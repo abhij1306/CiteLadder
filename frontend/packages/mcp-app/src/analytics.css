@@ -1,0 +1,13 @@
+@import 'tailwindcss' source(none);
+@import '../../../apps/app/src/globals.css';
+
+@source "./";
+@source "../../../components/ui";
+
+/* The host CSP grants no resource domains, so no web font loads. The app
+   shells define these families with hosted faces; here they resolve to an
+   installed copy or the system stack, never to an undefined var(). */
+:root {
+  --font-text: 'Switzer Variable', 'Switzer', ui-sans-serif, system-ui;
+  --font-heading: 'IBM Plex Sans Variable', 'IBM Plex Sans', ui-sans-serif, system-ui;
+}

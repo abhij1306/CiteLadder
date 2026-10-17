@@ -1,0 +1,13 @@
+{
+  "format_version": 1,
+  "comment": "Byte ceilings for what a COLD load pays before any route code runs. Raise a limit only with a measurement in the PR that explains what the bytes buy.",
+  "budgets": {
+    "apps/app": {
+      "comment": "Entry chunk + transitive STATIC imports + entry CSS. Lazy route chunks are excluded: they are paid on navigation, not on boot. Includes the route loader that resolves the shell's opening decision before first paint \u2014 it costs ~4.6 KB gzip and removes three full-viewport paints from a cold load, which is a trade worth making explicitly. React, React Router and Zod are split into vendor chunks: that costs ~600 B gzip in boundary overhead and buys cache stability, since an edit under lib/api used to invalidate React Router for every returning reader.",
+      "eager_js_raw": 900736,
+      "eager_js_gzip": 281643,
+      "eager_css_raw": 119768,
+      "eager_css_gzip": 22243
+    }
+  }
+}

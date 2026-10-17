@@ -1,0 +1,180 @@
+[
+  {
+    "id": "q01-visibility-overview",
+    "kind": "question, then a follow-up that needs the first turn's reads",
+    "turns": [
+      {
+        "message": "What are our biggest AI visibility problems right now, and which of our tracked prompts matter most?"
+      },
+      {
+        "message": "For the most important prompt you mentioned, which competitors are cited instead of us, and which of their pages?"
+      }
+    ],
+    "review": "Names real tracked prompts and real cited competitors and pages; the follow-up reuses turn 1 instead of starting over."
+  },
+  {
+    "id": "q02-competitors",
+    "kind": "question",
+    "turns": [
+      {
+        "message": "Which competitors show up most in AI answers for our prompts, and where do we lose to them?"
+      }
+    ],
+    "review": "Competitor names and counts come from citations or mentions read in the turn; no invented share figures."
+  },
+  {
+    "id": "q03-tech-issues",
+    "kind": "question, then a follow-up that needs the first turn's reads",
+    "turns": [
+      {
+        "message": "Summarise the worst technical SEO issues from the latest site crawl and which pages they affect."
+      },
+      {
+        "message": "Give me the exact URLs affected by the second issue you listed."
+      }
+    ],
+    "review": "Issues match the latest crawl; the follow-up returns real URLs for the issue listed second."
+  },
+  {
+    "id": "q04-actions-priority",
+    "kind": "question, then a deliverable follow-up",
+    "turns": [
+      {
+        "message": "How many open Actions do we have, and which three should we do first? Explain why."
+      },
+      { "message": "Draft a short brief for the first one." }
+    ],
+    "review": "The open-Action count is right; the order follows the evidence; the brief is about the Action picked first."
+  },
+  {
+    "id": "q05-cited-pages",
+    "kind": "question",
+    "turns": [
+      {
+        "message": "Which pages on our own site are cited by AI engines, if any?"
+      }
+    ],
+    "review": "Lists owned cited pages or says there are none; does not treat missing data as zero."
+  },
+  {
+    "id": "q06-catalog",
+    "kind": "question",
+    "turns": [
+      {
+        "message": "Are our product pages missing catalog fields or structured data that matter for AI shopping answers? Give examples."
+      }
+    ],
+    "review": "Examples are real products or pages with the specific missing fields."
+  },
+  {
+    "id": "q07-perception",
+    "kind": "question",
+    "turns": [
+      {
+        "message": "What do AI engines say about {{brand}}, and is the sentiment positive or negative?"
+      }
+    ],
+    "review": "Uses saved perception and sentiment evidence with its scope; no claims beyond it."
+  },
+  {
+    "id": "q08-missing-data",
+    "kind": "unavailable evidence",
+    "turns": [
+      {
+        "message": "How is our Google Search Console performance trending over the last 28 days?"
+      }
+    ],
+    "review": "With no Search Console data, says it is unavailable and names the connection that supplies it; never reports zero."
+  },
+  {
+    "id": "s09-visibility-diagnosis",
+    "kind": "skill",
+    "turns": [
+      {
+        "message": "Diagnose why we are not recommended for the prompt: {{top_prompt}}",
+        "skill_id": "ai_visibility"
+      }
+    ],
+    "review": "Diagnosis cites who is recommended instead and why, from the saved answers for that prompt."
+  },
+  {
+    "id": "s10-technical-action",
+    "kind": "Action-attached question",
+    "turns": [
+      {
+        "message": "Give me a concrete fix plan for this issue.",
+        "action": { "skill_id": "technical_health" }
+      }
+    ],
+    "review": "The plan addresses the attached Action's diagnosis and affected pages, with a way to check the fix."
+  },
+  {
+    "id": "s11-growth-plan",
+    "kind": "skill deliverable",
+    "turns": [
+      {
+        "message": "Brief me: what should our 30-day AI visibility plan be?",
+        "skill_id": "growth_plan"
+      }
+    ],
+    "review": "A saved plan ordered by evidence and impact, with real targets; no invented ROI or scores."
+  },
+  {
+    "id": "s12-prompt-discovery",
+    "kind": "skill deliverable, outline first",
+    "turns": [
+      {
+        "message": "Suggest more buyer prompts we should track for our main product categories.",
+        "skill_id": "prompt_discovery"
+      }
+    ],
+    "review": "Saves an outline first; prompts are short buyer questions answerable by naming a business."
+  },
+  {
+    "id": "s13-content-action",
+    "kind": "Action-attached deliverable, then a revision",
+    "turns": [
+      {
+        "message": "Create the page this Action needs.",
+        "action": { "skill_id": "content_create", "target_kind": "prompt" }
+      },
+      {
+        "message": "Make the outline shorter and add a section on the returns policy."
+      }
+    ],
+    "review": "Turn 1 saves an outline for the Action's prompt; turn 2 revises that outline and keeps the rest."
+  },
+  {
+    "id": "s14-social-post",
+    "kind": "short-form draft",
+    "turns": [
+      {
+        "message": "Write a LinkedIn post about how shoppers can find affordable school uniforms with click and collect.",
+        "skill_id": "content_create"
+      }
+    ],
+    "review": "Drafted directly (no outline); no invented prices, policies or statistics."
+  },
+  {
+    "id": "s15-internal-links",
+    "kind": "skill",
+    "turns": [
+      {
+        "message": "Which internal links should we add to strengthen our most important category pages?",
+        "skill_id": "internal_links"
+      }
+    ],
+    "review": "Source and target pages exist in the crawl; anchors are specific."
+  },
+  {
+    "id": "s16-comparison",
+    "kind": "skill deliverable, outline first",
+    "turns": [
+      {
+        "message": "Outline a comparison page: {{brand}} vs {{competitor}} for our core products.",
+        "skill_id": "comparison_content"
+      }
+    ],
+    "review": "Saves an outline; competitor claims are marked as needing checking unless read from evidence."
+  }
+]

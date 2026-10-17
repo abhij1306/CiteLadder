@@ -1,0 +1,16 @@
+{
+  "forbidden_code": "workspace_role_forbidden",
+  "denial_messages": {
+    "read": "Workspace access is required",
+    "write": "Workspace member access is required",
+    "run": "Workspace member access is required",
+    "manage_credentials": "Workspace owner or admin access is required",
+    "delete_projects": "Workspace owner or admin access is required"
+  },
+  "roles": {
+    "owner": ["delete_projects", "manage_credentials", "read", "run", "write"],
+    "admin": ["delete_projects", "manage_credentials", "read", "run", "write"],
+    "member": ["read", "run", "write"],
+    "viewer": ["read"]
+  }
+}

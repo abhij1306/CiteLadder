@@ -1,0 +1,192 @@
+{
+  "source": "DataForSEO locations and languages lists, fetched by `pnpm dataforseo:locations`.",
+  "generated_at": "2026-10-10",
+  "languages": {
+    "google_ai_overview": [
+      "ar",
+      "da",
+      "de",
+      "en",
+      "es",
+      "fi",
+      "fr",
+      "hi",
+      "it",
+      "ja",
+      "ko",
+      "nl",
+      "pl",
+      "pt",
+      "ru",
+      "sv",
+      "tr"
+    ],
+    "chatgpt_search": [
+      "ar",
+      "da",
+      "de",
+      "en",
+      "es",
+      "fi",
+      "fr",
+      "hi",
+      "it",
+      "ja",
+      "ko",
+      "nl",
+      "pl",
+      "pt",
+      "ru",
+      "sv",
+      "tr"
+    ],
+    "gemini_consumer": [
+      "ar",
+      "da",
+      "de",
+      "en",
+      "es",
+      "fi",
+      "fr",
+      "hi",
+      "it",
+      "ja",
+      "ko",
+      "nl",
+      "pl",
+      "ru",
+      "sv",
+      "tr"
+    ]
+  },
+  "countries": {
+    "AE": {
+      "location_code": 2784,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "AR": {
+      "location_code": 2032,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "AT": {
+      "location_code": 2040,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "AU": {
+      "location_code": 2036,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "BE": {
+      "location_code": 2056,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "BR": {
+      "location_code": 2076,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "CA": {
+      "location_code": 2124,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "CH": {
+      "location_code": 2756,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "CL": {
+      "location_code": 2152,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "CO": {
+      "location_code": 2170,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "DE": {
+      "location_code": 2276,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "DK": {
+      "location_code": 2208,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "ES": {
+      "location_code": 2724,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "FI": {
+      "location_code": 2246,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "FR": {
+      "location_code": 2250,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "GB": {
+      "location_code": 2826,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "IE": {
+      "location_code": 2372,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "IL": {
+      "location_code": 2376,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "IN": {
+      "location_code": 2356,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "IT": {
+      "location_code": 2380,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "JP": {
+      "location_code": 2392,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "KR": {
+      "location_code": 2410,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "MX": {
+      "location_code": 2484,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "NL": {
+      "location_code": 2528,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "NO": {
+      "location_code": 2578,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "NZ": {
+      "location_code": 2554,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "PL": {
+      "location_code": 2616,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "PT": {
+      "location_code": 2620,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "SE": {
+      "location_code": 2752,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "SG": {
+      "location_code": 2702,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "US": {
+      "location_code": 2840,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    },
+    "ZA": {
+      "location_code": 2710,
+      "surfaces": ["google_ai_overview", "chatgpt_search", "gemini_consumer"]
+    }
+  }
+}

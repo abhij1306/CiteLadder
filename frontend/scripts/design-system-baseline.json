@@ -1,0 +1,20 @@
+{
+  "format_version": 1,
+  "files": {
+    "components/layout/app-shell.tsx": {
+      "tsx-size": 1
+    },
+    "components/performance/dimension-table.tsx": {
+      "tsx-size": 5
+    },
+    "components/site-health/inventory-section.tsx": {
+      "tsx-size": 1
+    },
+    "components/visibility/source-prompts.tsx": {
+      "tsx-size": 1
+    },
+    "components/visibility/visibility-sources.tsx": {
+      "tsx-size": 1
+    }
+  }
+}

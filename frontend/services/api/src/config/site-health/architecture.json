@@ -1,0 +1,186 @@
+{
+  "architecture": {
+    "formula_version": "sh-architecture-1",
+    "hub_page_kinds": ["category", "docs", "homepage"],
+    "detail_page_kinds": [
+      "alternative",
+      "article",
+      "comparison",
+      "guide",
+      "how_to",
+      "listicle",
+      "local",
+      "product",
+      "service"
+    ],
+    "excessive_depth_min": 5,
+    "duplicate_metadata_min_urls": 3,
+    "duplicate_metadata_rate": 0.5,
+    "unhubbed_page_kind_min_urls": 3,
+    "max_pages": 500,
+    "max_evidence_items": 25,
+    "page_kind_collapse_min": 8,
+    "max_breadcrumb_items": 16
+  },
+  "archetypes": {
+    "policy_version": "sh-archetypes-1",
+    "commerce": "commerce",
+    "software": "software",
+    "services": "services",
+    "other": "other",
+    "source_onboarding": "onboarding_profile",
+    "source_abstained": "abstained",
+    "business_model_confidence_floor": 0.65,
+    "contradiction_min_pages": 5,
+    "contradiction_share": 0.6,
+    "by_business_model": {
+      "b2b_saas": "software",
+      "d2c_product": "commerce",
+      "education_provider": "services",
+      "healthcare_provider": "services",
+      "local_service": "services",
+      "marketplace": "commerce",
+      "professional_service": "services",
+      "regulated_finance": "services",
+      "retail": "commerce"
+    },
+    "contradicting_page_kinds": {
+      "commerce": ["comparison", "docs", "service"],
+      "services": ["category", "docs", "product"],
+      "software": ["category", "product"]
+    },
+    "corroborating_page_kinds": {
+      "commerce": ["category", "product"],
+      "services": ["about_contact", "local", "service"],
+      "software": ["comparison", "docs", "pricing", "service"]
+    }
+  },
+  "common_structures": {
+    "commerce": [
+      {
+        "key": "products",
+        "label": "Product pages",
+        "local_market_only": false,
+        "page_kinds": ["product"],
+        "path_segments": []
+      },
+      {
+        "key": "categories",
+        "label": "Category pages",
+        "local_market_only": false,
+        "page_kinds": ["category"],
+        "path_segments": []
+      },
+      {
+        "key": "shipping_returns",
+        "label": "Shipping / returns",
+        "local_market_only": false,
+        "page_kinds": [],
+        "path_segments": ["refund-policy", "returns", "shipping", "shipping-policy"]
+      },
+      {
+        "key": "contact",
+        "label": "Contact",
+        "local_market_only": false,
+        "page_kinds": [],
+        "path_segments": ["contact", "contact-us"]
+      },
+      {
+        "key": "help_hub",
+        "label": "Help / FAQ hub",
+        "local_market_only": false,
+        "page_kinds": ["faq"],
+        "path_segments": ["faq", "help", "support"]
+      },
+      {
+        "key": "editorial",
+        "label": "Editorial content",
+        "local_market_only": false,
+        "page_kinds": ["alternative", "article", "comparison", "guide", "how_to", "listicle"],
+        "path_segments": []
+      }
+    ],
+    "software": [
+      {
+        "key": "pricing",
+        "label": "Pricing",
+        "local_market_only": false,
+        "page_kinds": ["pricing"],
+        "path_segments": []
+      },
+      {
+        "key": "features",
+        "label": "Product / feature pages",
+        "local_market_only": false,
+        "page_kinds": ["service"],
+        "path_segments": []
+      },
+      {
+        "key": "docs",
+        "label": "Documentation",
+        "local_market_only": false,
+        "page_kinds": ["docs"],
+        "path_segments": []
+      },
+      {
+        "key": "contact",
+        "label": "About / contact",
+        "local_market_only": false,
+        "page_kinds": ["about_contact"],
+        "path_segments": []
+      },
+      {
+        "key": "comparison",
+        "label": "Comparison pages",
+        "local_market_only": false,
+        "page_kinds": ["comparison"],
+        "path_segments": []
+      },
+      {
+        "key": "editorial",
+        "label": "Editorial content",
+        "local_market_only": false,
+        "page_kinds": ["alternative", "article", "comparison", "guide", "how_to", "listicle"],
+        "path_segments": []
+      }
+    ],
+    "services": [
+      {
+        "key": "services",
+        "label": "Service pages",
+        "local_market_only": false,
+        "page_kinds": ["service"],
+        "path_segments": []
+      },
+      {
+        "key": "contact",
+        "label": "About / contact",
+        "local_market_only": false,
+        "page_kinds": ["about_contact"],
+        "path_segments": []
+      },
+      {
+        "key": "trust",
+        "label": "Trust / policy pages",
+        "local_market_only": false,
+        "page_kinds": ["trust_policy"],
+        "path_segments": []
+      },
+      {
+        "key": "locations",
+        "label": "Location pages",
+        "local_market_only": true,
+        "page_kinds": ["local"],
+        "path_segments": []
+      },
+      {
+        "key": "guides",
+        "label": "Guides",
+        "local_market_only": false,
+        "page_kinds": ["alternative", "article", "comparison", "guide", "how_to", "listicle"],
+        "path_segments": []
+      }
+    ],
+    "other": []
+  }
+}

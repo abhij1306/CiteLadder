@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light" />
+    <meta name="robots" content="noindex" />
+    <!-- Apply a stored dark preference before first paint so a dark reader
+        never sees a light frame. Light is the default. The key must match
+        THEME_STORAGE_KEY in lib/theme/theme.ts, which owns the preference. -->
+    <script src="/theme-preference.js"></script>
+    <link rel="icon" href="/citeladder-favicon.ico" sizes="any" />
+    <title>CiteLadder</title>
+    <style>
+      /* Switzer and IBM Plex Sans are used when the reader has them installed;
+         otherwise these metric-matched Arial faces stand in, so the layout is
+         the same either way. */
+      /* Match Arial's x-height to Switzer's (0.531em vs 0.519em). Vertical
+         overrides use Switzer's 980/-250/90 hhea metrics (1000 UPM), divided
+         by size-adjust. */
+      @font-face {
+        font-family: 'Switzer Fallback';
+        src: local('Arial');
+        font-weight: 100 500;
+        size-adjust: 102.31%;
+        ascent-override: 95.79%;
+        descent-override: 24.44%;
+        line-gap-override: 8.8%;
+      }
+
+      /* Match Arial's x-height to IBM Plex Sans's (0.516em vs 0.519em). Vertical
+         overrides use Plex Sans's 1025/-275/0 hhea metrics (1000 UPM), divided
+         by size-adjust. */
+      @font-face {
+        font-family: 'IBM Plex Sans Fallback';
+        src: local('Arial');
+        font-weight: 100 500;
+        size-adjust: 99.42%;
+        ascent-override: 103.1%;
+        descent-override: 27.66%;
+        line-gap-override: 0%;
+      }
+
+      :root {
+        font-synthesis-weight: none;
+        /* Switzer carries body, UI and data; IBM Plex Sans carries display headings. */
+        --font-text: 'Switzer Variable', 'Switzer Fallback', Arial;
+        --font-heading: 'IBM Plex Sans Variable', 'IBM Plex Sans Fallback', Arial;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

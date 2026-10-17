@@ -1,0 +1,231 @@
+{
+  "catalog_version": "1",
+  "resource_rules": [
+    {
+      "resource_class": "robots",
+      "paths": ["/robots.txt"],
+      "extensions": []
+    },
+    {
+      "resource_class": "llms_txt",
+      "paths": ["/llms.txt", "/llms-full.txt"],
+      "extensions": []
+    },
+    {
+      "resource_class": "sitemap",
+      "paths": ["/sitemap.xml", "/sitemap_index.xml"],
+      "extensions": []
+    },
+    {
+      "resource_class": "feed",
+      "paths": ["/feed", "/rss", "/atom.xml"],
+      "extensions": [".rss", ".atom"]
+    },
+    {
+      "resource_class": "document",
+      "paths": [],
+      "extensions": [".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".md"]
+    },
+    {
+      "resource_class": "asset",
+      "paths": [],
+      "extensions": [
+        ".css",
+        ".js",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".svg",
+        ".webp",
+        ".ico",
+        ".woff",
+        ".woff2",
+        ".mp4",
+        ".mp3"
+      ]
+    }
+  ],
+  "bots": [
+    {
+      "bot_id": "google_googlebot",
+      "label": "Googlebot",
+      "operator": "google",
+      "purpose": "search_engine",
+      "ai_source": null,
+      "robots_tokens": ["Googlebot"],
+      "ua_patterns": ["googlebot/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+      },
+      "checks": ["ai_crawler_access", "search_crawler_access"]
+    },
+    {
+      "bot_id": "microsoft_bingbot",
+      "label": "Bingbot",
+      "operator": "microsoft",
+      "purpose": "search_engine",
+      "ai_source": null,
+      "robots_tokens": ["Bingbot"],
+      "ua_patterns": ["bingbot/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://www.bing.com/toolbox/bingbot.json"
+      },
+      "checks": ["ai_crawler_access", "search_crawler_access"]
+    },
+    {
+      "bot_id": "openai_oai_searchbot",
+      "label": "OAI-SearchBot",
+      "operator": "openai",
+      "purpose": "ai_search",
+      "ai_source": "chatgpt",
+      "robots_tokens": ["OAI-SearchBot"],
+      "ua_patterns": ["oai-searchbot/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://openai.com/searchbot.json"
+      },
+      "checks": ["ai_crawler_access", "search_crawler_access"]
+    },
+    {
+      "bot_id": "perplexity_bot",
+      "label": "PerplexityBot",
+      "operator": "perplexity",
+      "purpose": "ai_search",
+      "ai_source": "perplexity",
+      "robots_tokens": ["PerplexityBot"],
+      "ua_patterns": ["perplexitybot/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://www.perplexity.com/perplexitybot.json"
+      },
+      "checks": ["ai_crawler_access", "search_crawler_access"]
+    },
+    {
+      "bot_id": "openai_gptbot",
+      "label": "GPTBot",
+      "operator": "openai",
+      "purpose": "ai_training",
+      "ai_source": "chatgpt",
+      "robots_tokens": ["GPTBot"],
+      "ua_patterns": ["gptbot/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://openai.com/gptbot.json"
+      },
+      "checks": ["ai_crawler_access"]
+    },
+    {
+      "bot_id": "anthropic_claudebot",
+      "label": "ClaudeBot",
+      "operator": "anthropic",
+      "purpose": "ai_training",
+      "ai_source": "claude",
+      "robots_tokens": ["ClaudeBot"],
+      "ua_patterns": ["claudebot"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://claude.com/crawling/bots.json"
+      },
+      "checks": ["ai_crawler_access"]
+    },
+    {
+      "bot_id": "google_extended",
+      "label": "Google-Extended",
+      "operator": "google",
+      "purpose": "ai_training",
+      "ai_source": "gemini",
+      "robots_tokens": ["Google-Extended"],
+      "ua_patterns": [],
+      "verification": {
+        "method": "none"
+      },
+      "checks": ["ai_crawler_access"]
+    },
+    {
+      "bot_id": "openai_chatgpt_user",
+      "label": "ChatGPT-User",
+      "operator": "openai",
+      "purpose": "ai_user_fetch",
+      "ai_source": "chatgpt",
+      "robots_tokens": ["ChatGPT-User"],
+      "ua_patterns": ["chatgpt-user/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://openai.com/chatgpt-user.json"
+      },
+      "checks": ["ai_crawler_access"]
+    },
+    {
+      "bot_id": "perplexity_user",
+      "label": "Perplexity-User",
+      "operator": "perplexity",
+      "purpose": "ai_user_fetch",
+      "ai_source": "perplexity",
+      "robots_tokens": ["Perplexity-User"],
+      "ua_patterns": ["perplexity-user/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://www.perplexity.com/perplexity-user.json"
+      },
+      "checks": ["ai_crawler_access"]
+    },
+    {
+      "bot_id": "anthropic_searchbot",
+      "label": "Claude-SearchBot",
+      "operator": "anthropic",
+      "purpose": "ai_search",
+      "ai_source": "claude",
+      "robots_tokens": ["Claude-SearchBot"],
+      "ua_patterns": ["claude-searchbot"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://claude.com/crawling/bots.json"
+      },
+      "checks": ["ai_crawler_access", "search_crawler_access"]
+    },
+    {
+      "bot_id": "anthropic_user",
+      "label": "Claude-User",
+      "operator": "anthropic",
+      "purpose": "ai_user_fetch",
+      "ai_source": "claude",
+      "robots_tokens": ["Claude-User"],
+      "ua_patterns": ["claude-user"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://claude.com/crawling/bots.json"
+      },
+      "checks": ["ai_crawler_access"]
+    },
+    {
+      "bot_id": "apple_applebot",
+      "label": "Applebot",
+      "operator": "apple",
+      "purpose": "search_engine",
+      "ai_source": null,
+      "robots_tokens": ["Applebot"],
+      "ua_patterns": ["applebot/"],
+      "verification": {
+        "method": "ip_ranges",
+        "source_url": "https://search.developer.apple.com/applebot.json"
+      },
+      "checks": ["ai_crawler_access", "search_crawler_access"]
+    },
+    {
+      "bot_id": "apple_extended",
+      "label": "Applebot-Extended",
+      "operator": "apple",
+      "purpose": "ai_training",
+      "ai_source": null,
+      "robots_tokens": ["Applebot-Extended"],
+      "ua_patterns": [],
+      "verification": {
+        "method": "none"
+      },
+      "checks": ["ai_crawler_access"]
+    }
+  ]
+}

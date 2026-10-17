@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  A faceted listing view. The page is real and useful, and its canonical
+  deliberately consolidates the sorted view onto the unsorted parent -- exactly
+  what rel=canonical exists to do.
+
+  ``canonical_conflict`` currently fails any page whose canonical is not its own
+  final URL, so correct canonicalisation is reported as a defect.
+-->
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Oak dining tables, sorted by price</title>
+    <meta
+      name="description"
+      content="Every oak dining table we make, sorted from lowest to highest price."
+    />
+    <link rel="canonical" href="https://northgate.example/oak-dining-tables" />
+  </head>
+  <body>
+    <main>
+      <h1>Oak dining tables</h1>
+      <div class="toolbar">
+        <button class="filter-toggle">Filters</button>
+        <span class="result-count">31 results</span>
+        <label for="sort-by">Sort</label>
+        <select id="sort-by" name="sort_by">
+          <option value="recommended">Recommended</option>
+          <option value="price-asc">Price: Low to High</option>
+        </select>
+      </div>
+      <ul class="product-grid">
+        <li>
+          <a href="/oak-dining-tables/ilkley">Ilkley Refectory Table</a><span>&pound;1,240</span>
+        </li>
+        <li><a href="/oak-dining-tables/otley">Otley Round Table</a><span>&pound;980</span></li>
+        <li>
+          <a href="/oak-dining-tables/wharfe">Wharfe Extending Table</a><span>&pound;1,610</span>
+        </li>
+        <li>
+          <a href="/oak-dining-tables/calder">Calder Trestle Table</a><span>&pound;1,150</span>
+        </li>
+        <li><a href="/oak-dining-tables/aire">Aire Farmhouse Table</a><span>&pound;1,395</span></li>
+        <li><a href="/oak-dining-tables/wren">Wren Drop-Leaf Table</a><span>&pound;760</span></li>
+        <li><a href="/oak-dining-tables/holme">Holme Bench Set</a><span>&pound;540</span></li>
+      </ul>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+# Docker builds use the repository root as context. Never send local
+# credentials, VCS history, dependency trees or generated output.
+.git
+.github
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+!**/.env.example
+
+**/node_modules
+**/*.tsbuildinfo
+**/coverage
+**/test-results
+**/playwright-report
+**/dist
+
+frontend/e2e
+frontend/**/*.test.ts
+frontend/**/*.test.tsx
+frontend/services/api/test

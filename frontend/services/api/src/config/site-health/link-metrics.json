@@ -1,0 +1,35 @@
+{
+  "link_metrics": {
+    "formula_version": "sh-link-metrics-1",
+    "top_neighbour_limit": 10,
+    "generic_texts": ["click here", "learn more", "read more", "view more", "view product"],
+    "repeated_destination_min": 2,
+    "low_alignment_coverage_max": 0.5,
+    "damping_factor": 0.85,
+    "max_iterations": 100,
+    "convergence_epsilon": 1e-12,
+    "repeated_anchor_factor": 0.1,
+    "edge_weights": [
+      {
+        "main": true,
+        "follow": true,
+        "weight": 1.0
+      },
+      {
+        "main": false,
+        "follow": true,
+        "weight": 0.35
+      },
+      {
+        "main": true,
+        "follow": false,
+        "weight": 0.15
+      },
+      {
+        "main": false,
+        "follow": false,
+        "weight": 0.05
+      }
+    ]
+  }
+}

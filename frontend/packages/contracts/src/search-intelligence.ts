@@ -1,0 +1,105 @@
+import { z } from 'zod';
+
+const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.object(shape);
+
+export const searchTargetSchema = responseObject({
+  identity: z.string(),
+  label: z.string(),
+  registrable_domain: z.string(),
+  hostname: z.string(),
+  origin: z.string(),
+  source_kind: z.string(),
+});
+export const researchScopeSchema = z.enum(['exact_host', 'domain_subdomains']);
+export const searchPreferencesSchema = responseObject({
+  research_scope: researchScopeSchema.optional(),
+  owned_target_id: z.string().nullable(),
+  competitor_ids: z.array(z.uuid()),
+  location_code: z.number().int().nullable(),
+  language_code: z.string(),
+  reuse_recent: z.boolean(),
+  depths: z.record(z.string(), z.number().int()),
+});
+export const searchRunSchema = responseObject({
+  id: z.uuid(),
+  status: z.string(),
+  action: z.string(),
+  pricing_version: z.string(),
+  estimated_cost_usd: z.string().nullable(),
+  provider_reported_cost_usd: z.string().nullable(),
+  planned_calls: z.number().int(),
+  completed_calls: z.number().int(),
+  planned_rows: z.number().int(),
+  received_rows: z.number().int(),
+  uncertain_calls: z.number().int(),
+  error_code: z.string(),
+  error_detail: z.string(),
+  expires_at: z.string(),
+  confirmed_at: z.string().nullable(),
+  cancelled_at: z.string().nullable(),
+  completed_at: z.string().nullable(),
+  frozen_scope: z.record(z.string(), z.unknown()),
+  call_plan: z.array(z.record(z.string(), z.unknown())),
+  reused_datasets: z.array(z.record(z.string(), z.unknown())),
+  created_at: z.string(),
+});
+export const searchDatasetSchema = responseObject({
+  research_scope: researchScopeSchema,
+  id: z.uuid(),
+  run_id: z.uuid(),
+  dataset_kind: z.string(),
+  target_domain: z.string(),
+  target_hostname: z.string(),
+  target_origin: z.string(),
+  acquisition: z.record(z.string(), z.unknown()),
+  comparison_origin: z.string(),
+  location_code: z.number().int().nullable(),
+  language_code: z.string(),
+  status: z.string(),
+  coverage: z.string(),
+  requested_rows: z.number().int(),
+  raw_rows_received: z.number().int(),
+  unique_rows_saved: z.number().int(),
+  provider_total: z.number().int().nullable(),
+  truncated: z.boolean(),
+  summary: z.record(z.string(), z.unknown()),
+  collection_started_at: z.string().nullable(),
+  collection_ended_at: z.string().nullable(),
+  published_at: z.string().nullable(),
+  filtered_saved_count: z.number().int().nullable().optional(),
+}).catchall(z.unknown());
+export const searchReadinessSchema = responseObject({
+  connected: z.boolean(),
+  connection_id: z.uuid().nullable(),
+  owned_targets: z.array(searchTargetSchema),
+  competitors: z.array(searchTargetSchema),
+  preferences: searchPreferencesSchema,
+  latest_run: searchRunSchema.nullable(),
+  datasets: z.array(searchDatasetSchema),
+});
+export const searchRowSchema = responseObject({
+  id: z.uuid(),
+  dataset_id: z.uuid(),
+  call_id: z.uuid().nullable(),
+  row_kind: z.string(),
+  keyword: z.string(),
+  domain: z.string(),
+  url: z.string(),
+  search_volume: z.number().int().nullable(),
+  difficulty: z.number().int().nullable(),
+  intent: z.string(),
+  rank_group: z.number().int().nullable(),
+  owned_rank_group: z.number().int().nullable(),
+  etv: z.string().nullable(),
+  backlinks: z.number().int().nullable(),
+  referring_main_domains: z.number().int().nullable(),
+  dataforseo_rank: z.number().int().nullable(),
+  auxiliary: z.record(z.string(), z.unknown()),
+  // The Action a missing-keyword row became, when it passed the keyword-gap gates.
+  action_id: z.uuid().nullable().optional(),
+}).catchall(z.unknown());
+export const searchDatasetPageSchema = responseObject({
+  dataset: searchDatasetSchema,
+  rows: z.array(searchRowSchema),
+  next_cursor: z.string().nullable(),
+});

@@ -1,0 +1,188 @@
+{
+  "source_to_logical_engine": {
+    "chatgpt": "chatgpt",
+    "gemini": "gemini",
+    "claude": "claude",
+    "google_ai_overview": "google_ai_overview"
+  },
+  "match_signals": {
+    "referrer": "referrer",
+    "utm": "utm",
+    "user_agent": "user_agent"
+  },
+  "host_rules": [
+    {
+      "rule_id": "host-chatgpt-com",
+      "host": "chatgpt.com",
+      "ai_source": "chatgpt",
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "host-chat-openai-com",
+      "host": "chat.openai.com",
+      "ai_source": "chatgpt",
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "host-gemini-google-com",
+      "host": "gemini.google.com",
+      "ai_source": "gemini",
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "host-claude-ai",
+      "host": "claude.ai",
+      "ai_source": "claude",
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "host-perplexity-ai",
+      "host": "perplexity.ai",
+      "ai_source": "perplexity",
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "host-copilot-microsoft-com",
+      "host": "copilot.microsoft.com",
+      "ai_source": "copilot",
+      "confidence": "exact"
+    }
+  ],
+  "utm_rules": [
+    {
+      "rule_id": "utm-source-chatgpt-com",
+      "ai_source": "chatgpt",
+      "utm_source": "chatgpt.com",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-chat-openai-com",
+      "ai_source": "chatgpt",
+      "utm_source": "chat.openai.com",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-chatgpt",
+      "ai_source": "chatgpt",
+      "utm_source": "chatgpt",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-openai",
+      "ai_source": "chatgpt",
+      "utm_source": "openai",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-gemini-google-com",
+      "ai_source": "gemini",
+      "utm_source": "gemini.google.com",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-gemini",
+      "ai_source": "gemini",
+      "utm_source": "gemini",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-claude-ai",
+      "ai_source": "claude",
+      "utm_source": "claude.ai",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-claude",
+      "ai_source": "claude",
+      "utm_source": "claude",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-perplexity-ai",
+      "ai_source": "perplexity",
+      "utm_source": "perplexity.ai",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-perplexity",
+      "ai_source": "perplexity",
+      "utm_source": "perplexity",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-copilot-microsoft-com",
+      "ai_source": "copilot",
+      "utm_source": "copilot.microsoft.com",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-copilot",
+      "ai_source": "copilot",
+      "utm_source": "copilot",
+      "utm_medium": null,
+      "confidence": "exact"
+    },
+    {
+      "rule_id": "utm-source-google-ai-overview",
+      "ai_source": "google_ai_overview",
+      "utm_source": "google_ai_overview",
+      "utm_medium": null,
+      "confidence": "exact"
+    }
+  ],
+  "ua_rules": [
+    {
+      "rule_id": "ua-chatgpt-user",
+      "ai_source": "chatgpt",
+      "substring": "chatgpt-user",
+      "confidence": "heuristic"
+    },
+    {
+      "rule_id": "ua-claude-user",
+      "ai_source": "claude",
+      "substring": "claude-user",
+      "confidence": "heuristic"
+    },
+    {
+      "rule_id": "ua-perplexity-user",
+      "ai_source": "perplexity",
+      "substring": "perplexity-user",
+      "confidence": "heuristic"
+    }
+  ],
+  "raw_allowlist": [
+    "dataset",
+    "date",
+    "dimension_key",
+    "landing_path",
+    "ref",
+    "referrer_host",
+    "utm_campaign",
+    "utm_content",
+    "utm_medium",
+    "utm_source",
+    "utm_term"
+  ],
+  "url_param_allowlist": ["ref"],
+  "url_param_allowlist_prefixes": ["utm_"],
+  "retention_days": 90,
+  "datasets": {
+    "referrer_daily": "ga4_referrer_daily",
+    "source_medium_daily": "ga4_source_medium_daily"
+  },
+  "rule_version": "ai-referral-rules-1",
+  "analyzer_version": "grounded-analysis-v1",
+  "sanitize_version": "referral-sanitize-1",
+  "other_source": "other"
+}

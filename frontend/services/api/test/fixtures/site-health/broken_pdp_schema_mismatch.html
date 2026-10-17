@@ -1,0 +1,61 @@
+<!doctype html>
+<!--
+  The COUNTER-EXAMPLE fixture. Every other page in the contract suite is a
+  well-built page that must not be accused of anything; this one is genuinely
+  broken, and its findings must survive every false-positive fix.
+
+  Three real defects, each independent of page-kind confidence:
+    * the Product schema says InStock while the buy box says Sold out;
+    * the schema name is a different product from the visible H1;
+    * the page declares noindex while claiming sitemap membership, so its
+      stated intent and its robots directive contradict each other.
+
+  If a rule is "fixed" by weakening it into silence, this fixture fails.
+-->
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ilkley Refectory Table | Northgate Joinery</title>
+    <meta
+      name="description"
+      content="A solid oak refectory table built to order in the Leeds workshop."
+    />
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href="https://northgate.example/oak-dining-tables/ilkley" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": "Otley Round Pedestal Table",
+        "sku": "NG-OTL-1100",
+        "offers": {
+          "@type": "Offer",
+          "price": "980.00",
+          "priceCurrency": "GBP",
+          "availability": "https://schema.org/InStock"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main>
+      <h1>Ilkley Refectory Table</h1>
+      <div class="price">&pound;1,240.00</div>
+      <p>Sold out &mdash; next batch cut in June</p>
+      <form action="/cart/add" method="post">
+        <label for="finish">Finish</label>
+        <select id="finish" name="finish">
+          <option value="oiled">Hardwax oiled</option>
+          <option value="lacquered">Lacquered</option>
+        </select>
+        <button type="submit">Add to cart</button>
+      </form>
+      <span itemprop="sku">NG-ILK-1800</span>
+      <p>
+        Cut from kiln-dried English oak and joined with drawbored mortise and tenon. Seats eight
+        comfortably and ten at a squeeze. Built to order in the Leeds workshop over roughly six
+        weeks.
+      </p>
+    </main>
+  </body>
+</html>

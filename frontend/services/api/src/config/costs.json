@@ -1,0 +1,94 @@
+{
+  "formula_version": "line-sum-v1",
+  "pricing_version": "official-2026-10-08-v1",
+  "tokens_per_million": 1000000,
+  "microusd_per_usd": 1000000,
+  "estimate_input_chars_per_token": 4,
+  "estimate_search_calls": {
+    "chatgpt": 1,
+    "claude": 3,
+    "gemini": 1
+  },
+  "unverified_pricing": {
+    "uncached_input_microusd_per_million": null,
+    "cached_input_microusd_per_million": null,
+    "output_microusd_per_million": null,
+    "reasoning_microusd_per_million": null,
+    "search_fee_microusd": null,
+    "currency": "USD",
+    "effective_date": "",
+    "pricing_version": "official-2026-10-08-v1"
+  },
+  "catalogs": {
+    "official-2026-10-08-v1": [
+      {
+        "identity": {
+          "logical_engine": "chatgpt",
+          "transport_provider": "openai",
+          "transport_model": "gpt-6.1-sol"
+        },
+        "pricing": {
+          "uncached_input_microusd_per_million": 2000000,
+          "cached_input_microusd_per_million": 100000,
+          "output_microusd_per_million": 10000000,
+          "reasoning_microusd_per_million": null,
+          "search_fee_microusd": null,
+          "currency": "USD",
+          "effective_date": "2026-10-08",
+          "pricing_version": "official-2026-10-08-v1"
+        }
+      },
+      {
+        "identity": {
+          "logical_engine": "claude",
+          "transport_provider": "anthropic",
+          "transport_model": "claude-sonnet-5-5"
+        },
+        "pricing": {
+          "uncached_input_microusd_per_million": 2000000,
+          "cached_input_microusd_per_million": 200000,
+          "output_microusd_per_million": 10000000,
+          "reasoning_microusd_per_million": null,
+          "search_fee_microusd": 10000,
+          "currency": "USD",
+          "effective_date": "2026-10-08",
+          "pricing_version": "official-2026-10-08-v1"
+        }
+      },
+      {
+        "identity": {
+          "logical_engine": "gemini",
+          "transport_provider": "google",
+          "transport_model": "gemini-3.6-flash"
+        },
+        "pricing": {
+          "uncached_input_microusd_per_million": 1500000,
+          "cached_input_microusd_per_million": null,
+          "output_microusd_per_million": 7500000,
+          "reasoning_microusd_per_million": null,
+          "search_fee_microusd": 14000,
+          "currency": "USD",
+          "effective_date": "2026-08-03",
+          "pricing_version": "official-2026-10-08-v1"
+        }
+      },
+      {
+        "identity": {
+          "logical_engine": "google_ai_overview",
+          "transport_provider": "dataforseo",
+          "transport_model": "google-organic-serp"
+        },
+        "pricing": {
+          "uncached_input_microusd_per_million": null,
+          "cached_input_microusd_per_million": null,
+          "output_microusd_per_million": null,
+          "reasoning_microusd_per_million": null,
+          "search_fee_microusd": null,
+          "currency": "USD",
+          "effective_date": "",
+          "pricing_version": "official-2026-10-08-v1"
+        }
+      }
+    ]
+  }
+}

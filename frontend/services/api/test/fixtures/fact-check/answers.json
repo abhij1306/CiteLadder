@@ -1,0 +1,602 @@
+{
+  "brands": [
+    {
+      "brand_name": "Taskline",
+      "competitors": ["Planbase"],
+      "prompt": "What is the best project management software?",
+      "facts": [
+        {
+          "topic": "pricing",
+          "statement": "The Team plan costs $12 per month."
+        },
+        {
+          "topic": "integrations",
+          "statement": "Taskline integrates with Slack. It does not integrate with Salesforce."
+        },
+        {
+          "topic": "markets",
+          "statement": "Taskline serves customers in the United States and Canada only."
+        },
+        {
+          "topic": "policies",
+          "statement": "Refunds are available within 30 days of purchase."
+        },
+        {
+          "topic": "company",
+          "statement": "Taskline was founded in 2016."
+        },
+        {
+          "topic": "specs",
+          "statement": "The Team plan includes 50 projects."
+        }
+      ]
+    },
+    {
+      "brand_name": "Brightdesk",
+      "competitors": ["Helpora"],
+      "prompt": "What is the best customer support software?",
+      "facts": [
+        {
+          "topic": "pricing",
+          "statement": "The Growth plan costs $29 per month."
+        },
+        {
+          "topic": "integrations",
+          "statement": "Brightdesk integrates with Shopify. It does not integrate with SAP."
+        },
+        {
+          "topic": "markets",
+          "statement": "Brightdesk serves customers in the UK and Ireland only."
+        },
+        {
+          "topic": "policies",
+          "statement": "Refunds are available within 14 days of purchase."
+        },
+        {
+          "topic": "company",
+          "statement": "Brightdesk was founded in 2018."
+        },
+        {
+          "topic": "specs",
+          "statement": "The Growth plan includes 5 agents."
+        }
+      ]
+    },
+    {
+      "brand_name": "Ledgerly",
+      "competitors": ["Countwise"],
+      "prompt": "What is the best small business accounting software?",
+      "facts": [
+        {
+          "topic": "pricing",
+          "statement": "The Plus plan costs $25 per month."
+        },
+        {
+          "topic": "integrations",
+          "statement": "Ledgerly integrates with Stripe. It does not integrate with Oracle NetSuite."
+        },
+        {
+          "topic": "markets",
+          "statement": "Ledgerly serves customers in Australia and New Zealand only."
+        },
+        {
+          "topic": "policies",
+          "statement": "Refunds are available within 30 days of purchase."
+        },
+        {
+          "topic": "company",
+          "statement": "Ledgerly was founded in 2013."
+        },
+        {
+          "topic": "specs",
+          "statement": "The Plus plan includes 3 users."
+        }
+      ]
+    },
+    {
+      "brand_name": "Roastery Co",
+      "competitors": ["Bean Club"],
+      "prompt": "What is the best coffee subscription?",
+      "facts": [
+        {
+          "topic": "pricing",
+          "statement": "The Monthly plan costs $18 per month."
+        },
+        {
+          "topic": "integrations",
+          "statement": "Roastery Co integrates with Apple Pay. It does not integrate with PayPal."
+        },
+        {
+          "topic": "markets",
+          "statement": "Roastery Co serves customers in the United States only."
+        },
+        {
+          "topic": "policies",
+          "statement": "Refunds are available within 7 days of purchase."
+        },
+        {
+          "topic": "company",
+          "statement": "Roastery Co was founded in 2019."
+        },
+        {
+          "topic": "specs",
+          "statement": "The Monthly plan includes 2 bags per delivery."
+        }
+      ]
+    }
+  ],
+  "answers": [
+    {
+      "name": "supported-price-taskline",
+      "brand_name": "Taskline",
+      "answer": "Taskline is a solid pick. The Team plan costs $12 per month. Planbase is another option.",
+      "expected": [
+        {
+          "quote_contains": "$12 per month",
+          "topic": "pricing",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "outdated-price-taskline",
+      "brand_name": "Taskline",
+      "answer": "Consider Taskline. Its Team plan costs $9 per month, which is cheap.",
+      "expected": [
+        {
+          "quote_contains": "$9 per month",
+          "topic": "pricing",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "missing-integration-taskline",
+      "brand_name": "Taskline",
+      "answer": "Taskline integrates with Salesforce, so data flows both ways. Planbase does too.",
+      "expected": [
+        {
+          "quote_contains": "Salesforce",
+          "topic": "integrations",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "supported-integration-and-market-taskline",
+      "brand_name": "Taskline",
+      "answer": "Taskline connects to Slack and serves customers in the United States and Canada.",
+      "expected": [
+        {
+          "quote_contains": "Slack",
+          "topic": "integrations",
+          "verdict": "supported"
+        },
+        {
+          "quote_contains": "the United States and Canada",
+          "topic": "markets",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "wrong-market-taskline",
+      "brand_name": "Taskline",
+      "answer": "If you are in Brazil, Taskline is available there and popular with local teams.",
+      "expected": [
+        {
+          "quote_contains": "Brazil",
+          "topic": "markets",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "refund-and-founding-taskline",
+      "brand_name": "Taskline",
+      "answer": "Taskline was founded in 2011 and offers refunds within 30 days.",
+      "expected": [
+        {
+          "quote_contains": "2011",
+          "topic": "company",
+          "verdict": "contradicted"
+        },
+        {
+          "quote_contains": "30 days",
+          "topic": "policies",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "spec-overstated-taskline",
+      "brand_name": "Taskline",
+      "answer": "The Team plan from Taskline includes unlimited projects, unlike Planbase.",
+      "expected": [
+        {
+          "quote_contains": "unlimited projects",
+          "topic": "specs",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "not-covered-taskline",
+      "brand_name": "Taskline",
+      "answer": "Taskline offers a free mobile app for iOS and Android and has a 4.7 star rating.",
+      "expected": [
+        {
+          "quote_contains": "mobile app",
+          "topic": "specs",
+          "verdict": "not_covered"
+        }
+      ]
+    },
+    {
+      "name": "subjective-decoy-taskline",
+      "brand_name": "Taskline",
+      "answer": "Taskline is the best project management software I know: friendly, polished and worth every penny. Planbase feels dated.",
+      "expected": []
+    },
+    {
+      "name": "competitor-claims-only-taskline",
+      "brand_name": "Taskline",
+      "answer": "Planbase costs $9 per month and integrates with Salesforce. Taskline is also worth a look.",
+      "expected": []
+    },
+    {
+      "name": "supported-price-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Brightdesk is a solid pick. The Growth plan costs $29 per month. Helpora is another option.",
+      "expected": [
+        {
+          "quote_contains": "$29 per month",
+          "topic": "pricing",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "outdated-price-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Consider Brightdesk. Its Growth plan costs $19 per month, which is cheap.",
+      "expected": [
+        {
+          "quote_contains": "$19 per month",
+          "topic": "pricing",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "missing-integration-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Brightdesk integrates with SAP, so data flows both ways. Helpora does too.",
+      "expected": [
+        {
+          "quote_contains": "SAP",
+          "topic": "integrations",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "supported-integration-and-market-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Brightdesk connects to Shopify and serves customers in the UK and Ireland.",
+      "expected": [
+        {
+          "quote_contains": "Shopify",
+          "topic": "integrations",
+          "verdict": "supported"
+        },
+        {
+          "quote_contains": "the UK and Ireland",
+          "topic": "markets",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "wrong-market-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "If you are in Japan, Brightdesk is available there and popular with local teams.",
+      "expected": [
+        {
+          "quote_contains": "Japan",
+          "topic": "markets",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "refund-and-founding-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Brightdesk was founded in 2014 and offers refunds within 14 days.",
+      "expected": [
+        {
+          "quote_contains": "2014",
+          "topic": "company",
+          "verdict": "contradicted"
+        },
+        {
+          "quote_contains": "14 days",
+          "topic": "policies",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "spec-overstated-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "The Growth plan from Brightdesk includes unlimited agents, unlike Helpora.",
+      "expected": [
+        {
+          "quote_contains": "unlimited agents",
+          "topic": "specs",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "not-covered-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Brightdesk offers a free mobile app for iOS and Android and has a 4.7 star rating.",
+      "expected": [
+        {
+          "quote_contains": "mobile app",
+          "topic": "specs",
+          "verdict": "not_covered"
+        }
+      ]
+    },
+    {
+      "name": "subjective-decoy-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Brightdesk is the best customer support software I know: friendly, polished and worth every penny. Helpora feels dated.",
+      "expected": []
+    },
+    {
+      "name": "competitor-claims-only-brightdesk",
+      "brand_name": "Brightdesk",
+      "answer": "Helpora costs $19 per month and integrates with SAP. Brightdesk is also worth a look.",
+      "expected": []
+    },
+    {
+      "name": "supported-price-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Ledgerly is a solid pick. The Plus plan costs $25 per month. Countwise is another option.",
+      "expected": [
+        {
+          "quote_contains": "$25 per month",
+          "topic": "pricing",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "outdated-price-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Consider Ledgerly. Its Plus plan costs $15 per month, which is cheap.",
+      "expected": [
+        {
+          "quote_contains": "$15 per month",
+          "topic": "pricing",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "missing-integration-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Ledgerly integrates with Oracle NetSuite, so data flows both ways. Countwise does too.",
+      "expected": [
+        {
+          "quote_contains": "Oracle NetSuite",
+          "topic": "integrations",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "supported-integration-and-market-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Ledgerly connects to Stripe and serves customers in Australia and New Zealand.",
+      "expected": [
+        {
+          "quote_contains": "Stripe",
+          "topic": "integrations",
+          "verdict": "supported"
+        },
+        {
+          "quote_contains": "Australia and New Zealand",
+          "topic": "markets",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "wrong-market-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "If you are in Germany, Ledgerly is available there and popular with local teams.",
+      "expected": [
+        {
+          "quote_contains": "Germany",
+          "topic": "markets",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "refund-and-founding-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Ledgerly was founded in 2009 and offers refunds within 30 days.",
+      "expected": [
+        {
+          "quote_contains": "2009",
+          "topic": "company",
+          "verdict": "contradicted"
+        },
+        {
+          "quote_contains": "30 days",
+          "topic": "policies",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "spec-overstated-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "The Plus plan from Ledgerly includes unlimited users, unlike Countwise.",
+      "expected": [
+        {
+          "quote_contains": "unlimited users",
+          "topic": "specs",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "not-covered-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Ledgerly offers a free mobile app for iOS and Android and has a 4.7 star rating.",
+      "expected": [
+        {
+          "quote_contains": "mobile app",
+          "topic": "specs",
+          "verdict": "not_covered"
+        }
+      ]
+    },
+    {
+      "name": "subjective-decoy-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Ledgerly is the best small business accounting software I know: friendly, polished and worth every penny. Countwise feels dated.",
+      "expected": []
+    },
+    {
+      "name": "competitor-claims-only-ledgerly",
+      "brand_name": "Ledgerly",
+      "answer": "Countwise costs $15 per month and integrates with Oracle NetSuite. Ledgerly is also worth a look.",
+      "expected": []
+    },
+    {
+      "name": "supported-price-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Roastery Co is a solid pick. The Monthly plan costs $18 per month. Bean Club is another option.",
+      "expected": [
+        {
+          "quote_contains": "$18 per month",
+          "topic": "pricing",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "outdated-price-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Consider Roastery Co. Its Monthly plan costs $11 per month, which is cheap.",
+      "expected": [
+        {
+          "quote_contains": "$11 per month",
+          "topic": "pricing",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "missing-integration-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Roastery Co integrates with PayPal, so data flows both ways. Bean Club does too.",
+      "expected": [
+        {
+          "quote_contains": "PayPal",
+          "topic": "integrations",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "supported-integration-and-market-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Roastery Co connects to Apple Pay and serves customers in the United States.",
+      "expected": [
+        {
+          "quote_contains": "Apple Pay",
+          "topic": "integrations",
+          "verdict": "supported"
+        },
+        {
+          "quote_contains": "the United States",
+          "topic": "markets",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "wrong-market-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "If you are in Mexico, Roastery Co is available there and popular with local teams.",
+      "expected": [
+        {
+          "quote_contains": "Mexico",
+          "topic": "markets",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "refund-and-founding-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Roastery Co was founded in 2012 and offers refunds within 7 days.",
+      "expected": [
+        {
+          "quote_contains": "2012",
+          "topic": "company",
+          "verdict": "contradicted"
+        },
+        {
+          "quote_contains": "7 days",
+          "topic": "policies",
+          "verdict": "supported"
+        }
+      ]
+    },
+    {
+      "name": "spec-overstated-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "The Monthly plan from Roastery Co includes 5 bags per delivery, unlike Bean Club.",
+      "expected": [
+        {
+          "quote_contains": "5 bags per delivery",
+          "topic": "specs",
+          "verdict": "contradicted"
+        }
+      ]
+    },
+    {
+      "name": "not-covered-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Roastery Co offers a free mobile app for iOS and Android and has a 4.7 star rating.",
+      "expected": [
+        {
+          "quote_contains": "mobile app",
+          "topic": "specs",
+          "verdict": "not_covered"
+        }
+      ]
+    },
+    {
+      "name": "subjective-decoy-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Roastery Co is the best coffee subscription I know: friendly, polished and worth every penny. Bean Club feels dated.",
+      "expected": []
+    },
+    {
+      "name": "competitor-claims-only-roastery-co",
+      "brand_name": "Roastery Co",
+      "answer": "Bean Club costs $11 per month and integrates with PayPal. Roastery Co is also worth a look.",
+      "expected": []
+    }
+  ]
+}

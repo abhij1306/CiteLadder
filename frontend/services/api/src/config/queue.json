@@ -1,0 +1,33 @@
+{
+  "max_attempts_error": "max_attempts_exceeded",
+  "max_drain_batches": 1000,
+  "statuses": {
+    "awaiting_provider_result": "awaiting_provider_result",
+    "cancelled": "cancelled",
+    "capacity_wait": "capacity_wait",
+    "failed": "failed",
+    "leased": "leased",
+    "queued": "queued",
+    "retry_wait": "retry_wait",
+    "running": "running",
+    "submission_uncertain": "submission_uncertain",
+    "succeeded": "succeeded"
+  },
+  "claimable": [
+    "awaiting_provider_result",
+    "capacity_wait",
+    "queued",
+    "retry_wait",
+    "submission_uncertain"
+  ],
+  "active": [
+    "awaiting_provider_result",
+    "capacity_wait",
+    "leased",
+    "queued",
+    "retry_wait",
+    "running",
+    "submission_uncertain"
+  ],
+  "terminal": ["cancelled", "failed", "succeeded"]
+}

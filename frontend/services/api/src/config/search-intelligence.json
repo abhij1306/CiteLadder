@@ -1,0 +1,108 @@
+{
+  "default_research_scope": "domain_subdomains",
+  "default_depths": {
+    "ranking_keywords": 200,
+    "missing_keywords": 100,
+    "shared_keywords": 100,
+    "referring_domains": 100,
+    "destination_pages": 100,
+    "keyword_suggestions": 150,
+    "organic_pages": 100,
+    "backlinks": 100
+  },
+  "max_depth": 1000000,
+  "endpoints": {
+    "footprint": "/v3/dataforseo_labs/google/subdomains/live",
+    "ranking_keywords": "/v3/dataforseo_labs/google/ranked_keywords/live",
+    "missing_keywords": "/v3/dataforseo_labs/google/page_intersection/live",
+    "shared_keywords": "/v3/dataforseo_labs/google/page_intersection/live",
+    "keyword_suggestions": "/v3/dataforseo_labs/google/keyword_suggestions/live",
+    "backlink_summary": "/v3/backlinks/summary/live",
+    "referring_domains": "/v3/backlinks/referring_domains/live",
+    "destination_pages": "/v3/backlinks/domain_pages_summary/live",
+    "organic_pages": "/v3/dataforseo_labs/google/relevant_pages/live",
+    "backlinks": "/v3/backlinks/backlinks/live",
+    "backlink_history": "/v3/backlinks/history/live"
+  },
+  "broad_endpoints": {
+    "footprint": "/v3/dataforseo_labs/google/domain_rank_overview/live",
+    "missing_keywords": "/v3/dataforseo_labs/google/domain_intersection/live",
+    "shared_keywords": "/v3/dataforseo_labs/google/domain_intersection/live"
+  },
+  "list_kinds": [
+    "backlinks",
+    "destination_pages",
+    "keyword_suggestions",
+    "missing_keywords",
+    "organic_pages",
+    "ranking_keywords",
+    "referring_domains",
+    "shared_keywords"
+  ],
+  "labs_kinds": [
+    "footprint",
+    "keyword_suggestions",
+    "missing_keywords",
+    "organic_pages",
+    "ranking_keywords",
+    "shared_keywords"
+  ],
+  "backlink_kinds": [
+    "backlink_history",
+    "backlink_summary",
+    "backlinks",
+    "destination_pages",
+    "referring_domains"
+  ],
+  "page_size": 1000,
+  "provider_timeout_seconds": 90.0,
+  "provider_max_response_bytes": 8388608,
+  "maintenance_batch_size": 100,
+  "backlink_max_offset": 20000,
+  "keyword_acquisition_fields": {
+    "volume": "keyword_info.search_volume",
+    "difficulty": "keyword_properties.keyword_difficulty",
+    "cpc": "keyword_info.cpc"
+  },
+  "history_days": 365,
+  "history_max_observations": 13,
+  "reuse_days": 30,
+  "review_ttl_seconds": 600,
+  "rate_limit_retries": 2,
+  "rate_limit_default_wait_seconds": 30.0,
+  "rate_limit_max_wait_seconds": 900.0,
+  "rates": {
+    "labs_task": "0.012",
+    "labs_item": "0.00012",
+    "backlinks_request": "0.024",
+    "backlinks_row": "0.000036"
+  },
+  "row_sort_fields": [
+    "backlinks",
+    "dataforseo_rank",
+    "difficulty",
+    "domain",
+    "etv",
+    "id",
+    "intent",
+    "keyword",
+    "owned_rank_group",
+    "rank_group",
+    "referring_main_domains",
+    "search_volume",
+    "url"
+  ],
+  "auxiliary_sort_fields": [
+    "backlinks_spam_score",
+    "broken_backlinks",
+    "broken_pages",
+    "cpc",
+    "organic_keywords",
+    "rank_absolute",
+    "referring_domains",
+    "referring_pages"
+  ],
+  "parser_version": "1",
+  "price_version": "dataforseo-standard-2026-09-20",
+  "transport_provider": "dataforseo"
+}

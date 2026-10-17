@@ -1,0 +1,7 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "citeladder",
+  "version": "0.1.0",
+  "description": "Review AI visibility, cited sources and Site Health evidence from a self-hosted CiteLadder instance.",
+  "author": { "name": "CiteLadder contributors", "url": "https://github.com/abhij1306/CiteLadder" }
+}

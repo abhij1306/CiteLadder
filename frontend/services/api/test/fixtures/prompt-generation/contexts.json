@@ -1,0 +1,320 @@
+[
+  {
+    "name": "regional-school",
+    "brand_name": "The Asian School",
+    "brand_aliases": ["Asian School Dehradun"],
+    "competitors": [
+      {
+        "name": "Welham Boys School",
+        "aliases": []
+      }
+    ],
+    "country_code": "IN",
+    "language_code": "en",
+    "offerings": ["Boarding school", "Day school", "CBSE curriculum"],
+    "business_context": {
+      "category": "Residential schools",
+      "category_terms": ["boarding school", "CBSE school", "residential school"],
+      "business_model": "education_provider",
+      "buyer_type": "consumer",
+      "market_scope": "regional",
+      "service_areas": ["Dehradun", "Uttarakhand"],
+      "buyer_roles": ["parents", "guardians"],
+      "primary_market": "IN",
+      "description": "A co-educational CBSE boarding and day school in Dehradun, Uttarakhand."
+    },
+    "geo_terms": ["Dehradun", "Uttarakhand", "India", "Mussoorie", "North India"],
+    "observed_queries": [
+      {
+        "offering": "Boarding school",
+        "text": "boarding schools in dehradun for girls",
+        "weight": 2400
+      },
+      {
+        "offering": "Boarding school",
+        "text": "best boarding school for class 6 admission",
+        "weight": 880
+      },
+      {
+        "offering": "Boarding school",
+        "text": "which boarding school has good sports facilities",
+        "weight": 320
+      },
+      {
+        "offering": "Day school",
+        "text": "day school with transport near rajpur road",
+        "weight": 210
+      },
+      {
+        "offering": "Day school",
+        "text": "day schools with small class sizes",
+        "weight": 140
+      },
+      {
+        "offering": "CBSE curriculum",
+        "text": "cbse schools with hostel facility",
+        "weight": 1300
+      },
+      {
+        "offering": "CBSE curriculum",
+        "text": "cbse school admission for class 11 science",
+        "weight": 590
+      }
+    ]
+  },
+  {
+    "name": "local-service",
+    "brand_name": "CoolFix",
+    "brand_aliases": [],
+    "competitors": [
+      {
+        "name": "Urban Company",
+        "aliases": []
+      }
+    ],
+    "country_code": "IN",
+    "language_code": "en",
+    "offerings": ["AC repair", "AC installation"],
+    "business_context": {
+      "category": "Air conditioner repair",
+      "category_terms": ["AC repair", "AC service", "AC installation"],
+      "business_model": "local_service",
+      "buyer_type": "consumer",
+      "market_scope": "local",
+      "service_areas": ["Delhi", "Noida", "Gurgaon"],
+      "buyer_roles": ["homeowners", "tenants"],
+      "primary_market": "IN"
+    },
+    "geo_terms": ["Delhi", "Noida", "Gurgaon", "NCR", "India"],
+    "observed_queries": [
+      {
+        "offering": "AC repair",
+        "text": "ac repair service near me same day",
+        "weight": 5400
+      },
+      {
+        "offering": "AC repair",
+        "text": "split ac not cooling repair cost",
+        "weight": 1900
+      },
+      {
+        "offering": "AC repair",
+        "text": "who repairs inverter ac gas leak",
+        "weight": 320
+      },
+      {
+        "offering": "AC installation",
+        "text": "split ac installation charges with copper pipe",
+        "weight": 2900
+      },
+      {
+        "offering": "AC installation",
+        "text": "window ac installation service at home",
+        "weight": 720
+      }
+    ]
+  },
+  {
+    "name": "national-d2c-apparel",
+    "brand_name": "Denimly",
+    "brand_aliases": [],
+    "competitors": [
+      {
+        "name": "Levi's",
+        "aliases": ["Levis"]
+      }
+    ],
+    "country_code": "IN",
+    "language_code": "en",
+    "offerings": ["Jeans", "Chinos", "Jackets"],
+    "business_context": {
+      "category": "Denim apparel",
+      "category_terms": ["jeans", "denim", "chinos"],
+      "business_model": "d2c_product",
+      "buyer_type": "consumer",
+      "market_scope": "national",
+      "service_areas": ["Bengaluru", "India"],
+      "buyer_roles": ["men", "women"],
+      "primary_market": "IN"
+    },
+    "geo_terms": ["Bengaluru", "Bangalore", "India", "Indian"],
+    "observed_queries": [
+      {
+        "offering": "Jeans",
+        "text": "stretchable jeans for men slim fit",
+        "weight": 8100
+      },
+      {
+        "offering": "Jeans",
+        "text": "high waisted jeans for women under 2000",
+        "weight": 4400
+      },
+      {
+        "offering": "Jeans",
+        "text": "jeans that do not fade after washing",
+        "weight": 390
+      },
+      {
+        "offering": "Chinos",
+        "text": "cotton chinos for office wear",
+        "weight": 1600
+      },
+      {
+        "offering": "Jackets",
+        "text": "denim jacket for winter men",
+        "weight": 3600
+      },
+      {
+        "offering": "Jackets",
+        "text": "lightweight jacket for monsoon",
+        "weight": 880
+      }
+    ]
+  },
+  {
+    "name": "global-b2b-saas",
+    "brand_name": "FeedFlow",
+    "brand_aliases": [],
+    "competitors": [
+      {
+        "name": "Feedonomics",
+        "aliases": []
+      }
+    ],
+    "country_code": "US",
+    "language_code": "en",
+    "offerings": ["Product feed management", "Marketplace integrations"],
+    "business_context": {
+      "category": "Product feed software",
+      "category_terms": ["product feed", "feed management", "marketplace integration"],
+      "business_model": "b2b_saas",
+      "buyer_type": "business",
+      "market_scope": "global",
+      "service_areas": ["United States", "Europe"],
+      "buyer_roles": ["ecommerce managers", "marketing teams"],
+      "primary_market": "US"
+    },
+    "geo_terms": ["United States", "USA", "US", "Europe", "UK"],
+    "observed_queries": [
+      {
+        "offering": "Product feed management",
+        "text": "product feed management software for shopify",
+        "weight": 720
+      },
+      {
+        "offering": "Product feed management",
+        "text": "how to fix google merchant center feed errors",
+        "weight": 1300
+      },
+      {
+        "offering": "Product feed management",
+        "text": "feed tool for multiple marketplaces",
+        "weight": 260
+      },
+      {
+        "offering": "Marketplace integrations",
+        "text": "sell on amazon and ebay from one dashboard",
+        "weight": 590
+      },
+      {
+        "offering": "Marketplace integrations",
+        "text": "multichannel listing tool for small business",
+        "weight": 480
+      }
+    ]
+  },
+  {
+    "name": "marketplace",
+    "brand_name": "ApplianceHub",
+    "brand_aliases": [],
+    "competitors": [
+      {
+        "name": "Flipkart",
+        "aliases": []
+      }
+    ],
+    "country_code": "IN",
+    "language_code": "en",
+    "offerings": ["Washing machines", "Refrigerators", "Air purifiers"],
+    "business_context": {
+      "category": "Home appliances",
+      "category_terms": ["washing machine", "refrigerator", "air purifier"],
+      "business_model": "marketplace",
+      "buyer_type": "consumer",
+      "market_scope": "national",
+      "service_areas": ["India"],
+      "buyer_roles": ["families", "first-time buyers"],
+      "primary_market": "IN"
+    },
+    "geo_terms": ["India", "Indian", "Mumbai", "Delhi"],
+    "observed_queries": [
+      {
+        "offering": "Washing machines",
+        "text": "best front load washing machine under 30000",
+        "weight": 12100
+      },
+      {
+        "offering": "Washing machines",
+        "text": "quiet washing machine for apartment",
+        "weight": 880
+      },
+      {
+        "offering": "Refrigerators",
+        "text": "double door refrigerator with low power consumption",
+        "weight": 2900
+      },
+      {
+        "offering": "Refrigerators",
+        "text": "which fridge is best for a family of four",
+        "weight": 1600
+      },
+      {
+        "offering": "Air purifiers",
+        "text": "air purifier for allergies and dust",
+        "weight": 2400
+      },
+      {
+        "offering": "Air purifiers",
+        "text": "air purifier for large living room",
+        "weight": 1000
+      }
+    ]
+  },
+  {
+    "name": "japanese-retailer",
+    "brand_name": "ミドリ茶舗",
+    "brand_aliases": [],
+    "competitors": [
+      {
+        "name": "伊藤園",
+        "aliases": []
+      }
+    ],
+    "country_code": "JP",
+    "language_code": "ja",
+    "offerings": ["緑茶", "抹茶"],
+    "business_context": {
+      "category": "日本茶",
+      "category_terms": ["緑茶", "抹茶", "煎茶"],
+      "business_model": "retail",
+      "buyer_type": "consumer",
+      "market_scope": null,
+      "service_areas": ["静岡"],
+      "buyer_roles": [],
+      "primary_market": "JP"
+    },
+    "geo_terms": ["静岡", "日本", "京都"],
+    "observed_queries": [
+      {
+        "offering": "緑茶",
+        "text": "緑茶 おすすめ 通販 ギフト",
+        "weight": 1900
+      },
+      {
+        "offering": "抹茶",
+        "text": "抹茶 パウダー お菓子作り用 おすすめ",
+        "weight": 1300
+      }
+    ]
+  }
+]

@@ -1,0 +1,797 @@
+/* Focused-flow (onboarding) typography is intentionally roomier than the dense
+   product ladder. The flow shares the product palette and geometry
+   (globals.css); this scope changes type scale only. Every size is a rung of
+   the one globals.css scale. */
+:where([data-flow-surface]) {
+  /* Switzer carries body, UI and data, IBM Plex Sans the display headings, as in
+     the product. The scale is the product's (globals.css @theme), unchanged;
+     being "roomier" is a job for measure and rhythm, not for resizing rungs. */
+  --tracking-tight: -0.02em;
+  --tracking-wide: 0.02em;
+  --tracking-wider: 0.06em;
+  --leading-relaxed: 1.5;
+}
+
+:where([data-flow-surface]) {
+  font-size: 0.875rem;
+  line-height: 1.375rem;
+}
+
+/* Onboarding is one focused, touch-friendly flow. These
+   tokens own its measure, rhythm, and controls instead of route-local utility
+   constants. */
+[data-flow-surface] {
+  --flow-bar-height: 4rem;
+  --flow-measure: 45rem;
+  /* Review is the one step with more to confirm than to read. It was capped at
+     the same 45rem as every other step, which is why it scrolled for a page and
+     a half with both margins empty. */
+  --flow-measure-wide: 64rem;
+  --flow-gutter: 1.5rem;
+  --flow-header-gap: 2.5rem;
+  --flow-block: 2rem;
+  --flow-answer: 1rem;
+  --flow-stack: 0.5rem;
+  --flow-step-mark: 1.5rem;
+  --flow-step-connector: clamp(1.5rem, 4vw, 4rem);
+  --flow-result-stagger: var(--motion-stagger);
+}
+
+.flow-title {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--color-foreground);
+}
+
+.flow-group-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  color: var(--color-foreground);
+}
+
+.flow-help {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--color-secondary);
+}
+
+.flow-meta {
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+:where([data-flow-surface]) :where(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+:where([data-flow-surface]) [data-button-size='md'],
+:where([data-flow-surface]) [data-button-size='lg'] {
+  min-height: var(--control-height-lg);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  font-weight: 500;
+  letter-spacing: -0.005em;
+}
+
+/* The flow sits on a flat stage: white paper and a faint dot
+   lattice, with the task sheet lying on it rather than floating. */
+:root:not([data-theme='dark']) [data-flow-surface] {
+  background: var(--color-panel);
+}
+
+:root:not([data-theme='dark']) [data-flow-surface]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--lattice);
+  mask-image: radial-gradient(80% 60% at 50% 20%, black, transparent);
+  opacity: 0.5;
+}
+
+/* Opaque so a long step scrolls cleanly beneath it. It has no rule in
+   light mode; dark mode keeps one below. */
+.flow-bar {
+  background: var(--color-panel);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-index-sticky);
+}
+
+[data-theme='dark'] .flow-bar {
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.flow-bar-content {
+  display: grid;
+  min-height: var(--flow-bar-height);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--flow-stack);
+  /* The flow bar's logo sits in the same
+     1280px container and site gutter as the app header. */
+  max-width: 80rem;
+  margin-inline: auto;
+  padding-inline: var(--site-gutter);
+}
+
+.flow-exit {
+  justify-self: end;
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.flow-exit:hover {
+  color: var(--color-foreground);
+}
+
+.flow-progress ol {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-progress li {
+  display: flex;
+  align-items: center;
+  gap: var(--flow-stack);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.flow-progress li[aria-current='step'] {
+  color: var(--color-foreground);
+}
+
+.flow-step-mark {
+  display: grid;
+  width: var(--flow-step-mark);
+  height: var(--flow-step-mark);
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-full);
+  background: var(--color-panel);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+.flow-step-mark-current {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+
+.flow-step-mark-done {
+  border-color: var(--color-border-strong);
+  background: var(--color-track);
+  color: var(--color-secondary);
+}
+
+.flow-step-connector {
+  width: var(--flow-step-connector);
+  height: 1px;
+  margin-inline: var(--flow-stack);
+  background: var(--color-border-strong);
+}
+
+.flow-step-mobile-prefix {
+  display: none;
+}
+
+.flow-progress-rule {
+  height: 2px;
+  overflow: hidden;
+  background: var(--color-border-subtle);
+}
+
+.flow-progress-rule span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--color-accent-border);
+  transform-origin: left center;
+  transition: transform var(--motion-slow) var(--ease-standard);
+}
+
+.flow-main {
+  position: relative;
+  z-index: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--flow-header-gap) var(--flow-gutter) var(--flow-block);
+}
+
+.flow-main[data-flow-align='center'] {
+  display: grid;
+  align-items: center;
+}
+
+.flow-content,
+.flow-action-content {
+  width: min(100%, var(--flow-measure));
+  margin-inline: auto;
+}
+
+.flow-content[data-flow-measure='wide'],
+.flow-action-content[data-flow-measure='wide'] {
+  width: min(100%, var(--flow-measure-wide));
+}
+
+/* The task column is the white paper (it carries `app-pane` at its call site);
+   this is the inset that keeps its content off the sheet's edge.
+   `.flow-action-content` is deliberately excluded: it shares the measure so its
+   buttons line up with the pane, but it is a row on the ground. */
+.flow-content {
+  padding: var(--flow-block) var(--flow-gutter);
+}
+
+.flow-footer {
+  position: relative;
+  z-index: 1;
+  padding: var(--flow-answer) var(--flow-gutter);
+}
+
+.flow-actions {
+  background: var(--color-panel);
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-index-sticky);
+  padding: var(--flow-answer) var(--flow-gutter);
+}
+
+[data-theme='dark'] .flow-actions {
+  border-top: 1px solid var(--color-border);
+}
+
+.flow-actions.safe-bottom {
+  padding-bottom: calc(var(--flow-answer) + env(safe-area-inset-bottom, 0px));
+}
+
+.flow-action-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--flow-answer);
+}
+
+.flow-header {
+  display: grid;
+  gap: var(--flow-stack);
+  margin-bottom: var(--flow-header-gap);
+}
+
+.flow-header :where(h1, p) {
+  margin: 0;
+}
+
+.flow-group {
+  min-width: 0;
+}
+
+.flow-group-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--flow-answer);
+}
+
+.flow-group-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--flow-stack);
+}
+
+.flow-group-aside {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--flow-stack);
+}
+
+.flow-answer {
+  margin-top: var(--flow-answer);
+}
+
+/* Choices on a flow surface are squared off and set at reading size. They also
+   drop the control smudge: an unselected option is a word you have not picked
+   yet, not a button, and twelve outlined rectangles read as a form to fill in
+   rather than a list to check. Selection alone carries a fill. */
+[data-flow-surface] [data-radio-variant='chip'] button {
+  border-radius: var(--radius-control);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  box-shadow: none;
+}
+
+/* The review step is the only wide one, and the only one with more to confirm
+   than to read. Its title is smaller than the single-question steps', but its
+   sections are separate cards with room between them: at a 0.5rem answer gap
+   every question ran into the next and the page read as one long list. */
+.flow-content[data-flow-measure='wide'] {
+  --flow-header-gap: 1.25rem;
+  --flow-block: 1.5rem;
+  --flow-answer: 0.875rem;
+  --flow-card-gap: 1rem;
+}
+
+.flow-content[data-flow-measure='wide'] .flow-title {
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl--line-height);
+}
+
+/* The review step is one grid in reading order: the two business questions
+   share the first row (equal height, so neither leaves a hole beside the
+   other), then websites and competitors run the full width. One column below
+   the breakpoint, in the same order. */
+.flow-review {
+  display: grid;
+  gap: var(--flow-card-gap);
+}
+
+.flow-review > * {
+  min-width: 0;
+}
+
+@media (min-width: 64rem) {
+  .flow-review {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  }
+
+  .flow-review > .flow-review-wide,
+  .flow-review > .flow-review-hint {
+    grid-column: 1 / -1;
+  }
+
+  .flow-review .flow-competitor-chips {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* One or two auto-verified domains do not need a card's worth of height:
+     the heading and its toggles share a line. */
+  .flow-review-sites {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--flow-block);
+  }
+
+  .flow-review-sites > .flow-answer {
+    grid-row: 1;
+    grid-column: 2;
+    margin-top: 0;
+  }
+}
+
+/* A cell that pairs a card with its hint; the card fills the row height. */
+.flow-review-cell {
+  display: grid;
+  grid-template-rows: 1fr;
+  gap: var(--flow-stack);
+}
+
+/* Who buys it and where: two short questions in one card. */
+.flow-review-audience {
+  display: grid;
+  align-content: start;
+  gap: var(--flow-block);
+}
+
+/* One decision per card. The card's tone step, not a rule, is what separates
+   questions. */
+.flow-review-card {
+  padding: 1.25rem;
+  border-radius: var(--radius-card);
+  background: var(--color-background-alt);
+}
+
+.flow-review-card .flow-help {
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+}
+
+.flow-review-card .flow-group-copy {
+  gap: 0.25rem;
+}
+
+/* Inside a card the card's own edge frames the list; the rows keep their
+   separators. */
+.flow-review-card .flow-entity-list:not(.flow-competitor-chips) {
+  border-block: 0;
+}
+
+/* Short single-answer choices read as a set of options, not loose words. */
+.flow-review-card [data-radio-variant='chip'] button {
+  border: 1px solid var(--color-border-subtle);
+}
+
+.flow-review-card [data-radio-variant='chip'] button[data-state='checked'] {
+  border-color: var(--color-accent-border);
+}
+
+.flow-review-notices {
+  display: grid;
+  gap: var(--flow-stack);
+  margin-bottom: var(--flow-block);
+  scroll-margin-top: var(--flow-block);
+}
+
+/* Stated here, not left to the layered `empty:hidden` utility this unlayered
+   rule outranks: an empty region still spent its margin above the cards. */
+.flow-review-notices:empty {
+  display: none;
+}
+
+.flow-review-hint {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  color: var(--color-warning-text);
+  scroll-margin-block: var(--flow-block);
+}
+
+/* Owned domains use ruled rows. Competitor suggestions use compact toggles
+   in two equal columns so ten choices occupy five rows. */
+.flow-entity-list {
+  display: grid;
+  border-block: 1px solid var(--color-border-subtle);
+}
+
+.flow-entity-list > li + li {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.flow-entity {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+/* The row fills its line so the selection mark always sits at the right edge,
+   not wherever a short name happens to end. A row without a logo has two
+   children, which the three-column template put the mark into the 1fr track
+   straight after the name. */
+.flow-entity > .flow-entity-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.flow-entity-row:has(> .flow-entity-identity:first-child) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.flow-entity-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.5rem;
+  padding-inline: 0.5rem;
+  border-radius: var(--radius-control);
+}
+
+.flow-entity-row:hover {
+  background: var(--color-background-alt);
+}
+
+.flow-entity-row[aria-pressed='false'] .flow-entity-identity {
+  opacity: 0.55;
+}
+
+.flow-entity-identity {
+  display: grid;
+  min-width: 0;
+  gap: 0.125rem;
+}
+
+.flow-entity-name {
+  color: var(--color-foreground);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-entity-meta {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-entity-mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-accent-fg);
+}
+
+.flow-entity-row[aria-pressed='true'] .flow-entity-mark {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.flow-competitor-chips {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  border: 0;
+}
+
+.flow-competitor-chips > li {
+  padding-right: 0.25rem;
+}
+
+.flow-competitor-chips > li + li {
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.flow-competitor-chips .flow-entity-row {
+  min-width: 0;
+  flex: 1;
+}
+
+.flow-competitor-chips > li:has(input) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.5rem;
+}
+
+.flow-competitor-chips > li:has(input) input {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 480px) {
+  .flow-competitor-chips {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.flow-activity {
+  gap: var(--flow-answer);
+}
+
+.flow-activity-list {
+  display: grid;
+  gap: var(--flow-stack);
+}
+
+.flow-activity-row {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2rem;
+}
+
+.flow-activity-indicator {
+  display: grid;
+  width: 1.5rem;
+  height: 1.5rem;
+  place-items: center;
+  color: var(--color-muted);
+}
+
+.flow-activity-indicator svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.flow-activity-row[data-state='complete'] .flow-help,
+.flow-activity-row[data-state='active'] .flow-help {
+  color: var(--color-foreground);
+}
+
+.flow-activity-row[data-state='active'] .flow-activity-indicator {
+  color: var(--color-accent-text);
+}
+
+.flow-activity-row[data-state='attention'] {
+  margin-inline: calc(var(--flow-stack) * -1);
+  padding-inline: var(--flow-stack);
+  border-radius: var(--radius-control);
+  background: var(--color-warning-bg);
+}
+
+.flow-activity-row[data-state='attention'] .flow-activity-indicator,
+.flow-activity-row[data-state='attention'] .flow-help {
+  color: var(--color-warning-text);
+}
+
+.flow-found {
+  margin-top: var(--flow-block);
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--flow-answer);
+}
+
+.flow-found-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--flow-stack);
+  margin: var(--flow-stack) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flow-found-item {
+  color: var(--color-secondary);
+  font-size: var(--text-sm);
+  line-height: var(--text-sm--line-height);
+  animation: flow-result-in var(--motion-slow) var(--ease-standard) both;
+  animation-delay: calc(var(--flow-result-index, 0) * var(--flow-result-stagger));
+}
+
+.flow-found-item:not(:last-child)::after {
+  content: '·';
+  margin-left: var(--flow-stack);
+  color: var(--color-muted);
+}
+
+@keyframes flow-result-in {
+  from {
+    opacity: 0.35;
+    transform: translateY(0.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (min-width: 640px) {
+  [data-flow-surface] {
+    --flow-gutter: 2rem;
+  }
+}
+
+@media (max-width: 639px) {
+  [data-flow-surface] {
+    --flow-bar-height: 3.5rem;
+  }
+
+  /* Progress has its own row so the full wordmark and account controls
+     never compete with the step label on a phone. */
+  .flow-bar-content:has(.flow-progress) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding-top: 0.75rem;
+  }
+  .flow-bar-content:has(.flow-progress) > :last-child {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .flow-progress,
+  .flow-progress ol,
+  .flow-progress li,
+  .flow-step-label {
+    min-width: 0;
+  }
+
+  .flow-progress {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+    padding-bottom: 0.75rem;
+  }
+
+  .flow-step-label {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .flow-progress li:not([aria-current='step']) {
+    display: none;
+  }
+
+  .flow-step-connector {
+    display: none;
+  }
+
+  .flow-step-mobile-prefix {
+    display: inline;
+  }
+
+  .flow-step-mark {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+
+  .flow-action-content > div:last-child [data-button-size] {
+    min-height: var(--control-height-xl);
+  }
+
+  .flow-activity-row {
+    grid-template-columns: 1.5rem minmax(0, 1fr);
+  }
+
+  /* On a phone the review sheet is already the card: its questions become
+     ruled sections instead of boxes inset twice from the screen edge. */
+  .flow-review .flow-review-card {
+    padding: var(--flow-block) 0 0;
+    border: 0;
+    border-top: 1px solid var(--color-border-subtle);
+    border-radius: 0;
+    background: none;
+  }
+
+  .flow-review > :first-child .flow-review-card,
+  .flow-review > .flow-review-card:first-child {
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .flow-review-audience > * + * {
+    padding-top: var(--flow-block);
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  .flow-review {
+    gap: var(--flow-block);
+  }
+
+  .flow-activity-row .flow-meta {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 700px) {
+  [data-flow-surface] {
+    --flow-gutter: 1rem;
+    --flow-header-gap: 1.5rem;
+    --flow-block: 1.5rem;
+    --flow-answer: 0.75rem;
+  }
+
+  .flow-title {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+}
+
+/* Keep the focused workflow usable on a laptop with limited vertical room.
+   The shell remains the scroll owner; this only tightens its named rhythm. */
+@media (min-width: 981px) and (max-height: 800px) {
+  [data-flow-surface] {
+    --flow-bar-height: 3.5rem;
+    --flow-header-gap: 1.5rem;
+    --flow-block: 1.5rem;
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "settings": {
+    "request_id_header": {
+      "env": ["REQUEST_ID_HEADER"],
+      "type": "str",
+      "default": "X-Request-ID"
+    },
+    "frontend_url": {
+      "env": ["FRONTEND_URL"],
+      "type": "str",
+      "default": "http://localhost:8100"
+    },
+    "public_api_url": {
+      "env": ["PUBLIC_API_URL"],
+      "type": "str",
+      "default": ""
+    },
+    "allowed_hosts": {
+      "env": ["ALLOWED_HOSTS"],
+      "type": "str",
+      "default": ""
+    },
+    "encryption_key": {
+      "env": ["ENCRYPTION_KEY"],
+      "type": "str",
+      "default": "replace-with-32-byte-minimum-secret"
+    },
+    "api_key_pepper": {
+      "env": ["API_KEY_PEPPER"],
+      "type": "str",
+      "default": "replace-with-a-32-byte-minimum-api-key-pepper"
+    },
+    "referral_hash_salt": {
+      "env": ["REFERRAL_HASH_SALT"],
+      "type": "str",
+      "default": "replace-with-64-byte-random-secret"
+    }
+  },
+  "secret_policy": {
+    "min_bytes": 32,
+    "min_unique_chars": 12,
+    "insecure_values": [
+      "change-me",
+      "replace-with-32-byte-minimum-secret",
+      "replace-with-64-byte-random-secret",
+      "replace-with-a-32-byte-minimum-api-key-pepper"
+    ],
+    "weak_words": ["changeme", "citeladder", "password", "secret"]
+  }
+}

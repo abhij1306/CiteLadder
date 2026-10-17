@@ -1,0 +1,16 @@
+{
+  "profile_text_max_chars": 4000,
+  "profile_product_max_chars": 255,
+  "profile_products_max_count": 100,
+  "profile_review_edited": "edited",
+  "map_value_max_chars": 120,
+  "map_max_entries_per_dimension": 20,
+  "map_max_exclusions": 40,
+  "max_project_competitors": 5,
+  "max_entity_aliases": 50,
+  "alias_max_chars": 1024,
+  "category_max_chars": 160,
+  "profile_fields": ["description", "positioning", "products_services", "target_audience"],
+  "profile_source_manual": "manual",
+  "profile_review_confirmed": "confirmed"
+}

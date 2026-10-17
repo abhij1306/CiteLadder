@@ -1,0 +1,124 @@
+{
+  "reads": {
+    "robots_history_default_limit": 5,
+    "robots_history_max_limit": 20,
+    "page_default_limit": 50,
+    "page_max_limit": 200,
+    "terminal_grace_polls": 2,
+    "export_page_size": 200,
+    "max_detail_evaluations": 200,
+    "scoring_version": "sh-scoring-1",
+    "rule_dimensions": ["aeo", "technical"],
+    "failing_outcomes": ["missing", "partial"],
+    "event_count_bearing_keys": [
+      "discarded",
+      "discarded_count",
+      "discovered_total",
+      "discovered_url_count",
+      "estimated_total",
+      "frontier",
+      "frontier_size",
+      "has_more_site_urls",
+      "overflow",
+      "overflow_count",
+      "sitemap_url_count",
+      "total",
+      "total_url_count"
+    ],
+    "aeo_dimension_labels": {
+      "answerability": "Answerability",
+      "structure": "Structure",
+      "evidence": "Evidence",
+      "machine-readability": "Machine readability",
+      "provenance": "Provenance",
+      "freshness": "Freshness",
+      "crawlability": "Crawlability"
+    },
+    "aeo_dimension_descriptions": {
+      "answerability": "Whether a page answers its question directly, near the top, without hiding the answer behind a click.",
+      "structure": "Whether headings and structured data describe the page accurately enough for an answer engine to quote the right part.",
+      "evidence": "Whether claims are backed by sources a reader can follow.",
+      "machine-readability": "Whether the page states what it is in machine-readable form, rather than leaving an engine to infer it from prose.",
+      "provenance": "Whether a responsible creator or publisher is identified.",
+      "freshness": "Whether the page says when it was written or last updated.",
+      "crawlability": "Whether an answer engine can reach and read the page at all — the checks that make every other dimension moot when they fail."
+    },
+    "policy_blocking_error_codes": [
+      "access_blocked",
+      "bot_blocked",
+      "robots_denied",
+      "robots_unavailable",
+      "ssrf_blocked"
+    ],
+    "corpus_exclusion_error_codes": ["robots_denied", "url_admission_rejected"],
+    "non_error_terminal_codes": [
+      "access_blocked",
+      "bot_blocked",
+      "robots_denied",
+      "robots_unavailable",
+      "ssrf_blocked",
+      "url_admission_rejected"
+    ],
+    "fetch_attempt_error_outcome": "error",
+    "defect_impact_bands": {
+      "critical": 4,
+      "high": 3,
+      "medium": 2,
+      "low": 1,
+      "info": 0
+    },
+    "readiness_dimension_weights": {
+      "answerability": 0.2,
+      "structure": 0.15,
+      "evidence": 0.15,
+      "machine-readability": 0.2,
+      "provenance": 0.1,
+      "freshness": 0.05,
+      "crawlability": 0.15
+    },
+    "aeo_check_pillar": {
+      "aeo.content_date_present": "freshness",
+      "aeo.heading_hierarchy": "structure",
+      "aeo.listing_answer_set": "answerability",
+      "aeo.offer_freshness_signal": "freshness",
+      "aeo.product_answer_facts": "answerability",
+      "aeo.product_brand_identity": "provenance",
+      "aeo.product_evidence_facts": "evidence",
+      "aeo.schema_matches_content": "machine-readability",
+      "aeo.schema_required_valid": "machine-readability",
+      "aeo.server_rendered_content": "machine-readability",
+      "aeo.visible_attribution": "provenance",
+      "search.crawler_access": "crawlability",
+      "search.snippet_access": "crawlability",
+      "technical.indexable": "crawlability"
+    },
+    "unknown_rule_remediation_route": "code",
+    "issue_history_max_crawls": 24,
+    "inventory_source_crawl_ids_key": "inventory_source_crawl_ids",
+    "coverage_formula_version": "sh-coverage-1",
+    "classification_formula_version": "sh-classification-1",
+    "overview_trend_point_limit": 12,
+    "web_fundamentals_areas": ["accessibility", "mobile", "security", "lab"],
+    "eligibility_critical_checkpoints": [
+      "acquisition.public_representation",
+      "search.indexability"
+    ],
+    "aeo_max_evaluations": 100000,
+    "aeo_max_evidence_pages": 25,
+    "content_addressable_check_fields": {
+      "technical.title_present": "title",
+      "technical.meta_description_present": "meta_description"
+    },
+    "partial_reasons": {
+      "discovery": "discovery_incomplete",
+      "analysis": "analysis_incomplete",
+      "both": "discovery_and_analysis_incomplete"
+    },
+    "measurement_versions": {
+      "profile": "sh-profiles-1",
+      "schema_contract": "sh-schema-1",
+      "presentation": "sh-presentation-1"
+    },
+    "terminal_crawl_statuses": ["cancelled", "completed", "failed", "partially_completed"]
+  }
+}

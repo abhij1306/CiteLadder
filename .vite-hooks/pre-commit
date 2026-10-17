@@ -1,0 +1,8 @@
+# Pin the hook to the project-local Vite+ toolchain (frontend/node_modules,
+# installed from the frozen lockfile) so the result never depends on whichever
+# global `vp` version happens to be first on PATH. Git runs hooks from the
+# repository root; this PATH also covers the `vp check --fix` command inside
+# the root vite.config.ts `staged` block.
+PATH="./frontend/node_modules/.bin:$PATH"
+export PATH
+exec vp staged

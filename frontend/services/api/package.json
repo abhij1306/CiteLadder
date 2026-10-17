@@ -1,0 +1,67 @@
+{
+  "name": "@citeladder/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": [
+    "src",
+    "assets",
+    "migrations"
+  ],
+  "scripts": {
+    "start": "node src/server.ts",
+    "tick": "node src/tick.ts",
+    "acquisition:control": "node src/cli/acquisition-control.ts",
+    "bootstrap:account": "node src/cli/bootstrap-account.ts",
+    "migrate": "node src/cli/migrate.ts",
+    "reset:db": "node src/cli/reset-database.ts",
+    "seed:site-health": "node scripts/seed-site-health.ts",
+    "seed:dev": "node src/cli/seed-dev-data.ts",
+    "test": "vitest run",
+    "test:local": "node scripts/api-test.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "check:routes": "node scripts/check-route-ownership.ts",
+    "jev:calibrate": "node scripts/jev-calibration.ts",
+    "prompts:eval": "node scripts/eval-prompt-generation.ts",
+    "agent:eval": "node scripts/eval-agent.ts",
+    "perception:eval": "node scripts/eval-perception.ts",
+    "facts:eval": "node scripts/eval-fact-check.ts",
+    "crawl:worker": "node scripts/export-crawl-worker.ts",
+    "crawl:firehose-filter": "node scripts/export-firehose-filter.ts",
+    "dataforseo:locations": "node src/cli/dataforseo-locations.ts",
+    "db:types": "kysely-codegen --dialect postgres --url \"env(TYPES_DATABASE_URL)\" --exclude-pattern schema_migrations --out-file src/generated/db-schema.ts",
+    "db:types:check": "kysely-codegen --dialect postgres --url \"env(TYPES_DATABASE_URL)\" --exclude-pattern schema_migrations --out-file src/generated/db-schema.ts --verify"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.133.0",
+    "@citeladder/contracts": "workspace:*",
+    "@fontsource/noto-sans": "^5.3.0",
+    "@hono/node-server": "^2.1.5",
+    "@noble/hashes": "^2.4.0",
+    "csv-parse": "^7.0.3",
+    "fast-xml-parser": "^5.11.2",
+    "fontkit": "^2.0.4",
+    "hono": "^4.13.13",
+    "ipaddr.js": "^2.5.0",
+    "jose": "^6.2.12",
+    "kysely": "^0.29.6",
+    "parse5": "^8.0.1",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.23.1",
+    "robots-parser": "^3.0.1",
+    "tldts": "^7.4.18",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/fontkit": "^2.0.9",
+    "@types/node": "^26.6.5",
+    "@types/pdfkit": "^0.17.6",
+    "@types/pg": "^8.23.1",
+    "kysely-codegen": "^0.20.0",
+    "typescript": "^7.0.2",
+    "vitest": "catalog:"
+  },
+  "engines": {
+    "node": ">=26"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "formula_version": "1",
+  "refresh_delay_seconds": 60,
+  "min_verified_requests": 5,
+  "min_referral_sessions": 5,
+  "concentration_top_k": 3,
+  "concentration_share": 0.8,
+  "max_pattern_pages": 100,
+  "max_timeline_items": 1000
+}
