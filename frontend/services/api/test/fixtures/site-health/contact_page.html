@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+  A COMPLETE contact page that is 30 words long. Every fact a visitor needs is
+  present -- postal address, phone, email, opening hours and a working form --
+  and none of it is prose, so a word-count sufficiency threshold reads this
+  excellent page as thin content.
+
+  It also carries no JSON-LD and no question headings, because a contact page
+  has no reason to carry either.
+-->
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Contact Northgate Joinery</title>
+    <meta
+      name="description"
+      content="Call, email or visit the Northgate Joinery workshop in Leeds."
+    />
+    <link rel="canonical" href="https://northgate.example/contact-us" />
+  </head>
+  <body>
+    <header>
+      <nav><a href="/">Home</a><a href="/about">About</a></nav>
+    </header>
+
+    <main>
+      <h1>Contact us</h1>
+
+      <address>
+        Northgate Joinery<br />
+        18 Meanwood Road<br />
+        Leeds LS7 2AB
+      </address>
+
+      <p>Phone: <a href="tel:+441132960114">0113 296 0114</a></p>
+      <p>Email: <a href="mailto:workshop@northgate.example">workshop@northgate.example</a></p>
+
+      <table>
+        <tr>
+          <th>Mon&ndash;Fri</th>
+          <td>08:00&ndash;17:00</td>
+        </tr>
+        <tr>
+          <th>Saturday</th>
+          <td>09:00&ndash;13:00</td>
+        </tr>
+        <tr>
+          <th>Sunday</th>
+          <td>Closed</td>
+        </tr>
+      </table>
+
+      <form action="/contact-us" method="post">
+        <label for="name">Your name</label>
+        <input id="name" name="name" type="text" />
+        <label for="email">Your email</label>
+        <input id="email" name="email" type="email" />
+        <label for="message">Message</label>
+        <textarea id="message" name="message"></textarea>
+        <button type="submit">Send</button>
+      </form>
+    </main>
+
+    <footer><a href="/privacy-policy">Privacy</a></footer>
+  </body>
+</html>

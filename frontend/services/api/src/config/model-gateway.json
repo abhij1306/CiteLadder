@@ -1,0 +1,61 @@
+{
+  "gateway": {
+    "api_key": {
+      "env": ["DEFAULT_AGENT_API_KEY"],
+      "type": "str",
+      "default": ""
+    },
+    "base_url": {
+      "env": ["DEFAULT_AGENT_BASE_URL"],
+      "type": "str",
+      "default": ""
+    },
+    "model": {
+      "env": ["DEFAULT_AGENT_MODEL"],
+      "type": "str",
+      "default": ""
+    },
+    "timeout_seconds": {
+      "env": ["DEFAULT_AGENT_TIMEOUT_SECONDS"],
+      "type": "float",
+      "default": 180.0,
+      "exclusive_minimum": 0
+    },
+    "max_output_tokens": {
+      "env": ["DEFAULT_AGENT_MAX_OUTPUT_TOKENS"],
+      "type": "int",
+      "default": 16384,
+      "exclusive_minimum": 0
+    },
+    "skills_directory": {
+      "env": ["AGENT_SKILLS_DIRECTORY"],
+      "type": "str",
+      "default": ""
+    },
+    "execution_timeout_seconds": {
+      "env": ["DEFAULT_AGENT_EXECUTION_TIMEOUT_SECONDS"],
+      "type": "float",
+      "default": 210.0,
+      "exclusive_minimum": 0
+    },
+    "lease_margin_seconds": {
+      "env": ["DEFAULT_AGENT_LEASE_MARGIN_SECONDS"],
+      "type": "float",
+      "default": 30.0,
+      "exclusive_minimum": 0
+    },
+    "retry_base_delay_seconds": {
+      "env": ["DEFAULT_AGENT_RETRY_BASE_DELAY_SECONDS"],
+      "type": "float",
+      "default": 2.0,
+      "exclusive_minimum": 0
+    },
+    "retry_max_delay_seconds": {
+      "env": ["DEFAULT_AGENT_RETRY_MAX_DELAY_SECONDS"],
+      "type": "float",
+      "default": 45.0,
+      "exclusive_minimum": 0
+    }
+  },
+  "max_attempts": 3
+}

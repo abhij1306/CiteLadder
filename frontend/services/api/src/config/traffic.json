@@ -1,0 +1,117 @@
+{
+  "TRAFFIC_MAX_WINDOW_DAYS": 480,
+  "TRAFFIC_GRANULARITY_DAY": "day",
+  "TRAFFIC_SNAPSHOT_GRANULARITIES": ["day", "month", "week"],
+  "TRAFFIC_DEFAULT_GRANULARITY": "day",
+  "TRAFFIC_GA4_ORGANIC_CHANNEL_GROUPS": ["Organic Search"],
+  "TRAFFIC_GA4_ORGANIC_MEDIUMS": ["organic"],
+  "TRAFFIC_GA4_REFERRAL_DATASETS": ["ga4_referrer_daily", "ga4_source_medium_daily"],
+  "TRAFFIC_CONSUMED_DATASETS": [
+    "ga4_channel_daily",
+    "ga4_landing_daily",
+    "ga4_source_medium_daily",
+    "gsc_country_daily",
+    "gsc_day_daily",
+    "gsc_device_daily",
+    "gsc_page_daily",
+    "gsc_query_daily"
+  ],
+  "AI_REFERRALS_REFRESH_TRIGGER_DATASETS": [
+    "ga4_channel_daily",
+    "ga4_ecommerce_source_medium_daily",
+    "ga4_landing_daily"
+  ],
+  "TRAFFIC_REFRESH_TRIGGER_DATASETS": [
+    "bing_page_daily",
+    "bing_query_daily",
+    "ga4_channel_daily",
+    "ga4_landing_daily",
+    "ga4_source_medium_daily",
+    "gsc_country_daily",
+    "gsc_day_daily",
+    "gsc_device_daily",
+    "gsc_page_daily",
+    "gsc_query_daily"
+  ],
+  "TRAFFIC_PROJECTED_DATASETS": [
+    "bing_page_daily",
+    "bing_query_daily",
+    "ga4_channel_daily",
+    "ga4_landing_daily",
+    "ga4_source_medium_daily",
+    "gsc_country_daily",
+    "gsc_day_daily",
+    "gsc_device_daily",
+    "gsc_page_daily",
+    "gsc_query_daily"
+  ],
+  "TRAFFIC_PROVENANCE_ID_LIMIT": 500,
+  "TRAFFIC_METRIC_ROW_BATCH_SIZE": 1000,
+  "PERFORMANCE_RANGE_LAST_SYNCED": "last_synced",
+  "PERFORMANCE_PRESET_RANGE_DAYS": {
+    "day": 1,
+    "week": 7,
+    "month": 28
+  },
+  "PERFORMANCE_EXTENDED_RANGE_DAYS": {
+    "3_months": 90,
+    "6_months": 180
+  },
+  "PERFORMANCE_RANGES": ["3_months", "6_months", "custom", "day", "last_synced", "month", "week"],
+  "PERFORMANCE_DEFAULT_RANGE": "last_synced",
+  "PERFORMANCE_SNAPSHOT_WINDOW_DAYS": [1, 7, 28],
+  "PERFORMANCE_TABLE_DIMENSION_ORDER": [
+    "query",
+    "page",
+    "country",
+    "device",
+    "search_appearance",
+    "day",
+    "bing_query",
+    "bing_page"
+  ],
+  "PERFORMANCE_DIMENSIONS": [
+    "bing_page",
+    "bing_query",
+    "country",
+    "day",
+    "device",
+    "page",
+    "query",
+    "search_appearance"
+  ],
+  "PERFORMANCE_DEFAULT_DIMENSION": "query",
+  "PERFORMANCE_DIMENSION_DATASETS": {
+    "query": "gsc_query_daily",
+    "page": "gsc_page_daily",
+    "country": "gsc_country_daily",
+    "device": "gsc_device_daily",
+    "search_appearance": "gsc_search_appearance_daily",
+    "day": "gsc_day_daily",
+    "bing_query": "bing_query_daily",
+    "bing_page": "bing_page_daily"
+  },
+  "PERFORMANCE_SORT_KEY_DIMENSION": "dimension_key",
+  "PERFORMANCE_SORT_WHITELIST": ["clicks", "ctr", "dimension_key", "impressions", "position"],
+  "PERFORMANCE_PAGE_SIZE_OPTIONS": [10, 25, 50, 100],
+  "PERFORMANCE_DEFAULT_PAGE_SIZE": 10,
+  "PERFORMANCE_DIMENSION_DEFAULT_SORT": {
+    "query": "-clicks",
+    "page": "-clicks",
+    "country": "-clicks",
+    "device": "-clicks",
+    "search_appearance": "-clicks",
+    "day": "dimension_key",
+    "bing_query": "-clicks",
+    "bing_page": "-clicks"
+  },
+  "PERFORMANCE_CUSTOM_RANGE_MAX_DAYS": 480,
+  "PERFORMANCE_COMPARE_NONE": "none",
+  "PERFORMANCE_COMPARE_PREVIOUS": "previous",
+  "PERFORMANCE_COMPARE_YEAR_OVER_YEAR": "year_over_year",
+  "PERFORMANCE_COMPARE_MODES": ["custom", "none", "previous", "year_over_year"],
+  "PERFORMANCE_DEFAULT_COMPARE": "none",
+  "PERFORMANCE_YEAR_OVER_YEAR_SHIFT_DAYS": 364,
+  "TRAFFIC_FORMULA_VERSION": "traffic-formula-1",
+  "TRAFFIC_NORMALIZATION_VERSION": "traffic-normalization-1"
+}

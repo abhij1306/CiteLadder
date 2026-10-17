@@ -1,0 +1,12 @@
+{
+  "revision": "ai-pricing-v1",
+  "gateway_default_price": "claude-haiku-5-5",
+  "models": {
+    "claude-haiku-5-5": {
+      "input_microusd_per_million": 100000,
+      "cache_write_input_microusd_per_million": 125000,
+      "cached_input_microusd_per_million": 10000,
+      "output_microusd_per_million": 500000
+    }
+  }
+}

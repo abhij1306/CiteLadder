@@ -1,0 +1,45 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        // The Vite app is entered explicitly because knip's vite plugin does
+        // not discover the nested apps/app/vite.config.ts on its own; main.tsx
+        // covers the HTML-driven runtime graph.
+        "apps/app/vite.config.ts",
+        "apps/app/src/main.tsx",
+      ],
+      "project": [
+        "apps/app/**/*.{ts,tsx}",
+        "components/**/*.{ts,tsx}",
+        "lib/**/*.{ts,tsx}",
+        "test/**/*.{ts,tsx}",
+        "e2e/**/*.{ts,tsx}",
+        "scripts/**/*.{js,mjs,ts,mts}",
+        "**/*.css",
+      ],
+    },
+    // The API contracts shared by the browser app and the TypeScript service.
+    // Its exports are its public surface, so an export no consumer imports is
+    // still reported as dead rather than excused as a package entry.
+    "packages/contracts": {
+      "project": ["src/**/*.ts"],
+      "includeEntryExports": true,
+    },
+    "packages/mcp-app": {
+      "project": ["src/**/*.{ts,tsx}"],
+    },
+    // The TypeScript API service. Its generated inputs
+    // are consumed wholesale, so unused generated table types are expected.
+    "services/api": {
+      // Native development seed orchestration invokes this CLI entrypoint directly.
+      "entry": ["src/cli/seed-audit.ts"],
+      "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"],
+      "ignore": ["src/generated/**"],
+    },
+  },
+  "ignoreDependencies": [
+    // Resolved through a computed path in check-jscpd.mjs, which static analysis cannot follow.
+    "jscpd",
+  ],
+}

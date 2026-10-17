@@ -1,0 +1,22 @@
+/** Agent context selection and content bounds. */
+export const agentContext = {
+  content_context_status_included: 'included',
+  content_context_status_unavailable: 'unavailable',
+  content_context_max_pages: 10,
+  content_context_background_max_pages: 100,
+  content_context_read_batch_size: 100,
+  context_max_h1: 3,
+  context_max_h2: 8,
+  content_context_per_page_body_chars: 2000,
+  content_context_max_chars: 24000,
+  content_context_field_max_chars: 300,
+  content_score_target_url: 1000,
+  content_score_title: 20,
+  content_score_h1: 20,
+  content_score_h2: 10,
+  content_score_url: 10,
+  content_score_body: 2,
+  content_score_monitored: 5,
+  content_crawl_fragment_selection_version: 'crawl-fragment-selection-1',
+  content_context_version: 'content-context-v1',
+};

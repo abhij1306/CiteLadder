@@ -1,0 +1,34 @@
+# Env / secrets
+.env
+*.env
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+frontend/test-results/
+frontend/playwright-report/
+/.playwright/
+frontend/.playwright-cli/
+
+# The root package.json only delegates to frontend/; frontend/pnpm-lock.yaml
+# is the one lockfile.
+/pnpm-lock.yaml
+
+# Generated MCP App HTML (built from frontend/packages/mcp-app)
+frontend/services/api/assets/mcp-app/
+frontend/packages/mcp-app/dist/
+
+# Playwright saved browser state
+auth.json
+*.auth-state.json
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Local self-host data (generated secrets)
+.data/

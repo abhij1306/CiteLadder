@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "citeladder": {
+      "type": "streamable-http",
+      "url": "http://localhost:8100/mcp",
+      "headers": { "Authorization": "Bearer ${CITELADDER_MCP_TOKEN}" }
+    }
+  }
+}

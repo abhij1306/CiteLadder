@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: App (lint, types, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-frontend
+      - name: Lint and format
+        run: pnpm check
+      - name: Design policy tests
+        run: node --test ../scripts/*.test.mjs ../scripts/frontend/*.test.mjs
+      - name: Type check
+        run: pnpm exec tsc --noEmit
+      - name: Tests
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+
+  api:
+    name: API (types, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: citeladder
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CITELADDER_DISABLE_DOTENV: '1'
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/citeladder
+      TYPES_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/citeladder
+      API_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/citeladder
+    defaults:
+      run:
+        working-directory: frontend/services/api
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-frontend
+      - name: Apply the schema
+        run: pnpm migrate
+      - name: Type check
+        run: pnpm typecheck
+      - name: Generated database types match the schema
+        run: pnpm db:types:check
+      - name: Tests
+        run: pnpm test
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Build and start the stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+      - name: Smoke test
+        run: |
+          curl -fsS http://127.0.0.1:8100/ready
+          curl -fsS http://127.0.0.1:8100/api/v1/auth/me
+          curl -fsS http://127.0.0.1:8100/ | grep -qi '<div id="root"'
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+  secrets:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: gitleaks (working tree, reviewed allowlist in .gitleaks.toml)
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1             dir /repo --no-banner --redact --config /repo/.gitleaks.toml

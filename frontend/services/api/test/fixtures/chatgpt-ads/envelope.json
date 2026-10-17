@@ -1,0 +1,73 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    {
+      "id": "ours",
+      "status_code": 20000,
+      "cost": 0.004,
+      "result": [
+        {
+          "model": "gpt-5",
+          "markdown": "",
+          "fan_out_queries": ["best running shoes"],
+          "sources": [
+            { "url": "https://publisher.example/review?utm_source=chatgpt", "title": "Review" }
+          ],
+          "items": [
+            {
+              "type": "chat_gpt_text",
+              "markdown": "Acme and Rival both make good road shoes.",
+              "sources": [{ "url": "https://rival.example/shoes", "title": "Rival shoes" }]
+            },
+            {
+              "type": "chat_gpt_ad",
+              "rank_group": 1,
+              "rank_absolute": 2,
+              "title": "Rival Runner 3",
+              "snippet": "Free returns on every pair.",
+              "url": "https://shop.rival.example/runner-3?gclid=abc&utm_campaign=ai#reviews",
+              "domain": "shop.rival.example",
+              "image_url": "https://cdn.ads.example/rival.png",
+              "advertiser": {
+                "name": "Rival",
+                "url": "https://www.rival.example/",
+                "favicon_url": "https://cdn.ads.example/rival.ico"
+              },
+              "sources": [{ "url": "https://sponsored.example/landing", "title": "Sponsored" }]
+            },
+            {
+              "type": "chat_gpt_carousel",
+              "items": [
+                {
+                  "type": "chat_gpt_ad",
+                  "rank_group": 2,
+                  "rank_absolute": 3,
+                  "title": "Acme Trail",
+                  "snippet": "",
+                  "url": "https://acme.example/trail",
+                  "domain": "acme.example",
+                  "image_url": null,
+                  "advertiser": null
+                },
+                {
+                  "type": "chat_gpt_ad",
+                  "rank_group": 3,
+                  "title": "No rank",
+                  "url": "https://norank.example/"
+                },
+                {
+                  "type": "chat_gpt_ad",
+                  "rank_group": 4,
+                  "rank_absolute": 5,
+                  "title": "Not a web link",
+                  "url": "javascript:alert(1)",
+                  "domain": "bad.example"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

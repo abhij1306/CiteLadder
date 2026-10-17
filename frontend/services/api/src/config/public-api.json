@@ -1,0 +1,23 @@
+{
+  "key_prefix": "cl_live_",
+  "prefix_random_chars": 8,
+  "secret_random_bytes": 32,
+  "rate_limits": {
+    "api_key": { "operation": "public_api.request", "limit": 600, "window_seconds": 60 },
+    "workspace": { "operation": "public_api.request", "limit": 1200, "window_seconds": 60 }
+  },
+  "last_used_resolution_seconds": 300,
+  "rejection_event_interval_seconds": 3600,
+  "idempotency": {
+    "key_max_chars": 255,
+    "retention_hours": 24,
+    "purge_batch": 500
+  },
+  "page": { "default_limit": 50, "max_limit": 100 },
+  "document": {
+    "title": "CiteLadder API",
+    "version": "1",
+    "server_url": "/",
+    "auth_description": "An API key created in Settings → API keys, sent as `Authorization: Bearer cl_live_…`."
+  }
+}

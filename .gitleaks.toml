@@ -1,0 +1,12 @@
+# Secrets scan for the CI `secrets` job: gitleaks' default rules plus reviewed
+# false positives. Allow a line only after confirming it holds no credential.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Reviewed non-secrets: labelled test fixtures"
+regexTarget = "line"
+regexes = [
+  '''_KEY: '[a-z-]*fixture[a-z0-9-]*',''',
+  '''"AuthenticationCode": "ABC123DEF456"''',
+]

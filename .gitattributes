@@ -1,0 +1,20 @@
+# Line endings are LF in the index and in every working tree.
+#
+# Previously nothing declared this, so a Windows checkout got CRLF via
+# `core.autocrlf` while the index stayed LF. Prettier absorbed the difference
+# with `endOfLine: auto`; oxfmt, which replaced it, always writes LF, so
+# `pnpm format:check` reported every file as unformatted after each checkout
+# on Windows. Declaring the policy here fixes it for every clone regardless of
+# the developer's local git configuration, which `core.autocrlf` cannot do.
+* text=auto eol=lf
+
+# Binary assets: never touched, never diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.sh text eol=lf

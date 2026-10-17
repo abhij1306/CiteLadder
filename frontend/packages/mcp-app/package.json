@@ -1,0 +1,19 @@
+{
+  "name": "@citeladder/mcp-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp build -c vite.config.ts && pnpm --dir ../.. exec vp fmt --write packages/mcp-app/dist/analytics.html"
+  },
+  "dependencies": {
+    "@citeladder/contracts": "workspace:*",
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vite-plus": "catalog:"
+  }
+}

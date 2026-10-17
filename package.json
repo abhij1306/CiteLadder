@@ -1,0 +1,27 @@
+{
+  "name": "citeladder",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-hosted AI search visibility and evidence-grounded growth intelligence. Root manifest: delegates to the pnpm workspace in frontend/ and declares no dependencies of its own.",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhij1306/CiteLadder.git"
+  },
+  "packageManager": "pnpm@12.10.1",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "bootstrap": "pnpm --dir frontend install --frozen-lockfile && node frontend/node_modules/vite-plus/bin/vp config --hooks --no-agent",
+    "build": "pnpm --dir frontend build && pnpm --dir frontend --filter @citeladder/mcp-app build && node scripts/copy-mcp-app.mjs",
+    "start": "node scripts/start.mjs",
+    "dev": "pnpm --dir frontend dev",
+    "test": "pnpm --dir frontend test",
+    "test:e2e": "pnpm --dir frontend test:e2e",
+    "lint": "pnpm --dir frontend lint",
+    "format": "pnpm --dir frontend format",
+    "format:check": "pnpm --dir frontend format:check",
+    "typecheck": "pnpm --dir frontend exec tsc --noEmit"
+  }
+}

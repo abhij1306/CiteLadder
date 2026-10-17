@@ -1,0 +1,40 @@
+/*
+ * The authenticated app's stylesheet.
+ *
+ * `source(none)` turns off Tailwind's automatic content detection, which walks
+ * up to the nearest package boundary — here the whole frontend, so the app was
+ * generating utilities for every `*.test.tsx` and for the Playwright specs.
+ * None of those classes could ever match; they were simply carried.
+ *
+ * The list below is what the app can actually reach. Adding a directory the app
+ * imports from and forgetting it here fails SILENTLY — the class is just absent
+ * — so `e2e/design-repair.spec.ts` is the guard that matters.
+ */
+/* Both imports come first: CSS drops an `@import` that follows another
+   at-rule, and putting the `@source` list above this one silently shipped a
+   stylesheet with no design system in it at all. */
+@import 'tailwindcss' source(none);
+@import './globals.css';
+
+@source '../../../apps/app/src';
+@source '../../../components/agent';
+@source '../../../components/ai-traffic';
+@source '../../../components/demand';
+@source '../../../components/integrations';
+@source '../../../components/knowledge-base';
+@source '../../../components/layout';
+@source '../../../components/mcp';
+@source '../../../components/onboarding';
+@source '../../../components/opportunities';
+@source '../../../components/performance';
+@source '../../../components/products';
+@source '../../../components/providers';
+@source '../../../components/projects';
+@source '../../../components/prompts';
+@source '../../../components/runs';
+@source '../../../components/settings';
+@source '../../../components/search-intelligence';
+@source '../../../components/site-health';
+@source '../../../components/ui';
+@source '../../../components/visibility';
+@source '../../../lib';

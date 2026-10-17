@@ -1,0 +1,312 @@
+{
+  "transitions": {
+    "draft": ["cancelled", "validating"],
+    "validating": ["cancelled", "failed", "queued"],
+    "queued": ["cancelled", "running"],
+    "running": ["analyzing", "cancelled", "failed", "partially_completed"],
+    "analyzing": ["cancelled", "failed", "partially_completed", "reporting"],
+    "reporting": ["completed", "failed", "partially_completed"],
+    "completed": [],
+    "partially_completed": [],
+    "failed": [],
+    "cancelled": []
+  },
+  "analysis": {
+    "entity_assessment_version": "entity-assessment-1",
+    "scoring_rule_version": "prompt-composite-v1",
+    "prompt_score_visibility_weight": 0.6,
+    "prompt_score_competitive_weight": 0.25,
+    "prompt_score_owned_citation_weight": 0.15,
+    "prompt_decline_materiality_points": 5.0,
+    "prompt_decline_required_movements": 3,
+    "prompt_decline_window_movements": 4,
+    "prompt_decline_min_engines": 2,
+    "prompt_decline_repetition_agreement": 0.67,
+    "prompt_decline_history_candidate_limit": 20,
+    "entity_matching_version": "entity-matching-1",
+    "context_window_tokens": 12,
+    "entity_context_seed_max": 12,
+    "entity_terms_max": 20,
+    "common_noun_names": [
+      "apple",
+      "dove",
+      "gap",
+      "indeed",
+      "jaguar",
+      "linear",
+      "mercury",
+      "monday",
+      "nest",
+      "next",
+      "notion",
+      "oracle",
+      "orange",
+      "puma",
+      "ring",
+      "shell",
+      "slack",
+      "square",
+      "subway",
+      "target",
+      "zoom"
+    ],
+    "fanout_feature_rules": {
+      "community": ["reddit", "forum", "discussion", "experiences"],
+      "review": ["review", "reviews", "rating", "ratings", "customer feedback"],
+      "comparison": ["vs", "versus", "alternative", "alternatives", "compare", "best"],
+      "commercial": ["price", "prices", "cheap", "affordable", "budget", "sale", "under"],
+      "local": ["near me", "nearby", "store", "sydney", "melbourne", "brisbane", "perth"],
+      "service": ["click and collect", "delivery", "returns", "shipping"],
+      "freshness": ["latest", "current", "today", "2026"],
+      "product_evidence": ["material", "fabric", "size", "multipack", "availability", "stock"]
+    },
+    "analyzer_version": "grounded-analysis-v1"
+  },
+  "observed_competitors": {
+    "analyzer_version": "observed-competitor-v1",
+    "min_distinct_prompts": 2,
+    "min_distinct_engines": 2,
+    "max_candidates_per_audit": 20,
+    "excluded_research_domains": [
+      "facebook.com",
+      "instagram.com",
+      "linkedin.com",
+      "reddit.com",
+      "wikipedia.org",
+      "x.com",
+      "youtube.com"
+    ],
+    "status_pending": "pending",
+    "status_accepted": "accepted",
+    "status_rejected": "rejected",
+    "statuses": ["accepted", "pending", "rejected"]
+  },
+  "settings": {
+    "max_tasks_per_audit": {
+      "env": ["AUDIT_MAX_TASKS_PER_AUDIT"],
+      "type": "int",
+      "default": 500,
+      "exclusive_minimum": 0
+    },
+    "worker_concurrency": {
+      "env": ["AUDIT_WORKER_CONCURRENCY"],
+      "type": "int",
+      "default": 10,
+      "exclusive_minimum": 0
+    },
+    "per_transport_concurrency": {
+      "env": ["AUDIT_PER_TRANSPORT_CONCURRENCY"],
+      "type": "int",
+      "default": 4,
+      "exclusive_minimum": 0
+    },
+    "capacity_lease_ttl_seconds": {
+      "env": ["AUDIT_CAPACITY_LEASE_TTL_SECONDS"],
+      "type": "float",
+      "default": 240.0,
+      "exclusive_minimum": 0
+    },
+    "capacity_concurrency_retry_seconds": {
+      "env": ["AUDIT_CAPACITY_CONCURRENCY_RETRY_SECONDS"],
+      "type": "float",
+      "default": 2.0,
+      "exclusive_minimum": 0
+    },
+    "poll_interval_seconds": {
+      "env": ["AUDIT_POLL_INTERVAL_SECONDS"],
+      "type": "float",
+      "default": 1.0,
+      "exclusive_minimum": 0
+    },
+    "min_request_interval_seconds": {
+      "env": ["AUDIT_MIN_REQUEST_INTERVAL_SECONDS"],
+      "type": "float",
+      "default": 0.0,
+      "minimum": 0
+    },
+    "max_run_seconds": {
+      "env": ["AUDIT_MAX_RUN_SECONDS"],
+      "type": "float",
+      "default": 1800.0,
+      "exclusive_minimum": 0
+    },
+    "max_attempts": {
+      "env": ["AUDIT_MAX_ATTEMPTS"],
+      "type": "int",
+      "default": 3,
+      "exclusive_minimum": 0
+    },
+    "retry_base_delay_seconds": {
+      "env": ["AUDIT_RETRY_BASE_DELAY_SECONDS"],
+      "type": "float",
+      "default": 2.0,
+      "exclusive_minimum": 0
+    },
+    "retry_max_delay_seconds": {
+      "env": ["AUDIT_RETRY_MAX_DELAY_SECONDS"],
+      "type": "float",
+      "default": 45.0,
+      "exclusive_minimum": 0
+    },
+    "retry_jitter_seconds": {
+      "env": ["AUDIT_RETRY_JITTER_SECONDS"],
+      "type": "float",
+      "default": 1.5,
+      "minimum": 0
+    },
+    "lease_ttl_seconds": {
+      "env": ["AUDIT_LEASE_TTL_SECONDS"],
+      "type": "float",
+      "default": 120.0,
+      "exclusive_minimum": 0
+    },
+    "heartbeat_interval_seconds": {
+      "env": ["AUDIT_HEARTBEAT_INTERVAL_SECONDS"],
+      "type": "float",
+      "default": 30.0,
+      "exclusive_minimum": 0
+    },
+    "request_timeout_seconds": {
+      "env": ["AUDIT_REQUEST_TIMEOUT_SECONDS"],
+      "type": "float",
+      "default": 60.0,
+      "exclusive_minimum": 0
+    },
+    "audit_max_output_tokens": {
+      "env": ["AUDIT_AUDIT_MAX_OUTPUT_TOKENS"],
+      "type": "int",
+      "default": 800,
+      "exclusive_minimum": 0
+    },
+    "audit_timeout_seconds": {
+      "env": ["AUDIT_AUDIT_TIMEOUT_SECONDS"],
+      "type": "float",
+      "default": 60.0,
+      "exclusive_minimum": 0
+    },
+    "audit_repetitions": {
+      "env": ["AUDIT_AUDIT_REPETITIONS"],
+      "type": "int",
+      "default": 3,
+      "exclusive_minimum": 0
+    },
+    "max_prompt_chars": {
+      "env": ["AUDIT_MAX_PROMPT_CHARS"],
+      "type": "int",
+      "default": 300,
+      "exclusive_minimum": 0
+    },
+    "sse_poll_seconds": {
+      "env": ["AUDIT_SSE_POLL_SECONDS"],
+      "type": "float",
+      "default": 1.0,
+      "exclusive_minimum": 0
+    },
+    "sse_max_duration_seconds": {
+      "env": ["AUDIT_SSE_MAX_DURATION_SECONDS"],
+      "type": "int",
+      "default": 300,
+      "exclusive_minimum": 0
+    },
+    "sse_terminal_grace_polls": {
+      "env": ["AUDIT_SSE_TERMINAL_GRACE_POLLS"],
+      "type": "int",
+      "default": 2,
+      "minimum": 0
+    },
+    "max_event_page": {
+      "env": ["AUDIT_MAX_EVENT_PAGE"],
+      "type": "int",
+      "default": 1000,
+      "exclusive_minimum": 0
+    }
+  },
+  "constants": {
+    "benchmark_mode_consumer_like": "consumer_like",
+    "benchmark_mode_controlled_localized": "controlled_localized",
+    "audit_status_validating": "validating",
+    "audit_status_queued": "queued",
+    "audit_status_running": "running",
+    "audit_status_analyzing": "analyzing",
+    "audit_status_reporting": "reporting",
+    "audit_status_completed": "completed",
+    "audit_status_partially_completed": "partially_completed",
+    "audit_status_failed": "failed",
+    "audit_status_cancelled": "cancelled",
+    "audit_lease_sweep_batch_size": 500,
+    "audit_terminal_statuses": ["cancelled", "completed", "failed", "partially_completed"],
+    "audit_active_statuses": ["analyzing", "draft", "queued", "running", "validating"],
+    "audit_trigger_manual": "manual",
+    "audit_trigger_scheduled": "scheduled",
+    "audit_trigger_system": "system",
+    "audit_trigger_repair": "repair",
+    "audit_triggers": ["manual", "repair", "scheduled", "system"],
+    "task_status_pending_reservation": "pending_reservation",
+    "audit_scope_commerce": "commerce",
+    "audit_scopes": ["brand", "commerce"],
+    "audit_answer_instruction": "Answer the question directly in 150 to 250 words. Use concise paragraphs or bullets, avoid repetition, and include citations to the most relevant sources when web search is available.",
+    "attempt_status_succeeded": "succeeded",
+    "attempt_status_failed": "failed",
+    "event_audit_created": "audit.created",
+    "event_audit_queued": "audit.queued",
+    "event_audit_running": "audit.running",
+    "event_audit_status": "audit.status",
+    "event_task_succeeded": "task.succeeded",
+    "event_task_failed": "task.failed",
+    "event_task_retry": "task.retry",
+    "event_audit_cancelled": "audit.cancelled",
+    "event_audit_completed": "audit.completed",
+    "event_task_capacity_wait": "task.capacity_wait",
+    "pool_kind_transport": "transport",
+    "pool_kind_connection": "connection",
+    "pool_kind_funded_global": "funded_global",
+    "pool_kind_funded_account": "funded_account",
+    "pool_kinds": ["connection", "funded_account", "funded_global", "transport"],
+    "lease_kind_concurrency": "concurrency",
+    "credential_kind_byok": "byok",
+    "credential_kind_funded": "funded",
+    "credential_kinds": ["byok", "funded"],
+    "capacity_code_concurrency": "capacity_concurrency",
+    "capacity_code_rate_limited": "capacity_rate_limited",
+    "capacity_code_unconfigured": "capacity_unconfigured",
+    "capacity_outcome_succeeded": "succeeded",
+    "capacity_outcome_failed": "failed",
+    "capacity_outcome_rate_limited": "rate_limited",
+    "capacity_policy_version": "v8-t4-1",
+    "telemetry_capacity_wait": "audit.capacity.wait",
+    "telemetry_capacity_rate_limited": "audit.capacity.rate_limited",
+    "error_run_deadline": "run_deadline_exceeded",
+    "error_cancelled": "cancelled",
+    "code_prompt_count_policy_unconfigured": "prompt_count_policy_unconfigured",
+    "code_prompt_count_exceeded": "prompt_count_exceeded",
+    "error_no_connection": "provider_connection_missing",
+    "localized_instruction": "Answer for a shopper in the market identified by ISO country code {country_code}, using language {language_code}. Prioritize retailers that serve that market and sources relevant to that market.",
+    "forced_grounded_instruction": "Answer the shopping question using current web information. Cite the sources supporting your recommendations.",
+    "measurement_policy_key": "measurement_policy",
+    "audit_scope_brand": "brand",
+    "audit_status_draft": "draft"
+  },
+  "benchmark_modes": ["consumer_like", "controlled_localized", "forced_grounded"],
+  "min_repetitions": 1,
+  "max_repetitions": 10,
+  "max_markets_per_launch": 11,
+  "route_policies": {
+    "chatgpt": {},
+    "claude": {},
+    "gemini": {},
+    "google_ai_overview": {},
+    "chatgpt_search": {},
+    "gemini_consumer": {}
+  },
+  "ads_engine": "chatgpt_search",
+  "ads_versions": {
+    "parser_version": "chatgpt-ads-1",
+    "metrics_version": "ads-metrics-1"
+  },
+  "commerce_versions": {
+    "template_version": "commerce-buyer-prompts-1",
+    "parser_version": "commerce-recommendation-parser-1",
+    "matcher_version": "commerce-recommendation-matcher-1",
+    "formula_version": "commerce-shelf-formulas-1"
+  }
+}

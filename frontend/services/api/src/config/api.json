@@ -1,0 +1,96 @@
+{
+  "prefix": "/api/v1",
+  "machine_prefix": "/v1",
+  "readiness_timeout_seconds": 2.0,
+  "origin_signature_max_skew_seconds": 60,
+  "service_port": 8100,
+  "request_body_max_bytes": 2097152,
+  "settings": {
+    "app_name": {
+      "env": ["APP_NAME"],
+      "type": "str",
+      "default": "CiteLadder"
+    },
+    "app_env": {
+      "env": ["APP_ENV"],
+      "type": "str",
+      "default": "development"
+    },
+    "database_url": {
+      "env": ["DATABASE_URL"],
+      "type": "str",
+      "default": "postgresql://postgres:postgres@localhost:5432/citeladder"
+    },
+    "db_pool_size": {
+      "env": ["DB_POOL_SIZE"],
+      "type": "int",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 50
+    },
+    "db_max_overflow": {
+      "env": ["DB_MAX_OVERFLOW"],
+      "type": "int",
+      "default": 4,
+      "minimum": 0,
+      "maximum": 50
+    },
+    "db_pool_recycle_seconds": {
+      "env": ["DB_POOL_RECYCLE_SECONDS"],
+      "type": "int",
+      "default": 600
+    },
+    "db_pool_timeout_seconds": {
+      "env": ["DB_POOL_TIMEOUT_SECONDS"],
+      "type": "int",
+      "default": 10
+    },
+    "db_connect_timeout_seconds": {
+      "env": ["DB_CONNECT_TIMEOUT_SECONDS"],
+      "type": "int",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 60
+    },
+    "db_command_timeout_seconds": {
+      "env": ["DB_COMMAND_TIMEOUT_SECONDS"],
+      "type": "int",
+      "default": 30,
+      "minimum": 1,
+      "maximum": 300
+    },
+    "db_statement_timeout_ms": {
+      "env": ["DB_STATEMENT_TIMEOUT_MS"],
+      "type": "int",
+      "default": 30000,
+      "minimum": 1000,
+      "maximum": 300000
+    },
+    "db_lock_timeout_ms": {
+      "env": ["DB_LOCK_TIMEOUT_MS"],
+      "type": "int",
+      "default": 5000,
+      "minimum": 100,
+      "maximum": 60000
+    },
+    "db_idle_transaction_timeout_ms": {
+      "env": ["DB_IDLE_TRANSACTION_TIMEOUT_MS"],
+      "type": "int",
+      "default": 30000,
+      "minimum": 1000,
+      "maximum": 300000
+    },
+    "db_ssl_mode": {
+      "env": ["DB_SSL_MODE"],
+      "type": "literal",
+      "values": ["disable", "require"],
+      "default": "disable"
+    },
+    "crawl_log_reader_email": {
+      "env": ["CRAWL_LOG_READER_EMAIL"],
+      "type": "str",
+      "default": ""
+    }
+  },
+  "development_env_names": ["", "dev", "development", "local", "test", "testing"]
+}

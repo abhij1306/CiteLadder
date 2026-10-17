@@ -1,0 +1,293 @@
+{
+  "groups": [
+    { "id": "create", "label": "Create content" },
+    { "id": "social", "label": "Social and video" },
+    { "id": "improve", "label": "Improve your site" },
+    { "id": "visibility", "label": "AI visibility" },
+    { "id": "plan", "label": "Plan and measure" }
+  ],
+  "workflows": [
+    {
+      "id": "article",
+      "group": "create",
+      "label": "Article or guide",
+      "description": "A complete article that answers a buyer question, grounded in your business facts and measured demand.",
+      "skill_id": "content_create",
+      "format_id": "article",
+      "prompt": "Write an article or guide.",
+      "inputs": [
+        { "key": "topic", "label": "Topic or question", "required": true },
+        { "key": "audience", "label": "Reader", "required": false }
+      ]
+    },
+    {
+      "id": "blog_post",
+      "group": "create",
+      "label": "Blog post",
+      "description": "A timely post with a clear point of view, written in your voice.",
+      "skill_id": "content_create",
+      "format_id": "blog",
+      "prompt": "Write a blog post.",
+      "inputs": [
+        { "key": "topic", "label": "Topic", "required": true },
+        { "key": "angle", "label": "Angle or takeaway", "required": false }
+      ]
+    },
+    {
+      "id": "landing_page",
+      "group": "create",
+      "label": "Landing or service page",
+      "description": "A page that explains an offer, who it is for and the next step, without inventing proof.",
+      "skill_id": "content_create",
+      "format_id": "content_page",
+      "prompt": "Write a landing or service page.",
+      "inputs": [
+        { "key": "offer", "label": "Offer or service", "required": true },
+        { "key": "url", "label": "Existing page URL", "required": false }
+      ]
+    },
+    {
+      "id": "refresh_page",
+      "group": "create",
+      "label": "Refresh an existing page",
+      "description": "Update a page that is losing traffic or AI mentions, keeping what already works.",
+      "skill_id": "content_create",
+      "format_id": "content_refresh",
+      "prompt": "Refresh an existing page.",
+      "inputs": [{ "key": "url", "label": "Page URL", "required": true }]
+    },
+    {
+      "id": "comparison_page",
+      "group": "create",
+      "label": "Comparison page",
+      "description": "An honest comparison or alternatives page for named competitors.",
+      "skill_id": "comparison_content",
+      "format_id": "comparison",
+      "prompt": "Write a comparison page.",
+      "inputs": [{ "key": "competitors", "label": "Competitors to compare", "required": true }]
+    },
+    {
+      "id": "faq_page",
+      "group": "create",
+      "label": "FAQ page",
+      "description": "Answers to the questions buyers actually ask, taken from your demand and AI answers.",
+      "skill_id": "content_create",
+      "format_id": "faq",
+      "prompt": "Write an FAQ page.",
+      "inputs": [{ "key": "topic", "label": "Product or topic", "required": true }]
+    },
+    {
+      "id": "linkedin_post",
+      "group": "social",
+      "label": "LinkedIn post",
+      "description": "A short professional post with one clear idea.",
+      "skill_id": "content_create",
+      "format_id": "linkedin",
+      "prompt": "Write a LinkedIn post.",
+      "inputs": [{ "key": "topic", "label": "Topic or source page", "required": true }]
+    },
+    {
+      "id": "x_thread",
+      "group": "social",
+      "label": "X post or thread",
+      "description": "A concise post or thread built from one strong point.",
+      "skill_id": "content_create",
+      "format_id": "x",
+      "prompt": "Write an X post or thread.",
+      "inputs": [{ "key": "topic", "label": "Topic or source page", "required": true }]
+    },
+    {
+      "id": "youtube_script",
+      "group": "social",
+      "label": "YouTube script",
+      "description": "A video script with a hook, sections and on-screen notes.",
+      "skill_id": "content_create",
+      "format_id": "youtube",
+      "prompt": "Write a YouTube script.",
+      "inputs": [
+        { "key": "topic", "label": "Topic", "required": true },
+        { "key": "length", "label": "Target length", "required": false }
+      ]
+    },
+    {
+      "id": "short_video",
+      "group": "social",
+      "label": "Short video script",
+      "description": "A TikTok, Reels or Shorts script that lands one point fast.",
+      "skill_id": "content_create",
+      "format_id": "tiktok",
+      "prompt": "Write a short video script for TikTok, Reels or Shorts.",
+      "inputs": [{ "key": "topic", "label": "Topic", "required": true }]
+    },
+    {
+      "id": "community_answer",
+      "group": "social",
+      "label": "Reddit or forum answer",
+      "description": "A genuinely helpful answer that discloses your affiliation.",
+      "skill_id": "content_create",
+      "format_id": "reddit",
+      "prompt": "Write a Reddit or forum answer.",
+      "inputs": [{ "key": "question", "label": "The question being asked", "required": true }]
+    },
+    {
+      "id": "page_edits",
+      "group": "improve",
+      "label": "Improve a page's search traffic",
+      "description": "Exact edits for a page, based on the queries Search Console shows it for.",
+      "skill_id": "gsc_optimize",
+      "prompt": "Suggest exact edits to improve this page's search traffic.",
+      "inputs": [{ "key": "url", "label": "Page URL", "required": true }]
+    },
+    {
+      "id": "internal_links",
+      "group": "improve",
+      "label": "Internal links",
+      "description": "Where to link from, with anchor text, to support an important page.",
+      "skill_id": "internal_links",
+      "prompt": "Plan internal links.",
+      "inputs": [{ "key": "url", "label": "Page to support", "required": false }]
+    },
+    {
+      "id": "technical_fix",
+      "group": "improve",
+      "label": "Fix a technical issue",
+      "description": "Diagnose a crawl, indexing or AI-access problem and plan the fix.",
+      "skill_id": "technical_health",
+      "prompt": "Diagnose our most important technical issue and plan the fix.",
+      "inputs": [{ "key": "issue", "label": "Issue or page, if you have one", "required": false }]
+    },
+    {
+      "id": "visibility_diagnosis",
+      "group": "visibility",
+      "label": "Why AI answers miss us",
+      "description": "Find why AI engines leave you out or misdescribe you, and what to change.",
+      "skill_id": "ai_visibility",
+      "prompt": "Diagnose why AI answers miss or misdescribe us, and what to change.",
+      "inputs": [{ "key": "focus", "label": "Question or topic to focus on", "required": false }]
+    },
+    {
+      "id": "earned_sources",
+      "group": "visibility",
+      "label": "Earn third-party mentions",
+      "description": "Specific publications and pages to pitch, correct or contribute to.",
+      "skill_id": "earned_authority",
+      "prompt": "Find third-party sources we should be mentioned in, with a pitch for each.",
+      "inputs": [{ "key": "focus", "label": "Topic or competitor", "required": false }]
+    },
+    {
+      "id": "prompt_portfolio",
+      "group": "visibility",
+      "label": "Track a niche",
+      "description": "Buyer questions for a place, persona or constraint the general prompt set misses.",
+      "skill_id": "prompt_discovery",
+      "prompt": "Propose buyer questions to track for a niche.",
+      "inputs": [{ "key": "niche", "label": "Place, persona or constraint", "required": true }]
+    },
+    {
+      "id": "growth_plan",
+      "group": "plan",
+      "label": "What to do next",
+      "description": "A short, prioritized plan from your current Actions and data.",
+      "skill_id": "growth_plan",
+      "prompt": "What should we focus on next? Give a prioritized plan.",
+      "inputs": []
+    },
+    {
+      "id": "search_gaps",
+      "group": "plan",
+      "label": "Find content gaps",
+      "description": "Topics and questions with real demand that your site does not answer yet.",
+      "skill_id": "search_opportunities",
+      "prompt": "Find the content gaps with the most commercial value.",
+      "inputs": [{ "key": "focus", "label": "Product or market", "required": false }]
+    },
+    {
+      "id": "measure_results",
+      "group": "plan",
+      "label": "Measure a change",
+      "description": "How to tell whether a change worked, with the baseline and the check date.",
+      "skill_id": "measure",
+      "prompt": "Plan how to measure the result of a change.",
+      "inputs": [{ "key": "change", "label": "What changed", "required": true }]
+    },
+    {
+      "id": "programmatic_pilot",
+      "group": "plan",
+      "label": "Programmatic pages pilot",
+      "description": "A small, quality-gated pilot for a repeatable page family.",
+      "skill_id": "programmatic_seo",
+      "prompt": "Design a small programmatic pages pilot.",
+      "inputs": [{ "key": "family", "label": "Page family", "required": true }]
+    }
+  ],
+  "kinds": {
+    "content": {
+      "label": "Content",
+      "refinements": ["Make it shorter", "Tighten the introduction"],
+      "next": [
+        { "workflow": "internal_links", "prompt": "Plan internal links to the page from" },
+        { "workflow": "linkedin_post", "prompt": "Write a LinkedIn post that promotes" },
+        { "workflow": "measure_results", "prompt": "Plan how to measure the result of" }
+      ]
+    },
+    "plan": {
+      "label": "Plan",
+      "refinements": ["Prioritize the top three items", "Make it more specific"],
+      "next": [{ "workflow": "measure_results", "prompt": "Plan how to measure the result of" }]
+    },
+    "measurement": {
+      "label": "Measurement plan",
+      "refinements": ["Make it shorter", "Make it more specific"],
+      "next": [{ "workflow": "growth_plan", "prompt": "Plan next steps from" }]
+    },
+    "research": {
+      "label": "Research brief",
+      "refinements": ["Rank by commercial value", "Make it shorter"],
+      "next": [
+        { "workflow": "article", "prompt": "Write content for the top opportunity in" },
+        { "workflow": "measure_results", "prompt": "Plan how to measure the result of" }
+      ]
+    },
+    "prompt_portfolio": {
+      "label": "Prompt portfolio",
+      "refinements": ["Make it shorter", "Make it more specific"],
+      "next": [
+        {
+          "workflow": "visibility_diagnosis",
+          "prompt": "Diagnose our AI visibility for the questions in"
+        }
+      ]
+    },
+    "page_edits": {
+      "label": "Page edits",
+      "refinements": ["Only the highest-impact edits", "Make it shorter"],
+      "next": [
+        { "workflow": "internal_links", "prompt": "Plan internal links that support" },
+        { "workflow": "measure_results", "prompt": "Plan how to measure the result of" }
+      ]
+    },
+    "link_plan": {
+      "label": "Internal-link plan",
+      "refinements": ["Make it shorter", "Make it more specific"],
+      "next": [{ "workflow": "measure_results", "prompt": "Plan how to measure the result of" }]
+    },
+    "technical_fix": {
+      "label": "Technical fix",
+      "refinements": ["Make it shorter", "Make it more specific"],
+      "next": [{ "workflow": "measure_results", "prompt": "Plan how to measure the result of" }]
+    },
+    "diagnosis": {
+      "label": "Diagnosis",
+      "refinements": ["Which finding matters most?", "Make it shorter"],
+      "next": [
+        { "workflow": "page_edits", "prompt": "Draft exact page edits for" },
+        { "workflow": "earned_sources", "prompt": "Find third-party source opportunities for" }
+      ]
+    },
+    "earned_brief": {
+      "label": "Earned-placement brief",
+      "refinements": ["Make it shorter", "Make it more specific"],
+      "next": [{ "workflow": "measure_results", "prompt": "Plan how to measure the result of" }]
+    }
+  }
+}

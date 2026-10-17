@@ -1,0 +1,93 @@
+<!doctype html>
+<!--
+  An API reference page. It is well structured, current, and correct -- and it
+  has no question-shaped headings and no direct-answer opening paragraph,
+  because reference documentation is not written that way.
+
+  ``question_headings`` fails it twice over: the ratio is 0.0 both because no
+  heading is a question AND because there are no h2/h3 headings at all, which
+  the check cannot tell apart from "the questions here are badly written".
+-->
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>GET /v1/orders &mdash; Northgate API reference</title>
+    <meta
+      name="description"
+      content="Request parameters, response fields and error codes for the orders collection endpoint."
+    />
+    <link rel="canonical" href="https://northgate.example/docs/api/orders" />
+  </head>
+  <body>
+    <main>
+      <nav class="breadcrumbs"><a href="/docs">Docs</a> / <a href="/docs/api">API</a></nav>
+      <h1>GET /v1/orders</h1>
+      <p>Returns the authenticated workspace's orders, newest first. Last updated 11 March 2026.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Parameter</th>
+            <th>Type</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>limit</td>
+            <td>integer</td>
+            <td>no</td>
+            <td>Page size, 1 to 200. Defaults to 50.</td>
+          </tr>
+          <tr>
+            <td>cursor</td>
+            <td>string</td>
+            <td>no</td>
+            <td>Opaque cursor returned by the previous page.</td>
+          </tr>
+          <tr>
+            <td>status</td>
+            <td>string</td>
+            <td>no</td>
+            <td>Filter to one of pending, dispatched or cancelled.</td>
+          </tr>
+          <tr>
+            <td>since</td>
+            <td>string</td>
+            <td>no</td>
+            <td>RFC 3339 timestamp; excludes orders created before it.</td>
+          </tr>
+        </tbody>
+      </table>
+      <pre><code>curl https://api.northgate.example/v1/orders?limit=25 \
+  -H "Authorization: Bearer $NORTHGATE_TOKEN"</code></pre>
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>200</td>
+            <td>Orders returned, with a cursor when more remain.</td>
+          </tr>
+          <tr>
+            <td>401</td>
+            <td>The token is missing, expired or revoked.</td>
+          </tr>
+          <tr>
+            <td>422</td>
+            <td>A parameter failed validation; the body names the field.</td>
+          </tr>
+          <tr>
+            <td>429</td>
+            <td>Rate limit exceeded; retry after the interval in the header.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p><a href="/docs/api/orders-create">Next: POST /v1/orders</a></p>
+    </main>
+  </body>
+</html>

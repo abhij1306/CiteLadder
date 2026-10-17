@@ -1,0 +1,12 @@
+{
+  "rows": [
+    {
+      "keys": ["https://example.com/", "2026-07-21"],
+      "clicks": 9,
+      "impressions": 280,
+      "ctr": 0.0321,
+      "position": 3.8
+    }
+  ],
+  "responseAggregationType": "byPage"
+}

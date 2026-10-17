@@ -1,0 +1,86 @@
+{
+  "max_window_days": 480,
+  "preset_range_days": {
+    "30d": 30,
+    "90d": 90,
+    "1y": 365
+  },
+  "worker_settings": {
+    "lease_ttl_seconds": {
+      "env": ["ANALYTICS_LEASE_TTL_SECONDS"],
+      "type": "float",
+      "default": 120.0,
+      "exclusive_minimum": 0
+    },
+    "heartbeat_interval_seconds": {
+      "env": ["ANALYTICS_HEARTBEAT_INTERVAL_SECONDS"],
+      "type": "float",
+      "default": 30.0,
+      "exclusive_minimum": 0
+    },
+    "poll_interval_seconds": {
+      "env": ["ANALYTICS_POLL_INTERVAL_SECONDS"],
+      "type": "float",
+      "default": 1.0,
+      "exclusive_minimum": 0
+    },
+    "retry_delay_seconds": {
+      "env": ["ANALYTICS_RETRY_DELAY_SECONDS"],
+      "type": "float",
+      "default": 30.0,
+      "minimum": 0
+    },
+    "lease_reclaim_batch_size": {
+      "env": ["ANALYTICS_LEASE_RECLAIM_BATCH_SIZE"],
+      "type": "int",
+      "default": 100,
+      "exclusive_minimum": 0
+    },
+    "drain_budget_seconds": {
+      "env": ["ANALYTICS_DRAIN_BUDGET_SECONDS"],
+      "type": "float",
+      "default": 300.0,
+      "exclusive_minimum": 0
+    },
+    "task_max_attempts": {
+      "env": ["ANALYTICS_TASK_MAX_ATTEMPTS"],
+      "type": "int",
+      "default": 3,
+      "exclusive_minimum": 0
+    }
+  },
+  "task_lease_ttl_seconds": {
+    "crawl_log_pull": 300
+  },
+  "executor_not_wired_error": "executor_not_wired",
+  "retry_error": "unknown",
+  "terminal_compensation_batch": 100,
+  "terminal_compensation_max_failures": 5,
+  "tasks": {
+    "ai_traffic_insights_refresh": "ai_traffic_insights_refresh",
+    "crawl_log_rollup_refresh": "crawl_log_rollup_refresh",
+    "crawl_log_pull": "crawl_log_pull",
+    "bot_ip_range_refresh": "bot_ip_range_refresh",
+    "bot_request_retention_sweep": "bot_request_retention_sweep",
+    "crawl_log_upload_abandon_sweep": "crawl_log_upload_abandon_sweep",
+    "ai_referrals_snapshot_refresh": "ai_referrals_snapshot_refresh",
+    "answer_perception": "answer_perception",
+    "classify_referrals": "classify_referrals",
+    "commerce_catalog_projection": "commerce_catalog_projection",
+    "commerce_competitor_discovery": "commerce_competitor_discovery",
+    "demand_snapshot_refresh": "demand_snapshot_refresh",
+    "fact_verification": "fact_verification",
+    "internal_link_judgment": "internal_link_judgment",
+    "internal_link_publish": "internal_link_publish",
+    "opportunity_verification": "opportunity_verification",
+    "performance_range_projection": "performance_range_projection",
+    "referral_retention_sweep": "referral_retention_sweep",
+    "search_intelligence_acquisition": "search_intelligence_acquisition",
+    "source_page_inspection": "source_page_inspection",
+    "traffic_snapshot_refresh": "traffic_snapshot_refresh",
+    "ingest_referrals": "ingest_referrals",
+    "opportunity_refresh": "opportunity_refresh"
+  },
+  "ai_referral_analyzer_version": "ai-referrals-v1",
+  "ai_referral_formula_version": "ai-referral-sessions-v1"
+}

@@ -1,0 +1,74 @@
+# One workspace rooted here. The root package is the browser frontend;
+# `packages/*` holds libraries shared across it (the API contracts in
+# packages/contracts, the MCP app) and `services/*` holds server-side
+# TypeScript services such as the API service in services/api.
+packages:
+  - packages/*
+  - services/*
+
+allowBuilds:
+  esbuild: true
+  msw: true
+  unrs-resolver: true
+
+# Supply-chain hardening: refuse packages whose trust signals (provenance,
+# signatures) weaken between updates.
+#
+# NOTE: `minimumReleaseAge` (a 7-day quarantine on freshly published versions)
+# was removed at the maintainer's request. pnpm defaults this setting to 1440
+# minutes -- one day -- so keep the immediate-install decision explicit. Note
+# that an explicit cutoff also turns `minimumReleaseAgeStrict` on from pnpm 12
+# onward; at a cutoff of 0 no version is ever immature, so nothing is gated.
+minimumReleaseAge: 0
+trustPolicy: no-downgrade
+# Skip the downgrade check for releases older than ~1 year — they predate
+# widespread provenance publishing and trip the check for benign reasons.
+# Anything newer must keep (or strengthen) its trust evidence.
+trustPolicyIgnoreAfter: 525600
+# Pinned exceptions (currently none): recent versions that trip the downgrade
+# check for benign reasons, e.g. a release published without provenance while
+# earlier ones had it. Reviewed individually; keep this list short and exact,
+# and delete an entry as soon as the resolved tree no longer contains it.
+
+# Keep transitive PostCSS consumers on the patched line for CVE-2026-41305.
+# pnpm 10+ reads overrides here, not from package.json.
+overrides:
+  postcss: '>=8.5.10'
+  # Keeps the React type packages on a single version across the tree. The `$`
+  # form resolves to whatever package.json declares, so the override cannot hold
+  # the tree behind the declared version.
+  '@types/react': '$@types/react'
+  '@types/react-dom': '$@types/react-dom'
+  # Vite+ toolchain overrides, keyed with the explicit `@*` ranges that `vp
+  # migrate` uses for managed keys. The catalog below holds the actual pins;
+  # bump them together with the vite-plus dependency.
+  vite@*: 'catalog:'
+  vitest@*: 'catalog:'
+# Single-source pins for the Vite+ toolchain (referenced by package.json
+# through `catalog:` and by the overrides above). `vite` aliases the Vite+
+# core so every consumer — including @vitejs/plugin-react's peer — shares one
+# Vite type family; `pnpm build` must be re-verified when bumping this pin. `vitest` stays at
+# the exact version vite-plus bundles so there is exactly one Vitest copy.
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.1.0
+  vitest: 5.0.4
+  vite-plus: 1.1.0
+  '@vitest/coverage-v8': 5.0.4
+peerDependencyRules:
+  allowAny:
+    - vite
+    - vitest
+  allowedVersions:
+    vite: '*'
+    vitest: '*'
+minimumReleaseAgeExclude:
+  - vite-plus
+  - '@voidzero-dev/*'
+  - oxlint
+  - '@oxlint/*'
+  - oxlint-tsgolint
+  - '@oxlint-tsgolint/*'
+  - oxfmt
+  - '@oxfmt/*'
+  - vitest
+  - '@vitest/*'

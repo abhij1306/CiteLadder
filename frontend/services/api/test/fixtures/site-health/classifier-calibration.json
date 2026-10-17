@@ -1,0 +1,1255 @@
+{
+  "manifest_version": 1,
+  "limits": {
+    "max_html_chars": 12000,
+    "max_fact_chars": 12000,
+    "max_reason_chars": 512
+  },
+  "cases": [
+    {
+      "id": "healthy_homepage",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "title": "Healthy Example",
+          "headings": {
+            "h1_texts": ["Healthy Example"],
+            "h2_texts": []
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "homepage",
+        "traits": [],
+        "deciding_signal": "root_path",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["high"],
+        "rejected_kinds": ["category", "service"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The absolute root URL is exact homepage evidence; page modules cannot replace that identity."
+    },
+    {
+      "id": "flourist_primary_product",
+      "source_label": "Flourist sanitized product-detail pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://flourist.example.test/products/stone-planter",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><article><h1>Stone Planter</h1><p>A durable planter made for indoor herbs.</p><span data-sku='STONE-1'>SKU STONE-1</span><p>$48.00</p><form action='/cart/add'><button type='submit'>Add to cart</button></form></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "product",
+        "traits": [],
+        "deciding_signal": "primary_product_entity",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["high"],
+        "rejected_kinds": ["category", "article"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A page-owned price and purchase path form one product buy box outside every repeated-card module."
+    },
+    {
+      "id": "lanhtropy_contextual_product",
+      "source_label": "Lanhtropy sanitized contextual-product pattern",
+      "observation_date": "2026-09-01",
+      "condition": "healthy",
+      "url": "https://lanhtropy.example.test/collections/sale/products/linen-shirt",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html lang='en'><head><title>Linen Shirt</title></head><body><main><article><h1>Linen Shirt</h1><p>A lightweight linen shirt with a relaxed fit.</p><span data-sku='LINEN-1'>SKU LINEN-1</span><label for='size'>Size</label><select id='size' name='size'><option>Small</option><option>Medium</option></select><form action='/cart/add'><button type='submit'>Add to cart</button></form></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "product",
+        "traits": ["has_variants"],
+        "deciding_signal": "primary_product_entity",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category", "article"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A page-owned purchase control, variant chooser, and SKU identify a product even when the static response exposes no visible price; the ancestor collection route cannot override that structure."
+    },
+    {
+      "id": "lanhtropy_care_guide_route",
+      "source_label": "Lanhtropy sanitized care-guide route",
+      "observation_date": "2026-09-01",
+      "condition": "healthy",
+      "url": "https://lanhtropy.example.test/pages/care-guide",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html lang='en'><head><title>Clothing Care Guide</title></head><body><main><h1>Clothing Care Guide</h1><p>Instructions for washing and storing linen clothing.</p></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "guide",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["other", "article"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The complete care-guide route segment is a common task-guide identity; partial slug matches remain excluded."
+    },
+    {
+      "id": "lanhtropy_returns_exchanges_route",
+      "source_label": "Lanhtropy sanitized returns-and-exchanges route",
+      "observation_date": "2026-09-01",
+      "condition": "healthy",
+      "url": "https://lanhtropy.example.test/pages/returns-exchanges",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html lang='en'><head><title>Returns &amp; Exchanges</title></head><body><main><h1>Returns &amp; Exchanges</h1><p>Conditions and steps for returning or exchanging an order.</p></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "trust_policy",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["other", "service"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The complete returns-exchanges route segment identifies a merchant policy rather than a service page."
+    },
+    {
+      "id": "lanhtropy_terms_conditions_route",
+      "source_label": "Lanhtropy sanitized terms-and-conditions route",
+      "observation_date": "2026-09-01",
+      "condition": "healthy",
+      "url": "https://lanhtropy.example.test/pages/terms-conditions",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html lang='en'><head><title>Terms &amp; Conditions</title></head><body><main><h1>Terms &amp; Conditions</h1><p>Terms governing use of the store and purchases.</p></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "trust_policy",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["other", "service"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The complete terms-conditions route segment is explicit legal-policy evidence; unrelated hyphenated terms remain excluded."
+    },
+    {
+      "id": "flourist_bound_collection",
+      "source_label": "Flourist sanitized collection pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://flourist.example.test/seasonal-arrangements",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><h1>Seasonal Arrangements</h1><section aria-label='Seasonal arrangements'><p>8 results</p><label for='season-sort'>Sort arrangements</label><select id='season-sort' name='sort'><option>Featured</option><option>Newest</option></select><div class='collection-grid'><article><a href='/products/a'>A</a></article><article><a href='/products/b'>B</a></article><article><a href='/products/c'>C</a></article><article><a href='/products/d'>D</a></article><article><a href='/products/e'>E</a></article><article><a href='/products/f'>F</a></article><article><a href='/products/g'>G</a></article><article><a href='/products/h'>H</a></article></div></section></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "category",
+        "traits": ["listing"],
+        "deciding_signal": "primary_listing_structure",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["high"],
+        "rejected_kinds": ["product", "article"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The result count and sort control are contained with the page-owned eight-item collection and corroborate that same collection."
+    },
+    {
+      "id": "flourist_empty_collection",
+      "source_label": "Flourist sanitized empty-collection pattern",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://flourist.example.test/collections/sold-out",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><h1>Sold-out arrangements</h1><section aria-label='Sold-out arrangements'><p role='status'>No arrangements match this collection.</p><a href='/collections'>Clear filters</a></section></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "category",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "product"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The category route remains observable while bound empty-state evidence records that this collection currently has no items."
+    },
+    {
+      "id": "healthy_pricing",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/pricing",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "pricing",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["product", "service"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A complete pricing route segment supplies bounded route evidence without relying on price copy."
+    },
+    {
+      "id": "searchable_docs_reference",
+      "source_label": "Searchable sanitized documentation detail pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://docs.searchable.example.test/query-language",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><header><a href='/'>Developer documentation</a></header><nav aria-label='Documentation'><a href='/getting-started'>Getting started</a><a href='/query-language'>Query language</a><a href='/api-client'>API client</a></nav><main><article><p><a href='/'>Docs</a> / Query language</p><h1>Query language reference</h1><p>Use the query parameter to select indexed fields and return matching records.</p><h2>Request syntax</h2><pre><code>GET /v1/search?q=planter</code></pre><h2>Response fields</h2><p>The response object contains hits and pagination metadata.</p></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "docs",
+        "traits": [],
+        "deciding_signal": "documentation_context",
+        "allowed_deciding_tiers": ["semantic"],
+        "allowed_confidence": ["low"],
+        "rejected_kinds": ["article", "category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The docs host only corroborates independently observed documentation navigation, reference headings, and technical syntax."
+    },
+    {
+      "id": "healthy_faq",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/answers",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "headings": {
+            "h1_texts": ["Answers"],
+            "h2_texts": ["What is delivery?", "How do returns work?", "Where can I get help?"]
+          },
+          "question_answer_relationships": [
+            {
+              "question": "What is delivery?",
+              "answer": "Delivery is tracked from dispatch.",
+              "source": "heading",
+              "answer_state": "available",
+              "reason": ""
+            },
+            {
+              "question": "How do returns work?",
+              "answer": "Returns follow the published policy.",
+              "source": "heading",
+              "answer_state": "available",
+              "reason": ""
+            },
+            {
+              "question": "Where can I get help?",
+              "answer": "Support is available through the contact page.",
+              "source": "heading",
+              "answer_state": "available",
+              "reason": ""
+            }
+          ]
+        }
+      },
+      "expected": {
+        "page_kind": "faq",
+        "traits": ["has_faq"],
+        "deciding_signal": "content_heuristic",
+        "allowed_deciding_tiers": ["semantic"],
+        "allowed_confidence": ["low"],
+        "rejected_kinds": ["docs", "article"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "Three page-owned question headings meet the configured question-form threshold."
+    },
+    {
+      "id": "healthy_about",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/about",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "about_contact",
+        "traits": ["about_intent", "company_profile_intent"],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["homepage", "service"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "An exact about route identifies organization-information purpose and independently yields about intent."
+    },
+    {
+      "id": "healthy_service_expression",
+      "source_label": "Synthetic provider-capability control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/site-discovery",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "entity_proposition": {
+            "identity": "Acme",
+            "proposition": "Site discovery for commerce teams that helps shoppers find the right product.",
+            "provider": "Acme",
+            "named_capability": "Site discovery",
+            "audience_or_outcome": "Commerce teams help shoppers find the right product",
+            "next_action": "Book a demo"
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "service",
+        "traits": [],
+        "deciding_signal": "service_capability_expression",
+        "allowed_deciding_tiers": ["semantic"],
+        "allowed_confidence": ["low"],
+        "rejected_kinds": ["product", "docs"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The page names a provider, capability, audience outcome, and acquisition action; route vocabulary alone is not used."
+    },
+    {
+      "id": "healthy_local_detail",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/locations/berlin",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "entity": {
+            "location": {
+              "address_entity_count": 1,
+              "has_phone": true,
+              "has_hours": true
+            }
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "local",
+        "traits": ["local_intent"],
+        "deciding_signal": "primary_location_entity",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["high"],
+        "rejected_kinds": ["category", "about_contact"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "One address with contact and hours evidence belongs to a single location route rather than a multi-location finder."
+    },
+    {
+      "id": "healthy_guide",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/guides/repotting",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "ordered_list_steps": 4
+        }
+      },
+      "expected": {
+        "page_kind": "guide",
+        "traits": ["procedural"],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "docs"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The guide route supplies purpose while four ordered content steps record procedural structure."
+    },
+    {
+      "id": "healthy_comparison",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/compare/basic-vs-pro",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "comparison",
+        "traits": ["comparison_content"],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["pricing", "product"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A complete compare route identifies a comparison and independently records comparison content."
+    },
+    {
+      "id": "healthy_case_study",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/customers/acme",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "case_study_review",
+        "traits": ["case_study_intent"],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "about_contact"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A complete customer route identifies a customer evidence page and records case-study intent."
+    },
+    {
+      "id": "healthy_trust_policy",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/legal/privacy",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "trust_policy",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "about_contact"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The complete legal/privacy route identifies policy purpose without reading footer boilerplate."
+    },
+    {
+      "id": "searchable_blog_detail_1",
+      "source_label": "Searchable sanitized blog-detail pattern 1 of 6",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://www.searchable.example.test/blog/result-copy-is-not-a-grid",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><article><h1>Result copy is not a grid</h1><p class='byline'>By Sam Lee</p><p>We tested 13 products and recorded the results for this article.</p><section class='related-posts' aria-label='Related posts'><article><a href='/r/1'>One</a></article><article><a href='/r/2'>Two</a></article><article><a href='/r/3'>Three</a></article><article><a href='/r/4'>Four</a></article><article><a href='/r/5'>Five</a></article><article><a href='/r/6'>Six</a></article></section></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "article",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The phrase '13 products' and a six-card recommendation module are not bound to one collection."
+    },
+    {
+      "id": "searchable_blog_detail_2",
+      "source_label": "Searchable sanitized blog-detail pattern 2 of 6",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://www.searchable.example.test/blog/sort-controls-need-a-target",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><article><h1>Sort controls need a target</h1><p class='byline'>By Sam Lee</p><aside><label>Sort notes<select name='sort'><option>Newest</option><option>Oldest</option></select></label></aside><section class='recommendations' aria-label='Recommended articles'><article><a href='/r/1'>One</a></article><article><a href='/r/2'>Two</a></article><article><a href='/r/3'>Three</a></article><article><a href='/r/4'>Four</a></article><article><a href='/r/5'>Five</a></article><article><a href='/r/6'>Six</a></article></section></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "article",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "An unrelated sort-like form and recommendation list share no bounded structural relation."
+    },
+    {
+      "id": "searchable_blog_detail_3",
+      "source_label": "Searchable sanitized blog-detail pattern 3 of 6",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://www.searchable.example.test/blog/filter-controls-need-a-target",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><article><h1>Filter controls need a target</h1><p class='byline'>By Sam Lee</p><form action='/newsletter'><button name='filter'>Filter newsletter topics</button></form><section class='related-guides' aria-label='Related guides'><article><a href='/r/1'>One</a></article><article><a href='/r/2'>Two</a></article><article><a href='/r/3'>Three</a></article><article><a href='/r/4'>Four</a></article><article><a href='/r/5'>Five</a></article><article><a href='/r/6'>Six</a></article></section></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "article",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A filter label in an unrelated form cannot bind itself to related article cards."
+    },
+    {
+      "id": "searchable_blog_detail_4",
+      "source_label": "Searchable sanitized blog-detail pattern 4 of 6",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://www.searchable.example.test/blog/recommendations-are-not-results",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><header><output role='status'>12 results</output></header><main><article><h1>Recommendations are not results</h1><p class='byline'>By Sam Lee</p><section class='you-may-also-like' aria-label='You may also like'><article><a href='/r/1'>One</a></article><article><a href='/r/2'>Two</a></article><article><a href='/r/3'>Three</a></article><article><a href='/r/4'>Four</a></article><article><a href='/r/5'>Five</a></article><article><a href='/r/6'>Six</a></article></section></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "article",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "Recommendation cards, result-like prose, and an unrelated control cannot be combined across containers."
+    },
+    {
+      "id": "searchable_blog_detail_5",
+      "source_label": "Searchable sanitized blog-detail pattern 5 of 6",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://www.searchable.example.test/blog/footer-controls-are-chrome",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><article><h1>Footer controls are chrome</h1><p class='byline'>By Sam Lee</p><section class='suggested-reading' aria-label='Suggested reading'><article><a href='/r/1'>One</a></article><article><a href='/r/2'>Two</a></article><article><a href='/r/3'>Three</a></article><article><a href='/r/4'>Four</a></article><article><a href='/r/5'>Five</a></article><article><a href='/r/6'>Six</a></article></section></article></main><footer><select name='sort'><option>Newest</option><option>Oldest</option></select><button name='filter'>Filter links</button></footer></body></html>"
+      },
+      "expected": {
+        "page_kind": "article",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "Footer filter and sort controls are chrome and have no relation to recommendation cards."
+    },
+    {
+      "id": "searchable_blog_detail_6",
+      "source_label": "Searchable sanitized blog-detail pattern 6 of 6",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://www.searchable.example.test/blog/pagination-copy-needs-a-collection",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><article><h1>Pagination copy needs a collection</h1><p class='byline'>By Sam Lee</p><p>Page 1 of this long-form article explains 10 products.</p><section class='more-like-this' aria-label='More like this'><article><a href='/r/1'>One</a></article><article><a href='/r/2'>Two</a></article><article><a href='/r/3'>Three</a></article><article><a href='/r/4'>Four</a></article><article><a href='/r/5'>Five</a></article><article><a href='/r/6'>Six</a></article></section></article></main><footer><nav aria-label='Pagination'><a rel='next' href='/page/2'>Next</a></nav></footer></body></html>"
+      },
+      "expected": {
+        "page_kind": "article",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "Pagination wording, a numeric phrase, and related cards do not form evidence when not structurally bound."
+    },
+    {
+      "id": "searchable_exact_blog_archive",
+      "source_label": "Searchable sanitized blog archive pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://www.searchable.example.test/blog",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "entity": {
+            "listing": {
+              "largest_card_list_size": 8,
+              "distinct_card_list_targets": 8,
+              "has_result_count": false,
+              "has_sort_control": false,
+              "has_filter_control": false,
+              "collection_evidence": {
+                "container": {
+                  "tag": "section",
+                  "label": "Latest articles",
+                  "item_count": 8,
+                  "distinct_targets": 8
+                },
+                "affordances": [
+                  {
+                    "class": "pagination",
+                    "relation": "adjacent",
+                    "text": "Next"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "editorial_index",
+        "traits": ["listing"],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The exact archive route identifies an editorial index; linked posts do not make it an authored article or a product category."
+    },
+    {
+      "id": "searchable_blog_root_without_collection",
+      "source_label": "Searchable sanitized archive negative pattern",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://empty.searchable.example.test/blog",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><h1>Blog</h1><p>The archive introduction is present, but no page-owned article collection was rendered.</p></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "editorial_index",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The exact archive route remains an editorial index even when its article collection was not rendered."
+    },
+    {
+      "id": "searchable_docs_host_root",
+      "source_label": "Searchable sanitized docs-host root pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://docs.searchable.example.test/",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "homepage",
+        "traits": [],
+        "deciding_signal": "root_path",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["high"],
+        "rejected_kinds": ["docs", "category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A docs host can have its own homepage; host context cannot override exact root identity."
+    },
+    {
+      "id": "searchable_docs_host_changelog",
+      "source_label": "Searchable sanitized docs-host changelog pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://docs.searchable.example.test/blog/august-release-notes",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "authorship": {
+            "visible_byline": "By Product Team",
+            "visible_date": "August 20, 2026"
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "article",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["docs", "category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The docs host contains an authored changelog article; the article route outranks host corroboration."
+    },
+    {
+      "id": "searchable_docs_host_alone",
+      "source_label": "Searchable sanitized docs-host negative pattern",
+      "observation_date": "2026-08-30",
+      "condition": "ambiguous",
+      "url": "https://docs.searchable.example.test/miscellany",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "body": {
+            "text": "A short page without technical task or reference structure.",
+            "word_count": 9
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["docs", "article", "category"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "The host name is the only docs-like context; no page-owned documentation structure corroborates it."
+    },
+    {
+      "id": "searchable_feature_service",
+      "source_label": "Searchable sanitized feature pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://www.searchable.example.test/features/instant-results",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "entity_proposition": {
+            "identity": "Searchable",
+            "proposition": "Instant results for retail teams helps shoppers reach relevant items faster.",
+            "provider": "Searchable",
+            "named_capability": "Instant results",
+            "audience_or_outcome": "Retail teams help shoppers reach relevant items faster",
+            "next_action": "Start a trial"
+          },
+          "entity": {
+            "listing": {
+              "largest_card_list_size": 8,
+              "distinct_card_list_targets": 8,
+              "has_result_count": true,
+              "has_sort_control": true,
+              "has_filter_control": false,
+              "collection_evidence": {
+                "container": {
+                  "tag": "",
+                  "label": "",
+                  "item_count": 0,
+                  "distinct_targets": 0
+                },
+                "affordances": []
+              }
+            }
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "service",
+        "traits": [],
+        "deciding_signal": "service_capability_expression",
+        "allowed_deciding_tiers": ["semantic"],
+        "allowed_confidence": ["low"],
+        "rejected_kinds": ["category", "product"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "Unbound cards cannot make a feature page a category; the complete capability expression identifies service purpose."
+    },
+    {
+      "id": "searchable_solution_service",
+      "source_label": "Searchable sanitized solution pattern",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://www.searchable.example.test/solutions/merchandising",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "service",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["category", "docs"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A complete solutions route identifies service purpose without treating unrelated cards as a collection."
+    },
+    {
+      "id": "broken_product_schema_conflict",
+      "source_label": "Synthetic broken control",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://broken.example.test/products/missing-buy-box",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "structured_data": {
+            "types": ["Article"],
+            "blocks": []
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "product",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "The product route remains purpose while conflicting Article markup is suggestion-only and the missing buy box is a separate defect."
+    },
+    {
+      "id": "ambiguous_no_signals",
+      "source_label": "Synthetic ambiguous control",
+      "observation_date": "2026-08-30",
+      "condition": "ambiguous",
+      "url": "https://ambiguous.example.test/explore",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["article", "category", "service"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "No route, page-owned entity, heading pattern, or content structure supports a fixed taxonomy kind."
+    },
+    {
+      "id": "ambiguous_schema_only",
+      "source_label": "Synthetic schema-only control",
+      "observation_date": "2026-08-30",
+      "condition": "ambiguous",
+      "url": "https://ambiguous.example.test/entity",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "structured_data": {
+            "types": ["Product"],
+            "blocks": []
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["product", "category"],
+        "other_reason": "schema_only"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "Product structured data is retained as a suggestion but cannot self-certify product purpose."
+    },
+    {
+      "id": "conflicting_semantic_evidence",
+      "source_label": "Synthetic conflicting control",
+      "observation_date": "2026-08-30",
+      "condition": "conflicting",
+      "url": "https://conflicting.example.test/answers-and-notes",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "title": "Shipping policy questions and answers",
+          "headings": {
+            "h1_texts": ["Shipping policy questions and answers"],
+            "h2_texts": ["What changed?", "Why did it change?", "How does it work?"]
+          },
+          "question_answer_relationships": [
+            {
+              "question": "What changed?",
+              "answer": "The shipping window changed.",
+              "source": "heading",
+              "answer_state": "available",
+              "reason": ""
+            },
+            {
+              "question": "Why did it change?",
+              "answer": "Carrier schedules changed.",
+              "source": "heading",
+              "answer_state": "available",
+              "reason": ""
+            },
+            {
+              "question": "How does it work?",
+              "answer": "The new window appears at checkout.",
+              "source": "heading",
+              "answer_state": "available",
+              "reason": ""
+            }
+          ]
+        }
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": ["has_faq"],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["faq", "trust_policy"],
+        "other_reason": "conflicting_top_tier_evidence"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "FAQ and trust-policy evidence conflict in the strongest semantic tier, so the classifier preserves both signals and abstains."
+    },
+    {
+      "id": "js_shell_without_owned_content",
+      "source_label": "Synthetic JavaScript shell control",
+      "observation_date": "2026-08-30",
+      "condition": "js_shell",
+      "url": "https://shell.example.test/app",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><head><title>Loading</title></head><body><div id='app'></div><script src='/assets/app.js'></script></body></html>"
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["homepage", "category", "service"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "The response contains only an application mount and script; no page-owned purpose is observable."
+    },
+    {
+      "id": "non_html_product_like_url",
+      "source_label": "Synthetic non-HTML control",
+      "observation_date": "2026-08-30",
+      "condition": "non_html",
+      "url": "https://files.example.test/products/catalog.pdf",
+      "content_type": "application/pdf",
+      "fixture": {
+        "kind": "html",
+        "html": "%PDF-1.7 sanitized fixture bytes"
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["product", "category"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "A non-HTML response has no document structure to classify; a product-like path cannot fabricate a verdict."
+    },
+    {
+      "id": "incidental_results_copy",
+      "source_label": "Synthetic false-listing control",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://false-listing.example.test/research",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "html",
+        "html": "<html><body><main><article><h1>Research methods</h1><p>We tested 13 products and recorded the results.</p><p>The study explains the outcomes without presenting a collection.</p></article></main></body></html>"
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["category", "product"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "Ordinary editorial copy containing '13 products' and 'results' has no candidate collection or bound affordance."
+    },
+    {
+      "id": "incomplete_service_expression",
+      "source_label": "Synthetic service false-positive control",
+      "observation_date": "2026-08-30",
+      "condition": "broken",
+      "url": "https://false-service.example.test/platform",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "entity_proposition": {
+            "identity": "Acme",
+            "proposition": "Search tools for retail teams.",
+            "provider": "Acme",
+            "named_capability": "Search tools",
+            "audience_or_outcome": "Retail teams",
+            "next_action": ""
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["service", "product"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "Provider, capability, and audience copy without an acquisition or next-action path is incomplete service evidence."
+    },
+    {
+      "id": "healthy_how_to",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/blog/how-to-season-a-pan",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "how_to",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "guide"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A how-to named in the slug identifies the shape, not the blog it is filed under."
+    },
+    {
+      "id": "healthy_listicle",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/blog/best-cast-iron-pans",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "listicle",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["article", "category"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A ranking named in the slug identifies a listicle over the blog route holding it."
+    },
+    {
+      "id": "healthy_alternative",
+      "source_label": "Synthetic healthy control",
+      "observation_date": "2026-08-30",
+      "condition": "healthy",
+      "url": "https://healthy.example.test/blog/flourist-alternatives",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {}
+      },
+      "expected": {
+        "page_kind": "alternative",
+        "traits": [],
+        "deciding_signal": "path_pattern",
+        "allowed_deciding_tiers": ["route"],
+        "allowed_confidence": ["medium"],
+        "rejected_kinds": ["comparison", "article"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "An alternatives page names the shape in its slug and is not a plain comparison."
+    },
+    {
+      "id": "locale_region_root",
+      "source_label": "Synthetic regional locale root",
+      "observation_date": "2026-10-07",
+      "condition": "healthy",
+      "url": "https://example.test/en-in",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "title": "Example India",
+          "headings": {
+            "h1_texts": ["Example India"],
+            "h2_texts": []
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "homepage",
+        "traits": [],
+        "deciding_signal": "root_path",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["high"],
+        "rejected_kinds": ["category", "service"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A region-qualified locale root is the site root for that market, whether or not it is in a fixed list."
+    },
+    {
+      "id": "numeric_region_root",
+      "source_label": "Synthetic UN M.49 locale root",
+      "observation_date": "2026-10-07",
+      "condition": "healthy",
+      "url": "https://example.test/es-419",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "title": "Ejemplo Latinoamérica",
+          "headings": {
+            "h1_texts": ["Ejemplo Latinoamérica"],
+            "h2_texts": []
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "homepage",
+        "traits": [],
+        "deciding_signal": "root_path",
+        "allowed_deciding_tiers": ["structural"],
+        "allowed_confidence": ["high"],
+        "rejected_kinds": ["category", "service"],
+        "other_reason": null
+      },
+      "deliberate_abstention": false,
+      "structural_reason": "A numeric region code (es-419) names a locale root just like a country code."
+    },
+    {
+      "id": "generic_word_in_product_title",
+      "source_label": "Synthetic product title containing a policy word",
+      "observation_date": "2026-10-07",
+      "condition": "ambiguous",
+      "url": "https://example.test/daily-contact-lenses",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "title": "Daily Contact Lenses",
+          "headings": {
+            "h1_texts": ["Daily Contact Lenses"],
+            "h2_texts": []
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["about_contact", "homepage"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "A lone generic word such as contact names products too; without route or structure there is no purpose evidence."
+    },
+    {
+      "id": "two_letter_product_path",
+      "source_label": "Synthetic two-letter product path",
+      "observation_date": "2026-10-07",
+      "condition": "ambiguous",
+      "url": "https://example.test/ai",
+      "content_type": "text/html",
+      "fixture": {
+        "kind": "facts",
+        "facts": {
+          "title": "AI Assistant",
+          "headings": {
+            "h1_texts": ["AI Assistant"],
+            "h2_texts": []
+          }
+        }
+      },
+      "expected": {
+        "page_kind": "other",
+        "traits": [],
+        "deciding_signal": "none",
+        "allowed_deciding_tiers": [""],
+        "allowed_confidence": ["unknown"],
+        "rejected_kinds": ["about_contact", "homepage"],
+        "other_reason": "no_classification_signals"
+      },
+      "deliberate_abstention": true,
+      "structural_reason": "Only listed language roots are bare two-letter homepages; /ai is not a locale."
+    }
+  ]
+}

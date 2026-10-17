@@ -1,0 +1,68 @@
+/* Authenticated interaction motion. Timing lives in globals.css; feature files
+   consume semantic component classes rather than defining local animation. */
+.menu-panel {
+  transform-origin: var(
+    --radix-dropdown-menu-content-transform-origin,
+    var(--radix-popover-content-transform-origin, var(--radix-select-content-transform-origin, top))
+  );
+}
+
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    scale: 0.985;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+.dialog-overlay[data-state='open'] {
+  animation: modal-overlay-in var(--motion-slow) var(--ease-standard) both;
+}
+.dialog-overlay[data-state='closed'] {
+  animation: modal-overlay-in var(--motion-normal) var(--ease-exit) reverse both;
+}
+.dialog-panel[data-state='open'] {
+  animation: modal-panel-in var(--motion-slow) var(--ease-standard) both;
+}
+.dialog-panel[data-state='closed'] {
+  animation: modal-panel-in var(--motion-normal) var(--ease-exit) reverse both;
+}
+
+.tooltip-panel,
+.toast-panel {
+  transition:
+    opacity var(--motion-normal) var(--ease-standard),
+    transform var(--motion-normal) var(--ease-standard);
+}
+
+.toast-panel {
+  transition-duration: var(--motion-slow);
+}
+
+.tooltip-panel[data-state='closed'],
+.toast-panel[data-state='closed'] {
+  opacity: 0;
+  transform: translateY(2px);
+  transition-timing-function: var(--ease-exit);
+}
+
+@starting-style {
+  .tooltip-panel[data-state='delayed-open'],
+  .tooltip-panel[data-state='instant-open'],
+  .toast-panel[data-state='open'] {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}

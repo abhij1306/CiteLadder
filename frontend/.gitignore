@@ -1,0 +1,30 @@
+# dependencies
+/node_modules
+
+# build output
+/out/
+
+# production
+/build
+/dist
+/apps/*/dist/
+/apps/marketing/.dev/
+/apps/*/.astro/
+**/.astro/
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/.playwright
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+pnpm-debug.log*
+
+# env
+.env*.local
+*.tsbuildinfo

@@ -1,0 +1,88 @@
+# CiteLadder self-hosted stack: PostgreSQL, the app (API + browser app on
+# http://localhost:8100) and the background runner.
+#
+#   docker compose up -d
+#
+# Every setting is optional; put overrides in a .env file next to this one
+# (see .env.example). Instance secrets are generated on first start and kept
+# in the `citeladder_data` volume.
+
+x-citeladder-env: &citeladder-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-citeladder}:${POSTGRES_PASSWORD:-citeladder}@db:5432/${POSTGRES_DB:-citeladder}
+  PUBLIC_API_URL: ${PUBLIC_APP_ORIGIN:-http://localhost:8100}
+  FRONTEND_URL: ${PUBLIC_APP_ORIGIN:-http://localhost:8100}
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-citeladder}
+      POSTGRES_USER: ${POSTGRES_USER:-citeladder}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-citeladder}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-citeladder} -d ${POSTGRES_DB:-citeladder}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Applies migrations and creates the local workspace on start, then serves
+  # the API, the MCP endpoint and the browser app.
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE: ${NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE:-}
+    image: citeladder:local
+    restart: unless-stopped
+    command: ['server']
+    env_file:
+      - path: .env
+        required: false
+    environment: *citeladder-env
+    # Lets a model server on the host (e.g. Ollama) be reached on Linux too.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - citeladder_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Loopback only. CiteLadder has no login: anyone who can reach this port
+      # can use the workspace. Put an authenticating proxy in front before
+      # exposing it beyond this machine.
+      - '127.0.0.1:${CITELADDER_PORT:-8100}:8100'
+
+  # Drains queued work: crawls, audits, syncs and scheduled jobs.
+  runner:
+    image: citeladder:local
+    # Built by the app service; never pulled from a registry.
+    pull_policy: never
+    restart: unless-stopped
+    command: ['runner']
+    env_file:
+      - path: .env
+        required: false
+    environment: *citeladder-env
+    # Lets a model server on the host (e.g. Ollama) be reached on Linux too.
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - citeladder_data:/data
+    depends_on:
+      app:
+        condition: service_healthy
+    # Healthy while ticks keep succeeding (the loop touches the heartbeat).
+    healthcheck:
+      test: ['CMD-SHELL', 'test -n "$$(find /tmp/runner-heartbeat -mmin -5 2>/dev/null)"']
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  pg_data:
+  citeladder_data:

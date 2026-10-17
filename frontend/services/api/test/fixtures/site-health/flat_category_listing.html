@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  A server-rendered ecommerce listing on a FLAT slug: "/womens-dresses" carries
+  no /category/, /categories/, /collections/ or /catalog/ segment, so the route
+  tier has nothing to say about it. Its listing structure -- a real grid plus a
+  result count, a sort control and a filter control -- is what identifies it.
+
+  Note the sort dropdown is a multi-option <select>, the same shape as a variant
+  picker; it must not corroborate a product reading of this page.
+-->
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Women's Dresses</title>
+    <script>
+      var re = /[.*+?^${}()|[\]\\]/g;
+      function esc(s) {
+        return s.replace(re, '\\$1');
+      }
+    </script>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/womens-tops">Tops</a>
+        <a href="/womens-jeans">Jeans</a>
+        <a href="/womens-pyjamas">Sleepwear</a>
+      </nav>
+    </header>
+
+    <main>
+      <h1>Women's Dresses</h1>
+      <div class="toolbar">
+        <button class="filter-toggle">Filters</button>
+        <span class="result-count">56 results</span>
+        <label for="sort-by">Sort</label>
+        <select id="sort-by" name="sort_by">
+          <option value="recommended">Recommended</option>
+          <option value="price-asc">Price: Low to High</option>
+        </select>
+      </div>
+      <ul class="product-grid">
+        <li><a href="/dress-1">Tiered Maxi Dress</a><span>$39.00</span></li>
+        <li><a href="/dress-2">Wrap Midi Dress</a><span>$45.00</span></li>
+        <li><a href="/dress-3">Linen Shift Dress</a><span>$35.00</span></li>
+        <li><a href="/dress-4">Shirred Sundress</a><span>$29.00</span></li>
+        <li><a href="/dress-5">Knit Jumper Dress</a><span>$49.00</span></li>
+        <li><a href="/dress-6">Satin Slip Dress</a><span>$55.00</span></li>
+        <li><a href="/dress-7">Denim Midi Dress</a><span>$59.00</span></li>
+        <li><a href="/dress-8">Floral Wrap Dress</a><span>$42.00</span></li>
+      </ul>
+    </main>
+
+    <footer><a href="/company/privacypolicy">Privacy</a></footer>
+  </body>
+</html>

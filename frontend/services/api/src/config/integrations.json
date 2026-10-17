@@ -1,0 +1,401 @@
+{
+  "transport": {
+    "INTEGRATION_PROVIDER_GSC": "gsc",
+    "INTEGRATION_PROVIDER_GA4": "ga4",
+    "INTEGRATION_PROVIDER_BING": "bing",
+    "INTEGRATION_PROVIDERS": ["bing", "ga4", "gsc"],
+    "INTEGRATION_TRANSPORT_GOOGLE": "google_oauth",
+    "INTEGRATION_TRANSPORT_MICROSOFT": "microsoft_oauth",
+    "INTEGRATION_TRANSPORTS": ["google_oauth", "microsoft_oauth"],
+    "INTEGRATION_PROVIDER_TRANSPORT": {
+      "gsc": "google_oauth",
+      "ga4": "google_oauth",
+      "bing": "microsoft_oauth"
+    },
+    "INTEGRATION_OAUTH_REFRESHABLE": {
+      "google_oauth": true,
+      "microsoft_oauth": true
+    },
+    "INTEGRATION_OAUTH_AUTHORIZE_URLS": {
+      "google_oauth": "https://accounts.google.com/o/oauth2/v2/auth",
+      "microsoft_oauth": "https://www.bing.com/webmasters/oauth/authorize"
+    },
+    "INTEGRATION_OAUTH_TOKEN_URLS": {
+      "google_oauth": "https://oauth2.googleapis.com/token",
+      "microsoft_oauth": "https://www.bing.com/webmasters/oauth/token"
+    },
+    "INTEGRATION_OAUTH_REVOKE_URLS": {
+      "google_oauth": "https://oauth2.googleapis.com/revoke",
+      "microsoft_oauth": ""
+    },
+    "INTEGRATION_OAUTH_SCOPES": {
+      "google_oauth": [
+        "https://www.googleapis.com/auth/webmasters.readonly",
+        "https://www.googleapis.com/auth/analytics.readonly"
+      ],
+      "microsoft_oauth": ["webmaster.read"]
+    },
+    "INTEGRATION_OAUTH_CALLBACK_PATH": "/api/v1/integrations/oauth/{provider}/callback",
+    "INTEGRATION_OAUTH_LANDING_PATH": "/settings?tab=integrations",
+    "INTEGRATION_OAUTH_RETURN_PATHS": ["/performance", "/demand", "/ai-traffic", "/settings"],
+    "INTEGRATION_OAUTH_TRANSACTION_COOKIE": "citeladder_integration_oauth",
+    "INTEGRATION_OAUTH_TRANSACTION_COOKIE_PATH": "/api/v1/integrations/oauth",
+    "GSC_API_BASE_URL": "https://www.googleapis.com",
+    "GSC_SEARCH_ANALYTICS_PATH": "/webmasters/v3/sites/{property_ref}/searchAnalytics/query",
+    "GSC_SITES_PATH": "/webmasters/v3/sites",
+    "GSC_PERMISSION_UNVERIFIED": "siteUnverifiedUser",
+    "GSC_DOMAIN_PROPERTY_PREFIX": "sc-domain:",
+    "GA4_API_BASE_URL": "https://analyticsdata.googleapis.com",
+    "GA4_RUN_REPORT_PATH": "/v1beta/properties/{property_ref}:runReport",
+    "GA4_ADMIN_API_BASE_URL": "https://analyticsadmin.googleapis.com",
+    "GA4_ACCOUNT_SUMMARIES_PATH": "/v1beta/accountSummaries",
+    "GA4_ACCOUNT_SUMMARIES_PAGE_SIZE": 200,
+    "GA4_ACCOUNT_SUMMARIES_MAX_PAGES": 25,
+    "GA4_PROPERTY_RESOURCE_PREFIX": "properties/",
+    "BING_API_BASE_URL": "https://www.bing.com",
+    "BING_API_JSON_ROOT": "/webmaster/api.svc/json/",
+    "BING_SITES_PROBE_METHOD": "GetUserSites",
+    "INTEGRATION_APPROVED_ENDPOINT_HOSTS": [
+      "accounts.google.com",
+      "analyticsadmin.googleapis.com",
+      "analyticsdata.googleapis.com",
+      "oauth2.googleapis.com",
+      "www.bing.com",
+      "www.googleapis.com"
+    ]
+  },
+  "settings": {
+    "sync_on_demand_active_limit": {
+      "env": ["INTEGRATION_SYNC_ON_DEMAND_ACTIVE_LIMIT"],
+      "type": "int",
+      "default": 20,
+      "exclusive_minimum": 0
+    },
+    "sync_on_demand_request_limit": {
+      "env": ["INTEGRATION_SYNC_ON_DEMAND_REQUEST_LIMIT"],
+      "type": "int",
+      "default": 10,
+      "exclusive_minimum": 0
+    },
+    "sync_on_demand_request_window_seconds": {
+      "env": ["INTEGRATION_SYNC_ON_DEMAND_REQUEST_WINDOW_SECONDS"],
+      "type": "int",
+      "default": 60,
+      "exclusive_minimum": 0
+    },
+    "sync_default_window_days": {
+      "env": ["INTEGRATION_SYNC_DEFAULT_WINDOW_DAYS"],
+      "type": "int",
+      "default": 28,
+      "exclusive_minimum": 0
+    },
+    "sync_backfill_max_days": {
+      "env": ["INTEGRATION_SYNC_BACKFILL_MAX_DAYS"],
+      "type": "int",
+      "default": 480,
+      "exclusive_minimum": 0
+    },
+    "sync_cadence_seconds": {
+      "env": ["INTEGRATION_SYNC_CADENCE_SECONDS"],
+      "type": "float",
+      "default": 86400.0,
+      "exclusive_minimum": 0
+    },
+    "sync_late_data_revision_days": {
+      "env": ["INTEGRATION_SYNC_LATE_DATA_REVISION_DAYS"],
+      "type": "int",
+      "default": 3,
+      "minimum": 0
+    },
+    "sync_page_size": {
+      "env": ["INTEGRATION_SYNC_PAGE_SIZE"],
+      "type": "int",
+      "default": 25000,
+      "exclusive_minimum": 0
+    },
+    "sync_max_pages": {
+      "env": ["INTEGRATION_SYNC_MAX_PAGES"],
+      "type": "int",
+      "default": 1000,
+      "exclusive_minimum": 0
+    },
+    "sync_request_timeout_seconds": {
+      "env": ["INTEGRATION_SYNC_REQUEST_TIMEOUT_SECONDS"],
+      "type": "float",
+      "default": 60.0,
+      "exclusive_minimum": 0
+    },
+    "lease_ttl_seconds": {
+      "env": ["INTEGRATION_LEASE_TTL_SECONDS"],
+      "type": "float",
+      "default": 120.0,
+      "exclusive_minimum": 0
+    },
+    "heartbeat_interval_seconds": {
+      "env": ["INTEGRATION_HEARTBEAT_INTERVAL_SECONDS"],
+      "type": "float",
+      "default": 30.0,
+      "exclusive_minimum": 0
+    },
+    "retry_base_delay_seconds": {
+      "env": ["INTEGRATION_RETRY_BASE_DELAY_SECONDS"],
+      "type": "float",
+      "default": 30.0,
+      "exclusive_minimum": 0
+    },
+    "retry_max_delay_seconds": {
+      "env": ["INTEGRATION_RETRY_MAX_DELAY_SECONDS"],
+      "type": "float",
+      "default": 900.0,
+      "exclusive_minimum": 0
+    },
+    "token_refresh_skew_seconds": {
+      "env": ["INTEGRATION_TOKEN_REFRESH_SKEW_SECONDS"],
+      "type": "float",
+      "default": 300.0,
+      "minimum": 0
+    },
+    "token_refresh_claim_seconds": {
+      "env": ["INTEGRATION_TOKEN_REFRESH_CLAIM_SECONDS"],
+      "type": "float",
+      "default": 75.0,
+      "exclusive_minimum": 0
+    },
+    "token_refresh_wait_seconds": {
+      "env": ["INTEGRATION_TOKEN_REFRESH_WAIT_SECONDS"],
+      "type": "float",
+      "default": 70.0,
+      "exclusive_minimum": 0
+    },
+    "token_refresh_poll_seconds": {
+      "env": ["INTEGRATION_TOKEN_REFRESH_POLL_SECONDS"],
+      "type": "float",
+      "default": 1.0,
+      "exclusive_minimum": 0
+    },
+    "max_inline_payload_bytes": {
+      "env": ["INTEGRATION_MAX_INLINE_PAYLOAD_BYTES"],
+      "type": "int",
+      "default": 1000000,
+      "exclusive_minimum": 0
+    },
+    "gsc_requests_per_minute": {
+      "env": ["INTEGRATION_GSC_REQUESTS_PER_MINUTE"],
+      "type": "int",
+      "default": 200,
+      "exclusive_minimum": 0
+    },
+    "ga4_requests_per_minute": {
+      "env": ["INTEGRATION_GA4_REQUESTS_PER_MINUTE"],
+      "type": "int",
+      "default": 60,
+      "exclusive_minimum": 0
+    },
+    "bing_requests_per_minute": {
+      "env": ["INTEGRATION_BING_REQUESTS_PER_MINUTE"],
+      "type": "int",
+      "default": 30,
+      "exclusive_minimum": 0
+    },
+    "sync_max_attempts": {
+      "env": ["INTEGRATION_SYNC_MAX_ATTEMPTS"],
+      "type": "int",
+      "default": 4,
+      "exclusive_minimum": 0
+    }
+  },
+  "contracts": {
+    "GRANT_STATUS_NEEDS_REAUTH": "needs_reauth",
+    "GRANT_STATUS_PENDING_REVOCATION": "pending_revocation",
+    "GRANT_STATUS_REVOKED": "revoked",
+    "GRANT_STATUS_ERROR": "error",
+    "MAPPING_STATUS_DISABLED": "disabled",
+    "SYNC_KIND_SCHEDULED": "scheduled",
+    "SYNC_KIND_BACKFILL": "backfill",
+    "EVENT_INTEGRATION_CONNECTED": "integration.connected",
+    "EVENT_INTEGRATION_TESTED": "integration.tested",
+    "EVENT_INTEGRATION_SYNC_STARTED": "integration.sync_started",
+    "EVENT_INTEGRATION_SYNC_FINISHED": "integration.sync_finished",
+    "EVENT_INTEGRATION_REAUTH_REQUIRED": "integration.reauth_required",
+    "EVENT_INTEGRATION_REVOKED": "integration.revoked",
+    "EVENT_INTEGRATION_DISCONNECTED": "integration.disconnected",
+    "BACKFILL_STATE_NOT_STARTED": "not_started",
+    "BACKFILL_STATE_IMPORTING": "importing",
+    "BACKFILL_STATE_COMPLETE": "complete",
+    "BACKFILL_STATE_PARTIAL": "partial",
+    "EVENT_INTEGRATION_REVOKE_FAILED": "integration.revoke_failed",
+    "ERROR_UNMAPPED_PROPERTY": "unmapped_property",
+    "ERROR_TOKEN_REFRESH_FAILED": "token_refresh_failed",
+    "ERROR_PROVIDER_API": "provider_api_error",
+    "ERROR_RATE_LIMITED": "rate_limited",
+    "ERROR_UNAPPROVED_ENDPOINT": "unapproved_endpoint",
+    "ERROR_GRANT_AUTH_FAILED": "grant_auth_failed",
+    "ERROR_OAUTH_STATE_INVALID": "oauth_state_invalid",
+    "ERROR_OAUTH_EXCHANGE_FAILED": "oauth_exchange_failed",
+    "ERROR_OAUTH_NOT_CONFIGURED": "oauth_not_configured",
+    "ERROR_SYNC_WINDOW_INVALID": "sync_window_invalid",
+    "ERROR_SYNC_ACTIVE_WINDOW_CONFLICT": "sync_active_window_conflict",
+    "ERROR_SYNC_TARGET_UNRESOLVED": "sync_target_unresolved",
+    "ERROR_PAYLOAD_TOO_LARGE": "payload_too_large",
+    "ERROR_MAPPING_PROVIDER_MISMATCH": "mapping_provider_mismatch",
+    "ERROR_MAPPING_PROPERTY_NOT_OWNED": "mapping_property_not_owned",
+    "ERROR_MAPPING_ACTIVE_OWNER_CONFLICT": "mapping_active_owner_conflict",
+    "ERROR_PROPERTY_DISCOVERY_UNSUPPORTED": "property_discovery_unsupported",
+    "ERROR_PROPERTY_NOT_ACCESSIBLE": "property_not_accessible",
+    "ERROR_GA4_DIMENSION_INCOMPATIBLE": "ga4_dimension_incompatible",
+    "READINESS_NOT_CONNECTED": "not_connected",
+    "READINESS_CONNECTED": "connected",
+    "READINESS_IMPORTING": "importing",
+    "READINESS_CORE_DATA_READY": "core_data_ready",
+    "READINESS_ANALYSIS_READY": "analysis_ready",
+    "READINESS_IMPORT_FAILED": "import_failed",
+    "GRANT_STATUS_CONNECTED": "connected",
+    "MAPPING_STATUS_ACTIVE": "active",
+    "SYNC_KIND_ON_DEMAND": "on_demand",
+    "INTEGRATION_IMPORTER_VERSION": "integrations-importer-1"
+  },
+  "datasets": {
+    "gsc_page_daily": {
+      "dataset": "gsc_page_daily",
+      "provider": "gsc",
+      "api_method": "searchAnalytics.query",
+      "dimensions": ["page", "date"],
+      "metrics": ["clicks", "impressions", "ctr", "position"],
+      "paging_mode": "offset"
+    },
+    "gsc_day_daily": {
+      "dataset": "gsc_day_daily",
+      "provider": "gsc",
+      "api_method": "searchAnalytics.query",
+      "dimensions": ["date"],
+      "metrics": ["clicks", "impressions", "ctr", "position"],
+      "paging_mode": "offset"
+    },
+    "gsc_query_daily": {
+      "dataset": "gsc_query_daily",
+      "provider": "gsc",
+      "api_method": "searchAnalytics.query",
+      "dimensions": ["query", "date"],
+      "metrics": ["clicks", "impressions", "ctr", "position"],
+      "paging_mode": "offset"
+    },
+    "gsc_query_page_daily": {
+      "dataset": "gsc_query_page_daily",
+      "provider": "gsc",
+      "api_method": "searchAnalytics.query",
+      "dimensions": ["query", "page", "date"],
+      "metrics": ["clicks", "impressions", "ctr", "position"],
+      "paging_mode": "offset"
+    },
+    "gsc_search_appearance_daily": {
+      "dataset": "gsc_search_appearance_daily",
+      "provider": "gsc",
+      "api_method": "searchAnalytics.query",
+      "dimensions": ["searchAppearance", "date"],
+      "metrics": ["clicks", "impressions", "ctr", "position"],
+      "paging_mode": "offset"
+    },
+    "gsc_device_daily": {
+      "dataset": "gsc_device_daily",
+      "provider": "gsc",
+      "api_method": "searchAnalytics.query",
+      "dimensions": ["device", "date"],
+      "metrics": ["clicks", "impressions", "ctr", "position"],
+      "paging_mode": "offset"
+    },
+    "gsc_country_daily": {
+      "dataset": "gsc_country_daily",
+      "provider": "gsc",
+      "api_method": "searchAnalytics.query",
+      "dimensions": ["country", "date"],
+      "metrics": ["clicks", "impressions", "ctr", "position"],
+      "paging_mode": "offset"
+    },
+    "ga4_channel_daily": {
+      "dataset": "ga4_channel_daily",
+      "provider": "ga4",
+      "api_method": "runReport",
+      "dimensions": ["sessionDefaultChannelGroup", "date"],
+      "metrics": ["sessions", "engagedSessions", "keyEvents"],
+      "paging_mode": "offset"
+    },
+    "ga4_source_medium_daily": {
+      "dataset": "ga4_source_medium_daily",
+      "provider": "ga4",
+      "api_method": "runReport",
+      "dimensions": ["sessionSource", "sessionMedium", "date"],
+      "metrics": ["sessions", "engagedSessions", "keyEvents"],
+      "paging_mode": "offset"
+    },
+    "ga4_referrer_daily": {
+      "dataset": "ga4_referrer_daily",
+      "provider": "ga4",
+      "api_method": "runReport",
+      "dimensions": ["pageReferrer", "date"],
+      "metrics": ["sessions", "engagedSessions", "keyEvents"],
+      "paging_mode": "offset"
+    },
+    "ga4_landing_daily": {
+      "dataset": "ga4_landing_daily",
+      "provider": "ga4",
+      "api_method": "runReport",
+      "dimensions": ["landingPage", "sessionSource", "sessionMedium", "hostName", "date"],
+      "metrics": ["sessions", "engagedSessions", "keyEvents"],
+      "paging_mode": "offset"
+    },
+    "ga4_ecommerce_source_medium_daily": {
+      "dataset": "ga4_ecommerce_source_medium_daily",
+      "provider": "ga4",
+      "api_method": "runReport",
+      "dimensions": ["sessionSource", "sessionMedium", "date"],
+      "metrics": ["transactions", "purchaseRevenue", "sessions"],
+      "paging_mode": "offset"
+    },
+    "ga4_item_source_medium_daily": {
+      "dataset": "ga4_item_source_medium_daily",
+      "provider": "ga4",
+      "api_method": "runReport",
+      "dimensions": ["itemId", "sessionSource", "sessionMedium", "date"],
+      "metrics": ["itemRevenue", "itemsPurchased"],
+      "paging_mode": "offset"
+    },
+    "ga4_item_channel_group_daily": {
+      "dataset": "ga4_item_channel_group_daily",
+      "provider": "ga4",
+      "api_method": "runReport",
+      "dimensions": ["itemId", "sessionDefaultChannelGroup", "date"],
+      "metrics": ["itemRevenue", "itemsPurchased"],
+      "paging_mode": "offset"
+    },
+    "bing_page_daily": {
+      "dataset": "bing_page_daily",
+      "provider": "bing",
+      "api_method": "GetPageStats",
+      "dimensions": ["page", "date"],
+      "metrics": ["clicks", "impressions"],
+      "paging_mode": "offset"
+    },
+    "bing_query_daily": {
+      "dataset": "bing_query_daily",
+      "provider": "bing",
+      "api_method": "GetQueryStats",
+      "dimensions": ["query", "date"],
+      "metrics": ["clicks", "impressions"],
+      "paging_mode": "offset"
+    }
+  },
+  "excluded_datasets": ["gsc_search_appearance_daily"],
+  "dimension_separator": " | ",
+  "ga4_incompatible_markers": ["incompatib"],
+  "ga4_capability_key": "ga4_item_attribution",
+  "ga4_capability_version": "ga4-item-attribution-1",
+  "ga4_fallback_granularity": "default_channel_group",
+  "post_sync_task_kinds": [
+    "ingest_referrals",
+    "classify_referrals",
+    "traffic_snapshot_refresh",
+    "demand_snapshot_refresh",
+    "ai_referrals_snapshot_refresh"
+  ],
+  "importer_version": "integrations-importer-1"
+}

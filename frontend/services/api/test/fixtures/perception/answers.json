@@ -1,0 +1,734 @@
+[
+  {
+    "name": "praised-0-a",
+    "language": "en",
+    "prompt": "What is the best project management software?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Here are good picks. Taskline is the easiest option to set up, and support answers within minutes. Planbase is another choice.",
+    "labels": {
+      "Taskline": "positive",
+      "Planbase": "neutral"
+    }
+  },
+  {
+    "name": "praised-0-b",
+    "language": "en",
+    "prompt": "What is the best project management software?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "For most people: Taskline stands out for value: the entry plan includes features others charge extra for.",
+    "labels": {
+      "Taskline": "positive"
+    }
+  },
+  {
+    "name": "criticised-0-a",
+    "language": "en",
+    "prompt": "What is the best project management software?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Be careful. Taskline has become expensive after its latest price rise, and support is slow to respond. Orbit Boards is a safer bet.",
+    "labels": {
+      "Taskline": "negative",
+      "Orbit Boards": "positive"
+    }
+  },
+  {
+    "name": "criticised-0-b",
+    "language": "en",
+    "prompt": "What is the best project management software?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Opinions are poor lately: Taskline is hard to learn and its returns policy is strict, so I would avoid it for now.",
+    "labels": {
+      "Taskline": "negative"
+    }
+  },
+  {
+    "name": "mixed-0",
+    "language": "en",
+    "prompt": "What is the best project management software?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Taskline has excellent features, but it is pricier than most alternatives. Overall it depends on budget.",
+    "labels": {
+      "Taskline": "mixed"
+    }
+  },
+  {
+    "name": "list-0-a",
+    "language": "en",
+    "prompt": "Which project management software brands exist?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Popular options include Taskline, Planbase and Orbit Boards.",
+    "labels": {
+      "Taskline": "neutral",
+      "Planbase": "neutral",
+      "Orbit Boards": "neutral"
+    }
+  },
+  {
+    "name": "list-0-b",
+    "language": "en",
+    "prompt": "List project management software providers.",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "1. Orbit Boards\n2. Taskline\n3. Planbase",
+    "labels": {
+      "Taskline": "neutral",
+      "Planbase": "neutral",
+      "Orbit Boards": "neutral"
+    }
+  },
+  {
+    "name": "compare-0-a",
+    "language": "en",
+    "prompt": "Taskline or Planbase?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Planbase is cheaper and simpler to set up. Taskline costs more but has excellent support and reliability. Choose Taskline if uptime matters.",
+    "labels": {
+      "Taskline": "mixed",
+      "Planbase": "positive"
+    }
+  },
+  {
+    "name": "compare-0-b",
+    "language": "en",
+    "prompt": "Taskline vs Orbit Boards",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Orbit Boards is the better product overall. Taskline lags on features and its app is buggy.",
+    "labels": {
+      "Taskline": "negative",
+      "Orbit Boards": "positive"
+    }
+  },
+  {
+    "name": "absent-context-0",
+    "language": "en",
+    "prompt": "What is the best project management software?",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Taskline was mentioned in a 2019 roundup. Little else is known about it.",
+    "labels": {
+      "Taskline": "not_assessable"
+    }
+  },
+  {
+    "name": "praised-1-a",
+    "language": "en",
+    "prompt": "What is the best running shoes?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Here are good picks. Stride Co stands out for value: the entry plan includes features others charge extra for. Peakfoot is another choice.",
+    "labels": {
+      "Stride Co": "positive",
+      "Peakfoot": "neutral"
+    }
+  },
+  {
+    "name": "praised-1-b",
+    "language": "en",
+    "prompt": "What is the best running shoes?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "For most people: Reviewers consistently praise Stride Co for reliability and a polished, fast interface.",
+    "labels": {
+      "Stride Co": "positive"
+    }
+  },
+  {
+    "name": "criticised-1-a",
+    "language": "en",
+    "prompt": "What is the best running shoes?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Be careful. Many users report that Stride Co is unreliable, with frequent outages during busy periods. Runwell is a safer bet.",
+    "labels": {
+      "Stride Co": "negative",
+      "Runwell": "positive"
+    }
+  },
+  {
+    "name": "criticised-1-b",
+    "language": "en",
+    "prompt": "What is the best running shoes?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Opinions are poor lately: Customers complain that Stride Co ships late and that refunds take weeks.",
+    "labels": {
+      "Stride Co": "negative"
+    }
+  },
+  {
+    "name": "mixed-1",
+    "language": "en",
+    "prompt": "What is the best running shoes?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Stride Co is reliable and well made, though customer support can be slow. Overall it depends on budget.",
+    "labels": {
+      "Stride Co": "mixed"
+    }
+  },
+  {
+    "name": "list-1-a",
+    "language": "en",
+    "prompt": "Which running shoes brands exist?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "You could look at Peakfoot, Stride Co or Runwell, depending on your needs.",
+    "labels": {
+      "Stride Co": "neutral",
+      "Peakfoot": "neutral",
+      "Runwell": "neutral"
+    }
+  },
+  {
+    "name": "list-1-b",
+    "language": "en",
+    "prompt": "List running shoes providers.",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "1. Runwell\n2. Stride Co\n3. Peakfoot",
+    "labels": {
+      "Stride Co": "neutral",
+      "Peakfoot": "neutral",
+      "Runwell": "neutral"
+    }
+  },
+  {
+    "name": "compare-1-a",
+    "language": "en",
+    "prompt": "Stride Co or Peakfoot?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Peakfoot is cheaper and simpler to set up. Stride Co costs more but has excellent support and reliability. Choose Stride Co if uptime matters.",
+    "labels": {
+      "Stride Co": "mixed",
+      "Peakfoot": "positive"
+    }
+  },
+  {
+    "name": "compare-1-b",
+    "language": "en",
+    "prompt": "Stride Co vs Runwell",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Runwell is the better product overall. Stride Co lags on features and its app is buggy.",
+    "labels": {
+      "Stride Co": "negative",
+      "Runwell": "positive"
+    }
+  },
+  {
+    "name": "absent-context-1",
+    "language": "en",
+    "prompt": "What is the best running shoes?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Stride Co was mentioned in a 2019 roundup. Little else is known about it.",
+    "labels": {
+      "Stride Co": "not_assessable"
+    }
+  },
+  {
+    "name": "praised-2-a",
+    "language": "en",
+    "prompt": "What is the best accounting software for freelancers?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "Here are good picks. Reviewers consistently praise Ledgerly for reliability and a polished, fast interface. Bookwise is another choice.",
+    "labels": {
+      "Ledgerly": "positive",
+      "Bookwise": "neutral"
+    }
+  },
+  {
+    "name": "praised-2-b",
+    "language": "en",
+    "prompt": "What is the best accounting software for freelancers?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "For most people: If you want something that just works, Ledgerly is the one I would recommend first.",
+    "labels": {
+      "Ledgerly": "positive"
+    }
+  },
+  {
+    "name": "criticised-2-a",
+    "language": "en",
+    "prompt": "What is the best accounting software for freelancers?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "Be careful. Ledgerly is hard to learn and its returns policy is strict, so I would avoid it for now. Tallyhub is a safer bet.",
+    "labels": {
+      "Ledgerly": "negative",
+      "Tallyhub": "positive"
+    }
+  },
+  {
+    "name": "criticised-2-b",
+    "language": "en",
+    "prompt": "What is the best accounting software for freelancers?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "Opinions are poor lately: Ledgerly has become expensive after its latest price rise, and support is slow to respond.",
+    "labels": {
+      "Ledgerly": "negative"
+    }
+  },
+  {
+    "name": "mixed-2",
+    "language": "en",
+    "prompt": "What is the best accounting software for freelancers?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "People like how easy Ledgerly is to use, yet integrations are limited. Overall it depends on budget.",
+    "labels": {
+      "Ledgerly": "mixed"
+    }
+  },
+  {
+    "name": "list-2-a",
+    "language": "en",
+    "prompt": "Which accounting software for freelancers brands exist?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "Popular options include Ledgerly, Bookwise and Tallyhub.",
+    "labels": {
+      "Ledgerly": "neutral",
+      "Bookwise": "neutral",
+      "Tallyhub": "neutral"
+    }
+  },
+  {
+    "name": "list-2-b",
+    "language": "en",
+    "prompt": "List accounting software for freelancers providers.",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "1. Tallyhub\n2. Ledgerly\n3. Bookwise",
+    "labels": {
+      "Ledgerly": "neutral",
+      "Bookwise": "neutral",
+      "Tallyhub": "neutral"
+    }
+  },
+  {
+    "name": "compare-2-a",
+    "language": "en",
+    "prompt": "Ledgerly or Bookwise?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "Bookwise is cheaper and simpler to set up. Ledgerly costs more but has excellent support and reliability. Choose Ledgerly if uptime matters.",
+    "labels": {
+      "Ledgerly": "mixed",
+      "Bookwise": "positive"
+    }
+  },
+  {
+    "name": "compare-2-b",
+    "language": "en",
+    "prompt": "Ledgerly vs Tallyhub",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "Tallyhub is the better product overall. Ledgerly lags on features and its app is buggy.",
+    "labels": {
+      "Ledgerly": "negative",
+      "Tallyhub": "positive"
+    }
+  },
+  {
+    "name": "absent-context-2",
+    "language": "en",
+    "prompt": "What is the best accounting software for freelancers?",
+    "brand_name": "Ledgerly",
+    "competitors": ["Bookwise", "Tallyhub"],
+    "answer": "Ledgerly was mentioned in a 2019 roundup. Little else is known about it.",
+    "labels": {
+      "Ledgerly": "not_assessable"
+    }
+  },
+  {
+    "name": "praised-3-a",
+    "language": "en",
+    "prompt": "What is the best meal kit delivery?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "Here are good picks. If you want something that just works, Freshbox is the one I would recommend first. Kitchen Kit is another choice.",
+    "labels": {
+      "Freshbox": "positive",
+      "Kitchen Kit": "neutral"
+    }
+  },
+  {
+    "name": "praised-3-b",
+    "language": "en",
+    "prompt": "What is the best meal kit delivery?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "For most people: Freshbox is the easiest option to set up, and support answers within minutes.",
+    "labels": {
+      "Freshbox": "positive"
+    }
+  },
+  {
+    "name": "criticised-3-a",
+    "language": "en",
+    "prompt": "What is the best meal kit delivery?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "Be careful. Customers complain that Freshbox ships late and that refunds take weeks. Platewise is a safer bet.",
+    "labels": {
+      "Freshbox": "negative",
+      "Platewise": "positive"
+    }
+  },
+  {
+    "name": "criticised-3-b",
+    "language": "en",
+    "prompt": "What is the best meal kit delivery?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "Opinions are poor lately: Many users report that Freshbox is unreliable, with frequent outages during busy periods.",
+    "labels": {
+      "Freshbox": "negative"
+    }
+  },
+  {
+    "name": "mixed-3",
+    "language": "en",
+    "prompt": "What is the best meal kit delivery?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "Freshbox has excellent features, but it is pricier than most alternatives. Overall it depends on budget.",
+    "labels": {
+      "Freshbox": "mixed"
+    }
+  },
+  {
+    "name": "list-3-a",
+    "language": "en",
+    "prompt": "Which meal kit delivery brands exist?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "You could look at Kitchen Kit, Freshbox or Platewise, depending on your needs.",
+    "labels": {
+      "Freshbox": "neutral",
+      "Kitchen Kit": "neutral",
+      "Platewise": "neutral"
+    }
+  },
+  {
+    "name": "list-3-b",
+    "language": "en",
+    "prompt": "List meal kit delivery providers.",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "1. Platewise\n2. Freshbox\n3. Kitchen Kit",
+    "labels": {
+      "Freshbox": "neutral",
+      "Kitchen Kit": "neutral",
+      "Platewise": "neutral"
+    }
+  },
+  {
+    "name": "compare-3-a",
+    "language": "en",
+    "prompt": "Freshbox or Kitchen Kit?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "Kitchen Kit is cheaper and simpler to set up. Freshbox costs more but has excellent support and reliability. Choose Freshbox if uptime matters.",
+    "labels": {
+      "Freshbox": "mixed",
+      "Kitchen Kit": "positive"
+    }
+  },
+  {
+    "name": "compare-3-b",
+    "language": "en",
+    "prompt": "Freshbox vs Platewise",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "Platewise is the better product overall. Freshbox lags on features and its app is buggy.",
+    "labels": {
+      "Freshbox": "negative",
+      "Platewise": "positive"
+    }
+  },
+  {
+    "name": "absent-context-3",
+    "language": "en",
+    "prompt": "What is the best meal kit delivery?",
+    "brand_name": "Freshbox",
+    "competitors": ["Kitchen Kit", "Platewise"],
+    "answer": "Freshbox was mentioned in a 2019 roundup. Little else is known about it.",
+    "labels": {
+      "Freshbox": "not_assessable"
+    }
+  },
+  {
+    "name": "praised-4-a",
+    "language": "en",
+    "prompt": "What is the best home insurance?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Here are good picks. Shieldhome is the easiest option to set up, and support answers within minutes. Coverly is another choice.",
+    "labels": {
+      "Shieldhome": "positive",
+      "Coverly": "neutral"
+    }
+  },
+  {
+    "name": "praised-4-b",
+    "language": "en",
+    "prompt": "What is the best home insurance?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "For most people: Shieldhome stands out for value: the entry plan includes features others charge extra for.",
+    "labels": {
+      "Shieldhome": "positive"
+    }
+  },
+  {
+    "name": "criticised-4-a",
+    "language": "en",
+    "prompt": "What is the best home insurance?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Be careful. Shieldhome has become expensive after its latest price rise, and support is slow to respond. Hearth Mutual is a safer bet.",
+    "labels": {
+      "Shieldhome": "negative",
+      "Hearth Mutual": "positive"
+    }
+  },
+  {
+    "name": "criticised-4-b",
+    "language": "en",
+    "prompt": "What is the best home insurance?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Opinions are poor lately: Shieldhome is hard to learn and its returns policy is strict, so I would avoid it for now.",
+    "labels": {
+      "Shieldhome": "negative"
+    }
+  },
+  {
+    "name": "mixed-4",
+    "language": "en",
+    "prompt": "What is the best home insurance?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Shieldhome is reliable and well made, though customer support can be slow. Overall it depends on budget.",
+    "labels": {
+      "Shieldhome": "mixed"
+    }
+  },
+  {
+    "name": "list-4-a",
+    "language": "en",
+    "prompt": "Which home insurance brands exist?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Popular options include Shieldhome, Coverly and Hearth Mutual.",
+    "labels": {
+      "Shieldhome": "neutral",
+      "Coverly": "neutral",
+      "Hearth Mutual": "neutral"
+    }
+  },
+  {
+    "name": "list-4-b",
+    "language": "en",
+    "prompt": "List home insurance providers.",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "1. Hearth Mutual\n2. Shieldhome\n3. Coverly",
+    "labels": {
+      "Shieldhome": "neutral",
+      "Coverly": "neutral",
+      "Hearth Mutual": "neutral"
+    }
+  },
+  {
+    "name": "compare-4-a",
+    "language": "en",
+    "prompt": "Shieldhome or Coverly?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Coverly is cheaper and simpler to set up. Shieldhome costs more but has excellent support and reliability. Choose Shieldhome if uptime matters.",
+    "labels": {
+      "Shieldhome": "mixed",
+      "Coverly": "positive"
+    }
+  },
+  {
+    "name": "compare-4-b",
+    "language": "en",
+    "prompt": "Shieldhome vs Hearth Mutual",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Hearth Mutual is the better product overall. Shieldhome lags on features and its app is buggy.",
+    "labels": {
+      "Shieldhome": "negative",
+      "Hearth Mutual": "positive"
+    }
+  },
+  {
+    "name": "absent-context-4",
+    "language": "en",
+    "prompt": "What is the best home insurance?",
+    "brand_name": "Shieldhome",
+    "competitors": ["Coverly", "Hearth Mutual"],
+    "answer": "Shieldhome was mentioned in a 2019 roundup. Little else is known about it.",
+    "labels": {
+      "Shieldhome": "not_assessable"
+    }
+  },
+  {
+    "name": "praised-5-a",
+    "language": "en",
+    "prompt": "What is the best CRM for small teams?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "Here are good picks. Pipewell stands out for value: the entry plan includes features others charge extra for. Dealdesk is another choice.",
+    "labels": {
+      "Pipewell": "positive",
+      "Dealdesk": "neutral"
+    }
+  },
+  {
+    "name": "praised-5-b",
+    "language": "en",
+    "prompt": "What is the best CRM for small teams?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "For most people: Reviewers consistently praise Pipewell for reliability and a polished, fast interface.",
+    "labels": {
+      "Pipewell": "positive"
+    }
+  },
+  {
+    "name": "criticised-5-a",
+    "language": "en",
+    "prompt": "What is the best CRM for small teams?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "Be careful. Many users report that Pipewell is unreliable, with frequent outages during busy periods. Contactly is a safer bet.",
+    "labels": {
+      "Pipewell": "negative",
+      "Contactly": "positive"
+    }
+  },
+  {
+    "name": "criticised-5-b",
+    "language": "en",
+    "prompt": "What is the best CRM for small teams?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "Opinions are poor lately: Customers complain that Pipewell ships late and that refunds take weeks.",
+    "labels": {
+      "Pipewell": "negative"
+    }
+  },
+  {
+    "name": "mixed-5",
+    "language": "en",
+    "prompt": "What is the best CRM for small teams?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "People like how easy Pipewell is to use, yet integrations are limited. Overall it depends on budget.",
+    "labels": {
+      "Pipewell": "mixed"
+    }
+  },
+  {
+    "name": "list-5-a",
+    "language": "en",
+    "prompt": "Which CRM for small teams brands exist?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "You could look at Dealdesk, Pipewell or Contactly, depending on your needs.",
+    "labels": {
+      "Pipewell": "neutral",
+      "Dealdesk": "neutral",
+      "Contactly": "neutral"
+    }
+  },
+  {
+    "name": "list-5-b",
+    "language": "en",
+    "prompt": "List CRM for small teams providers.",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "1. Contactly\n2. Pipewell\n3. Dealdesk",
+    "labels": {
+      "Pipewell": "neutral",
+      "Dealdesk": "neutral",
+      "Contactly": "neutral"
+    }
+  },
+  {
+    "name": "compare-5-a",
+    "language": "en",
+    "prompt": "Pipewell or Dealdesk?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "Dealdesk is cheaper and simpler to set up. Pipewell costs more but has excellent support and reliability. Choose Pipewell if uptime matters.",
+    "labels": {
+      "Pipewell": "mixed",
+      "Dealdesk": "positive"
+    }
+  },
+  {
+    "name": "compare-5-b",
+    "language": "en",
+    "prompt": "Pipewell vs Contactly",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "Contactly is the better product overall. Pipewell lags on features and its app is buggy.",
+    "labels": {
+      "Pipewell": "negative",
+      "Contactly": "positive"
+    }
+  },
+  {
+    "name": "absent-context-5",
+    "language": "en",
+    "prompt": "What is the best CRM for small teams?",
+    "brand_name": "Pipewell",
+    "competitors": ["Dealdesk", "Contactly"],
+    "answer": "Pipewell was mentioned in a 2019 roundup. Little else is known about it.",
+    "labels": {
+      "Pipewell": "not_assessable"
+    }
+  },
+  {
+    "name": "german-praise",
+    "language": "de",
+    "prompt": "Welche Laufschuhe sind am besten?",
+    "brand_name": "Stride Co",
+    "competitors": ["Peakfoot", "Runwell"],
+    "answer": "Stride Co ist sehr bequem und hält lange. Peakfoot ist ebenfalls beliebt.",
+    "labels": {
+      "Stride Co": "positive",
+      "Peakfoot": "neutral"
+    }
+  },
+  {
+    "name": "japanese-criticism",
+    "language": "ja",
+    "prompt": "最高のプロジェクト管理ツールは？",
+    "brand_name": "Taskline",
+    "competitors": ["Planbase", "Orbit Boards"],
+    "answer": "Taskline は高価で、サポートの対応が遅いです。Planbase の方が使いやすいです。",
+    "labels": {
+      "Taskline": "negative",
+      "Planbase": "positive"
+    }
+  }
+]

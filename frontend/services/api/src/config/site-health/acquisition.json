@@ -1,0 +1,210 @@
+{
+  "crawl": {
+    "monitored_url_selection_max": 5000,
+    "value_priorities": {
+      "root": 100,
+      "product": 90,
+      "comparison": 85,
+      "service": 80,
+      "local": 80,
+      "category": 70,
+      "pricing": 70,
+      "about": 65,
+      "article": 60,
+      "guide": 60,
+      "faq": 60,
+      "docs": 60,
+      "contact": 45,
+      "trust": 40,
+      "other": 20
+    },
+    "value_fallback_tokens": [
+      ["product", ["products", "p", "shop", "store"]],
+      ["comparison", ["compare", "vs", "versus"]],
+      ["service", ["services", "solutions"]],
+      ["local", ["locations", "location", "store-locator"]],
+      ["category", ["collections", "collection", "categories"]],
+      ["pricing", ["plans", "prices"]],
+      ["about", ["company", "team", "story", "who-we-are"]],
+      ["article", ["blog", "articles", "news", "insights"]],
+      ["guide", ["guides", "resources", "learn", "help"]],
+      ["faq", ["faqs"]],
+      ["docs", ["documentation"]],
+      ["contact", ["get-in-touch", "support"]],
+      ["trust", ["privacy", "terms", "legal", "policy", "policies", "security"]]
+    ],
+    "exclusions": {
+      "hard_path": "hard_excluded_path",
+      "hard_asset": "hard_excluded_asset",
+      "hard_query": "hard_excluded_query",
+      "out_of_scope": "out_of_scope",
+      "narrowed": "narrowed",
+      "invalid": "invalid_url",
+      "duplicate": "duplicate",
+      "page_kind": "page_kind_filtered",
+      "tracking": "tracking_url",
+      "hard_host": "hard_excluded_host"
+    },
+    "inventory_document_extensions": [
+      ".doc",
+      ".docx",
+      ".md",
+      ".pdf",
+      ".ppt",
+      ".pptx",
+      ".xls",
+      ".xlsx"
+    ],
+    "document_media_types": [
+      "application/msword",
+      "application/pdf",
+      "application/vnd.ms-excel",
+      "application/vnd.ms-powerpoint",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/markdown"
+    ],
+    "disposition_version": "sh-disposition-1",
+    "automatic_monitor_limit_key": "automatic_monitor_limit",
+    "admission_policy_version": "sh-url-admission-1",
+    "site_setup_priority_boost": 1000,
+    "cancel_db_conflict_retries": 3,
+    "analyze_priority_boost": 1000,
+    "link_rewrite": {
+      "reason": "encoded_tracking_query_delimiter",
+      "version": "sh-link-rewrite-1"
+    },
+    "robots_path": "/robots.txt",
+    "robots_statuses": {
+      "fetched": "fetched",
+      "access_blocked": "access_blocked",
+      "fetch_failed": "fetch_failed",
+      "not_found": "not_found"
+    },
+    "max_declared_sitemaps": 16,
+    "max_url_chars": 2048,
+    "max_referrers_per_url": 10,
+    "frontier_statuses": {
+      "admitted": "admitted",
+      "pending": "pending"
+    },
+    "llms_path": "/llms.txt",
+    "sitemap_default_paths": ["/sitemap.xml"],
+    "sitemap_content_types": [
+      "application/gzip",
+      "application/x-gzip",
+      "application/xml",
+      "text/xml"
+    ],
+    "sitemap_path_suffixes": [".xml", ".xml.gz"],
+    "value_kind_page_kinds": {
+      "about": "about_contact",
+      "contact": "about_contact",
+      "trust": "trust_policy"
+    },
+    "coverage_expected_value_kinds": ["about", "contact", "pricing"]
+  },
+  "route_patterns": [
+    [
+      "editorial_index",
+      "^/(?:[^/]+/)*?(blogs?|news|articles?|insights|resources|press)(?:/(?:page/\\d+|(?:category|categories|tag|tags)/[^/]+)(?:/page/\\d+)?)?$"
+    ],
+    ["article", "^/(?:[^/]+/)*?(blogs?|news|articles?)(/|$)"],
+    ["product", "^/(?:[^/]+/)*?(products?|p)(/|$)"],
+    [
+      "category",
+      "^/(?:[^/]+/)*?(category|categories|collections?|catalog|shop|offers?|offers-list|deals?|search|q)(/|$)"
+    ],
+    ["service", "^/(?:[^/]+/)*?(services?|solutions?)(/|$)"],
+    ["local", "^/(?:[^/]+/)*?(locations?|stores?|offices?)(/|$)"],
+    ["guide", "^/(?:[^/]+/)*?(guides?|care-guide|how-to|tutorials?)(/|$)"],
+    ["editorial_index", "^/(?:[^/]+/)*?(compare|comparisons)$"],
+    ["comparison", "^/(?:[^/]+/)*?(compare|comparisons?|vs)(/|$)"],
+    ["pricing", "^/(?:[^/]+/)*?(pricing|plans)(/|$)"],
+    ["faq", "^/(?:[^/]+/)*?faqs?(/|$)"],
+    [
+      "docs",
+      "^/(?!.*(?:/|^)faqs?(?:/|$))(?:[^/]+/)*?(docs|documentation|reference|api|help|support)(/|$)"
+    ],
+    [
+      "about_contact",
+      "^/(?:[^/]+/)*?(about|about-us|company|our-story|contact|contact-us|request-demo|book-demo)(/|$)"
+    ],
+    [
+      "case_study_review",
+      "^/(?:[^/]+/)*?(case-study|case-studies|customers?|reviews?|testimonials?)(/|$)"
+    ],
+    [
+      "trust_policy",
+      "^/(?:[^/]+/)*?(privacy|privacy-policy|terms|terms-conditions|terms-of-service|cookies?|refund|returns?|returns-exchanges|shipping-policy|security|trust|policies?|legal)(/|$)"
+    ]
+  ],
+  "slug_patterns": [
+    ["comparison", "(^|-)(vs|versus|compared-to|comparison)(-|$)"],
+    ["alternative", "(^|-)(alternatives?|competitors?|substitutes?)(-|$)"],
+    ["how_to", "(^|-)(how-to|tutorials?)(-|$)"],
+    ["listicle", "(^|-)(best(?!-sell)|top-\\d+|\\d+-best)(-|$)"]
+  ],
+  "homepage_paths": [
+    "",
+    "/ar",
+    "/da",
+    "/de",
+    "/default",
+    "/en",
+    "/es",
+    "/fi",
+    "/fr",
+    "/hi",
+    "/home",
+    "/id",
+    "/index",
+    "/it",
+    "/ja",
+    "/ko",
+    "/nl",
+    "/no",
+    "/pl",
+    "/pt",
+    "/ru",
+    "/sv",
+    "/th",
+    "/tr",
+    "/vi",
+    "/zh"
+  ],
+  "route_document_extensions": ["asp", "aspx", "htm", "html", "jsp", "php"],
+  "homepage_locale_root_pattern": "^/[a-z]{2}[-_](?:[a-z]{2}|[0-9]{3}|hans|hant|latn|cyrl)$",
+  "tracking_params": [
+    "_hsenc",
+    "_hsmi",
+    "fbclid",
+    "gclid",
+    "intpromo",
+    "mc_cid",
+    "mc_eid",
+    "msclkid",
+    "ref",
+    "ref_src",
+    "utm_campaign",
+    "utm_content",
+    "utm_medium",
+    "utm_source",
+    "utm_term"
+  ],
+  "ignored_query_keys": ["variant", "variant_id"],
+  "ts_owned_task_kinds": [
+    "analyze",
+    "architecture",
+    "change_intel",
+    "discover",
+    "link_metrics",
+    "site_setup"
+  ],
+  "web_fetch": {
+    "user_agent": "CiteLadderSiteHealthBot/1.0 (+https://github.com/abhij1306/CiteLadder)",
+    "ports": [80, 443],
+    "schemes": ["http", "https"]
+  }
+}

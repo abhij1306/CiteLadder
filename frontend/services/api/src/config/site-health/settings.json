@@ -1,0 +1,442 @@
+{
+  "robots_policy_sample_size": {
+    "env": ["SITE_HEALTH_ROBOTS_POLICY_SAMPLE_SIZE"],
+    "type": "int",
+    "default": 100,
+    "minimum": 1,
+    "maximum": 1000
+  },
+  "robots_snapshot_max_bytes": {
+    "env": ["SITE_HEALTH_ROBOTS_SNAPSHOT_MAX_BYTES"],
+    "type": "int",
+    "default": 524288,
+    "minimum": 1
+  },
+  "advanced_controls_enabled": {
+    "env": ["SITE_HEALTH_ADVANCED_CONTROLS_ENABLED"],
+    "type": "bool",
+    "default": false
+  },
+  "max_advanced_requested_page_limit": {
+    "env": ["SITE_HEALTH_MAX_ADVANCED_REQUESTED_PAGE_LIMIT"],
+    "type": "int",
+    "default": 500,
+    "exclusive_minimum": 0
+  },
+  "max_discovery_urls": {
+    "env": ["SITE_HEALTH_MAX_DISCOVERY_URLS"],
+    "type": "int",
+    "default": 50000,
+    "exclusive_minimum": 0
+  },
+  "max_analysis_urls": {
+    "env": ["SITE_HEALTH_MAX_ANALYSIS_URLS"],
+    "type": "int",
+    "default": 50000,
+    "exclusive_minimum": 0
+  },
+  "max_preview_rows": {
+    "env": ["SITE_HEALTH_MAX_PREVIEW_ROWS"],
+    "type": "int",
+    "default": 500,
+    "exclusive_minimum": 0
+  },
+  "max_preview_input_bytes": {
+    "env": ["SITE_HEALTH_MAX_PREVIEW_INPUT_BYTES"],
+    "type": "int",
+    "default": 262144,
+    "exclusive_minimum": 0
+  },
+  "max_seed_urls": {
+    "env": ["SITE_HEALTH_MAX_SEED_URLS"],
+    "type": "int",
+    "default": 500,
+    "exclusive_minimum": 0
+  },
+  "max_narrowing_globs": {
+    "env": ["SITE_HEALTH_MAX_NARROWING_GLOBS"],
+    "type": "int",
+    "default": 100,
+    "exclusive_minimum": 0
+  },
+  "max_glob_length": {
+    "env": ["SITE_HEALTH_MAX_GLOB_LENGTH"],
+    "type": "int",
+    "default": 512,
+    "exclusive_minimum": 0
+  },
+  "max_frontier_urls": {
+    "env": ["SITE_HEALTH_MAX_FRONTIER_URLS"],
+    "type": "int",
+    "default": 50000,
+    "minimum": 0
+  },
+  "max_crawl_depth": {
+    "env": ["SITE_HEALTH_MAX_CRAWL_DEPTH"],
+    "type": "int",
+    "default": 20
+  },
+  "admission_batch_size": {
+    "env": ["SITE_HEALTH_ADMISSION_BATCH_SIZE"],
+    "type": "int",
+    "default": 200
+  },
+  "inventory_history_crawl_limit": {
+    "env": ["SITE_HEALTH_INVENTORY_HISTORY_CRAWL_LIMIT"],
+    "type": "int",
+    "default": 20,
+    "exclusive_minimum": 0
+  },
+  "global_concurrency": {
+    "env": ["SITE_HEALTH_GLOBAL_CONCURRENCY"],
+    "type": "int",
+    "default": 8,
+    "exclusive_minimum": 0
+  },
+  "per_host_concurrency": {
+    "env": ["SITE_HEALTH_PER_HOST_CONCURRENCY"],
+    "type": "int",
+    "default": 6,
+    "exclusive_minimum": 0
+  },
+  "per_host_delay_seconds": {
+    "env": ["SITE_HEALTH_PER_HOST_DELAY_SECONDS"],
+    "type": "float",
+    "default": 0.15
+  },
+  "rate_limit_cooldown_seconds": {
+    "env": ["SITE_HEALTH_RATE_LIMIT_COOLDOWN_SECONDS"],
+    "type": "float",
+    "default": 5.0,
+    "exclusive_minimum": 0
+  },
+  "default_crawl_delay_seconds": {
+    "env": ["SITE_HEALTH_DEFAULT_CRAWL_DELAY_SECONDS"],
+    "type": "float",
+    "default": 0.0
+  },
+  "max_crawl_delay_seconds": {
+    "env": ["SITE_HEALTH_MAX_CRAWL_DELAY_SECONDS"],
+    "type": "float",
+    "default": 30.0
+  },
+  "request_timeout_seconds": {
+    "env": ["SITE_HEALTH_REQUEST_TIMEOUT_SECONDS"],
+    "type": "float",
+    "default": 20.0
+  },
+  "max_redirects": {
+    "env": ["SITE_HEALTH_MAX_REDIRECTS"],
+    "type": "int",
+    "default": 5
+  },
+  "max_response_wire_bytes": {
+    "env": ["SITE_HEALTH_MAX_RESPONSE_WIRE_BYTES"],
+    "type": "int",
+    "default": 5000000
+  },
+  "max_response_decoded_bytes": {
+    "env": ["SITE_HEALTH_MAX_RESPONSE_DECODED_BYTES"],
+    "type": "int",
+    "default": 20000000
+  },
+  "max_html_bytes": {
+    "env": ["SITE_HEALTH_MAX_HTML_BYTES"],
+    "type": "int",
+    "default": 5000000
+  },
+  "acquisition_policy_version": {
+    "env": ["SITE_HEALTH_ACQUISITION_POLICY_VERSION"],
+    "type": "str",
+    "default": "sh-acquisition-1"
+  },
+  "max_sitemap_index_depth": {
+    "env": ["SITE_HEALTH_MAX_SITEMAP_INDEX_DEPTH"],
+    "type": "int",
+    "default": 3
+  },
+  "max_sitemap_urls": {
+    "env": ["SITE_HEALTH_MAX_SITEMAP_URLS"],
+    "type": "int",
+    "default": 5000
+  },
+  "max_sitemap_decoded_bytes": {
+    "env": ["SITE_HEALTH_MAX_SITEMAP_DECODED_BYTES"],
+    "type": "int",
+    "default": 8000000
+  },
+  "max_sitemap_documents": {
+    "env": ["SITE_HEALTH_MAX_SITEMAP_DOCUMENTS"],
+    "type": "int",
+    "default": 32
+  },
+  "sitemap_fetch_concurrency": {
+    "env": ["SITE_HEALTH_SITEMAP_FETCH_CONCURRENCY"],
+    "type": "int",
+    "default": 4,
+    "minimum": 1
+  },
+  "max_sitemap_admitted_urls": {
+    "env": ["SITE_HEALTH_MAX_SITEMAP_ADMITTED_URLS"],
+    "type": "int",
+    "default": 5000
+  },
+  "robots_max_decoded_bytes": {
+    "env": ["SITE_HEALTH_ROBOTS_MAX_DECODED_BYTES"],
+    "type": "int",
+    "default": 512000
+  },
+  "llms_txt_max_decoded_bytes": {
+    "env": ["SITE_HEALTH_LLMS_TXT_MAX_DECODED_BYTES"],
+    "type": "int",
+    "default": 262144
+  },
+  "robots_cache_ttl_seconds": {
+    "env": ["SITE_HEALTH_ROBOTS_CACHE_TTL_SECONDS"],
+    "type": "float",
+    "default": 86400.0,
+    "exclusive_minimum": 0
+  },
+  "robots_unreachable_recheck_seconds": {
+    "env": ["SITE_HEALTH_ROBOTS_UNREACHABLE_RECHECK_SECONDS"],
+    "type": "float",
+    "default": 300.0,
+    "exclusive_minimum": 0
+  },
+  "robots_cache_max_authorities": {
+    "env": ["SITE_HEALTH_ROBOTS_CACHE_MAX_AUTHORITIES"],
+    "type": "int",
+    "default": 2048
+  },
+  "max_links_per_page": {
+    "env": ["SITE_HEALTH_MAX_LINKS_PER_PAGE"],
+    "type": "int",
+    "default": 2000
+  },
+  "max_structured_data_blocks": {
+    "env": ["SITE_HEALTH_MAX_STRUCTURED_DATA_BLOCKS"],
+    "type": "int",
+    "default": 100
+  },
+  "max_text_chars": {
+    "env": ["SITE_HEALTH_MAX_TEXT_CHARS"],
+    "type": "int",
+    "default": 200000
+  },
+  "lease_ttl_seconds": {
+    "env": ["SITE_HEALTH_LEASE_TTL_SECONDS"],
+    "type": "float",
+    "default": 120.0,
+    "exclusive_minimum": 0
+  },
+  "heartbeat_interval_seconds": {
+    "env": ["SITE_HEALTH_HEARTBEAT_INTERVAL_SECONDS"],
+    "type": "float",
+    "default": 30.0,
+    "exclusive_minimum": 0
+  },
+  "retry_base_delay_seconds": {
+    "env": ["SITE_HEALTH_RETRY_BASE_DELAY_SECONDS"],
+    "type": "float",
+    "default": 2.0
+  },
+  "retry_max_delay_seconds": {
+    "env": ["SITE_HEALTH_RETRY_MAX_DELAY_SECONDS"],
+    "type": "float",
+    "default": 60.0
+  },
+  "retry_jitter_seconds": {
+    "env": ["SITE_HEALTH_RETRY_JITTER_SECONDS"],
+    "type": "float",
+    "default": 1.5
+  },
+  "db_conflict_max_requeues": {
+    "env": ["SITE_HEALTH_DB_CONFLICT_MAX_REQUEUES"],
+    "type": "int",
+    "default": 20,
+    "exclusive_minimum": 0
+  },
+  "db_conflict_base_delay_seconds": {
+    "env": ["SITE_HEALTH_DB_CONFLICT_BASE_DELAY_SECONDS"],
+    "type": "float",
+    "default": 0.05,
+    "minimum": 0
+  },
+  "db_conflict_jitter_seconds": {
+    "env": ["SITE_HEALTH_DB_CONFLICT_JITTER_SECONDS"],
+    "type": "float",
+    "default": 0.2,
+    "minimum": 0
+  },
+  "worker_concurrency": {
+    "env": ["SITE_HEALTH_WORKER_CONCURRENCY"],
+    "type": "int",
+    "default": 8,
+    "exclusive_minimum": 0
+  },
+  "poll_interval_seconds": {
+    "env": ["SITE_HEALTH_POLL_INTERVAL_SECONDS"],
+    "type": "float",
+    "default": 1.0
+  },
+  "interpretation_worker_threads": {
+    "env": ["SITE_HEALTH_INTERPRETATION_WORKER_THREADS"],
+    "type": "int",
+    "default": 1,
+    "minimum": 1
+  },
+  "claim_window_seconds": {
+    "env": ["SITE_HEALTH_CLAIM_WINDOW_SECONDS"],
+    "type": "float",
+    "default": 30.0,
+    "exclusive_minimum": 0
+  },
+  "analysis_dependency_retry_seconds": {
+    "env": ["SITE_HEALTH_ANALYSIS_DEPENDENCY_RETRY_SECONDS"],
+    "type": "float",
+    "default": 1.0,
+    "exclusive_minimum": 0
+  },
+  "analysis_dependency_retry_max_seconds": {
+    "env": ["SITE_HEALTH_ANALYSIS_DEPENDENCY_RETRY_MAX_SECONDS"],
+    "type": "float",
+    "default": 5.0,
+    "exclusive_minimum": 0
+  },
+  "analysis_dependency_max_wait_seconds": {
+    "env": ["SITE_HEALTH_ANALYSIS_DEPENDENCY_MAX_WAIT_SECONDS"],
+    "type": "float",
+    "default": 180.0,
+    "exclusive_minimum": 0
+  },
+  "monitored_seed_stagger_seconds": {
+    "env": ["SITE_HEALTH_MONITORED_SEED_STAGGER_SECONDS"],
+    "type": "float",
+    "default": 0.25,
+    "minimum": 0
+  },
+  "monitored_seed_stagger_max_seconds": {
+    "env": ["SITE_HEALTH_MONITORED_SEED_STAGGER_MAX_SECONDS"],
+    "type": "float",
+    "default": 30.0,
+    "minimum": 0
+  },
+  "lease_reclaim_batch_size": {
+    "env": ["SITE_HEALTH_LEASE_RECLAIM_BATCH_SIZE"],
+    "type": "int",
+    "default": 500,
+    "exclusive_minimum": 0
+  },
+  "drain_budget_seconds": {
+    "env": ["SITE_HEALTH_DRAIN_BUDGET_SECONDS"],
+    "type": "float",
+    "default": 300.0,
+    "exclusive_minimum": 0
+  },
+  "backstop_interval_seconds": {
+    "env": ["SITE_HEALTH_BACKSTOP_INTERVAL_SECONDS"],
+    "type": "float",
+    "default": 15.0,
+    "exclusive_minimum": 0
+  },
+  "stalled_crawl_reconcile_seconds": {
+    "env": ["SITE_HEALTH_STALLED_CRAWL_RECONCILE_SECONDS"],
+    "type": "float",
+    "default": 240.0,
+    "minimum": 0
+  },
+  "stalled_crawl_reconcile_batch": {
+    "env": ["SITE_HEALTH_STALLED_CRAWL_RECONCILE_BATCH"],
+    "type": "int",
+    "default": 50,
+    "exclusive_minimum": 0
+  },
+  "overdue_crawl_seconds": {
+    "env": ["SITE_HEALTH_OVERDUE_CRAWL_SECONDS"],
+    "type": "float",
+    "default": 3600.0,
+    "minimum": 0
+  },
+  "live_score_refresh_page_interval": {
+    "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_PAGE_INTERVAL"],
+    "type": "int",
+    "default": 10,
+    "minimum": 0
+  },
+  "live_score_refresh_page_fraction": {
+    "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_PAGE_FRACTION"],
+    "type": "float",
+    "default": 0.1,
+    "minimum": 0,
+    "maximum": 1
+  },
+  "live_score_refresh_min_interval_seconds": {
+    "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_MIN_INTERVAL_SECONDS"],
+    "type": "float",
+    "default": 5.0,
+    "minimum": 0
+  },
+  "live_score_refresh_max_tracked_crawls": {
+    "env": ["SITE_HEALTH_LIVE_SCORE_REFRESH_MAX_TRACKED_CRAWLS"],
+    "type": "int",
+    "default": 256,
+    "minimum": 0
+  },
+  "max_export_items": {
+    "env": ["SITE_HEALTH_MAX_EXPORT_ITEMS"],
+    "type": "int",
+    "default": 20000
+  },
+  "sse_poll_interval_seconds": {
+    "env": ["SITE_HEALTH_SSE_POLL_INTERVAL_SECONDS"],
+    "type": "float",
+    "default": 2.0
+  },
+  "sse_max_duration_seconds": {
+    "env": ["SITE_HEALTH_SSE_MAX_DURATION_SECONDS"],
+    "type": "float",
+    "default": 300.0
+  },
+  "max_event_page": {
+    "env": ["SITE_HEALTH_MAX_EVENT_PAGE"],
+    "type": "int",
+    "default": 1000,
+    "exclusive_minimum": 0
+  },
+  "automatic_page_limit": {
+    "env": ["SITE_HEALTH_AUTOMATIC_PAGE_LIMIT"],
+    "type": "int",
+    "default": 500,
+    "exclusive_minimum": 0
+  },
+  "max_requested_page_limit": {
+    "env": ["SITE_HEALTH_MAX_REQUESTED_PAGE_LIMIT"],
+    "type": "int",
+    "default": 500,
+    "exclusive_minimum": 0
+  },
+  "max_attempts": {
+    "env": ["SITE_HEALTH_MAX_ATTEMPTS"],
+    "type": "int",
+    "default": 4,
+    "minimum": 1
+  },
+  "sample_discovery_url_cap": {
+    "env": ["SITE_HEALTH_SAMPLE_DISCOVERY_URL_CAP"],
+    "type": "int",
+    "default": 200,
+    "minimum": 0
+  },
+  "sample_url_limit": {
+    "env": ["SITE_HEALTH_SAMPLE_URL_LIMIT"],
+    "type": "int",
+    "default": 10,
+    "minimum": 0
+  },
+  "monitored_url_limit": {
+    "env": ["SITE_HEALTH_MONITORED_URL_LIMIT"],
+    "type": "int",
+    "default": 500,
+    "exclusive_minimum": 0
+  }
+}

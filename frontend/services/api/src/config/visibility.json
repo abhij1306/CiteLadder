@@ -1,0 +1,25 @@
+{
+  "selection_max_runs": 100,
+  "fanout_projection_version": "fanout-1",
+  "evidence_default_limit": 100,
+  "evidence_max_limit": 500,
+  "source_movers_default_limit": 5,
+  "source_movers_max_limit": 20,
+  "ads_advertisers_limit": 50,
+  "ads_creatives_default_limit": 20,
+  "ads_creatives_max_limit": 50,
+  "trend_granularities": ["day", "month", "run", "week"],
+  "trend_default_granularity": "run",
+  "trend_max_points": 100,
+  "logical_engines": [
+    "chatgpt",
+    "claude",
+    "gemini",
+    "google_ai_overview",
+    "chatgpt_search",
+    "gemini_consumer"
+  ],
+  "search_surface_engines": ["google_ai_overview"],
+  "brand_audit_scope": "brand",
+  "succeeded_task_status": "succeeded"
+}
