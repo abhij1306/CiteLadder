@@ -51,9 +51,9 @@ overrides:
 # the exact version vite-plus bundles so there is exactly one Vitest copy.
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@1.1.0
-  vitest: 5.0.3
+  vitest: 5.0.4
   vite-plus: 1.1.0
-  '@vitest/coverage-v8': 5.0.3
+  '@vitest/coverage-v8': 5.0.4
 peerDependencyRules:
   allowAny:
     - vite
