@@ -21,7 +21,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-frontend
@@ -62,7 +62,7 @@ jobs:
       run:
         working-directory: frontend/services/api
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-frontend
@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Build and start the stack
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: gitleaks (working tree, reviewed allowlist in .gitleaks.toml)
