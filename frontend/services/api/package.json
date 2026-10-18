@@ -29,7 +29,7 @@
     "db:types:check": "kysely-codegen --dialect postgres --url \"env(TYPES_DATABASE_URL)\" --exclude-pattern schema_migrations --out-file src/generated/db-schema.ts --verify"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.133.0",
+    "@anthropic-ai/sdk": "0.134.0",
     "@citeladder/contracts": "workspace:*",
     "@fontsource/noto-sans": "^5.3.0",
     "@hono/node-server": "^2.1.5",
