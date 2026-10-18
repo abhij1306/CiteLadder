@@ -233,7 +233,7 @@ const writeDefinitions = {
   rename_topic: direct('rename_topic', {
     title: 'Rename a topic',
     description:
-      'Rename one topic. Its prompts and past results stay under it. Runs at once; refused if another topic in the project already has the name.',
+      'Rename one topic, after the user agrees. Its prompts and past results stay under it, so prefer this to delete_topic and create_topic when only the name is wrong. Runs at once and returns the new name; refused if another topic in the project already has the name, or if topic_id is not in this project.',
     schema: z.strictObject({
       ...project,
       topic_id: uuid.describe('The topic id create_topic returned.'),
@@ -249,7 +249,7 @@ const writeDefinitions = {
   update_prompt_text: direct('update_prompt_text', {
     title: 'Edit a prompt',
     description:
-      'Replace the wording of one tracked prompt. Runs at once; earlier measurements keep the old wording.',
+      "Replace the wording of one tracked prompt, after the user agrees, such as to fix a typo or make it read like a buyer's question. Runs at once and returns the new wording; earlier measurements keep the old wording, so results before and after the edit may not compare. To stop measuring a prompt use prepare_archive_prompts, and to add new ones prepare_add_prompts. Refused if prompt_id is not in this project.",
     schema: z.strictObject({
       ...project,
       prompt_id: uuid.describe('A prompt id from read_prompt_portfolio.'),
@@ -320,7 +320,7 @@ const writeDefinitions = {
   cancel_audit: direct('cancel_audit', {
     title: 'Cancel an audit',
     description:
-      'Stop a queued or running audit. Runs at once and cannot be undone; results so far are kept.',
+      'Stop a queued or running audit, after the user agrees, such as one launched by mistake or on the wrong engines. Runs at once and cannot be undone; answers recorded so far are kept, and no further answers are collected for it. To launch a corrected audit use prepare_launch_audit. Refused if the audit is not in this project or has already finished.',
     schema: z.strictObject({
       ...project,
       audit_id: uuid.describe(
@@ -337,7 +337,7 @@ const writeDefinitions = {
   delete_topic: direct('delete_topic', {
     title: 'Delete a topic',
     description:
-      'Delete one topic by name. Its prompts are kept, still tracked, without a topic, and its subtopics become top-level; recorded answers are kept. Runs at once and cannot be undone.',
+      'Delete one topic by name, after the user agrees, when the grouping itself is no longer wanted. Its prompts are kept, still tracked, without a topic, and its subtopics become top-level; recorded answers are kept. Runs at once and cannot be undone. To fix only the name use rename_topic; to stop measuring the prompts use prepare_archive_prompts.',
     schema: z.strictObject({
       ...project,
       name: topicCreate.shape.name.describe('The topic name, ignoring case.'),
