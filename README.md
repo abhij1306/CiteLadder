@@ -200,7 +200,8 @@ integrations show as *not configured*, and everything else keeps working.
 
 ## Connect an AI assistant (MCP)
 
-Set `MCP_TOKEN` in `.env` to a long random string and restart. Treat it like a password: it can change your project. Then, for example in Claude Code:
+Set `MCP_TOKEN` in `.env` to a long random string and apply it with `docker compose up -d` (a plain
+`restart` keeps the old environment; without Docker, restart `pnpm start`). Treat it like a password: it can change your project. Then, for example in Claude Code:
 
 ```bash
 claude mcp add --transport http citeladder http://localhost:8100/mcp \
