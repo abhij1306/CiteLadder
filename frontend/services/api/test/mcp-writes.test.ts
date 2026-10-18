@@ -309,6 +309,53 @@ it('runs a direct change at once and keeps named records inside the project', as
   ).toBe('The topic was not found in this project');
 });
 
+it('stops tracking a competitor and deletes a topic by name, keeping its prompts', async () => {
+  const tenant = await auditTenant(db, fixtures);
+  const principal = await connection(tenant);
+  const sibling = await fixtures.project(tenant.workspaceId);
+  await call(principal, 'add_competitor', { project_id: tenant.projectId, name: 'Fleet Feet' });
+  await call(principal, 'add_competitor', { project_id: sibling, name: 'Fleet Feet' });
+  expect(
+    await call(principal, 'remove_competitor', {
+      project_id: tenant.projectId,
+      name: 'fleet feet',
+    }),
+  ).toMatchObject({
+    state: 'changed',
+    change: 'remove_competitor',
+    summary: 'Stopped tracking Fleet Feet.',
+  });
+  const competitorNames = (projectId: string) =>
+    db.selectFrom('competitors').select('name').where('project_id', '=', projectId).execute();
+  expect(await competitorNames(tenant.projectId)).toEqual([]);
+  expect(await competitorNames(sibling)).toEqual([{ name: 'Fleet Feet' }]);
+  expect(
+    await failure(
+      call(principal, 'remove_competitor', { project_id: tenant.projectId, name: 'Fleet Feet' }),
+    ),
+  ).toBe('No competitor named "Fleet Feet" was found in this project');
+
+  const topicId = await topic(db, tenant.projectId, 'Road running');
+  await db
+    .updateTable('prompts')
+    .set({ topic_id: topicId })
+    .where('id', '=', tenant.promptId)
+    .execute();
+  expect(
+    await call(principal, 'delete_topic', { project_id: tenant.projectId, name: 'ROAD RUNNING' }),
+  ).toMatchObject({
+    change: 'delete_topic',
+    summary: 'Deleted the topic "Road running"; its prompts are kept without a topic.',
+  });
+  expect(
+    await db
+      .selectFrom('prompts')
+      .select(['text', 'topic_id', 'status'])
+      .where('prompt_set_id', '=', tenant.setId)
+      .execute(),
+  ).toEqual([{ text: 'Which running shoes suit road use?', topic_id: null, status: 'active' }]);
+});
+
 it('launches an audit only on confirmation, within the frozen estimate', async () => {
   const tenant = await auditTenant(db, fixtures);
   const principal = await connection(tenant);

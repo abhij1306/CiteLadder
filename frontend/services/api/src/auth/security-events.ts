@@ -21,6 +21,8 @@ export type McpWriteKind =
   | 'rename_topic'
   | 'update_prompt_text'
   | 'add_competitor'
+  | 'remove_competitor'
+  | 'delete_topic'
   | 'update_action_status'
   | 'cancel_audit'
   | 'add_prompts'
