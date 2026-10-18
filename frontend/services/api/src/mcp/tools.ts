@@ -7,6 +7,7 @@ import { policy } from '../config.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import type { Database } from '../db/database.ts';
 import { plainJson } from '../db/json.ts';
+import { resolutionOutcome } from '../routes/demand-contracts.ts';
 import { PAGE_STATUS_FILTERS } from '../site-health/reads/page-rows.ts';
 import { mcpPolicy } from './config.ts';
 import {
@@ -52,26 +53,73 @@ import { McpInputError, type Evidence, type EvidencePrincipal, type ProjectRead 
 
 const optional = <T extends z.ZodType>(schema: T) => schema.nullish();
 const uuid = z.uuid();
-const limit = optional(z.number().int().min(1).max(mcpPolicy.max_list_limit));
+const pageSize = 'How many rows to return; omit for the default page size.';
+const limit = optional(z.number().int().min(1).max(mcpPolicy.max_list_limit).describe(pageSize));
 const cursor = optional(z.string().describe('The next_cursor a previous page returned.'));
 const page = { cursor, limit };
 /** A visibility run, named the way every read returns it. */
 const run = uuid.describe('A run id (audit_id) that read_visibility_overview returned.');
+const latestRun = optional(run.describe('A run id (audit_id); omit for the latest run.'));
+const snapshot_id = optional(
+  uuid.describe('A Site Health snapshot id; omit for the latest crawl.'),
+);
 const crawl_id = optional(
   uuid.describe('A crawl id that read_site_health returned; omit for the latest crawl.'),
 );
-const project = { project_id: uuid };
-const engine = optional(z.enum(policy.visibility.logical_engines));
-const cohort = z.enum(['core', 'comparison', 'all']).default('core');
+const project = { project_id: uuid.describe('A project id that list_projects returned.') };
+const engine = optional(
+  z
+    .enum(policy.visibility.logical_engines)
+    .describe('Read one engine only; omit for every engine.'),
+);
+const cohort = z
+  .enum(['core', 'comparison', 'all'])
+  .default('core')
+  .describe(
+    'core is the scored prompts (the default); comparison is the prompts that also name a competitor, reported separately; all is both.',
+  );
 /** A market id from the project context's markets; omitted is the default market. */
-const market_id = optional(uuid);
-const analyticsRange = optional(z.enum(Object.keys(policy.analytics.preset_range_days)));
-const dates = { start_date: optional(z.iso.date()), end_date: optional(z.iso.date()) };
-const crawlPage = {
-  cursor: optional(z.string()),
-  limit: optional(z.number().int().min(1).max(crawlLogs.max_page_size)),
+const market_id = optional(
+  uuid.describe(
+    'A market id from get_project_business_context; omit for the default market. Markets are never pooled.',
+  ),
+);
+const analyticsRange = optional(
+  z
+    .enum(Object.keys(policy.analytics.preset_range_days))
+    .describe('A preset window ending today; or pass start_date and end_date instead.'),
+);
+const dates = {
+  start_date: optional(z.iso.date().describe('First day of a custom window, inclusive.')),
+  end_date: optional(z.iso.date().describe('Last day of a custom window, inclusive.')),
 };
-const verification = optional(verificationSchema);
+const crawlPage = {
+  cursor,
+  limit: optional(z.number().int().min(1).max(crawlLogs.max_page_size).describe(pageSize)),
+};
+const verification = optional(
+  verificationSchema.describe(
+    'Keep only crawler requests whose claimed identity was verified, could not be verified, or failed verification.',
+  ),
+);
+const folder = optional(
+  z.string().max(2048).describe('A site path prefix such as /blog/ to read only pages under it.'),
+);
+const resource_class = optional(
+  z
+    .string()
+    .max(24)
+    .describe('A resource_class a previous row returned, such as page, to read only that kind.'),
+);
+const url_filter = optional(z.url().describe('Keep only answers that cite this exact URL.'));
+const domain_filter = optional(
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(253)
+    .describe('A domain such as example.com; keep only rows citing it.'),
+);
 
 type Context = {
   db: Database;
@@ -137,7 +185,12 @@ export const definitions = {
   get_project_business_context: tool({
     title: 'Get project overview',
     description: `One overview of a project: business profile, competitors, active prompts, latest visibility, top Actions, Site Health and connected data. Pass sections to read fewer; valid sections: ${overviewSections.join(', ')}.`,
-    schema: z.strictObject({ ...project, sections: optional(z.array(z.enum(overviewSections))) }),
+    schema: z.strictObject({
+      ...project,
+      sections: optional(
+        z.array(z.enum(overviewSections)).describe('The sections to read; omit for all of them.'),
+      ),
+    }),
     read: ({ db, principal, origin }, args) =>
       businessContext(db, principal, args.project_id, origin, args.sections ?? undefined),
   }),
@@ -146,14 +199,15 @@ export const definitions = {
     description:
       'Find projects, active Actions and prompts by text when you do not know where a record is. Returns matching records with ids; pass one to fetch for the full record.',
     schema: z.strictObject({
-      query: z.string().trim().min(1),
-      project_id: optional(uuid),
+      query: z.string().trim().min(1).describe('Words to look for, such as a prompt or brand.'),
+      project_id: optional(uuid.describe('Search one project only; omit to search every project.')),
       limit: z
         .number()
         .int()
         .min(1)
         .max(mcpPolicy.max_search_results)
-        .default(mcpPolicy.default_search_limit),
+        .default(mcpPolicy.default_search_limit)
+        .describe('How many matches to return.'),
     }),
     read: ({ db, principal, origin }, args) =>
       searchBusinessContext(db, principal, args.query, args.project_id ?? null, args.limit, origin),
@@ -175,8 +229,10 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       market_id,
-      audit_id: optional(uuid),
-      baseline_id: optional(uuid),
+      audit_id: latestRun,
+      baseline_id: optional(
+        uuid.describe('An earlier run id (audit_id) to compare audit_id against.'),
+      ),
       engine,
       cohort,
     }),
@@ -189,13 +245,26 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       market_id,
-      from_at: z.iso.datetime({ offset: true }),
-      to_at: z.iso.datetime({ offset: true }),
+      from_at: z.iso.datetime({ offset: true }).describe('Start of the window, with an offset.'),
+      to_at: z.iso.datetime({ offset: true }).describe('End of the window, with an offset.'),
       engine,
       cohort,
-      granularity: z.enum(['run', 'day', 'week', 'month']).default('run'),
-      transport_model: optional(z.string().trim().min(1)),
-      retrieval_enabled: optional(z.boolean()),
+      granularity: z
+        .enum(['run', 'day', 'week', 'month'])
+        .default('run')
+        .describe('One point per run (the default), or per day, week or month.'),
+      transport_model: optional(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .describe('Keep only runs answered by this model, as a previous point named it.'),
+      ),
+      retrieval_enabled: optional(
+        z
+          .boolean()
+          .describe('true keeps only runs with web search on; false only runs without it.'),
+      ),
     }),
     read: visibilityTrends,
   }),
@@ -206,13 +275,33 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       market_id,
-      audit_id: optional(uuid),
+      audit_id: latestRun,
       engine,
       cohort,
-      view: z.enum(['summary', 'quotes']).default('summary'),
-      entity: optional(z.string().trim().min(1).max(255)),
-      theme: optional(z.enum(policy.perception.themes)),
-      polarity: optional(z.enum(['positive', 'negative'])),
+      view: z
+        .enum(['summary', 'quotes'])
+        .default('summary')
+        .describe(
+          'summary is sentiment and themes per brand; quotes lists the verified quotes, paged.',
+        ),
+      entity: optional(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(255)
+          .describe('With view quotes: a brand exactly as the summary names it, to quote only it.'),
+      ),
+      theme: optional(
+        z
+          .enum(policy.perception.themes)
+          .describe('With view quotes: keep only quotes about this theme.'),
+      ),
+      polarity: optional(
+        z
+          .enum(['positive', 'negative'])
+          .describe('With view quotes: keep only praise or only criticism.'),
+      ),
       ...page,
     }),
     read: perceptionRead,
@@ -224,12 +313,23 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       market_id,
-      audit_id: optional(uuid),
+      audit_id: latestRun,
       engine,
       cohort,
-      view: z.enum(['summary', 'claims']).default('summary'),
-      topic: optional(z.enum(policy.perception.fact_check.topics)),
-      verdict: optional(z.enum(['supported', 'contradicted', 'inconclusive', 'not_covered'])),
+      view: z
+        .enum(['summary', 'claims'])
+        .default('summary')
+        .describe('summary is accuracy and its coverage; claims lists the checked claims, paged.'),
+      topic: optional(
+        z
+          .enum(policy.perception.fact_check.topics)
+          .describe('With view claims: keep only claims about this kind of fact.'),
+      ),
+      verdict: optional(
+        z
+          .enum(['supported', 'contradicted', 'inconclusive', 'not_covered'])
+          .describe('With view claims: keep only this verdict; contradicted finds the errors.'),
+      ),
       ...page,
     }),
     read: factChecksRead,
@@ -241,7 +341,7 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       market_id,
-      audit_id: optional(uuid),
+      audit_id: latestRun,
       engine,
       cohort,
       ...page,
@@ -257,9 +357,11 @@ export const definitions = {
       audit_id: run,
       engine,
       cohort,
-      prompt_id: optional(uuid),
-      domain: optional(z.string().trim().min(1).max(253)),
-      url: optional(z.url()),
+      prompt_id: optional(
+        uuid.describe('A prompt id from read_prompt_portfolio; keep only its answers.'),
+      ),
+      domain: domain_filter,
+      url: url_filter,
       ...page,
     }),
     read: visibilityResults,
@@ -271,11 +373,21 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       market_id,
-      audit_id: optional(run.describe('A run id (audit_id); omit for the latest run.')),
+      audit_id: latestRun,
       engine,
       cohort,
-      level: z.enum(['domain', 'url']).default('domain'),
-      domain: optional(z.string().trim().min(1).max(253)),
+      level: z
+        .enum(['domain', 'url'])
+        .default('domain')
+        .describe('domain counts publishers (the default); url counts individual pages.'),
+      domain: optional(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(253)
+          .describe('A cited domain such as example.com; with level url, lists its pages.'),
+      ),
       ...page,
     }),
     read: visibilitySources,
@@ -287,8 +399,13 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       market_id,
-      url: z.string().trim().min(1).max(8192),
-      audit_id: optional(uuid),
+      url: z
+        .string()
+        .trim()
+        .min(1)
+        .max(8192)
+        .describe('A cited URL exactly as read_visibility_sources or an answer listed it.'),
+      audit_id: optional(uuid.describe('A run id (audit_id); omit for every run.')),
       engine,
       cohort,
     }),
@@ -300,9 +417,16 @@ export const definitions = {
       'The tracked prompts with topic, intent and status. Core prompts are scored; comparison prompts are reported separately.',
     schema: z.strictObject({
       ...project,
-      prompt_set_id: optional(uuid),
-      cohort: optional(z.enum(['core', 'comparison'])),
-      active_only: z.boolean().default(false),
+      prompt_set_id: optional(
+        uuid.describe('Read one prompt set only; omit for every set in the project.'),
+      ),
+      cohort: optional(
+        z.enum(['core', 'comparison']).describe('Keep only scored or only comparison prompts.'),
+      ),
+      active_only: z
+        .boolean()
+        .default(false)
+        .describe('true keeps only the prompts audits measure now.'),
       ...page,
     }),
     read: promptPortfolio,
@@ -313,8 +437,14 @@ export const definitions = {
       'The prioritized Actions to improve visibility, with status. Pass action_id for one Action with its findings, remediation and measured outcome.',
     schema: z.strictObject({
       ...project,
-      action_id: optional(uuid),
-      status: optional(z.enum(policy.opportunity.actions.ACTION_STATUSES)),
+      action_id: optional(
+        uuid.describe('An Action id from a previous list, to read that one Action in full.'),
+      ),
+      status: optional(
+        z
+          .enum(policy.opportunity.actions.ACTION_STATUSES)
+          .describe('Keep only Actions with this status.'),
+      ),
       ...page,
     }),
     read: actionsRead,
@@ -332,8 +462,12 @@ export const definitions = {
       'Product recommendations in AI answers. Without a target, lists categories and products; with one, its visibility, share of shelf and who holds the shelf.',
     schema: z.strictObject({
       ...project,
-      target_kind: optional(z.enum(['category', 'product'])),
-      target_id: optional(uuid),
+      target_kind: optional(
+        z.enum(['category', 'product']).describe('Whether target_id is a category or a product.'),
+      ),
+      target_id: optional(
+        uuid.describe('A category or product id from the list this tool returns without one.'),
+      ),
     }),
     read: shelfRead,
   }),
@@ -341,7 +475,7 @@ export const definitions = {
     title: 'Read Site Health',
     description:
       'Site Health scores, coverage and top issues for the latest crawl, or a chosen snapshot_id.',
-    schema: z.strictObject({ ...project, snapshot_id: optional(uuid) }),
+    schema: z.strictObject({ ...project, snapshot_id }),
     read: siteSnapshot,
   }),
   read_site_pages: projectTool({
@@ -359,8 +493,12 @@ export const definitions = {
           .max(120)
           .describe('A Site Health rule_id; returns only the pages with a current issue of it.'),
       ),
-      page_kind: optional(z.enum(policy.site_health.page_analysis.classification.page_kinds)),
-      status: optional(z.enum(PAGE_STATUS_FILTERS)),
+      page_kind: optional(
+        z
+          .enum(policy.site_health.page_analysis.classification.page_kinds)
+          .describe('Keep only pages of this type.'),
+      ),
+      status: optional(z.enum(PAGE_STATUS_FILTERS).describe('Keep only pages in this state.')),
       ...page,
     }),
     read: sitePages,
@@ -372,7 +510,15 @@ export const definitions = {
     schema: z.strictObject({
       ...project,
       crawl_id,
-      site_url_ids: optional(z.array(uuid).min(1).max(mcpPolicy.max_link_pages)),
+      site_url_ids: optional(
+        z
+          .array(uuid)
+          .min(1)
+          .max(mcpPolicy.max_link_pages)
+          .describe(
+            'Page ids (site_url_id) from read_site_pages; omit to page through every page.',
+          ),
+      ),
       ...page,
     }),
     read: siteLinks,
@@ -390,14 +536,27 @@ export const definitions = {
       'AI crawler requests from server logs: summary, per crawler, log coverage, or individual requests (view requests). Missing coverage is not zero.',
     schema: z.strictObject({
       ...project,
-      view: z.enum(['summary', 'crawlers', 'coverage', 'requests']).default('summary'),
+      view: z
+        .enum(['summary', 'crawlers', 'coverage', 'requests'])
+        .default('summary')
+        .describe(
+          'summary is totals; crawlers is one row per AI crawler; coverage is how complete each day of logs is; requests lists individual requests, paged.',
+        ),
       range: analyticsRange,
       ...dates,
       verification,
-      bot_id: optional(z.string()),
-      status: optional(z.int().min(100).max(599)),
-      folder: optional(z.string().max(2048)),
-      resource_class: optional(z.string().max(24)),
+      bot_id: optional(
+        z.string().describe('A bot_id the crawlers view returned; keep only that crawler.'),
+      ),
+      status: optional(
+        z
+          .int()
+          .min(100)
+          .max(599)
+          .describe('An HTTP status code; keep only requests answered with it.'),
+      ),
+      folder,
+      resource_class,
       ...crawlPage,
     }),
     read: crawlLogsRead,
@@ -410,11 +569,13 @@ export const definitions = {
       ...project,
       range: analyticsRange,
       ...dates,
-      folder: optional(z.string().max(2048)),
-      resource_class: optional(z.string().max(24)),
+      folder,
+      resource_class,
       verification,
       sort: optional(
-        z.enum(['requests_desc', 'sessions_desc', 'key_events_desc', 'citations_desc', 'url_asc']),
+        z
+          .enum(['requests_desc', 'sessions_desc', 'key_events_desc', 'citations_desc', 'url_asc'])
+          .describe('Row order; omit for the default.'),
       ),
       ...crawlPage,
     }),
@@ -426,7 +587,12 @@ export const definitions = {
       'The AI crawler and referral timeline of one page on the project site, for a range. Use it after read_ai_traffic_pages names the page.',
     schema: z.strictObject({
       ...project,
-      url: z.string().trim().min(1).max(4096),
+      url: z
+        .string()
+        .trim()
+        .min(1)
+        .max(4096)
+        .describe('A page URL on the project site, as read_ai_traffic_pages listed it.'),
       range: analyticsRange,
       ...dates,
     }),
@@ -442,7 +608,7 @@ export const definitions = {
   read_ai_referrals: projectTool({
     title: 'Read AI referral traffic',
     description:
-      'Visits from AI assistants (GA4): sessions, share of traffic, key events, landing pages.',
+      'Visits that arrived from AI assistants such as ChatGPT, from GA4: sessions, share of all traffic, key events and top landing pages for a range. These are people clicking through; read_crawl_logs has crawler requests. An unavailable state means no referral data has been imported, which is not zero; read_integration_status says why.',
     schema: z.strictObject({ ...project, range: analyticsRange, ...dates }),
     read: referrals,
   }),
@@ -451,16 +617,40 @@ export const definitions = {
     description: `Search Console and GA4 totals for a range with an optional comparison. range is one of ${policy.traffic.PERFORMANCE_RANGES.join(', ')} (default ${policy.traffic.PERFORMANCE_DEFAULT_RANGE}); custom needs start_date and end_date. Pass dimension for a breakdown by query, page, country, device or day. not_connected means no search data source is connected, which is not zero.`,
     schema: z.strictObject({
       ...project,
-      range: optional(z.enum(policy.traffic.PERFORMANCE_RANGES)),
+      range: optional(z.enum(policy.traffic.PERFORMANCE_RANGES).describe('The reporting window.')),
       ...dates,
-      granularity: optional(z.enum(policy.traffic.TRAFFIC_SNAPSHOT_GRANULARITIES)),
-      compare: optional(z.enum(policy.traffic.PERFORMANCE_COMPARE_MODES)),
-      compare_start_date: optional(z.iso.date()),
-      compare_end_date: optional(z.iso.date()),
-      dimension: optional(performanceDimensionSchema),
-      sort: optional(z.string()),
-      cursor: optional(z.string()),
-      limit: optional(z.literal(policy.traffic.PERFORMANCE_PAGE_SIZE_OPTIONS)),
+      granularity: optional(
+        z
+          .enum(policy.traffic.TRAFFIC_SNAPSHOT_GRANULARITIES)
+          .describe('The bucket size of the totals over time.'),
+      ),
+      compare: optional(
+        z
+          .enum(policy.traffic.PERFORMANCE_COMPARE_MODES)
+          .describe('The window to compare against; custom needs the compare dates.'),
+      ),
+      compare_start_date: optional(
+        z.iso.date().describe('First day of a custom comparison window, inclusive.'),
+      ),
+      compare_end_date: optional(
+        z.iso.date().describe('Last day of a custom comparison window, inclusive.'),
+      ),
+      dimension: optional(
+        performanceDimensionSchema.describe('Break the totals down by this dimension, paged.'),
+      ),
+      sort: optional(
+        z
+          .string()
+          .describe(
+            `With dimension: one of ${policy.traffic.PERFORMANCE_SORT_WHITELIST.join(', ')}; prefix - for descending, such as -clicks.`,
+          ),
+      ),
+      cursor,
+      limit: optional(
+        z
+          .literal(policy.traffic.PERFORMANCE_PAGE_SIZE_OPTIONS)
+          .describe('With dimension: rows per page.'),
+      ),
     }),
     read: performanceRead,
   }),
@@ -470,11 +660,17 @@ export const definitions = {
       'Search Console queries matched to site pages for an exact saved window (inclusive dates).',
     schema: z.strictObject({
       ...project,
-      window_start: z.iso.date(),
-      window_end: z.iso.date(),
-      query: optional(z.string()),
-      site_url_id: optional(uuid),
-      resolution_outcome: optional(z.string()),
+      window_start: z.iso.date().describe('First day of the saved window, inclusive.'),
+      window_end: z.iso.date().describe('Last day of the saved window, inclusive.'),
+      query: optional(
+        z.string().describe('One search query, matched exactly ignoring case and spacing.'),
+      ),
+      site_url_id: optional(
+        uuid.describe('A page id from read_site_pages; keep only its queries.'),
+      ),
+      resolution_outcome: optional(
+        resolutionOutcome.describe('Keep only queries matched to a page in this way.'),
+      ),
       ...page,
     }),
     read: queryEvidence,
@@ -506,9 +702,15 @@ export const definitions = {
       'Rows of one keyword or backlink dataset. Referring-domain and page totals are aggregates, not individual links.',
     schema: z.strictObject({
       ...project,
-      dataset_id: uuid,
-      sort: optional(z.string()),
-      direction: z.enum(['asc', 'desc']).default('asc'),
+      dataset_id: uuid.describe('A dataset id that read_search_intelligence returned.'),
+      sort: optional(
+        z
+          .string()
+          .describe(
+            `The column to order by: one of ${[...policy.search_intelligence.row_sort_fields, ...policy.search_intelligence.auxiliary_sort_fields].join(', ')}.`,
+          ),
+      ),
+      direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction.'),
       ...page,
     }),
     read: searchDataset,
@@ -516,16 +718,20 @@ export const definitions = {
   render_visibility: projectScoped({
     title: 'Show AI visibility',
     description:
-      'Show an interactive visibility view: overview, trends over a window, or cited sources for one run.',
+      'Show the user an interactive visibility view, in clients that display apps: overview, trends over a window, or cited sources for one run. To reason over the numbers yourself, use read_visibility_overview, read_visibility_trends or read_visibility_sources.',
     schema: analyticsSelectionSchema.extend({
-      view: z.enum(['overview', 'trends', 'sources']).default('overview'),
+      view: z
+        .enum(['overview', 'trends', 'sources'])
+        .default('overview')
+        .describe('Which view to show; each other field says the views it applies to.'),
     }),
     read: ({ db, scope, origin }, args) => renderAnalytics(db, scope, args, origin),
   }),
   render_site_health: projectScoped({
     title: 'Show Site Health',
-    description: 'Show an interactive Site Health view for the latest or a chosen snapshot.',
-    schema: z.strictObject({ ...project, snapshot_id: optional(uuid) }),
+    description:
+      'Show the user an interactive Site Health view (scores, coverage and top issues) for the latest or a chosen snapshot, in clients that display apps. To reason over the data yourself, use read_site_health.',
+    schema: z.strictObject({ ...project, snapshot_id }),
     read: ({ db, scope, origin }, args) =>
       renderAnalytics(
         db,
@@ -536,7 +742,8 @@ export const definitions = {
   }),
   open_analytics: tool({
     title: 'Open CiteLadder',
-    description: 'Open the CiteLadder project picker.',
+    description:
+      'Show the user the CiteLadder project picker, in clients that display apps, so they can choose a project to view. Use list_projects to find projects yourself.',
     schema: z.strictObject({}),
     read: ({ origin }) =>
       Promise.resolve({

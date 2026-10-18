@@ -211,7 +211,7 @@ export async function deleteTopic(
   workspaceId: string,
   topicId: string,
 ): Promise<void> {
-  await db.transaction().execute(async (trx) => {
+  await inTransaction(db, async (trx) => {
     const topic = await scopedTopic(trx, workspaceId, topicId);
     await acquireProjectLock(trx, topic.project_id);
     await trx.deleteFrom('topics').where('id', '=', topic.id).execute();

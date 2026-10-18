@@ -158,7 +158,7 @@ export async function removeCompetitor(
   scope: ProjectScope,
   competitorId: string,
 ): Promise<void> {
-  await db.transaction().execute(async (trx) => {
+  await inTransaction(db, async (trx) => {
     await lockProject(trx, scope);
     const deleted = await trx
       .deleteFrom('competitors')
