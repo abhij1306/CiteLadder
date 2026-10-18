@@ -24,10 +24,29 @@ they name, and which pages they cite. Then find out why, fix it, and measure whe
 ---
 
 > **Don't want to run it yourself?** [CiteLadder Cloud](https://citeladder.com) is the hosted
-> version with a free trial, team workspaces and managed engine access. Product guides live at
+> version with a 7-day free trial, team workspaces and managed engine access. Product guides live at
 > [docs.citeladder.com](https://docs.citeladder.com).
 
+**Self-host or Cloud?** Self-host (this repo, AGPL-3.0) to keep everything on your machine with your own
+keys. Use [CiteLadder Cloud](https://citeladder.com) if you would rather not run anything.
+
+## Screenshots
+
+| AI Visibility | Overview |
+|---|---|
+| ![AI Visibility: visibility, share of voice, owned citation rate and competitors over time](.github/assets/ai-visibility.png) | ![Project overview with citation share and ranked actions](.github/assets/overview.png) |
+| **Site Health** | **Issues** |
+| ![Site Health: Web Fundamentals, AEO Readiness and crawl coverage scores](.github/assets/site-health.png) | ![Issues with impact, affected pages and how to fix](.github/assets/issues.png) |
+
 ## Why CiteLadder
+
+- **See it:** which brands ChatGPT, Gemini, Claude and Google AI Overviews name for your buyers' questions, and which pages they cite.
+- **Fix it:** every finding comes with evidence and a ranked Action you can work through.
+- **Prove it:** every prompt is asked several times and compared like for like, so you see real change, not noise.
+
+**How it differs from Peec AI and Profound:** CiteLadder is open source and self-hostable, so your data
+and keys stay with you. It also ships an MCP server that can read and change your project (changes need
+your confirmation), so your own assistant can work in it directly.
 
 ### Every prompt is asked more than once
 
@@ -53,7 +72,7 @@ both runs answered are compared, and the comparison says so.
 
 ### A full MCP server, reads and changes
 
-CiteLadder ships an MCP server with **48 tools**, so Claude Code or any MCP client can work with
+CiteLadder ships an MCP server with **48 tools** (self-hosted; the hosted version may list fewer), so Claude Code or any MCP client can work with
 your project directly:
 
 - **31 read tools** across AI visibility, perception, fact checks, ads in AI answers, cited sources
@@ -61,8 +80,8 @@ your project directly:
   AI traffic, search performance and demand, and keyword research.
 - **3 interactive app views** (MCP Apps) for visibility, Site Health and analytics, rendered inside
   clients that support them.
-- **14 change tools** behind the connection's *Allow changes* grant; a read-only grant does not
-  even list them. Small changes (topics, prompt text, adding or removing a competitor, Action
+- **14 change tools** behind the connection's *Allow changes* grant. Tokens without that grant
+  see only the read tools; change tools are not listed. Small changes (topics, prompt text, adding or removing a competitor, Action
   status, cancelling an audit) run at once. Larger ones (adding or archiving prompts, launching or
   scheduling audits, declaring an Action implemented) are previewed by a `prepare_*` tool and
   applied only after you agree and the assistant calls `confirm_change`.
@@ -90,14 +109,6 @@ The measured outcome is **observed** mention and citation share, compared under 
 engines over time. Site and demand metrics are leading indicators, never presented as proof of cause.
 `unavailable`, `not configured` and `observed zero` stay three different things.
 
-## Screenshots
-
-| AI Visibility | Overview |
-|---|---|
-| ![AI Visibility: visibility, share of voice, owned citation rate and competitors over time](.github/assets/ai-visibility.png) | ![Project overview with citation share and ranked actions](.github/assets/overview.png) |
-| **Site Health** | **Issues** |
-| ![Site Health: Web Fundamentals, AEO Readiness and crawl coverage scores](.github/assets/site-health.png) | ![Issues with impact, affected pages and how to fix](.github/assets/issues.png) |
-
 ## Features
 
 | Area | What you get |
@@ -111,7 +122,7 @@ engines over time. Site and demand metrics are leading indicators, never present
 | **Search Intelligence** | Keyword suggestions, search volume and backlink research via DataForSEO, with a cost review before any paid call runs. |
 | **AI Traffic** | AI crawler logs from Cloudflare (Worker or Logpush), AWS Firehose, Google Cloud Pub/Sub or file uploads, and referral traffic from answer engines: which bots read which pages, and which answers send visitors. |
 | **Commerce Suite** | Product catalog, buyer prompts and an AI "shelf" view of how your products appear next to competitors. |
-| **MCP server** | 48 tools for Claude, ChatGPT and any MCP client: read visibility, sources, Site Health, actions, demand and traffic, **and make changes**: add or archive prompts, add or remove competitors, manage topics, launch and schedule audits, update actions. Larger changes are shown as a preview and applied only after you confirm. Includes interactive MCP Apps views. |
+| **MCP server** | 48 tools (self-hosted) for Claude, ChatGPT and any MCP client: read visibility, sources, Site Health, actions, demand and traffic, **and make changes**: add or archive prompts, add or remove competitors, manage topics, launch and schedule audits, update actions. Larger changes are shown as a preview and applied only after you confirm. Includes interactive MCP Apps views. |
 | **Public API** | Scoped API keys for `/v1` endpoints, with an OpenAPI document at `/v1/openapi.json`. |
 | **Overview reports** | An editable project overview with layout control and PDF export. |
 
@@ -120,7 +131,7 @@ your own model and data-provider keys, and every crawl and audit runs on your ma
 
 ## Quick start
 
-You need [Docker](https://docs.docker.com/get-docker/) with Compose v2.
+You need [Docker](https://docs.docker.com/get-docker/) with Compose v2. No Docker, or no Node 26? Docker is the easier path; see [Without Docker](#without-docker) otherwise.
 
 ```bash
 git clone https://github.com/abhij1306/CiteLadder.git
@@ -134,7 +145,7 @@ applies the database schema and creates your workspace. There is no sign-up and 
 Then:
 
 1. **Create a project.** Enter your website; CiteLadder researches the brand and proposes competitors and an ideal customer profile for you to confirm.
-2. **Add model keys** in *Settings → Providers* (OpenAI, Anthropic, Google, DataForSEO) to run AI Visibility audits.
+2. **Add model keys** in *Settings → Providers* (OpenAI, Anthropic, Google, DataForSEO). AI Visibility audits need them.
 3. **Run Site Health** to crawl and analyse your site; it needs no keys.
 4. Optionally connect Search Console, GA4 or Bing in *Settings → Integrations* (see [Google and Microsoft sign-in](#google-and-microsoft-integrations)).
 
@@ -149,7 +160,7 @@ docker compose down -v          # stop and delete all data
 
 ### Without Docker
 
-You need Node.js 26+, pnpm 12 (`corepack enable`) and a PostgreSQL 16 database.
+You need Node.js 26+ (very new: if your package manager does not offer it yet, use Docker above), pnpm 12 (`corepack enable`) and a PostgreSQL 16 database.
 
 ```bash
 git clone https://github.com/abhij1306/CiteLadder.git
@@ -164,7 +175,7 @@ root. Generated instance secrets are stored in `.data/`.
 
 ## Configuration
 
-Everything is optional. Copy the template and fill in what you need:
+Nothing is required to start the app. Add keys to unlock audits and the Agent. Copy the template and fill in what you need:
 
 ```bash
 cp .env.example .env
@@ -173,13 +184,14 @@ cp .env.example .env
 | Setting | Purpose |
 |---|---|
 | `DEFAULT_AGENT_API_KEY`, `DEFAULT_AGENT_BASE_URL`, `DEFAULT_AGENT_MODEL` | The LLM behind the Agent, brand research and prompt generation. Anthropic and OpenAI are fully supported; any OpenAI-compatible endpoint (Gemini, Mistral, or a local server such as Ollama at `http://host.docker.internal:11434/v1`) works for research and generation. |
-| `MCP_TOKEN` | Enables the MCP endpoint at `/mcp`; clients send it as a bearer token. |
+| `MCP_TOKEN` | Enables the MCP endpoint at `/mcp`; clients send it as a bearer token. Treat it like a password: it can change your project. |
 | `INTEGRATION_GOOGLE_CLIENT_ID` / `_SECRET` | Search Console and GA4 sync (your own Google OAuth client). |
 | `INTEGRATION_MICROSOFT_CLIENT_ID` / `_SECRET` | Bing Webmaster sync. |
 | `TAVILY_API_KEY`, `KEENABLE_API_KEY` | Optional web research for competitor and brand discovery. |
 | `JEV_API_KEY` | Optional quality judge for generated prompt candidates. |
 | `CITELADDER_PORT` | Host port for Docker (default `8100`). |
 | `PUBLIC_APP_ORIGIN` | The URL you open CiteLadder at, if it is not `http://localhost:8100`. Used in OAuth redirects and MCP setup text. |
+| `ALLOWED_HOSTS` | Extra host names the API should answer to (comma-separated), for example behind a reverse proxy. `localhost` and the host in `PUBLIC_APP_ORIGIN` are always allowed. |
 | `SITE_HEALTH_*` | Crawler politeness and size limits. |
 
 Answer-engine and DataForSEO keys are entered in the app (*Settings → Providers*) and stored
@@ -195,7 +207,7 @@ integrations show as *not configured*, and everything else keeps working.
 
 ## Connect an AI assistant (MCP)
 
-Set `MCP_TOKEN` in `.env` to a long random string and restart. Then, for example in Claude Code:
+Set `MCP_TOKEN` in `.env` to a long random string and restart. Treat it like a password: it can change your project. Then, for example in Claude Code:
 
 ```bash
 claude mcp add --transport http citeladder http://localhost:8100/mcp \
