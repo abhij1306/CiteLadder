@@ -172,7 +172,8 @@ function projectTool<S extends z.ZodObject<{ project_id: typeof uuid }>>(
 export const definitions = {
   list_projects: tool({
     title: 'List projects',
-    description: 'List the projects this connection can read. Start here when no project is known.',
+    description:
+      'List the projects this connection can read. Start here when no project is known: every other project tool needs the id it returns. Each project has its id, name, brand, website, industry, primary market and the workspace it belongs to. Projects come oldest first, 50 per page by default; pass next_cursor for more. An empty list means the workspace has no projects yet. To find a project by name use search; for one project in depth use get_project_business_context.',
     schema: z.strictObject(page),
     read: ({ db, principal }, args) =>
       listAccountProjects(
@@ -184,11 +185,16 @@ export const definitions = {
   }),
   get_project_business_context: tool({
     title: 'Get project overview',
-    description: `One overview of a project: business profile, competitors, active prompts, latest visibility, top Actions, Site Health and connected data. Pass sections to read fewer; valid sections: ${overviewSections.join(', ')}.`,
+    description:
+      "Read one overview of a project in a single call: its identity and markets (with the market ids other tools take), then a short summary per section: business profile with owned domains and tracked competitors, latest visibility, the top 10 Actions, active prompts, Site Health, AI crawler access, demand, search performance, AI referrals, crawler logs, connected data and keyword research. Use it first to orient yourself, then the matching read_* tool for depth or paging (each section is that tool's default read). Omit sections for all of them; pass a few to keep the response small. A section can be unavailable on its own, such as a project with no completed run.",
     schema: z.strictObject({
       ...project,
       sections: optional(
-        z.array(z.enum(overviewSections)).describe('The sections to read; omit for all of them.'),
+        z
+          .array(z.enum(overviewSections))
+          .describe(
+            'The sections to read; omit for all. profile also returns owned domains and competitors.',
+          ),
       ),
     }),
     read: ({ db, principal, origin }, args) =>
@@ -225,7 +231,7 @@ export const definitions = {
   read_visibility_overview: projectTool({
     title: 'Read AI visibility',
     description:
-      'Mention rate, citation rate, rankings against competitors and run status for the latest or a chosen run. Pass baseline_id to compare two runs. Each market is measured separately: pass market_id for a non-default market, and never pool markets.',
+      "Read the headline AI visibility of one run: how often answers mention the brand and cite its site, the visibility score, rankings of the brand against each competitor (mention rate, citation rate, share of voice, average position), a breakdown per engine, and the run's status and answer counts. It defaults to the latest completed run in the default market; pass baseline_id to compare two runs. Each market is measured separately: pass market_id for another market, and never pool markets. unavailable no_completed_run means no run has finished yet. Use read_visibility_trends for change over time, read_visibility_results for the answers themselves, and read_visibility_sources for what was cited.",
     schema: z.strictObject({
       ...project,
       market_id,
@@ -241,12 +247,16 @@ export const definitions = {
   read_visibility_trends: projectTool({
     title: 'Read visibility trends',
     description:
-      'Visibility over time for an explicit window. Points with different comparison keys are not comparable; gaps are missing runs, not zero.',
+      'Read how visibility changed over an explicit window of at most 366 days, as points per run or per day, week or month. Each point has the visibility score, brand mention and citation rates, share of voice, competitor rankings, the model and whether web search was on, and a comparison_key. Points with different comparison keys were measured differently and are not comparable; gaps are missing runs, not zero. At most the newest 100 points are returned. unavailable no_measured_runs means no run fell in the window. Use read_visibility_overview for one run in depth, or with baseline_id to compare exactly two runs.',
     schema: z.strictObject({
       ...project,
       market_id,
-      from_at: z.iso.datetime({ offset: true }).describe('Start of the window, with an offset.'),
-      to_at: z.iso.datetime({ offset: true }).describe('End of the window, with an offset.'),
+      from_at: z.iso
+        .datetime({ offset: true })
+        .describe('Start of the window, with a UTC offset, such as 2026-09-01T00:00:00Z.'),
+      to_at: z.iso
+        .datetime({ offset: true })
+        .describe('End of the window, after from_at and at most 366 days later.'),
       engine,
       cohort,
       granularity: z
@@ -271,7 +281,7 @@ export const definitions = {
   read_perception: projectTool({
     title: 'Read answer perception',
     description:
-      'How AI answers portray the brand and competitors in the latest or a chosen run: net sentiment (-100 to +100) with its coverage, themes, verified quotes, sources cited alongside criticism and the recommended rate. Always state the coverage; perception_state pending, unavailable or no_mentions means there is no value, never zero. Sources are cited alongside criticism, never its cause.',
+      'Read how AI answers portray the brand and competitors in the latest or a chosen run: net sentiment (-100 to +100) per brand, engine, topic and prompt, each with its coverage; praise and criticism by theme; how often answers recommend or advise against the brand; and the sources cited alongside criticism. The summary view returns all of that; the quotes view lists the verified quotes behind it, paged (50 by default, pass next_cursor). The response is always available: read perception_state, where pending, unavailable or no_mentions means there is no value, never zero. Always state the coverage. Sources are cited alongside criticism, never its cause. Use read_fact_checks for whether answers are factually right, and read_visibility_overview for how often the brand is mentioned at all.',
     schema: z.strictObject({
       ...project,
       market_id,
@@ -309,7 +319,7 @@ export const definitions = {
   read_fact_checks: projectTool({
     title: 'Read fact checks',
     description:
-      "Factual claims AI answers made about the brand in the latest or a chosen run, checked against the brand's confirmed facts: accuracy (supported of supported plus contradicted) with its coverage, contradicted claims with the fact they contradict, and sources cited alongside them. Always state the coverage and quote the fact. accuracy_state not_enabled, no_facts, no_claims, pending or unavailable means there is no value, never zero; inconclusive and not_covered are not errors in the answer. Sources are cited alongside a contradiction, never its cause.",
+      "Read whether AI answers state the brand's facts correctly. Factual claims answers made about the brand in the latest or a chosen run are checked against the brand's confirmed facts. The summary view gives accuracy (supported out of supported plus contradicted) with its coverage, by topic and engine, the contradicted claims with the fact they contradict, and sources cited alongside them. The claims view lists every checked claim with its quote, verdict and the facts used, paged (50 by default, pass next_cursor). Use read_perception for tone rather than accuracy. Always state the coverage and quote the fact. accuracy_state no_facts, no_claims, pending or unavailable means there is no value, never zero; inconclusive and not_covered are not errors in the answer. Sources are cited alongside a contradiction, never its cause.",
     schema: z.strictObject({
       ...project,
       market_id,
@@ -351,7 +361,7 @@ export const definitions = {
   read_visibility_results: projectTool({
     title: 'Read AI answers',
     description:
-      'The answers engines gave in one run, with mentions and cited sources, paged. Use it to see what an engine said for a prompt; filter by prompt_id, cited domain or URL to read fewer.',
+      "Read the answers engines gave in one run, to see exactly what an engine said for a prompt. Each answer has the prompt text, engine, model, repetition, whether web search was used, the brands mentioned (with first position) and every citation (URL, domain, whether it is your site or a competitor's), plus a citeladder:// id for fetch. audit_id is required: take it from read_visibility_overview. Answers come 50 per page by default; pass next_cursor for more. Only core prompts are included unless cohort is comparison or all. Filters (prompt_id, domain, url, engine) combine. Use read_visibility_overview for rates and read_visibility_sources for citation totals.",
     schema: z.strictObject({
       ...project,
       audit_id: run,
@@ -369,7 +379,7 @@ export const definitions = {
   read_visibility_sources: projectTool({
     title: 'Read cited sources',
     description:
-      'Which domains or URLs engines cited in the latest or a chosen run, how often, and whether you or competitors are listed on them. level is domain (publishers) or url (pages); pass domain for its pages. Use it to find the sources to earn a place on.',
+      "Rank the domains or pages AI answers cited in one run, to find the sources worth earning a place on. Each row has how many answers and prompts cited it, its citation share and rate, ownership (yours, a competitor's or third party) and category; page rows also list up to 3 brands named on the page and whether there is an Action for it. It defaults to the latest run; unavailable no_completed_run means none has finished. Rows come 50 per page by default; pass next_cursor for more. level domain lists publishers; level url, or passing domain, lists pages. Use read_source_url for one page in depth, and read_visibility_results for the answers that cite it.",
     schema: z.strictObject({
       ...project,
       market_id,
@@ -395,7 +405,7 @@ export const definitions = {
   read_source_url: projectTool({
     title: 'Read a cited page',
     description:
-      'One cited URL: the prompts and engines that cite it, the brands it lists and whether your brand is on it. Omit audit_id for every run.',
+      'Read one cited page in depth, after read_visibility_sources or an answer names it: how often it was retrieved and cited, when first and last seen, the engines and models that cite it, the prompts it is cited for (up to 50), the brands it names (up to 12, including whether yours is there), and what CiteLadder read on the page itself. Omit audit_id to cover every run in the market, not just the latest. The URL must match the cited URL exactly; unavailable url_not_cited_in_selection means it was not cited in that selection.',
     schema: z.strictObject({
       ...project,
       market_id,
@@ -414,19 +424,27 @@ export const definitions = {
   read_prompt_portfolio: projectTool({
     title: 'Read prompts',
     description:
-      'The tracked prompts with topic, intent and status. Core prompts are scored; comparison prompts are reported separately.',
+      'List the prompts the project tracks, so you know what is measured before reading results or changing prompts. Each row has the prompt id, text, topic, intent, buyer stage, cohort (core prompts are scored; comparison prompts name a competitor and are reported separately), status and whether audits measure it now, plus its prompt set. Rows come oldest first, 50 per page by default; pass next_cursor for more. To find one prompt by its wording use search; to see what engines answered for a prompt use read_visibility_results with its prompt_id. Prompt ids feed update_prompt_text, prepare_archive_prompts and prepare_launch_audit.',
     schema: z.strictObject({
       ...project,
       prompt_set_id: optional(
-        uuid.describe('Read one prompt set only; omit for every set in the project.'),
+        uuid.describe(
+          'A prompt set id from an earlier row of this tool; omit for every set in the project.',
+        ),
       ),
       cohort: optional(
-        z.enum(['core', 'comparison']).describe('Keep only scored or only comparison prompts.'),
+        z
+          .enum(['core', 'comparison'])
+          .describe(
+            'Keep only scored or only comparison prompts; combines with the other filters.',
+          ),
       ),
       active_only: z
         .boolean()
         .default(false)
-        .describe('true keeps only the prompts audits measure now.'),
+        .describe(
+          'true keeps only prompts audits measure now; false (the default) also lists disabled and archived ones.',
+        ),
       ...page,
     }),
     read: promptPortfolio,
@@ -434,7 +452,7 @@ export const definitions = {
   read_actions: projectTool({
     title: 'Read Actions',
     description:
-      'The prioritized Actions to improve visibility, with status. Pass action_id for one Action with its findings, remediation and measured outcome.',
+      'List the work CiteLadder recommends to improve visibility, highest priority first. Without a status filter it lists open and in-progress Actions; each item has its id, target (page, prompt or source), status, priority score, approach and link, and status_counts counts every status. Items come 50 per page by default; pass next_cursor for more. Pass action_id for one Action in full: its diagnosis, each finding with its remediation, the measured outcome and any declaration. Use update_action_status to dismiss or reopen one, and prepare_declare_implemented when its work is done.',
     schema: z.strictObject({
       ...project,
       action_id: optional(
@@ -452,21 +470,24 @@ export const definitions = {
   read_content_differentiation: projectTool({
     title: 'Read content comparisons',
     description:
-      'How cited competitor pages differ from yours on the topics they win, from pages CiteLadder has already read. Use it before rewriting a page to compete.',
+      'Read how the competitor pages AI answers cite differ from your own page on the topics they win. Use it before rewriting a page to compete. It returns up to the 10 newest comparison reports, each with its query, the owned page compared, the features both have (parity), those only competitors have (gaps) and those only you have, each with the share of inspected pages showing it. A report with state insufficient_evidence had fewer than 3 readable competitor pages or no matching owned page. An empty list means no comparison was made yet; this tool never reads new pages. Use read_visibility_sources to find the competing pages first.',
     schema: z.strictObject(project),
     read: differentiationRead,
   }),
   read_ai_shelf: projectTool({
     title: 'Read the AI Shelf',
-    description:
-      'Product recommendations in AI answers. Without a target, lists categories and products; with one, its visibility, share of shelf and who holds the shelf.',
+    description: `Read how AI answers recommend products for an ecommerce project: which products and merchants hold the "shelf" when buyers ask for a product category. Call it first with no target to get the catalog: categories with product counts, and up to ${mcpPolicy.max_list_limit} products with their category ids (products_omitted counts the rest). Then call it again with target_kind and target_id for one category or product: product visibility, share of shelf, average position, first-position win rate, the answer counts they rest on, when it was measured, and the holders (your products, competitors, merchants) with their best rank. unavailable no_product_catalog means the project has no product catalog, which is normal for non-ecommerce brands; use read_visibility_overview for brand mentions instead.`,
     schema: z.strictObject({
       ...project,
       target_kind: optional(
-        z.enum(['category', 'product']).describe('Whether target_id is a category or a product.'),
+        z
+          .enum(['category', 'product'])
+          .describe('Pass together with target_id: whether it names a category or a product.'),
       ),
       target_id: optional(
-        uuid.describe('A category or product id from the list this tool returns without one.'),
+        uuid.describe(
+          'A category or product id from the catalog this tool returns without a target; pass together with target_kind.',
+        ),
       ),
     }),
     read: shelfRead,
@@ -474,7 +495,7 @@ export const definitions = {
   read_site_health: projectTool({
     title: 'Read Site Health',
     description:
-      'Site Health scores, coverage and top issues for the latest crawl, or a chosen snapshot_id.',
+      'Read the Site Health summary of the latest crawl, or a chosen snapshot: the web fundamentals and AI-readiness scores with their measurement state, how many pages were selected and analyzed, and the top 10 issues, each with its rule_id, severity, description, remediation and how many pages it affects. unavailable no_site_snapshot means no crawl was analyzed yet; this tool never starts one. Use read_site_pages with a rule_id to list the affected pages, read_ai_crawlability for robots access, and render_site_health to show the user the interactive view.',
     schema: z.strictObject({ ...project, snapshot_id }),
     read: siteSnapshot,
   }),
@@ -506,7 +527,7 @@ export const definitions = {
   read_site_links: projectTool({
     title: 'Read internal links',
     description:
-      'Internal link counts per page for a crawl, with sampled linking and linked pages and anchor diagnostics. Pass site_url_ids (from read_site_pages) to read several pages in one call.',
+      'Read the internal links of crawled pages: per page, inbound and outbound link counts (overall and in main content) and nofollow inbound links, click depth from the home page, a bounded sample of the pages linking to it and linked from it with their anchors, and anchor diagnostics. Use it to find orphaned or buried pages. Pass up to 10 site_url_ids from read_site_pages to read those pages in one call; missing_site_url_ids lists any not found. Otherwise rows come 50 per page; pass next_cursor for more. unavailable no_site_crawl means no crawl exists. Use read_site_pages for page scores and issues.',
     schema: z.strictObject({
       ...project,
       crawl_id,
@@ -526,14 +547,13 @@ export const definitions = {
   read_ai_crawlability: projectTool({
     title: 'Read AI crawler access',
     description:
-      'Whether robots.txt lets each AI crawler in, for the latest or a chosen crawl. Permission, not observed visits.',
+      "Read whether the site's robots.txt lets each AI crawler in, for the latest or a chosen crawl: whether robots.txt was fetched (and its status), the sitemaps it lists, and per crawler (such as GPTBot or ClaudeBot) its operator, purpose, the matching rule, root access and how many sampled URLs it may not fetch. This is permission, not observed visits: use read_crawl_logs for crawlers that actually came. unavailable no_site_crawl means no crawl exists; robots_not_observed means the crawl could not read robots.txt.",
     schema: z.strictObject({ ...project, crawl_id }),
     read: crawlability,
   }),
   read_crawl_logs: projectTool({
     title: 'Read AI crawler visits',
-    description:
-      'AI crawler requests from server logs: summary, per crawler, log coverage, or individual requests (view requests). Missing coverage is not zero.',
+    description: `Read the AI crawler requests your server logs recorded, to see which crawlers actually visited, what they fetched and what they got back. View summary (the default) gives totals: requests, pages, active crawlers, error share and a daily series by purpose. View crawlers gives one row per crawler with status codes and verification. View coverage says how complete each day of logs is. View requests lists individual requests. The window defaults to the last ${crawlLogs.default_range}, except that requests without range or dates reads every retained day. The paged views return ${crawlLogs.default_page_size} rows by default (up to ${crawlLogs.max_page_size}) with a top-level next_cursor; changing a filter or limit needs a new first page. Failed-verification requests are left out unless verification asks for them. connection not_connected or missing coverage means unknown, not zero. Use read_ai_crawlability for robots permission and read_ai_traffic_pages for activity per page.`,
     schema: z.strictObject({
       ...project,
       view: z
@@ -563,8 +583,7 @@ export const definitions = {
   }),
   read_ai_traffic_pages: projectTool({
     title: 'Read AI traffic by page',
-    description:
-      'Per page: AI crawler requests, AI referral sessions, citations and Site Health findings, each with its own coverage.',
+    description: `Rank the project's own pages by AI activity, to find which pages AI crawlers fetch, AI assistants send visitors to and AI answers cite. Each row is one page (URL, path, folder, resource class) with four measures, each carrying its own coverage: AI crawler requests (server logs), AI referral sessions and key events (GA4), citations in AI answers, and Site Health findings, plus its last crawl. The window defaults to the last ${crawlLogs.default_range}; rows come ${crawlLogs.default_page_size} per page (up to ${crawlLogs.max_page_size}); pass next_cursor for more. observed_crawl_coverage says how complete the logs are, and a measure without a connected source is missing, not zero. Use read_ai_traffic_url for one page's timeline, read_crawl_logs for crawler-level detail, read_ai_referrals for site-wide referral totals, and read_site_pages for crawl data such as titles and scores.`,
     schema: z.strictObject({
       ...project,
       range: analyticsRange,
@@ -575,7 +594,9 @@ export const definitions = {
       sort: optional(
         z
           .enum(['requests_desc', 'sessions_desc', 'key_events_desc', 'citations_desc', 'url_asc'])
-          .describe('Row order; omit for the default.'),
+          .describe(
+            'Row order by one measure, highest first, or by URL; omit for the default. Filters (folder, resource_class, verification) apply first.',
+          ),
       ),
       ...crawlPage,
     }),
@@ -583,8 +604,7 @@ export const definitions = {
   }),
   read_ai_traffic_url: projectTool({
     title: 'Read AI traffic for a URL',
-    description:
-      'The AI crawler and referral timeline of one page on the project site, for a range. Use it after read_ai_traffic_pages names the page.',
+    description: `Read the timeline of AI activity on one page of the project site, after read_ai_traffic_pages names it: the page's four measures (crawler requests, referral sessions, citations, Site Health findings) with their coverage and 4xx/5xx errors, then each crawler's first and last visit and request count, each AI source's first referral and sessions, and each citation by date and run. The window defaults to the last ${crawlLogs.default_range}. Each timeline is capped, and provenance.bounded is true when a cap was hit. The URL must be on the project's own site. unavailable url_not_joinable means the path cannot be matched (for example a redacted path); unavailable with no reason means no activity was recorded for that page in the window.`,
     schema: z.strictObject({
       ...project,
       url: z
@@ -601,7 +621,7 @@ export const definitions = {
   read_ai_traffic_insights: projectTool({
     title: 'Read AI traffic insights',
     description:
-      'Patterns across AI crawler, referral and citation data. Co-occurrence, not cause.',
+      'Read the patterns CiteLadder found by joining AI crawler, referral and citation data for one saved window: pages crawled but never visited from AI, pages getting AI referrals but not crawled recently, crawler errors on valuable pages, and key events concentrated on few pages. Each pattern has a short explanation, the numbers behind it and the pages involved, with coverage. These are co-occurrence, not cause. It reads the newest saved 30-day window by default; custom dates must match a saved window exactly. unavailable means no insight snapshot exists yet, and coverage.notice says why, such as GA4 not being connected. Use read_ai_traffic_pages for the per-page numbers.',
     schema: z.strictObject({ ...project, range: analyticsRange, ...dates }),
     read: aiTrafficInsights,
   }),
@@ -614,7 +634,7 @@ export const definitions = {
   }),
   read_performance: projectTool({
     title: 'Read search performance',
-    description: `Search Console and GA4 totals for a range with an optional comparison. range is one of ${policy.traffic.PERFORMANCE_RANGES.join(', ')} (default ${policy.traffic.PERFORMANCE_DEFAULT_RANGE}); custom needs start_date and end_date. Pass dimension for a breakdown by query, page, country, device or day. not_connected means no search data source is connected, which is not zero.`,
+    description: `Read the site's organic search performance from Search Console and GA4: clicks, impressions, CTR, average position, sessions and key events for a window, with a series over time and an optional comparison window. Without dimension it returns totals, the series, data coverage and how many rows each breakdown has; with dimension it returns one page of rows by query, page, country, device or day (${policy.traffic.PERFORMANCE_DEFAULT_PAGE_SIZE} by default, pass next_cursor for more). The range defaults to ${policy.traffic.PERFORMANCE_DEFAULT_RANGE}, all imported data; most custom windows have no saved snapshot and return performance_range_not_projected, so prefer the preset ranges. not_connected means no search source is connected, which is not zero; read_integration_status says why. Use read_query_evidence for queries matched to crawled pages, and read_ai_referrals for traffic from AI assistants.`,
     schema: z.strictObject({
       ...project,
       range: optional(z.enum(policy.traffic.PERFORMANCE_RANGES).describe('The reporting window.')),
@@ -657,19 +677,29 @@ export const definitions = {
   read_query_evidence: projectTool({
     title: 'Read queries by page',
     description:
-      'Search Console queries matched to site pages for an exact saved window (inclusive dates).',
+      'Read the Search Console queries that bring searchers to each site page, matched to pages CiteLadder crawled, for one saved window. Use it to see which queries a page ranks for, or which page answers a query; for totals and trends use read_performance, and for the search signals found in the same window use read_demand. The window must exactly match a saved one: read_demand returns it. Any other window returns unavailable exact_query_evidence_window_not_projected, which is not zero. Each row is one query, page and day: the query, the page Search Console reported, the crawled page it was matched to (site_url_id), how the match was made (resolution_outcome), and impressions, clicks and CTR. Rows come 50 per page by default; pass next_cursor for more. Country, device and search type are not broken out.',
     schema: z.strictObject({
       ...project,
-      window_start: z.iso.date().describe('First day of the saved window, inclusive.'),
-      window_end: z.iso.date().describe('Last day of the saved window, inclusive.'),
+      window_start: z.iso
+        .date()
+        .describe("First day of a saved window, inclusive: read_demand's window.start."),
+      window_end: z.iso
+        .date()
+        .describe("Last day of the same saved window, inclusive: read_demand's window.end."),
       query: optional(
-        z.string().describe('One search query, matched exactly ignoring case and spacing.'),
+        z
+          .string()
+          .describe('One search query, matched exactly ignoring case and spacing, not a search.'),
       ),
       site_url_id: optional(
-        uuid.describe('A page id from read_site_pages; keep only its queries.'),
+        uuid.describe(
+          'A page id (site_url_id) from read_site_pages or an earlier row; keep only its queries.',
+        ),
       ),
       resolution_outcome: optional(
-        resolutionOutcome.describe('Keep only queries matched to a page in this way.'),
+        resolutionOutcome.describe(
+          'Keep only queries whose page match was exact, resolved (for example through a redirect or canonical), ambiguous or unresolved. All filters combine.',
+        ),
       ),
       ...page,
     }),
@@ -678,39 +708,46 @@ export const definitions = {
   read_demand: projectTool({
     title: 'Read search demand',
     description:
-      'Latest search demand: what people search for in this market, with volumes and how they changed. Volumes are provider estimates.',
+      "Read the latest search-demand snapshot: the opportunities CiteLadder found in the project's own Search Console data for one window, such as queries in striking distance of page one, pages competing for the same query, click-through below the site's norm and rising or falling queries. It returns the window (pass it to read_query_evidence for the query rows behind it), the signal count by type, each detector's state, coverage (whether search data and query evidence were observed) and the change in signal count against the previous snapshot, which is not a cause. unavailable no_demand_snapshot means no snapshot was built yet, usually because Search Console is not connected or still importing; read_integration_status says which. The signals become Actions: use read_actions for the prioritized work. Keyword volumes from research live in read_search_intelligence.",
     schema: z.strictObject(project),
     read: demandSnapshot,
   }),
   read_integration_status: projectTool({
     title: 'Read connected data',
     description:
-      'Which data sources (Search Console, GA4, server logs) are connected and how far their import has got. Read it when a traffic or search read is unavailable, before reading it again.',
+      'Read which data sources (Search Console, GA4, server logs) are connected to the project and how far their import has got, to explain why a traffic or search read is unavailable. It returns the overall stage (not_connected, connected, importing, core_data_ready, analysis_ready or import_failed), the backfill state and the date data is imported through, whether performance and demand snapshots exist, and each connection with its provider, property and last sync. Read it when another read returns unavailable or not_connected, before reading that again. Connecting a source happens in CiteLadder, not through this tool.',
     schema: z.strictObject(project),
     read: integrationStatus,
   }),
   read_search_intelligence: projectTool({
     title: 'Read keyword and backlink research',
     description:
-      'The keyword, competitor and backlink datasets researched for this project, with their ids. Pass a dataset_id to read_search_dataset for its rows.',
+      "List the keyword, competitor and backlink research datasets saved for this project, and whether the research provider is connected. Each dataset has its id, kind, target domain, market (location and language), status and whether its totals are aggregates rather than individual links, plus the project's owned targets, tracked competitors and latest research run. It lists datasets only: pass a dataset id to read_search_dataset for its rows. unavailable with no datasets means no research was run yet; this tool never starts research, which happens in CiteLadder. For the project's own Search Console queries use read_query_evidence instead.",
     schema: z.strictObject(project),
     read: searchIntelligence,
   }),
   read_search_dataset: projectTool({
     title: 'Read a research dataset',
     description:
-      'Rows of one keyword or backlink dataset. Referring-domain and page totals are aggregates, not individual links.',
+      "Read the rows of one saved keyword or backlink research dataset, after read_search_intelligence has named it. Use it for keyword volumes, rankings, competitor keywords or referring domains; use read_search_intelligence to choose the dataset and read_query_evidence for the project's own Search Console queries. It returns the dataset (kind, target, market, saved row count) and a page of rows (50 by default; pass next_cursor for more, with the same sort), each with a citeladder:// id for fetch. Columns depend on the dataset kind. Referring-domain and page totals are provider aggregates, not individual links: never report them as a link list. Rows are as saved at research time and are never refreshed by this read.",
     schema: z.strictObject({
       ...project,
-      dataset_id: uuid.describe('A dataset id that read_search_intelligence returned.'),
+      dataset_id: uuid.describe(
+        'A dataset id from read_search_intelligence; a dataset of another project is refused.',
+      ),
       sort: optional(
         z
           .string()
           .describe(
-            `The column to order by: one of ${[...policy.search_intelligence.row_sort_fields, ...policy.search_intelligence.auxiliary_sort_fields].join(', ')}.`,
+            `The column to order by, which must exist for the dataset kind: one of ${[...policy.search_intelligence.row_sort_fields, ...policy.search_intelligence.auxiliary_sort_fields].join(', ')}. Omit to order by row id. Rows with no value sort last.`,
           ),
       ),
-      direction: z.enum(['asc', 'desc']).default('asc').describe('Sort direction.'),
+      direction: z
+        .enum(['asc', 'desc'])
+        .default('asc')
+        .describe(
+          'asc (the default) or desc; desc with a volume or rank column puts the largest first.',
+        ),
       ...page,
     }),
     read: searchDataset,
