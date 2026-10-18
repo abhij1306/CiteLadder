@@ -51,24 +51,12 @@ your confirmation), so your own assistant can work in it directly.
 ### Every prompt is asked more than once
 
 AI answers change from one ask to the next, so one sample can show your brand as present or absent
-by chance. An audit can ask every prompt up to 10 times on every engine (you set the repetitions
-per audit or schedule; API and MCP launches default to 3), keeps every answer, and measures how
-much the answers to each prompt vary:
-
-- **Per-prompt counts**: how many of a prompt's answers named your brand and how many cited your
-  site, for example 2/3 and 1/3, never rounded to a single yes or no.
-- **Repetition agreement**: the share of a prompt's answers that agree with the majority on whether
-  your brand is named (and, separately, on whether your site is cited). The audit report shows it
-  as each prompt's consistency.
-- **Per-engine scores and trend confidence**: each prompt is scored per engine, and its trend
-  carries a confidence built from repetition agreement, how many engines agree on the movement, and
-  how many of the planned answers actually came back.
-- **Confirmed declines, not noise**: a prompt only counts as declining when the drop is material on
-  at least two engines, repeats across recent runs, and, when it was asked more than once, its
-  repetitions agree (two thirds by default). Confirmed declines become Actions, ranked by their confidence.
-
-Runs are compared like for like: when two runs differ, only the prompt, model and repetition cells
-both runs answered are compared, and the comparison says so.
+by chance. An audit can ask every prompt up to 10 times per engine (API and MCP launches default to
+3), keeps every answer, and reports per-prompt counts: 2/3 answers named your brand, never a
+rounded yes or no. A prompt only counts as declining when the drop is material on at least two
+engines, repeats across recent runs and its repetitions agree; confirmed declines become ranked
+Actions. Runs are compared like for like, over only the prompt, model and repetition cells both
+runs answered.
 
 ### A full MCP server, reads and changes
 
@@ -101,6 +89,11 @@ and records every answer:
   rank and how each one changes between comparable runs.
 - **Which pages they cite**: cited and retrieved domains and URLs, your owned citation rate, source
   types, and which publishers show up next to your competitors.
+- **How mentions and citations are extracted**: brand and competitor names are matched in the
+  answer text on word boundaries (separator-free spellings like "acehardware" count, and a common
+  one-word name only counts with your category terms nearby). Citations come from each engine's own
+  citation metadata - the API answers' URL citations and the AI Overviews reference lists - never
+  from paid placements. A citation counts as owned when its domain is one of yours.
 - **What they get wrong**: perception and fact checks against your own site's claims.
 - **Why**: your site's crawlability and structure for AI (Site Health), the demand behind each
   question (Search Console, GA4, Bing), and which AI crawlers and referrals actually reach you.
