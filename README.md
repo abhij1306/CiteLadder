@@ -17,7 +17,7 @@ they name, and which pages they cite. Then find out why, fix it, and measure whe
 ![MCP server](https://img.shields.io/badge/MCP-server-6E56CF?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Node%2026-3178C6?logo=typescript&logoColor=white&style=flat-square)
 
-[Quick start](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [MCP](#connect-an-ai-assistant-mcp) · [Hosted version](https://citeladder.com) · [Docs](https://docs.citeladder.com) · [Contributing](CONTRIBUTING.md)
+[Why CiteLadder](#why-citeladder) · [Quick start](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [MCP](#connect-an-ai-assistant-mcp) · [Hosted version](https://citeladder.com) · [Docs](https://docs.citeladder.com) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -26,6 +26,50 @@ they name, and which pages they cite. Then find out why, fix it, and measure whe
 > **Don't want to run it yourself?** [CiteLadder Cloud](https://citeladder.com) is the hosted
 > version with a free trial, team workspaces and managed engine access. Product guides live at
 > [docs.citeladder.com](https://docs.citeladder.com).
+
+## Why CiteLadder
+
+### Every prompt is asked more than once
+
+AI answers change from one ask to the next, so one sample can show your brand as present or absent
+by chance. An audit can ask every prompt up to 10 times on every engine (you set the repetitions
+per audit or schedule; API and MCP launches default to 3), keeps every answer, and measures how
+much the answers to each prompt vary:
+
+- **Per-prompt counts**: how many of a prompt's answers named your brand and how many cited your
+  site, for example 2/3 and 1/3, never rounded to a single yes or no.
+- **Repetition agreement**: the share of a prompt's answers that agree with the majority on whether
+  your brand is named (and, separately, on whether your site is cited). The audit report shows it
+  as each prompt's consistency.
+- **Per-engine scores and trend confidence**: each prompt is scored per engine, and its trend
+  carries a confidence built from repetition agreement, how many engines agree on the movement, and
+  how many of the planned answers actually came back.
+- **Confirmed declines, not noise**: a prompt only counts as declining when the drop is material on
+  at least two engines, repeats across recent runs, and, when it was asked more than once, its
+  repetitions agree (two thirds by default). Confirmed declines become Actions, ranked by their confidence.
+
+Runs are compared like for like: when two runs differ, only the prompt, model and repetition cells
+both runs answered are compared, and the comparison says so.
+
+### A full MCP server, reads and changes
+
+CiteLadder ships an MCP server with **48 tools**, so Claude Code or any MCP client can work with
+your project directly:
+
+- **31 read tools** across AI visibility, perception, fact checks, ads in AI answers, cited sources
+  and URLs, prompts, Actions, Site Health (pages, links, AI crawlability), AI crawler logs and
+  AI traffic, search performance and demand, and keyword research.
+- **3 interactive app views** (MCP Apps) for visibility, Site Health and analytics, rendered inside
+  clients that support them.
+- **14 change tools** behind the connection's *Allow changes* grant; a read-only grant does not
+  even list them. Small changes (topics, prompt text, adding or removing a competitor, Action
+  status, cancelling an audit) run at once. Larger ones (adding or archiving prompts, launching or
+  scheduling audits, declaring an Action implemented) are previewed by a `prepare_*` tool and
+  applied only after you agree and the assistant calls `confirm_change`.
+
+Every call is scoped to your workspace and budgeted per connection. The self-hosted server
+authenticates with the `MCP_TOKEN` bearer, whose grant allows changes (see
+[Connect an AI assistant](#connect-an-ai-assistant-mcp)).
 
 ## What it tracks
 
@@ -67,7 +111,7 @@ engines over time. Site and demand metrics are leading indicators, never present
 | **Search Intelligence** | Keyword suggestions, search volume and backlink research via DataForSEO, with a cost review before any paid call runs. |
 | **AI Traffic** | AI crawler logs from Cloudflare (Worker or Logpush), AWS Firehose, Google Cloud Pub/Sub or file uploads, and referral traffic from answer engines: which bots read which pages, and which answers send visitors. |
 | **Commerce Suite** | Product catalog, buyer prompts and an AI "shelf" view of how your products appear next to competitors. |
-| **MCP server** | 46 tools for Claude, ChatGPT and any MCP client: read visibility, sources, Site Health, actions, demand and traffic, **and make changes**: add or archive prompts, add competitors, launch and schedule audits, update actions. Every change is shown as a preview and applied only after you confirm. Includes an interactive MCP Apps view. |
+| **MCP server** | 48 tools for Claude, ChatGPT and any MCP client: read visibility, sources, Site Health, actions, demand and traffic, **and make changes**: add or archive prompts, add or remove competitors, manage topics, launch and schedule audits, update actions. Larger changes are shown as a preview and applied only after you confirm. Includes interactive MCP Apps views. |
 | **Public API** | Scoped API keys for `/v1` endpoints, with an OpenAPI document at `/v1/openapi.json`. |
 | **Overview reports** | An editable project overview with layout control and PDF export. |
 
