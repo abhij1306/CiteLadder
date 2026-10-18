@@ -527,7 +527,7 @@ export const definitions = {
   read_site_links: projectTool({
     title: 'Read internal links',
     description:
-      'Read the internal links of crawled pages: per page, inbound and outbound link counts (in main content and nofollow), click depth from the home page, a bounded sample of the pages linking to it and linked from it with their anchors, and anchor diagnostics. Use it to find orphaned or buried pages. Pass up to 10 site_url_ids from read_site_pages to read those pages in one call; missing_site_url_ids lists any not found. Otherwise rows come 50 per page; pass next_cursor for more. unavailable no_site_crawl means no crawl exists. Use read_site_pages for page scores and issues.',
+      'Read the internal links of crawled pages: per page, inbound and outbound link counts (overall and in main content) and nofollow inbound links, click depth from the home page, a bounded sample of the pages linking to it and linked from it with their anchors, and anchor diagnostics. Use it to find orphaned or buried pages. Pass up to 10 site_url_ids from read_site_pages to read those pages in one call; missing_site_url_ids lists any not found. Otherwise rows come 50 per page; pass next_cursor for more. unavailable no_site_crawl means no crawl exists. Use read_site_pages for page scores and issues.',
     schema: z.strictObject({
       ...project,
       crawl_id,
