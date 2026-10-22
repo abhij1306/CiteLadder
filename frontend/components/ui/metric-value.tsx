@@ -14,41 +14,43 @@ import { cn } from '@/lib/utils';
  *   - **missing** — the shared missing mark at the numeral's role in muted ink.
  *     `label` becomes its accessible name, so the state is still announced
  *     without a phrase set at numeral size.
- *   - **measured** — the value, at the caller's numeral role.
+ *   - **measured** — the value.
  *
  * Every state occupies the SAME box. The slot reserves the numeral's line
  * height, so a card does not resize when its value arrives, disappears, or
  * starts reloading — the row beneath it must not move under the reader's
  * pointer.
+ *
+ * One form each: `MetricValue` is the `figure` numeral (a metric's own
+ * value); `ComparisonValue` is the `figureSm` numeral a `StatRow` segment's
+ * comparison slot draws under it. Neither takes a size.
  */
-
-/** Line box per numeral role, so the slot is the same height in every state. */
-const SLOT_HEIGHT = {
-  figure: 'min-h-8',
-  figureSm: 'min-h-6',
-} as const;
-
-export type MetricValueSize = keyof typeof SLOT_HEIGHT;
-
-export function MetricValue({
-  value,
-  label,
-  size = 'figure',
-  loading = false,
-  tone,
-  className,
-}: Readonly<{
+type ValueSlotProps = Readonly<{
   /** The formatted value, or null when the window measured nothing for it. */
   value: string | null;
   /** The missing state's accessible name, e.g. "Not measured". */
   label: string;
-  size?: MetricValueSize;
   loading?: boolean;
   /** Ink override — an on-accent card passes its own foreground. */
   tone?: string;
   className?: string;
-}>) {
-  const slot = cn('flex items-center', SLOT_HEIGHT[size], className);
+}>;
+
+/** Line box per numeral role, so the slot is the same height in every state. */
+const SLOT = {
+  figure: 'min-h-8',
+  figureSm: 'min-h-6',
+} as const;
+
+function ValueSlot({
+  numeral,
+  value,
+  label,
+  loading = false,
+  tone,
+  className,
+}: ValueSlotProps & Readonly<{ numeral: keyof typeof SLOT }>) {
+  const slot = cn('flex items-center', SLOT[numeral], className);
   if (loading) {
     return (
       <div className={slot}>
@@ -61,7 +63,7 @@ export function MetricValue({
     // sits in the same place and size as a present one and never out-ranks it.
     return (
       <div className={slot}>
-        <span className={textRole(size, cn('text-muted', tone))}>
+        <span className={textRole(numeral, cn('text-muted', tone))}>
           <span aria-hidden>{MISSING_MARK}</span>
           <span className="sr-only">{label}</span>
         </span>
@@ -70,7 +72,15 @@ export function MetricValue({
   }
   return (
     <div className={slot}>
-      <span className={textRole(size, tone)}>{value}</span>
+      <span className={textRole(numeral, tone)}>{value}</span>
     </div>
   );
+}
+
+export function MetricValue(props: ValueSlotProps) {
+  return <ValueSlot numeral="figure" {...props} />;
+}
+
+export function ComparisonValue(props: ValueSlotProps) {
+  return <ValueSlot numeral="figureSm" {...props} />;
 }

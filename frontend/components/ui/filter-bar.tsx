@@ -44,9 +44,10 @@ export type FilterBarProps = Readonly<{
  * the end.
  *
  * It owns every number in the band: the 8px gap between items, the 8px above
- * and below the row, the 32px row height and the one search width. The
- * controls inside keep their one 32px height; nothing here resizes them.
- * Below the phone breakpoint the search and every filter take the full row.
+ * and below the row, the 32px row height, the one search width and the one
+ * `FilterField` width. The controls inside keep their one 32px height;
+ * nothing here resizes them. Below the phone breakpoint the search and every
+ * filter take the full row.
  */
 export function FilterBar({ search, filters, status, actions }: FilterBarProps) {
   return (
@@ -58,7 +59,12 @@ export function FilterBar({ search, filters, status, actions }: FilterBarProps) 
       {filters ? (
         // `contents` keeps the filters as the row's own flex items; it only
         // scopes the narrow-screen width to them (not the status or actions).
-        <div className="desktop:[&>*]:w-auto contents [&>*]:w-full">{filters}</div>
+        // A `FilterField` takes its width from the custom property, so the
+        // same field is the full row on a phone and the one filter width on
+        // desktop without the two width rules competing.
+        <div className="desktop:[&>*:not([data-filter-field])]:w-auto desktop:[--filter-field-width:var(--filter-width)] contents [--filter-field-width:100%] [&>*:not([data-filter-field])]:w-full">
+          {filters}
+        </div>
       ) : null}
       {status === undefined ? null : (
         <output className="type-caption flex min-w-0 items-center gap-2 empty:hidden">
@@ -66,6 +72,25 @@ export function FilterBar({ search, filters, status, actions }: FilterBarProps) 
         </output>
       )}
       {actions ? <div className="ms-auto flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * FilterField — the one width a typed or picked filter value takes (a folder,
+ * a status code, a minimum volume, a chart's bucket size): 160px, so a field
+ * does not resize as its value changes and every such field in the product
+ * reads at one width. The `Input` or `Select` inside fills it. In a
+ * `FilterBar` it is the full row below desktop; elsewhere (a card header's
+ * actions) it is always the one width.
+ */
+export function FilterField({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <div
+      data-filter-field=""
+      className="w-[var(--filter-field-width,var(--filter-width))] min-w-0 shrink-0 [&>*]:w-full"
+    >
+      {children}
     </div>
   );
 }

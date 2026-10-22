@@ -7,6 +7,7 @@ import { TRAFFIC_RANGES, VERIFICATION_OPTIONS } from '@/lib/config/crawl-logs';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { FilterField } from '@/components/ui/filter-bar';
 import { Icon } from '@/components/ui/icon';
 type ControlProps = Readonly<{ model: ReturnType<typeof useTrafficData> }>;
 type TrafficControlsProps = ControlProps & Readonly<{ crawlAvailable: boolean }>;
@@ -56,14 +57,15 @@ function ScopeControls({ model }: ControlProps) {
   const { folder, setFolder, resource, setResource } = model.selection;
   return (
     <>
-      <Input
-        aria-label="Folder"
-        placeholder="Folder"
-        value={folder ?? ''}
-        onChange={(e) => setFolder(e.target.value || null)}
-        startContent={<Icon icon={Folder} />}
-        containerClassName="w-full desktop:w-44"
-      />
+      <FilterField>
+        <Input
+          aria-label="Folder"
+          placeholder="Folder"
+          value={folder ?? ''}
+          onChange={(e) => setFolder(e.target.value || null)}
+          startContent={<Icon icon={Folder} />}
+        />
+      </FilterField>
       <Select
         ariaLabel="Resource class"
         value={resource ?? ''}
@@ -134,18 +136,19 @@ function ActivityControls({ model }: ControlProps) {
         ]}
         className={FIELD}
       />
-      <Input
-        aria-label="Response status"
-        placeholder="Status code"
-        type="number"
-        inputMode="numeric"
-        min={100}
-        max={599}
-        step={1}
-        value={status ?? ''}
-        onChange={(e) => setStatus(e.target.value || null)}
-        className="desktop:w-32 w-full"
-      />
+      <FilterField>
+        <Input
+          aria-label="Response status"
+          placeholder="Status code"
+          type="number"
+          inputMode="numeric"
+          min={100}
+          max={599}
+          step={1}
+          value={status ?? ''}
+          onChange={(e) => setStatus(e.target.value || null)}
+        />
+      </FilterField>
     </>
   );
 }

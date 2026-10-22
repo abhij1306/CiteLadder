@@ -9,7 +9,7 @@ import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/
  * `check:policy` guards the inputs (tokens, classes). It cannot see a 28px
  * button beside a 32px tab, a toolbar rebinding a token, or an error block
  * that is 88px on one route and 152px on the next — and those are what made
- * the app look inconsistent (docs/plans/app-geometry-consistency.md). So this
+ * the app look inconsistent (docs/design.md, Data and geometry). So this
  * walks every product route at the owner's viewport (982×900, DPR 1) and at
  * 1280×900, in light and dark, measures every visible control, badge, tab,
  * band, box and query state, and asserts ONE value per role — the same
@@ -38,6 +38,7 @@ const ROUTES = [
   '/settings',
   '/settings?tab=integrations',
   '/settings?tab=providers',
+  '/settings?tab=connections',
   '/billing',
   '/agent/actions',
   '/agent/skills',
@@ -66,6 +67,8 @@ const TABLE_ROW_HEIGHT = 36;
 const TABLE_CELL_PADDING_Y = 6;
 /** A DataTable's header row is the control band again: 8 + 32 + 8 and its rule. */
 const DATA_TABLE_HEADER_HEIGHT = 49;
+/** That header row (or the column header) starts at the card's top edge. */
+const DATA_TABLE_PADDING_TOP = 0;
 /** A StatRow segment is padded 12 above and below; a row's segments share one height. */
 const STAT_SEGMENT_PADDING_Y = 12;
 const STAT_ROW_HEIGHT_SPREAD = 0;
@@ -77,6 +80,11 @@ const ICON_TILE_SIZE = 32;
 const ROW_PART_GAP = 12;
 /** A ruled fact list pads each fact 8 above and below. */
 const FACT_ROW_PADDING_Y = 8;
+/** A field's end target (clear, reveal) is the field less its 2px inset each side. */
+const FIELD_END_TARGET_SIZE = 28;
+/** An inline code token is padded 8 across and 4 down. */
+const CODE_TOKEN_PADDING_X = 8;
+const CODE_TOKEN_PADDING_Y = 4;
 
 type Box = Readonly<{ route: string; role: string; label: string; value: number }>;
 
@@ -205,7 +213,12 @@ function measure(route: string) {
   for (const box of all(boxes)) {
     if (nestedState(box)) continue;
     const boxStyle = getComputedStyle(box);
-    add('box.padding', box, px(boxStyle.paddingTop));
+    // A record table's first row is its own top inset (data-table.tsx).
+    add(
+      box.matches('[data-data-table]') ? 'data-table.padding-top' : 'box.padding',
+      box,
+      px(boxStyle.paddingTop),
+    );
     add('box.radius', box, px(boxStyle.borderTopLeftRadius));
     add('box.border', box, px(boxStyle.borderTopWidth));
     const next = box.nextElementSibling;
@@ -294,6 +307,17 @@ function measure(route: string) {
       if (index < facts.length - 1) add('fact-row.padding-y', fact, px(style.paddingBottom));
     }
   }
+  // A field's end target, in both axes.
+  for (const element of all('[data-field-end-target]')) {
+    const rect = element.getBoundingClientRect();
+    add('field-end-target.size', element, rect.width);
+    add('field-end-target.size', element, rect.height);
+  }
+  for (const element of all('[data-code-token]')) {
+    const style = getComputedStyle(element);
+    add('code-token.padding-x', element, px(style.paddingLeft));
+    add('code-token.padding-y', element, px(style.paddingTop));
+  }
   // Rows only: a DataTable's state row holds a QueryState, measured above.
   for (const row of all('tbody tr:not([data-table-state])')) {
     add('table-row.height', row, row.getBoundingClientRect().height);
@@ -303,11 +327,16 @@ function measure(route: string) {
   return records;
 }
 
-async function census(page: Page, route: string): Promise<Box[]> {
+async function census(
+  page: Page,
+  route: string,
+  prepare?: (page: Page) => Promise<void>,
+): Promise<Box[]> {
   await page.goto(fixtureProjectPath(route));
   await expect(page.getByRole('heading', { level: 1 })).toBeAttached();
   await page.waitForLoadState('networkidle');
   await expect(page.locator('[data-query-state="loading"]')).toHaveCount(0);
+  await prepare?.(page);
   return page.evaluate(measure, route);
 }
 
@@ -425,6 +454,14 @@ async function expectOneGeometry(page: Page) {
     ...integrations.map((record) => ({ ...record, route: '/settings integrations (cards)' })),
   );
 
+  // A search holding a value, so its end target (Clear search) is drawn.
+  await stubAuthedShell(page);
+  const searched = await census(page, '/prompts', async (current) => {
+    await current.getByRole('searchbox').first().fill('pricing');
+    await expect(current.getByRole('button', { name: 'Clear search' })).toBeVisible();
+  });
+  records.push(...searched.map((record) => ({ ...record, route: '/prompts (searched)' })));
+
   expectOneValue(records, 'button.height', CONTROL_HEIGHT);
   expectOneValue(records, 'input.height', CONTROL_HEIGHT);
   expectOneValue(records, 'select.height', CONTROL_HEIGHT);
@@ -441,6 +478,7 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'section.gap', SECTION_GAP);
   expectOneValue(records, 'card.gap', CARD_GAP);
   expectOneValue(records, 'box.padding', CARD_INSET);
+  expectOneValue(records, 'data-table.padding-top', DATA_TABLE_PADDING_TOP);
   expectOneValue(records, 'box.radius', BOX_RADIUS);
   expectOneValue(records, 'box.border', BOX_BORDER);
   expectOneValue(records, 'card.inset-top', CARD_INSET);
@@ -456,6 +494,9 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'icon-tile.size', ICON_TILE_SIZE);
   expectOneValue(records, 'row-part.gap', ROW_PART_GAP);
   expectOneValue(records, 'fact-row.padding-y', FACT_ROW_PADDING_Y);
+  expectOneValue(records, 'field-end-target.size', FIELD_END_TARGET_SIZE);
+  expectOneValue(records, 'code-token.padding-x', CODE_TOKEN_PADDING_X);
+  expectOneValue(records, 'code-token.padding-y', CODE_TOKEN_PADDING_Y);
 
   // The account menu is a 32px control like every other one in its row.
   await expect(page.getByRole('button', { name: /^Account menu/ })).toHaveCSS('height', '32px');

@@ -63,6 +63,25 @@ export function Label({
   );
 }
 
+/**
+ * CodeToken — a literal the reader copies or types (a URL, a key prefix, a
+ * command) set inline on the well tint: the `emphasis` role, 8 across and 4
+ * down, the small radius, cut to one line. One form; the token owns its box.
+ */
+export function CodeToken({ children }: Readonly<{ children: string }>) {
+  return (
+    <code
+      data-code-token=""
+      className={textRole(
+        'emphasis',
+        'bg-well min-w-0 truncate rounded-[var(--radius-xs)] px-2 py-1',
+      )}
+    >
+      {children}
+    </code>
+  );
+}
+
 /** Primary numeral with tabular figures — the `figure` role. */
 export function Metric({
   children,

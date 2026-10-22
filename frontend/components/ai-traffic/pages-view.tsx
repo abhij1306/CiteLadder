@@ -16,13 +16,13 @@ import type { TrafficFilters } from '@/lib/api/ai-traffic';
 
 const PAGE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'path', label: 'Path' },
-  { key: 'crawl', label: 'Crawler requests', width: 'metric', numeric: 'end' },
-  { key: 'referrals', label: 'AI referral sessions', width: 'metric', numeric: 'end' },
-  { key: 'key-events', label: 'Key events', width: 'figure', numeric: 'end' },
-  { key: 'citations', label: 'Tracked citations', width: 'metric', numeric: 'end' },
-  { key: 'findings', label: 'Open findings', width: 'metric', numeric: 'end' },
-  { key: 'last-crawl', label: 'Last crawl', width: 'date', numeric: 'end' },
-  { key: 'errors', label: '4xx / 5xx', width: 'figure', numeric: 'end' },
+  { key: 'crawl', label: 'Crawler requests', width: 'metric', numeric: true },
+  { key: 'referrals', label: 'AI referral sessions', width: 'metric', numeric: true },
+  { key: 'key-events', label: 'Key events', width: 'figure', numeric: true },
+  { key: 'citations', label: 'Tracked citations', width: 'metric', numeric: true },
+  { key: 'findings', label: 'Open findings', width: 'metric', numeric: true },
+  { key: 'last-crawl', label: 'Last crawl', width: 'date', numeric: true },
+  { key: 'errors', label: '4xx / 5xx', width: 'figure', numeric: true },
 ];
 
 export function TrafficPages({
@@ -130,13 +130,13 @@ function TrafficPageRow({
           </ClampText>
         </Button>
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         <TrafficLeg compact leg={r.crawl} unit="requests" />
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         <TrafficLeg compact leg={r.referrals} unit="sessions" />
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         {r.key_events === null ? (
           <UnavailableTrafficValue
             label="Key events unavailable"
@@ -146,13 +146,13 @@ function TrafficPageRow({
           r.key_events
         )}
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         <TrafficLeg compact leg={r.citations} unit="citations" />
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         <TrafficLeg compact leg={r.findings} unit="findings" />
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         {r.last_crawl ? (
           <DisplayTime value={r.last_crawl} />
         ) : (
@@ -162,7 +162,7 @@ function TrafficPageRow({
           />
         )}
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         <TrafficErrors page={r} />
       </TableCell>
     </TableRow>

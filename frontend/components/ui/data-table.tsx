@@ -7,10 +7,10 @@ import { cardClasses } from '@/components/ui/card-variants';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Pager } from '@/components/ui/pager';
+import { TABLE_PAGE_SIZE_OPTIONS } from '@/lib/config/tables';
 import { QueryState, type QueryStateProps } from '@/components/ui/query-state';
+import { HintedTableHead, SortableTableHead } from '@/components/ui/table-heads';
 import {
-  HintedTableHead,
-  SortableTableHead,
   Table,
   TableBody,
   TableCell,
@@ -67,7 +67,8 @@ export type DataTableColumn = Readonly<{
   key: string;
   label: string;
   width?: DataTableColumnWidth;
-  numeric?: boolean | 'end';
+  /** Right-aligned tabular figures (or a trailing control), header included. */
+  numeric?: boolean;
   /** Keep the header for assistive technology only (an actions column). */
   hideLabel?: boolean;
   /** A sortable column: the header becomes the sort button. */
@@ -106,20 +107,24 @@ export type DataTableSelection = Readonly<{
  *
  *   header — the table's title and its toolbar (`FilterBar`: search, filters,
  *            status, actions) on one row, 49px with the hairline that closes
- *            it — the page's control band, repeated in the card. A table's
+ *            it — the page's control band, repeated in the card, flush with
+ *            the card's top edge (the band's own 8px is the inset). A table's
  *            filters live here, never in a toolbar the page builds. A
  *            `description` is one caption line under that row, so the row
  *            itself keeps its height.
  *   rows   — `Table` laid out fixed from the columns' width roles, at the one
- *            36px row. A paged table passes `pageSize` and `rowCount`: a short
- *            last page is padded with blank rows, so the pager never moves.
- *            Rows of two lines (`rowLines={2}`, cells on `TableCellLines`)
- *            are padded with two-line blanks.
- *   pager  — the shared `Pager`, framed as the table's footer.
+ *            36px row. A paged table passes `pageSize` and `rowCount`: while
+ *            the rows run past one page, a short last page is padded with
+ *            blank rows, so the pager never moves between pages. Rows of two
+ *            lines (`rowLines={2}`, cells on `TableCellLines`) are padded
+ *            with two-line blanks. A fixed list with `pageSize` and no
+ *            pager (top movers) always reserves its rows.
+ *   pager  — the shared `Pager`, framed as the table's footer, drawn only
+ *            while the rows run past one page: a table that fits on one page
+ *            has no pager and no blank rows.
  *   state  — loading, read-error and empty render INSIDE the table body,
  *            under the same header row, in the footprint of a full page of
- *            rows (or the query-state height when the table is not paged).
- *            A filter that empties the table therefore moves nothing.
+ *            rows while the table is paged (else the query-state height).
  *
  * Inside a box that already frames it (a card holding other content, a
  * dialog's preview of parsed rows) the table is `nested`: the same header,
@@ -181,6 +186,7 @@ export function DataTable({
 }>) {
   const headingId = useId();
   const colSpan = columns.length + (selection ? 1 : 0);
+  const paging = pagingLayout(pager, pageSize);
   // The region and the table share one name: the visible title, else `label`.
   const naming = title
     ? { ariaLabelledBy: headingId, ariaLabel: undefined }
@@ -191,7 +197,13 @@ export function DataTable({
       aria-label={naming.ariaLabel}
       aria-busy={busy?.active || undefined}
       data-data-table=""
-      className={cn(!nested && cardClasses(), 'relative grid min-w-0 content-start')}
+      // The card's first row (the title band, else the column header) is its
+      // own top inset: card padding above it read as a gap over the header.
+      className={cn(
+        !nested && cardClasses(),
+        !nested && 'pt-0',
+        'relative grid min-w-0 content-start',
+      )}
     >
       {busy ? <BusyBar active={busy.active} label={busy.label} /> : null}
       <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} />
@@ -210,14 +222,14 @@ export function DataTable({
         <DataTableBody
           colSpan={colSpan}
           state={state}
-          pageSize={pageSize}
+          pageSize={paging.pageSize}
           rowCount={rowCount}
           rowLines={rowLines}
         >
           {children}
         </DataTableBody>
       </Table>
-      {pager ? <Pager frame="table" {...pager} /> : null}
+      {paging.pager ? <Pager frame="table" {...paging.pager} /> : null}
       {footer ? (
         <div className="type-caption border-border-subtle grid gap-1 border-t px-[var(--table-cell-padding-x)] py-2">
           {footer}
@@ -225,6 +237,34 @@ export function DataTable({
       ) : null}
     </section>
   );
+}
+
+/**
+ * Whether the rows run past one page: another page either way, or (with a
+ * rows-per-page select) more rows than the smallest page holds, so a reader on
+ * a bigger page can still step back down. A table that fits on one page shows
+ * no pager and no blank rows (owner, 2026-10-21).
+ */
+function hasMorePages(pager: DataTablePager): boolean {
+  if (pager.canPrev || pager.canNext) return true;
+  const total = pager.range?.total;
+  return (
+    pager.pageSize !== undefined &&
+    total !== undefined &&
+    total > Math.min(...TABLE_PAGE_SIZE_OPTIONS)
+  );
+}
+
+/**
+ * The pager to draw and the page of rows to reserve. A fixed list with no
+ * pager (top movers) keeps its reserved rows.
+ */
+function pagingLayout(
+  pager: DataTablePager | undefined,
+  pageSize: number | undefined,
+): { pager?: DataTablePager; pageSize?: number } {
+  if (pager === undefined) return { pageSize };
+  return hasMorePages(pager) ? { pager, pageSize } : {};
 }
 
 /** The first column stays in view while a wide table scrolls in its frame. */

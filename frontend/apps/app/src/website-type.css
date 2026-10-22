@@ -549,6 +549,12 @@
   border-color: var(--color-accent);
 }
 
+/* The mark sizes its own check: 14 inside the 20 box. A 16px glyph filled
+   the mark edge to edge and read too heavy beside the name. */
+.flow-entity-mark > svg {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+}
 .flow-competitor-chips {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
@@ -568,9 +574,12 @@
   flex: 1;
 }
 
+/* A competitor being edited swaps its toggle for its two fields over Save and
+   Cancel; the row owns their rhythm, 12 between the fields and the actions. */
 .flow-competitor-chips > li:has(input) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 0.75rem;
   padding: 0.5rem;
 }
 
@@ -633,6 +642,12 @@
 .flow-activity-row[data-state='attention'] .flow-activity-indicator,
 .flow-activity-row[data-state='attention'] .flow-help {
   color: var(--color-warning-text);
+}
+
+/* A stage's results band (warnings, the failed discovery, the next step)
+   starts one flow block under the progress above it. */
+.flow-stage-band {
+  margin-top: var(--flow-block);
 }
 
 .flow-found {

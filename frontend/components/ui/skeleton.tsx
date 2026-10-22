@@ -17,7 +17,7 @@ const SKELETON_SHAPE = {
 
 export type SkeletonShape = keyof typeof SKELETON_SHAPE;
 
-/** Skeleton — shimmer between --skeleton-base → --skeleton-highlight. */
+/** Skeleton — a flat --skeleton-base bar at the size of the value it holds. */
 export function Skeleton({
   shape,
   className,

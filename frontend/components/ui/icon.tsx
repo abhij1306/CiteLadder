@@ -1,7 +1,26 @@
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentPropsWithoutRef, ComponentType } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+
+/**
+ * What the atom hands a glyph: its box, its ink and its accessible name. A
+ * lucide icon takes these, and so does a brand glyph (`BrandGlyph`).
+ */
+type GlyphProps = Readonly<{
+  className?: string;
+  'aria-hidden'?: true;
+  'aria-label'?: string;
+  role?: 'img';
+  'data-icon'?: '';
+}>;
+
+/**
+ * A brand's own multi-colour mark drawn as an inline SVG (the Google "G" on
+ * Continue with Google): a component that spreads `GlyphProps` onto its
+ * `<svg>` and carries its own fills, so `Icon` sizes it like any glyph.
+ */
+export type BrandGlyph = ComponentType<GlyphProps>;
 
 /**
  * Icon — a glyph at the product's one icon size, 16px.
@@ -10,7 +29,8 @@ import { cn } from '@/lib/utils';
  * the same 14px text, so an arrow next to a caption looked different from the
  * same arrow next to a label. The atom has one form: the caller picks the
  * glyph and, through `className`, its ink — never its size. Decorative by
- * default; pass `label` when the glyph alone carries meaning.
+ * default; pass `label` when the glyph alone carries meaning. A brand glyph
+ * takes the same 16px box; its fills are its own.
  *
  * The glyph occupies one 20px body line (2 above and below), so in a row
  * aligned to the top it sits centred on the first line of text beside it
@@ -20,7 +40,7 @@ export function Icon({
   icon: Glyph,
   label,
   className,
-}: Readonly<{ icon: LucideIcon; label?: string; className?: string }>) {
+}: Readonly<{ icon: LucideIcon | BrandGlyph; label?: string; className?: string }>) {
   return (
     <Glyph
       data-icon=""

@@ -19,10 +19,10 @@ import { runsApi } from '@/lib/api/runs';
 import type { Audit } from '@/lib/api/types';
 import { saveBlob } from '@/lib/download';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
+import { formatDisplayDate, formatDisplayTime } from '@/lib/format';
 import {
   auditBadgeValue,
   auditStatusLabel,
-  formatDateTime,
   isAuditCancelable,
   shouldPollAudit,
 } from '@/lib/runs/status';
@@ -174,7 +174,14 @@ function ProgressMetrics({ audit }: Readonly<{ audit: Audit }>) {
           value: audit.failed_count,
           tone: audit.failed_count > 0 ? 'danger' : 'muted',
         },
-        { key: 'created', label: 'Created', value: formatDateTime(audit.created_at, timeZone) },
+        // A date is not a figure: the day holds the figure's one line and the
+        // time, with its zone, is the line under it.
+        {
+          key: 'created',
+          label: 'Created',
+          value: formatDisplayDate(audit.created_at, timeZone),
+          sub: formatDisplayTime(audit.created_at, timeZone),
+        },
       ]}
     />
   );

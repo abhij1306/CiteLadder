@@ -1,39 +1,8 @@
 {
   "format_version": 1,
   "files": {
-    "components/ai-traffic/traffic-controls.tsx": {
-      "layer-geometry": 2
-    },
     "components/layout/app-shell.tsx": {
       "tsx-size": 1
-    },
-    "components/onboarding/choice-controls.tsx": {
-      "layer-geometry": 1
-    },
-    "components/onboarding/flow-shell.tsx": {
-      "layer-geometry": 2
-    },
-    "components/onboarding/onboarding-page-client.tsx": {
-      "layer-geometry": 1
-    },
-    "components/onboarding/onboarding-stages.tsx": {
-      "layer-geometry": 1
-    },
-    "components/onboarding/review-step.tsx": {
-      "layer-geometry": 2
-    },
-    "components/performance/metric-cards.tsx": {
-      "layer-geometry": 1,
-      "layer-size-prop": 1
-    },
-    "components/performance/performance-chrome.tsx": {
-      "layer-geometry": 1
-    },
-    "components/search-intelligence/search-intelligence-dataset-view.tsx": {
-      "layer-geometry": 1
-    },
-    "components/settings/mcp-connections.tsx": {
-      "layer-geometry": 3
     }
   }
 }

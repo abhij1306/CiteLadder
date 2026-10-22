@@ -1,5 +1,8 @@
 import type { ComponentPropsWithoutRef, ReactNode, Ref } from 'react';
+import type { LucideIcon } from 'lucide-react';
 
+import { Icon } from '@/components/ui/icon';
+import { Pressable } from '@/components/ui/pressable';
 import { cn } from '@/lib/utils';
 
 /** Fields share a hairline boundary whose colour shows keyboard focus. */
@@ -10,11 +13,9 @@ const inputClasses =
 const raisedClasses = 'border border-border-strong enabled:hover:border-border-strong';
 
 /**
- * The roomier field used on the standalone auth and onboarding screens, where a
- * form is the whole page rather than one control in a dense table.
- *
- * Large fields use the large control role. The product field is the 32px
- * `md` everywhere; `lg` is the flow's rung only.
+ * The roomier field of the public website's forms. The product field —
+ * auth and onboarding included — is the 32px `md` everywhere; `lg` is the
+ * website's rung only.
  */
 const inputSizes = {
   md: '',
@@ -107,5 +108,36 @@ export function Input({
       />
       {endContent ? <span className="flex shrink-0 items-center">{endContent}</span> : null}
     </div>
+  );
+}
+
+/**
+ * FieldEndButton — the one icon target at a field's end (clear a search,
+ * reveal a password): the field's height less its 2px inset, the control
+ * radius, the neutral hover and pressed tints and the 16px `Icon`. Pass it as
+ * an `Input`'s `endContent` with `endContentFlush`, so the target owns the
+ * frame's end padding. `label` is its accessible name.
+ */
+export function FieldEndButton({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: Readonly<{
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}>) {
+  return (
+    <Pressable
+      data-field-end-target=""
+      className="text-muted enabled:hover:bg-hover enabled:hover:text-foreground enabled:active:bg-active grid size-[var(--field-end-target)] place-items-center"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+    >
+      <Icon icon={icon} />
+    </Pressable>
   );
 }

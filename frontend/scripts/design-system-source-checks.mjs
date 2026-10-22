@@ -1088,11 +1088,13 @@ function componentFolder(label) {
 
 /**
  * Geometry a feature folder chose for itself: spacing, sized boxes and radii
- * as utilities, and `size=`/`padding=` props; and, in every product folder
- * including `ui/` and `layout/`, a breakpoint other than `desktop:`.
- * Ratcheted per file by check-design-system.mjs, so the debt can only fall.
+ * as utilities (`layer-geometry`), and `size=`/`padding=` props
+ * (`layer-size-prop`); and, in every product folder including `ui/` and
+ * `layout/`, a breakpoint other than `desktop:` (`layer-breakpoint`).
+ * Every one is a violation: the layering debt was burned to zero (app
+ * geometry PR 7), so none is ratcheted or baselined and none can regrow.
  */
-export function featureLayeringFindings(source, label) {
+export function featureLayeringViolations(source, label) {
   const folder = componentFolder(label);
   if (!folder || folder === 'marketing') return [];
   const feature = !LAYERING_OWNERS.has(folder);
@@ -1101,7 +1103,7 @@ export function featureLayeringFindings(source, label) {
   const program = parseSource(source, label);
   const lineOf = lineIndex(source);
   const findings = [];
-  const push = (rule, line, message) => findings.push({ rule, file: label, line, message });
+  const push = (rule, line, message) => findings.push(`${label}:${line}: ${message} [${rule}]`);
   for (const { token, line } of classTokens(program, lineOf)) {
     const { variants, utility } = splitVariants(token);
     if (
@@ -1165,7 +1167,6 @@ export function productContractViolations(root) {
   const requiredTokens = [
     '--text-xs',
     '--text-sm',
-    '--text-base',
     '--text-2xl',
     '--content-gutter',
     '--workspace-gap',
@@ -1195,7 +1196,7 @@ export function productContractViolations(root) {
     }
   }
   // The type ladder is ordered even though its absolute sizes are free.
-  const TYPE_SCALE = ['--text-xs', '--text-sm', '--text-base', '--text-2xl'];
+  const TYPE_SCALE = ['--text-xs', '--text-sm', '--text-2xl'];
   const scale = TYPE_SCALE.map((token) => {
     const match = new RegExp(escapeRegExp(token) + String.raw`\s*:\s*([\d.]+)rem`).exec(css);
     return { token, size: match ? Number(match[1]) : null };

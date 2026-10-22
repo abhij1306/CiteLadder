@@ -5,8 +5,7 @@ import type { ReactNode } from 'react';
 
 import type { OverviewWidget } from '@citeladder/contracts/overview';
 import { IconButton } from '@/components/ui/button';
-import { FloatingToolbar } from '@/components/ui/floating-toolbar';
-import { splitPaneClasses } from '@/components/ui/workspace';
+import { FloatingToolbar, splitPaneClasses } from '@/components/ui/workspace';
 import { moveWidget, removeWidget, toggleWidth, WIDGET_TITLES } from '@/lib/overview/layout';
 import { cn } from '@/lib/utils';
 

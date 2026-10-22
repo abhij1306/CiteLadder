@@ -93,7 +93,7 @@ function KeyRow({
       <TableCell>
         {apiKey.last_used_at ? <DisplayTime value={apiKey.last_used_at} /> : 'Not used yet'}
       </TableCell>
-      <TableCell numeric="end">
+      <TableCell numeric>
         {apiKey.state === 'active' ? (
           <Button variant="secondary" onClick={onRevoke}>
             Revoke
@@ -113,7 +113,7 @@ const KEY_COLUMNS: readonly DataTableColumn[] = [
     key: 'revoke',
     label: 'Revoke',
     width: 'action',
-    numeric: 'end',
+    numeric: true,
     hideLabel: true,
   },
 ];

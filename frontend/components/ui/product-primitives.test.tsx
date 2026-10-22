@@ -17,7 +17,8 @@ import { NoProjectState } from './no-project-state';
 import { Pager, pageNumberControls } from './pager';
 import { QueryState } from './query-state';
 import { StatRow } from './stat-row';
-import { SortableTableHead, Table, TableCell, TableHeader, TableRow } from './table';
+import { Table, TableCell, TableHeader, TableRow } from './table';
+import { SortableTableHead } from './table-heads';
 import { TextLink } from './text-link';
 import { TooltipProvider } from './tooltip';
 
@@ -89,6 +90,35 @@ describe('StatRow', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(toggle);
     expect(onSelect).toHaveBeenCalledOnce();
+  });
+
+  it('puts a comparison window under the value, its absence named like the value', () => {
+    render(
+      <StatRow
+        label="Search Console metrics"
+        segments={[
+          {
+            key: 'clicks',
+            label: 'Clicks',
+            value: '1,204',
+            comparison: { label: 'Previous 28 days', value: '980' },
+          },
+          {
+            key: 'ctr',
+            label: 'CTR',
+            value: '2.1%',
+            missingLabel: 'Not measured',
+            comparison: { label: 'Previous 28 days', value: null },
+          },
+        ]}
+      />,
+    );
+    const group = screen.getByRole('group', { name: 'Search Console metrics' });
+    const [clicks, ctr] = within(group).getAllByText('Previous 28 days');
+    expect(clicks?.closest('[data-stat-comparison]')).toHaveTextContent('Previous 28 days980');
+    expect(ctr?.closest('[data-stat-comparison]')).toHaveTextContent(
+      'Previous 28 days–Not measured',
+    );
   });
 });
 

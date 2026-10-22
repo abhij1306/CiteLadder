@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 import { Archive, Check, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Tag } from '@/components/ui/tag';
 import { IconButton } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
@@ -17,9 +16,8 @@ import {
   DropdownTrigger,
 } from '@/components/ui/dropdown';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { TableActionsCell, TableCell, TableRow } from '@/components/ui/table';
+import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
-import { Tooltip } from '@/components/ui/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { Prompt, PromptStatus, Topic } from '@/lib/api/types';
@@ -88,10 +86,11 @@ export function PromptTable({
   return (
     <DataTable
       label="Prompts"
-      minWidth="xl"
+      minWidth={measured ? 'xl' : 'md'}
       columns={promptColumns(measured)}
       pageSize={PAGE_SIZE}
       rowCount={pagedPrompts.length}
+      rowLines={2}
       state={
         prompts.length === 0
           ? {
@@ -110,23 +109,22 @@ export function PromptTable({
       {pagedPrompts.map((prompt) => (
         <TableRow key={prompt.id}>
           <TableCell>
-            {/* The question is held to two lines, so the tooltip carries the
-                    whole question. */}
-            <Tooltip content={prompt.text}>
-              {/* The question opens its history: the prompt is the object. */}
-              <ProjectLink
-                href={promptHistoryHref(prompt.id)}
-                className="text-foreground line-clamp-2 break-words hover:underline"
-              >
-                {prompt.text}
-              </ProjectLink>
-            </Tooltip>
-          </TableCell>
-          <TableCell>
-            <TopicBadge name={prompt.topic_id ? topicNames.get(prompt.topic_id) : undefined} />
-          </TableCell>
-          <TableCell>
-            <PromptTags prompt={prompt} />
+            {/* The question opens its history: the prompt is the object. Its
+                topic and classification are the caption under it, so the
+                question keeps the table's width (each line is cut with the
+                whole text in a tooltip). */}
+            <TableCellLines
+              title
+              primary={
+                <ProjectLink
+                  href={promptHistoryHref(prompt.id)}
+                  className="text-foreground hover:underline"
+                >
+                  {prompt.text}
+                </ProjectLink>
+              }
+              secondary={promptCaption(prompt, topicNames)}
+            />
           </TableCell>
           {measured ? <MeasuredCells measurement={measurements?.get(prompt.id)} /> : null}
           <TableCell>
@@ -186,50 +184,44 @@ export function PromptTable({
 function promptColumns(measured: boolean): DataTableColumn[] {
   return [
     { key: 'prompt', label: 'Prompt' },
-    { key: 'topic', label: 'Topic', width: 'status' },
-    { key: 'tags', label: 'Tags', width: 'name' },
     ...(measured ? MEASURED_COLUMNS : []),
-    { key: 'enabled', label: 'Enabled', width: 'name' },
-    { key: 'actions', label: 'Actions', width: 'action', numeric: 'end' },
+    // A switch, and the "Not measured" badge beside it after a downgrade.
+    { key: 'enabled', label: 'Enabled', width: 'category' },
+    { key: 'actions', label: 'Actions', width: 'action', numeric: true },
   ];
 }
 
 const MEASURED_COLUMNS: readonly DataTableColumn[] = [
   { key: 'visibility', label: 'Visibility', width: 'figure', numeric: true },
-  { key: 'owned', label: 'Owned citations', width: 'figure', numeric: true },
+  { key: 'owned', label: 'Owned citations', width: 'metric', numeric: true },
   {
     key: 'position',
     label: 'Avg. mention position',
-    width: 'figure',
+    width: 'metric',
     numeric: true,
   },
   { key: 'change', label: 'Change', width: 'figure', numeric: true },
 ];
 
-/** The row's topic; a prompt without one (or with a since-deleted one) has none. */
-function TopicBadge({ name }: Readonly<{ name?: string }>) {
-  if (!name) return <UnavailableValue state="not_set" />;
-  return (
-    <Tooltip content={name}>
-      <Tag tone="blue" className="max-w-full">
-        <span className="min-w-0 truncate">{name}</span>
-      </Tag>
-    </Tooltip>
-  );
-}
-
-/** Whether the prompt names a brand, then its intent, buyer stage and persona when set. */
-function PromptTags({ prompt }: Readonly<{ prompt: Prompt }>) {
-  return (
-    <Inline as="span" gap="tight" className="flex-wrap">
-      <Tag tone={prompt.branded ? 'amber' : 'neutral'}>
-        {prompt.branded ? 'Branded' : 'Unbranded'}
-      </Tag>
-      {prompt.intent ? <Tag tone="outline">{intentLabels[prompt.intent]}</Tag> : null}
-      {prompt.buyer_stage ? <Tag tone="outline">{buyerStageLabels[prompt.buyer_stage]}</Tag> : null}
-      {prompt.persona ? <Tag tone="outline">{prompt.persona}</Tag> : null}
-    </Inline>
-  );
+/**
+ * The prompt's topic, whether it names a brand, then its intent, buyer stage
+ * and persona when set: one caption line. A prompt filed under a topic the
+ * list cannot name (not loaded, or since deleted) says the topic is
+ * unavailable, apart from a prompt filed under none.
+ */
+function promptCaption(prompt: Prompt, topicNames: ReadonlyMap<string, string>): string {
+  const topic = prompt.topic_id
+    ? (topicNames.get(prompt.topic_id) ?? 'Topic unavailable')
+    : 'No topic';
+  return [
+    topic,
+    prompt.branded ? 'Branded' : 'Unbranded',
+    prompt.intent ? intentLabels[prompt.intent] : null,
+    prompt.buyer_stage ? buyerStageLabels[prompt.buyer_stage] : null,
+    prompt.persona,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 /** A prompt's measured visibility, and its movement since the last run. */
