@@ -76,7 +76,6 @@ export function CompetitorSuggestions({
                 </p>
               </div>
               <Button
-                size="sm"
                 variant="secondary"
                 onClick={() => acceptMutation.mutate(candidate.id)}
                 disabled={acceptMutation.isPending}

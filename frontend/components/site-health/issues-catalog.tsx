@@ -248,7 +248,6 @@ function IssueSearch({
       }}
     >
       <SearchField
-        size="compact"
         value={draft}
         onValueChange={setDraft}
         placeholder="Search issues…"

@@ -113,7 +113,6 @@ function ChatHistory({
         pending={chats.isFetching && !chats.isFetchingNextPage && !chats.isRefetching}
         aria-label="Search chats"
         placeholder="Search chats"
-        size="compact"
       />
       <ChatRows
         rows={rows}
@@ -125,7 +124,6 @@ function ChatHistory({
       {chats.hasNextPage ? (
         <Button
           variant="ghost"
-          size="sm"
           disabled={chats.isFetchingNextPage}
           onClick={() => void chats.fetchNextPage()}
         >

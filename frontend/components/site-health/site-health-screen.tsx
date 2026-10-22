@@ -332,21 +332,21 @@ function CrawlActions({
 }>) {
   return (
     <div className="flex items-center gap-2">
-      <Button variant="secondary" size="sm" onClick={onExport} disabled={exporting}>
+      <Button variant="secondary" onClick={onExport} disabled={exporting}>
         {exporting ? 'Exporting…' : 'Export'}
       </Button>
       {/* Always present, so starting a crawl never reflows the header. */}
       <Tooltip content="Rerun this crawl's scope and settings, so Changes compares like with like.">
-        <Button variant="secondary" size="sm" onClick={onRecrawl} disabled={active || startPending}>
+        <Button variant="secondary" onClick={onRecrawl} disabled={active || startPending}>
           Recrawl
         </Button>
       </Tooltip>
       {active ? (
-        <Button variant="destructive" size="sm" onClick={onCancel} disabled={cancelPending}>
+        <Button variant="destructive" onClick={onCancel} disabled={cancelPending}>
           {cancelPending ? 'Stopping…' : 'Stop crawl'}
         </Button>
       ) : (
-        <Button size="sm" onClick={() => onStart()} disabled={startPending}>
+        <Button onClick={() => onStart()} disabled={startPending}>
           {startPending ? 'Starting…' : 'Run new crawl'}
         </Button>
       )}

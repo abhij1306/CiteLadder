@@ -196,7 +196,6 @@ function ReadinessLedger({
                   <TableCell className="block px-4 pt-2 pb-3 md:table-cell md:px-[var(--table-cell-padding-x)] md:py-[var(--table-cell-padding-y)]">
                     <Button
                       variant="secondary"
-                      size="sm"
                       className="w-full md:w-auto"
                       onClick={() => onOpen(dimension.key)}
                     >
@@ -367,7 +366,6 @@ function PageActions({
       {promptChecks.length > 0 ? (
         <CopyButton
           value={fixPrompt(dimensionLabel, page.normalized_url, promptChecks)}
-          size="sm"
           variant="secondary"
         >
           Copy fix prompt

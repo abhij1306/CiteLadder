@@ -10,7 +10,7 @@ import { ProjectLink } from './scoped-link';
 
 function OverviewLink({ variant }: Readonly<{ variant?: 'secondary' }>) {
   return (
-    <Button asChild size="sm" variant={variant}>
+    <Button asChild variant={variant}>
       <ProjectLink href="/projects">Go to Overview</ProjectLink>
     </Button>
   );
@@ -30,9 +30,7 @@ export function ScreenError() {
         description="Reload to try again, or go back to Overview."
         action={
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={() => window.location.reload()}>
-              Reload page
-            </Button>
+            <Button onClick={() => window.location.reload()}>Reload page</Button>
             <OverviewLink variant="secondary" />
           </div>
         }

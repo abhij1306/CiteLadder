@@ -1208,11 +1208,6 @@ input:-webkit-autofill:focus {
   }
 }
 
-/* Dense page toolbars keep every trigger at the same role in all viewports. */
-[data-page-band='control'] {
-  --control-height-md: var(--control-height-sm);
-}
-
 /* Keep wrapping filter rows off their rules, including narrow viewports. */
 [data-page-band='control'] > div {
   padding-block: 8px;

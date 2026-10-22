@@ -335,7 +335,6 @@ function CreativeList({
         {onShowMore ? (
           <Button
             variant="secondary"
-            size="sm"
             className="justify-self-start"
             disabled={loadingMore}
             onClick={onShowMore}

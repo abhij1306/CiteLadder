@@ -61,7 +61,7 @@ export function ProjectSwitcher({ className }: Readonly<{ className?: string }>)
     <Dropdown>
       <DropdownTrigger
         className={cn(
-          'focus-ring hover:bg-hover active:bg-active data-[state=open]:bg-selected hover:text-foreground flex w-full items-center gap-2 rounded-[var(--radius-control)] px-3 py-1 text-left transition-colors disabled:pointer-events-none disabled:bg-disabled disabled:text-muted',
+          'focus-ring hover:bg-hover active:bg-active data-[state=open]:bg-selected hover:text-foreground flex h-[var(--control-height-md)] w-full items-center gap-2 rounded-[var(--radius-control)] px-3 text-left transition-colors disabled:pointer-events-none disabled:bg-disabled disabled:text-muted',
           className,
         )}
         disabled={isLoading}
@@ -71,7 +71,7 @@ export function ProjectSwitcher({ className }: Readonly<{ className?: string }>)
           logoUrl={activeProject?.brand.logo_url}
           websiteUrl={activeProject?.website_url}
           size="sm"
-          className="bg-foreground text-background size-6.5 rounded-[var(--radius-control)]"
+          className="bg-foreground text-background size-6 rounded-[var(--radius-control)]"
         />
         <span className={textRole('itemTitle', 'min-w-0 flex-1 truncate')}>{label}</span>
         <ChevronsUpDown className="text-muted size-3.5 shrink-0" aria-hidden />

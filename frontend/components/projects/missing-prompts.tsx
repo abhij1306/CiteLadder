@@ -37,7 +37,7 @@ export function MissingPrompts({
       <CardHeader
         actions={
           rows.length > SHOWN ? (
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="ghost">
               <ProjectLink href="/prompts">
                 All prompts <ArrowRight className="ms-1 size-3.5" aria-hidden />
               </ProjectLink>
@@ -86,7 +86,7 @@ function MissingRow({ row }: Readonly<{ row: MissingPrompt }>) {
         </span>
       </div>
       {row.actionId ? (
-        <Button asChild variant="secondary" size="sm">
+        <Button asChild variant="secondary">
           <ProjectLink href={`/agent/actions/${row.actionId}`}>Open the Action</ProjectLink>
         </Button>
       ) : (

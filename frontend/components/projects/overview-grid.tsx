@@ -84,7 +84,7 @@ function WidgetControls({
     <div className={panelClasses({ pad: 'none' }, 'absolute end-3 top-3 z-10 flex gap-1 p-1')}>
       <Button
         variant="ghost"
-        size="iconSm"
+        size="icon"
         aria-label={`Move ${title} earlier`}
         disabled={pending || first}
         onClick={() => onMove(index - 1)}
@@ -93,7 +93,7 @@ function WidgetControls({
       </Button>
       <Button
         variant="ghost"
-        size="iconSm"
+        size="icon"
         aria-label={`Move ${title} later`}
         disabled={pending || last}
         onClick={() => onMove(index + 1)}
@@ -102,7 +102,7 @@ function WidgetControls({
       </Button>
       <Button
         variant="ghost"
-        size="iconSm"
+        size="icon"
         aria-label={wide ? `Make ${title} half width` : `Make ${title} full width`}
         disabled={pending}
         onClick={onResize}
@@ -115,7 +115,7 @@ function WidgetControls({
       </Button>
       <Button
         variant="ghost"
-        size="iconSm"
+        size="icon"
         aria-label={`Remove ${title}`}
         disabled={pending || only}
         onClick={onRemove}

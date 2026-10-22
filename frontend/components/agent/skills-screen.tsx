@@ -78,7 +78,7 @@ function SkillGroups({ skills }: Readonly<{ skills: AgentSkill[] }>) {
                 </Stack>
                 <div className="flex flex-wrap items-center justify-between gap-2 self-end">
                   <Badge>Produces {kindLabel(skill.output_kind).toLowerCase()}</Badge>
-                  <Button asChild variant="ghost" size="sm">
+                  <Button asChild variant="ghost">
                     <ProjectLink
                       href={agentHandoffHref({ skillId: skill.id })}
                       aria-label={`Start a chat with ${skill.label}`}

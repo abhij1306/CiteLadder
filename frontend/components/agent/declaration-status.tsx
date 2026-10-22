@@ -221,7 +221,6 @@ function RunCrawl({ workspaceId }: Readonly<{ workspaceId: string }>) {
       <div>
         <Button
           variant="secondary"
-          size="sm"
           pending={start.isPending}
           pendingLabel="Starting…"
           onClick={() => start.mutate({ project_id: activeProjectId })}

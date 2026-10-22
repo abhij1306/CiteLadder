@@ -175,7 +175,6 @@ function SinkFilterUpdate({
       <CodeText label="Copy filter" value={gcp.log_filter} />
       {canManage ? (
         <Button
-          size="sm"
           variant="secondary"
           className="w-fit"
           pending={confirmFilter.isPending}

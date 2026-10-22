@@ -116,7 +116,6 @@ export function TrafficCrawlers({
                 <TableCell numeric>
                   <Button
                     variant="ghost"
-                    size="sm"
                     onClick={() => setBotId(b.bot_id)}
                     aria-label={`View paths requested by ${b.label}`}
                   >

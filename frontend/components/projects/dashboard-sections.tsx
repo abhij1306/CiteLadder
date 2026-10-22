@@ -103,7 +103,7 @@ export function CompanyFacts({ data }: Readonly<{ data: CommandCenter }>) {
         actions={
           <>
             <span className={textRole('label')}>{facts.industry || 'Industry not set'}</span>
-            <Button asChild variant="ghost" size="sm">
+            <Button asChild variant="ghost">
               <ProjectLink href="/agent/context">
                 Edit in Agent context <ArrowRight className="ms-1 size-3.5" aria-hidden />
               </ProjectLink>
@@ -193,7 +193,6 @@ function PdfButton({
   return (
     <Button
       variant="secondary"
-      size="sm"
       onClick={onDownload}
       pending={downloading}
       pendingLabel="Preparing…"
@@ -303,7 +302,7 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
         )}
       </CardContent>
       <CardContent className="flex justify-end">
-        <Button asChild variant="ghost" size="sm">
+        <Button asChild variant="ghost">
           <ProjectLink href="/visibility?tab=trends">
             Open Trends <ArrowRight className="ms-1 size-3.5" aria-hidden />
           </ProjectLink>
@@ -401,7 +400,7 @@ export function ProgressProofCard({ data }: Readonly<{ data: CommandCenter }>) {
 
 function ViewAllActions() {
   return (
-    <Button asChild variant="ghost" size="sm">
+    <Button asChild variant="ghost">
       <ProjectLink href="/agent/actions">
         View all <ArrowRight className="ms-1 size-3.5" aria-hidden />
       </ProjectLink>

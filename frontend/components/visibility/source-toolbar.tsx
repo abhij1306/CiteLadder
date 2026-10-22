@@ -115,7 +115,7 @@ export function SourceTableToolbar({
         }
         searchWidth="sm"
         actions={
-          <Button variant="secondary" size="sm" onClick={onExport} disabled={rows.length === 0}>
+          <Button variant="secondary" onClick={onExport} disabled={rows.length === 0}>
             <Download className="size-3.5" aria-hidden />
             Export
           </Button>

@@ -117,7 +117,7 @@ function ChatView({
 function ChatHeaderActions({ detail }: Readonly<{ detail: AgentChatDetail }>) {
   if (!detail.chat.action_id) return null;
   return (
-    <Button asChild variant="ghost" size="sm">
+    <Button asChild variant="ghost">
       <ProjectLink href={`/agent/actions/${detail.chat.action_id}`}>Open Action</ProjectLink>
     </Button>
   );

@@ -42,7 +42,7 @@ function WidgetCard({
     <Card aria-labelledby={`widget-${id}`} className="flex h-full min-h-64 flex-col">
       <CardHeader
         actions={
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost">
             <ProjectLink href={href}>
               Open <ArrowRight className="ms-1 size-3.5" aria-hidden />
             </ProjectLink>

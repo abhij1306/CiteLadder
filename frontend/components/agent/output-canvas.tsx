@@ -141,7 +141,6 @@ function SectionBlock({
         <div className="flex flex-wrap gap-2 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
           <Button
             variant="ghost"
-            size="sm"
             disabled={!canSend}
             aria-expanded={mode === 'revise'}
             aria-label={`Ask the agent to revise ${name}`}
@@ -150,12 +149,7 @@ function SectionBlock({
             <Sparkles className="size-3.5" aria-hidden />
             Revise
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={`Edit ${name}`}
-            onClick={() => onMode('edit')}
-          >
+          <Button variant="ghost" aria-label={`Edit ${name}`} onClick={() => onMode('edit')}>
             <Pencil className="size-3.5" aria-hidden />
             Edit
           </Button>
@@ -193,10 +187,10 @@ function ReviseForm({
         placeholder="e.g. Add a pricing comparison table"
         onChange={(event) => setInstruction(event.target.value)}
       />
-      <Button type="submit" size="sm" disabled={!instruction.trim()}>
+      <Button type="submit" disabled={!instruction.trim()}>
         Ask agent
       </Button>
-      <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+      <Button type="button" variant="ghost" onClick={onCancel}>
         Cancel
       </Button>
     </form>
@@ -255,14 +249,10 @@ function SectionEditor({
       />
       {save.isError ? <Alert tone="danger">{agentWriteFailure(save.error).message}</Alert> : null}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onDone} disabled={save.isPending}>
+        <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
           Cancel
         </Button>
-        <Button
-          type="submit"
-          size="sm"
-          disabled={body === revision.body || !body.trim() || save.isPending}
-        >
+        <Button type="submit" disabled={body === revision.body || !body.trim() || save.isPending}>
           Save section
         </Button>
       </div>

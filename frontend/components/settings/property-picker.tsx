@@ -153,7 +153,6 @@ function SelectedProperty({
       {canChoose ? (
         <Button
           variant="ghost"
-          size="sm"
           onClick={onChoose}
           disabled={disabled}
           data-testid={`select-property-${provider}`}

@@ -120,7 +120,6 @@ export function FilterTrigger({
     <Button
       ref={ref}
       variant="secondary"
-      size="sm"
       data-active={active || showCount || undefined}
       className={cn((active || showCount) && 'bg-selected', className)}
       {...props}

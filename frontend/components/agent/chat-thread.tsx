@@ -104,7 +104,7 @@ export function JumpToLatest({ show, onJump }: Readonly<{ show: boolean; onJump:
   if (!show) return null;
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-full flex justify-center pb-2">
-      <Button variant="secondary" size="sm" className="pointer-events-auto" onClick={onJump}>
+      <Button variant="secondary" className="pointer-events-auto" onClick={onJump}>
         Jump to latest
       </Button>
     </div>
@@ -130,7 +130,6 @@ function FollowUpFailure({
       ) : (
         <Button
           variant="secondary"
-          size="sm"
           onClick={turn.retrySubmission}
           disabled={turn.pending || !canSend}
         >

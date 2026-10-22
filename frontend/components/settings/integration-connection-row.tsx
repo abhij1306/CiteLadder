@@ -106,7 +106,6 @@ function ConnectionActions({
       <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
         <Button
           variant="secondary"
-          size="sm"
           className="min-w-14"
           onClick={onTest}
           disabled={busy}
@@ -116,7 +115,6 @@ function ConnectionActions({
         </Button>
         <Button
           variant="secondary"
-          size="sm"
           className="min-w-22"
           onClick={onSync}
           title={hasProperty ? undefined : 'Select a property first'}
@@ -130,7 +128,6 @@ function ConnectionActions({
         {hasProperty ? (
           <Button
             variant="destructiveGhost"
-            size="sm"
             onClick={onRemove}
             disabled={busy}
             pending={removePending}

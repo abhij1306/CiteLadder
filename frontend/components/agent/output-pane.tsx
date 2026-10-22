@@ -194,20 +194,15 @@ function OutputActions({
 }: Readonly<{ revision: AgentRevision; locked: boolean; onEdit: () => void }>) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="secondary" size="sm" disabled={locked} onClick={onEdit}>
+      <Button variant="secondary" disabled={locked} onClick={onEdit}>
         <Pencil className="size-3.5" aria-hidden />
         Edit
       </Button>
-      <CopyButton
-        value={outputMarkdown(revision.title, revision.body)}
-        size="sm"
-        variant="secondary"
-      >
+      <CopyButton value={outputMarkdown(revision.title, revision.body)} variant="secondary">
         Copy
       </CopyButton>
       <Button
         variant="secondary"
-        size="sm"
         onClick={() => downloadOutputMarkdown(revision.title, revision.body)}
       >
         <Download className="size-3.5" aria-hidden />

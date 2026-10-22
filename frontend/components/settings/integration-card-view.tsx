@@ -172,7 +172,7 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
   const sources = joinProviderLabels(grant.connections.map((item) => item.provider));
   return (
     <>
-      <Button variant="destructiveGhost" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="destructiveGhost" onClick={() => setOpen(true)}>
         Disconnect {title}
       </Button>
       <Dialog
@@ -253,7 +253,6 @@ function ConnectedCard({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={grant.status === 'connected' ? 'secondary' : 'primary'}
-              size="sm"
               onClick={() =>
                 hardNavigate(integrationsApi.oauthStartUrl(meta.connectProvider, workspaceId))
               }

@@ -216,7 +216,6 @@ function PromptRow({
             cannot replace with a number. */}
         <Button
           variant="ghost"
-          size="sm"
           onClick={() =>
             onOpenAnswer({
               // The visibility row names the execution as `task_id`; the drawer

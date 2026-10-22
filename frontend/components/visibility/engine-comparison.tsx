@@ -57,11 +57,7 @@ export function EngineComparison({
                 <TableRow key={engine.logical_engine}>
                   <TableCell>
                     {onSelect ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onSelect(engine.logical_engine)}
-                      >
+                      <Button variant="ghost" onClick={() => onSelect(engine.logical_engine)}>
                         {engineLabel(engine.logical_engine)}
                       </Button>
                     ) : (

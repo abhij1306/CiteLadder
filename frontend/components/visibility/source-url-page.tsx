@@ -68,15 +68,15 @@ function GetListed({ url, actionId }: Readonly<{ url: string; actionId: string |
     <div className="flex flex-wrap items-center gap-2">
       {actionId ? (
         <>
-          <Button size="sm" asChild>
+          <Button asChild>
             <ProjectLink href={`/agent/actions/${actionId}`}>Open the Action</ProjectLink>
           </Button>
-          <Button size="sm" variant="secondary" asChild>
+          <Button variant="secondary" asChild>
             <ProjectLink href={agentHandoffHref({ actionId })}>Draft the request</ProjectLink>
           </Button>
         </>
       ) : (
-        <Button size="sm" variant="secondary" asChild>
+        <Button variant="secondary" asChild>
           <ProjectLink
             href={agentHandoffHref({
               targetUrl: url,

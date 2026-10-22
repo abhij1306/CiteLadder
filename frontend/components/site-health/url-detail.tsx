@@ -179,7 +179,6 @@ function IssueHistoryButton(target: HistoryTarget) {
     <>
       <Button
         variant="ghost"
-        size="sm"
         onClick={() => {
           setRequested(true);
           setOpen(true);

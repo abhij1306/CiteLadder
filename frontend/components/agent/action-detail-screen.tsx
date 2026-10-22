@@ -159,7 +159,6 @@ function ActionControls({
       {mayWrite ? (
         <Button
           variant="secondary"
-          size="sm"
           disabled={update.isPending}
           onClick={() =>
             update.mutate({ actionId: action.id, status: dismissed ? 'open' : 'dismissed' })
@@ -168,7 +167,7 @@ function ActionControls({
           {dismissed ? 'Reopen' : 'Dismiss'}
         </Button>
       ) : null}
-      <Button asChild size="sm">
+      <Button asChild>
         <ProjectLink href={agentHandoffHref({ actionId: action.id })}>Work on this</ProjectLink>
       </Button>
     </>
@@ -236,7 +235,7 @@ function Diagnosis({
                   <span className={textRole('itemTitle')}>{member.title}</span>
                   <span className={textRole('caption')}>{member.remediation}</span>
                 </span>
-                <Button variant="ghost" size="sm" onClick={() => onOpenEvidence(member.id)}>
+                <Button variant="ghost" onClick={() => onOpenEvidence(member.id)}>
                   View evidence
                 </Button>
               </li>
@@ -371,7 +370,6 @@ function LinkedChats({
       {chats.hasNextPage ? (
         <Button
           variant="secondary"
-          size="sm"
           className="justify-self-start"
           disabled={chats.isFetchingNextPage}
           onClick={() => void chats.fetchNextPage()}

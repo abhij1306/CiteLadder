@@ -73,7 +73,7 @@ export function SkillPicker({
   return (
     <Dropdown open={disabled ? false : open} onOpenChange={onOpenChange}>
       <DropdownTrigger asChild>
-        <Button variant="ghost" size="sm" disabled={disabled} aria-label={`Skill: ${current}`}>
+        <Button variant="ghost" disabled={disabled} aria-label={`Skill: ${current}`}>
           Skill: {current}
           <ChevronDown className="size-3.5" aria-hidden />
         </Button>

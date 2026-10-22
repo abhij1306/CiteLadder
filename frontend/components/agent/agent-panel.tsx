@@ -71,10 +71,10 @@ export function AgentPanel() {
           onLeave={close}
           toolbar={
             <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => panel.setChat(null)}>
+              <Button variant="ghost" onClick={() => panel.setChat(null)}>
                 New chat
               </Button>
-              <Button asChild variant="secondary" size="sm">
+              <Button asChild variant="secondary">
                 <ProjectLink href={`/agent/chats/${chatId}`} onClick={close}>
                   Open in Agent
                 </ProjectLink>
@@ -259,7 +259,7 @@ function PanelConversation({
           detail.output?.latest_revision ? (
             <div className="grid justify-items-start gap-2">
               <span className={textRole('itemTitle')}>{detail.output.latest_revision.title}</span>
-              <Button variant="secondary" size="sm" onClick={openOutput}>
+              <Button variant="secondary" onClick={openOutput}>
                 Open output
               </Button>
             </div>

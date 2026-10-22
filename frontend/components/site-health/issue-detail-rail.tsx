@@ -132,7 +132,7 @@ export function IssueDetailRail({
 function IssueActions({ issue, crawlId }: Readonly<{ issue: SiteIssue; crawlId: string }>) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" asChild>
+      <Button asChild>
         <ProjectLink
           href={agentHandoffHref({
             issueGroup: { crawlId, groupId: issue.group_id },
@@ -143,7 +143,7 @@ function IssueActions({ issue, crawlId }: Readonly<{ issue: SiteIssue; crawlId: 
           Ask agent
         </ProjectLink>
       </Button>
-      <CopyButton value={buildFixPrompt(issue)} size="sm" variant="secondary" className="w-fit">
+      <CopyButton value={buildFixPrompt(issue)} variant="secondary" className="w-fit">
         Copy fix prompt
       </CopyButton>
     </div>
@@ -221,7 +221,7 @@ function OccurrenceList({
             </span>
           </TextLink>
           <IssueEvidence occurrence={occurrence} />
-          <Button variant="ghost" size="sm" asChild className="w-fit">
+          <Button variant="ghost" asChild className="w-fit">
             <ProjectLink
               href={agentHandoffHref({
                 issueGroup: { crawlId, groupId: issue.group_id, siteUrlId: occurrence.site_url_id },

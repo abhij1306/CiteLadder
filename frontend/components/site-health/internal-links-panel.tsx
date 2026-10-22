@@ -201,7 +201,7 @@ function LinksHeader({
         />
       ) : null}
       {links.length ? (
-        <Button variant="secondary" size="sm" onClick={() => downloadInternalLinksCsv(links)}>
+        <Button variant="secondary" onClick={() => downloadInternalLinksCsv(links)}>
           Export CSV
         </Button>
       ) : null}
@@ -217,7 +217,6 @@ function RunControls({ read, running }: Readonly<{ read: LinksRead; running: boo
     return (
       <Button
         variant="secondary"
-        size="sm"
         pending={read.cancel.isPending}
         onClick={() => read.cancel.mutate()}
       >
@@ -226,7 +225,6 @@ function RunControls({ read, running }: Readonly<{ read: LinksRead; running: boo
     );
   return (
     <Button
-      size="sm"
       disabled={!read.data?.crawl_id || read.query.isError}
       pending={read.analyze.isPending}
       onClick={() => read.analyze.mutate()}
@@ -349,7 +347,6 @@ function LinksBody({
           searchWidth="lg"
           search={
             <SearchField
-              size="compact"
               value={params.get('links_q') ?? ''}
               onValueChange={(value) => update('links_q', value, 'replace')}
               placeholder="Search pages and anchors"
@@ -431,7 +428,6 @@ function LinksTable({
               <TableCell>
                 <Button
                   variant="ghost"
-                  size="sm"
                   onClick={() => onSelect(link.id)}
                   aria-label={`Review link from ${link.source.title || link.source.url} to ${link.target.title || link.target.url}`}
                 >

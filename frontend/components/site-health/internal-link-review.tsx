@@ -95,13 +95,13 @@ export function InternalLinkReview({
             >
               Copy HTML
             </CopyButton>
-            <Button asChild variant="secondary" size="sm">
+            <Button asChild variant="secondary">
               <ProjectLink href={`/site/crawls/${crawlId}/pages/${link.source.site_url_id}`}>
                 View source page evidence
               </ProjectLink>
             </Button>
             {link.action_id ? (
-              <Button asChild variant="secondary" size="sm">
+              <Button asChild variant="secondary">
                 <ProjectLink href={`/agent/actions/${link.action_id}`}>Open Action</ProjectLink>
               </Button>
             ) : null}

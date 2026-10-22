@@ -326,7 +326,7 @@ function MeasurementHistory({
           ))}
           {focused ? (
             <li>
-              <Button variant="ghost" size="sm" onClick={onClearFocus}>
+              <Button variant="ghost" onClick={onClearFocus}>
                 Show all brands
               </Button>
             </li>
