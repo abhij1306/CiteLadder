@@ -2,6 +2,7 @@
 
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ChartFrame } from '@/components/ui/chart';
 import { DonutChart } from '@/components/ui/donut-chart';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
@@ -9,7 +10,6 @@ import { SeriesChart } from '@/components/ui/series-chart';
 import { Skeleton } from '@/components/ui/skeleton';
 import { seriesCeiling, toChartSeries, type typeSlices } from '@/lib/visibility/sources';
 import type { useSourceAnalysis, useSourceSeries } from '@/lib/visibility/use-source-analysis';
-import { cn } from '@/lib/utils';
 
 /**
  * The two cards above the Sources table: usage over time, and the type mix.
@@ -46,17 +46,16 @@ export function UsageCard({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <UsagePlot query={query} series={series} />
+        {/* Every state occupies the page-chart box, which holds the legend
+            (up to two wrapped lines) above the plot, so a state of another
+            height never moves the table below this card. */}
+        <ChartFrame height="lg">
+          <UsagePlot query={query} series={series} />
+        </ChartFrame>
       </CardContent>
     </Card>
   );
 }
-
-/**
- * The box every state of the usage card occupies: the page-chart height role,
- * which holds the legend (up to two wrapped lines) above the 260px plot.
- */
-const USAGE_PLOT_BOX = 'min-h-[var(--chart-height-lg)]';
 
 /** The plot, or the one state standing in for it. */
 function UsagePlot({
@@ -66,25 +65,20 @@ function UsagePlot({
   query: ReturnType<typeof useSourceSeries>;
   series: ReturnType<typeof toChartSeries>;
 }>) {
-  // Every state occupies the same box. The plot is 260px and the legend above
-  // it wraps to one or two lines, so a state of another height moved the table
-  // below this card every time a filter changed.
   if (query.isError) {
     return (
-      <div className={USAGE_PLOT_BOX}>
-        <ReadError
-          error={query.error}
-          fallback="Could not load source usage."
-          onRetry={() => void query.refetch()}
-          pending={query.isFetching}
-        />
-      </div>
+      <ReadError
+        error={query.error}
+        fallback="Could not load source usage."
+        onRetry={() => void query.refetch()}
+        pending={query.isFetching}
+      />
     );
   }
-  if (query.isLoading) return <Skeleton className={cn(USAGE_PLOT_BOX, 'w-full')} />;
+  if (query.isLoading) return <Skeleton className="size-full" />;
   if (!series.length) {
     return (
-      <div className={cn(USAGE_PLOT_BOX, 'grid place-items-center')}>
+      <div className="grid place-items-center">
         <QueryState kind="empty" inline message="No sources were used in this period." />
       </div>
     );
@@ -95,13 +89,9 @@ function UsagePlot({
       labels={(query.data?.buckets ?? []).map(bucketLabel)}
       domainMax={seriesCeiling(series)}
       yAxisLabel="Share of answers"
-      className={USAGE_PLOT_BOX}
     />
   );
 }
-
-/** The ring, its centre total and its legend: the default chart height role. */
-const TYPES_RING_BOX = 'h-[var(--chart-height-md)]';
 
 /** The citation mix, counted server-side over the whole selection. */
 export function TypesCard({
@@ -120,7 +110,10 @@ export function TypesCard({
         <CardTitle>Source types</CardTitle>
       </CardHeader>
       <CardContent>
-        <TypesRing slices={slices} total={total} query={query} />
+        {/* The ring, its centre total and its legend: the default chart height role. */}
+        <ChartFrame height="md">
+          <TypesRing slices={slices} total={total} query={query} />
+        </ChartFrame>
       </CardContent>
     </Card>
   );
@@ -140,17 +133,15 @@ function TypesRing({
   // "no citations in this selection" for a request that never answered.
   if (query.isError) {
     return (
-      <div className={TYPES_RING_BOX}>
-        <ReadError
-          error={query.error}
-          fallback="Could not load source types."
-          onRetry={() => void query.refetch()}
-          pending={query.isFetching}
-        />
-      </div>
+      <ReadError
+        error={query.error}
+        fallback="Could not load source types."
+        onRetry={() => void query.refetch()}
+        pending={query.isFetching}
+      />
     );
   }
-  if (query.isLoading) return <Skeleton className={cn(TYPES_RING_BOX, 'w-full')} />;
+  if (query.isLoading) return <Skeleton className="size-full" />;
   return (
     <DonutChart
       slices={slices}

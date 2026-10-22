@@ -5,19 +5,10 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import { useSearchParams } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
-import { Label, textRole } from '@/components/ui/typography';
-import { Pager } from '@/components/ui/pager';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { PageKindSelect } from '@/components/site-health/page-kind-select';
 import { PagesTable } from '@/components/site-health/pages-table';
@@ -71,7 +62,7 @@ export function InventorySection({
   }
 
   return (
-    <section className="grid min-w-0 gap-2" data-testid="inventory-section">
+    <section className="grid min-w-0" data-testid="inventory-section">
       {content}
     </section>
   );
@@ -98,77 +89,70 @@ function DiscoveringInventory({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
   const rows = data?.items ?? [];
   const nextCursor = data?.next_cursor ?? null;
 
-  let body: ReactNode;
+  let state: DataTableState | undefined;
   if (inventoryQuery.isError) {
-    body = (
-      <ReadError
-        error={inventoryQuery.error}
-        fallback="Could not load the page inventory."
-        onRetry={() => void inventoryQuery.refetch()}
-        pending={inventoryQuery.isFetching}
-      />
-    );
+    state = {
+      kind: 'error',
+      error: inventoryQuery.error,
+      fallback: 'Could not load the page inventory.',
+      onRetry: () => void inventoryQuery.refetch(),
+      pending: inventoryQuery.isFetching,
+    };
   } else if (rows.length === 0) {
-    body = (
-      <p className={textRole('body')}>
-        Discovering pages — sitemaps and internal links are being scanned.
-      </p>
-    );
-  } else {
-    body = (
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Page URL</TableHead>
-            <TableHead>Source</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={row.site_url_id}>
-              <TableCell>
-                {/* Clamped for the same reason as the scored table: a long
-                    query-string URL is one unbreakable token and would size
-                    the column to its full width. */}
-                <ClampText
-                  lines={1}
-                  className="type-caption text-foreground max-w-[40rem] tabular-nums"
-                >
-                  {row.display_url}
-                </ClampText>
-              </TableCell>
-              <TableCell className="type-caption">
-                {row.source ? statusLabel(row.source) : <UnavailableValue state="unknown" />}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    );
+    state = {
+      kind: 'empty',
+      icon: FileText,
+      headingLevel: 3,
+      heading: 'Discovering pages — sitemaps and internal links are being scanned.',
+    };
   }
 
   return (
-    <div className="grid gap-3">
-      <Label>Pages discovered so far</Label>
-      {body}
-      {crawl.status === 'running' || crawl.status === 'queued' ? (
-        <p className="type-caption">More URLs appear as discovery continues.</p>
-      ) : null}
-      <Pager
-        frame="table"
-        range={{ ...pageRange(pager.page, pager.pageSize, rows.length), noun: 'pages' }}
+    <DataTable
+      title="Pages discovered so far"
+      columns={DISCOVERED_COLUMNS}
+      state={state}
+      pageSize={pager.pageSize}
+      rowCount={rows.length}
+      pager={{
+        range: { ...pageRange(pager.page, pager.pageSize, rows.length), noun: 'pages' },
         // No exact total: `visible_url_count` counts what THIS crawl
         // admitted, which a recrawl inheriting monitored URLs need not match
         // row-for-row. The caption already says the list is still growing,
         // so the range alone is the honest reading — a total that can drift
         // from the rows beneath it is worse than no total.
-        pageSize={{ value: pager.pageSize, onChange: pager.setPageSize }}
-        {...cursorControls(pager, nextCursor)}
-        busy={inventoryQuery.isFetching}
-      />
-    </div>
+        pageSize: { value: pager.pageSize, onChange: pager.setPageSize },
+        ...cursorControls(pager, nextCursor),
+        busy: inventoryQuery.isFetching,
+      }}
+      footer={
+        crawl.status === 'running' || crawl.status === 'queued'
+          ? 'More URLs appear as discovery continues.'
+          : undefined
+      }
+    >
+      {rows.map((row) => (
+        <TableRow key={row.site_url_id}>
+          <TableCell>
+            {/* Clamped for the same reason as the scored table: a long
+                query-string URL is one unbreakable token. */}
+            <ClampText lines={1} className="type-caption text-foreground tabular-nums">
+              {row.display_url}
+            </ClampText>
+          </TableCell>
+          <TableCell className="type-caption">
+            {row.source ? statusLabel(row.source) : <UnavailableValue state="unknown" />}
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
+
+const DISCOVERED_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'url', label: 'Page URL' },
+  { key: 'source', label: 'Source', width: 'name' },
+];
 
 /** The three server-backed page tabs (design mockup 713). */
 type TabKey = 'monitored' | 'all' | 'errors';
@@ -189,51 +173,32 @@ const TABS: ReadonlyArray<{ key: TabKey; label: string; params: PagesParams }> =
  * → completed and its scores fill in — the SAME rows, in place, until the run
  * settles. Finishing changes nothing structurally.
  */
-function ScoredInventoryBody({
+function scoredInventoryState({
   query,
   rows,
-  rootErrors,
   active,
-  crawlId,
-  sort,
-  onSortChange,
 }: Readonly<{
   query: UseQueryResult<PagesPage>;
   rows: PagesPage['items'];
-  rootErrors: NonNullable<PagesPage['root_errors']>;
   active: boolean;
-  crawlId: string;
-  sort: PagesSort;
-  onSortChange: (sort: PagesSort) => void;
-}>) {
+}>): DataTableState | undefined {
   if (query.isError)
-    return (
-      <QueryState
-        kind="error"
-        error={query.error}
-        fallback="Could not load pages for this view."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
-      />
-    );
-  if (query.isLoading) return <QueryState kind="loading" />;
-  if (rows.length === 0 && rootErrors.length === 0)
-    return (
-      <QueryState
-        kind="empty"
-        icon={FileText}
-        heading={active ? 'Pages appear here as the audit reaches them.' : 'No pages in this view.'}
-        headingLevel={3}
-      />
-    );
-  return (
-    <div className="grid gap-3">
-      <RootErrorsBlock errors={rootErrors} />
-      {rows.length > 0 ? (
-        <PagesTable pages={rows} crawlId={crawlId} sort={sort} onSortChange={onSortChange} />
-      ) : null}
-    </div>
-  );
+    return {
+      kind: 'error',
+      error: query.error,
+      fallback: 'Could not load pages for this view.',
+      onRetry: () => void query.refetch(),
+      pending: query.isFetching,
+    };
+  if (query.isLoading) return { kind: 'loading' };
+  if (rows.length === 0)
+    return {
+      kind: 'empty',
+      icon: FileText,
+      heading: active ? 'Pages appear here as the audit reaches them.' : 'No pages in this view.',
+      headingLevel: 3,
+    };
+  return undefined;
 }
 
 function ScoredInventory({
@@ -344,58 +309,46 @@ function ScoredInventoryState({
   // semantics (a root failure never created a page row).
   const rootErrors = tab === 'errors' ? (data?.root_errors ?? []) : [];
 
-  const body = (
-    <ScoredInventoryBody
-      query={pagesQuery}
-      rows={rows}
-      rootErrors={rootErrors}
-      active={active}
-      crawlId={crawl.id}
-      sort={sort}
-      onSortChange={selectSort}
-    />
-  );
-
   return (
-    <div className="grid gap-3">
-      <div className="flex min-h-10 flex-wrap items-end gap-2">
-        <Tabs
-          value={tab}
-          onValueChange={setTab}
-          onIntent={(value) => {
-            const item = TABS.find((candidate) => candidate.key === value);
-            if (item) prefetchTab(item);
-          }}
-          items={TABS.map((item) => ({
-            value: item.key,
-            label:
-              active && tab === 'monitored' && item.key === 'monitored'
-                ? 'Audited so far'
-                : item.label,
-          }))}
-          ariaLabel="Page inventory views"
-          rootClassName="min-w-0 flex-1"
-        />
-        <div className="ml-auto flex items-center gap-2">
-          <PageKindSelect value={pageKind} onChange={selectPageKind} />
-        </div>
-      </div>
-
-      {body}
-
-      <Pager
-        frame="table"
-        range={{ ...pageRange(pager.page, pager.pageSize, rows.length), noun: 'pages' }}
-        // Deliberately no exact total: these tabs are FILTERED views (status,
-        // page kind), and no persisted count describes a filtered set. An
-        // unbounded live COUNT(*) per navigation is the thing this footer
-        // exists to avoid, so the range stands alone rather than carrying an
-        // invented or expensive total.
-        pageSize={{ value: pager.pageSize, onChange: pager.setPageSize }}
-        {...cursorControls(pager, nextCursor)}
-        busy={pagesQuery.isFetching}
+    <Stack>
+      <Tabs
+        value={tab}
+        onValueChange={setTab}
+        onIntent={(value) => {
+          const item = TABS.find((candidate) => candidate.key === value);
+          if (item) prefetchTab(item);
+        }}
+        items={TABS.map((item) => ({
+          value: item.key,
+          label:
+            active && tab === 'monitored' && item.key === 'monitored'
+              ? 'Audited so far'
+              : item.label,
+        }))}
+        ariaLabel="Page inventory views"
       />
-    </div>
+      <RootErrorsBlock errors={rootErrors} />
+      <PagesTable
+        pages={rows}
+        crawlId={crawl.id}
+        sort={sort}
+        onSortChange={selectSort}
+        toolbar={{ filters: <PageKindSelect value={pageKind} onChange={selectPageKind} /> }}
+        state={scoredInventoryState({ query: pagesQuery, rows, active })}
+        pageSize={pager.pageSize}
+        pager={{
+          range: { ...pageRange(pager.page, pager.pageSize, rows.length), noun: 'pages' },
+          // Deliberately no exact total: these tabs are FILTERED views (status,
+          // page kind), and no persisted count describes a filtered set. An
+          // unbounded live COUNT(*) per navigation is the thing this footer
+          // exists to avoid, so the range stands alone rather than carrying an
+          // invented or expensive total.
+          pageSize: { value: pager.pageSize, onChange: pager.setPageSize },
+          ...cursorControls(pager, nextCursor),
+          busy: pagesQuery.isFetching,
+        }}
+      />
+    </Stack>
   );
 }
 

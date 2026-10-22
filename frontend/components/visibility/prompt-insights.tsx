@@ -4,7 +4,8 @@ import { useMutation, useQueryClient, type UseQueryResult } from '@tanstack/reac
 
 import { Alert } from '@/components/ui/alert';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Inline, Stack } from '@/components/ui/layout';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import type { ObservedCompetitor } from '@/lib/api/types';
@@ -46,13 +47,13 @@ export function CompetitorSuggestions({
   });
 
   return (
-    <div className="flex flex-col gap-3 pt-2">
-      <div className="grid gap-0.5">
+    <Stack>
+      <Stack gap="tight">
         <h3 className={textRole('sectionTitle')}>Competitor suggestions</h3>
         <p className="type-caption">
           Observed repeatedly in third-party citations. Verify relevance before adding.
         </p>
-      </div>
+      </Stack>
       {suggestionsQuery.isError ? (
         <ReadError
           error={suggestionsQuery.error}
@@ -64,17 +65,18 @@ export function CompetitorSuggestions({
       {suggestionsQuery.data?.length ? (
         <ul className={ledgerClasses('boxed')}>
           {suggestionsQuery.data.map((candidate) => (
-            <li
+            <Inline
+              as="li"
               key={candidate.id}
-              className="type-body flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+              className={ledgerItemClasses('type-body flex-wrap justify-between')}
             >
-              <div className="grid gap-0.5">
+              <Stack gap="tight">
                 <p className={textRole('itemTitle')}>{candidate.name}</p>
                 <p className="type-caption">
                   {candidate.domain} · {candidate.prompt_count} prompts / {candidate.engine_count}{' '}
                   engines
                 </p>
-              </div>
+              </Stack>
               <Button
                 variant="secondary"
                 onClick={() => acceptMutation.mutate(candidate.id)}
@@ -82,7 +84,7 @@ export function CompetitorSuggestions({
               >
                 Add competitor
               </Button>
-            </li>
+            </Inline>
           ))}
         </ul>
       ) : null}
@@ -92,6 +94,6 @@ export function CompetitorSuggestions({
       {acceptMutation.isError ? (
         <Alert tone="danger">Could not add that competitor. Try again.</Alert>
       ) : null}
-    </div>
+    </Stack>
   );
 }

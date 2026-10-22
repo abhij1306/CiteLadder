@@ -4,8 +4,8 @@ import type { ReactNode } from 'react';
 import { Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { CardHeader } from '@/components/ui/card';
-import { FilterBar } from '@/components/ui/filter-bar';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
+import { Icon } from '@/components/ui/icon';
 import { SearchField } from '@/components/ui/search-field';
 import { downloadCsv } from '@/lib/csv/download';
 import { standingLabel } from '@/lib/visibility/source-pages';
@@ -44,7 +44,7 @@ const URL_HEADERS = [
  * one on screen, and a reader who had narrowed to one type would have no way to
  * tell until they opened the file.
  */
-export function SourceTableToolbar({
+export function sourceTableToolbar({
   dimension,
   search,
   onSearch,
@@ -61,7 +61,7 @@ export function SourceTableToolbar({
   typeControl: ReactNode;
   /** Narrows the URL table to one publisher, above the URL column. */
   domainControl?: ReactNode;
-}>) {
+}>): FilterBarProps {
   const onExport = () => {
     const stamp = new Date().toISOString().slice(0, 10);
     const scope = domain ? `${domain}-` : '';
@@ -101,31 +101,27 @@ export function SourceTableToolbar({
     );
   };
 
-  return (
-    <CardHeader>
-      <FilterBar
-        search={
-          <SearchField
-            value={search}
-            onValueChange={onSearch}
-            onClear={() => onSearch('')}
-            placeholder="Search"
-            aria-label={dimension === 'url' ? 'Search URLs' : 'Search domains'}
-          />
-        }
-        filters={
-          <>
-            {domainControl}
-            {typeControl}
-          </>
-        }
-        actions={
-          <Button variant="secondary" onClick={onExport} disabled={rows.length === 0}>
-            <Download className="size-3.5" aria-hidden />
-            Export
-          </Button>
-        }
+  return {
+    search: (
+      <SearchField
+        value={search}
+        onValueChange={onSearch}
+        onClear={() => onSearch('')}
+        placeholder="Search"
+        aria-label={dimension === 'url' ? 'Search URLs' : 'Search domains'}
       />
-    </CardHeader>
-  );
+    ),
+    filters: (
+      <>
+        {domainControl}
+        {typeControl}
+      </>
+    ),
+    actions: (
+      <Button variant="secondary" onClick={onExport} disabled={rows.length === 0}>
+        <Icon icon={Download} />
+        Export
+      </Button>
+    ),
+  };
 }

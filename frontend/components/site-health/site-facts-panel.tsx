@@ -1,20 +1,14 @@
 'use client';
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Disclosure } from '@/components/ui/disclosure';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
@@ -87,35 +81,42 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
           {llmsStatus}
         </p>
       </CardHeader>
-      <CardContent className="grid min-w-0 gap-3">
-        {unknown ? (
-          <Alert tone="warning">
-            robots.txt could not be read. Root access and robots policy are unknown.
-          </Alert>
-        ) : null}
-        {view.robots.status === 'not_found' ? (
-          <Alert tone="info">
-            No robots.txt was found. No robots rules restrict these known URLs.
-          </Alert>
-        ) : null}
-        <Disclosure title={crawlerSummary(view)}>
-          <Select
-            className="w-48 max-w-full"
-            ariaLabel="Filter crawlers by purpose"
-            value={purpose}
-            onValueChange={setPurpose}
-            options={[
-              { value: 'all', label: 'All purposes' },
-              ...purposes.map((value) => ({ value, label: crawlerPurposeLabels[value] })),
-            ]}
-          />
-          <CrawlerTable view={view} purposes={purposes} purpose={purpose} />
-        </Disclosure>
-        <Disclosure title="robots.txt history" onOpenChange={setHistoryOpen}>
-          {historyOpen ? (
-            <RobotsHistory workspaceId={crawl.workspace_id} projectId={crawl.project_id} />
+      <CardContent>
+        <Stack className="min-w-0">
+          {unknown ? (
+            <Alert tone="warning">
+              robots.txt could not be read. Root access and robots policy are unknown.
+            </Alert>
           ) : null}
-        </Disclosure>
+          {view.robots.status === 'not_found' ? (
+            <Alert tone="info">
+              No robots.txt was found. No robots rules restrict these known URLs.
+            </Alert>
+          ) : null}
+          <Disclosure title={crawlerSummary(view)}>
+            <CrawlerTable
+              view={view}
+              purposes={purposes}
+              purpose={purpose}
+              filter={
+                <Select
+                  ariaLabel="Filter crawlers by purpose"
+                  value={purpose}
+                  onValueChange={setPurpose}
+                  options={[
+                    { value: 'all', label: 'All purposes' },
+                    ...purposes.map((value) => ({ value, label: crawlerPurposeLabels[value] })),
+                  ]}
+                />
+              }
+            />
+          </Disclosure>
+          <Disclosure title="robots.txt history" onOpenChange={setHistoryOpen}>
+            {historyOpen ? (
+              <RobotsHistory workspaceId={crawl.workspace_id} projectId={crawl.project_id} />
+            ) : null}
+          </Disclosure>
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -139,36 +140,38 @@ function crawlerSummary(view: SiteFactsView): string {
 
 type CrawlerBot = SiteFactsView['robots']['bots'][number];
 
+const CRAWLER_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'bot', label: 'Bot' },
+  { key: 'operator', label: 'Operator', width: 'status' },
+  { key: 'matched', label: 'Matched group', width: 'status' },
+  { key: 'root', label: 'Root access', width: 'status' },
+  { key: 'policy', label: 'Robots policy', width: 'name' },
+];
+
 function CrawlerTable({
   view,
   purposes,
   purpose,
-}: Readonly<{ view: SiteFactsView; purposes: CrawlerBot['purpose'][]; purpose: string }>) {
+  filter,
+}: Readonly<{
+  view: SiteFactsView;
+  purposes: CrawlerBot['purpose'][];
+  purpose: string;
+  filter: ReactNode;
+}>) {
   return (
-    <Table minWidth="md" className="table-fixed">
-      <caption className="sr-only">Crawler robots policy by purpose</caption>
-      <colgroup>
-        <col className="w-1/5" />
-        <col className="w-[16%]" />
-        <col className="w-[18%]" />
-        <col className="w-[14%]" />
-        <col className="w-[32%]" />
-      </colgroup>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Bot</TableHead>
-          <TableHead>Operator</TableHead>
-          <TableHead>Matched group</TableHead>
-          <TableHead>Root access</TableHead>
-          <TableHead>Robots policy</TableHead>
-        </TableRow>
-      </TableHeader>
+    <DataTable
+      label="Crawler robots policy by purpose"
+      columns={CRAWLER_COLUMNS}
+      minWidth="md"
+      toolbar={{ filters: filter }}
+    >
       {purposes
         .filter((value) => purpose === 'all' || value === purpose)
         .map((group) => (
-          <TableBody key={group}>
+          <Fragment key={group}>
             <TableRow>
-              <TableHead scope="rowgroup" colSpan={5} className="bg-panel-tonal static">
+              <TableHead scope="colgroup" colSpan={5} className="bg-panel-tonal static">
                 {crawlerPurposeLabels[group]}
               </TableHead>
             </TableRow>
@@ -183,16 +186,16 @@ function CrawlerTable({
                     <Badge>{crawlerRootAccessLabels[bot.root_access]}</Badge>
                   </TableCell>
                   <TableCell>
-                    <span className="flex min-w-0 items-center gap-2 whitespace-nowrap">
+                    <Inline className="whitespace-nowrap">
                       <Badge>{crawlerPolicyLabels[bot.policy]}</Badge>
                       <PolicySample bot={bot} />
-                    </span>
+                    </Inline>
                   </TableCell>
                 </TableRow>
               ))}
-          </TableBody>
+          </Fragment>
         ))}
-    </Table>
+    </DataTable>
   );
 }
 

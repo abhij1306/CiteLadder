@@ -41,6 +41,25 @@ const chartHeightClasses = {
 
 export type ChartHeight = keyof typeof chartHeightClasses;
 
+const chartFrameClasses = {
+  sm: 'min-h-[var(--chart-height-sm)]',
+  md: 'min-h-[var(--chart-height-md)]',
+  lg: 'min-h-[var(--chart-height-lg)]',
+} as const;
+
+/**
+ * The box a chart and every state standing in for it share: the chart's
+ * height role as a floor, so loading, a read error or an empty selection
+ * occupy the plot's footprint and nothing under the card moves. A state
+ * inside is centred; the plot fills it.
+ */
+export function ChartFrame({
+  height,
+  children,
+}: Readonly<{ height: ChartHeight; children: ReactNode }>) {
+  return <div className={cn('grid min-w-0 *:min-w-0', chartFrameClasses[height])}>{children}</div>;
+}
+
 /** `--color-<key>` for every series, so Recharts props can name the token. */
 function seriesVariables(config: ChartConfig): Record<string, string> {
   return Object.fromEntries(

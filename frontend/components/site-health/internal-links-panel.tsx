@@ -10,6 +10,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Inline, Stack } from '@/components/ui/layout';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { QueryState } from '@/components/ui/query-state';
@@ -122,7 +123,7 @@ export function InternalLinksPanel(scope: Scope) {
   );
   const selected = analysis?.recommendations.find((link) => link.id === params.get('link'));
   return (
-    <div className="grid min-w-0 gap-4">
+    <Stack gap="workspace" className="min-w-0">
       <LinksHeader read={read} links={links} update={update} />
       <Notices read={read} />
       {analysis ? (
@@ -146,7 +147,7 @@ export function InternalLinksPanel(scope: Scope) {
           onClose={() => update('link', '')}
         />
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -176,7 +177,7 @@ function LinksHeader({
   const analysis = data?.analysis;
   if (!data || !analysis) return null;
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+    <Inline gap="meta">
       <output className="type-caption min-w-0 flex-1">
         {analysisSummary(analysis)} · <DisplayTime value={analysis.created_at} />
       </output>
@@ -197,7 +198,7 @@ function LinksHeader({
         </Button>
       ) : null}
       <RunControls read={read} running={isRunning(analysis.state)} />
-    </div>
+    </Inline>
   );
 }
 

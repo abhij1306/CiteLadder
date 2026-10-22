@@ -5,6 +5,7 @@ import type { z } from 'zod';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Inline, Stack } from '@/components/ui/layout';
 import { OnPageEntities } from '@/components/ui/on-page-entities';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BrandOnPage } from '@/components/visibility/brand-on-page';
@@ -33,7 +34,7 @@ export function SourceUrlPageCard({
   page,
   loading,
 }: Readonly<{ url: string; page: Page | undefined; loading: boolean }>) {
-  if (loading) return <Skeleton className="h-32 w-full" />;
+  if (loading) return <Skeleton shape="block" />;
   if (page === undefined) return null;
   const standing = page?.standing ?? 'untracked';
   const brand = brandVerdict(page?.entities);
@@ -43,16 +44,18 @@ export function SourceUrlPageCard({
         <CardTitle>On this page</CardTitle>
         <CardDescription>{standingSentence(standing)}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4">
-        {standing === 'gap' ? <GetListed url={url} actionId={page?.action_id ?? null} /> : null}
-        <OnPageEntities
-          heading={standing === 'gap' ? 'Listed here' : 'Competitors on this page'}
-          entities={onPageCompetitors(page?.entities)}
-        />
-        {brand && page?.read_at ? (
-          <BrandOnPage heading="You" brand={brand} extractedChars={page.extracted_chars ?? 0} />
-        ) : null}
-        {page ? <PageFacts page={page} /> : null}
+      <CardContent>
+        <Stack gap="workspace">
+          {standing === 'gap' ? <GetListed url={url} actionId={page?.action_id ?? null} /> : null}
+          <OnPageEntities
+            heading={standing === 'gap' ? 'Listed here' : 'Competitors on this page'}
+            entities={onPageCompetitors(page?.entities)}
+          />
+          {brand && page?.read_at ? (
+            <BrandOnPage heading="You" brand={brand} extractedChars={page.extracted_chars ?? 0} />
+          ) : null}
+          {page ? <PageFacts page={page} /> : null}
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -65,7 +68,7 @@ export function SourceUrlPageCard({
  */
 function GetListed({ url, actionId }: Readonly<{ url: string; actionId: string | null }>) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       {actionId ? (
         <>
           <Button asChild>
@@ -88,7 +91,7 @@ function GetListed({ url, actionId }: Readonly<{ url: string; actionId: string |
           </ProjectLink>
         </Button>
       )}
-    </div>
+    </Inline>
   );
 }
 
@@ -113,12 +116,12 @@ function PageFacts({ page }: Readonly<{ page: NonNullable<Page> }>) {
     pageTypeFact(type, page, basis),
   ].filter(Boolean);
   return (
-    <div className="grid gap-1">
+    <Stack gap="tight">
       {facts.map((fact) => (
         <p key={fact} className="type-caption">
           {fact}
         </p>
       ))}
-    </div>
+    </Stack>
   );
 }

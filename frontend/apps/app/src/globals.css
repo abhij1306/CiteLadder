@@ -532,10 +532,7 @@ body {
     font-weight: 500;
     letter-spacing: 0;
   }
-  /* `.type-label-before` sets the role on a generated `::before` label (the
-     labelled record cells a table becomes on a phone). */
-  .type-label,
-  .type-label-before::before {
+  .type-label {
     font-family: var(--font-sans);
     font-size: 0.875rem;
     line-height: 1.25rem;

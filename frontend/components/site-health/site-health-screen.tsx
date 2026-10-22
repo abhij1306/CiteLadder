@@ -10,7 +10,7 @@ import { MutationNotice } from '@/components/ui/mutation-notice';
 import { TabsRoot } from '@/components/ui/tabs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ListScreen } from '@/components/layout/page-shell';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { SiteHealthDashboardLayout } from '@/components/site-health/dashboard-layout';
 import { AeoReadinessPanel } from '@/components/site-health/aeo-readiness-panel';
 import { ArchitecturePanel } from '@/components/site-health/architecture-panel';
@@ -326,7 +326,7 @@ function CrawlActions({
   onRecrawl: () => void;
 }>) {
   return (
-    <div className="flex items-center gap-2">
+    <Inline>
       <Button variant="secondary" onClick={onExport} disabled={exporting}>
         {exporting ? 'Exporting…' : 'Export'}
       </Button>
@@ -345,6 +345,6 @@ function CrawlActions({
           {startPending ? 'Starting…' : 'Run new crawl'}
         </Button>
       )}
-    </div>
+    </Inline>
   );
 }

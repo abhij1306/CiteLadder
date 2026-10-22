@@ -3,6 +3,7 @@
 import type { ExecutionPerception } from '@citeladder/contracts/visibility-perception';
 
 import { Badge } from '@/components/ui/badge';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Label, textRole } from '@/components/ui/typography';
 import type { Highlight } from '@/lib/markdown/highlight';
@@ -52,18 +53,23 @@ export function EvidencePerception({
 }: Readonly<{ perception: readonly ExecutionPerception[] }>) {
   if (!perception.length) return null;
   return (
-    <section className="grid gap-2">
+    <Stack as="section" gap="item">
       <Label>Perception</Label>
-      <ul className="grid gap-2">
+      <Stack as="ul" gap="item">
         {perception.map((entity) => (
-          <li key={entity.entity} className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-1')}>
-            <span className="flex flex-wrap items-center gap-2">
+          <Stack
+            as="li"
+            gap="tight"
+            key={entity.entity}
+            className={panelClasses({ tone: 'well' }, 'min-w-0')}
+          >
+            <Inline as="span" className="flex-wrap">
               <span className={textRole('emphasis')}>{entity.entity}</span>
               {entity.is_brand ? (
                 <span className={textRole('caption', 'text-muted')}>You</span>
               ) : null}
               <PerceptionChip entity={entity} />
-            </span>
+            </Inline>
             {entity.state === 'classified'
               ? entity.aspects.map((aspect) => (
                   <span
@@ -74,9 +80,9 @@ export function EvidencePerception({
                   </span>
                 ))
               : null}
-          </li>
+          </Stack>
         ))}
-      </ul>
-    </section>
+      </Stack>
+    </Stack>
   );
 }

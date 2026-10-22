@@ -7,6 +7,7 @@ import { CoverageByKind } from './coverage-by-kind';
 import { OverviewDetails } from './overview-details';
 import { OverviewMetricCards } from './overview-metrics';
 import { Alert } from '@/components/ui/alert';
+import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { httpErrorStatus } from '@/lib/api/client';
 import { siteHealthQueries } from '@/lib/api/site-health';
@@ -61,7 +62,7 @@ export function OverviewPanel({
   }
 
   return (
-    <div className="grid min-w-0 gap-4" data-testid="site-health-overview">
+    <Stack gap="workspace" className="min-w-0" data-testid="site-health-overview">
       {data ? (
         <Alert tone={searchEligibilityTone(data.search_eligibility)}>
           Audit finished: {data.audited_page_count} of {data.selected_page_count} selected pages
@@ -71,7 +72,7 @@ export function OverviewPanel({
       <OverviewMetricCards overview={data} dashboard={dashboard} crawl={crawl} />
       {data ? <CoverageByKind coverage={data.crawl_coverage} /> : null}
       {overviewBody}
-    </div>
+    </Stack>
   );
 }
 

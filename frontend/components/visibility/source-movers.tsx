@@ -1,18 +1,14 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { TrendingUp } from 'lucide-react';
 import type { z } from 'zod';
 
-import { BusyBar } from '@/components/ui/busy-bar';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ClampText } from '@/components/ui/table';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Delta } from '@/components/ui/delta';
-import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
-import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
-import { textRole } from '@/components/ui/typography';
-import { splitPaneClasses } from '@/components/ui/workspace';
+import { EditorialSectionHeader, splitPaneClasses } from '@/components/ui/workspace';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import { queryKeys } from '@/lib/api/query-keys';
 import { visibilityApi } from '@/lib/api/visibility';
@@ -55,101 +51,103 @@ export function useSourceMovers(
   });
 }
 
+const NO_BASELINE = 'No comparable earlier period to compare this one with yet.';
+const IDENTITY_UNAVAILABLE = 'The earlier period cannot be matched to this one.';
+
 const STATUS_COPY: Record<string, string> = {
-  no_baseline: 'No comparable earlier period to compare this one with yet.',
+  no_baseline: NO_BASELINE,
   no_observations: 'The earlier period has no answers to compare with.',
   partial_coverage: 'One of the periods did not finish every answer, so shares would mislead.',
   changed_context: 'The earlier period was measured differently, so it is not comparable.',
   invalid_baseline: 'The earlier period does not finish before this one starts.',
-  identity_unavailable: 'The earlier period cannot be matched to this one.',
+  identity_unavailable: IDENTITY_UNAVAILABLE,
 };
 
-const ROW = 'flex h-[var(--table-row-height)] items-center justify-between gap-3';
+const MOVER_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'source', label: 'Source' },
+  { key: 'share', label: 'Share', width: 'status', numeric: true },
+  { key: 'change', label: 'Change', width: 'figure', numeric: true },
+];
 
-function MoverList({
+/**
+ * What both lists show instead of rows: no comparable period, a failed read,
+ * the first load, or a comparison the server could not make. Undefined once
+ * there are movers to list.
+ */
+function moversState(
+  query: ReturnType<typeof useSourceMovers>,
+  comparable: boolean,
+): DataTableState | undefined {
+  const empty = (heading: string): DataTableState => ({
+    kind: 'empty',
+    headingLevel: 3,
+    icon: TrendingUp,
+    heading,
+  });
+  if (!comparable) return empty(NO_BASELINE);
+  if (query.isError) {
+    return {
+      kind: 'error',
+      error: query.error,
+      fallback: 'Could not load top movers.',
+      onRetry: () => void query.refetch(),
+      pending: query.isFetching,
+    };
+  }
+  const data = query.data;
+  if (!data) return { kind: 'loading', label: 'Loading top movers…' };
+  if (data.comparison_status !== 'comparable') {
+    return empty(STATUS_COPY[data.comparison_status] ?? IDENTITY_UNAVAILABLE);
+  }
+  return undefined;
+}
+
+function MoverTable({
   title,
   movers,
   dimension,
-}: Readonly<{ title: string; movers: Mover[]; dimension: 'domain' | 'url' }>) {
-  const padding = Math.max(0, MOVER_ROWS - Math.max(1, movers.length));
-  return (
-    <Stack as="section" gap="tight" aria-label={title} className="min-w-0">
-      <h3 className={textRole('label', 'text-secondary')}>{title}</h3>
-      <div>
-        {movers.length ? (
-          movers.map((mover) => (
-            <div key={mover.key} className={ROW}>
-              <ClampText lines={1} className="min-w-0">
-                {dimension === 'url' ? pathOf(mover.key) : mover.key}
-              </ClampText>
-              <span className="flex shrink-0 items-center gap-3">
-                <span className={textRole('caption', 'text-secondary tabular-nums')}>
-                  {`${percent(mover.previous_share, 1)} → ${percent(mover.current_share, 1)}`}
-                </span>
-                <Delta value={mover.delta} policy="neutral" unit=" pp" />
-              </span>
-            </div>
-          ))
-        ) : (
-          <div className={ROW}>
-            <QueryState kind="empty" inline message="No source moved this way." />
-          </div>
-        )}
-        {Array.from({ length: padding }, (_, index) => (
-          <div key={`pad-${index}`} className={ROW} aria-hidden />
-        ))}
-      </div>
-    </Stack>
-  );
-}
-
-function MoversBody({
-  query,
-  dimension,
-  comparable,
+  state,
+  busy,
 }: Readonly<{
-  query: ReturnType<typeof useSourceMovers>;
+  title: string;
+  movers: Mover[];
   dimension: 'domain' | 'url';
-  comparable: boolean;
+  state: DataTableState | undefined;
+  busy: boolean;
 }>) {
-  const box = 'min-h-[calc(var(--table-row-height)*6)]';
-  if (!comparable) {
-    return (
-      <div className={box}>
-        <QueryState kind="empty" inline message={STATUS_COPY.no_baseline} />
-      </div>
-    );
-  }
-  if (query.isError) {
-    return (
-      <div className={box}>
-        <ReadError
-          error={query.error}
-          fallback="Could not load top movers."
-          onRetry={() => void query.refetch()}
-          pending={query.isFetching}
-        />
-      </div>
-    );
-  }
-  const data = query.data;
-  if (!data) return <Skeleton className={box} />;
-  if (data.comparison_status !== 'comparable') {
-    return (
-      <div className={box}>
-        <QueryState
-          kind="empty"
-          inline
-          message={STATUS_COPY[data.comparison_status] ?? STATUS_COPY.identity_unavailable}
-        />
-      </div>
-    );
-  }
   return (
-    <div className={splitPaneClasses('peers')}>
-      <MoverList title="Rising" movers={data.risers} dimension={dimension} />
-      <MoverList title="Falling" movers={data.fallers} dimension={dimension} />
-    </div>
+    <DataTable
+      title={title}
+      columns={MOVER_COLUMNS}
+      pageSize={MOVER_ROWS}
+      rowCount={movers.length}
+      busy={{ active: busy, label: 'Updating top movers' }}
+      state={
+        state ??
+        (movers.length
+          ? undefined
+          : {
+              kind: 'empty',
+              headingLevel: 3,
+              icon: TrendingUp,
+              heading: 'No source moved this way.',
+            })
+      }
+    >
+      {movers.map((mover) => (
+        <TableRow key={mover.key}>
+          <TableCell>
+            <ClampText lines={1}>{dimension === 'url' ? pathOf(mover.key) : mover.key}</ClampText>
+          </TableCell>
+          <TableCell numeric className="text-secondary">
+            {`${percent(mover.previous_share, 1)} → ${percent(mover.current_share, 1)}`}
+          </TableCell>
+          <TableCell numeric>
+            <Delta value={mover.delta} policy="neutral" unit=" pp" />
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 
@@ -164,18 +162,18 @@ export function TopMoversCard({
   /** Whether the dashboard found a comparable earlier period at all. */
   comparable: boolean;
 }>) {
+  const state = moversState(query, comparable);
+  const shared = { dimension, state, busy: query.isFetching };
   return (
-    <Card className="relative">
-      <BusyBar active={query.isFetching} label="Updating top movers" />
-      <CardHeader>
-        <CardTitle>Top movers</CardTitle>
-        <CardDescription>
-          {`The ${dimension === 'url' ? 'pages' : 'domains'} whose share of citations changed most against the previous comparable period, in percentage points.`}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <MoversBody query={query} dimension={dimension} comparable={comparable} />
-      </CardContent>
-    </Card>
+    <Stack as="section" aria-label="Top movers">
+      <EditorialSectionHeader
+        title="Top movers"
+        description={`The ${dimension === 'url' ? 'pages' : 'domains'} whose share of citations changed most against the previous comparable period, in percentage points.`}
+      />
+      <div className={splitPaneClasses('peers')}>
+        <MoverTable title="Rising" movers={query.data?.risers ?? []} {...shared} />
+        <MoverTable title="Falling" movers={query.data?.fallers ?? []} {...shared} />
+      </div>
+    </Stack>
   );
 }

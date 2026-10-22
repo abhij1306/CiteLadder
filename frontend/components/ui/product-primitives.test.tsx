@@ -126,6 +126,34 @@ describe('DataTable', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'No failed runs.' })).toBeVisible();
     expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
+
+  it('puts an unsortable column caveat behind its header and a note under the table', async () => {
+    render(
+      <TooltipProvider delayDuration={0}>
+        <DataTable
+          label="Sources"
+          columns={[
+            { key: 'name', label: 'Name' },
+            { key: 'type', label: 'Type', hint: 'How the publisher is classified.' },
+          ]}
+          footer="Showing the newest 50."
+        >
+          <TableRow>
+            <TableCell>Alpha</TableCell>
+            <TableCell>Editorial</TableCell>
+          </TableRow>
+        </DataTable>
+      </TooltipProvider>,
+    );
+    const head = screen.getByRole('columnheader', { name: 'Type' });
+    fireEvent.focus(within(head).getByRole('button', { name: 'Type' }));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'How the publisher is classified.',
+    );
+    expect(
+      within(screen.getByRole('region', { name: 'Sources' })).getByText('Showing the newest 50.'),
+    ).toBeVisible();
+  });
 });
 
 describe('Meter', () => {

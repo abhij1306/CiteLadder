@@ -352,7 +352,9 @@ describe('IssuesCatalog', () => {
     );
     const user = userEvent.setup();
     renderIssues(<IssuesCatalog crawlId={CRAWL} />);
-    const trigger = await screen.findByRole('button', { name: 'Filter by page kind' });
+    const trigger = await screen.findByRole('button', {
+      name: 'Filter by page kind: All page kinds',
+    });
 
     await user.click(trigger);
     await user.click(await screen.findByRole('menuitemradio', { name: 'Article' }));
@@ -465,7 +467,7 @@ describe('IssuesCatalog', () => {
 
     const user = userEvent.setup();
     renderIssues(<IssuesCatalog crawlId={CRAWL} />);
-    const trigger = await screen.findByRole('button', { name: 'Filter by page kind' });
+    const trigger = await screen.findByRole('button', { name: /^Filter by page kind:/ });
     // The initial unfiltered request carries no page-kind param.
     await screen.findAllByText('WebSite schema is missing');
     expect(seen.at(-1)).toBeNull();

@@ -1,8 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { expect, it, vi } from 'vite-plus/test';
 import { setUrlParams } from '@/lib/navigation/url-state';
+import { Pager } from '@/components/ui/pager';
 import type { SourcesData } from '@/lib/visibility/sources';
-import { SourcePaging } from './source-panels';
+import { sourcePager } from './source-panels';
+
+function SourcePaging(props: Parameters<typeof sourcePager>[0]) {
+  return <Pager {...sourcePager(props)} />;
+}
 
 vi.mock('@/lib/navigation/url-state', () => ({ setUrlParams: vi.fn() }));
 

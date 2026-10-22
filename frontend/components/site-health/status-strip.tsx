@@ -3,6 +3,8 @@
 import type { ReactNode } from 'react';
 
 import { Alert } from '@/components/ui/alert';
+import { Dot } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
@@ -174,10 +176,10 @@ function DashboardNotice({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
 
 function RunNotice({ crawl, message }: Readonly<{ crawl: SiteCrawl; message: string }>) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       <CrawlStatusBadge crawl={crawl} />
       <span>{message}</span>
-    </div>
+    </Inline>
   );
 }
 
@@ -201,30 +203,24 @@ function ProgressRow({
   children?: ReactNode;
 }>) {
   return (
-    <div className="grid gap-3">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-        <div className="flex min-w-0 items-center gap-3">
+    <Stack>
+      <Inline gap="meta" className="justify-between">
+        <Inline gap="compact">
           <CrawlStatusBadge crawl={crawl} />
-          <span className="type-body flex min-w-0 items-center gap-2">
-            {active ? (
-              <span
-                aria-hidden
-                data-testid="activity-pulse"
-                className="activity-dot bg-info size-1.5 shrink-0"
-              />
-            ) : null}
+          <Inline as="span" className="type-body">
+            {active ? <Dot data-testid="activity-pulse" className="activity-dot bg-info" /> : null}
             {/* The live region is the TEXT, not the row: announcing the whole
                   row would re-read every counter on each poll. */}
             <span className="truncate" aria-live="polite">
               {narration}
             </span>
-          </span>
-        </div>
-        <dl className="ml-auto flex flex-wrap items-center gap-x-6 gap-y-1">
+          </Inline>
+        </Inline>
+        <Inline as="dl" gap="meta">
           {counts.map((count) => (
-            <div key={count.label} className="type-body flex items-center gap-2">
+            <Inline key={count.label} className="type-body">
               <dt className="type-label">{count.label}</dt>
-              <dd className="m-0">
+              <dd>
                 {count.value === null ? (
                   <UnavailableValue state="not_measured" />
                 ) : (
@@ -233,12 +229,12 @@ function ProgressRow({
                   </span>
                 )}
               </dd>
-            </div>
+            </Inline>
           ))}
-        </dl>
-      </div>
+        </Inline>
+      </Inline>
       {children}
-    </div>
+    </Stack>
   );
 }
 

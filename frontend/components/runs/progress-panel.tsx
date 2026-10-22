@@ -8,6 +8,8 @@ import { ENGINE_LABELS } from '@/lib/providers/catalog';
 import { marketLabel } from '@citeladder/contracts/markets';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Dot } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Meter } from '@/components/ui/meter';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { StatRow } from '@/components/ui/stat-row';
@@ -112,7 +114,7 @@ export function RunActions({
 
 function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: boolean }>) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
         {auditStatusLabel(audit.status)}
       </Badge>
@@ -125,15 +127,12 @@ function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: bo
         </Badge>
       ) : null}
       {polling ? (
-        <span
-          className="type-caption inline-flex items-center gap-2 tabular-nums"
-          aria-live="polite"
-        >
-          <span className="activity-dot bg-info inline-block size-1.5" aria-hidden />
+        <Inline as="span" className="type-caption inline-flex tabular-nums" aria-live="polite">
+          <Dot className="activity-dot bg-info" />
           {'Updating…'}
-        </span>
+        </Inline>
       ) : null}
-    </div>
+    </Inline>
   );
 }
 
@@ -147,13 +146,13 @@ function ProgressBar({
   const percent = requested > 0 ? Math.min(100, Math.round((completed / requested) * 100)) : 0;
 
   return (
-    <div className="grid gap-1">
+    <Stack gap="tight">
       <div className="type-caption flex justify-between">
         <span>Progress</span>
         <span>{percent}%</span>
       </div>
       <Meter kind="progress" tone="info" label="Progress" value={percent} />
-    </div>
+    </Stack>
   );
 }
 
@@ -234,22 +233,24 @@ export function ProgressPanel({
 
   return (
     <Card>
-      <CardContent className="grid gap-4">
-        <ProgressStatus audit={audit} polling={polling} />
+      <CardContent>
+        <Stack gap="workspace">
+          <ProgressStatus audit={audit} polling={polling} />
 
-        {polling && audit.requested_count > 0 ? (
-          <ProgressBar requested={audit.requested_count} completed={audit.completed_count} />
-        ) : null}
+          {polling && audit.requested_count > 0 ? (
+            <ProgressBar requested={audit.requested_count} completed={audit.completed_count} />
+          ) : null}
 
-        <ProgressMetrics audit={audit} />
+          <ProgressMetrics audit={audit} />
 
-        <ProgressNotices
-          errorMessage={exportError ?? audit.error_message}
-          cancelNotice={cancelNotice}
-          onCancelRetry={onCancelRetry}
-          rerunNotice={rerunNotice}
-          onRerunRetry={onRerunRetry}
-        />
+          <ProgressNotices
+            errorMessage={exportError ?? audit.error_message}
+            cancelNotice={cancelNotice}
+            onCancelRetry={onCancelRetry}
+            rerunNotice={rerunNotice}
+            onRerunRetry={onRerunRetry}
+          />
+        </Stack>
       </CardContent>
     </Card>
   );

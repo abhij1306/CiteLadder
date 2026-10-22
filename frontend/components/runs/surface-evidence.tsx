@@ -3,22 +3,22 @@
 import { Check, Link2, Minus, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { DisplayTime } from '@/components/ui/display-time';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
 import { StatRow } from '@/components/ui/stat-row';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow, TableRowHeader } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
-import { Label, textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { textRole } from '@/components/ui/typography';
+import {
+  ledgerClasses,
+  ledgerItemClasses,
+  MetaFooter,
+  SubsectionHeader,
+} from '@/components/ui/workspace';
 import type { SearchSurfaceEvidence, SurfaceEntity } from '@/lib/api/types';
 import { cn } from '@/lib/utils';
 
@@ -50,19 +50,16 @@ function presenceLabel(evidence: SearchSurfaceEvidence): string {
 
 /** One yes/no cell. Never colour alone: the icon carries a text label too. */
 function SignalCell({ present, label }: Readonly<{ present: boolean; label: string }>) {
-  const Icon = present ? Check : Minus;
   return (
     <TableCell>
-      <span
-        className={cn(
-          'type-body inline-flex items-center gap-2',
-          present ? 'text-success-text' : 'text-muted',
-        )}
+      <Inline
+        as="span"
+        className={cn('type-body inline-flex', present ? 'text-success-text' : 'text-muted')}
       >
-        <Icon className="size-3.5 shrink-0" aria-hidden />
+        <Icon icon={present ? Check : Minus} />
         <span className="sr-only">{label}: </span>
         {present ? 'Yes' : 'No'}
-      </span>
+      </Inline>
     </TableCell>
   );
 }
@@ -70,15 +67,12 @@ function SignalCell({ present, label }: Readonly<{ present: boolean; label: stri
 function EntityRow({ entity }: Readonly<{ entity: SurfaceEntity }>) {
   return (
     <TableRow>
-      <th
-        scope="row"
-        className="border-border-subtle border-b px-[var(--table-cell-padding-x)] py-[var(--table-cell-padding-y)] text-left align-middle [tr:last-child>&]:border-b-0"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          <ClampText className={textRole('itemTitle')}>{entity.name}</ClampText>
+      <TableRowHeader>
+        <Inline as="span">
+          <ClampText>{entity.name}</ClampText>
           {entity.kind === 'brand' ? <Badge variant="neutral">Your brand</Badge> : null}
-        </span>
-      </th>
+        </Inline>
+      </TableRowHeader>
       <SignalCell present={entity.mentioned} label="Named in the answer" />
       <SignalCell present={entity.linked} label="Linked from the answer" />
       <SignalCell present={entity.cited} label="Cited in the references" />
@@ -95,36 +89,35 @@ function EntityRow({ entity }: Readonly<{ entity: SurfaceEntity }>) {
   );
 }
 
+const PRESENCE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'brand', label: 'Brand' },
+  { key: 'named', label: 'Named', width: 'figure' },
+  { key: 'linked', label: 'Linked', width: 'figure' },
+  { key: 'cited', label: 'Cited', width: 'figure' },
+  { key: 'order', label: 'Mention order', width: 'status', numeric: true },
+];
+
 function PresenceTable({ entities }: Readonly<{ entities: readonly SurfaceEntity[] }>) {
-  if (entities.length === 0) {
-    return (
-      <QueryState
-        kind="empty"
-        headingLevel={3}
-        icon={Users}
-        heading="No tracked brands were configured for this run."
-      />
-    );
-  }
   return (
-    <Table minWidth="sm">
-      <TableHeader>
-        <tr>
-          <TableHead scope="col">Brand</TableHead>
-          <TableHead scope="col">Named</TableHead>
-          <TableHead scope="col">Linked</TableHead>
-          <TableHead scope="col">Cited</TableHead>
-          <TableHead scope="col" numeric>
-            Mention order
-          </TableHead>
-        </tr>
-      </TableHeader>
-      <TableBody>
-        {entities.map((entity) => (
-          <EntityRow key={`${entity.kind}-${entity.name}`} entity={entity} />
-        ))}
-      </TableBody>
-    </Table>
+    <DataTable
+      label="Who appeared, and how"
+      columns={PRESENCE_COLUMNS}
+      minWidth="sm"
+      state={
+        entities.length === 0
+          ? {
+              kind: 'empty',
+              headingLevel: 3,
+              icon: Users,
+              heading: 'No tracked brands were configured for this run.',
+            }
+          : undefined
+      }
+    >
+      {entities.map((entity) => (
+        <EntityRow key={`${entity.kind}-${entity.name}`} entity={entity} />
+      ))}
+    </DataTable>
   );
 }
 
@@ -139,19 +132,21 @@ function safeLinkUrl(value: string): string | null {
 
 function InlineLinks({ links }: Readonly<{ links: SearchSurfaceEvidence['links'] }>) {
   return (
-    <section className="grid gap-3">
-      <div className="grid gap-0.5">
-        <div className="flex items-center justify-between gap-2">
-          <Label>Inline links</Label>
+    <Stack as="section" gap="compact">
+      <SubsectionHeader
+        title="Inline links"
+        trailing={
           <span className="type-caption">
             {links.length} {links.length === 1 ? 'link' : 'links'}
           </span>
-        </div>
-        <p className="type-caption">
-          Links inside the overview&rsquo;s own text. Separate from its references, which are listed
-          as citations.
-        </p>
-      </div>
+        }
+        description={
+          <>
+            Links inside the overview&rsquo;s own text. Separate from its references, which are
+            listed as citations.
+          </>
+        }
+      />
       {links.length === 0 ? (
         <QueryState
           kind="empty"
@@ -168,7 +163,12 @@ function InlineLinks({ links }: Readonly<{ links: SearchSurfaceEvidence['links']
               // An overview can point at the same URL from two places in its
               // own text, so the URL alone is not unique among siblings. The
               // element it was drawn from is what separates them.
-              <li key={`${link.element_index}-${link.url}`} className="grid gap-0.5 p-4">
+              <Stack
+                as="li"
+                gap="tight"
+                key={`${link.element_index}-${link.url}`}
+                className={ledgerItemClasses()}
+              >
                 {href ? (
                   <TextLink variant="external" text="itemTitle" href={href} className="max-w-full">
                     <span className="truncate">{title}</span>
@@ -177,12 +177,12 @@ function InlineLinks({ links }: Readonly<{ links: SearchSurfaceEvidence['links']
                   <p className={textRole('itemTitle', 'truncate')}>{title}</p>
                 )}
                 <p className="type-caption truncate">{link.domain}</p>
-              </li>
+              </Stack>
             );
           })}
         </ul>
       )}
-    </section>
+    </Stack>
   );
 }
 
@@ -194,7 +194,7 @@ function InlineLinks({ links }: Readonly<{ links: SearchSurfaceEvidence['links']
  */
 function SurfaceFooter({ evidence }: Readonly<{ evidence: SearchSurfaceEvidence }>) {
   return (
-    <footer className="type-caption border-border-subtle flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3">
+    <MetaFooter>
       <span>
         Captured <DisplayTime value={evidence.observed_at} fallback="Not recorded" />
       </span>
@@ -204,18 +204,15 @@ function SurfaceFooter({ evidence }: Readonly<{ evidence: SearchSurfaceEvidence 
       <span>Location {evidence.location_code}</span>
       <span>{evidence.language_code}</span>
       <span>{evidence.device}</span>
-    </footer>
+    </MetaFooter>
   );
 }
 
 export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurfaceEvidence }>) {
   const shown = evidence.aio_present === true;
   return (
-    <section className="grid min-w-0 gap-[var(--workspace-gap)]">
-      <div className="grid gap-0.5">
-        <Label>AI Overview details</Label>
-        <p className="type-caption">{presenceCaption(evidence)}</p>
-      </div>
+    <Stack as="section" gap="workspace" className="min-w-0">
+      <SubsectionHeader title="AI Overview details" description={presenceCaption(evidence)} />
       <StatRow
         segments={[
           { key: 'overview', label: 'Overview', value: presenceLabel(evidence) },
@@ -234,16 +231,13 @@ export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurface
       />
       {shown ? (
         <>
-          <section className="grid gap-3">
-            <div className="grid gap-0.5">
-              <Label>Who appeared, and how</Label>
-              <p className="type-caption">
-                Three independent observations. A brand can be linked without being cited, and cited
-                without being named.
-              </p>
-            </div>
+          <Stack as="section" gap="compact">
+            <SubsectionHeader
+              title="Who appeared, and how"
+              description="Three independent observations. A brand can be linked without being cited, and cited without being named."
+            />
             <PresenceTable entities={evidence.entities} />
-          </section>
+          </Stack>
           <InlineLinks links={evidence.links} />
         </>
       ) : (
@@ -254,6 +248,6 @@ export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurface
         </div>
       )}
       <SurfaceFooter evidence={evidence} />
-    </section>
+    </Stack>
   );
 }

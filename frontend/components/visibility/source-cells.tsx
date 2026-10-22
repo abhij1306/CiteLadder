@@ -1,9 +1,8 @@
 'use client';
 
 import { BrandLogo } from '@/components/ui/brand-logo';
-import { QueryState } from '@/components/ui/query-state';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { Inline } from '@/components/ui/layout';
+import { ClampText, TableCell } from '@/components/ui/table';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { textRole } from '@/components/ui/typography';
 import { engineLabel } from '@/lib/providers/catalog';
@@ -16,7 +15,7 @@ export function SourceName({
   secondary,
 }: Readonly<{ name: string; host: string | null; secondary?: string | null }>) {
   return (
-    <span className="flex min-w-0 items-center gap-2">
+    <Inline as="span">
       <BrandLogo name={name} websiteUrl={host ? `https://${host}` : null} />
       <span className="grid min-w-0">
         <ClampText lines={secondary ? 1 : 2}>{name}</ClampText>
@@ -26,7 +25,7 @@ export function SourceName({
           </ClampText>
         ) : null}
       </span>
-    </span>
+    </Inline>
   );
 }
 
@@ -40,10 +39,10 @@ export function SourceName({
  */
 export function NumericCell({
   value,
-  className,
-}: Readonly<{ value: string | null; className?: string }>) {
+  desktopOnly,
+}: Readonly<{ value: string | null; desktopOnly?: boolean }>) {
   return (
-    <TableCell numeric className={className}>
+    <TableCell numeric desktopOnly={desktopOnly}>
       {value ?? <MissingValue />}
     </TableCell>
   );
@@ -53,12 +52,9 @@ export function NumericCell({
  * A Retrieved cell. Null means no answer in the selection exposed what it
  * read, which is "Unavailable", never a read of zero.
  */
-export function RetrievedCell({
-  value,
-  className,
-}: Readonly<{ value: string | null; className?: string }>) {
+export function RetrievedCell({ value }: Readonly<{ value: string | null }>) {
   return (
-    <TableCell numeric className={className}>
+    <TableCell numeric>
       {value ?? (
         <MissingValue
           state="unavailable"
@@ -74,54 +70,6 @@ export function retrievedHint(base: string, retrieval: SourcesData['retrieval'] 
   const unavailable = retrieval?.unavailable_engines ?? [];
   if (!unavailable.length) return base;
   return `${base} Not available for ${unavailable.map(engineLabel).join(', ')}, which do not expose the pages they read.`;
-}
-
-/**
- * What a table shows INSTEAD of rows, without giving up its own structure.
- *
- * The states used to replace the whole table: a 160px skeleton, or a single
- * sentence, where ten 44px rows had been. That is a ~320px collapse on every
- * filter change, and the reader watched the page jump under the control they
- * had just clicked. Filling the existing `<tbody>` keeps the header, the
- * column widths and the footer exactly where they were.
- */
-export type SourceTableState =
-  | { kind: 'rows' }
-  | { kind: 'loading'; rows: number }
-  | { kind: 'empty'; message: string };
-
-export function StateRows({
-  state,
-  columns,
-}: Readonly<{
-  state: Exclude<SourceTableState, { kind: 'rows' }>;
-  columns: readonly string[];
-}>) {
-  if (state.kind === 'loading') {
-    return (
-      <>
-        {Array.from({ length: state.rows }, (_, row) => (
-          <TableRow key={`loading-${row}`}>
-            {columns.map((columnClass, cell) => (
-              <TableCell
-                key={cell} // NOSONAR -- placeholder cells of a fixed column layout; the column position is the identity
-                className={columnClass || undefined}
-              >
-                <Skeleton className="h-4 w-full" />
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </>
-    );
-  }
-  return (
-    <TableRow>
-      <TableCell colSpan={columns.length}>
-        <QueryState kind="empty" inline message={state.message} />
-      </TableCell>
-    </TableRow>
-  );
 }
 
 /** One sortable column's header state, from the table's single sort. */

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Drawer } from '@/components/ui/drawer';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { TextLink } from '@/components/ui/text-link';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { MarkActionImplemented } from '@/components/agent/action-declaration';
@@ -87,7 +87,7 @@ export function InternalLinkReview({
                 : 'Verify the source text before using this historical suggestion.'}
             </p>
           </Stack>
-          <div className="flex flex-wrap gap-2">
+          <Inline className="flex-wrap">
             <CopyButton value={link.anchor}>Copy anchor</CopyButton>
             <CopyButton value={link.target.url}>Copy URL</CopyButton>
             <CopyButton
@@ -105,7 +105,7 @@ export function InternalLinkReview({
                 <ProjectLink href={`/agent/actions/${link.action_id}`}>Open Action</ProjectLink>
               </Button>
             ) : null}
-          </div>
+          </Inline>
           <p className="type-caption">
             Make the edit in your site editor. Copying does not mark it implemented.
           </p>

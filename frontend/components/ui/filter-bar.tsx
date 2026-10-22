@@ -71,6 +71,15 @@ export function FilterBar({ search, filters, status, actions }: FilterBarProps) 
 }
 
 /**
+ * FilterDivider — the hairline between two groups of filters in one band
+ * (what is measured | how it is narrowed). Desktop only: on a phone every
+ * filter takes its own row and the groups need no separator.
+ */
+export function FilterDivider() {
+  return <span className="bg-border desktop:block mx-1 hidden h-5 w-px" aria-hidden />;
+}
+
+/**
  * FilterTrigger — the button that opens a filter menu.
  *
  * The accessible name always contains the visible value, so a voice user can

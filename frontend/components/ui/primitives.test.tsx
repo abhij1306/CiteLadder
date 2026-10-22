@@ -10,15 +10,7 @@ import { Input } from './input';
 import { ScoreBar } from './score-bar';
 import { ScoreRing } from './score-ring';
 import { Skeleton } from './skeleton';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRecordMetricCell,
-  TableRow,
-} from './table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
 import { TrendChart } from './trend-chart';
 import { scoreBand } from './score-band';
 
@@ -70,21 +62,6 @@ describe('Table (dense)', () => {
 
     const rows = screen.getAllByRole('row');
     expect(rows).toHaveLength(2);
-  });
-
-  it('labels numeric values when a table becomes mobile records', () => {
-    render(
-      <table>
-        <tbody>
-          <tr>
-            <TableRecordMetricCell label="Coverage">82%</TableRecordMetricCell>
-          </tr>
-        </tbody>
-      </table>,
-    );
-
-    const cell = screen.getByRole('cell', { name: '82%' });
-    expect(cell).toHaveAttribute('data-label', 'Coverage');
   });
 });
 

@@ -4,8 +4,10 @@ import { useMemo } from 'react';
 
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
+import { treeBranchClasses } from '@/components/ui/workspace';
 import type { ArchitectureNode } from '@/lib/api/types';
 
 const PARENT_SOURCE_LABELS: Record<ArchitectureNode['parent_source'], string> = {
@@ -62,7 +64,7 @@ export function HierarchyCard({
           <QueryState kind="empty" inline message="No hierarchy nodes were measured." />
         ) : (
           <section
-            className="content-scroll max-h-96 overflow-y-auto overscroll-contain pr-2"
+            className="content-scroll max-h-96 overflow-y-auto overscroll-contain"
             aria-label="Observed hierarchy pages"
           >
             <HierarchyList nodes={roots} grouped={grouped} crawlId={crawlId} />
@@ -83,12 +85,12 @@ function HierarchyList({
   crawlId: string | null;
 }>) {
   return (
-    <ul className="border-border-subtle grid gap-2 border-l pl-4">
+    <ul className={treeBranchClasses()}>
       {nodes.map((node) => {
         const children = grouped.get(node.site_url_id) ?? [];
         return (
-          <li key={node.site_url_id} className="grid min-w-0 gap-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Stack as="li" gap="item" key={node.site_url_id} className="min-w-0">
+            <Inline className="flex-wrap">
               {crawlId ? (
                 <TextLink
                   text="body"
@@ -104,11 +106,11 @@ function HierarchyList({
               )}
               <PageKindBadge pageKind={node.page_kind} />
               <span className="type-caption">{PARENT_SOURCE_LABELS[node.parent_source]}</span>
-            </div>
+            </Inline>
             {children.length > 0 ? (
               <HierarchyList nodes={children} grouped={grouped} crawlId={crawlId} />
             ) : null}
-          </li>
+          </Stack>
         );
       })}
     </ul>

@@ -1,9 +1,10 @@
 'use client';
 
+import { Inline, Stack } from '@/components/ui/layout';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { RootError } from '@/lib/api/types';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 
 /**
  * Root-failure block for the Errors & Blocked tab.
@@ -18,7 +19,7 @@ export function RootErrorsBlock({ errors }: Readonly<{ errors: RootError[] }>) {
   if (errors.length === 0) return null;
   const keyOccurrences = new Map<string, number>();
   return (
-    <div className="grid gap-2" data-testid="root-errors-block">
+    <Stack gap="item" data-testid="root-errors-block">
       <p className={textRole('body')}>
         The start URL could not be fetched — the crawl never reached any page. Each row is one
         network call the crawler made.
@@ -36,10 +37,12 @@ export function RootErrorsBlock({ errors }: Readonly<{ errors: RootError[] }>) {
           const occurrence = keyOccurrences.get(signature) ?? 0;
           keyOccurrences.set(signature, occurrence + 1);
           return (
-            <li
+            <Inline
+              as="li"
+              gap="meta"
               key={`${signature}:${occurrence}`}
               data-testid="root-error-row"
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+              className={ledgerItemClasses()}
             >
               <span className={textRole('itemTitle', 'tabular-nums')}>{error.method}</span>
               <span className="type-body min-w-0 flex-1 truncate tabular-nums">{error.target}</span>
@@ -62,10 +65,10 @@ export function RootErrorsBlock({ errors }: Readonly<{ errors: RootError[] }>) {
                   <UnavailableValue state="not_measured" />
                 )}
               </span>
-            </li>
+            </Inline>
           );
         })}
       </ul>
-    </div>
+    </Stack>
   );
 }

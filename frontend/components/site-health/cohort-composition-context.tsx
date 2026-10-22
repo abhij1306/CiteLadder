@@ -2,6 +2,7 @@ import type { SiteHealthOverview } from '@/lib/api/types';
 import { pageKindLabel } from '@/lib/site-health/page-kinds';
 import { textRole } from '@/components/ui/typography';
 import { panelClasses } from '@/components/ui/panel';
+import { Stack } from '@/components/ui/layout';
 
 type CohortComposition = SiteHealthOverview['trend']['cohort_composition'];
 
@@ -23,17 +24,17 @@ export function CohortCompositionContext({
       : composition.removed_page_kinds.map(pageKindLabel).join(', ');
 
   return (
-    <div className={panelClasses({ tone: 'tonal' }, 'type-caption grid gap-2')}>
+    <Stack gap="item" className={panelClasses({ tone: 'tonal' }, 'type-caption')}>
       <p className={textRole('emphasis', 'text-foreground')}>Scored cohort composition changed.</p>
       <p className="text-secondary">
         Added page kinds: {addedKinds}. Removed page kinds: {removedKinds}. Score movement is not
         split into quality versus cohort effects.
       </p>
-      <dl className="desktop:grid-cols-2 grid gap-2">
+      <Stack as="dl" gap="item">
         <CompositionRow label="Previous counts" counts={composition.previous_page_count_by_kind} />
         <CompositionRow label="Current counts" counts={composition.current_page_count_by_kind} />
-      </dl>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -43,13 +44,13 @@ function CompositionRow({
 }: Readonly<{ label: string; counts: Readonly<Partial<Record<string, number>>> }>) {
   const rows = Object.entries(counts).sort(([left], [right]) => left.localeCompare(right));
   return (
-    <div className="grid gap-0.5">
+    <Stack gap="tight">
       <dt className="text-muted">{label}</dt>
       <dd className="text-secondary tabular-nums">
         {rows.length === 0
           ? 'No scored page kinds'
           : rows.map(([kind, count]) => `${pageKindLabel(kind)} ${count}`).join(' · ')}
       </dd>
-    </div>
+    </Stack>
   );
 }

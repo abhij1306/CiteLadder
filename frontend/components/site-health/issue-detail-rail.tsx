@@ -8,16 +8,16 @@ import { IssueMetadata } from '@/components/site-health/issue-metadata';
 import { ReadError } from '@/components/ui/read-error';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { BusyBar } from '@/components/ui/busy-bar';
 import { CopyButton } from '@/components/ui/copy-button';
 import { QueryState } from '@/components/ui/query-state';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
+import { ListDetailPane } from '@/components/ui/list-detail';
 import { Pager } from '@/components/ui/pager';
 import { panelClasses } from '@/components/ui/panel';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';
 import type { SiteIssue, SiteIssueDetail } from '@/lib/api/types';
@@ -52,30 +52,20 @@ export function IssueDetailRail({
     skillId: 'technical_health',
   });
   return (
-    <section
-      className="desktop:sticky desktop:top-[var(--workspace-gap)] desktop:max-h-[calc(100dvh-2*var(--workspace-gap))] desktop:overflow-hidden min-w-0"
-      aria-busy={detailQuery.isFetching}
-    >
-      <div className="desktop:max-h-[calc(100dvh-2*var(--workspace-gap))] relative flex flex-col">
-        <BusyBar active={detailQuery.isFetching} label="Updating issue evidence" />
-        <header className="border-border-subtle grid min-w-0 shrink-0 gap-3 border-b p-[var(--card-padding)]">
-          <div className="desktop:flex-row flex min-w-0 flex-col items-start justify-between gap-[var(--workspace-gap)]">
-            <div className="grid min-w-0 gap-2">
-              <h2 className={textRole('sectionTitle')}>{issueTitle(issue)}</h2>
-              <IssueMetadata issue={issue} />
-            </div>
-            <div
-              className={textRole(
-                'body',
-                'border-border-subtle grid w-full shrink-0 gap-1 border-t pt-3 desktop:w-auto desktop:border-t-0 desktop:border-l desktop:pt-0 desktop:pl-4',
-              )}
-            >
+    <ListDetailPane
+      busy={{ active: detailQuery.isFetching, label: 'Updating issue evidence' }}
+      header={
+        <>
+          <Stack gap="item" className="min-w-0">
+            <h2 className={textRole('sectionTitle')}>{issueTitle(issue)}</h2>
+            <IssueMetadata issue={issue} />
+            <Inline gap="meta" className="type-body">
               <span className="text-secondary whitespace-nowrap tabular-nums">
                 {issue.affected_url_count} {issue.affected_url_count === 1 ? 'page' : 'pages'}{' '}
                 affected
               </span>
               {issue.page_kinds.length > 0 ? (
-                <span className="type-caption flex max-w-56 flex-wrap items-center gap-1">
+                <Inline as="span" gap="tight" className="type-caption flex-wrap">
                   <span>Affects</span>
                   {issue.page_kinds.map((kind, index) => (
                     <span key={kind} className="contents">
@@ -83,28 +73,15 @@ export function IssueDetailRail({
                       <span>{pageKindLabel(kind)}</span>
                     </span>
                   ))}
-                </span>
+                </Inline>
               ) : null}
-            </div>
-          </div>
-          <IssueActions issue={issue} crawlId={crawlId} />
-        </header>
-        <div className="content-scroll desktop:flex-1 desktop:overflow-y-auto grid min-h-0 gap-[var(--workspace-gap)] p-[var(--card-padding)]">
-          {issue.description ? (
-            <p className="type-body whitespace-pre-line">{issue.description}</p>
-          ) : null}
-          {issue.remediation ? (
-            <div className={panelClasses({ tone: 'tonal' }, 'grid gap-1')}>
-              <span className={textRole('label')}>How to fix</span>
-              <p className="type-body whitespace-pre-line">{issue.remediation}</p>
-            </div>
-          ) : null}
-          <Stack as="section">
-            <h3 className={textRole('itemTitle')}>Affected pages</h3>
-            <OccurrenceList issue={issue} detail={detail} crawlId={crawlId} query={detailQuery} />
+            </Inline>
           </Stack>
-        </div>
-        {detail ? (
+          <IssueActions issue={issue} crawlId={crawlId} />
+        </>
+      }
+      footer={
+        detail ? (
           // The retained page keeps its `next_cursor` while the next one is in
           // flight, so a second click would push the SAME cursor onto the
           // stack and Previous would need two presses to undo one: `busy`
@@ -112,16 +89,29 @@ export function IssueDetailRail({
           <Pager
             frame="table"
             hideWhenSinglePage
-            className="bg-panel shrink-0"
             canPrev={canPrevious}
             canNext={Boolean(detail.next_cursor)}
             onPrev={onPrevious}
             onNext={onNext}
             busy={detailQuery.isFetching}
           />
-        ) : null}
-      </div>
-    </section>
+        ) : null
+      }
+    >
+      {issue.description ? (
+        <p className="type-body whitespace-pre-line">{issue.description}</p>
+      ) : null}
+      {issue.remediation ? (
+        <Stack gap="tight" className={panelClasses({ tone: 'tonal' })}>
+          <span className={textRole('label')}>How to fix</span>
+          <p className="type-body whitespace-pre-line">{issue.remediation}</p>
+        </Stack>
+      ) : null}
+      <Stack as="section">
+        <h3 className={textRole('itemTitle')}>Affected pages</h3>
+        <OccurrenceList issue={issue} detail={detail} crawlId={crawlId} query={detailQuery} />
+      </Stack>
+    </ListDetailPane>
   );
 }
 
@@ -131,7 +121,7 @@ export function IssueDetailRail({
  */
 function IssueActions({ issue, crawlId }: Readonly<{ issue: SiteIssue; crawlId: string }>) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       <Button asChild>
         <ProjectLink
           href={agentHandoffHref({
@@ -146,7 +136,7 @@ function IssueActions({ issue, crawlId }: Readonly<{ issue: SiteIssue; crawlId: 
       <CopyButton value={buildFixPrompt(issue)} variant="secondary" className="w-fit">
         Copy fix prompt
       </CopyButton>
-    </div>
+    </Inline>
   );
 }
 
@@ -189,10 +179,10 @@ function OccurrenceList({
     return (
       <ul aria-busy="true" className={ledgerClasses('open')}>
         {OCCURRENCE_PLACEHOLDERS.map((placeholder) => (
-          <li key={placeholder} className="grid gap-2 p-3">
-            <Skeleton className="h-4 w-3/5" />
-            <Skeleton className="h-3 w-4/5" />
-          </li>
+          <Stack as="li" gap="item" key={placeholder} className={ledgerItemClasses()}>
+            <Skeleton shape="line" />
+            <Skeleton shape="line" />
+          </Stack>
         ))}
       </ul>
     );
@@ -202,18 +192,18 @@ function OccurrenceList({
   return (
     <ul className={ledgerClasses('open')}>
       {detail.occurrences.map((occurrence) => (
-        <li key={occurrence.occurrence_id} className="grid gap-3 p-3">
+        <Stack as="li" key={occurrence.occurrence_id} className={ledgerItemClasses()}>
           <TextLink
             text="inherit"
-            className="flex min-w-0 flex-col gap-0.5"
+            className="flex min-w-0 flex-col"
             href={`/site/crawls/${crawlId}/pages/${occurrence.site_url_id}`}
           >
-            <span className="flex min-w-0 flex-wrap items-center gap-2">
+            <Inline as="span" className="flex-wrap">
               <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
                 {pageDisplayTitle(occurrence.title, occurrence.display_url)}
               </span>
               {occurrence.page_kind ? <Badge>{pageKindLabel(occurrence.page_kind)}</Badge> : null}
-            </span>
+            </Inline>
             <span
               className="type-caption [overflow-wrap:anywhere] tabular-nums"
               title={occurrence.display_url}
@@ -233,7 +223,7 @@ function OccurrenceList({
               Ask agent about this page
             </ProjectLink>
           </Button>
-        </li>
+        </Stack>
       ))}
     </ul>
   );

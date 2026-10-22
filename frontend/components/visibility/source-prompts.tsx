@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { useState } from 'react';
+import { MessageSquare } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
@@ -9,20 +10,9 @@ import {
   ExecutionEvidenceDrawer,
   type EvidenceSubject,
 } from '@/components/runs/execution-evidence-drawer';
-import { BusyBar } from '@/components/ui/busy-bar';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { QueryState } from '@/components/ui/query-state';
-import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { Inline } from '@/components/ui/layout';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
@@ -93,18 +83,20 @@ export function SourcePrompts({
   const [opened, setOpened] = useState<EvidenceSubject | null>(null);
 
   return (
-    <Card className="relative" aria-busy={query.isFetching}>
-      <BusyBar active={query.isFetching} label="Updating prompts" />
-      <CardHeader>
-        <CardTitle>Prompts</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <PromptsBody query={query} onOpenAnswer={setOpened} />
-        {/* The endpoint returns a bounded newest-first window. Without this a
-            source cited by more answers than fit simply looked like it had
-            fewer. */}
-        {query.data?.truncated ? <TruncationNotice limit={EVIDENCE_LIMIT} /> : null}
-      </CardContent>
+    <>
+      <DataTable
+        title="Prompts"
+        columns={COLUMNS}
+        state={promptsState(query)}
+        busy={{ active: query.isFetching, label: 'Updating prompts' }}
+        // The endpoint returns a bounded newest-first window. Without this a
+        // source cited by more answers than fit simply looked like it had fewer.
+        footer={query.data?.truncated ? <TruncationNotice limit={EVIDENCE_LIMIT} /> : null}
+      >
+        {(query.data?.items ?? []).map((item) => (
+          <PromptRow key={item.analysis_id} item={item} onOpenAnswer={setOpened} />
+        ))}
+      </DataTable>
       <ExecutionEvidenceDrawer
         execution={opened}
         open={opened !== null}
@@ -112,60 +104,39 @@ export function SourcePrompts({
           if (!next) setOpened(null);
         }}
       />
-    </Card>
+    </>
   );
 }
 
-function PromptsBody({
-  query,
-  onOpenAnswer,
-}: Readonly<{
-  query: UseQueryResult<VisibilityEvidenceResponse, unknown>;
-  onOpenAnswer: (subject: EvidenceSubject) => void;
-}>) {
-  if (query.isError)
-    return (
-      <ReadError
-        error={query.error}
-        fallback="Could not load the tracked answers."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
-      />
-    );
-  if (query.isLoading) return <Skeleton className="h-40" />;
-  const items = query.data?.items ?? [];
-  if (items.length === 0) {
-    return (
-      <QueryState
-        kind="empty"
-        inline
-        message="No tracked answers in this selection used this source."
-      />
-    );
+const COLUMNS: readonly DataTableColumn[] = [
+  { key: 'prompt', label: 'Prompt' },
+  { key: 'citations', label: 'Citations', width: 'figure', numeric: true },
+  { key: 'mentioned', label: 'Mentioned', width: 'status', desktopOnly: true },
+  { key: 'sources', label: 'Sources', width: 'status', desktopOnly: true },
+  { key: 'created', label: 'Created', width: 'figure', numeric: true, desktopOnly: true },
+  { key: 'open', label: 'Open', width: 'status', hideLabel: true },
+];
+
+function promptsState(
+  query: UseQueryResult<VisibilityEvidenceResponse, unknown>,
+): DataTableState | undefined {
+  if (query.isError) {
+    return {
+      kind: 'error',
+      error: query.error,
+      fallback: 'Could not load the tracked answers.',
+      onRetry: () => void query.refetch(),
+      pending: query.isFetching,
+    };
   }
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Prompt</TableHead>
-          <TableHead numeric>Citations</TableHead>
-          <TableHead className="desktop:table-cell hidden">Mentioned</TableHead>
-          <TableHead className="desktop:table-cell hidden">Sources</TableHead>
-          <TableHead numeric className="desktop:table-cell hidden">
-            Created
-          </TableHead>
-          <TableHead>
-            <span className="sr-only">Open</span>
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {items.map((item) => (
-          <PromptRow key={item.analysis_id} item={item} onOpenAnswer={onOpenAnswer} />
-        ))}
-      </TableBody>
-    </Table>
-  );
+  if (query.isLoading) return { kind: 'loading', label: 'Loading prompts…' };
+  if (query.data?.items.length) return undefined;
+  return {
+    kind: 'empty',
+    headingLevel: 3,
+    icon: MessageSquare,
+    heading: 'No tracked answers in this selection used this source.',
+  };
 }
 
 /**
@@ -184,8 +155,8 @@ function PromptRow({
 }>) {
   return (
     <TableRow>
-      <TableCell className="max-w-[34rem]">
-        <span className="flex min-w-0 items-start gap-2">
+      <TableCell>
+        <Inline as="span" className="items-start">
           <BrandLogo name={engineLabel(item.logical_engine) || item.logical_engine} />
           <span className="grid min-w-0">
             <ClampText lines={1}>{item.prompt_text || 'Untitled prompt'}</ClampText>
@@ -195,16 +166,16 @@ function PromptRow({
                 item.logical_engine}
             </ClampText>
           </span>
-        </span>
+        </Inline>
       </TableCell>
       <TableCell numeric>{count(item.citations.length) ?? '0'}</TableCell>
-      <TableCell className="desktop:table-cell hidden">
+      <TableCell desktopOnly>
         <MentionChips item={item} />
       </TableCell>
-      <TableCell className="desktop:table-cell hidden">
+      <TableCell desktopOnly>
         <SourceChips item={item} />
       </TableCell>
-      <TableCell numeric className="desktop:table-cell hidden">
+      <TableCell numeric desktopOnly>
         {sinceLabel(item.completed_at) ?? <MissingValue />}
       </TableCell>
       <TableCell>
@@ -276,16 +247,13 @@ function SourceChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>) 
   );
 }
 
-function ChipRow({
-  children,
-  overflow,
-}: Readonly<{ children: React.ReactNode; overflow: number }>) {
+function ChipRow({ children, overflow }: Readonly<{ children: ReactNode; overflow: number }>) {
   return (
-    <span className="flex items-center gap-1">
+    <Inline as="span" gap="tight">
       {children}
       {overflow > 0 ? (
         <span className={textRole('caption', 'text-secondary tabular-nums')}>+{overflow}</span>
       ) : null}
-    </span>
+    </Inline>
   );
 }

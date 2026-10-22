@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { EvidenceCard } from '@/components/runs/evidence-card';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Drawer } from '@/components/ui/drawer';
+import { Stack } from '@/components/ui/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi } from '@/lib/api/runs';
@@ -68,11 +69,11 @@ function useResolvedAnswer(execution: EvidenceSubject | null, open: boolean) {
 
 function EvidenceLoading() {
   return (
-    <div className="grid gap-4" aria-label="Loading execution evidence">
-      <Skeleton className="h-10 w-2/3" />
-      <Skeleton className="h-44 w-full" />
-      <Skeleton className="h-52 w-full" />
-    </div>
+    <Stack gap="workspace" aria-label="Loading execution evidence">
+      <Skeleton shape="line" />
+      <Skeleton shape="block" />
+      <Skeleton shape="chart" />
+    </Stack>
   );
 }
 
