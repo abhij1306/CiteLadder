@@ -34,7 +34,9 @@ import {
   US,
   ZA,
 } from 'country-flag-icons/react/3x2';
+import { Globe } from 'lucide-react';
 
+import { Icon } from '@/components/ui/icon';
 import { SearchableSelect, type SearchableSelectOption } from '@/components/ui/searchable-select';
 import type { MarketOption } from '@citeladder/contracts/markets';
 
@@ -109,12 +111,14 @@ export function MarketSelect({
 function CountryFlag({ code }: Readonly<{ code: string }>) {
   if (code === 'GLOBAL') {
     return (
+      // The flags' 20px slot, holding the product's own outline globe rather
+      // than an emoji that renders differently on every platform.
       <span
         data-country-flag="GLOBAL"
-        className="flex size-5 shrink-0 items-center justify-center text-base leading-none"
+        className="text-muted flex size-5 shrink-0 items-center justify-center"
         aria-hidden
       >
-        🌐
+        <Icon icon={Globe} />
       </span>
     );
   }

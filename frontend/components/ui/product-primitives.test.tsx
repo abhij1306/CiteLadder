@@ -17,7 +17,8 @@ import { NoProjectState } from './no-project-state';
 import { Pager, pageNumberControls } from './pager';
 import { QueryState } from './query-state';
 import { StatRow } from './stat-row';
-import { SortableTableHead, Table, TableCell, TableHeader, TableRow } from './table';
+import { Table, TableCell, TableHeader, TableRow } from './table';
+import { SortableTableHead } from './table-heads';
 import { TextLink } from './text-link';
 import { TooltipProvider } from './tooltip';
 

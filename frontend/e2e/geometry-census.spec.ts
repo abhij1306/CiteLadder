@@ -66,6 +66,8 @@ const TABLE_ROW_HEIGHT = 36;
 const TABLE_CELL_PADDING_Y = 6;
 /** A DataTable's header row is the control band again: 8 + 32 + 8 and its rule. */
 const DATA_TABLE_HEADER_HEIGHT = 49;
+/** That header row (or the column header) starts at the card's top edge. */
+const DATA_TABLE_PADDING_TOP = 0;
 /** A StatRow segment is padded 12 above and below; a row's segments share one height. */
 const STAT_SEGMENT_PADDING_Y = 12;
 const STAT_ROW_HEIGHT_SPREAD = 0;
@@ -205,7 +207,12 @@ function measure(route: string) {
   for (const box of all(boxes)) {
     if (nestedState(box)) continue;
     const boxStyle = getComputedStyle(box);
-    add('box.padding', box, px(boxStyle.paddingTop));
+    // A record table's first row is its own top inset (data-table.tsx).
+    add(
+      box.matches('[data-data-table]') ? 'data-table.padding-top' : 'box.padding',
+      box,
+      px(boxStyle.paddingTop),
+    );
     add('box.radius', box, px(boxStyle.borderTopLeftRadius));
     add('box.border', box, px(boxStyle.borderTopWidth));
     const next = box.nextElementSibling;
@@ -441,6 +448,7 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'section.gap', SECTION_GAP);
   expectOneValue(records, 'card.gap', CARD_GAP);
   expectOneValue(records, 'box.padding', CARD_INSET);
+  expectOneValue(records, 'data-table.padding-top', DATA_TABLE_PADDING_TOP);
   expectOneValue(records, 'box.radius', BOX_RADIUS);
   expectOneValue(records, 'box.border', BOX_BORDER);
   expectOneValue(records, 'card.inset-top', CARD_INSET);

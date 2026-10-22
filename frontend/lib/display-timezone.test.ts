@@ -10,6 +10,7 @@ import {
 import {
   formatDisplayDate,
   formatDisplayShortDate,
+  formatDisplayTime,
   formatDisplayTimestamp,
   formatWindowDate,
 } from './format';
@@ -54,6 +55,7 @@ describe('display timezone', () => {
     expect(after).toContain('3:30');
     expect(formatDisplayDate('2026-01-01T00:30:00Z', 'America/New_York')).toContain('Dec 31, 2025');
     expect(formatDisplayShortDate('2026-01-01T00:30:00Z', 'America/New_York')).toBe('Dec 31');
+    expect(formatDisplayTime('2026-01-01T00:30:00Z', 'Asia/Kolkata')).toBe('06:00 AM GMT+5:30');
     expect(formatWindowDate('2026-01-01')).toBe('Jan 1, 2026');
   });
 });

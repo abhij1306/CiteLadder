@@ -42,26 +42,30 @@ function renderTable(prompts: Prompt[]) {
 }
 
 describe('PromptTable pagination', () => {
-  it('shows each prompt’s branding, intent and buyer stage as tags', () => {
+  it('captions each question with its topic, branding, intent and buyer stage', () => {
     renderTable([
       makePrompt(1, { branded: true, buyer_stage: 'consideration' }),
       makePrompt(2, { intent: '', buyer_stage: '' }),
     ]);
 
-    expect(screen.getByRole('columnheader', { name: 'Tags' })).toBeInTheDocument();
     const [, tagged, untagged] = screen.getAllByRole('row');
-    expect(within(tagged!).getAllByRole('cell')[2]).toHaveTextContent(
-      'BrandedDiscoveryConsideration',
+    expect(within(tagged!).getAllByRole('cell')[0]!.textContent).toBe(
+      'Prompt number 1No topic · Branded · Discovery · Consideration',
     );
-    expect(within(untagged!).getAllByRole('cell')[2]!.textContent).toBe('Unbranded');
+    expect(within(untagged!).getAllByRole('cell')[0]!.textContent).toBe(
+      'Prompt number 2No topic · Unbranded',
+    );
   });
 
-  it('carries the whole question in a tooltip', async () => {
+  it('carries the whole question in a tooltip when the row cuts it', async () => {
+    // jsdom lays nothing out; report the question as wider than its line.
+    const scrollWidth = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(1000);
     renderTable([makePrompt(1)]);
 
     await userEvent.setup().tab();
     expect(screen.getByRole('link', { name: 'Prompt number 1' })).toHaveFocus();
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Prompt number 1');
+    scrollWidth.mockRestore();
   });
 
   it('opens each question on its history and shows its measured rates', () => {
@@ -104,12 +108,22 @@ describe('PromptTable pagination', () => {
   });
 
   it('names each row by its topic rather than its internal theme', () => {
-    renderTable([makePrompt(1, { topic_id: TOPICS[0]!.id }), makePrompt(2, { topic_id: null })]);
+    renderTable([
+      makePrompt(1, { topic_id: TOPICS[0]!.id }),
+      makePrompt(2, { topic_id: null }),
+      makePrompt(3, { topic_id: '33333333-3333-4333-8333-333333333333' }),
+    ]);
 
-    const [, filed, unassigned] = screen.getAllByRole('row');
-    expect(within(filed!).getByText('Running shoes')).toBeInTheDocument();
-    expect(within(filed!).queryByText('Comfort')).not.toBeInTheDocument();
-    expect(within(unassigned!).queryByText('Running shoes')).not.toBeInTheDocument();
+    const [, filed, unassigned, unresolved] = screen.getAllByRole('row');
+    expect(within(unresolved!).getAllByRole('cell')[0]!.textContent).toBe(
+      'Prompt number 3Topic unavailable · Unbranded · Discovery',
+    );
+    expect(within(filed!).getAllByRole('cell')[0]!.textContent).toBe(
+      'Prompt number 1Running shoes · Unbranded · Discovery',
+    );
+    expect(within(unassigned!).getAllByRole('cell')[0]!.textContent).toBe(
+      'Prompt number 2No topic · Unbranded · Discovery',
+    );
   });
 
   it('pages through rows with the page indicator and ghost buttons', async () => {

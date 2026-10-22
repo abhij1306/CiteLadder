@@ -8,9 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Pager } from '@/components/ui/pager';
 import { QueryState, type QueryStateProps } from '@/components/ui/query-state';
+import { HintedTableHead, SortableTableHead } from '@/components/ui/table-heads';
 import {
-  HintedTableHead,
-  SortableTableHead,
   Table,
   TableBody,
   TableCell,
@@ -67,7 +66,8 @@ export type DataTableColumn = Readonly<{
   key: string;
   label: string;
   width?: DataTableColumnWidth;
-  numeric?: boolean | 'end';
+  /** Right-aligned tabular figures (or a trailing control), header included. */
+  numeric?: boolean;
   /** Keep the header for assistive technology only (an actions column). */
   hideLabel?: boolean;
   /** A sortable column: the header becomes the sort button. */
@@ -106,7 +106,8 @@ export type DataTableSelection = Readonly<{
  *
  *   header — the table's title and its toolbar (`FilterBar`: search, filters,
  *            status, actions) on one row, 49px with the hairline that closes
- *            it — the page's control band, repeated in the card. A table's
+ *            it — the page's control band, repeated in the card, flush with
+ *            the card's top edge (the band's own 8px is the inset). A table's
  *            filters live here, never in a toolbar the page builds. A
  *            `description` is one caption line under that row, so the row
  *            itself keeps its height.
@@ -191,7 +192,13 @@ export function DataTable({
       aria-label={naming.ariaLabel}
       aria-busy={busy?.active || undefined}
       data-data-table=""
-      className={cn(!nested && cardClasses(), 'relative grid min-w-0 content-start')}
+      // The card's first row (the title band, else the column header) is its
+      // own top inset: card padding above it read as a gap over the header.
+      className={cn(
+        !nested && cardClasses(),
+        !nested && 'pt-0',
+        'relative grid min-w-0 content-start',
+      )}
     >
       {busy ? <BusyBar active={busy.active} label={busy.label} /> : null}
       <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} />

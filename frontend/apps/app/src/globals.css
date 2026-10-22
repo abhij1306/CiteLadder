@@ -335,7 +335,6 @@
   --lattice: radial-gradient(var(--color-border-strong) 1px, transparent 1px) 0 0 / 16px 16px;
   --site-gutter: 20px;
   --skeleton-base: var(--color-well);
-  --skeleton-highlight: var(--color-panel);
   --value-placeholder: var(--color-muted);
 }
 
@@ -1127,7 +1126,6 @@ input:-webkit-autofill:focus {
   --color-chart-8: #9aa29d;
   --color-overlay-scrim: rgb(0 0 0 / 72%);
   --skeleton-base: #1a1e1b;
-  --skeleton-highlight: #232825;
   /* On near-black a drop shadow carries no edge, so dark material leads with
      a light hairline ring and keeps a deep shadow only for detached layers. */
   --shadow-overlay: 0 0 0 1px rgb(255 255 255 / 8%), 0 16px 40px -8px rgb(0 0 0 / 60%);
@@ -1260,15 +1258,6 @@ samp {
   letter-spacing: 0;
 }
 
-@keyframes skeleton-shimmer {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(266.67%);
-  }
-}
-
 .menu-panel {
   transition:
     opacity var(--motion-normal) var(--ease-standard),
@@ -1377,36 +1366,13 @@ samp {
 }
 
 /*
- * The shimmer moves a layer, not a background.
- *
- * Animating `background-position` is not compositable: every frame repaints the
- * element. A loading screen is exactly where that is worst — Site Health's
- * issues placeholder puts about thirty of these on screen at once, all
- * repainting at 60fps for as long as the reads take. The highlight is now a
- * pseudo-element translated across the base, which the compositor owns.
+ * A placeholder is a flat bar at the size of the value it stands for: no
+ * shimmer, so a loading screen holds still and costs no paint while the reads
+ * take (Site Health's issues placeholder puts about thirty on screen).
  */
 .skeleton {
-  position: relative;
-  overflow: hidden;
   border-radius: var(--radius-xs);
   background-color: var(--skeleton-base);
-  /* Confine the repaint to this box: 30 of them are siblings. */
-  contain: paint;
-}
-
-.skeleton::after {
-  content: "";
-  position: absolute;
-  inset-block: 0;
-  inline-size: 60%;
-  inset-inline-start: 0;
-  background-image: linear-gradient(
-    90deg,
-    transparent,
-    var(--skeleton-highlight),
-    transparent
-  );
-  animation: skeleton-shimmer calc(var(--motion-slow) * 5) var(--ease-standard) infinite;
 }
 
 @media (min-width: 768px) {
@@ -1506,10 +1472,6 @@ samp {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
-  .skeleton::after {
-    display: none;
-  }
-
   /* The expanding rings carry no information the static mark does not, and at
      1ms they would flash rather than settle. The drawn check keeps its final
      frame through the global clamp. */

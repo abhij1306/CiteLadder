@@ -119,6 +119,22 @@ export function formatDisplayDate(timestamp: string, timeZone: string): string {
   }
 }
 
+/** Time-of-day portion of a persisted instant, with its zone, in the same display timezone. */
+export function formatDisplayTime(timestamp: string, timeZone: string): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return timestamp;
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone,
+      timeZoneName: 'short',
+    }).format(date);
+  } catch {
+    return timeZone === 'UTC' ? timestamp : formatDisplayTime(timestamp, 'UTC');
+  }
+}
+
 /** Compact chart label for a persisted instant. */
 export function formatDisplayShortDate(timestamp: string, timeZone: string): string {
   const date = new Date(timestamp);

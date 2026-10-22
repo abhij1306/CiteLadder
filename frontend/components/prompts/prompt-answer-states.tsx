@@ -133,13 +133,14 @@ function CompetitorGapTable({ gaps }: Readonly<{ gaps: readonly CompetitorGap[] 
 type Outcome = NonNullable<PromptMetricItem['outcomes']>[number];
 
 /** Engine coverage: each engine and model that answered, by answer state. */
+// The engine leads at a quarter of the table, so "Google AI Overview" holds
+// one line at every width; the five counts share the rest evenly.
 const ENGINE_COLUMNS: readonly DataTableColumn[] = [
-  { key: 'engine', label: 'Engine' },
-  { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
+  { key: 'engine', label: 'Engine', width: 'lead' },
+  { key: 'answers', label: 'Answers', numeric: true },
   ...ANSWER_STATES.map((state): DataTableColumn => ({
     key: state.key,
     label: state.label,
-    width: 'figure',
     numeric: true,
   })),
 ];
