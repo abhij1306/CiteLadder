@@ -197,7 +197,7 @@ export function FanoutEvidence({
           }
         />
       </CardHeader>
-      <CardContent flush className="grid gap-0">
+      <CardContent className="grid">
         {visible.length === 0 ? (
           <NoSearchMatch search={needle} matched={matched} />
         ) : (

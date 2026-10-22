@@ -114,7 +114,7 @@ export function CompanyFacts({ data }: Readonly<{ data: CommandCenter }>) {
         <CardTitle id="company-facts">Company facts</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className={cn(hairlineBandClasses, 'sm:grid-cols-3')}>
+        <div className={cn(hairlineBandClasses, 'desktop:grid-cols-3')}>
           <FactSummary
             label="Positioning"
             value={facts.positioning || facts.description}

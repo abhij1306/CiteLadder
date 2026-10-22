@@ -106,9 +106,5 @@ export function NoSearchMatch({
 }: Readonly<{ search: string | null; matched: number | null }>) {
   const verb = matched === 1 ? 'match sits' : 'matches sit';
   const elsewhere = matched ? ` — ${matched} ${verb} elsewhere in the run set.` : '.';
-  return (
-    <InlineEmpty className="p-[var(--card-padding)]">
-      {`No search matches “${search}” on this page${elsewhere}`}
-    </InlineEmpty>
-  );
+  return <InlineEmpty>{`No search matches “${search}” on this page${elsewhere}`}</InlineEmpty>;
 }

@@ -243,7 +243,7 @@ export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurface
           <InlineLinks links={evidence.links} />
         </>
       ) : (
-        <div className={panelClasses({ tone: 'well', pad: 'compact' }, 'type-body min-w-0')}>
+        <div className={panelClasses({ tone: 'well' }, 'type-body min-w-0')}>
           {evidence.aio_present === false
             ? 'There was nothing to compose: no overview appeared, so no brand could appear in one.'
             : 'No presence can be reported for a search that was never retrieved. This is a gap in our measurement, not an absence of the brand.'}

@@ -41,11 +41,11 @@ import { cn } from '@/lib/utils';
  * target, so a hint in it stays reachable by hover and Tab.
  */
 const COLUMNS = {
-  2: 'grid-cols-1 sm:grid-cols-2',
-  3: 'grid-cols-2 sm:grid-cols-3',
-  // One row from 768px, like `MetricGroup`: the sheet is ~700px wide even
-  // beside the rail at a 980px desktop.
-  4: 'grid-cols-2 md:grid-cols-4',
+  2: 'grid-cols-1 desktop:grid-cols-2',
+  3: 'grid-cols-2 desktop:grid-cols-3',
+  // One row on desktop, like `MetricGroup`: the sheet is ~700px wide even
+  // beside the rail at a 981px desktop.
+  4: 'grid-cols-2 desktop:grid-cols-4',
 } as const;
 
 export type StatGridColumns = keyof typeof COLUMNS;
@@ -97,7 +97,7 @@ const SURFACE_GRID: Record<StatGridSurface, string> = {
 
 const SURFACE_ITEM: Record<StatGridSurface, string> = {
   open: '',
-  well: panelClasses({ tone: 'well', pad: 'compact' }),
+  well: panelClasses({ tone: 'well' }),
   band: 'border-border-subtle border-e border-b p-[var(--card-padding)]',
 };
 

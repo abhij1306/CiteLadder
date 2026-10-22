@@ -122,7 +122,7 @@ function AddFact({
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   return (
     <form
-      className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid gap-3')}
+      className={panelClasses({ tone: 'well' }, 'grid gap-3')}
       onSubmit={(event) => {
         event.preventDefault();
         if (!draft.statement.trim()) return;
@@ -187,7 +187,7 @@ function FactRow({
 }>) {
   const [editing, setEditing] = useState<string | null>(null);
   return (
-    <li className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid min-w-0 gap-2')}>
+    <li className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-2')}>
       <span className="flex flex-wrap items-center gap-2">
         <Badge>{TOPIC_LABELS[fact.topic]}</Badge>
         {fact.status === 'confirmed' ? (

@@ -206,7 +206,7 @@ function RunsContent({
       >
         <CardTitle>All runs</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {filteredAudits.length === 0 ? (
           <QueryState
             kind="empty"

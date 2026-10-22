@@ -6,6 +6,12 @@
  */
 @import "./ui-motion.css";
 
+/* The product's one breakpoint (docs/design.md §Data and geometry): the
+   sidebar shell appears at 981px, the same edge as the `max-width: 980px`
+   rules below. Product components change layout only through `desktop:`;
+   `sm:`/`md:`/`lg:`/`xl:` belong to the flow. */
+@custom-variant desktop (@media (min-width: 981px));
+
 /* CiteLadder's single design-system owner across the product and onboarding
    surfaces. */
 @theme {
@@ -250,7 +256,8 @@
      it carry the elevated paper fill. The focused flow pane stays paper. */
   /* No seam: the tonal steps between rail, ground, and paper are the separation. */
   --modal-padding: 24px;
-  --control-height-sm: 28px;
+  /* The product has one control height, 32. The 36 and 44 rungs are the
+     public website's and the auth/onboarding flow's only. */
   --control-height-md: 32px;
   --control-height-lg: 36px;
   /* The touch and hero rung of the control ladder (32 / 36 / 44). */
@@ -264,10 +271,12 @@
   --surface-drop: rgb(11 15 13 / 5%);
   --elevation-sheet: 0 0 0 1px var(--color-border);
   --elevation-track: inset 0 0 0 1px var(--color-border-subtle);
-  --field-end-target: var(--control-height-sm);
+  /* An icon target inside a 32px field (clear, calendar): the field's height
+     less its 2px border inset on each side. It is part of the field, not a
+     control of its own. */
+  --field-end-target: calc(var(--control-height-md) - 4px);
   --menu-item-height: 32px;
   --badge-height-sm: 20px;
-  --badge-height-md: 24px;
   --textarea-min-height: 112px;
   /* The one footprint a read's loading, error and first-use empty states
      share (QueryState), so a read changing state never moves the page. */
@@ -838,14 +847,21 @@ a.focus-ring:active .type-caption {
   outline-color: currentColor;
 }
 
-/* Shared material recipes. No extra DOM, clipping or hitbox changes. */
-.surface-card {
+/* Shared material recipes. No extra DOM, clipping or hitbox changes. The card
+   and the panel draw their edge as a real one-pixel `border` (cardClasses,
+   panelClasses), so every box has the same geometry: radius 12, border 1,
+   padding 16. `.surface-card` and `.surface-panel` only mark a container for
+   the nested rules below. */
+
+/* The sign-in brand cards are the flow's, not the product's box: they keep the
+   flow's own edge, none at rest in light and the ring in dark. */
+.auth-brand-card.surface-card {
   box-shadow: var(--elevation-card);
 }
 
 /* A recommendation's hairline takes the wash's own tint, not a grey edge. */
 .surface-card.surface-card-recommendation {
-  box-shadow: 0 0 0 1px var(--color-accent-subtle);
+  border-color: var(--color-accent-subtle);
 }
 
 /* A bare table's boundary on the white sheet: a hairline ring, no lift. A
@@ -868,16 +884,20 @@ a.focus-ring:active .type-caption {
 
 :where(.surface-card, .surface-panel, [role='dialog'], .table-frame) .empty-state-surface {
   background: transparent;
+  border: 0;
   border-radius: 0;
   box-shadow: none;
   padding: var(--compact-gap) 0;
 }
 
-/* Inside a card a query state shares the card's surface, but keeps its
-   padding and its reserved height: the footprint is the same either way. */
+/* Inside a card a query state shares the card's surface and its padding
+   (the container already insets it), but keeps its reserved height: the
+   footprint is the same either way. */
 :where(.surface-card, .surface-panel, [role='dialog'], .table-frame) .query-state {
   background: transparent;
+  border: 0;
   box-shadow: none;
+  padding: 0;
 }
 
 .flow-content.app-pane {
@@ -1225,7 +1245,6 @@ input:-webkit-autofill:focus {
 /* Box shadows disappear in forced colours; retain a system-colour boundary. */
 @media (forced-colors: active) {
   .control-raised,
-  .surface-card,
   .shell-link[aria-current='page'] {
     outline: 1px solid ButtonText;
     outline-offset: -1px;

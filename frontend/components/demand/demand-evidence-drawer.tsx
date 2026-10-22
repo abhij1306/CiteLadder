@@ -56,7 +56,7 @@ function DemandEvidenceContent({
       open={open}
       onOpenChange={onOpenChange}
       title="Signal evidence"
-      className="max-w-md sm:max-w-lg"
+      className="desktop:max-w-lg max-w-md"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="secondary" asChild>
@@ -166,7 +166,7 @@ function DemandEvidenceContent({
         {details.cohortMedianCtr !== null && (
           <section className="grid gap-2">
             <h3 className={textRole('label')}>Position benchmark</h3>
-            <div className={panelClasses({ pad: 'compact' }, 'type-caption grid gap-2')}>
+            <div className={panelClasses({}, 'type-caption grid gap-2')}>
               <div className="flex justify-between">
                 <span className="text-muted">Position band</span>
                 {details.positionBand !== null ? (
@@ -203,7 +203,7 @@ function DemandEvidenceContent({
             <ShieldCheck className="text-muted size-3.5" aria-hidden />
             Provenance
           </h3>
-          <dl className={panelClasses({ tone: 'well', pad: 'compact' }, 'type-caption grid gap-2')}>
+          <dl className={panelClasses({ tone: 'well' }, 'type-caption grid gap-2')}>
             <ProvenanceRow label="Search Console rows">
               <ProvenanceCount value={details.metricRowCount} />
             </ProvenanceRow>

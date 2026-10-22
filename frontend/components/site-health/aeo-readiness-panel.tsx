@@ -145,9 +145,12 @@ function ReadinessLedger({
       <CardHeader bordered>
         <CardTitle>Readiness dimensions</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <Table className="block md:table" wrapperClassName="overflow-hidden md:overflow-auto">
-          <TableHeader className="hidden md:table-header-group">
+      <CardContent>
+        <Table
+          className="desktop:table block"
+          wrapperClassName="overflow-hidden desktop:overflow-auto"
+        >
+          <TableHeader className="desktop:table-header-group hidden">
             <TableRow>
               <TableHead>Dimension</TableHead>
               <TableHead numeric>Score</TableHead>
@@ -157,15 +160,15 @@ function ReadinessLedger({
               <TableHead className="w-28" />
             </TableRow>
           </TableHeader>
-          <TableBody className="block md:table-row-group">
+          <TableBody className="desktop:table-row-group block">
             {dimensions.map((dimension) => {
               const state = dimensionState(dimension);
               return (
                 <TableRow
                   key={dimension.key}
-                  className="grid h-auto grid-cols-1 py-2 md:table-row md:h-[var(--table-row-height)] md:py-0"
+                  className="desktop:table-row desktop:h-[var(--table-row-height)] desktop:py-0 grid h-auto grid-cols-1 py-2"
                 >
-                  <TableCell className="block min-w-0 border-b-0 px-4 py-2 md:table-cell md:min-w-64 md:border-b md:px-[var(--table-cell-padding-x)] md:py-[var(--table-cell-padding-y)]">
+                  <TableCell className="desktop:table-cell desktop:min-w-64 desktop:border-b desktop:px-[var(--table-cell-padding-x)] desktop:py-[var(--table-cell-padding-y)] block min-w-0 border-b-0 px-4 py-2">
                     <div className="grid max-w-md min-w-0">
                       <ClampText lines={1} className={textRole('emphasis')}>
                         {dimension.label}
@@ -178,7 +181,7 @@ function ReadinessLedger({
                   <TableRecordMetricCell label="Score">
                     {formatScore(dimension.score)}
                   </TableRecordMetricCell>
-                  <TableRecordMetricCell label="Quality" className="md:min-w-32">
+                  <TableRecordMetricCell label="Quality" className="desktop:min-w-32">
                     <QualityCell dimension={dimension} state={state} />
                   </TableRecordMetricCell>
                   <TableRecordMetricCell label="Coverage">
@@ -193,10 +196,10 @@ function ReadinessLedger({
                       {state}
                     </Badge>
                   </TableRecordMetricCell>
-                  <TableCell className="block px-4 pt-2 pb-3 md:table-cell md:px-[var(--table-cell-padding-x)] md:py-[var(--table-cell-padding-y)]">
+                  <TableCell className="desktop:table-cell desktop:px-[var(--table-cell-padding-x)] desktop:py-[var(--table-cell-padding-y)] block px-4 pt-2 pb-3">
                     <Button
                       variant="secondary"
-                      className="w-full md:w-auto"
+                      className="desktop:w-auto w-full"
                       onClick={() => onOpen(dimension.key)}
                     >
                       View details <span className="sr-only">for {dimension.label}</span>

@@ -245,7 +245,7 @@ function BreakdownTable({
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
@@ -283,11 +283,9 @@ function CitedTable({ cited }: Readonly<{ cited: AccuracyResponse['cited_alongsi
           source.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {!cited.length ? (
-          <InlineEmpty className="p-[var(--card-padding)]">
-            No sources cited alongside contradictions.
-          </InlineEmpty>
+          <InlineEmpty>No sources cited alongside contradictions.</InlineEmpty>
         ) : (
           <Table>
             <TableHeader>

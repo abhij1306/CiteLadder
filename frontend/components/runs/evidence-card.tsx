@@ -38,9 +38,7 @@ function Outcome({
 }: Readonly<{ label: string; detail: string; passed: boolean }>) {
   const Icon = passed ? CheckCircle2 : XCircle;
   return (
-    <div
-      className={panelClasses({ tone: 'well', pad: 'compact' }, 'flex min-w-0 items-start gap-2')}
-    >
+    <div className={panelClasses({ tone: 'well' }, 'flex min-w-0 items-start gap-2')}>
       <Icon
         className={cn('mt-0.5 size-4 shrink-0', passed ? 'text-success' : 'text-muted')}
         aria-hidden
@@ -201,7 +199,7 @@ function EvidenceAnswer({
   return (
     <section className="grid gap-2">
       <Label>{isSearchSurface ? 'AI Overview' : 'Engine response'}</Label>
-      <div className={panelClasses({ tone: 'well', pad: 'compact' }, 'min-w-0 overflow-hidden')}>
+      <div className={panelClasses({ tone: 'well' }, 'min-w-0 overflow-hidden')}>
         <EvidenceAnswerBody
           text={trimmed}
           measuredAbsence={measuredAbsence}
@@ -272,7 +270,7 @@ function EvidenceOutcomes({ evidence }: Readonly<{ evidence: ExecutionEvidence }
           Deterministic checks against the persisted answer and source evidence.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="desktop:grid-cols-2 grid gap-3">
         <Outcome label="Brand detected" detail={brandDetail} passed={evidence.brand_mentioned} />
         <Outcome
           label="Owned source cited"

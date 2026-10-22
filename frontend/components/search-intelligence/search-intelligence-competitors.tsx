@@ -45,7 +45,7 @@ export function SearchIntelligenceCompetitors({
       <CardHeader bordered>
         <CardTitle>Competitive footprint</CardTitle>
       </CardHeader>
-      <CardContent flush>
+      <CardContent>
         <Table minWidth="md">
           <TableHeader>
             <TableRow>

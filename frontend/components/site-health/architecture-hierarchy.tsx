@@ -57,7 +57,7 @@ export function HierarchyCard({
           Unresolved pages remain at the root.
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent>
         {roots.length === 0 ? (
           <InlineEmpty>No hierarchy nodes were measured.</InlineEmpty>
         ) : (

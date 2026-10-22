@@ -63,7 +63,7 @@ export function QueryState(props: QueryStateProps) {
       data-query-state={props.kind}
       className={cn(
         cardClasses(),
-        'query-state grid min-h-[var(--query-state-height)] gap-[var(--compact-gap)] p-[var(--card-padding)]',
+        'query-state grid min-h-[var(--query-state-height)] gap-[var(--compact-gap)]',
         props.kind === 'loading' ? 'place-items-center' : 'content-start justify-items-start',
       )}
     >

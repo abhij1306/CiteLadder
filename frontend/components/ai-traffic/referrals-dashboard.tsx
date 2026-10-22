@@ -49,7 +49,7 @@ export function AiReferralsDashboard({
         ]}
       >
         <TabPanel value="overview">
-          <div className="grid gap-[var(--workspace-gap)] lg:grid-cols-2">
+          <div className="desktop:grid-cols-2 grid gap-[var(--workspace-gap)]">
             <ReferralVolumeCard data={data} />
             <ReferralShareCard data={data} />
           </div>

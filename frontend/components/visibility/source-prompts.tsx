@@ -98,7 +98,7 @@ export function SourcePrompts({
       <CardHeader>
         <CardTitle>Prompts</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         <PromptsBody query={query} onOpenAnswer={setOpened} />
         {/* The endpoint returns a bounded newest-first window. Without this a
             source cited by more answers than fit simply looked like it had
@@ -130,17 +130,12 @@ function PromptsBody({
         fallback="Could not load the tracked answers."
         onRetry={() => void query.refetch()}
         pending={query.isFetching}
-        className="m-[var(--card-padding)]"
       />
     );
-  if (query.isLoading) return <Skeleton className="m-[var(--card-padding)] h-40" />;
+  if (query.isLoading) return <Skeleton className="h-40" />;
   const items = query.data?.items ?? [];
   if (items.length === 0) {
-    return (
-      <InlineEmpty className="p-[var(--card-padding)]">
-        No tracked answers in this selection used this source.
-      </InlineEmpty>
-    );
+    return <InlineEmpty>No tracked answers in this selection used this source.</InlineEmpty>;
   }
   return (
     <Table>
@@ -148,9 +143,9 @@ function PromptsBody({
         <TableRow>
           <TableHead>Prompt</TableHead>
           <TableHead numeric>Citations</TableHead>
-          <TableHead className="hidden md:table-cell">Mentioned</TableHead>
-          <TableHead className="hidden lg:table-cell">Sources</TableHead>
-          <TableHead numeric className="hidden sm:table-cell">
+          <TableHead className="desktop:table-cell hidden">Mentioned</TableHead>
+          <TableHead className="desktop:table-cell hidden">Sources</TableHead>
+          <TableHead numeric className="desktop:table-cell hidden">
             Created
           </TableHead>
           <TableHead>
@@ -201,13 +196,13 @@ function PromptRow({
         </span>
       </TableCell>
       <TableCell numeric>{count(item.citations.length) ?? '0'}</TableCell>
-      <TableCell className="hidden md:table-cell">
+      <TableCell className="desktop:table-cell hidden">
         <MentionChips item={item} />
       </TableCell>
-      <TableCell className="hidden lg:table-cell">
+      <TableCell className="desktop:table-cell hidden">
         <SourceChips item={item} />
       </TableCell>
-      <TableCell numeric className="hidden sm:table-cell">
+      <TableCell numeric className="desktop:table-cell hidden">
         {sinceLabel(item.completed_at) ?? <MissingValue />}
       </TableCell>
       <TableCell>

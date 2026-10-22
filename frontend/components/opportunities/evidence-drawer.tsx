@@ -73,7 +73,7 @@ export function EvidenceDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Evidence detail"
-      className="sm:max-w-160"
+      className="desktop:max-w-160"
     >
       {body}
     </Drawer>
@@ -97,7 +97,7 @@ function OpportunityDetailBody({ detail }: Readonly<{ detail: OpportunityDetail 
       {detail.remediation ? (
         <section className="grid gap-2">
           <Label>Recommended improvements</Label>
-          <div className={panelClasses({ tone: 'well', pad: 'compact' })}>
+          <div className={panelClasses({ tone: 'well' })}>
             <p className="type-body whitespace-pre-line">{detail.remediation}</p>
           </div>
         </section>
@@ -123,7 +123,7 @@ function ActionHandoff({ detail }: Readonly<{ detail: OpportunityDetail }>) {
   return (
     <section className="grid gap-2">
       <Label>Action handoff</Label>
-      <div className={panelClasses({ pad: 'compact' }, 'grid gap-2')}>
+      <div className={panelClasses({}, 'grid gap-2')}>
         <p className={textRole('body')}>Create or improve content the brand controls.</p>
         <Limitations items={detail.content_handoff.limitations} />
       </div>

@@ -136,7 +136,7 @@ export function SurfaceRatesPanel({
           {`${data.successful} successfully observed ${data.successful === 1 ? 'search' : 'searches'}, ${data.with_overview} of which showed an overview. Each rate below states what it divided by.`}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-[var(--workspace-gap)] p-0">
+      <CardContent className="grid gap-[var(--workspace-gap)]">
         <div className="border-border-subtle border-b">
           <StatGrid
             surface="band"

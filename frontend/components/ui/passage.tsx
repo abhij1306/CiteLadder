@@ -20,7 +20,7 @@ export function Passage({
   className,
 }: Readonly<{ children: ReactNode; className?: string }>) {
   return (
-    <blockquote className={panelClasses({ tone: 'well', pad: 'compact' }, className)}>
+    <blockquote className={panelClasses({ tone: 'well' }, className)}>
       <p className={textRole('body')}>“{children}”</p>
     </blockquote>
   );

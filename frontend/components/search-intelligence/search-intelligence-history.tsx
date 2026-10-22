@@ -51,8 +51,8 @@ export function SearchIntelligenceHistory({
     );
   const data = fillMonths(observations, first.date, last.date);
   return (
-    <section className="grid gap-4 md:grid-cols-2" aria-label="Saved backlink history">
-      <p className={textRole('caption', 'md:col-span-2')}>
+    <section className="desktop:grid-cols-2 grid gap-4" aria-label="Saved backlink history">
+      <p className={textRole('caption', 'desktop:col-span-2')}>
         Monthly domain-level history for {dataset.target_domain}, {first.date} to {last.date}.
         Coverage includes the provider’s historical link population and may differ from the live
         summary. Missing observations are gaps.

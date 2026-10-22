@@ -10,63 +10,38 @@ import { cn } from '@/lib/utils';
  *
  * This is a class recipe, not a component, because these boxes land on `div`,
  * `li`, `section` and `dd` alike and the element must stay semantic.
+ *
+ * One box recipe (docs/design.md §Component recipes), shared with `Card`:
+ * radius 12, a one-pixel `border` and 16 padding. The tone picks the fill and
+ * the edge colour only; there is no padding, radius or edge variant.
  */
 const PANEL_TONE = {
   /** Raised out of the section — the default for a nested object. */
-  panel: 'bg-panel',
+  panel: 'bg-panel border-border',
   /** Recessed — evidence, payloads, quoted source. */
-  well: 'bg-well',
+  well: 'bg-well border-transparent',
   /** Quietly separated, for a row that is chrome rather than content. */
-  tonal: 'bg-background-alt',
+  tonal: 'bg-background-alt border-transparent',
   /** Advice: a suggested next step or a quoted prompt. */
-  accent: 'bg-accent-soft',
+  accent: 'bg-accent-soft border-transparent',
   /** The caller supplies the fill because it carries a status meaning. */
-  none: '',
+  none: 'border-transparent',
 } as const;
 
-const PANEL_PAD = {
-  none: '',
-  compact: 'p-[var(--card-padding)]',
-  default: 'p-[var(--card-padding)]',
-  large: 'p-[var(--card-padding)]',
-} as const;
-
-/**
- * Panels normally carry their own radius. `flush` is for a panel TILED inside
- * another surface — a strip of cards filling a card — where the container
- * already draws the outer edge and a per-tile radius would show as notches
- * along the seams.
- *
+/*
  * A box is separated by a fill OR an edge, never both. Only the white `panel`
- * tone draws an edge, because it is white inside a white card and has nothing
- * else; a tinted panel's fill is its boundary, and an outline around it is one
- * more line on the screen carrying no information.
+ * tone shows its edge, because it is white inside a white card and has nothing
+ * else; a tinted panel's border is transparent, so it keeps the same one-pixel
+ * geometry without one more line on the screen carrying no information.
  */
-const PANEL_EDGE = {
-  rounded: 'rounded-[var(--radius-card)]',
-  flush: '',
-} as const;
-
-export type PanelEdge = keyof typeof PANEL_EDGE;
 export type PanelTone = keyof typeof PANEL_TONE;
-export type PanelPad = keyof typeof PANEL_PAD;
 
-export function panelClasses(
-  {
-    tone = 'panel',
-    pad = 'default',
-    edge = 'rounded',
-  }: { tone?: PanelTone; pad?: PanelPad; edge?: PanelEdge } = {},
-  className?: string,
-) {
+export function panelClasses({ tone = 'panel' }: { tone?: PanelTone } = {}, className?: string) {
   return cn(
     // Marks a container surface: a nested empty state shares it rather than
     // drawing a second card inside.
-    'surface-panel',
-    PANEL_EDGE[edge],
-    tone === 'panel' && edge === 'rounded' && 'border-border border',
+    'surface-panel rounded-[var(--radius-card)] border p-[var(--card-padding)]',
     PANEL_TONE[tone],
-    PANEL_PAD[pad],
     className,
   );
 }

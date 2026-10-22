@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cardClasses } from '@/components/ui/card-variants';
 import { ScoreRing } from '@/components/ui/score-ring';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { hairlineBandClasses, hairlineBandItemClasses } from '@/components/ui/workspace';
 import { textRole } from '@/components/ui/typography';
 import { ICONS } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -28,22 +29,21 @@ export function AuditMetricStrip({
       data-testid={testId}
       className={cn(
         cardClasses(),
-        'grid grid-cols-1 overflow-hidden sm:grid-cols-2',
-        // Three fit one row from 768px; a 2 + 1 grid strands the third.
-        metrics.length === 3 ? 'md:grid-cols-3' : 'xl:grid-cols-4',
+        // One hairline band inside the one box recipe: stacked below the
+        // desktop breakpoint, one row on desktop.
+        hairlineBandClasses,
+        'overflow-hidden',
+        metrics.length === 3 ? 'desktop:grid-cols-3' : 'desktop:grid-cols-4',
       )}
     >
       {metrics.map(
-        ({ title, value, valueUnit = 'score', caveat, href, icon: Icon, unavailable }, index) => (
+        ({ title, value, valueUnit = 'score', caveat, href, icon: Icon, unavailable }) => (
           <div
             key={title}
             className={cn(
-              'grid min-w-0 grid-rows-[auto_1fr_auto] gap-2 border-border-subtle p-3',
-              index > 0 && 'border-t',
-              index % 2 === 1 && 'sm:border-l',
-              index < 2 && 'sm:border-t-0',
-              metrics.length === 3 ? 'md:border-t-0' : 'xl:border-t-0',
-              index > 0 && (metrics.length === 3 ? 'md:border-l' : 'xl:border-l'),
+              'grid grid-rows-[auto_1fr_auto] gap-2',
+              hairlineBandItemClasses,
+              'first:pt-0 last:pb-0 desktop:py-0',
             )}
           >
             <div className="flex items-center justify-between gap-3">

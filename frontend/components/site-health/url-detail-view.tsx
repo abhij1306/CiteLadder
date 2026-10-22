@@ -192,13 +192,10 @@ function PageMetadata({ detail }: Readonly<{ detail: PageDetail }>) {
   return (
     <Card className="min-w-0">
       <CardContent>
-        <StatGrid
-          columns={2}
-          className="min-[701px]:grid-cols-2 sm:grid-cols-1 xl:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]"
-        >
+        <StatGrid columns={4} className="desktop:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
           <StatItem
             label="URL"
-            className="min-[701px]:col-span-2 xl:col-span-1"
+            className="desktop:col-span-1 col-span-2"
             value={
               <TextLink
                 variant="external"
@@ -259,7 +256,7 @@ function DeliveryMetrics({ delivery }: Readonly<{ delivery: DeliveryFacts }>) {
   ];
   return (
     <Stack>
-      <p className={textRole('caption', 'max-[980px]:hidden')}>Static HTTP-level measurements</p>
+      <p className={textRole('caption', 'hidden desktop:block')}>Static HTTP-level measurements</p>
       <StatGrid columns={4} items={items} />
     </Stack>
   );
@@ -280,7 +277,7 @@ function IssuesList({ issues }: Readonly<{ issues: IssueOccurrence[] }>) {
             {ordered.map((issue) => (
               <li
                 key={issue.occurrence_id}
-                className="flex flex-col gap-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                className="desktop:flex-row desktop:items-start desktop:justify-between flex flex-col gap-3 py-3"
               >
                 <div className="grid min-w-0 gap-2">
                   <span className={textRole('itemTitle')}>{issue.issue_title}</span>

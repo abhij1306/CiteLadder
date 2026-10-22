@@ -61,7 +61,7 @@ export function InternalLinksCard({
         {`Modelled over ${links.source_page_count} observed crawl page${links.source_page_count === 1 ? '' : 's'}${links.observed_crawl_incomplete ? '; this crawl is incomplete or sampled' : ''}`}
       </p>
       <StatGrid columns={4} items={metrics.map((metric) => ({ key: metric.label, ...metric }))} />
-      <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+      <div className="desktop:grid-cols-2 grid min-w-0 gap-4">
         <NeighbourList
           heading="Top linking pages"
           neighbours={links.top_inbound}

@@ -1,6 +1,6 @@
 'use client';
 
-import { Bot, ChevronDown, Filter, Plus, Sparkles, Upload } from 'lucide-react';
+import { Bot, ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { ProjectLink } from '@/components/layout/scoped-link';
@@ -98,7 +98,7 @@ export function promptFilterControls({
     filters: (
       <Dropdown>
         <DropdownTrigger asChild>
-          <FilterTrigger label="Filter" icon={Filter} count={activeFilterCount} />
+          <FilterTrigger label="Filter" count={activeFilterCount} />
         </DropdownTrigger>
         <DropdownContent align="end" className="w-56">
           <DropdownLabel>Intent</DropdownLabel>

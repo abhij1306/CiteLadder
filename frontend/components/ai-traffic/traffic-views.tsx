@@ -62,7 +62,7 @@ export function TrafficOverview({
     <TabPanel value="overview">
       <Stack gap="workspace">
         <InsightStrip projectId={projectId} workspaceId={workspaceId} range={range} />
-        <div className="grid gap-[var(--workspace-gap)] lg:grid-cols-3">
+        <div className="desktop:grid-cols-3 grid gap-[var(--workspace-gap)]">
           <CrawlSignalPanel
             data={data.crawl}
             available={crawlAvailable}

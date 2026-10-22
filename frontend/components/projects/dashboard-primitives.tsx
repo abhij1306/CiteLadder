@@ -72,7 +72,7 @@ export function StateMetric({
  */
 export function MovementChart({ movements }: Readonly<{ movements: CommandCenter['movements'] }>) {
   return (
-    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+    <div className="desktop:grid-cols-2 grid gap-x-6 gap-y-4">
       {movements.map((row) => (
         <div key={row.label} className="grid min-w-0 content-start gap-2">
           <div className="flex items-center justify-between gap-2">
@@ -150,7 +150,7 @@ export function ActionRow({
         if (!reorderPending) onDrop(Number(event.dataTransfer.getData('text/plain')), index);
       }}
       className={cn(
-        'border-border-subtle hover:bg-hover active:bg-active grid gap-3 border-b py-3 transition-colors last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center',
+        'border-border-subtle hover:bg-hover active:bg-active grid gap-3 border-b py-3 transition-colors last:border-b-0 desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center',
         dragging && 'opacity-60',
       )}
     >

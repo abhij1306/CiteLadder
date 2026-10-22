@@ -124,7 +124,7 @@ export function VisibilityTrends({
               own.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             <RankingRowsTable
               rows={selected.rankings}
               onSelect={setFocused}

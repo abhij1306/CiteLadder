@@ -23,7 +23,7 @@ import { Delta } from '@/components/ui/delta';
 import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { textRole } from '@/components/ui/typography';
-import { tagClasses } from '@/components/ui/filter-chip-variants';
+import { tagClasses } from '@/components/ui/tag-variants';
 
 /**
  * Where you stand against the brands you track.
@@ -216,10 +216,10 @@ export function RankingRowsTable({
                 read #1 while this column reads #3. */}
             {anyPosition ? <TableHead numeric>Rank</TableHead> : null}
             {anyChange ? <TableHead numeric>Change</TableHead> : null}
-            <TableHead numeric className="hidden md:table-cell">
+            <TableHead numeric className="desktop:table-cell hidden">
               Share of voice
             </TableHead>
-            <TableHead numeric className="hidden md:table-cell">
+            <TableHead numeric className="desktop:table-cell hidden">
               Citations
             </TableHead>
           </TableRow>
@@ -250,7 +250,10 @@ export function RankingRowsTable({
                       <span className={textRole('label', tagClasses('well', 'shrink-0'))}>You</span>
                     ) : null}
                   </span>
-                  <ClampText lines={1} className={textRole('caption', 'text-secondary md:hidden')}>
+                  <ClampText
+                    lines={1}
+                    className={textRole('caption', 'text-secondary desktop:hidden')}
+                  >
                     {formatRate(row.share_of_voice)} share of voice ·{' '}
                     {formatRate(row.citation_rate)} citations
                   </ClampText>
@@ -275,10 +278,10 @@ export function RankingRowsTable({
                     <Delta value={change} unit=" pp" />
                   </TableCell>
                 ) : null}
-                <TableCell numeric className="hidden md:table-cell">
+                <TableCell numeric className="desktop:table-cell hidden">
                   {measured(formatRate(row.share_of_voice)) ?? <MissingValue />}
                 </TableCell>
-                <TableCell numeric className="hidden md:table-cell">
+                <TableCell numeric className="desktop:table-cell hidden">
                   {measured(formatRate(row.citation_rate)) ?? <MissingValue />}
                 </TableCell>
               </TableRow>

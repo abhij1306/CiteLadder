@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 type ControlProps = Readonly<{ model: ReturnType<typeof useTrafficData> }>;
 type TrafficControlsProps = ControlProps & Readonly<{ crawlAvailable: boolean }>;
 /** Narrow screens give every field the band's full width instead of a ragged wrap. */
-const FIELD = 'max-[700px]:w-full';
+const FIELD = 'w-full desktop:w-auto';
 export function TrafficControls({ model, crawlAvailable }: TrafficControlsProps) {
   const { tab } = model;
   const { range, setRange, verification, setVerification } = model.selection;
@@ -61,7 +61,7 @@ function ScopeControls({ model }: ControlProps) {
         value={folder ?? ''}
         onChange={(e) => setFolder(e.target.value || null)}
         startContent={<Folder className="size-4" aria-hidden />}
-        containerClassName={`w-44 ${FIELD}`}
+        containerClassName="w-full desktop:w-44"
       />
       <Select
         ariaLabel="Resource class"
@@ -143,7 +143,7 @@ function ActivityControls({ model }: ControlProps) {
         step={1}
         value={status ?? ''}
         onChange={(e) => setStatus(e.target.value || null)}
-        className={`w-32 ${FIELD}`}
+        className="desktop:w-32 w-full"
       />
     </>
   );

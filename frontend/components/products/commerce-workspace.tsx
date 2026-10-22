@@ -47,7 +47,7 @@ export function BulkActions({
     hint = `Competitors can be found for up to ${COMMERCE_TARGETS_MAX} targets at a time.`;
   else if (count) hint = 'Find competitors for every checked target.';
   return (
-    <Card className="flex min-h-16 flex-wrap items-center justify-between gap-3 px-3 py-2">
+    <Card className="flex flex-wrap items-center justify-between gap-3">
       <div className="grid gap-0.5">
         <span aria-live="polite" className={textRole('itemTitle')}>
           {count ? `${count} ${noun} selected` : 'No targets selected'}
@@ -131,7 +131,7 @@ export function CommerceWorkspace({ projectId }: Readonly<{ projectId: string }>
           stickyList
           list={
             <Card className="min-w-0">
-              <CardContent flush>
+              <CardContent>
                 <CatalogList
                   query={queries.catalog}
                   selectedKey={selectedKey}

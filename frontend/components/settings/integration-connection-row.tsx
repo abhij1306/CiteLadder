@@ -90,7 +90,7 @@ function ConnectionActions({
   const syncDisabled = busy || runInFlight || !hasProperty || grant.status !== 'connected';
 
   return (
-    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+    <div className="desktop:flex-row desktop:items-center flex flex-col justify-between gap-3">
       <div className="flex min-w-0 flex-1 items-start gap-3">
         <span
           aria-hidden
@@ -103,7 +103,7 @@ function ConnectionActions({
           <PropertyPicker connection={connection} disabled={busy} />
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2 self-end sm:self-auto">
+      <div className="desktop:self-auto flex shrink-0 items-center gap-2 self-end">
         <Button
           variant="secondary"
           className="min-w-14"
@@ -239,10 +239,7 @@ function ConnectionRowView({
   const { label, Icon } = PROVIDER_META[connection.provider];
 
   return (
-    <div
-      className={panelClasses({ pad: 'compact' })}
-      data-testid={`connection-row-${connection.provider}`}
-    >
+    <div className={panelClasses()} data-testid={`connection-row-${connection.provider}`}>
       <ConnectionActions
         connection={connection}
         grant={grant}

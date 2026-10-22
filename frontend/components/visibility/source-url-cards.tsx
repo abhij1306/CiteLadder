@@ -55,7 +55,7 @@ function SectionCard({
         <CardTitle>{title}</CardTitle>
         {caption ? <CardDescription>{caption}</CardDescription> : null}
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         <SectionBody loading={loading} errored={errored} empty={empty}>
           {children}
         </SectionBody>
@@ -83,9 +83,9 @@ function SectionBody({
   children: React.ReactNode | null;
 }>) {
   if (errored) return null;
-  if (loading) return <Skeleton className="m-[var(--card-padding)] h-24" />;
+  if (loading) return <Skeleton className="h-24" />;
   if (children) return <>{children}</>;
-  return <InlineEmpty className="p-[var(--card-padding)]">{empty}</InlineEmpty>;
+  return <InlineEmpty>{empty}</InlineEmpty>;
 }
 
 export function EnginesCard({
@@ -163,7 +163,7 @@ export function BrandsCard({
       empty="No tracked brand was named in the answers citing this URL."
     >
       {brands?.length ? (
-        <ul className="grid gap-2 p-[var(--card-padding)]">
+        <ul className="grid gap-2">
           {brands.map((brand) => (
             <li key={`${brand.kind}:${brand.name}`} className="flex items-center gap-2">
               <BrandLogo

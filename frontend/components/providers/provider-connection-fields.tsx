@@ -38,7 +38,7 @@ function ApiKeyField({ state }: Readonly<{ state: ConnectionState }>) {
 function BasicAuthFields({ state }: Readonly<{ state: ConnectionState }>) {
   const { configured, apiLogin, setApiLogin, apiPassword, setApiPassword } = state;
   return (
-    <div className="grid gap-3 sm:grid-cols-2">
+    <div className="desktop:grid-cols-2 grid gap-3">
       <Field label={configured ? 'API login (enter both fields to rotate)' : 'API login'}>
         {(props) => (
           <Input

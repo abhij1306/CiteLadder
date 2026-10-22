@@ -117,7 +117,7 @@ export function SearchIntelligenceDatasetView({
     <>
       <Card className="min-w-0">
         <DatasetHeader dataset={dataset} title={title} />
-        <CardContent flush>
+        <CardContent>
           <CardHeader bordered>
             <FilterBar
               search={
@@ -300,7 +300,7 @@ function EmptyDataset({
       <CardHeader bordered>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-2 py-[var(--workspace-gap)]">
+      <CardContent className="grid gap-2">
         <p className={textRole('itemTitle')}>
           {dataset.coverage === 'unknown'
             ? 'Provider evidence is unavailable for this saved scope.'

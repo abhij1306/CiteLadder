@@ -86,7 +86,7 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
   if (!relevance) return null;
   if (relevance.state !== 'measured') {
     return (
-      <div className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid gap-1')}>
+      <div className={panelClasses({ tone: 'well' }, 'grid gap-1')}>
         <span className={textRole('label')}>Query relevance unavailable</span>
         <p className="type-caption">
           {relevance.reason === 'page_content_unavailable'
@@ -100,10 +100,7 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
     new Set([...(relevance.absent_from_title ?? []), ...(relevance.absent_from_h1 ?? [])]),
   );
   return (
-    <section
-      className={panelClasses({ tone: 'well', pad: 'compact' })}
-      aria-label="Query relevance"
-    >
+    <section className={panelClasses({ tone: 'well' })} aria-label="Query relevance">
       <div className="grid gap-2">
         <div>
           <span className={textRole('label')}>Query relevance</span>

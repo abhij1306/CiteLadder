@@ -64,7 +64,7 @@ export function EmptyState({
       className={cn(
         cardClasses(),
         'empty-state-surface grid gap-3',
-        variant === 'compact' && 'min-[981px]:gap-1',
+        variant === 'compact' && 'desktop:gap-1',
         className,
       )}
     >
@@ -73,7 +73,7 @@ export function EmptyState({
         <Heading className={textRole(headingRole)}>{heading}</Heading>
       </div>
       {description ? (
-        <p className={cn('type-body max-w-[52ch]', variant === 'compact' && 'min-[981px]:pl-6')}>
+        <p className={cn('type-body max-w-[52ch]', variant === 'compact' && 'desktop:pl-6')}>
           {description}
         </p>
       ) : null}

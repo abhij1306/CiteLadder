@@ -159,7 +159,7 @@ function ArchitectureLedger({ data }: Readonly<{ data: SiteArchitecture }>) {
             URLs grouped by their persisted structural purpose for this crawl.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 pt-1">
+        <CardContent className="grid gap-3">
           <ArchitectureMetrics
             pageKinds={pageKinds.length}
             pages={data.page_count}
@@ -239,8 +239,8 @@ function PageKindTable({
 }>) {
   const [openKind, setOpenKind] = useState<string | null>(null);
   return (
-    <Table className="block md:table" wrapperClassName="overflow-hidden md:overflow-auto">
-      <TableHeader className="hidden md:table-header-group">
+    <Table className="desktop:table block" wrapperClassName="overflow-hidden desktop:overflow-auto">
+      <TableHeader className="desktop:table-header-group hidden">
         <TableRow>
           <TableHead>Page kind</TableHead>
           <TableHead numeric>Pages</TableHead>
@@ -250,20 +250,20 @@ function PageKindTable({
           <TableHead numeric>Orphaned</TableHead>
         </TableRow>
       </TableHeader>
-      <TableBody className="block md:table-row-group">
+      <TableBody className="desktop:table-row-group block">
         {pageKinds.map((pageKind) => {
           const open = openKind === pageKind.page_kind;
           const pages = grouped.get(pageKind.page_kind) ?? [];
           const Chevron = open ? ChevronDown : ChevronRight;
           return (
             <Fragment key={pageKind.page_kind}>
-              <TableRow className="grid h-auto grid-cols-1 py-2 md:table-row md:h-[var(--table-row-height)] md:py-0">
-                <TableCell className="block border-b-0 px-4 py-1 md:table-cell md:border-b md:px-[var(--table-cell-padding-x)] md:py-[var(--table-cell-padding-y)]">
+              <TableRow className="desktop:table-row desktop:h-[var(--table-row-height)] desktop:py-0 grid h-auto grid-cols-1 py-2">
+                <TableCell className="desktop:table-cell desktop:border-b desktop:px-[var(--table-cell-padding-x)] desktop:py-[var(--table-cell-padding-y)] block border-b-0 px-4 py-1">
                   <Pressable
                     type="button"
                     aria-expanded={open}
                     onClick={() => setOpenKind(open ? null : pageKind.page_kind)}
-                    className="inline-flex min-h-11 w-auto items-center gap-2 text-left md:min-h-9"
+                    className="desktop:min-h-9 inline-flex min-h-11 w-auto items-center gap-2 text-left"
                   >
                     <Chevron className="text-muted size-4 shrink-0" aria-hidden />
                     <PageKindBadge pageKind={pageKind.page_kind} />
@@ -297,8 +297,8 @@ function PageKindPages({
   crawlId,
 }: Readonly<{ pages: ArchitectureNode[]; crawlId: string | null }>) {
   return (
-    <TableRow className="bg-background-alt hover:bg-background-alt block h-auto md:table-row md:h-[var(--table-row-height)]">
-      <TableCell colSpan={6} className="block py-3 md:table-cell">
+    <TableRow className="bg-background-alt hover:bg-background-alt desktop:table-row desktop:h-[var(--table-row-height)] block h-auto">
+      <TableCell colSpan={6} className="desktop:table-cell block py-3">
         {pages.length === 0 ? (
           <InlineEmpty>No projected URLs are available for this kind.</InlineEmpty>
         ) : (
@@ -341,7 +341,7 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
               Internal linking
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 pt-2">
+          <CardContent className="grid gap-4">
             <StatGrid columns={3} size="figure">
               <StatItem
                 label="In-content links"
@@ -375,7 +375,7 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
               Structure depth
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 pt-2">
+          <CardContent className="grid gap-3">
             {data.structure_depth.buckets.map((bucket) => (
               <div key={bucket.key} className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-3">
                 <span className="type-caption">{DEPTH_LABELS[bucket.key]}</span>

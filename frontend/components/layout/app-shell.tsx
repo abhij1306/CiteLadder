@@ -81,7 +81,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
             </a>
             {/* The rail starts one sheet inset down, so its rows line up with
                 the bands of the floating sheet beside it. */}
-            <aside className="shell-rail bg-background sticky top-0 z-1 hidden h-dvh w-[var(--sidebar-width)] shrink-0 flex-col pt-[var(--workspace-inset)] min-[981px]:flex">
+            <aside className="shell-rail bg-background desktop:flex sticky top-0 z-1 hidden h-dvh w-[var(--sidebar-width)] shrink-0 flex-col pt-[var(--workspace-inset)]">
               {/* The project selector is the sidebar's first row, at the same
                   height as the header beside it. The rail reads project →
                   tools → destinations → brand: the switcher is the thing a
@@ -124,7 +124,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
               {/* Compact only, exactly as before. On desktop the account
                   trigger rides the route's own header row instead, so the shell
                   adds no second bar above the work. */}
-              <header className="bg-panel border-border-subtle z-sticky sticky top-0 grid h-[var(--compact-topbar-height)] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-[var(--content-gutter)] min-[981px]:hidden">
+              <header className="bg-panel border-border-subtle z-sticky desktop:hidden sticky top-0 grid h-[var(--compact-topbar-height)] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-[var(--content-gutter)]">
                 <div className="flex items-center">
                   <Button
                     variant="ghost"
@@ -156,7 +156,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
                     Desktop only — the compact topbar already carries it. The
                     inline-size padding matches the pane's gutter so the glyph
                     lines up with the actions beneath it. */}
-                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 hidden h-[var(--page-band-identity)] min-[981px]:block">
+                <div className="desktop:block pointer-events-none absolute inset-x-0 top-0 z-10 hidden h-[var(--page-band-identity)]">
                   <div className="mx-auto flex h-full w-full max-w-[var(--content-max-width)] items-center justify-end px-[var(--content-gutter)]">
                     <div className="pointer-events-auto flex items-center gap-1">
                       <AgentPanelTrigger />

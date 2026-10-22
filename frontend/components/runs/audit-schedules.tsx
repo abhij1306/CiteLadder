@@ -149,7 +149,7 @@ function WorkspaceSchedules({
         {promptSets.length === 0 ? (
           <Alert tone="info">Add prompts before scheduling an audit.</Alert>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="desktop:grid-cols-3 grid gap-3">
             <div className={textRole('label', 'grid gap-1')}>
               <span>Prompt set</span>
               <Select
@@ -195,7 +195,7 @@ function WorkspaceSchedules({
                 />
               </label>
             ) : null}
-            <fieldset className="grid gap-1 sm:col-span-2">
+            <fieldset className="desktop:col-span-2 grid gap-1">
               <legend className={textRole('label')}>Engines</legend>
               <div className="flex flex-wrap gap-2">
                 {ENGINE_ORDER.map((engine) => (
@@ -255,7 +255,7 @@ function MarketChecklist({
 }>) {
   if (markets.length < 2) return null;
   return (
-    <fieldset className="grid gap-1 sm:col-span-2">
+    <fieldset className="desktop:col-span-2 grid gap-1">
       <legend className={textRole('label')}>Markets</legend>
       <div className="flex flex-wrap gap-2">
         {markets.map((market) => (

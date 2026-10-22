@@ -321,7 +321,7 @@ function ChangesTable({
             exact implementation-event matches.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 pt-0">
+        <CardContent className="grid gap-4">
           <StatGrid
             columns={4}
             items={Object.entries(CLASS_LABELS).map(([key, label]) => ({

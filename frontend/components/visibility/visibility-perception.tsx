@@ -184,7 +184,7 @@ function EntityTable({ entities }: Readonly<{ entities: PerceptionResponse['enti
           Classified mentions of each business in the selected answers.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
@@ -232,9 +232,9 @@ function ThemeTable({ themes }: Readonly<{ themes: PerceptionResponse['themes'] 
           What answers praised or criticised about you, with a verified quote.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {!themes.length ? (
-          <InlineEmpty className="p-[var(--card-padding)]">No themes in these answers.</InlineEmpty>
+          <InlineEmpty>No themes in these answers.</InlineEmpty>
         ) : (
           <Table>
             <TableHeader>
@@ -319,11 +319,9 @@ function DriverTable({ drivers }: Readonly<{ drivers: PerceptionResponse['driver
           Domains cited in answers that criticised you. Cited alongside, not shown to be the cause.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {!drivers.length ? (
-          <InlineEmpty className="p-[var(--card-padding)]">
-            No sources cited alongside criticism.
-          </InlineEmpty>
+          <InlineEmpty>No sources cited alongside criticism.</InlineEmpty>
         ) : (
           <Table>
             <TableHeader>

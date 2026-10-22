@@ -174,28 +174,29 @@ function IdentityBand({
       data-page-band="identity"
       className={cn(
         'bg-panel border-border-subtle border-b',
-        // Below 701px the compact topbar already names the page, so a band
-        // holding only a screen-reader title would be an empty ruled row. A
-        // back link is visible content, so it keeps the band.
-        !actions && !back && 'max-[700px]:hidden',
+        // Below the desktop breakpoint the compact topbar already names the
+        // page, so a band holding only a screen-reader title would be an
+        // empty ruled row. A back link is visible content, so it keeps the band.
+        !actions && !back && 'hidden desktop:block',
       )}
     >
       <div
         className={cn(
           pageGutterClasses,
           'flex min-w-0 flex-col gap-[var(--page-header-gap)] pt-[var(--page-header-padding-top)] pb-[var(--page-header-padding-bottom)]',
-          'min-[701px]:flex-row min-[701px]:items-center min-[701px]:justify-between',
-          // Desktop: the sidebar's switcher line. The title centres on it, and
-          // the band below starts where the sidebar's second row starts.
-          'min-[981px]:min-h-[var(--page-band-identity)] min-[981px]:py-0',
+          // Desktop: one row on the sidebar's switcher line. The title centres
+          // on it, and the band below starts where the sidebar's second row
+          // starts.
+          'desktop:flex-row desktop:items-center desktop:justify-between',
+          'desktop:min-h-[var(--page-band-identity)] desktop:py-0',
         )}
       >
         {/* The title keeps a floor, so a long action row wraps rather than
             squeezing the page's name to nothing. */}
         <div
           className={cn(
-            'grid min-w-0 flex-1 gap-1 min-[701px]:min-w-[var(--page-title-min-width)]',
-            !back && 'max-[700px]:sr-only',
+            'grid min-w-0 flex-1 gap-1 desktop:min-w-[var(--page-title-min-width)]',
+            !back && 'sr-only desktop:not-sr-only',
           )}
         >
           {back ? (
@@ -212,7 +213,7 @@ function IdentityBand({
           {/* The route H1 is the top of the type ladder: nothing on the page
               out-ranks it except a figure. It stays the one H1 per route. */}
           {/* One row, always: a long title truncates rather than wrapping. */}
-          <h1 className={textRole('pageTitle', 'min-w-0 truncate max-[700px]:sr-only')}>
+          <h1 className={textRole('pageTitle', 'min-w-0 truncate sr-only desktop:not-sr-only')}>
             {resolved}
           </h1>
         </div>
@@ -223,10 +224,10 @@ function IdentityBand({
           // Desktop-only, because that is the only width the glyphs appear at.
           <div
             className={cn(
-              'flex min-w-0 min-h-[var(--control-height-md)] flex-wrap items-center gap-2 min-[701px]:justify-end',
+              'flex min-w-0 min-h-[var(--control-height-md)] flex-wrap items-center gap-2 desktop:justify-end',
               navigationMode(pathname) === 'dashboard'
-                ? 'min-[981px]:pe-[calc(3*var(--control-height-md)+1.25rem)]'
-                : 'min-[981px]:pe-[calc(2*var(--control-height-md)+1rem)]',
+                ? 'desktop:pe-[calc(3*var(--control-height-md)+1.25rem)]'
+                : 'desktop:pe-[calc(2*var(--control-height-md)+1rem)]',
             )}
           >
             {actions}

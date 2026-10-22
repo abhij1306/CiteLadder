@@ -318,7 +318,7 @@ export function SourcesPanel({
             returned three rows instead of ten pulled everything below it up
             by seven rows -- and then pushed it back down when the filter was
             cleared. The height is the toolbar plus a full page of rows. */}
-        <CardContent className="flex min-h-[560px] flex-col justify-between p-0">
+        <CardContent className="flex min-h-[560px] flex-col justify-between">
           {nearMiss ? (
             <NearMissBody
               query={nearMissQuery}
@@ -450,7 +450,6 @@ function SourceTable({
         fallback="Could not load sources. Check your connection and try again."
         onRetry={() => void query.refetch()}
         pending={query.isFetching}
-        className="m-[var(--card-padding)]"
       />
     );
   }

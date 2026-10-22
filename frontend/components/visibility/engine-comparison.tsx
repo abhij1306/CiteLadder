@@ -39,9 +39,9 @@ export function EngineComparison({
         <CardTitle>By model</CardTitle>
         <CardDescription>How each answer engine treated your brand.</CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {!engines.length ? (
-          <InlineEmpty className="p-[var(--card-padding)]">No model observations.</InlineEmpty>
+          <InlineEmpty>No model observations.</InlineEmpty>
         ) : (
           <Table>
             <TableHeader>

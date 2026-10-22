@@ -126,7 +126,7 @@ export function ExecutionEvidenceDrawer({
       onOpenChange={onOpenChange}
       title="Execution evidence"
       description={description}
-      className="sm:max-w-220"
+      className="desktop:max-w-220"
       closeLabel="Close evidence drawer"
     >
       {evidenceBody}

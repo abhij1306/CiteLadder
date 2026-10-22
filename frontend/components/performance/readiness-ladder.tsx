@@ -136,7 +136,7 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
   const reached = stageIndex(data.stage);
   return (
     <section
-      className={cn(panelClasses({ tone: 'panel', pad: 'compact' }), 'grid gap-2')}
+      className={cn(panelClasses({ tone: 'panel' }), 'grid gap-2')}
       aria-label="Data readiness"
       data-testid="readiness-ladder"
     >

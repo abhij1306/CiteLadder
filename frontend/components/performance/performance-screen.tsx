@@ -188,7 +188,7 @@ function SearchConsoleWorkspace({
   if (!available) return null;
   return (
     <Card className="overflow-hidden">
-      <div className="border-border-subtle flex flex-col border-b lg:flex-row lg:items-stretch lg:justify-between">
+      <div className="border-border-subtle desktop:flex-row desktop:items-stretch desktop:justify-between flex flex-col border-b">
         <MetricCards
           data-testid="metric-card-strip"
           className="min-w-0 flex-1"
@@ -201,7 +201,7 @@ function SearchConsoleWorkspace({
           colors={METRIC_COLORS}
           loading={refreshing}
         />
-        <div className="border-border-subtle flex shrink-0 items-center justify-end border-t px-3 py-2 lg:border-t-0 lg:border-l">
+        <div className="border-border-subtle desktop:border-t-0 desktop:border-l flex shrink-0 items-center justify-end border-t px-3 py-2">
           <GranularitySelect value={granularity} onChange={onGranularityChange} />
         </div>
       </div>

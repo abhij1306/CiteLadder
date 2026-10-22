@@ -31,7 +31,7 @@ export function EarnedPageHandoff({ detail }: Readonly<{ detail: OpportunityDeta
   return (
     <section className="grid gap-2">
       <Label>Action handoff</Label>
-      <div className={panelClasses({ pad: 'compact' }, 'grid gap-3')}>
+      <div className={panelClasses({}, 'grid gap-3')}>
         <p className={textRole('body')}>
           Get listed on this page. Competitors are on it and you are not.
         </p>

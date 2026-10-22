@@ -354,7 +354,7 @@ function LinkedChats({
       {rows.length > 0 ? (
         <ul className="grid gap-2">
           {rows.map((chat) => (
-            <li key={chat.id} className={panelClasses({ pad: 'compact' }, 'grid gap-0.5')}>
+            <li key={chat.id} className={panelClasses({}, 'grid gap-0.5')}>
               <TextLink
                 href={`/agent/chats/${chat.id}`}
                 text="itemTitle"

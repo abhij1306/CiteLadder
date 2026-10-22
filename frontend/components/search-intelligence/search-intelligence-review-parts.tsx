@@ -118,7 +118,7 @@ function DatasetGroup({
   onDepth: (option: DatasetSelection, text: string) => void;
 }>) {
   return (
-    <fieldset className={panelClasses({ tone: 'panel', pad: 'compact' })}>
+    <fieldset className={panelClasses({ tone: 'panel' })}>
       <legend className={textRole('label', 'px-1')}>{legend}</legend>
       <div className="grid gap-3">
         {options.map((option) => {

@@ -1,6 +1,6 @@
 'use client';
 
-import type { ComponentProps, InputHTMLAttributes } from 'react';
+import type { InputHTMLAttributes } from 'react';
 import { Search, X } from 'lucide-react';
 
 import { Input } from './input';
@@ -15,16 +15,15 @@ export type SearchFieldProps = Omit<
   onValueChange: (value: string) => void;
   pending?: boolean;
   onClear?: () => void;
-  size?: ComponentProps<typeof Input>['size'];
 };
 
+/** The product search field: one form, the 32px control. */
 export function SearchField({
   value,
   onValueChange,
   pending = false,
   onClear,
   className,
-  size,
   'aria-label': ariaLabel = 'Search',
   ...props
 }: Readonly<SearchFieldProps>) {
@@ -32,7 +31,6 @@ export function SearchField({
     <Input
       {...props}
       type="search"
-      size={size}
       value={value}
       onChange={(event) => onValueChange(event.target.value)}
       aria-label={ariaLabel}

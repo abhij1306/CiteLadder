@@ -195,9 +195,9 @@ function AdvertiserTable({
             : 'Who paid to appear in these answers.'}
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {!advertisers.length ? (
-          <InlineEmpty className="p-[var(--card-padding)]">No ads in these answers.</InlineEmpty>
+          <InlineEmpty>No ads in these answers.</InlineEmpty>
         ) : (
           <Table>
             <TableHeader>
@@ -250,9 +250,9 @@ function PromptTable({ prompts }: Readonly<{ prompts: VisibilityAdsResponse['pro
           only, not a cause.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {!prompts.length ? (
-          <InlineEmpty className="p-[var(--card-padding)]">No prompt surfaced an ad.</InlineEmpty>
+          <InlineEmpty>No prompt surfaced an ad.</InlineEmpty>
         ) : (
           <Table>
             <TableHeader>

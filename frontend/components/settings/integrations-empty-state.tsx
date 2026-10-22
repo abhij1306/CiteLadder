@@ -20,7 +20,6 @@ export function IntegrationsEmptyState({ workspaceId }: Readonly<{ workspaceId: 
   return (
     <Card data-testid="integrations-empty-state">
       <CardHeader
-        className="pb-[var(--card-padding)]"
         actions={
           <>
             <Button

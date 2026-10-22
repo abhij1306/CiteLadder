@@ -50,7 +50,7 @@ export function SignalLegend({ signals }: Readonly<{ signals: readonly DemandSig
   if (types.length === 0) return null;
   return (
     <section aria-label="Signal types">
-      <dl className="grid gap-x-6 gap-y-2 md:grid-cols-2">
+      <dl className="desktop:grid-cols-2 grid gap-x-6 gap-y-2">
         {types.map((type) => (
           <div key={type} className="flex items-start gap-2">
             <dt className="shrink-0">

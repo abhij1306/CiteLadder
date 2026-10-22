@@ -93,12 +93,7 @@ export function CandidateReview({
       </div>
       {error ? <Alert tone="danger">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      <div
-        className={panelClasses(
-          { tone: 'tonal', pad: 'none' },
-          'flex items-center justify-between gap-3 px-1 py-1',
-        )}
-      >
+      <div className={panelClasses({ tone: 'tonal' }, 'flex items-center justify-between gap-3')}>
         <Checkbox
           label="Select all"
           checked={allState}

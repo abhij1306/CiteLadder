@@ -201,7 +201,7 @@ function AttachedAction({
   if (!query.data) return null;
   const action = query.data;
   return (
-    <section aria-label="Working on" className={panelClasses({ pad: 'compact' }, 'grid gap-1')}>
+    <section aria-label="Working on" className={panelClasses({}, 'grid gap-1')}>
       <span className={textRole('label')}>Working on</span>
       <div className="flex flex-wrap items-center gap-2">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
@@ -247,7 +247,7 @@ function TopActions({
 
 function TopActionRow({ action }: Readonly<{ action: Action }>) {
   return (
-    <li className={panelClasses({ pad: 'compact' }, 'flex flex-wrap items-center gap-3')}>
+    <li className={panelClasses({}, 'flex flex-wrap items-center gap-3')}>
       <div className="grid min-w-0 flex-1 gap-0.5">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle" className="truncate">
           {action.target_label}

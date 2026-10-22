@@ -53,13 +53,13 @@ export function IssueDetailRail({
   });
   return (
     <section
-      className="min-w-0 lg:sticky lg:top-[var(--workspace-gap)] lg:max-h-[calc(100dvh-2*var(--workspace-gap))] lg:overflow-hidden"
+      className="desktop:sticky desktop:top-[var(--workspace-gap)] desktop:max-h-[calc(100dvh-2*var(--workspace-gap))] desktop:overflow-hidden min-w-0"
       aria-busy={detailQuery.isFetching}
     >
-      <div className="relative flex flex-col lg:max-h-[calc(100dvh-2*var(--workspace-gap))]">
+      <div className="desktop:max-h-[calc(100dvh-2*var(--workspace-gap))] relative flex flex-col">
         <BusyBar active={detailQuery.isFetching} label="Updating issue evidence" />
         <header className="border-border-subtle grid min-w-0 shrink-0 gap-3 border-b p-[var(--card-padding)]">
-          <div className="flex min-w-0 items-start justify-between gap-[var(--workspace-gap)] max-[700px]:flex-col">
+          <div className="desktop:flex-row flex min-w-0 flex-col items-start justify-between gap-[var(--workspace-gap)]">
             <div className="grid min-w-0 gap-2">
               <h2 className={textRole('sectionTitle')}>{issueTitle(issue)}</h2>
               <IssueMetadata issue={issue} />
@@ -67,7 +67,7 @@ export function IssueDetailRail({
             <div
               className={textRole(
                 'body',
-                'border-border-subtle grid shrink-0 gap-1 border-l pl-4 max-[700px]:w-full max-[700px]:border-t max-[700px]:border-l-0 max-[700px]:pt-3 max-[700px]:pl-0',
+                'border-border-subtle grid w-full shrink-0 gap-1 border-t pt-3 desktop:w-auto desktop:border-t-0 desktop:border-l desktop:pt-0 desktop:pl-4',
               )}
             >
               <span className="text-secondary whitespace-nowrap tabular-nums">
@@ -89,12 +89,12 @@ export function IssueDetailRail({
           </div>
           <IssueActions issue={issue} crawlId={crawlId} />
         </header>
-        <div className="content-scroll grid min-h-0 gap-[var(--workspace-gap)] p-[var(--card-padding)] lg:flex-1 lg:overflow-y-auto">
+        <div className="content-scroll desktop:flex-1 desktop:overflow-y-auto grid min-h-0 gap-[var(--workspace-gap)] p-[var(--card-padding)]">
           {issue.description ? (
             <p className="type-body whitespace-pre-line">{issue.description}</p>
           ) : null}
           {issue.remediation ? (
-            <div className={panelClasses({ tone: 'tonal', pad: 'compact' }, 'grid gap-1')}>
+            <div className={panelClasses({ tone: 'tonal' }, 'grid gap-1')}>
               <span className={textRole('label')}>How to fix</span>
               <p className="type-body whitespace-pre-line">{issue.remediation}</p>
             </div>
