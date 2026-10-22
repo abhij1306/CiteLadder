@@ -16,11 +16,12 @@ import {
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { integrationsApi, type IntegrationProvider } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { projectDestination } from '@/lib/navigation/project-destination';
@@ -97,7 +98,7 @@ function setupRows(
 }
 
 function RowFrame({
-  Icon,
+  Icon: glyph,
   title,
   status,
   action,
@@ -110,22 +111,20 @@ function RowFrame({
   children?: ReactNode;
 }>) {
   return (
-    <Stack as="li" gap="compact" className="py-3 first:pt-0 last:pb-0">
-      <div className="desktop:flex-row desktop:items-center flex flex-col gap-3">
-        <div className="flex min-w-0 flex-1 items-start gap-3">
-          <span
-            aria-hidden
-            className="bg-well border-border text-secondary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] border"
-          >
-            <Icon className="size-4" />
-          </span>
+    <Stack as="li" gap="compact" className={ledgerItemClasses()}>
+      <Inline
+        gap="compact"
+        className="desktop:flex-row desktop:items-center flex-col items-stretch"
+      >
+        <Inline gap="compact" className="flex-1 items-start">
+          <Icon icon={glyph} className="text-secondary" />
           <div className="min-w-0">
             <div className={textRole('itemTitle', 'truncate')}>{title}</div>
             <div className="type-caption">{status}</div>
           </div>
-        </div>
-        {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
-      </div>
+        </Inline>
+        {action ? <Inline className="shrink-0">{action}</Inline> : null}
+      </Inline>
       {children}
     </Stack>
   );
@@ -200,13 +199,13 @@ function SourceRow({
         Icon={source.Icon}
         title={source.label}
         status={
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <Inline as="span" gap="meta">
             <span className="tabular-nums">{step.mapping.property_ref}</span>
             <BackfillProgress
               workspaceId={step.connection.workspace_id}
               connectionId={step.connection.id}
             />
-          </span>
+          </Inline>
         }
       />
     );

@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 
+import { Checkbox } from '@/components/ui/checkbox';
 import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
@@ -56,9 +57,15 @@ export function Table({
   fixed = false,
   wrapperClassName,
   wrapperRef,
+  ariaLabel,
+  ariaLabelledBy,
 }: Readonly<{
   children: ReactNode;
   className?: string;
+  /** The table's accessible name, when no visible heading names it. */
+  ariaLabel?: string;
+  /** The visible heading that names the table. */
+  ariaLabelledBy?: string;
   /** Below this width the table scrolls in its frame instead of squeezing. */
   minWidth?: TableMinWidth;
   /**
@@ -79,6 +86,8 @@ export function Table({
       )}
     >
       <table
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         className={cn(
           'type-body w-full border-collapse',
           fixed && 'table-fixed',
@@ -316,6 +325,70 @@ export function TableCell({
       )}
     >
       {!numeric && isPlainText(children) ? <ClampText>{children}</ClampText> : children}
+    </td>
+  );
+}
+
+/**
+ * A value over one caption line (a query over its page), each cut to one line
+ * with the rest in a tooltip. `title` inks the value as an item title; a blank
+ * `secondary` (a non-breaking space) keeps a captionless row two lines tall.
+ */
+export function TableCellLines({
+  primary,
+  secondary,
+  secondaryTooltip,
+  title = false,
+}: Readonly<{
+  primary: ReactNode;
+  secondary?: ReactNode;
+  /** The caption's tooltip when it is cut, e.g. the full URL behind a path. */
+  secondaryTooltip?: ReactNode;
+  title?: boolean;
+}>) {
+  return (
+    <span className="grid min-w-0">
+      <ClampText lines={1} className={title ? textRole('itemTitle') : undefined}>
+        {primary}
+      </ClampText>
+      {secondary ? (
+        <ClampText lines={1} tooltip={secondaryTooltip} className={textRole('caption')}>
+          {secondary}
+        </ClampText>
+      ) : null}
+    </span>
+  );
+}
+
+/** A row's trailing buttons, end-aligned at the button gap (`rowActions` column). */
+export function TableActionsCell({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <td className={cn(cellClasses({}), 'whitespace-nowrap')}>
+      <span className="flex items-center justify-end gap-2">{children}</span>
+    </td>
+  );
+}
+
+/** A selectable row's first cell: its checkbox, named for the row ("Select …"). */
+export function TableSelectCell({
+  label,
+  checked,
+  onCheckedChange,
+  disabled,
+}: Readonly<{
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+}>) {
+  return (
+    <td className={cellClasses({})}>
+      <Checkbox
+        aria-label={label}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={(next) => onCheckedChange(next === true)}
+      />
     </td>
   );
 }

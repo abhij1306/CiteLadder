@@ -2,15 +2,8 @@
 import { useState } from 'react';
 import type { z } from 'zod';
 import type { aiTrafficPagesSchema } from '@citeladder/contracts/ai-traffic';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Stack } from '@/components/ui/layout';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { Pressable } from '@/components/ui/pressable';
@@ -20,6 +13,17 @@ import { DisplayTime } from '@/components/ui/display-time';
 import { UrlPanel, TrafficLeg, trafficLegExplanation } from './url-panel';
 import { TrafficNoResults } from './empty-state';
 import type { TrafficFilters } from '@/lib/api/ai-traffic';
+
+const PAGE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'path', label: 'Path' },
+  { key: 'crawl', label: 'Crawler requests', width: 'metric', numeric: 'end' },
+  { key: 'referrals', label: 'AI referral sessions', width: 'metric', numeric: 'end' },
+  { key: 'key-events', label: 'Key events', width: 'figure', numeric: 'end' },
+  { key: 'citations', label: 'Tracked citations', width: 'metric', numeric: 'end' },
+  { key: 'findings', label: 'Open findings', width: 'metric', numeric: 'end' },
+  { key: 'last-crawl', label: 'Last crawl', width: 'date', numeric: 'end' },
+  { key: 'errors', label: '4xx / 5xx', width: 'figure', numeric: 'end' },
+];
 
 export function TrafficPages({
   data,
@@ -52,26 +56,15 @@ export function TrafficPages({
         />
       )}
       {data.items.length ? (
-        <Table minWidth="lg">
-          <caption className="sr-only">Path-level AI Traffic with separate signal units</caption>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Path</TableHead>
-              <TableHead numeric="end">Crawler requests</TableHead>
-              <TableHead numeric="end">AI referral sessions</TableHead>
-              <TableHead numeric="end">Key events</TableHead>
-              <TableHead numeric="end">Tracked citations</TableHead>
-              <TableHead numeric="end">Open findings</TableHead>
-              <TableHead numeric="end">Last crawl</TableHead>
-              <TableHead numeric="end">4xx / 5xx</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.items.map((r) => (
-              <TrafficPageRow key={r.url_hash} r={r} onOpen={setUrlHash} />
-            ))}
-          </TableBody>
-        </Table>
+        <DataTable
+          label="Path-level AI Traffic with separate signal units"
+          columns={PAGE_COLUMNS}
+          minWidth="xl"
+        >
+          {data.items.map((r) => (
+            <TrafficPageRow key={r.url_hash} r={r} onOpen={setUrlHash} />
+          ))}
+        </DataTable>
       ) : null}
       <UrlPanel urlHash={urlHash} onClose={() => setUrlHash(null)} filters={filters} />
     </Stack>
@@ -129,7 +122,7 @@ function TrafficPageRow({
         <Button
           variant="ghost"
           onClick={() => onOpen(r.url_hash)}
-          className="max-w-72"
+          className="max-w-full"
           aria-label={`View AI Traffic for ${r.canonical_url}`}
         >
           <ClampText lines={1} tooltip={r.canonical_url}>

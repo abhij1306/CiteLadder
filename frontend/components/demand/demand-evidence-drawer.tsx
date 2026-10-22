@@ -24,9 +24,10 @@ import {
 import { DisplayTime } from '@/components/ui/display-time';
 import { formatCount, formatPercent } from '@/lib/format';
 import { textRole } from '@/components/ui/typography';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 
 export function DemandEvidenceDrawer({
   signal,
@@ -65,7 +66,7 @@ function DemandEvidenceContent({
               href={demandSignalHandoffHref(signal)}
               className="inline-flex items-center"
             >
-              <ArrowUpRight className="size-3.5" aria-hidden />
+              <Icon icon={ArrowUpRight} />
               Ask agent
             </ProjectLink>
           </Button>
@@ -73,14 +74,14 @@ function DemandEvidenceContent({
       }
     >
       <Stack gap="workspace">
-        <Stack className="border-border-subtle border-b pb-4">
-          <div className="flex flex-wrap items-center gap-2">
+        <Stack>
+          <Inline className="flex-wrap">
             <Badge variant="neutral">{details.targetKind}</Badge>
             <SignalChip signalType={signal.signal_type} />
-          </div>
+          </Inline>
           <h2 className={textRole('sectionTitle', 'break-words')}>{details.target}</h2>
           {details.linkablePageUrl && (
-            <div className="type-caption flex items-center gap-2">
+            <Inline className="type-caption">
               <span className={textRole('emphasis', 'shrink-0')}>Landing page</span>
               <TextLink
                 variant="external"
@@ -90,7 +91,7 @@ function DemandEvidenceContent({
               >
                 <span className="truncate">{details.linkablePageUrl}</span>
               </TextLink>
-            </div>
+            </Inline>
           )}
         </Stack>
 
@@ -140,13 +141,13 @@ function DemandEvidenceContent({
             page holds at least a 10% share, so there are never more than 10. */}
         {details.pages.length > 0 && (
           <Stack as="section">
-            <h3 className={textRole('label', 'flex items-center gap-2')}>
-              <Split className="text-muted size-3.5" aria-hidden />
+            <Inline as="h3" className={textRole('label')}>
+              <Icon icon={Split} className="text-muted" />
               Competing pages ({details.pages.length})
-            </h3>
+            </Inline>
             <div className={ledgerClasses('boxed')}>
               {details.pages.map((page) => (
-                <Stack key={page.url} gap="tight" className="type-caption p-3">
+                <Stack key={page.url} gap="tight" className={ledgerItemClasses('type-caption')}>
                   <div className={textRole('emphasis', 'text-foreground break-all')}>
                     {page.url}
                   </div>
@@ -198,10 +199,10 @@ function DemandEvidenceContent({
 
         {/* Where the figures came from, as counts and a date; internal IDs stay out of view. */}
         <Stack as="section" aria-labelledby="demand-provenance">
-          <h3 id="demand-provenance" className={textRole('label', 'flex items-center gap-2')}>
-            <ShieldCheck className="text-muted size-3.5" aria-hidden />
+          <Inline as="h3" id="demand-provenance" className={textRole('label')}>
+            <Icon icon={ShieldCheck} className="text-muted" />
             Provenance
-          </h3>
+          </Inline>
           <Stack as="dl" className={panelClasses({ tone: 'well' }, 'type-caption')}>
             <ProvenanceRow label="Search Console rows">
               <ProvenanceCount value={details.metricRowCount} />
@@ -221,10 +222,10 @@ function DemandEvidenceContent({
 
 function ProvenanceRow({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
-    <div className="flex justify-between gap-4">
+    <Inline gap="workspace" className="justify-between">
       <dt className="text-muted">{label}</dt>
       <dd className="text-foreground tabular-nums">{children}</dd>
-    </div>
+    </Inline>
   );
 }
 

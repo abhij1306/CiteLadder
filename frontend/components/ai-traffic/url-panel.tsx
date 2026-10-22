@@ -196,7 +196,12 @@ export function TrafficUrlButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="ghost" onClick={() => setOpen(true)} aria-label={label}>
+      <Button
+        variant="ghost"
+        onClick={() => setOpen(true)}
+        aria-label={label}
+        className="max-w-full"
+      >
         {children}
       </Button>
       <UrlPanel urlHash={open ? urlHash : null} onClose={() => setOpen(false)} filters={filters} />

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -116,8 +116,8 @@ export function SearchIntelligenceCollection({
       {tab === 'backlinks' ? (
         <BacklinkMetrics datasets={datasets} targetOrigin={activeTarget} />
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <Inline gap="compact" className="flex-wrap justify-between">
+        <Inline gap="compact" className="flex-wrap">
           {tab === 'competitors' ? (
             <Button
               variant="ghost"
@@ -158,9 +158,9 @@ export function SearchIntelligenceCollection({
               options={candidates.map((item) => ({ value: item.id, label: label(item) }))}
             />
           ) : null}
-        </div>
+        </Inline>
         {action?.(activeTarget)}
-      </div>
+      </Inline>
       <CollectionResult
         dataset={dataset}
         title={title}

@@ -4,6 +4,7 @@ import { useId, type ComponentProps, type CSSProperties, type ReactNode } from '
 
 import { BusyBar } from '@/components/ui/busy-bar';
 import { cardClasses } from '@/components/ui/card-variants';
+import { Checkbox } from '@/components/ui/checkbox';
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Pager } from '@/components/ui/pager';
 import { QueryState, type QueryStateProps } from '@/components/ui/query-state';
@@ -13,6 +14,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableCellLines,
   TableFillerRows,
   TableHead,
   TableHeader,
@@ -36,18 +38,27 @@ const COLUMN_WIDTH = {
    * rest evenly whatever the viewport.
    */
   lead: 'w-1/4',
-  /** A row's ordinal on the page (#). */
+  /** A row's ordinal on the page (#, rank). */
   index: 'w-12',
   /** A count, a rate or a short figure. */
   figure: 'w-28',
+  /**
+   * A figure whose header names its unit ("AI referral sessions", "Longest
+   * receipt gap"): the figure role is too narrow for the label.
+   */
+  metric: 'w-40',
   /** A status badge or a short label. */
   status: 'w-32',
+  /** A category badge longer than a status ("Striking distance", a purpose). */
+  category: 'w-44',
   /** A date or a date-time. */
   date: 'w-40',
   /** A second text column beside the flexible one (an engine, a role). */
   name: 'w-56',
   /** A row's trailing link or icon control. */
   action: 'w-24',
+  /** A row's trailing buttons, up to two (`TableActionsCell`). */
+  rowActions: 'w-64',
 } as const;
 
 type DataTableColumnWidth = keyof typeof COLUMN_WIDTH;
@@ -61,7 +72,7 @@ export type DataTableColumn = Readonly<{
   hideLabel?: boolean;
   /** A sortable column: the header becomes the sort button. */
   sort?: Readonly<{ active: boolean; descending: boolean; onSort: () => void }>;
-  /** A qualifier under a sortable label, e.g. the comparison window. */
+  /** A qualifier under the label, e.g. the comparison window. */
   sublabel?: string;
   /** The column's shared caveat, behind a tooltip on the header. */
   hint?: string;
@@ -78,40 +89,67 @@ export type DataTableState = Exclude<QueryStateProps, { inline: true }>;
 export type DataTablePager = Omit<ComponentProps<typeof Pager>, 'frame' | 'className'>;
 
 /**
+ * Row selection: a leading checkbox column whose header box selects every
+ * row on the page. Each row's first cell is a `TableSelectCell`.
+ */
+export type DataTableSelection = Readonly<{
+  /** Every row selected, some, or none. */
+  all: boolean | 'indeterminate';
+  onAllChange: (checked: boolean) => void;
+  /** What the rows are, for the header box's name: "Select all {noun}". */
+  noun: string;
+}>;
+
+/**
  * DataTable — the record table organism: a header, the rows, the pager and
  * the read's states, in one card with one geometry.
  *
  *   header — the table's title and its toolbar (`FilterBar`: search, filters,
  *            status, actions) on one row, 49px with the hairline that closes
  *            it — the page's control band, repeated in the card. A table's
- *            filters live here, never in a toolbar the page builds.
+ *            filters live here, never in a toolbar the page builds. A
+ *            `description` is one caption line under that row, so the row
+ *            itself keeps its height.
  *   rows   — `Table` laid out fixed from the columns' width roles, at the one
  *            36px row. A paged table passes `pageSize` and `rowCount`: a short
  *            last page is padded with blank rows, so the pager never moves.
+ *            Rows of two lines (`rowLines={2}`, cells on `TableCellLines`)
+ *            are padded with two-line blanks.
  *   pager  — the shared `Pager`, framed as the table's footer.
  *   state  — loading, read-error and empty render INSIDE the table body,
  *            under the same header row, in the footprint of a full page of
  *            rows (or the query-state height when the table is not paged).
  *            A filter that empties the table therefore moves nothing.
  *
+ * Inside a box that already frames it (a card holding other content, a
+ * dialog's preview of parsed rows) the table is `nested`: the same header,
+ * rows and pager without a card of its own.
+ *
  * The page passes data, columns and rows; it sets no geometry.
  */
 export function DataTable({
   title,
+  description,
   toolbar,
   columns,
   children,
   rowCount,
   pageSize,
+  rowLines = 1,
   state,
   pager,
   busy,
   minWidth,
+  pinFirstColumn = false,
+  selection,
+  nested = false,
   footer,
   label,
 }: Readonly<{
   /** The table's heading (an h3, the card title rung). */
   title?: string;
+  /** One caption line under the title row: what the figures are. */
+  description?: ReactNode;
   toolbar?: FilterBarProps;
   columns: readonly DataTableColumn[];
   /** The page's `TableRow`s. Ignored while `state` is set. */
@@ -120,52 +158,61 @@ export function DataTable({
   rowCount?: number;
   /** Rows per page: the footprint reserved for rows and for every state. */
   pageSize?: number;
+  /** Lines per row: 2 when every row stacks a caption under its value. */
+  rowLines?: 1 | 2;
   /** What to show instead of rows. */
   state?: DataTableState;
   pager?: DataTablePager;
   /** A background refetch while the current rows stay on screen. */
   busy?: Readonly<{ active: boolean; label: string }>;
   minWidth?: TableMinWidth;
+  /**
+   * Keep the first column (the row's identity) in view while a wide table
+   * scrolls sideways in its frame.
+   */
+  pinFirstColumn?: boolean;
+  selection?: DataTableSelection;
+  /** Inside a box that already frames it: no card of its own. */
+  nested?: boolean;
   /** A note under the table (e.g. a truncation notice). */
   footer?: ReactNode;
   /** The table's accessible name when it has no visible title. */
   label?: string;
 }>) {
   const headingId = useId();
+  const colSpan = columns.length + (selection ? 1 : 0);
+  // The region and the table share one name: the visible title, else `label`.
+  const naming = title
+    ? { ariaLabelledBy: headingId, ariaLabel: undefined }
+    : { ariaLabelledBy: undefined, ariaLabel: label };
   return (
     <section
-      aria-labelledby={title ? headingId : undefined}
-      aria-label={title ? undefined : label}
+      aria-labelledby={naming.ariaLabelledBy}
+      aria-label={naming.ariaLabel}
       aria-busy={busy?.active || undefined}
       data-data-table=""
-      className={cn(cardClasses(), 'relative grid min-w-0 content-start')}
+      className={cn(!nested && cardClasses(), 'relative grid min-w-0 content-start')}
     >
       {busy ? <BusyBar active={busy.active} label={busy.label} /> : null}
       <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} />
-      <Table fixed minWidth={minWidth}>
-        <colgroup>
-          {columns.map((column) => (
-            <col
-              key={column.key}
-              className={cn(
-                COLUMN_WIDTH[column.width ?? 'flex'],
-                column.desktopOnly && 'hidden desktop:table-column',
-              )}
-            />
-          ))}
-        </colgroup>
-        <TableHeader>
-          <TableRow>
-            {columns.map((column) => (
-              <ColumnHead key={column.key} column={column} />
-            ))}
-          </TableRow>
-        </TableHeader>
+      {description ? (
+        <p data-data-table-description="" className={textRole('caption', 'py-3')}>
+          {description}
+        </p>
+      ) : null}
+      <Table
+        fixed
+        minWidth={minWidth}
+        {...naming}
+        className={pinFirstColumn ? PINNED_FIRST_COLUMN : undefined}
+      >
+        <DataTableColumns columns={columns} selection={selection} />
         <DataTableBody
-          colSpan={columns.length}
+          colSpan={colSpan}
           state={state}
           pageSize={pageSize}
           rowCount={rowCount}
+          rowLines={rowLines}
         >
           {children}
         </DataTableBody>
@@ -177,6 +224,41 @@ export function DataTable({
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** The first column stays in view while a wide table scrolls in its frame. */
+const PINNED_FIRST_COLUMN =
+  '[&_tr>:first-child]:sticky [&_tr>:first-child]:left-0 [&_tbody_tr>:first-child]:z-10 [&_tbody_tr>:first-child]:bg-panel [&_thead_tr>:first-child]:z-20';
+
+/** The column widths and the header row, with the select-all column first. */
+function DataTableColumns({
+  columns,
+  selection,
+}: Readonly<{ columns: readonly DataTableColumn[]; selection?: DataTableSelection }>) {
+  return (
+    <>
+      <colgroup>
+        {selection ? <col className="w-10" /> : null}
+        {columns.map((column) => (
+          <col
+            key={column.key}
+            className={cn(
+              COLUMN_WIDTH[column.width ?? 'flex'],
+              column.desktopOnly && 'hidden desktop:table-column',
+            )}
+          />
+        ))}
+      </colgroup>
+      <TableHeader>
+        <TableRow>
+          {selection ? <SelectAllHead selection={selection} /> : null}
+          {columns.map((column) => (
+            <ColumnHead key={column.key} column={column} />
+          ))}
+        </TableRow>
+      </TableHeader>
+    </>
   );
 }
 
@@ -214,12 +296,14 @@ function DataTableBody({
   state,
   pageSize,
   rowCount,
+  rowLines,
   children,
 }: Readonly<{
   colSpan: number;
   state?: DataTableState;
   pageSize?: number;
   rowCount?: number;
+  rowLines: 1 | 2;
   children?: ReactNode;
 }>) {
   if (state) {
@@ -241,8 +325,27 @@ function DataTableBody({
   return (
     <TableBody>
       {children}
-      <TableFillerRows count={filler} colSpan={colSpan} />
+      <TableFillerRows
+        count={filler}
+        colSpan={colSpan}
+        spacer={rowLines === 2 ? <TableCellLines primary={BLANK} secondary={BLANK} /> : null}
+      />
     </TableBody>
+  );
+}
+
+/** A non-breaking space: a blank line that still takes a line's height. */
+const BLANK = ' ';
+
+function SelectAllHead({ selection }: Readonly<{ selection: DataTableSelection }>) {
+  return (
+    <TableHead>
+      <Checkbox
+        aria-label={`Select all ${selection.noun}`}
+        checked={selection.all}
+        onCheckedChange={(checked) => selection.onAllChange(checked === true)}
+      />
+    </TableHead>
   );
 }
 
@@ -269,9 +372,20 @@ function ColumnHead({ column }: Readonly<{ column: DataTableColumn }>) {
       />
     );
   }
+  // The columns are fixed, so a label longer than its role wraps under
+  // itself instead of painting over the next header.
   return (
-    <TableHead numeric={column.numeric} desktopOnly={column.desktopOnly}>
+    <TableHead
+      numeric={column.numeric}
+      desktopOnly={column.desktopOnly}
+      className="whitespace-normal"
+    >
       {column.hideLabel ? <span className="sr-only">{column.label}</span> : column.label}
+      {column.sublabel ? (
+        <span className={textRole('caption', 'block truncate')} title={column.sublabel}>
+          {column.sublabel}
+        </span>
+      ) : null}
     </TableHead>
   );
 }

@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { QueryState } from '@/components/ui/query-state';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
 import { Select } from '@/components/ui/select';
@@ -192,7 +192,7 @@ function FactRow({
   const [editing, setEditing] = useState<string | null>(null);
   return (
     <Stack as="li" gap="compact" className={panelClasses({ tone: 'well' }, 'min-w-0')}>
-      <span className="flex flex-wrap items-center gap-2">
+      <Inline as="span" className="flex-wrap">
         <Badge>{TOPIC_LABELS[fact.topic]}</Badge>
         {fact.status === 'confirmed' ? (
           <Badge variant="status" value="success">
@@ -203,7 +203,7 @@ function FactRow({
             Draft · not used until confirmed
           </Badge>
         )}
-      </span>
+      </Inline>
       {editing === null ? (
         <span className={textRole('body')}>{fact.statement}</span>
       ) : (
@@ -219,7 +219,7 @@ function FactRow({
         <span className={textRole('caption', 'text-muted break-all')}>{fact.source_url}</span>
       ) : null}
       {mayEdit ? (
-        <span className="flex flex-wrap gap-2">
+        <Inline as="span" className="flex-wrap">
           {editing === null ? (
             <>
               {fact.status === 'draft' ? (
@@ -260,7 +260,7 @@ function FactRow({
               </Button>
             </>
           )}
-        </span>
+        </Inline>
       ) : null}
     </Stack>
   );

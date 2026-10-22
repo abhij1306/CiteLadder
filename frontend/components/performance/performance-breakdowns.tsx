@@ -64,7 +64,7 @@ export function PerformanceBreakdowns({
           onValueChange={onDimensionChange}
           items={DIMENSION_TABS.map((tab) => ({ value: tab.value, label: tab.label }))}
           ariaLabel="Performance breakdowns"
-          rootClassName="grid gap-3"
+          spaced
           // The tab row heads the table card, so it spans the full width
           // rather than hugging six labels and leaving dead space to the right.
           fill

@@ -5,7 +5,7 @@ import type { OpportunityDetail } from '@/lib/api/types';
 import { formatAudited } from '@/lib/site-health/status';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { ledgerClasses } from '@/components/ui/workspace';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -18,12 +18,12 @@ function SourceLink({
   linkText,
 }: Readonly<{ label: string; href: string; linkText: string }>) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1">
+    <Inline gap="compact" className="items-start justify-between">
       <span className="type-caption shrink-0">{label}</span>
       <TextLink href={href} text="itemTitle">
         {linkText}
       </TextLink>
-    </div>
+    </Inline>
   );
 }
 

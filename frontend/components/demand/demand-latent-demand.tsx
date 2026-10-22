@@ -1,5 +1,7 @@
 import { Zap } from 'lucide-react';
 
+import { Icon } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { DemandSnapshot } from '@/lib/api/demand';
 import { isActionableGap, numericMetric } from '@/lib/demand/signals';
@@ -19,8 +21,8 @@ export function DemandLatentDemand({ snapshot }: Readonly<{ snapshot: DemandSnap
   const known = observed.filter((value): value is number => value !== null);
   const partial = known.length > 0 && known.length < observed.length;
   return (
-    <span className="type-caption inline-flex items-center gap-1">
-      <Zap className="size-3.5" aria-hidden="true" />
+    <Inline as="span" gap="tight" className="type-caption">
+      <Icon icon={Zap} />
       {observed.length > 0 && known.length === 0 ? (
         <>
           <UnavailableValue state="not_measured" /> latent demand
@@ -35,6 +37,6 @@ export function DemandLatentDemand({ snapshot }: Readonly<{ snapshot: DemandSnap
             : ' impressions on non-branded signals'}
         </>
       )}
-    </span>
+    </Inline>
   );
 }

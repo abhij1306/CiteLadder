@@ -9,7 +9,8 @@ import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
@@ -157,7 +158,7 @@ export function BrandProfilePanel({
             onClick={() => saveMutation.mutate()}
             disabled={!workspaceId || saveMutation.isPending}
           >
-            <Save className="size-4" aria-hidden />
+            <Icon icon={Save} />
             {saveMutation.isPending ? 'Saving…' : 'Save brand knowledge'}
           </Button>
         }
@@ -173,7 +174,7 @@ export function BrandProfilePanel({
         onValueChange={setActiveTab}
         items={PROFILE_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
         ariaLabel="Company facts sections"
-        rootClassName="grid gap-4"
+        spaced
       >
         <TabPanel value={activeTab} className="focus-ring">
           {activeTab === 'map' ? (
@@ -295,12 +296,10 @@ function ProfileTabPanel({
         {competitors.length ? (
           <Stack as="ul" gap="compact" className="desktop:grid-cols-2">
             {competitors.map((competitor) => (
-              <li
+              <Inline
+                as="li"
                 key={`${competitor.name}:${competitor.domains[0] ?? ''}`}
-                className={panelClasses(
-                  { tone: 'well' },
-                  textRole('label', 'flex min-w-0 items-center gap-2'),
-                )}
+                className={panelClasses({ tone: 'well' }, textRole('label'))}
               >
                 <BrandLogo
                   name={competitor.name}
@@ -308,7 +307,7 @@ function ProfileTabPanel({
                   websiteUrl={competitor.domains[0]}
                 />
                 <span className="truncate">{competitor.name}</span>
-              </li>
+              </Inline>
             ))}
           </Stack>
         ) : (

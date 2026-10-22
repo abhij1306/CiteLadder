@@ -10,7 +10,7 @@ import {
   axisProps,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import {
   axisDomainMax,
@@ -178,15 +178,15 @@ export function PerformanceChart({
         </LineChart>
       </ChartContainer>
 
-      <ul className="flex flex-wrap gap-x-4 gap-y-1">
+      <Inline as="ul" gap="meta">
         {series.map((entry) => (
-          <li key={entry.key} className="type-caption flex items-center gap-2">
+          <Inline as="li" key={entry.key} className="type-caption">
             <LegendSwatch color={entry.color} shape="line" />
             {entry.label}
             <span className="tabular-nums">0–{formatAxisTick(entry.key, domainFor(entry)[1])}</span>
-          </li>
+          </Inline>
         ))}
-      </ul>
+      </Inline>
     </Stack>
   );
 }
@@ -224,7 +224,7 @@ function ChartTooltip({
         </p>
         <Stack as="ul" gap="tight">
           {series.map((entry) => (
-            <li key={entry.key} className="flex items-center gap-2">
+            <Inline as="li" key={entry.key}>
               <LegendSwatch color={entry.color} shape="line" />
               <span>{entry.label}</span>
               <span className="tabular-nums">
@@ -235,7 +235,7 @@ function ChartTooltip({
                   vs {formatMetric(entry.key, entry.comparison[index]?.value ?? null)}
                 </span>
               ) : null}
-            </li>
+            </Inline>
           ))}
         </Stack>
         {comparisonDate ? <p>Comparison day · {comparisonDate}</p> : null}

@@ -2,25 +2,13 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { SearchX } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
-import { Card } from '@/components/ui/card';
-import { QueryState } from '@/components/ui/query-state';
-import { Pager } from '@/components/ui/pager';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { readErrorProps } from '@/components/ui/read-error';
 import { MissingValue } from '@/components/ui/unavailable-value';
-import {
-  ClampText,
-  SortableTableHead,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { textRole } from '@/components/ui/typography';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { performanceApi, type PerformanceDimension } from '@/lib/api/performance';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -50,7 +38,7 @@ import { cn } from '@/lib/utils';
  * With a comparison active every metric widens to THREE columns — the
  * selected period, the comparison period, and their absolute difference —
  * exactly as Search Console renders it. Twelve numeric columns will not fit
- * most viewports, so the table scrolls horizontally inside its own container
+ * most viewports, so the table scrolls horizontally inside its own frame
  * with the dimension column pinned left: the row's identity stays readable
  * while the reader scrolls the measures, and the page body never scrolls
  * sideways.
@@ -85,18 +73,70 @@ function orderableSort(
   return displayed.some((card) => card.key === key) ? sort : defaultSort(dimension);
 }
 
-/** A header cell for a derived column — not sortable, since it is not stored. */
-function StaticHead({ label, sublabel }: Readonly<{ label: string; sublabel: string }>) {
-  return (
-    <TableHead numeric className="min-w-[7.5rem]">
-      <span className="inline-flex w-full flex-col items-center text-center">
-        <span>{label}</span>
-        <span className={textRole('caption', 'max-w-full truncate')} title={sublabel}>
-          {sublabel}
-        </span>
-      </span>
-    </TableHead>
-  );
+/**
+ * The header row: the row identity (a quarter of the table, so every tab
+ * lays out identically and switching QUERIES -> PAGES does not reflow the
+ * metric columns under the pointer), then each metric. Search Console groups
+ * each metric with its own comparison and difference rather than appending
+ * all comparisons at the end, so a reader compares adjacent columns. The
+ * derived columns are not stored, so they do not sort.
+ */
+function dimensionColumns({
+  header,
+  metrics,
+  activeSort,
+  onSort,
+  comparing,
+  selectedLabel,
+  compareLabel,
+}: Readonly<{
+  header: string;
+  metrics: readonly { key: PerformanceMetricKey; label: string }[];
+  activeSort: string;
+  onSort: (key: PerformanceMetricKey) => void;
+  comparing: boolean;
+  selectedLabel: string;
+  compareLabel: string;
+}>): DataTableColumn[] {
+  return [
+    { key: 'dimension', label: header, width: 'lead' },
+    ...metrics.flatMap((metric): DataTableColumn[] => {
+      const label = metric.label.replace(/^(Total|Average) /, '');
+      const selected: DataTableColumn = {
+        key: metric.key,
+        label,
+        width: 'figure',
+        numeric: true,
+        sort: {
+          active: sortKey(activeSort) === metric.key,
+          descending: sortDirection(activeSort) === 'descending',
+          onSort: () => onSort(metric.key),
+        },
+        // The range is stated once, in the toolbar. Repeating it under every
+        // column earns its place only when a comparison makes the columns
+        // ambiguous (selected vs comparison vs difference).
+        sublabel: comparing ? selectedLabel : undefined,
+      };
+      if (!comparing) return [selected];
+      return [
+        selected,
+        {
+          key: `${metric.key}-comparison`,
+          label,
+          width: 'figure',
+          numeric: true,
+          sublabel: compareLabel,
+        },
+        {
+          key: `${metric.key}-difference`,
+          label,
+          width: 'figure',
+          numeric: true,
+          sublabel: 'Difference',
+        },
+      ];
+    }),
+  ];
 }
 
 export function DimensionTable({
@@ -153,12 +193,6 @@ export function DimensionTable({
   const nextCursor = query.data?.next_cursor ?? null;
   const total = query.data?.total_count;
   const { from, to } = pageRange(table.page, table.pageSize, rows.length);
-  const columnCount = 1 + displayedMetrics.length * (comparing ? 3 : 1);
-
-  const onSort = (key: PerformanceMetricKey) => {
-    setSort(toggleSort(activeSort, key));
-    table.reset();
-  };
 
   if (unavailable) {
     // Distinct from an empty table: Search Console does not serve this
@@ -171,163 +205,89 @@ export function DimensionTable({
       </Alert>
     );
   }
-  if (query.isError) {
-    return (
-      <ReadError
-        {...readErrorProps(query)}
-        fallback={`Could not load ${tab.noun}. Check your connection and try again.`}
-      />
-    );
-  }
+
+  let state: DataTableState | undefined;
+  if (query.isError)
+    state = {
+      kind: 'error',
+      ...readErrorProps(query),
+      fallback: `Could not load ${tab.noun}. Check your connection and try again.`,
+    };
+  // Empty is a settled successful read; a pending, paused or disabled query
+  // has not measured anything yet.
+  else if (!query.isSuccess) state = { kind: 'loading', label: `Loading ${tab.noun}…` };
+  else if (rows.length === 0)
+    state = { kind: 'empty', icon: SearchX, heading: `No ${tab.noun} measured for this range.` };
 
   return (
-    <Card className="overflow-hidden">
-      {/* 12px for the data inside the tab: these tables are dense and read
-          as a block of figures, so the smaller size fits more of a row on
-          screen without shrinking the tab labels that head them. */}
-      <Table
-        wrapperClassName="overflow-x-auto"
-        // Fixed layout with an explicit first column: every tab then lays
-        // out identically, so switching QUERIES -> PAGES does not reflow
-        // the metric columns under the pointer. Without it each tab sizes
-        // to its own longest cell and the whole table jumps.
-        minWidth={comparing ? 'md' : 'sm'}
-        className="w-full table-fixed"
-      >
-        <colgroup>
-          <col className="w-[32%] min-w-[14rem]" />
-          {Array.from({ length: columnCount - 1 }, (_, index) => (
-            <col key={index} className={comparing ? 'min-w-[7.5rem]' : 'min-w-[6rem]'} />
-          ))}
-        </colgroup>
-        <TableHeader>
-          <TableRow>
-            {/* Pinned so the row identity survives horizontal scrolling. */}
-            <TableHead className="bg-panel sticky left-0 z-10">{tab.header}</TableHead>
-            {displayedMetrics.flatMap((metric) => {
-              const label = metric.label.replace(/^(Total|Average) /, '');
-              const head = (
-                <SortableTableHead
-                  key={metric.key}
-                  label={label}
-                  numeric
-                  active={sortKey(activeSort) === metric.key}
-                  descending={sortDirection(activeSort) === 'descending'}
-                  onSort={() => onSort(metric.key)}
-                  className={comparing ? 'min-w-[7.5rem]' : undefined}
-                  // The range is stated once, in the toolbar. Repeating it
-                  // under every column adds no information — it only earns
-                  // its place when a comparison makes the columns AMBIGUOUS
-                  // (selected vs comparison vs difference).
-                  sublabel={comparing ? selectedLabel : undefined}
-                />
-              );
-              // Search Console groups each metric with its own comparison
-              // and difference rather than appending all comparisons at the
-              // end, so a reader compares adjacent columns.
-              return comparing
-                ? [
-                    head,
-                    <StaticHead
-                      key={`${metric.key}-comparison`}
-                      label={label}
-                      sublabel={compareLabel}
-                    />,
-                    <StaticHead
-                      key={`${metric.key}-difference`}
-                      label={label}
-                      sublabel="Difference"
-                    />,
-                  ]
-                : [head];
-            })}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {query.isLoading
-            ? // As many rows as a full page holds, so the table does not
-              // resize when the real ones arrive.
-              Array.from({ length: table.pageSize }, (_, index) => (
-                <TableRow key={`skeleton-${index}`}>
-                  {Array.from({ length: columnCount }, (_, cell) => (
-                    <TableCell key={cell} numeric={cell > 0}>
-                      <Skeleton className={cell === 0 ? 'h-4 w-3/4' : 'mx-auto h-4 w-16'} />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            : null}
-          {!query.isLoading && rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={columnCount}>
-                <QueryState
-                  kind="empty"
-                  inline
-                  message={`No ${tab.noun} measured for this range.`}
-                />
+    <DataTable
+      label={tab.header}
+      columns={dimensionColumns({
+        header: tab.header,
+        metrics: displayedMetrics,
+        activeSort,
+        onSort: (key) => {
+          setSort(toggleSort(activeSort, key));
+          table.reset();
+        },
+        comparing,
+        selectedLabel,
+        compareLabel,
+      })}
+      minWidth={comparing ? 'md' : 'sm'}
+      pinFirstColumn
+      state={state}
+      pageSize={table.pageSize}
+      rowCount={rows.length}
+      pager={{
+        range: { from, to, total, noun: tab.noun },
+        pageSize: { value: table.pageSize, onChange: table.setPageSize },
+        ...cursorControls(table, nextCursor),
+        busy: query.isFetching,
+      }}
+    >
+      {rows.map((row) => (
+        <TableRow key={row.dimension_key}>
+          <TableCell>
+            <ClampText
+              className={cn(
+                dimension === 'page' && 'tabular-nums break-all',
+                dimension === 'day' && 'tabular-nums',
+              )}
+            >
+              {formatDimensionValue(dimension, row.display_value)}
+            </ClampText>
+          </TableCell>
+          {displayedMetrics.flatMap((metric) => {
+            const selectedCell = (
+              <TableCell key={metric.key} numeric>
+                {measured(formatMetric(metric.key, row.metrics[metric.key])) ?? <MissingValue />}
               </TableCell>
-            </TableRow>
-          ) : null}
-          {rows.map((row) => (
-            <TableRow key={row.dimension_key}>
-              <TableCell className="bg-panel sticky left-0 z-10">
-                <ClampText
-                  className={cn(
-                    dimension === 'page' && 'tabular-nums break-all',
-                    dimension === 'day' && 'tabular-nums',
-                  )}
-                >
-                  {formatDimensionValue(dimension, row.display_value)}
-                </ClampText>
-              </TableCell>
-              {displayedMetrics.flatMap((metric) => {
-                const selectedCell = (
-                  <TableCell key={metric.key} numeric>
-                    <span className="tabular-nums">
-                      {measured(formatMetric(metric.key, row.metrics[metric.key])) ?? (
-                        <MissingValue />
-                      )}
-                    </span>
-                  </TableCell>
-                );
-                if (!comparing) return [selectedCell];
-                const comparisonValue = row.comparison_metrics
-                  ? row.comparison_metrics[metric.key]
-                  : null;
-                const difference = metricDifference(
-                  row.metrics[metric.key],
-                  row.comparison_metrics ? comparisonValue : undefined,
-                );
-                return [
-                  selectedCell,
-                  <TableCell key={`${metric.key}-comparison`} numeric>
-                    <span className="text-muted tabular-nums">
-                      {measured(formatMetric(metric.key, comparisonValue)) ?? <MissingValue />}
-                    </span>
-                  </TableCell>,
-                  <TableCell key={`${metric.key}-difference`} numeric>
-                    <span
-                      className={cn(
-                        'tabular-nums',
-                        TONE_CLASS[differenceTone(metric.key, difference)],
-                      )}
-                    >
-                      {measured(formatDifference(metric.key, difference)) ?? <MissingValue />}
-                    </span>
-                  </TableCell>,
-                ];
-              })}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <Pager
-        frame="table"
-        range={{ from, to, total, noun: tab.noun }}
-        pageSize={{ value: table.pageSize, onChange: table.setPageSize }}
-        {...cursorControls(table, nextCursor)}
-        busy={query.isFetching}
-      />
-    </Card>
+            );
+            if (!comparing) return [selectedCell];
+            const comparisonValue = row.comparison_metrics
+              ? row.comparison_metrics[metric.key]
+              : null;
+            const difference = metricDifference(
+              row.metrics[metric.key],
+              row.comparison_metrics ? comparisonValue : undefined,
+            );
+            return [
+              selectedCell,
+              <TableCell key={`${metric.key}-comparison`} numeric className="text-muted">
+                {measured(formatMetric(metric.key, comparisonValue)) ?? <MissingValue />}
+              </TableCell>,
+              <TableCell
+                key={`${metric.key}-difference`}
+                numeric
+                className={TONE_CLASS[differenceTone(metric.key, difference)]}
+              >
+                {measured(formatDifference(metric.key, difference)) ?? <MissingValue />}
+              </TableCell>,
+            ];
+          })}
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }

@@ -6,6 +6,7 @@ import { availabilityLabel, formatCount } from '@/lib/format';
 import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { textRole } from '@/components/ui/typography';
+import { splitPaneClasses } from '@/components/ui/workspace';
 
 /**
  * The plain-language reading of one signal, for its evidence drawer.
@@ -110,7 +111,7 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
               'Query-term coverage measured against the currently inspected page.'}
           </p>
         </Stack>
-        <dl className="type-caption grid grid-cols-3 gap-3">
+        <dl className={splitPaneClasses('thirds', 'type-caption')}>
           <div>
             <dt className="text-muted">Title</dt>
             <dd className={textRole('emphasis', 'tabular-nums')}>

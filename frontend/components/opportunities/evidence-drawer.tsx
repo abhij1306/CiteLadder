@@ -10,7 +10,7 @@ import { OpportunityTypeBadge } from '@/components/opportunities/opportunity-typ
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Drawer } from '@/components/ui/drawer';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Label, textRole } from '@/components/ui/typography';
@@ -81,12 +81,12 @@ function OpportunityDetailBody({ detail }: Readonly<{ detail: OpportunityDetail 
     <Stack gap="workspace">
       <Stack>
         <h2 className={textRole('sectionTitle')}>{detail.title}</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <Inline className="flex-wrap">
           <Badge variant="status" value={severityBadgeValue(detail.severity)}>
             {severityLabel(detail.severity)} impact
           </Badge>
           <OpportunityTypeBadge type={detail.opportunity_type} />
-        </div>
+        </Inline>
       </Stack>
       <OpportunityEvidenceSection detail={detail} />
       {detail.remediation ? (

@@ -3,7 +3,8 @@ import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Drawer } from '@/components/ui/drawer';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
@@ -57,20 +58,21 @@ export function RunNotice({
   if (!run) return null;
   if (run.status === 'queued' || run.status === 'running')
     return (
-      <div
+      <Inline
+        gap="compact"
         className={panelClasses(
           { tone: 'none' },
-          'type-body bg-info-bg text-info-text flex flex-wrap items-center justify-between gap-3',
+          'type-body bg-info-bg text-info-text flex-wrap justify-between',
         )}
       >
-        <span className="flex items-center gap-2">
-          <RefreshCw className="size-4 animate-spin" aria-hidden />
+        <Inline as="span">
+          <Icon icon={RefreshCw} className="animate-spin" />
           Analysis in progress: {run.completed_calls} of {run.planned_calls} requests complete.
-        </span>
+        </Inline>
         <Button variant="secondary" disabled={cancelling} onClick={() => onCancel(run.id)}>
           Cancel
         </Button>
-      </div>
+      </Inline>
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
   return (
@@ -154,7 +156,7 @@ export function CostDetails({
     content = (
       <ReadError error={error} fallback="Cost history could not be loaded." onRetry={onRetry} />
     );
-  if (pending) content = <Skeleton className="h-32 w-full" />;
+  if (pending) content = <Skeleton shape="block" />;
   return (
     <Drawer
       open={open}

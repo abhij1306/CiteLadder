@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { OnPageEntities } from '@/components/ui/on-page-entities';
 import { panelClasses } from '@/components/ui/panel';
 import { TextLink } from '@/components/ui/text-link';
@@ -36,12 +36,12 @@ export function EarnedPageHandoff({ detail }: Readonly<{ detail: OpportunityDeta
         <p className={textRole('body')}>
           Get listed on this page. Competitors are on it and you are not.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <Inline className="flex-wrap">
           {handoff.canonical_domain ? (
             <Badge variant="neutral">{handoff.canonical_domain}</Badge>
           ) : null}
           {format ? <Badge variant="neutral">{format}</Badge> : null}
-        </div>
+        </Inline>
         {handoff.ask ? (
           <Stack gap="tight">
             <p className={textRole('label')}>What to ask for</p>
@@ -109,13 +109,13 @@ function NamedInAnswers({ names }: Readonly<{ names?: string[] }>) {
   return (
     <Stack>
       <p className={textRole('label')}>Named in the answers, not on the page</p>
-      <div className="flex flex-wrap gap-2">
+      <Inline className="flex-wrap">
         {names.map((name) => (
           <Badge key={name} variant="neutral">
             {name}
           </Badge>
         ))}
-      </div>
+      </Inline>
       <p className="type-caption">
         These appeared somewhere in an answer that cited this page. They are not a finding about the
         page and did not affect this task&apos;s priority.

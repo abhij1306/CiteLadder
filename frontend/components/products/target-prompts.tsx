@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { commerceApi } from '@/lib/api/commerce';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
@@ -21,7 +21,7 @@ import { useRunEvents } from '@/lib/runs/use-run-events';
 import { sameTarget } from '@/lib/products/use-commerce-target';
 
 import type { CommerceQueries } from './commerce-queries';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 const GENERATED_COUNT = 5;
@@ -183,7 +183,7 @@ function PromptRows({
   return (
     <ul className={ledgerClasses()}>
       {rows.map((row) => (
-        <li key={row.id} className="flex flex-wrap items-center gap-3 py-2">
+        <Inline as="li" key={row.id} gap="compact" className={ledgerItemClasses('flex-wrap')}>
           <span className="text-secondary min-w-0 flex-1">{row.text}</span>
           <Button
             variant={row.enabled ? 'secondary' : 'primary'}
@@ -192,7 +192,7 @@ function PromptRows({
           >
             {row.enabled ? 'Disable' : 'Approve'}
           </Button>
-        </li>
+        </Inline>
       ))}
     </ul>
   );

@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Label, textRole } from '@/components/ui/typography';
 import {
@@ -23,7 +23,7 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
 
   return (
     <Stack as="section">
-      <div className="flex items-baseline justify-between gap-3">
+      <Inline gap="compact" className="items-baseline justify-between">
         <Label>Observed sources</Label>
         <span className="type-caption">
           {pattern.distinctDomainCount} {pattern.distinctDomainCount === 1 ? 'domain' : 'domains'}
@@ -31,10 +31,10 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
             ? ` · ${pattern.independentDomainCount} independent`
             : null}
         </span>
-      </div>
+      </Inline>
 
       {pattern.classCounts.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <Inline className="flex-wrap">
           {pattern.classCounts.map(({ sourceClass, count }) => (
             <Badge
               key={sourceClass}
@@ -44,19 +44,19 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
               {sourceClassLabel(sourceClass)} · {count}
             </Badge>
           ))}
-        </div>
+        </Inline>
       ) : null}
 
       {pattern.competitorSourceDomains.length > 0 ? (
         <Stack gap="tight">
           <span className="type-caption">Sources matched to a tracked competitor</span>
           {pattern.competitorSourceDomains.map(({ competitor, domains }) => (
-            <div key={competitor} className="flex items-start justify-between gap-3 py-0.5">
+            <Inline key={competitor} gap="compact" className="items-start justify-between">
               <span className={textRole('body', 'shrink-0')}>{competitor}</span>
               <span className="type-caption text-right break-all tabular-nums">
                 {domains.join(', ')}
               </span>
-            </div>
+            </Inline>
           ))}
         </Stack>
       ) : null}

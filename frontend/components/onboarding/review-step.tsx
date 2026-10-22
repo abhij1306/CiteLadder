@@ -7,6 +7,7 @@ import { FlowGroup } from '@/components/onboarding/flow-shell';
 import { EntityRow } from '@/components/onboarding/choice-controls';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import type { ReviewCompetitor, ReviewDomain } from '@/lib/onboarding/forms';
 
@@ -172,7 +173,7 @@ export function ReviewStep({
         help="Pick the brands to compare against in every answer."
         action={
           <Button variant="ghost" onClick={onAddCompetitor} disabled={competitorLimitReached}>
-            <Plus className="size-3.5" aria-hidden />
+            <Icon icon={Plus} />
             Add
           </Button>
         }

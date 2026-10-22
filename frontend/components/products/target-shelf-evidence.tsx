@@ -7,9 +7,9 @@ import { ProjectLink } from '@/components/layout/scoped-link';
 import { Badge } from '@/components/ui/badge';
 import type { StatusValue } from '@/components/ui/badge-variants';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { pluralCount } from '@/lib/format';
 
 type Holder = Shelf['holders'][number];
@@ -47,7 +47,12 @@ export function TargetShelfEvidence({ shelf }: Readonly<{ shelf: Shelf }>) {
           <CardContent>
             <ul className={ledgerClasses()}>
               {actions.map((action) => (
-                <li key={action.id} className="flex flex-wrap items-center gap-3 py-2">
+                <Inline
+                  as="li"
+                  key={action.id}
+                  gap="compact"
+                  className={ledgerItemClasses('flex-wrap')}
+                >
                   <ProjectLink
                     href={`/agent/actions/${action.id}`}
                     className={textRole('emphasis', 'text-link min-w-0 flex-1')}
@@ -55,7 +60,7 @@ export function TargetShelfEvidence({ shelf }: Readonly<{ shelf: Shelf }>) {
                     {action.title}
                   </ProjectLink>
                   <ActionStatusBadge status={action.status} />
-                </li>
+                </Inline>
               ))}
             </ul>
           </CardContent>
@@ -74,9 +79,11 @@ export function TargetShelfEvidence({ shelf }: Readonly<{ shelf: Shelf }>) {
               {holders.length ? (
                 <ol className={ledgerClasses()}>
                   {holders.map((holder) => (
-                    <li
+                    <Inline
+                      as="li"
                       key={`${holder.kind}:${holder.name}:${holder.merchant_domain}`}
-                      className="flex flex-wrap items-center gap-3 py-2"
+                      gap="compact"
+                      className={ledgerItemClasses('flex-wrap')}
                     >
                       <Stack gap="tight" className="min-w-0 flex-1">
                         <span className={textRole('emphasis', 'truncate')}>{holder.name}</span>
@@ -89,7 +96,7 @@ export function TargetShelfEvidence({ shelf }: Readonly<{ shelf: Shelf }>) {
                       <Badge variant="status" value={HOLDER_KIND[holder.kind].tone}>
                         {HOLDER_KIND[holder.kind].label}
                       </Badge>
-                    </li>
+                    </Inline>
                   ))}
                 </ol>
               ) : (

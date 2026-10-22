@@ -6,8 +6,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Stack } from '@/components/ui/layout';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Inline, Stack } from '@/components/ui/layout';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -76,7 +76,7 @@ export function SearchIntelligenceCitationMatcher({
     return (
       <ReadError {...readErrorProps(audits)} fallback="Visibility audits could not be loaded." />
     );
-  if (audits.isPending) return <Skeleton className="h-32 w-full" />;
+  if (audits.isPending) return <Skeleton shape="block" />;
   // Only an audit with answers can have cited sources.
   const answered = audits.data.filter((audit) => audit.completed_count > 0);
   if (!answered.length)
@@ -110,14 +110,19 @@ export function SearchIntelligenceCitationMatcher({
       ) : null}
       <div className={ledgerClasses('open', 'max-h-64 overflow-y-auto')}>
         {answered.map((audit) => (
-          <label key={audit.id} className="type-body flex items-center justify-between gap-3 py-2">
+          <Inline
+            as="label"
+            key={audit.id}
+            gap="compact"
+            className={ledgerItemClasses('type-body justify-between')}
+          >
             <Checkbox
               checked={selectedAudits.includes(audit.id)}
               onCheckedChange={() => toggle(audit.id)}
               label={formatDisplayTimestamp(audit.created_at, timeZone)}
             />
             <span className="text-muted">{pluralCount(audit.completed_count, 'answer')}</span>
-          </label>
+          </Inline>
         ))}
       </div>
       <div>

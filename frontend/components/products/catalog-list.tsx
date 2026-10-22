@@ -3,11 +3,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, PackageOpen, SearchX } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { listRowClasses } from '@/components/ui/list-row';
 import { panelClasses } from '@/components/ui/panel';
+import { treeBranchClasses } from '@/components/ui/workspace';
 import { SearchField } from '@/components/ui/search-field';
 import { Pressable } from '@/components/ui/pressable';
 import { QueryState } from '@/components/ui/query-state';
@@ -103,32 +104,28 @@ function CatalogRow({
           deliberately does NOT change which target is open, so checking three
           categories to run them together never moves you off the one you are
           reading. */}
-      <div
+      {/* A top-level row reserves the expander's column even without
+          children, so its label lines up with its expandable siblings; a
+          nested row hangs off its branch's rule and has no expander. */}
+      <Stack
+        gap="tight"
         className={cn(
-          'group flex min-w-0 items-center gap-1 px-1',
+          'group items-center',
+          nested
+            ? 'grid-cols-[auto_minmax(0,1fr)]'
+            : 'grid-cols-[var(--control-height-md)_auto_minmax(0,1fr)]',
           listRowClasses({ selected }),
-          nested && 'border-border-subtle ml-6 border-l pl-3',
         )}
       >
         {onExpand ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`${expanded ? 'Collapse' : 'Expand'} ${entry.label}`}
+          <IconButton
+            icon={expanded ? ChevronDown : ChevronRight}
+            label={`${expanded ? 'Collapse' : 'Expand'} ${entry.label}`}
             aria-expanded={expanded}
             onClick={onExpand}
-          >
-            {expanded ? (
-              <ChevronDown className="size-4" aria-hidden />
-            ) : (
-              <ChevronRight className="size-4" aria-hidden />
-            )}
-          </Button>
+          />
         ) : (
-          // A top-level row without children still reserves the expander's
-          // width so its label lines up with its expandable siblings; a nested
-          // row is already indented and needs no such placeholder.
-          !nested && <span className="size-[var(--control-height-md)] shrink-0" aria-hidden />
+          !nested && <span aria-hidden />
         )}
         <Checkbox
           aria-label={`Select ${entry.label} for bulk actions`}
@@ -140,14 +137,16 @@ function CatalogRow({
           onClick={onSelect}
           aria-label={entry.label}
           aria-current={selected ? 'true' : undefined}
-          className="type-control flex min-w-0 flex-1 items-center justify-between gap-2 py-2 text-left"
+          className="type-control flex min-h-[var(--control-height-md)] min-w-0 items-center text-left"
         >
-          <span className="truncate">{entry.label}</span>
-          {entry.count === undefined ? null : (
-            <span className="text-muted shrink-0 tabular-nums">{entry.count}</span>
-          )}
+          <Inline as="span" className="w-full justify-between">
+            <span className="truncate">{entry.label}</span>
+            {entry.count === undefined ? null : (
+              <span className="text-muted shrink-0 tabular-nums">{entry.count}</span>
+            )}
+          </Inline>
         </Pressable>
-      </div>
+      </Stack>
       {children}
     </li>
   );
@@ -177,18 +176,18 @@ function CatalogTree({
   return (
     <Stack as="fieldset" className="min-w-0">
       <legend className="sr-only">Catalog targets</legend>
-      <div className={panelClasses({ tone: 'tonal' }, 'flex items-center justify-between gap-3')}>
+      <Inline gap="compact" className={panelClasses({ tone: 'tonal' }, 'justify-between')}>
         <Checkbox
           label="Select all shown"
           checked={checkboxState(shownSelectionCount, shownKeys.length)}
           onCheckedChange={() => onToggle(shownKeys)}
         />
         <span className="type-caption tabular-nums">{shownKeys.length} shown</span>
-      </div>
-      <div className={textRole('label', 'flex items-center justify-between px-2')}>
+      </Inline>
+      <Inline className={textRole('label', 'justify-between')}>
         <span>Categories</span>
         <span className="tabular-nums">{categories.length}</span>
-      </div>
+      </Inline>
       <Stack as="ul" gap="tight" className="min-w-0">
         {categories.map((category) => {
           const selectionKeys = [
@@ -224,7 +223,7 @@ function CatalogTree({
               onToggle={() => onToggle(selectionKeys)}
             >
               {expanded ? (
-                <ul aria-label={`${category.label} products`} className="grid min-w-0">
+                <ul aria-label={`${category.label} products`} className={treeBranchClasses()}>
                   {(category.children ?? []).map((product) => (
                     <CatalogRow
                       key={`${category.key}:${product.key}`}
@@ -244,8 +243,8 @@ function CatalogTree({
       </Stack>
       {uncategorized.length ? (
         <Stack gap="tight" className="min-w-0">
-          <div className={textRole('label', 'px-2')}>Uncategorized</div>
-          <ul className="grid min-w-0">
+          <div className={textRole('label')}>Uncategorized</div>
+          <ul className={treeBranchClasses()}>
             {uncategorized.map((product) => (
               <CatalogRow
                 key={product.key}
@@ -331,8 +330,8 @@ export function CatalogList({
       />
     );
   return (
-    <div className="grid min-w-0 content-start">
-      <Stack className="border-border-subtle bg-panel sticky top-0 z-20 border-b pb-3">
+    <Stack className="min-w-0 content-start">
+      <Stack className="bg-panel sticky top-0 z-20">
         <SearchField
           aria-label="Search the catalog"
           placeholder="Search categories and products"
@@ -343,7 +342,7 @@ export function CatalogList({
           Check items for bulk actions. Select a name to view its details.
         </p>
       </Stack>
-      <Stack className="min-w-0 pt-3">
+      <Stack className="min-w-0">
         {empty ? (
           <QueryState
             kind="empty"
@@ -364,6 +363,6 @@ export function CatalogList({
           />
         )}
       </Stack>
-    </div>
+    </Stack>
   );
 }

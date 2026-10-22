@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { DateField } from '@/components/ui/date-field';
 import { Field } from '@/components/ui/field';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import {
@@ -95,7 +95,7 @@ function DateRangeFields({
   return (
     <Stack as="fieldset" gap="compact">
       <legend className="sr-only">{legend}</legend>
-      <div className="flex flex-wrap items-end gap-3">
+      <Inline gap="compact" className="flex-wrap">
         <Field label="Start date" hint="YYYY-MM-DD">
           {(props) => (
             <DateField
@@ -108,7 +108,7 @@ function DateRangeFields({
             />
           )}
         </Field>
-        <span className="text-muted pb-2">–</span>
+        <span className="text-muted">–</span>
         <Field label="End date" hint="YYYY-MM-DD">
           {(props) => (
             <DateField
@@ -121,7 +121,7 @@ function DateRangeFields({
             />
           )}
         </Field>
-      </div>
+      </Inline>
     </Stack>
   );
 }
@@ -213,7 +213,7 @@ export function DateRangeDialog({
           { value: 'compare', label: 'Compare' },
         ]}
         ariaLabel="Date range mode"
-        rootClassName="grid gap-4"
+        spaced
       >
         <TabPanel value="filter">
           <Stack gap="compact">

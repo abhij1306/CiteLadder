@@ -9,7 +9,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { commerceApi } from '@/lib/api/commerce';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -19,7 +19,7 @@ import type { useCompetitorDiscovery } from '@/lib/products/competitor-discovery
 import type { CommerceQueries } from './commerce-queries';
 import { competitorHost, competitorState, discoveryMessage } from './commerce-format';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { sameTarget } from '@/lib/products/use-commerce-target';
 
@@ -139,7 +139,7 @@ function CompetitorRows({
   return (
     <ul className={ledgerClasses()}>
       {rows.map((row) => (
-        <li key={row.id} className="flex flex-wrap items-center gap-3 py-2">
+        <Inline as="li" key={row.id} gap="compact" className={ledgerItemClasses('flex-wrap')}>
           <Stack gap="tight" className="min-w-0 flex-1">
             <a
               className={textRole('emphasis', 'text-link truncate')}
@@ -163,7 +163,7 @@ function CompetitorRows({
             {competitorState(row.state).label}
           </Badge>
           {row.state === 'pending' ? (
-            <div className="flex gap-2">
+            <Inline>
               <Button disabled={pending} onClick={() => onDecide(row.id, 'approved')}>
                 Approve
               </Button>
@@ -174,9 +174,9 @@ function CompetitorRows({
               >
                 Reject
               </Button>
-            </div>
+            </Inline>
           ) : null}
-        </li>
+        </Inline>
       ))}
     </ul>
   );

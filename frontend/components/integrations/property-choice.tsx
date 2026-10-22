@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -91,7 +91,7 @@ export function PropertyChoice({
   return (
     <Stack gap="compact">
       {suggested ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <Inline className="flex-wrap">
           <Button
             onClick={() => select.mutate(suggested.property_ref)}
             pending={select.isPending && select.variables === suggested.property_ref}
@@ -106,7 +106,7 @@ export function PropertyChoice({
               Choose another
             </Button>
           ) : null}
-        </div>
+        </Inline>
       ) : null}
       {suggested && !showAll ? null : (
         <PropertyList
@@ -141,9 +141,9 @@ function DiscoveryStatus({
     );
   if (discovery.isPending)
     return (
-      <output className="type-caption flex items-center gap-2">
+      <Inline as="output" className="type-caption">
         <Spinner /> Loading your {noun}s…
-      </output>
+      </Inline>
     );
   return (
     <Alert tone="danger">
@@ -172,7 +172,7 @@ function PropertyList({
       {properties.map((property) => {
         const foreign = property.matches_project === false;
         return (
-          <li key={property.property_ref} className="flex items-center gap-3">
+          <Inline as="li" key={property.property_ref} gap="compact">
             <span className="min-w-0 flex-1">
               <span className={textRole('label', 'block truncate')}>{property.label}</span>
               <span className="type-caption block truncate">
@@ -189,7 +189,7 @@ function PropertyList({
             >
               Use
             </Button>
-          </li>
+          </Inline>
         );
       })}
     </Stack>

@@ -13,11 +13,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Select } from '@/components/ui/select';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { formatCount, pluralCount } from '@/lib/format';
 import type {
   DatasetSelection,
@@ -120,15 +120,16 @@ function DatasetGroup({
 }>) {
   return (
     <fieldset className={panelClasses({ tone: 'panel' })}>
-      <legend className={textRole('label', 'px-1')}>{legend}</legend>
+      <legend className={textRole('label')}>{legend}</legend>
       <Stack gap="compact">
         {options.map((option) => {
           const checked = isSelected(option);
           const label = SEARCH_DATASET_LABELS[option.kind] ?? option.kind;
           return (
-            <div
+            <Stack
               key={selectionKey(option)}
-              className="grid grid-cols-[1fr_6rem] items-center gap-3"
+              gap="compact"
+              className="grid-cols-[1fr_6rem] items-center"
             >
               <Checkbox checked={checked} onCheckedChange={() => onToggle(option)} label={label} />
               {FIXED_DEPTH_KINDS.includes(option.kind) ? null : (
@@ -140,7 +141,7 @@ function DatasetGroup({
                   onChange={(event) => onDepth(option, event.target.value)}
                 />
               )}
-            </div>
+            </Stack>
           );
         })}
       </Stack>
@@ -278,22 +279,22 @@ export function ReviewFooter({
 }>) {
   if (review)
     return (
-      <div className="flex justify-end gap-2">
+      <Inline className="justify-end">
         <Button variant="secondary" onClick={onBack}>
           Back
         </Button>
         <Button disabled={busy} onClick={onConfirm}>
           Confirm {runEstimate(review)} analysis
         </Button>
-      </div>
+      </Inline>
     );
   return (
-    <div className="flex items-center justify-between gap-3">
+    <Inline gap="compact" className="justify-between">
       <span className={textRole('caption')}>{pluralCount(selected, 'dataset')} selected</span>
       <Button disabled={busy || !canReview} onClick={onReview}>
         Review cost
       </Button>
-    </div>
+    </Inline>
   );
 }
 
@@ -326,7 +327,7 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
     <Stack gap="workspace">
       <Stack as="section" gap="compact">
         <h3 className={textRole('sectionTitle')}>What will be fetched</h3>
-        <dl className="type-body grid grid-cols-2 gap-[var(--compact-gap)]">
+        <Stack as="dl" gap="compact" className="type-body grid-cols-2">
           <div>
             <dt className="type-label">Requests</dt>
             <dd className="type-figure">{review.planned_calls}</dd>
@@ -343,7 +344,7 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
             <dt className="type-label">Scope</dt>
             <dd>{searchScopeLabel(typeof scope === 'string' ? scope : undefined)}</dd>
           </div>
-        </dl>
+        </Stack>
         <p className={textRole('caption')}>
           The estimate is a ceiling: a request that could take the cost past it is not sent.
           DataForSEO bills your own account.
@@ -357,8 +358,10 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
               const target = hostOf(call.target),
                 comparison = hostOf(call.comparison);
               return (
-                <li
-                  className="flex justify-between gap-3 py-2"
+                <Inline
+                  as="li"
+                  gap="compact"
+                  className={ledgerItemClasses('justify-between')}
                   key={`${String(call.dataset_key)}:${String(call.page)}`}
                 >
                   <span>
@@ -371,7 +374,7 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
                       ${estimateUsd(String(call.estimated_cost_usd))}
                     </span>
                   )}
-                </li>
+                </Inline>
               );
             })}
           </ul>

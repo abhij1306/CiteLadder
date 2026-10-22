@@ -6,7 +6,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
 import { splitPaneClasses } from '@/components/ui/workspace';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
@@ -153,7 +153,7 @@ export function DiscoveryStage({
         ))}
         {discovery.discovery?.status === 'failed' ? (
           <Alert tone="danger">
-            <div className="flex items-center justify-between gap-3">
+            <Inline gap="compact" className="justify-between">
               <span>
                 {discovery.discovery.error_code === 'invalid_url'
                   ? 'The website address is invalid. Go back and correct it.'
@@ -162,17 +162,17 @@ export function DiscoveryStage({
               <Button variant="ghost" onClick={onEdit}>
                 Edit website
               </Button>
-            </div>
+            </Inline>
           </Alert>
         ) : null}
         {discovery.error ? (
           <Alert tone="warning">
-            <div className="flex items-center justify-between gap-3">
+            <Inline gap="compact" className="justify-between">
               <span>{onboardingErrorMessage(discovery.error)}</span>
               <Button variant="ghost" onClick={discovery.retry}>
                 Retry
               </Button>
-            </div>
+            </Inline>
           </Alert>
         ) : null}
       </Stack>
@@ -238,12 +238,12 @@ export function ReviewStage({
       <ReviewNotices failed={complete.isError}>
         {catalog.isError ? (
           <Alert tone="warning">
-            <div className="flex items-center justify-between gap-3">
+            <Inline gap="compact" className="justify-between">
               <span>We could not load the competitor limit.</span>
               <Button variant="ghost" onClick={() => catalog.refetch()}>
                 Try again
               </Button>
-            </div>
+            </Inline>
           </Alert>
         ) : null}
         {complete.isError ? (

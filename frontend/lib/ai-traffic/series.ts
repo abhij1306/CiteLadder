@@ -27,10 +27,6 @@ export function countDomainMax(values: readonly number[]): number {
   return Math.ceil(max / magnitude) * magnitude;
 }
 
-export function countYLabels(domainMax: number): string[] {
-  return [1, 0.75, 0.5, 0.25, 0].map((fraction) => `${Math.round(domainMax * fraction)}`);
-}
-
 const AI_SOURCE_LABELS: Record<AiSource, string> = {
   chatgpt: 'ChatGPT',
   gemini: 'Gemini',

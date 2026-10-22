@@ -1,5 +1,5 @@
 import { OpportunityKvRow } from '@/components/opportunities/opportunity-kv-row';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { OpportunitySourcePattern } from '@/components/opportunities/opportunity-source-pattern';
 import { Badge } from '@/components/ui/badge';
@@ -87,13 +87,13 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
       {competitors.length > 0 ? (
         <Stack gap="tight">
           <span className="type-caption">Competitors mentioned</span>
-          <div className="flex flex-wrap gap-2">
+          <Inline className="flex-wrap">
             {competitors.map((name) => (
               <Badge key={name} variant="classification" value="competitor">
                 {name}
               </Badge>
             ))}
-          </div>
+          </Inline>
         </Stack>
       ) : null}
       {sourcePattern ? <OpportunitySourcePattern pattern={sourcePattern} /> : null}
