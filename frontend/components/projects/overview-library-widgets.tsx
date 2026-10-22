@@ -7,13 +7,14 @@ import type { ReactNode } from 'react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatRow } from '@/components/ui/stat-row';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { ledgerClasses, MetricGroup, MetricItem } from '@/components/ui/workspace';
+import { ledgerClasses } from '@/components/ui/workspace';
 import type { Project } from '@/lib/api/types';
 import { formatCount, formatPercent } from '@/lib/format';
 import { WIDGET_TITLES } from '@/lib/overview/layout';
@@ -114,7 +115,7 @@ export function VisibilityTrendWidget({ project }: Readonly<{ project: Project }
               className="w-full"
             />
           ) : (
-            <InlineEmpty>No completed runs yet.</InlineEmpty>
+            <QueryState kind="empty" inline message="No completed runs yet." />
           )
         }
       </Loaded>
@@ -137,7 +138,7 @@ export function ShareOfVoiceWidget({ project }: Readonly<{ project: Project }>) 
               }))}
             />
           ) : (
-            <InlineEmpty>No brands measured in the latest run.</InlineEmpty>
+            <QueryState kind="empty" inline message="No brands measured in the latest run." />
           )
         }
       </Loaded>
@@ -151,7 +152,13 @@ export function TopMoversWidget({ project }: Readonly<{ project: Project }>) {
     return (
       <WidgetCard id="top_movers" href="/visibility?tab=sources">
         <Loaded query={visibility} fallback="Top movers could not be loaded.">
-          {() => <InlineEmpty>No comparable earlier run to compare with yet.</InlineEmpty>}
+          {() => (
+            <QueryState
+              kind="empty"
+              inline
+              message="No comparable earlier run to compare with yet."
+            />
+          )}
         </Loaded>
       </WidgetCard>
     );
@@ -169,7 +176,7 @@ export function TopMoversWidget({ project }: Readonly<{ project: Project }>) {
               }))}
             />
           ) : (
-            <InlineEmpty>No source changed its citation share.</InlineEmpty>
+            <QueryState kind="empty" inline message="No source changed its citation share." />
           );
         }}
       </Loaded>
@@ -183,7 +190,7 @@ export function RetrievalWidget({ project }: Readonly<{ project: Project }>) {
   return (
     <WidgetCard id="retrieval" href="/visibility?tab=sources&source_standing=near_miss">
       {noRun ? (
-        <InlineEmpty>No completed runs yet.</InlineEmpty>
+        <QueryState kind="empty" inline message="No completed runs yet." />
       ) : (
         <Loaded query={misses} fallback="Retrieved sources could not be loaded.">
           {(data) => (
@@ -216,20 +223,25 @@ export function PerceptionWidget({ project }: Readonly<{ project: Project }>) {
         {(data) => {
           const score = data.brand?.score ?? null;
           return (
-            <MetricGroup>
-              <MetricItem
-                label="Net sentiment"
-                value={valueOr(formatNet(score?.net_sentiment ?? null))}
-              />
-              <MetricItem
-                label="Positive"
-                value={valueOr(formatShare(score?.positive_share ?? null))}
-              />
-              <MetricItem
-                label="Negative"
-                value={valueOr(formatShare(score?.negative_share ?? null))}
-              />
-            </MetricGroup>
+            <StatRow
+              segments={[
+                {
+                  key: 'net',
+                  label: 'Net sentiment',
+                  value: valueOr(formatNet(score?.net_sentiment ?? null)),
+                },
+                {
+                  key: 'positive',
+                  label: 'Positive',
+                  value: valueOr(formatShare(score?.positive_share ?? null)),
+                },
+                {
+                  key: 'negative',
+                  label: 'Negative',
+                  value: valueOr(formatShare(score?.negative_share ?? null)),
+                },
+              ]}
+            />
           );
         }}
       </Loaded>
@@ -245,14 +257,21 @@ export function AiTrafficWidget({ project }: Readonly<{ project: Project }>) {
         {({ crawl, referrals }) => {
           const visits = referrals.referral_volume.at(-1)?.value ?? null;
           return (
-            <MetricGroup>
-              <MetricItem label="AI crawler requests" value={valueOr(count(crawl.requests))} />
-              <MetricItem label="Active bots" value={valueOr(count(crawl.active_bots))} />
-              <MetricItem
-                label="Latest AI referrals"
-                value={visits === null ? unavailable : formatCount(visits)}
-              />
-            </MetricGroup>
+            <StatRow
+              segments={[
+                {
+                  key: 'requests',
+                  label: 'AI crawler requests',
+                  value: valueOr(count(crawl.requests)),
+                },
+                { key: 'bots', label: 'Active bots', value: valueOr(count(crawl.active_bots)) },
+                {
+                  key: 'referrals',
+                  label: 'Latest AI referrals',
+                  value: visits === null ? unavailable : formatCount(visits),
+                },
+              ]}
+            />
           );
         }}
       </Loaded>
@@ -267,18 +286,29 @@ export function SearchConsoleWidget({ project }: Readonly<{ project: Project }>)
       <Loaded query={query} fallback="Search Console could not be loaded.">
         {({ selected }) =>
           selected.evidence_state === 'not_run' ? (
-            <InlineEmpty>Connect Search Console to see clicks and impressions.</InlineEmpty>
+            <QueryState
+              kind="empty"
+              inline
+              message="Connect Search Console to see clicks and impressions."
+            />
           ) : (
-            <MetricGroup>
-              <MetricItem label="Clicks" value={valueOr(count(selected.totals.clicks))} />
-              <MetricItem label="Impressions" value={valueOr(count(selected.totals.impressions))} />
-              <MetricItem
-                label="CTR"
-                value={valueOr(
-                  selected.totals.ctr === null ? null : formatPercent(selected.totals.ctr, 1),
-                )}
-              />
-            </MetricGroup>
+            <StatRow
+              segments={[
+                { key: 'clicks', label: 'Clicks', value: valueOr(count(selected.totals.clicks)) },
+                {
+                  key: 'impressions',
+                  label: 'Impressions',
+                  value: valueOr(count(selected.totals.impressions)),
+                },
+                {
+                  key: 'ctr',
+                  label: 'CTR',
+                  value: valueOr(
+                    selected.totals.ctr === null ? null : formatPercent(selected.totals.ctr, 1),
+                  ),
+                },
+              ]}
+            />
           )
         }
       </Loaded>

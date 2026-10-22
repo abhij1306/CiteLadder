@@ -48,7 +48,7 @@ export function SavedViewControls({
   );
 }
 
-/** The saved view's scope, for `PageShell`'s control band. */
+/** The saved view's scope, for the `ListScreen` control band. */
 export function scopeControls({
   data,
   tab,

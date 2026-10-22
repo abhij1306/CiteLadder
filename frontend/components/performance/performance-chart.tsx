@@ -10,7 +10,7 @@ import {
   axisProps,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import {
   axisDomainMax,
   computeTickIndices,
@@ -102,7 +102,7 @@ export function PerformanceChart({
     // Nothing is plotted, so the plot's height is not reserved. A tall empty
     // box read as a broken chart rather than an absent one. The line still
     // states which absence this is.
-    return <InlineEmpty className={cn('min-h-18', className)}>{summary}</InlineEmpty>;
+    return <QueryState kind="empty" inline message={summary} />;
   }
 
   // Axis dates come from the LONGEST selected series, never the first

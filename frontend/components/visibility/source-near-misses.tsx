@@ -31,7 +31,7 @@ import type { visibilitySourceNearMissesSchema } from '@citeladder/contracts/vis
 
 type NearMisses = z.infer<typeof visibilitySourceNearMissesSchema>;
 
-const COLUMNS = ['w-[46%]', '', '', '', 'hidden lg:table-cell'] as const;
+const COLUMNS = ['w-[46%]', '', '', '', 'hidden desktop:table-cell'] as const;
 
 /** Your pages an engine read and did not cite, over the same selection as the table. */
 export function useSourceNearMisses(
@@ -95,7 +95,6 @@ function NearMissTable({
         fallback="Could not load your pages read but not cited. Try again."
         onRetry={() => void query.refetch()}
         pending={query.isFetching}
-        className="m-[var(--card-padding)]"
       />
     );
   }

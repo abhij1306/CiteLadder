@@ -1,7 +1,64 @@
+import type { ReactNode } from 'react';
+
+import { Card } from '@/components/ui/card';
+import { StatRow, type StatSegment } from '@/components/ui/stat-row';
+import { TextLink } from '@/components/ui/text-link';
+import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ICONS } from '@/lib/icons';
 import type { SiteCrawl, SiteHealthDashboard, SiteHealthOverview } from '@/lib/api/types';
 import { measurementCaveat, shouldPollCrawl } from '@/lib/site-health/status';
-import { AuditMetricStrip, type AuditMetric } from './audit-metric-strip';
+
+/** One Site Health score as a `StatRow` segment: the ring, its caveat and where to act. */
+export type AuditMetric = {
+  title: string;
+  value: number | null;
+  valueUnit?: 'score' | 'percent';
+  caveat: string | null;
+  href?: string;
+  icon: typeof ICONS.site;
+  unavailable?: ReactNode;
+};
+
+function auditSegment({
+  title,
+  value,
+  valueUnit = 'score',
+  caveat,
+  href,
+  icon,
+  unavailable,
+}: AuditMetric): StatSegment {
+  const base = {
+    key: title,
+    label: title,
+    icon,
+    sub: caveat === null || caveat === 'Not measured' ? undefined : caveat,
+    action: href ? <TextLink href={href}>View details</TextLink> : undefined,
+  };
+  if (value === null) {
+    return { ...base, value: unavailable ?? <UnavailableValue state="not_measured" /> };
+  }
+  const rounded = Math.round(value);
+  return {
+    ...base,
+    score: {
+      value,
+      label: valueUnit === 'percent' ? `${title}: ${rounded}%` : `${title} score: ${rounded}`,
+    },
+  };
+}
+
+/** The Site Health scores, as one card holding one `StatRow`. */
+export function AuditScores({
+  metrics,
+  testId,
+}: Readonly<{ metrics: readonly AuditMetric[]; testId?: string }>) {
+  return (
+    <Card data-testid={testId}>
+      <StatRow segments={metrics.map(auditSegment)} />
+    </Card>
+  );
+}
 
 type Summary = SiteHealthDashboard['score_summary'];
 type MetricContext = {
@@ -33,7 +90,7 @@ export function OverviewMetricCards({
     measurementMetric(context),
     crawlMetric(context),
   ];
-  return <AuditMetricStrip metrics={metrics} testId="overview-metrics" />;
+  return <AuditScores metrics={metrics} testId="overview-metrics" />;
 }
 
 function metricContext(

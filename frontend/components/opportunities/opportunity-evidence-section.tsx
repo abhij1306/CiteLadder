@@ -68,7 +68,7 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
     <section className="grid gap-2">
       <Label>Evidence</Label>
       {promptText ? (
-        <blockquote className={panelClasses({ tone: 'accent', pad: 'compact' })}>
+        <blockquote className={panelClasses({ tone: 'accent' })}>
           <p className="type-body text-foreground">“{promptText}”</p>
         </blockquote>
       ) : null}

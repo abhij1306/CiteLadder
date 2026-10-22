@@ -1,7 +1,7 @@
 'use client';
 
 import type { ComponentPropsWithoutRef, ReactNode, Ref } from 'react';
-import { ChevronDown, type LucideIcon } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -15,9 +15,9 @@ import {
 import { cn } from '@/lib/utils';
 
 /**
- * What a route puts in its control band. A route passes these to
- * `PageShell`'s `controls`; it never renders a `FilterBar` itself, so no
- * feature draws a toolbar of its own.
+ * What a route puts in its control band. A route passes these to its screen
+ * template's `controls` (or a `DataTable`'s `toolbar`); it never renders a
+ * `FilterBar` itself, so no feature draws a toolbar of its own.
  */
 export type FilterBarProps = Readonly<{
   /** A `SearchField`. */
@@ -54,11 +54,11 @@ export function FilterBar({ search, filters, status, actions }: FilterBarProps) 
       data-filter-bar=""
       className="flex min-h-[var(--control-height-md)] w-full min-w-0 flex-wrap items-center gap-2 py-2"
     >
-      {search ? <div className="w-full min-w-0 sm:w-72">{search}</div> : null}
+      {search ? <div className="desktop:w-72 w-full min-w-0">{search}</div> : null}
       {filters ? (
         // `contents` keeps the filters as the row's own flex items; it only
         // scopes the narrow-screen width to them (not the status or actions).
-        <div className="contents max-sm:[&>*]:w-full">{filters}</div>
+        <div className="desktop:[&>*]:w-auto contents [&>*]:w-full">{filters}</div>
       ) : null}
       {status === undefined ? null : (
         <output className="type-caption flex min-w-0 items-center gap-2 empty:hidden">
@@ -93,7 +93,6 @@ export function FilterTrigger({
   hideLabel = false,
   count,
   active = false,
-  icon: Icon,
   className,
   ref,
   ...props
@@ -104,7 +103,6 @@ export function FilterTrigger({
     hideLabel?: boolean;
     count?: number;
     active?: boolean;
-    icon?: LucideIcon;
     ref?: Ref<HTMLButtonElement>;
   }
 >) {
@@ -117,10 +115,9 @@ export function FilterTrigger({
       className={cn((active || showCount) && 'bg-selected', className)}
       {...props}
     >
-      {/* The glyph is a scanning aid, not the name: it shows from xl, where
-          the row has room, so a full filter row still fits one line on a
-          980px desktop. */}
-      {Icon ? <Icon className="text-muted hidden size-4 shrink-0 xl:block" aria-hidden /> : null}
+      {/* One form at every width: the name, the count and the chevron. A
+          leading glyph that appeared only on wide screens made the same
+          trigger two widths and wrapped the band at the owner's 982px. */}
       <FilterTriggerText label={label} value={value} hideLabel={hideLabel} />
       {showCount ? (
         <>
@@ -163,7 +160,6 @@ export function FilterChoice<T extends string>({
   defaultValue,
   options,
   onChange,
-  icon,
 }: Readonly<{
   /** The trigger's accessible name prefix, e.g. "Select date range". */
   label: string;
@@ -174,7 +170,6 @@ export function FilterChoice<T extends string>({
   defaultValue?: T;
   options: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
-  icon?: LucideIcon;
 }>) {
   return (
     <Dropdown>
@@ -184,7 +179,6 @@ export function FilterChoice<T extends string>({
           hideLabel
           value={options.find((option) => option.value === value)?.label ?? label}
           active={defaultValue !== undefined && value !== defaultValue}
-          icon={icon}
         />
       </DropdownTrigger>
       <DropdownContent>

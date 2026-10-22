@@ -2,7 +2,7 @@ import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
 import { measurementCaveat } from '@/lib/site-health/status';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ICONS } from '@/lib/icons';
-import { AuditMetricStrip } from './audit-metric-strip';
+import { AuditScores } from './overview-metrics';
 
 export function ScoreSection({
   crawl,
@@ -11,7 +11,7 @@ export function ScoreSection({
   const summary = dashboard?.score_summary ?? crawl?.score_summary ?? null;
   const coverage = summary?.aeo_measurement_coverage;
   return (
-    <AuditMetricStrip
+    <AuditScores
       testId="score-section"
       metrics={[
         {

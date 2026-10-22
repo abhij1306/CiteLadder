@@ -20,10 +20,10 @@ import {
   measured,
 } from '@/lib/visibility/dashboard';
 import { Delta } from '@/components/ui/delta';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { textRole } from '@/components/ui/typography';
-import { tagClasses } from '@/components/ui/filter-chip-variants';
+import { tagClasses } from '@/components/ui/tag-variants';
 
 /**
  * Where you stand against the brands you track.
@@ -191,7 +191,8 @@ export function RankingRowsTable({
     (a, b) => (b.mention_rate ?? -1) - (a.mention_rate ?? -1) || a.name.localeCompare(b.name),
   );
   const { page, setPage, pageCount, from, to } = useTablePage(ordered.length, PAGE_SIZE);
-  if (!ordered.length) return <InlineEmpty>No measured responses in this selection.</InlineEmpty>;
+  if (!ordered.length)
+    return <QueryState kind="empty" inline message="No measured responses in this selection." />;
   const paged = ordered.slice(from - 1, to);
   // With no prior run there is no change for ANY brand, and a column of
   // "No comparable change" told the reader nothing seven times over. The reason
@@ -216,10 +217,10 @@ export function RankingRowsTable({
                 read #1 while this column reads #3. */}
             {anyPosition ? <TableHead numeric>Rank</TableHead> : null}
             {anyChange ? <TableHead numeric>Change</TableHead> : null}
-            <TableHead numeric className="hidden md:table-cell">
+            <TableHead numeric className="desktop:table-cell hidden">
               Share of voice
             </TableHead>
-            <TableHead numeric className="hidden md:table-cell">
+            <TableHead numeric className="desktop:table-cell hidden">
               Citations
             </TableHead>
           </TableRow>
@@ -243,14 +244,16 @@ export function RankingRowsTable({
                       name={row.name}
                       logoUrl={row.logo_url}
                       websiteUrl={row.website_url}
-                      size="sm"
                     />
                     <BrandName row={row} selected={selected} onSelect={onSelect} />
                     {row.is_brand ? (
                       <span className={textRole('label', tagClasses('well', 'shrink-0'))}>You</span>
                     ) : null}
                   </span>
-                  <ClampText lines={1} className={textRole('caption', 'text-secondary md:hidden')}>
+                  <ClampText
+                    lines={1}
+                    className={textRole('caption', 'text-secondary desktop:hidden')}
+                  >
                     {formatRate(row.share_of_voice)} share of voice ·{' '}
                     {formatRate(row.citation_rate)} citations
                   </ClampText>
@@ -275,10 +278,10 @@ export function RankingRowsTable({
                     <Delta value={change} unit=" pp" />
                   </TableCell>
                 ) : null}
-                <TableCell numeric className="hidden md:table-cell">
+                <TableCell numeric className="desktop:table-cell hidden">
                   {measured(formatRate(row.share_of_voice)) ?? <MissingValue />}
                 </TableCell>
-                <TableCell numeric className="hidden md:table-cell">
+                <TableCell numeric className="desktop:table-cell hidden">
                   {measured(formatRate(row.citation_rate)) ?? <MissingValue />}
                 </TableCell>
               </TableRow>

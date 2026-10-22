@@ -158,7 +158,7 @@ function TurnActions({
 function PendingMessage({ text }: Readonly<{ text: string }>) {
   return (
     <div className="flex justify-end">
-      <div className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid max-w-[85%] gap-1')}>
+      <div className={panelClasses({ tone: 'well' }, 'grid max-w-[85%] gap-1')}>
         <p className={textRole('body', 'whitespace-pre-wrap')}>{text}</p>
         <output aria-live="polite" className={textRole('caption')}>
           Sending…
@@ -191,7 +191,7 @@ function MessageBubble({
     return (
       <article
         aria-label="Outline approval"
-        className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid gap-1')}
+        className={panelClasses({ tone: 'well' }, 'grid gap-1')}
       >
         <span className={textRole('label')}>Outline approved</span>
         <p className={textRole('caption')}>Draft requested from the approved revision.</p>
@@ -200,7 +200,7 @@ function MessageBubble({
   if (message.role === 'user')
     return (
       <div className="flex justify-end">
-        <div className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid max-w-[85%] gap-2')}>
+        <div className={panelClasses({ tone: 'well' }, 'grid max-w-[85%] gap-2')}>
           <p className={textRole('body', 'whitespace-pre-wrap')}>{message.content}</p>
           {message.mentions.length > 0 ? (
             <ul aria-label="Mentioned Actions" className="flex flex-wrap gap-2">

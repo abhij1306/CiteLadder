@@ -18,7 +18,7 @@ import { DataSourceSetup } from '@/components/integrations/data-source-setup';
 import { usePerformanceSelection } from './use-performance-selection';
 import { usePerformanceSync } from './use-performance-sync';
 import { useRangeProjection } from './use-range-projection';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Alert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
@@ -188,7 +188,7 @@ function SearchConsoleWorkspace({
   if (!available) return null;
   return (
     <Card className="overflow-hidden">
-      <div className="border-border-subtle flex flex-col border-b lg:flex-row lg:items-stretch lg:justify-between">
+      <div className="border-border-subtle desktop:flex-row desktop:items-stretch desktop:justify-between flex flex-col border-b">
         <MetricCards
           data-testid="metric-card-strip"
           className="min-w-0 flex-1"
@@ -201,7 +201,7 @@ function SearchConsoleWorkspace({
           colors={METRIC_COLORS}
           loading={refreshing}
         />
-        <div className="border-border-subtle flex shrink-0 items-center justify-end border-t px-3 py-2 lg:border-t-0 lg:border-l">
+        <div className="border-border-subtle desktop:border-t-0 desktop:border-l flex shrink-0 items-center justify-end border-t px-3 py-2">
           <GranularitySelect value={granularity} onChange={onGranularityChange} />
         </div>
       </div>
@@ -280,23 +280,23 @@ export function PerformanceScreen() {
   // when the real one arrives.
   if (!projectId)
     return (
-      <PageShell>
+      <ListScreen>
         {isLoading ? (
           <QueryState kind="loading" label="Loading performance…" />
         ) : (
           <ProjectRequiredState />
         )}
-      </PageShell>
+      </ListScreen>
     );
   if (dashboard.isError)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           {...readErrorProps(dashboard)}
           fallback="Could not load performance data. Check your connection and try again."
         />
-      </PageShell>
+      </ListScreen>
     );
   // Only the dashboard controls the screen's first paint. Connections feeds
   // one toolbar button and readiness one advisory ladder — both render into
@@ -305,9 +305,9 @@ export function PerformanceScreen() {
   // scope data (a placeholder) counts as paintable.
   if (!dashboard.data)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" label="Loading performance…" />
-      </PageShell>
+      </ListScreen>
     );
 
   const data = dashboard.data as PerformanceDashboard;
@@ -330,7 +330,7 @@ export function PerformanceScreen() {
   const coverage = performanceCoverage(data, hasEvidence);
 
   return (
-    <PageShell
+    <ListScreen
       actions={
         <PerformanceActions
           latestDate={data.coverage.latest_date}
@@ -443,6 +443,6 @@ export function PerformanceScreen() {
           )}
         />
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }

@@ -5,10 +5,9 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Pager } from '@/components/ui/pager';
 import { QueryState } from '@/components/ui/query-state';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import {
   ClampText,
   Table,
@@ -321,10 +320,9 @@ function ChangesTable({
             exact implementation-event matches.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 pt-0">
-          <StatGrid
-            columns={4}
-            items={Object.entries(CLASS_LABELS).map(([key, label]) => ({
+        <CardContent className="grid gap-4">
+          <StatRow
+            segments={Object.entries(CLASS_LABELS).map(([key, label]) => ({
               key,
               label,
               value: counts?.[key] ?? 0,
@@ -364,7 +362,11 @@ function ChangesTable({
               </TableBody>
             </Table>
           ) : (
-            <InlineEmpty>No changes were observed in this comparable pair.</InlineEmpty>
+            <QueryState
+              kind="empty"
+              inline
+              message="No changes were observed in this comparable pair."
+            />
           )}
           <Pager
             frame="table"

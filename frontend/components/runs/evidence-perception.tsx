@@ -56,10 +56,7 @@ export function EvidencePerception({
       <Label>Perception</Label>
       <ul className="grid gap-2">
         {perception.map((entity) => (
-          <li
-            key={entity.entity}
-            className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid min-w-0 gap-1')}
-          >
+          <li key={entity.entity} className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-1')}>
             <span className="flex flex-wrap items-center gap-2">
               <span className={textRole('emphasis')}>{entity.entity}</span>
               {entity.is_brand ? (

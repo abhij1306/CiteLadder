@@ -65,7 +65,7 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
           {pattern.topCitations.map((citation) => (
             <li
               key={citation.url || citation.domain}
-              className={panelClasses({ tone: 'well', pad: 'none' }, 'grid gap-0.5 px-3 py-2')}
+              className={panelClasses({ tone: 'well' }, 'grid gap-0.5')}
             >
               <span className="type-caption text-foreground">
                 {citation.title || citation.domain}
@@ -84,7 +84,7 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
       ) : null}
 
       {action ? (
-        <div className={panelClasses({ tone: 'accent', pad: 'compact' }, 'grid gap-1')}>
+        <div className={panelClasses({ tone: 'accent' }, 'grid gap-1')}>
           <span className="type-caption">Suggested next action</span>
           <p className="type-body text-foreground">{action}</p>
         </div>

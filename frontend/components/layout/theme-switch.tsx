@@ -18,7 +18,7 @@ export function ThemeSwitch() {
   return (
     <TooltipProvider>
       <Tooltip content={label} side="bottom">
-        <Button variant="ghost" size="iconRound" aria-label={label} onClick={() => setTheme(next)}>
+        <Button variant="ghost" size="icon" aria-label={label} onClick={() => setTheme(next)}>
           <Icon className="size-4" aria-hidden />
         </Button>
       </Tooltip>

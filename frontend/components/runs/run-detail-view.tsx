@@ -95,7 +95,7 @@ function ExecutionsSection({
   }
   return (
     <Card>
-      <CardContent flush>
+      <CardContent>
         <ExecutionsTable executions={executions} onSelectEvidence={onSelectEvidence} />
       </CardContent>
     </Card>

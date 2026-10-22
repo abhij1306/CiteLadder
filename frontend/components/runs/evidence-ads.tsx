@@ -30,7 +30,7 @@ export function EvidenceAds({ ads }: Readonly<{ ads: ExecutionAds }>) {
           {ads.items.map((ad) => (
             <li
               key={ad.rank_absolute}
-              className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid min-w-0 gap-1')}
+              className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-1')}
             >
               <span className="flex flex-wrap items-center gap-2">
                 <span className={textRole('emphasis')}>{ad.title || 'Untitled ad'}</span>

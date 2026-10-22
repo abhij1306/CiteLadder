@@ -5,7 +5,7 @@ import { Info, Inbox, RefreshCw, SearchX } from 'lucide-react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardEyebrow, CardHeader, CardTitle } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ICONS } from '@/lib/icons';
@@ -56,7 +56,8 @@ export function EvidenceError({
       <CardContent>
         <Stack gap="tight">
           <CardEyebrow>{title}</CardEyebrow>
-          <EmptyState
+          <QueryState
+            kind="empty"
             headingLevel={3}
             icon={ICONS.warning}
             heading="Couldn't load this evidence"
@@ -84,7 +85,8 @@ export function EvidenceEmpty({
       <CardContent>
         <Stack gap="tight">
           <CardEyebrow>{title}</CardEyebrow>
-          <EmptyState
+          <QueryState
+            kind="empty"
             headingLevel={3}
             icon={Inbox}
             heading={heading}
@@ -111,7 +113,8 @@ export function EvidenceFilteredEmpty({
       <CardContent>
         <Stack gap="tight">
           <CardEyebrow>{title}</CardEyebrow>
-          <EmptyState
+          <QueryState
+            kind="empty"
             headingLevel={3}
             icon={SearchX}
             heading="No results match these filters"

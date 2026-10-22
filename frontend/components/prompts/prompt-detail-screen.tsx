@@ -5,12 +5,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { PageShell } from '@/components/layout/page-shell';
+import { DetailScreen } from '@/components/layout/page-shell';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { LegendSwatch } from '@/components/ui/chart';
 import type { DataTone } from '@/components/ui/data-tone';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
@@ -36,6 +35,8 @@ import {
 
 import { PromptAnswerStates } from './prompt-answer-states';
 
+const BACK = { href: '/prompts', label: 'Back to Prompts' } as const;
+
 /** /prompts/:promptId — one prompt's measurements over time, in one market. */
 export function PromptDetailScreen() {
   const { promptId = '' } = useParams();
@@ -57,31 +58,31 @@ export function PromptDetailScreen() {
 
   if (query.isError)
     return (
-      <PageShell back={{ href: '/prompts', label: 'Back to Prompts' }}>
+      <DetailScreen back={BACK}>
         <QueryState
           kind="error"
           {...readErrorProps(query)}
           fallback="This prompt could not be loaded."
         />
-      </PageShell>
+      </DetailScreen>
     );
   if (!activeWorkspaceId)
     return (
-      <PageShell>
+      <DetailScreen back={BACK}>
         <Alert tone="info">Choose a workspace to open this prompt.</Alert>
-      </PageShell>
+      </DetailScreen>
     );
   if (!query.data)
     return (
-      <PageShell>
+      <DetailScreen back={BACK}>
         <QueryState kind="loading" />
-      </PageShell>
+      </DetailScreen>
     );
   const history = query.data;
   return (
-    <PageShell
+    <DetailScreen
       title={history.prompt.text}
-      back={{ href: '/prompts', label: 'Back to Prompts' }}
+      back={BACK}
       // A single market has nothing to choose, so the band is not drawn empty.
       controls={
         markets.length > 1
@@ -101,7 +102,7 @@ export function PromptDetailScreen() {
         <HistoryCard history={history} />
         <PromptAnswerStates latest={history.latest} />
       </Stack>
-    </PageShell>
+    </DetailScreen>
   );
 }
 
@@ -170,7 +171,11 @@ function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
             </ul>
           </Stack>
         ) : (
-          <InlineEmpty>No run has measured this prompt in this market yet.</InlineEmpty>
+          <QueryState
+            kind="empty"
+            inline
+            message="No run has measured this prompt in this market yet."
+          />
         )}
         <Implementations history={history} />
       </CardContent>
@@ -198,7 +203,7 @@ function Implementations({ history }: Readonly<{ history: PromptHistory }>) {
         {history.implementations.map((item) => (
           <li
             key={`${item.action_id}:${item.implemented_at}`}
-            className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-2 py-3"
           >
             <div className="grid gap-0.5">
               <TextLink href={`/agent/actions/${item.action_id}`}>{item.title}</TextLink>

@@ -139,7 +139,7 @@ export function PromptFormDialog({
 
         {/* Tags are set on generation or import; editing corrects them. */}
         {isEdit ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="desktop:grid-cols-2 grid gap-4">
             <Field label="Intent">
               {(props) => (
                 <Controller
@@ -176,7 +176,7 @@ export function PromptFormDialog({
             </Field>
             {/* Tags are not part of a run's frozen prompt panel, so a
                 correction keeps the prompt's comparison series. */}
-            <Field label="Persona" error={errors.persona?.message} className="sm:col-span-2">
+            <Field label="Persona" error={errors.persona?.message} className="desktop:col-span-2">
               {(props) => (
                 <Input {...props} {...register('persona')} placeholder="Marathon runners" />
               )}

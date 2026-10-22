@@ -60,22 +60,22 @@ const DOMAIN_COLUMNS = [
   'w-[13%]',
   '',
   '',
-  'hidden lg:table-cell',
+  'hidden desktop:table-cell',
   '',
-  'hidden md:table-cell',
-  'hidden md:table-cell',
+  'hidden desktop:table-cell',
+  'hidden desktop:table-cell',
 ] as const;
 
 const URL_COLUMNS = [
   'w-[26%]',
   'w-[11%]',
-  'hidden md:table-cell w-[13%]',
+  'hidden desktop:table-cell w-[13%]',
   '',
   '',
   '',
-  'hidden xl:table-cell',
-  'hidden lg:table-cell',
-  'hidden lg:table-cell',
+  'hidden desktop:table-cell',
+  'hidden desktop:table-cell',
+  'hidden desktop:table-cell',
 ] as const;
 
 /** A source's type, with the basis for the claim behind a tooltip and in hidden text. */
@@ -246,7 +246,7 @@ function MentionedChips({
               name={brand.name}
               logoUrl={brand.logo_url}
               websiteUrl={brand.website}
-              size="xs"
+              placement="mark"
             />
           </span>
         </Tooltip>

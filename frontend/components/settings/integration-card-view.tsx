@@ -126,17 +126,17 @@ function ConnectCard({
   const meta = FAMILY_META[family];
 
   return (
-    <Card data-testid={`grant-card-${family}`} className="flex flex-col justify-between">
+    <Card data-testid={`grant-card-${family}`} className="flex flex-col justify-between gap-3">
       <div>
         <GrantHeader family={family} grant={null} />
-        <CardContent className="pt-4">
+        <CardContent>
           <p className={textRole('body')}>
             Connect your {meta.title} account to automatically import traffic and search visibility
             metrics.
           </p>
         </CardContent>
       </div>
-      <CardContent className="pt-0">
+      <CardContent>
         <Button
           variant="secondary"
           onClick={() =>
@@ -224,17 +224,12 @@ function ConnectedCard({
   const meta = FAMILY_META[family];
 
   return (
-    <Card data-testid={`grant-card-${family}`} className="flex flex-col justify-between">
+    <Card data-testid={`grant-card-${family}`} className="flex flex-col justify-between gap-3">
       <div>
         <GrantHeader family={family} grant={grant} />
-        <CardContent className="grid gap-3 pt-4">
+        <CardContent className="grid gap-3">
           <GrantAlert family={family} status={grant.status} />
-          <div
-            className={panelClasses(
-              { tone: 'well', pad: 'compact' },
-              'type-caption flex items-center gap-2',
-            )}
-          >
+          <div className={panelClasses({ tone: 'well' }, 'type-caption flex items-center gap-2')}>
             <Info className="text-secondary size-3.5 shrink-0" aria-hidden />
             <span>
               One OAuth grant shared by {grant.connections.length}{' '}
@@ -248,7 +243,7 @@ function ConnectedCard({
           </Stack>
         </CardContent>
       </div>
-      <CardContent className="pt-0">
+      <CardContent>
         <div className="border-border-subtle flex flex-wrap items-center justify-between gap-2 border-t pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <Button

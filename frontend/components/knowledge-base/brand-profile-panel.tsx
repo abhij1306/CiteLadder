@@ -292,20 +292,19 @@ function ProfileTabPanel({
           Tracked competitors
         </h3>
         {competitors.length ? (
-          <ul className="grid gap-2 sm:grid-cols-2">
+          <ul className="desktop:grid-cols-2 grid gap-2">
             {competitors.map((competitor) => (
               <li
                 key={`${competitor.name}:${competitor.domains[0] ?? ''}`}
                 className={panelClasses(
-                  { tone: 'well', pad: 'none' },
-                  textRole('label', 'flex min-w-0 items-center gap-2 px-3 py-2'),
+                  { tone: 'well' },
+                  textRole('label', 'flex min-w-0 items-center gap-2'),
                 )}
               >
                 <BrandLogo
                   name={competitor.name}
                   logoUrl={competitor.logo_url}
                   websiteUrl={competitor.domains[0]}
-                  size="sm"
                 />
                 <span className="truncate">{competitor.name}</span>
               </li>
@@ -348,7 +347,7 @@ function IdentityFields({
           />
         )}
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="desktop:grid-cols-2 grid gap-4">
         <FacetChoice
           label="Who buys it"
           value={identity.buyer_type}

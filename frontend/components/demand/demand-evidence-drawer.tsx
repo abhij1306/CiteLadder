@@ -9,7 +9,7 @@ import { SignalChip } from '@/components/demand/demand-signal-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { DemandSignal } from '@/lib/api/demand';
@@ -56,7 +56,7 @@ function DemandEvidenceContent({
       open={open}
       onOpenChange={onOpenChange}
       title="Signal evidence"
-      className="max-w-md sm:max-w-lg"
+      className="desktop:max-w-lg max-w-md"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Button variant="secondary" asChild>
@@ -97,10 +97,8 @@ function DemandEvidenceContent({
 
         <section className="grid gap-2">
           <h3 className={textRole('label')}>Search Console performance</h3>
-          <StatGrid
-            surface="well"
-            columns={4}
-            items={[
+          <StatRow
+            segments={[
               {
                 key: 'impressions',
                 label: 'Impressions',
@@ -166,7 +164,7 @@ function DemandEvidenceContent({
         {details.cohortMedianCtr !== null && (
           <section className="grid gap-2">
             <h3 className={textRole('label')}>Position benchmark</h3>
-            <div className={panelClasses({ pad: 'compact' }, 'type-caption grid gap-2')}>
+            <div className={panelClasses({}, 'type-caption grid gap-2')}>
               <div className="flex justify-between">
                 <span className="text-muted">Position band</span>
                 {details.positionBand !== null ? (
@@ -203,7 +201,7 @@ function DemandEvidenceContent({
             <ShieldCheck className="text-muted size-3.5" aria-hidden />
             Provenance
           </h3>
-          <dl className={panelClasses({ tone: 'well', pad: 'compact' }, 'type-caption grid gap-2')}>
+          <dl className={panelClasses({ tone: 'well' }, 'type-caption grid gap-2')}>
             <ProvenanceRow label="Search Console rows">
               <ProvenanceCount value={details.metricRowCount} />
             </ProvenanceRow>

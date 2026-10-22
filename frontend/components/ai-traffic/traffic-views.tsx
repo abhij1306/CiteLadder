@@ -17,7 +17,7 @@ import { MISSING_MARK } from '@/lib/format';
 import { CalendarX } from 'lucide-react';
 import { TabPanel } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { DisplayTime } from '@/components/ui/display-time';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
@@ -62,7 +62,7 @@ export function TrafficOverview({
     <TabPanel value="overview">
       <Stack gap="workspace">
         <InsightStrip projectId={projectId} workspaceId={workspaceId} range={range} />
-        <div className="grid gap-[var(--workspace-gap)] lg:grid-cols-3">
+        <div className="desktop:grid-cols-3 grid gap-[var(--workspace-gap)]">
           <CrawlSignalPanel
             data={data.crawl}
             available={crawlAvailable}
@@ -276,8 +276,8 @@ function CoverageTable({
         <ReadError {...readErrorProps(query)} fallback="Could not read coverage" />
       ) : null}
       {data && !data.items.length && !pager.canPrev ? (
-        <EmptyState
-          variant="compact"
+        <QueryState
+          kind="empty"
           headingLevel={3}
           icon={CalendarX}
           heading="No persisted coverage in this range"

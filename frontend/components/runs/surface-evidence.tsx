@@ -4,9 +4,9 @@ import { Check, Link2, Minus, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { DisplayTime } from '@/components/ui/display-time';
-import { EmptyState } from '@/components/ui/empty-state';
 import { panelClasses } from '@/components/ui/panel';
-import { StatGrid, StatItem } from '@/components/ui/stat-grid';
+import { QueryState } from '@/components/ui/query-state';
+import { StatRow } from '@/components/ui/stat-row';
 import {
   ClampText,
   Table,
@@ -98,8 +98,8 @@ function EntityRow({ entity }: Readonly<{ entity: SurfaceEntity }>) {
 function PresenceTable({ entities }: Readonly<{ entities: readonly SurfaceEntity[] }>) {
   if (entities.length === 0) {
     return (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         headingLevel={3}
         icon={Users}
         heading="No tracked brands were configured for this run."
@@ -153,8 +153,8 @@ function InlineLinks({ links }: Readonly<{ links: SearchSurfaceEvidence['links']
         </p>
       </div>
       {links.length === 0 ? (
-        <EmptyState
-          variant="compact"
+        <QueryState
+          kind="empty"
           headingLevel={3}
           icon={Link2}
           heading="The overview’s text carried no inline links."
@@ -216,18 +216,22 @@ export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurface
         <Label>AI Overview details</Label>
         <p className="type-caption">{presenceCaption(evidence)}</p>
       </div>
-      <StatGrid surface="well" columns={4}>
-        <StatItem label="Overview" value={presenceLabel(evidence)} />
-        <StatItem
-          label="Block position"
-          value={
-            evidence.aio_serp_position === null ? 'Not recorded' : `#${evidence.aio_serp_position}`
-          }
-          detail="On the results page"
-        />
-        <StatItem label="Elements" value={evidence.element_count} />
-        <StatItem label="References" value={evidence.reference_count} />
-      </StatGrid>
+      <StatRow
+        segments={[
+          { key: 'overview', label: 'Overview', value: presenceLabel(evidence) },
+          {
+            key: 'position',
+            label: 'Block position',
+            value:
+              evidence.aio_serp_position === null
+                ? 'Not recorded'
+                : `#${evidence.aio_serp_position}`,
+            sub: 'On the results page',
+          },
+          { key: 'elements', label: 'Elements', value: evidence.element_count },
+          { key: 'references', label: 'References', value: evidence.reference_count },
+        ]}
+      />
       {shown ? (
         <>
           <section className="grid gap-3">
@@ -243,7 +247,7 @@ export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurface
           <InlineLinks links={evidence.links} />
         </>
       ) : (
-        <div className={panelClasses({ tone: 'well', pad: 'compact' }, 'type-body min-w-0')}>
+        <div className={panelClasses({ tone: 'well' }, 'type-body min-w-0')}>
           {evidence.aio_present === false
             ? 'There was nothing to compose: no overview appeared, so no brand could appear in one.'
             : 'No presence can be reported for a search that was never retrieved. This is a gap in our measurement, not an absence of the brand.'}

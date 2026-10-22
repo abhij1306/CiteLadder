@@ -8,9 +8,8 @@ import { useNavigate } from 'react-router-dom';
 import { AuditSchedules } from '@/components/runs/audit-schedules';
 import { LaunchDialog } from '@/components/runs/launch-dialog';
 import { RunsTable } from '@/components/runs/runs-table';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
@@ -112,14 +111,14 @@ export function RunsScreen() {
 
   if (runsQuery.isLoading) {
     return (
-      <PageShell actions={actions} controls={controls}>
+      <ListScreen actions={actions} controls={controls}>
         <QueryState kind="loading" label="Loading runs…" />
-      </PageShell>
+      </ListScreen>
     );
   }
 
   return (
-    <PageShell actions={actions} controls={controls}>
+    <ListScreen actions={actions} controls={controls}>
       <RunsContent
         projectId={projectId}
         read={runsQuery}
@@ -142,7 +141,7 @@ export function RunsScreen() {
           onLaunched={(audit) => router(projectHref(`/runs/${audit.id}`))}
         />
       ) : null}
-    </PageShell>
+    </ListScreen>
   );
 }
 
@@ -190,34 +189,20 @@ function RunsContent({
     (filter) => filter.id === statusFilter,
   )?.label.toLowerCase();
   return (
-    <Card className="overflow-hidden">
-      <CardHeader
-        actions={
-          anyActive ? (
-            <span className="type-caption inline-flex items-center gap-2 tabular-nums">
-              <span
-                className="bg-info inline-block size-1.5 animate-pulse rounded-full"
-                aria-hidden
-              />
-              {'polling every 3s while a run is active'}
-            </span>
-          ) : null
-        }
-      >
-        <CardTitle>All runs</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {filteredAudits.length === 0 ? (
-          <QueryState
-            kind="empty"
-            headingLevel={3}
-            icon={Play}
-            heading={`No ${filterLabel} runs.`}
-          />
-        ) : (
-          <RunsTable audits={filteredAudits} />
-        )}
-      </CardContent>
-    </Card>
+    <RunsTable
+      audits={filteredAudits}
+      emptyHeading={`No ${filterLabel} runs.`}
+      status={
+        anyActive ? (
+          <span className="type-caption inline-flex items-center gap-2 tabular-nums">
+            <span
+              className="bg-info inline-block size-1.5 animate-pulse rounded-full"
+              aria-hidden
+            />
+            {'polling every 3s while a run is active'}
+          </span>
+        ) : null
+      }
+    />
   );
 }

@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TrendChart } from '@/components/ui/trend-chart';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { SiteHealthOverview } from '@/lib/api/types';
@@ -42,7 +42,7 @@ export function OverviewDetails({ data }: Readonly<{ data: SiteHealthOverview }>
         <DimensionLedger dimensions={data.aeo_dimensions} />
         <TopIssues issues={data.top_issues} />
       </div>
-      <div className="grid gap-[var(--workspace-gap)] xl:grid-cols-3">
+      <div className="desktop:grid-cols-3 grid gap-[var(--workspace-gap)]">
         <WebFundamentalsCard
           data={data.web_fundamentals}
           onOpen={() => setWebFundamentalsOpen(true)}
@@ -74,7 +74,7 @@ function DimensionLedger({
       >
         <CardTitle>AEO Readiness by pillar</CardTitle>
       </CardHeader>
-      <CardContent flush>
+      <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
@@ -143,7 +143,7 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
       >
         <CardTitle>Top issues</CardTitle>
       </CardHeader>
-      <CardContent flush>
+      <CardContent>
         <Table>
           <TableHeader>
             <TableRow>
@@ -201,13 +201,10 @@ function WebFundamentalsCard({
         <CardTitle>Web Fundamentals</CardTitle>
         <CardDescription>Persisted HTTP evidence across four areas.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4 pt-0">
+      <CardContent className="grid gap-4">
         <div className="grid grid-cols-2 gap-2">
           {data.areas.map((area) => (
-            <div
-              key={area.key}
-              className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid gap-1')}
-            >
+            <div key={area.key} className={panelClasses({ tone: 'well' }, 'grid gap-1')}>
               <span className={textRole('label', 'capitalize')}>{area.key}</span>
               <Badge variant="status" value={measurementTone(area.state)}>
                 {statusLabel(area.state)}
@@ -230,7 +227,7 @@ function TrendCard({ data }: Readonly<{ data: SiteHealthOverview['trend'] }>) {
         <CardTitle>AEO Readiness trend</CardTitle>
         <CardDescription>Comparable terminal crawl snapshots only.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-2 pt-0">
+      <CardContent className="grid gap-2">
         <TrendChart
           data={data.series}
           label="AEO Readiness trend"
@@ -264,7 +261,7 @@ function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change
         <CardTitle>Change summary</CardTitle>
         <CardDescription>Change since the previous comparable crawl.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 pt-0">
+      <CardContent className="grid gap-3">
         {data.metrics.map((metric) => (
           <div key={metric.key} className="type-body flex items-center justify-between gap-3">
             <span className="text-secondary">
@@ -274,7 +271,7 @@ function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change
           </div>
         ))}
         {data.state === 'unavailable' ? (
-          <InlineEmpty>No comparable snapshot yet.</InlineEmpty>
+          <QueryState kind="empty" inline message="No comparable snapshot yet." />
         ) : null}
         <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
       </CardContent>
@@ -381,7 +378,7 @@ function WebFundamentalsDrawer({
             />
             <Stack>
               {area.top_findings.length === 0 ? (
-                <InlineEmpty>No missing HTTP-evidence checks.</InlineEmpty>
+                <QueryState kind="empty" inline message="No missing HTTP-evidence checks." />
               ) : (
                 area.top_findings.map((finding) => (
                   <div key={finding.rule_id} className="grid gap-1">

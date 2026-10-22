@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Line, LineChart, XAxis, YAxis, Tooltip } from 'recharts';
 import { axisProps, ChartContainer, LegendSwatch } from '@/components/ui/chart';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { textRole } from '@/components/ui/typography';
@@ -47,12 +47,16 @@ export function SearchIntelligenceHistory({
   const last = observations.at(-1);
   if (!first || !last || observations.length < 2)
     return (
-      <InlineEmpty>History needs at least two saved observations to show a trend.</InlineEmpty>
+      <QueryState
+        kind="empty"
+        inline
+        message="History needs at least two saved observations to show a trend."
+      />
     );
   const data = fillMonths(observations, first.date, last.date);
   return (
-    <section className="grid gap-4 md:grid-cols-2" aria-label="Saved backlink history">
-      <p className={textRole('caption', 'md:col-span-2')}>
+    <section className="desktop:grid-cols-2 grid gap-4" aria-label="Saved backlink history">
+      <p className={textRole('caption', 'desktop:col-span-2')}>
         Monthly domain-level history for {dataset.target_domain}, {first.date} to {last.date}.
         Coverage includes the provider’s historical link population and may differ from the live
         summary. Missing observations are gaps.

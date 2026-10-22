@@ -1,10 +1,8 @@
 import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react';
-import { metricItemClasses } from '@/components/ui/workspace';
 import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MetricValue } from '@/components/ui/metric-value';
 import { Delta } from '@/components/ui/delta';
 import type { DataTone } from '@/components/ui/data-tone';
 import { Meter } from '@/components/ui/meter';
@@ -27,43 +25,6 @@ export function metricValue(value: number | null, suffix = '') {
   return `${figure}${suffix}`;
 }
 
-export function StateMetric({
-  label,
-  value,
-  delta,
-  suffix,
-  inverse,
-}: Readonly<{
-  label: string;
-  value: number | null;
-  delta: number | null;
-  suffix?: string;
-  inverse?: boolean;
-}>) {
-  return (
-    <div className={metricItemClasses}>
-      <dt className={textRole('label')}>{label}</dt>
-      <dd>
-        <MetricValue
-          value={value === null ? null : metricValue(value, suffix)}
-          label={availabilityLabel('not_measured')}
-        />
-      </dd>
-      {/* A missing value or a missing comparison has no change to report; the
-          Movement card states why once, rather than a dash under every figure. */}
-      {value !== null && delta !== null ? (
-        <dd>
-          <Delta
-            value={delta}
-            policy={inverse ? 'lower-is-better' : 'higher-is-better'}
-            {...VS_PREVIOUS_RUN}
-          />
-        </dd>
-      ) : null}
-    </div>
-  );
-}
-
 /**
  * Each engine's brand mention rate in the previous and the current comparable
  * run. Both are shares of answers on the same 0–100 scale, so they are drawn as
@@ -72,7 +33,7 @@ export function StateMetric({
  */
 export function MovementChart({ movements }: Readonly<{ movements: CommandCenter['movements'] }>) {
   return (
-    <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+    <div className="desktop:grid-cols-2 grid gap-x-6 gap-y-4">
       {movements.map((row) => (
         <div key={row.label} className="grid min-w-0 content-start gap-2">
           <div className="flex items-center justify-between gap-2">
@@ -150,7 +111,7 @@ export function ActionRow({
         if (!reorderPending) onDrop(Number(event.dataTransfer.getData('text/plain')), index);
       }}
       className={cn(
-        'border-border-subtle hover:bg-hover active:bg-active grid gap-3 border-b py-3 transition-colors last:border-b-0 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center',
+        'border-border-subtle hover:bg-hover active:bg-active grid gap-3 border-b py-3 transition-colors last:border-b-0 desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center',
         dragging && 'opacity-60',
       )}
     >

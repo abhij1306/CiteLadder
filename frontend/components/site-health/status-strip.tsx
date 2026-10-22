@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 
 import { Alert } from '@/components/ui/alert';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { PageSummary, SiteCrawl } from '@/lib/api/types';
@@ -105,7 +105,8 @@ function StripContent({
     // Direct component callers retain an empty-state fallback. The canonical
     // layout owns the actionable first-crawl placeholder.
     return (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={ICONS.siteHealth}
         heading="No crawl yet"
         description="Discover and analyze your site's pages for AI search optimization. Start a crawl to see your pages, scores, and issues here — this screen updates in place as the crawl progresses."

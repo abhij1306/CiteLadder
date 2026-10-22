@@ -19,7 +19,7 @@ import { humanizeApiError } from '@/lib/api/errors';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import { cn } from '@/lib/utils';
 import { textRole } from '@/components/ui/typography';
-import { tagClasses } from '@/components/ui/filter-chip-variants';
+import { tagClasses } from '@/components/ui/tag-variants';
 import {
   activeMappingFor,
   mappingsQuery,

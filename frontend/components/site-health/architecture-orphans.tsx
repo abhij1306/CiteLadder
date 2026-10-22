@@ -10,7 +10,7 @@
 
 import { Drawer } from '@/components/ui/drawer';
 import { Stack } from '@/components/ui/layout';
-import { StatItem } from '@/components/ui/stat-grid';
+import type { StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import type { SiteArchitecture } from '@/lib/api/types';
 import { pluralCount } from '@/lib/format';
@@ -20,7 +20,8 @@ import { pluralCount } from '@/lib/format';
 // them, which stays behind the coverage-gated rule.
 export const ORPHAN_SCOPE_NOTE = 'not linked from any page this crawl fetched';
 
-export function OrphanMetric({
+/** The orphan count as a `StatRow` segment of the Internal linking row. */
+export function orphanSegment({
   pages,
   total,
   onOpen,
@@ -28,22 +29,23 @@ export function OrphanMetric({
   pages: SiteArchitecture['internal_linking']['orphan_pages'];
   total: number | null;
   onOpen: () => void;
-}>) {
-  if (total === null) return <StatItem label="Orphaned pages" value={null} />;
+}>): StatSegment {
+  const base = { key: 'orphans', label: 'Orphaned pages' };
+  if (total === null) return { ...base, value: null };
   // The count opens the evidence rather than listing it in place. A list of
   // twenty URLs inside a three-metric summary card pushed Structure depth off
   // the fold to say something the number already said; the drawer is where
   // every other Site Health surface puts its supporting rows. The visible
   // label is the bare number, which as an accessible name says only "1", so
   // the target is named by the action instead.
-  const action =
-    pages.length > 0
-      ? {
-          onSelect: onOpen,
-          actionLabel: `View ${pluralCount(total, 'orphaned page')}`,
-        }
-      : {};
-  return <StatItem label="Orphaned pages" value={total} detail={ORPHAN_SCOPE_NOTE} {...action} />;
+  if (pages.length === 0) return { ...base, value: total, sub: ORPHAN_SCOPE_NOTE };
+  return {
+    ...base,
+    value: total,
+    sub: ORPHAN_SCOPE_NOTE,
+    onSelect: onOpen,
+    actionLabel: `View ${pluralCount(total, 'orphaned page')}`,
+  };
 }
 
 export function OrphanPageDrawer({

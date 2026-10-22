@@ -10,15 +10,17 @@ import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/
  * button beside a 32px tab, a toolbar rebinding a token, or an error block
  * that is 88px on one route and 152px on the next — and those are what made
  * the app look inconsistent (docs/plans/app-geometry-consistency.md). So this
- * walks every product route at the owner's viewport (982×900, DPR 1, light),
- * measures every visible control, badge, tab, band, card and query state, and
- * asserts ONE value per role. The expected values are literals on purpose:
- * deriving them from the tokens would let a token edit move the whole app
- * and still pass.
+ * walks every product route at the owner's viewport (982×900, DPR 1) and at
+ * 1280×900, in light and dark, measures every visible control, badge, tab,
+ * band, box and query state, and asserts ONE value per role — the same
+ * literals in every configuration. The expected values are literals on
+ * purpose: deriving them from the tokens would let a token edit move the
+ * whole app and still pass.
  *
  * The shell fixture answers every unstubbed read with a 404, so most routes
  * settle into their read-error state; Runs is also rendered with fixture
- * rows, so table rows, badges and real cards are measured too.
+ * rows, so table rows, badges and real cards are measured too, and Settings
+ * integrations with a connection, so two neighbouring cards are measured.
  */
 
 const ROUTES = [
@@ -54,12 +56,19 @@ const CONTROL_BAND_HEIGHT = 49;
 /** Sections in the content region stand 24 apart; cards inside a section 16. */
 const SECTION_GAP = 24;
 const CARD_GAP = 16;
-/** Content starts 16 inside a card's edge. */
+/** One box recipe: padding 16 on the box element, radius 12, a 1px border. */
 const CARD_INSET = 16;
+const BOX_RADIUS = 12;
+const BOX_BORDER = 1;
 /** Loading, read-error and first-use empty share one footprint. */
 const QUERY_STATE_HEIGHT = 160;
 const TABLE_ROW_HEIGHT = 36;
 const TABLE_CELL_PADDING_Y = 6;
+/** A DataTable's header row is the control band again: 8 + 32 + 8 and its rule. */
+const DATA_TABLE_HEADER_HEIGHT = 49;
+/** A StatRow segment is padded 12 above and below; a row's segments share one height. */
+const STAT_SEGMENT_PADDING_Y = 12;
+const STAT_ROW_HEIGHT_SPREAD = 0;
 
 type Box = Readonly<{ route: string; role: string; label: string; value: number }>;
 
@@ -180,7 +189,17 @@ function measure(route: string) {
     Array.from(element.childNodes).some(
       (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
     );
+  // A state nested in a container shares that container's surface and inset
+  // (globals.css), so it is not a box of its own.
+  const nestedState = (element: Element) =>
+    element.matches('.query-state') &&
+    element.parentElement?.closest(`${boxes}, [role="dialog"], .table-frame`) != null;
   for (const box of all(boxes)) {
+    if (nestedState(box)) continue;
+    const boxStyle = getComputedStyle(box);
+    add('box.padding', box, px(boxStyle.paddingTop));
+    add('box.radius', box, px(boxStyle.borderTopLeftRadius));
+    add('box.border', box, px(boxStyle.borderTopWidth));
     const next = box.nextElementSibling;
     if (
       next?.matches(boxes) &&
@@ -205,20 +224,34 @@ function measure(route: string) {
       )
       .map((element) => element.getBoundingClientRect());
     if (ink.length === 0) continue;
-    // Measured from the inside of the box's edge, whether that edge is a
-    // ring (a card) or a one-pixel border (a panel).
+    // Measured from the inside of the box's one-pixel border.
     const edge = box.getBoundingClientRect();
-    const style = getComputedStyle(box);
-    const top = edge.top + Number.parseFloat(style.borderTopWidth);
-    const left = edge.left + Number.parseFloat(style.borderLeftWidth);
+    const top = edge.top + Number.parseFloat(boxStyle.borderTopWidth);
+    const left = edge.left + Number.parseFloat(boxStyle.borderLeftWidth);
     add('card.inset-top', box, Math.min(...ink.map((rect) => rect.top)) - top);
     add('card.inset-left', box, Math.min(...ink.map((rect) => rect.left)) - left);
   }
-  for (const element of all('[data-query-state]')) {
+  for (const element of all('[data-query-state]:not([data-query-state-inline])')) {
     add('query-state.height', element, element.getBoundingClientRect().height);
-    add('query-state.padding', element, px(getComputedStyle(element).paddingTop));
+    if (!nestedState(element))
+      add('query-state.padding', element, px(getComputedStyle(element).paddingTop));
   }
-  for (const row of all('tbody tr')) {
+  // A DataTable's title-and-toolbar row, whatever it holds.
+  for (const element of all('[data-data-table-header]'))
+    add('data-table-header.height', element, element.getBoundingClientRect().height);
+  // A StatRow: every segment's padding, and the segments of one row at one
+  // height (the spread between the tallest and the shortest).
+  for (const element of all('[data-stat-segment]'))
+    add('stat-segment.padding-y', element, px(getComputedStyle(element).paddingTop));
+  for (const row of all('[data-stat-row] > dl')) {
+    const heights = Array.from(row.children)
+      .filter(visible)
+      .map((segment) => segment.getBoundingClientRect().height);
+    if (heights.length > 1)
+      add('stat-row.height-spread', row, Math.max(...heights) - Math.min(...heights));
+  }
+  // Rows only: a DataTable's state row holds a QueryState, measured above.
+  for (const row of all('tbody tr:not([data-table-state])')) {
     add('table-row.height', row, row.getBoundingClientRect().height);
     const cell = row.querySelector('td');
     if (cell) add('table-cell.padding-y', cell, px(getComputedStyle(cell).paddingTop));
@@ -245,18 +278,13 @@ function valuesOf(records: readonly Box[], role: string) {
   return values;
 }
 
-function expectOneValue(
-  records: readonly Box[],
-  role: string,
-  expected: number,
-  { required = true }: Readonly<{ required?: boolean }> = {},
-) {
+function expectOneValue(records: readonly Box[], role: string, expected: number) {
   const values = valuesOf(records, role);
   const offenders = [...values.entries()]
     .filter(([value]) => value !== expected)
     .map(([value, where]) => `${value}px: ${where.slice(0, 6).join(', ')}`);
   expect.soft(offenders, `${role} renders only ${expected}px`).toEqual([]);
-  if (required) expect.soft(values.size, `${role} was measured`).toBeGreaterThan(0);
+  expect.soft(values.size, `${role} was measured`).toBeGreaterThan(0);
 }
 
 const RUNS = [
@@ -285,10 +313,48 @@ const RUNS = [
   completed_at: '2026-01-01T00:10:00Z',
 }));
 
-test.use({ viewport: { width: 982, height: 900 }, deviceScaleFactor: 1, colorScheme: 'light' });
+/** A Search Console connection, so Settings draws its two integration cards. */
+const CONNECTIONS = [
+  {
+    id: '55555555-5555-4555-8555-555555555551',
+    workspace_id: FIXTURE_PROJECT.workspace_id,
+    grant_id: '55555555-5555-4555-8555-555555555552',
+    provider: 'gsc',
+    label: 'example.com GSC',
+    account_ref: 'sc-domain:example.com',
+    grant_status: 'connected',
+    granted_scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+    last_synced_at: '2026-01-01T00:00:00Z',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  },
+];
 
-test('every product route renders one value per geometric role', async ({ page }) => {
-  test.setTimeout(180_000);
+/** The owner's viewport and a wide one, each in both themes: the same literals. */
+const CONFIGURATIONS = [
+  { width: 982, theme: 'light' },
+  { width: 982, theme: 'dark' },
+  { width: 1280, theme: 'light' },
+  { width: 1280, theme: 'dark' },
+] as const;
+
+for (const { width, theme } of CONFIGURATIONS) {
+  test.describe(`${width}×900 ${theme}`, () => {
+    test.use({ viewport: { width, height: 900 }, deviceScaleFactor: 1, colorScheme: theme });
+
+    test('every product route renders one value per geometric role', async ({ page }) => {
+      test.setTimeout(240_000);
+      // The product theme is a stored per-device choice, not the OS scheme.
+      await page.addInitScript(
+        (value) => window.localStorage.setItem('citeladder.theme', value),
+        theme,
+      );
+      await expectOneGeometry(page);
+    });
+  });
+}
+
+async function expectOneGeometry(page: Page) {
   await stubAuthedShell(page);
   const records: Box[] = [];
   for (const route of ROUTES) records.push(...(await census(page, route)));
@@ -297,6 +363,23 @@ test('every product route renders one value per geometric role', async ({ page }
   await stubAuthedShell(page, [[/\/api\/v1\/audits(\?.*)?$/, RUNS]]);
   const runs = await census(page, '/runs');
   records.push(...runs.map((record) => ({ ...record, route: '/runs (rows)' })));
+
+  // One run's detail, so a StatRow (the run's progress figures) is measured.
+  const [run] = RUNS;
+  if (!run) throw new Error('the runs fixture has a first run');
+  await stubAuthedShell(page, [
+    [new RegExp(String.raw`/api/v1/audits/${run.id}$`), run],
+    [new RegExp(String.raw`/api/v1/audits/${run.id}/executions(\?.*)?$`), []],
+  ]);
+  const detail = await census(page, `/runs/${run.id}`);
+  records.push(...detail.map((record) => ({ ...record, route: '/runs/:id (detail)' })));
+
+  // Neighbouring cards, so the card → card gap is measured, not assumed.
+  await stubAuthedShell(page, [[/\/api\/v1\/integrations(\?.*)?$/, CONNECTIONS]]);
+  const integrations = await census(page, '/settings?tab=integrations');
+  records.push(
+    ...integrations.map((record) => ({ ...record, route: '/settings integrations (cards)' })),
+  );
 
   expectOneValue(records, 'button.height', CONTROL_HEIGHT);
   expectOneValue(records, 'input.height', CONTROL_HEIGHT);
@@ -312,16 +395,20 @@ test('every product route renders one value per geometric role', async ({ page }
   expectOneValue(records, 'tab.padding-x', TEXT_CONTROL_PADDING_X);
   expectOneValue(records, 'control-band.height', CONTROL_BAND_HEIGHT);
   expectOneValue(records, 'section.gap', SECTION_GAP);
-  // No fixture state yet draws two neighbouring cards inside one section, so
-  // the card gap is checked wherever it renders rather than required.
-  expectOneValue(records, 'card.gap', CARD_GAP, { required: false });
+  expectOneValue(records, 'card.gap', CARD_GAP);
+  expectOneValue(records, 'box.padding', CARD_INSET);
+  expectOneValue(records, 'box.radius', BOX_RADIUS);
+  expectOneValue(records, 'box.border', BOX_BORDER);
   expectOneValue(records, 'card.inset-top', CARD_INSET);
   expectOneValue(records, 'card.inset-left', CARD_INSET);
   expectOneValue(records, 'query-state.height', QUERY_STATE_HEIGHT);
   expectOneValue(records, 'query-state.padding', CARD_INSET);
   expectOneValue(records, 'table-row.height', TABLE_ROW_HEIGHT);
   expectOneValue(records, 'table-cell.padding-y', TABLE_CELL_PADDING_Y);
+  expectOneValue(records, 'data-table-header.height', DATA_TABLE_HEADER_HEIGHT);
+  expectOneValue(records, 'stat-segment.padding-y', STAT_SEGMENT_PADDING_Y);
+  expectOneValue(records, 'stat-row.height-spread', STAT_ROW_HEIGHT_SPREAD);
 
   // The account menu is a 32px control like every other one in its row.
   await expect(page.getByRole('button', { name: /^Account menu/ })).toHaveCSS('height', '32px');
-});
+}

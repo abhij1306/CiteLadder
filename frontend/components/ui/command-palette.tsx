@@ -97,7 +97,7 @@ export function CommandPaletteTrigger({
     >
       <Search className="text-muted size-4 shrink-0" aria-hidden />
       <span className="min-w-0 truncate">Search or jump to…</span>
-      <kbd className="bg-well text-muted type-badge ms-auto hidden shrink-0 rounded-xs px-1 py-0.5 sm:inline">
+      <kbd className="bg-well text-muted type-badge desktop:inline ms-auto hidden shrink-0 rounded-xs px-1 py-0.5">
         {isMac ? '⌘K' : 'Ctrl K'}
       </kbd>
     </Button>
@@ -386,8 +386,7 @@ export function CommandPalette() {
                             <BrandLogo
                               name={command.label}
                               logoUrl={command.logoUrl}
-                              size="xs"
-                              className="bg-foreground text-background"
+                              placement="mark"
                             />
                           )}
                           <span className="min-w-0 flex-1 truncate">{command.label}</span>

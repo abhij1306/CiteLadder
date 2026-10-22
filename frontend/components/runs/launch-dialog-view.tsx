@@ -4,7 +4,6 @@ import { ProviderList } from '@/components/providers/provider-list';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
-import { FilterChip } from '@/components/ui/filter-chip';
 import { Input } from '@/components/ui/input';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Select } from '@/components/ui/select';
@@ -144,7 +143,7 @@ function InlineProviderSetup({
   return (
     <section
       aria-label="Connect a provider"
-      className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid gap-2')}
+      className={panelClasses({ tone: 'well' }, 'grid gap-2')}
     >
       <div className="flex items-center justify-between gap-2">
         <p className={textRole('label')}>Connect a provider</p>
@@ -184,13 +183,14 @@ function MarketsField({
       </p>
       <div className="flex flex-wrap gap-2">
         {markets.map((market) => (
-          <FilterChip
+          <Button
             key={market.id ?? 'default'}
-            active={marketIds.includes(market.id)}
+            variant="secondary"
+            aria-pressed={marketIds.includes(market.id)}
             onClick={() => setMarketIds((current) => toggleMarket(current, market.id))}
           >
             {market.label}
-          </FilterChip>
+          </Button>
         ))}
       </div>
     </fieldset>
@@ -317,9 +317,10 @@ export function LaunchDialogView({
               <div className="flex flex-wrap gap-2">
                 {ENGINE_ORDER.filter((engine) => isConsumerEngine(engine) === consumer).map(
                   (engine) => (
-                    <FilterChip
+                    <Button
                       key={engine}
-                      active={selected.has(engine)}
+                      variant="secondary"
+                      aria-pressed={selected.has(engine)}
                       onClick={() =>
                         configuredEngines.includes(engine)
                           ? setEngines((current) => toggleEngine(current, engine))
@@ -333,7 +334,7 @@ export function LaunchDialogView({
                       {configuredEngines.includes(engine) ? null : (
                         <span className="sr-only">, not connected</span>
                       )}
-                    </FilterChip>
+                    </Button>
                   ),
                 )}
               </div>
@@ -362,9 +363,7 @@ export function LaunchDialogView({
           )}
         </Field>
         {estimate ? (
-          <div
-            className={panelClasses({ tone: 'well', pad: 'compact' }, 'type-caption grid gap-1')}
-          >
+          <div className={panelClasses({ tone: 'well' }, 'type-caption grid gap-1')}>
             <span className={textRole('emphasis', 'text-foreground')}>
               {estimate.execution_count} {estimate.execution_count === 1 ? 'response' : 'responses'}{' '}
               planned

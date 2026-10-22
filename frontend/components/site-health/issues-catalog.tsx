@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { IssueDetailRail } from '@/components/site-health/issue-detail-rail';
 import { IssueMetadata } from '@/components/site-health/issue-metadata';
@@ -164,12 +164,12 @@ export function IssuesCatalog({
   // showing nothing — and the filters stay in place while it loads.
   if (issuesQuery.isPending && !issuesQuery.data)
     return (
-      <PageShell controls={controls}>
+      <ListScreen controls={controls}>
         <Stack gap="section" className="min-w-0" aria-busy="true">
           {notice}
           <QueryState kind="loading" label="Loading issues…" />
         </Stack>
-      </PageShell>
+      </ListScreen>
     );
 
   let issuesBody: ReactNode = (
@@ -216,7 +216,7 @@ export function IssuesCatalog({
   }
 
   return (
-    <PageShell controls={controls}>
+    <ListScreen controls={controls}>
       <Stack gap="section" className="min-w-0">
         {notice}
         {summary ? <IssueSummary summary={summary} findingView={findingView} /> : null}
@@ -227,7 +227,7 @@ export function IssuesCatalog({
           <CatalogPager cursor={cursor} page={issuesQuery.data} onGo={catalog.goToPage} />
         ) : null}
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }
 
@@ -307,7 +307,7 @@ function IssueSummary({
   const typeCount =
     findingView === 'defect' ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
   return (
-    <div className="border-border-subtle flex flex-wrap gap-x-8 gap-y-3 border-b pb-3 min-[981px]:border-b-0 min-[981px]:pb-0">
+    <div className="border-border-subtle desktop:border-b-0 desktop:pb-0 flex flex-wrap gap-x-8 gap-y-3 border-b pb-3">
       <SummaryMeasure value={typeCount} label={`${findingView} issue types`} />
       <SummaryMeasure value={summary.occurrence_count} label={`${findingView} occurrences`} />
       <SummaryMeasure value={summary.affected_url_count} label="affected URLs" />
@@ -357,9 +357,9 @@ function IssueGroupList({
 }>) {
   return (
     // One vertical list at every width: above the detail when the panes
-    // stack, beside it from lg. A sideways strip of fixed-width cards left a
-    // lone issue stranded at a third of the width.
-    <div className="border-border-subtle divide-border-subtle grid min-w-0 divide-y border-b lg:border-r lg:border-b-0">
+    // stack, beside it on desktop. A sideways strip of fixed-width cards left
+    // a lone issue stranded at a third of the width.
+    <div className="border-border-subtle divide-border-subtle desktop:border-r desktop:border-b-0 grid min-w-0 divide-y border-b">
       {rows.map((issue) => {
         const selected = issue.group_id === selectedGroupId;
         return (

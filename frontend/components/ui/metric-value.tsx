@@ -52,7 +52,7 @@ export function MetricValue({
   if (loading) {
     return (
       <div className={slot}>
-        <Spinner size={size === 'figure' ? 'md' : 'sm'} label="Loading" className={tone} />
+        <Spinner label="Loading" className={tone} />
       </div>
     );
   }

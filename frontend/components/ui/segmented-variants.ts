@@ -5,7 +5,8 @@ export const segmentedTrackVariants = cva(
 );
 
 export const segmentedItemVariants = cva(
-  'focus-ring type-badge shrink-0 inline-flex h-[calc(var(--control-height-md)-4px)] items-center justify-center rounded-[var(--radius-control)] px-3 whitespace-nowrap transition-[background-color,color,border-color] disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle',
+  // A segment is a control, so it sets control text (14), not badge text.
+  'focus-ring type-control shrink-0 inline-flex h-[calc(var(--control-height-md)-4px)] items-center justify-center rounded-[var(--radius-control)] px-3 whitespace-nowrap transition-[background-color,color,border-color] disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle',
   {
     variants: {
       selected: {

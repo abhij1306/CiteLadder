@@ -24,9 +24,9 @@ export function ShellFallback({ children }: Readonly<{ children?: ReactNode }>) 
       aria-busy={children === undefined ? 'true' : undefined}
     >
       {/* Match the settled shell's rail fill before session identity resolves. */}
-      <div className="bg-background hidden w-[var(--sidebar-width)] shrink-0 min-[981px]:block" />
+      <div className="bg-background desktop:block hidden w-[var(--sidebar-width)] shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="h-[var(--compact-topbar-height)] shrink-0 min-[981px]:hidden" />
+        <div className="desktop:hidden h-[var(--compact-topbar-height)] shrink-0" />
         <div className="app-pane app-pane-workspace flex min-w-0 flex-1 flex-col">
           {children === undefined ? (
             <QueryState kind="loading" label="Loading your workspace…" />

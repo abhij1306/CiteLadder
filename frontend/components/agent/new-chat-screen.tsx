@@ -13,7 +13,7 @@ import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { useCreateChat } from '@/components/agent/use-chat-turns';
 import { useComposerCommands } from '@/components/agent/use-composer-commands';
 import { WorkflowGallery, WorkflowStart } from '@/components/agent/workflow-gallery';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
@@ -55,9 +55,9 @@ export function NewChatScreen() {
       searchParams={searchParams}
     />
   ) : (
-    <PageShell measure="workflow">
+    <ListScreen measure="workflow">
       <ProjectRequiredState />
-    </PageShell>
+    </ListScreen>
   );
 }
 
@@ -103,13 +103,11 @@ function NewChat({
     });
 
   return (
-    <PageShell
+    <ListScreen
       measure="workflow"
       // Fill the viewport below the shell chrome so the composer sits at the
-      // bottom of a short thread. `--route-chrome-height` (globals.css) owns the
-      // chrome above the route at each breakpoint; the gutter is the shell's
-      // padding under the route. Kept identical in chat- and new-chat-screen.
-      className="flex min-h-[calc(100dvh-var(--route-chrome-height)-var(--content-gutter))] flex-col"
+      // bottom of a short thread. Kept identical in chat- and new-chat-screen.
+      fill
     >
       <Stack gap="section" className="my-auto">
         <h2 className={textRole('sectionTitle', 'text-center')}>What can I help with?</h2>
@@ -170,7 +168,7 @@ function NewChat({
           </Disclosure>
         )}
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }
 
@@ -201,7 +199,7 @@ function AttachedAction({
   if (!query.data) return null;
   const action = query.data;
   return (
-    <section aria-label="Working on" className={panelClasses({ pad: 'compact' }, 'grid gap-1')}>
+    <section aria-label="Working on" className={panelClasses({}, 'grid gap-1')}>
       <span className={textRole('label')}>Working on</span>
       <div className="flex flex-wrap items-center gap-2">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
@@ -247,7 +245,7 @@ function TopActions({
 
 function TopActionRow({ action }: Readonly<{ action: Action }>) {
   return (
-    <li className={panelClasses({ pad: 'compact' }, 'flex flex-wrap items-center gap-3')}>
+    <li className={panelClasses({}, 'flex flex-wrap items-center gap-3')}>
       <div className="grid min-w-0 flex-1 gap-0.5">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle" className="truncate">
           {action.target_label}

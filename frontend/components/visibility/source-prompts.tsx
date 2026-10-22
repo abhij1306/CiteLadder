@@ -11,7 +11,7 @@ import {
 } from '@/components/runs/execution-evidence-drawer';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -98,7 +98,7 @@ export function SourcePrompts({
       <CardHeader>
         <CardTitle>Prompts</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         <PromptsBody query={query} onOpenAnswer={setOpened} />
         {/* The endpoint returns a bounded newest-first window. Without this a
             source cited by more answers than fit simply looked like it had
@@ -130,16 +130,17 @@ function PromptsBody({
         fallback="Could not load the tracked answers."
         onRetry={() => void query.refetch()}
         pending={query.isFetching}
-        className="m-[var(--card-padding)]"
       />
     );
-  if (query.isLoading) return <Skeleton className="m-[var(--card-padding)] h-40" />;
+  if (query.isLoading) return <Skeleton className="h-40" />;
   const items = query.data?.items ?? [];
   if (items.length === 0) {
     return (
-      <InlineEmpty className="p-[var(--card-padding)]">
-        No tracked answers in this selection used this source.
-      </InlineEmpty>
+      <QueryState
+        kind="empty"
+        inline
+        message="No tracked answers in this selection used this source."
+      />
     );
   }
   return (
@@ -148,9 +149,9 @@ function PromptsBody({
         <TableRow>
           <TableHead>Prompt</TableHead>
           <TableHead numeric>Citations</TableHead>
-          <TableHead className="hidden md:table-cell">Mentioned</TableHead>
-          <TableHead className="hidden lg:table-cell">Sources</TableHead>
-          <TableHead numeric className="hidden sm:table-cell">
+          <TableHead className="desktop:table-cell hidden">Mentioned</TableHead>
+          <TableHead className="desktop:table-cell hidden">Sources</TableHead>
+          <TableHead numeric className="desktop:table-cell hidden">
             Created
           </TableHead>
           <TableHead>
@@ -185,11 +186,7 @@ function PromptRow({
     <TableRow>
       <TableCell className="max-w-[34rem]">
         <span className="flex min-w-0 items-start gap-2">
-          <BrandLogo
-            name={engineLabel(item.logical_engine) || item.logical_engine}
-            size="sm"
-            className="mt-0.5"
-          />
+          <BrandLogo name={engineLabel(item.logical_engine) || item.logical_engine} />
           <span className="grid min-w-0">
             <ClampText lines={1}>{item.prompt_text || 'Untitled prompt'}</ClampText>
             <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
@@ -201,13 +198,13 @@ function PromptRow({
         </span>
       </TableCell>
       <TableCell numeric>{count(item.citations.length) ?? '0'}</TableCell>
-      <TableCell className="hidden md:table-cell">
+      <TableCell className="desktop:table-cell hidden">
         <MentionChips item={item} />
       </TableCell>
-      <TableCell className="hidden lg:table-cell">
+      <TableCell className="desktop:table-cell hidden">
         <SourceChips item={item} />
       </TableCell>
-      <TableCell numeric className="hidden sm:table-cell">
+      <TableCell numeric className="desktop:table-cell hidden">
         {sinceLabel(item.completed_at) ?? <MissingValue />}
       </TableCell>
       <TableCell>
@@ -252,7 +249,7 @@ function MentionChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>)
       {named.slice(0, MAX_CHIPS).map((mention) => (
         <Tooltip key={`${mention.kind}:${mention.name}`} content={mention.name}>
           <span className="inline-flex">
-            <BrandLogo name={mention.name || 'Brand'} size="xs" />
+            <BrandLogo name={mention.name || 'Brand'} placement="mark" />
           </span>
         </Tooltip>
       ))}
@@ -271,7 +268,7 @@ function SourceChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>) 
       {hosts.slice(0, MAX_CHIPS).map((host) => (
         <Tooltip key={host} content={host}>
           <span className="inline-flex">
-            <BrandLogo name={host} websiteUrl={`https://${host}`} size="xs" />
+            <BrandLogo name={host} websiteUrl={`https://${host}`} placement="mark" />
           </span>
         </Tooltip>
       ))}

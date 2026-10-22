@@ -142,7 +142,7 @@ export function ResizableSplitPane({
         onLostPointerCapture={resize.onLostPointerCapture}
         onDoubleClick={resize.onDoubleClick}
         onKeyDown={resize.onKeyDown}
-        className="focus-ring group hidden w-4 cursor-col-resize touch-none justify-center self-stretch rounded-xs py-2 lg:flex"
+        className="focus-ring group desktop:flex hidden w-4 cursor-col-resize touch-none justify-center self-stretch rounded-xs py-2"
       >
         <span
           aria-hidden

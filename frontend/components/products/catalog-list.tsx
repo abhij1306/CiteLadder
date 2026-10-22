@@ -176,12 +176,7 @@ function CatalogTree({
   return (
     <fieldset className="grid min-w-0 gap-3">
       <legend className="sr-only">Catalog targets</legend>
-      <div
-        className={panelClasses(
-          { tone: 'tonal', pad: 'none' },
-          'flex items-center justify-between gap-3 px-1 py-1',
-        )}
-      >
+      <div className={panelClasses({ tone: 'tonal' }, 'flex items-center justify-between gap-3')}>
         <Checkbox
           label="Select all shown"
           checked={checkboxState(shownSelectionCount, shownKeys.length)}
@@ -336,7 +331,7 @@ export function CatalogList({
     );
   return (
     <div className="grid min-w-0 content-start">
-      <div className="border-border-subtle bg-panel sticky top-0 z-20 grid gap-2 border-b p-[var(--card-padding)]">
+      <div className="border-border-subtle bg-panel sticky top-0 z-20 grid gap-2 border-b pb-3">
         <SearchField
           aria-label="Search the catalog"
           placeholder="Search categories and products"
@@ -347,7 +342,7 @@ export function CatalogList({
           Check items for bulk actions. Select a name to view its details.
         </p>
       </div>
-      <div className="grid min-w-0 gap-3 p-[var(--card-padding)] pt-3">
+      <div className="grid min-w-0 gap-3 pt-3">
         {empty ? (
           <QueryState
             kind="empty"

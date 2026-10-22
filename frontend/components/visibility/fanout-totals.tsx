@@ -1,6 +1,8 @@
 'use client';
 
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { SearchX } from 'lucide-react';
+
+import type { DataTableState } from '@/components/ui/data-table';
 import { textRole } from '@/components/ui/typography';
 
 /** What the fanout projection answers about the whole selection. */
@@ -100,15 +102,13 @@ export function SearchScopeNote({
  * the wording stays neutral instead of pointing at a pager that may not be
  * showing.
  */
-export function NoSearchMatch({
-  search,
-  matched,
-}: Readonly<{ search: string | null; matched: number | null }>) {
+export function noSearchMatchState(search: string | null, matched: number | null): DataTableState {
   const verb = matched === 1 ? 'match sits' : 'matches sit';
   const elsewhere = matched ? ` — ${matched} ${verb} elsewhere in the run set.` : '.';
-  return (
-    <InlineEmpty className="p-[var(--card-padding)]">
-      {`No search matches “${search}” on this page${elsewhere}`}
-    </InlineEmpty>
-  );
+  return {
+    kind: 'empty',
+    icon: SearchX,
+    headingLevel: 3,
+    heading: `No search matches “${search}” on this page${elsewhere}`,
+  };
 }

@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Pager } from '@/components/ui/pager';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -260,7 +260,11 @@ export function DimensionTable({
           {!query.isLoading && rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={columnCount}>
-                <InlineEmpty>No {tab.noun} measured for this range.</InlineEmpty>
+                <QueryState
+                  kind="empty"
+                  inline
+                  message={`No ${tab.noun} measured for this range.`}
+                />
               </TableCell>
             </TableRow>
           ) : null}

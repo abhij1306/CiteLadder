@@ -7,19 +7,18 @@ import { ChevronDown, ChevronRight, Link2, ListTree } from 'lucide-react';
 import { HierarchyCard } from '@/components/site-health/architecture-hierarchy';
 import {
   ORPHAN_SCOPE_NOTE,
-  OrphanMetric,
   OrphanPageDrawer,
+  orphanSegment,
 } from '@/components/site-health/architecture-orphans';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
 import { Meter } from '@/components/ui/meter';
 import { Pressable } from '@/components/ui/pressable';
 import { QueryState } from '@/components/ui/query-state';
-import { StatGrid, StatItem } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import {
@@ -32,7 +31,7 @@ import {
   TableRecordMetricCell,
   TableRow,
 } from '@/components/ui/table';
-import { MetricGroup, MetricItem, splitPaneClasses } from '@/components/ui/workspace';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import type {
   ArchitectureNode,
@@ -159,7 +158,7 @@ function ArchitectureLedger({ data }: Readonly<{ data: SiteArchitecture }>) {
             URLs grouped by their persisted structural purpose for this crawl.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 pt-1">
+        <CardContent className="grid gap-3">
           <ArchitectureMetrics
             pageKinds={pageKinds.length}
             pages={data.page_count}
@@ -169,7 +168,7 @@ function ArchitectureLedger({ data }: Readonly<{ data: SiteArchitecture }>) {
           />
           <CoverageReasons reasons={data.coverage_reasons} />
           {pageKinds.length === 0 ? (
-            <InlineEmpty>No page kinds were measured.</InlineEmpty>
+            <QueryState kind="empty" inline message="No page kinds were measured." />
           ) : (
             <PageKindTable pageKinds={pageKinds} grouped={grouped} crawlId={data.crawl_id} />
           )}
@@ -215,16 +214,14 @@ function ArchitectureMetrics({
     ],
   ];
   return (
-    <MetricGroup>
-      {items.map(([label, value, supporting]) => (
-        <MetricItem
-          key={label}
-          label={label}
-          value={value === PLACEHOLDER ? <UnavailableValue state="not_measured" /> : value}
-          detail={supporting}
-        />
-      ))}
-    </MetricGroup>
+    <StatRow
+      segments={items.map(([label, value, supporting]) => ({
+        key: label,
+        label,
+        value: value === PLACEHOLDER ? <UnavailableValue state="not_measured" /> : value,
+        sub: supporting,
+      }))}
+    />
   );
 }
 
@@ -239,8 +236,8 @@ function PageKindTable({
 }>) {
   const [openKind, setOpenKind] = useState<string | null>(null);
   return (
-    <Table className="block md:table" wrapperClassName="overflow-hidden md:overflow-auto">
-      <TableHeader className="hidden md:table-header-group">
+    <Table className="desktop:table block" wrapperClassName="overflow-hidden desktop:overflow-auto">
+      <TableHeader className="desktop:table-header-group hidden">
         <TableRow>
           <TableHead>Page kind</TableHead>
           <TableHead numeric>Pages</TableHead>
@@ -250,20 +247,20 @@ function PageKindTable({
           <TableHead numeric>Orphaned</TableHead>
         </TableRow>
       </TableHeader>
-      <TableBody className="block md:table-row-group">
+      <TableBody className="desktop:table-row-group block">
         {pageKinds.map((pageKind) => {
           const open = openKind === pageKind.page_kind;
           const pages = grouped.get(pageKind.page_kind) ?? [];
           const Chevron = open ? ChevronDown : ChevronRight;
           return (
             <Fragment key={pageKind.page_kind}>
-              <TableRow className="grid h-auto grid-cols-1 py-2 md:table-row md:h-[var(--table-row-height)] md:py-0">
-                <TableCell className="block border-b-0 px-4 py-1 md:table-cell md:border-b md:px-[var(--table-cell-padding-x)] md:py-[var(--table-cell-padding-y)]">
+              <TableRow className="desktop:table-row desktop:h-[var(--table-row-height)] desktop:py-0 grid h-auto grid-cols-1 py-2">
+                <TableCell className="desktop:table-cell desktop:border-b desktop:px-[var(--table-cell-padding-x)] desktop:py-[var(--table-cell-padding-y)] block border-b-0 px-4 py-1">
                   <Pressable
                     type="button"
                     aria-expanded={open}
                     onClick={() => setOpenKind(open ? null : pageKind.page_kind)}
-                    className="inline-flex min-h-11 w-auto items-center gap-2 text-left md:min-h-9"
+                    className="desktop:min-h-9 inline-flex min-h-11 w-auto items-center gap-2 text-left"
                   >
                     <Chevron className="text-muted size-4 shrink-0" aria-hidden />
                     <PageKindBadge pageKind={pageKind.page_kind} />
@@ -297,10 +294,14 @@ function PageKindPages({
   crawlId,
 }: Readonly<{ pages: ArchitectureNode[]; crawlId: string | null }>) {
   return (
-    <TableRow className="bg-background-alt hover:bg-background-alt block h-auto md:table-row md:h-[var(--table-row-height)]">
-      <TableCell colSpan={6} className="block py-3 md:table-cell">
+    <TableRow className="bg-background-alt hover:bg-background-alt desktop:table-row desktop:h-[var(--table-row-height)] block h-auto">
+      <TableCell colSpan={6} className="desktop:table-cell block py-3">
         {pages.length === 0 ? (
-          <InlineEmpty>No projected URLs are available for this kind.</InlineEmpty>
+          <QueryState
+            kind="empty"
+            inline
+            message="No projected URLs are available for this kind."
+          />
         ) : (
           <ul className="content-scroll grid max-h-64 gap-2 overflow-y-auto overscroll-contain pr-2 pl-6">
             {pages.map((page) => (
@@ -341,24 +342,28 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
               Internal linking
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4 pt-2">
-            <StatGrid columns={3} size="figure">
-              <StatItem
-                label="In-content links"
-                value={linking.content_link_count}
-                detail={`${linking.internal_link_count} including menus`}
-              />
-              <StatItem
-                label="Have incoming links"
-                value={linkedShare === null ? null : formatPercentage(linkedShare)}
-                detail={`${linking.pages_with_incoming_count} pages`}
-              />
-              <OrphanMetric
-                pages={linking.orphan_pages}
-                total={linking.orphan_page_count}
-                onOpen={() => setOrphansOpen(true)}
-              />
-            </StatGrid>
+          <CardContent className="grid gap-4">
+            <StatRow
+              segments={[
+                {
+                  key: 'content-links',
+                  label: 'In-content links',
+                  value: linking.content_link_count,
+                  sub: `${linking.internal_link_count} including menus`,
+                },
+                {
+                  key: 'incoming',
+                  label: 'Have incoming links',
+                  value: linkedShare === null ? null : formatPercentage(linkedShare),
+                  sub: `${linking.pages_with_incoming_count} pages`,
+                },
+                orphanSegment({
+                  pages: linking.orphan_pages,
+                  total: linking.orphan_page_count,
+                  onOpen: () => setOrphansOpen(true),
+                }),
+              ]}
+            />
             <OrphanPageDrawer
               pages={linking.orphan_pages}
               total={linking.orphan_page_count}
@@ -375,7 +380,7 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
               Structure depth
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 pt-2">
+          <CardContent className="grid gap-3">
             {data.structure_depth.buckets.map((bucket) => (
               <div key={bucket.key} className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-3">
                 <span className="type-caption">{DEPTH_LABELS[bucket.key]}</span>

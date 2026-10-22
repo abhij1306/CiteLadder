@@ -87,7 +87,7 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
   const saveVerb = configured ? 'Update' : 'Save';
   const saveLabel = saveMutation.isPending ? 'Saving & testing…' : `${saveVerb} ${noun}`;
   return (
-    <div id={id} className={panelClasses({ tone: 'tonal', pad: 'compact' }, 'grid gap-3')}>
+    <div id={id} className={panelClasses({ tone: 'tonal' }, 'grid gap-3')}>
       <ProviderConnectionFields state={state} />
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button
@@ -137,7 +137,6 @@ export function ProviderRow({
             name={group.label}
             logoUrl={TRANSPORT_LOGOS[group.transport]}
             websiteUrl={TRANSPORT_DOMAINS[group.transport]}
-            size="md"
           />
           <div className="grid min-w-0 gap-0.5">
             <h3 className={textRole('itemTitle')}>{group.label}</h3>

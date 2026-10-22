@@ -85,7 +85,7 @@ function StepMark({ state }: Readonly<{ state: 'done' | 'active' | 'pending' }>)
   if (state === 'active') {
     return (
       <span className="border-info-border text-info-text inline-flex size-5 shrink-0 items-center justify-center rounded-full border">
-        <Spinner size="sm" />
+        <Spinner />
       </span>
     );
   }
@@ -136,7 +136,7 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
   const reached = stageIndex(data.stage);
   return (
     <section
-      className={cn(panelClasses({ tone: 'panel', pad: 'compact' }), 'grid gap-2')}
+      className={cn(panelClasses({ tone: 'panel' }), 'grid gap-2')}
       aria-label="Data readiness"
       data-testid="readiness-ladder"
     >

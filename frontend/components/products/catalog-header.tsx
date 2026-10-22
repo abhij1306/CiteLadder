@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { CsvImportTrigger } from '@/components/ui/csv-import';
-import { StatGrid, type StatItemProps } from '@/components/ui/stat-grid';
+import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
 import { commerceApi } from '@/lib/api/commerce';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -69,7 +69,7 @@ function CatalogStats({
   counts: CommerceQueries['catalog']['data'];
   crawl: SiteHealthCrawl;
 }>) {
-  const items: (StatItemProps & { key: string })[] = [
+  const items: StatSegment[] = [
     {
       key: 'products',
       label: 'Products',
@@ -94,7 +94,7 @@ function CatalogStats({
   return (
     <Card>
       <CardContent>
-        <StatGrid surface="open" size="figure" items={items} />
+        <StatRow segments={items} />
       </CardContent>
     </Card>
   );

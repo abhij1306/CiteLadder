@@ -12,7 +12,7 @@ import { isAiReferralsEmpty } from '@/lib/ai-traffic/series';
 import type { AiReferrals } from '@/lib/api/ai-traffic';
 
 import { AiReferralsDashboard } from './referrals-dashboard';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { TabPanel, type TabRowProps } from '@/components/ui/tabs';
 
 export function AiReferralsContent({
@@ -51,9 +51,9 @@ export function AiReferralsContent({
     data
   );
   return (
-    <PageShell tabs={tabs} controls={controls}>
+    <ListScreen tabs={tabs} controls={controls}>
       {tabs ? <TabPanel value="referrals">{region}</TabPanel> : region}
-    </PageShell>
+    </ListScreen>
   );
 }
 

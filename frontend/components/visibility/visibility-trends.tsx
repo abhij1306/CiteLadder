@@ -13,12 +13,12 @@ import type { DataTone } from '@/components/ui/data-tone';
 import { Delta } from '@/components/ui/delta';
 import { Stack } from '@/components/ui/layout';
 import { InfoHint } from '@/components/ui/info-hint';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
+import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
-import { MetricGroup, MetricItem, splitPaneClasses } from '@/components/ui/workspace';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { RankingRowsTable } from '@/components/visibility/ranking-rows';
 import { EngineComparison } from '@/components/visibility/engine-comparison';
 import { SurfaceRatesPanel } from '@/components/visibility/surface-rates';
@@ -124,7 +124,7 @@ export function VisibilityTrends({
               own.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent>
             <RankingRowsTable
               rows={selected.rankings}
               onSelect={setFocused}
@@ -209,41 +209,31 @@ function HeadlineMetrics({ selected }: Readonly<{ selected: Visibility }>) {
   // Runs measured before competitor offsets were persisted have none, and the
   // tile is omitted rather than shown empty.
   const position = brand?.avg_position ?? selected.avg_position ?? null;
-  return (
-    <MetricGroup>
-      {definitions.map((item) => {
-        const change = comparison?.deltas[item.key];
-        return (
-          <MetricItem
-            key={item.key}
-            label={
-              <span className="inline-flex items-center gap-2">
-                {item.label}
-                <InfoHint label={item.label}>{item.explanation}</InfoHint>
-              </span>
-            }
-            value={unmeasured ?? formatRate(item.value)}
-            // No comparable run means no change line at all. The coverage strip
-            // below states the reason once, not a placeholder repeated three times.
-            detail={change == null ? null : <Delta value={change} unit=" pp" />}
-          />
-        );
-      })}
-      {position == null ? null : (
-        <MetricItem
-          label={
-            <span className="inline-flex items-center gap-2">
-              Average position
-              <InfoHint label="Average position">
-                {`Where your brand tends to appear among the brands you TRACK — you and your configured competitors. A brand an answer names that you do not track is not counted, so this is not a rank within the whole answer. Counted only over the answers that named you, and averaged to ${formatPositionExact(position)}.`}
-              </InfoHint>
-            </span>
-          }
-          value={formatPosition(position)}
-        />
-      )}
-    </MetricGroup>
-  );
+  const segments: StatSegment[] = definitions.map((item) => {
+    const change = comparison?.deltas[item.key];
+    return {
+      key: item.key,
+      label: item.label,
+      marker: <InfoHint label={item.label}>{item.explanation}</InfoHint>,
+      value: unmeasured ?? formatRate(item.value),
+      // No comparable run means no change line at all. The coverage strip
+      // below states the reason once, not a placeholder repeated three times.
+      delta: change == null ? null : <Delta value={change} unit=" pp" />,
+    };
+  });
+  if (position != null) {
+    segments.push({
+      key: 'avg_position',
+      label: 'Average position',
+      marker: (
+        <InfoHint label="Average position">
+          {`Where your brand tends to appear among the brands you TRACK — you and your configured competitors. A brand an answer names that you do not track is not counted, so this is not a rank within the whole answer. Counted only over the answers that named you, and averaged to ${formatPositionExact(position)}.`}
+        </InfoHint>
+      ),
+      value: formatPosition(position),
+    });
+  }
+  return <StatRow segments={segments} />;
 }
 
 function MeasurementHistory({
@@ -305,7 +295,7 @@ function MeasurementHistory({
       </output>
     );
   } else if (!points.length) {
-    body = <InlineEmpty>No measurements in this period yet.</InlineEmpty>;
+    body = <QueryState kind="empty" inline message="No measurements in this period yet." />;
   } else {
     body = (
       <Stack gap="compact" aria-busy={query.isFetching}>

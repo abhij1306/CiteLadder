@@ -12,14 +12,13 @@ import {
 import { DeclarationStatus } from '@/components/agent/declaration-status';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { PageShell } from '@/components/layout/page-shell';
+import { DetailScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { EvidenceDrawer } from '@/components/opportunities/evidence-drawer';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Button } from '@/components/ui/button';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
@@ -27,7 +26,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { EditorialSectionHeader, ledgerClasses, splitPaneClasses } from '@/components/ui/workspace';
+import { EditorialSectionHeader, ledgerClasses } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import {
   approachLabel,
@@ -43,6 +42,8 @@ import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { queryKeys } from '@/lib/api/query-keys';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 
+const BACK = { href: '/agent/actions', label: 'Back to Actions' } as const;
+
 /** One Action: diagnosis, member evidence, its declaration and linked chats. */
 export function ActionDetailScreen() {
   const { actionId = '' } = useParams();
@@ -54,33 +55,33 @@ export function ActionDetailScreen() {
 
   if (query.isError)
     return (
-      <PageShell>
+      <DetailScreen back={BACK}>
         <QueryState
           kind="error"
           {...readErrorProps(query)}
           fallback="This Action could not be loaded."
         />
-      </PageShell>
+      </DetailScreen>
     );
   if (!activeWorkspaceId)
     return (
-      <PageShell>
+      <DetailScreen back={BACK}>
         <Alert tone="info">Choose a workspace to open this Action.</Alert>
-      </PageShell>
+      </DetailScreen>
     );
   if (!query.data)
     return (
-      <PageShell>
+      <DetailScreen back={BACK}>
         <QueryState kind="loading" />
-      </PageShell>
+      </DetailScreen>
     );
   if (query.data.project_id !== activeProjectId)
     return (
-      <PageShell>
+      <DetailScreen back={BACK}>
         <Alert tone="danger">
           This Action belongs to another project. Choose an Action from the current project.
         </Alert>
-      </PageShell>
+      </DetailScreen>
     );
   // Keyed so a mutation's state (and its Retry) never outlives its Action.
   return (
@@ -101,35 +102,31 @@ function ActionDetailView({
   // and the one-row header never has to hold it.
   const update = useStatusUpdate(workspaceId);
   return (
-    <PageShell
+    <DetailScreen
       title={action.target_label}
-      back={{ href: '/agent/actions', label: 'Back to Actions', projectId: action.project_id }}
+      back={{ ...BACK, projectId: action.project_id }}
       actions={<ActionControls action={action} update={update} />}
-    >
-      <Stack gap="section">
-        {update.isError ? (
-          <MutationNotice
-            notice={mutationNoticeForError(update.error, { action: 'update this Action' })}
-            onRetry={() => update.variables && update.mutate(update.variables)}
+      aside={
+        <>
+          <ActionEvidence action={action} />
+          <TextList title="Avoid" items={action.diagnosis.donts ?? []} />
+          <TextList
+            title="Measure with"
+            items={(action.diagnosis.measure_with ?? []).map(measurementLegLabel).filter(isText)}
           />
-        ) : null}
-        <ActionFacts action={action} />
-        <div className={splitPaneClasses('main-aside')}>
-          <Stack gap="workspace" className="min-w-0">
-            <Diagnosis action={action} onOpenEvidence={setEvidenceId} />
-            <Implementation action={action} workspaceId={workspaceId} />
-          </Stack>
-          <Stack as="aside" gap="workspace" className="min-w-0">
-            <ActionEvidence action={action} />
-            <TextList title="Avoid" items={action.diagnosis.donts ?? []} />
-            <TextList
-              title="Measure with"
-              items={(action.diagnosis.measure_with ?? []).map(measurementLegLabel).filter(isText)}
-            />
-          </Stack>
-        </div>
-        <LinkedChats action={action} workspaceId={workspaceId} />
-      </Stack>
+        </>
+      }
+    >
+      {update.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(update.error, { action: 'update this Action' })}
+          onRetry={() => update.variables && update.mutate(update.variables)}
+        />
+      ) : null}
+      <ActionFacts action={action} />
+      <Diagnosis action={action} onOpenEvidence={setEvidenceId} />
+      <Implementation action={action} workspaceId={workspaceId} />
+      <LinkedChats action={action} workspaceId={workspaceId} />
       <EvidenceDrawer
         opportunityId={evidenceId}
         projectId={action.project_id}
@@ -138,7 +135,7 @@ function ActionDetailView({
           if (!open) setEvidenceId(null);
         }}
       />
-    </PageShell>
+    </DetailScreen>
   );
 }
 
@@ -230,7 +227,7 @@ function Diagnosis({
       </CardHeader>
       <CardContent>
         {action.members.length === 0 ? (
-          <InlineEmpty>No current finding targets this Action.</InlineEmpty>
+          <QueryState kind="empty" inline message="No current finding targets this Action." />
         ) : (
           <ul className={ledgerClasses()}>
             {action.members.map((member) => (
@@ -349,12 +346,12 @@ function LinkedChats({
         <ReadError {...readErrorProps(chats)} fallback="Linked chats could not be loaded." />
       ) : null}
       {chats.isSuccess && rows.length === 0 ? (
-        <InlineEmpty>No chats have worked on this Action yet.</InlineEmpty>
+        <QueryState kind="empty" inline message="No chats have worked on this Action yet." />
       ) : null}
       {rows.length > 0 ? (
         <ul className="grid gap-2">
           {rows.map((chat) => (
-            <li key={chat.id} className={panelClasses({ pad: 'compact' }, 'grid gap-0.5')}>
+            <li key={chat.id} className={panelClasses({}, 'grid gap-0.5')}>
               <TextLink
                 href={`/agent/chats/${chat.id}`}
                 text="itemTitle"

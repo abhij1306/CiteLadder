@@ -44,10 +44,14 @@ function audit(index: number, overrides: Partial<Audit> = {}): Audit {
 
 const bodyRows = () => screen.getAllByRole('row').slice(1);
 
+function renderTable(audits: Audit[]) {
+  return render(<RunsTable audits={audits} status={null} emptyHeading="No failed runs." />);
+}
+
 describe('RunsTable', () => {
   it('links each row to its own run', () => {
     const rows = [audit(1), audit(2)];
-    render(<RunsTable audits={rows} />);
+    renderTable(rows);
 
     const links = screen.getAllByRole('link', { name: 'View' });
     expect(links[0]).toHaveAttribute('href', `/runs/${rows[0]!.id}`);
@@ -60,25 +64,27 @@ describe('RunsTable', () => {
   ])('distinguishes a %s-scope run', (scope, label) => {
     // Brand and Commerce runs measure different things; a shared list has to
     // say which one a row is.
-    render(<RunsTable audits={[audit(1, { audit_scope: scope as Audit['audit_scope'] })]} />);
+    renderTable([audit(1, { audit_scope: scope as Audit['audit_scope'] })]);
 
     expect(screen.getByText(label)).toBeVisible();
   });
 
-  it('renders only a header when there are no runs', () => {
-    render(<RunsTable audits={[]} />);
+  it('keeps the column headers and states the absence when the filter leaves no runs', () => {
+    renderTable([]);
 
-    expect(screen.getAllByRole('row')).toHaveLength(1);
+    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'No failed runs.' })).toBeVisible();
+    expect(screen.queryByRole('link', { name: 'View' })).toBeNull();
   });
 
   it('shows every run when the history fits on one page', () => {
-    render(<RunsTable audits={Array.from({ length: PAGE_SIZE }, (_, i) => audit(i + 1))} />);
+    renderTable(Array.from({ length: PAGE_SIZE }, (_, i) => audit(i + 1)));
 
     expect(bodyRows()).toHaveLength(PAGE_SIZE);
   });
 
   it('caps a long history at one page', () => {
-    render(<RunsTable audits={Array.from({ length: 25 }, (_, i) => audit(i + 1))} />);
+    renderTable(Array.from({ length: 25 }, (_, i) => audit(i + 1)));
 
     expect(bodyRows()).toHaveLength(PAGE_SIZE);
   });
@@ -86,7 +92,7 @@ describe('RunsTable', () => {
   it('reaches the rest of a long history through pagination', async () => {
     const user = userEvent.setup();
     const rows = Array.from({ length: 25 }, (_, i) => audit(i + 1));
-    render(<RunsTable audits={rows} />);
+    renderTable(rows);
 
     const first = screen.getAllByRole('link', { name: 'View' })[0]!;
     expect(first).toHaveAttribute('href', `/runs/${rows[0]!.id}`);
@@ -100,7 +106,7 @@ describe('RunsTable', () => {
 
   it('shows the last, partial page in full', async () => {
     const user = userEvent.setup();
-    render(<RunsTable audits={Array.from({ length: 25 }, (_, i) => audit(i + 1))} />);
+    renderTable(Array.from({ length: 25 }, (_, i) => audit(i + 1)));
 
     await user.click(screen.getByRole('button', { name: /next/i }));
     await user.click(screen.getByRole('button', { name: /next/i }));

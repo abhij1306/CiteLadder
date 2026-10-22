@@ -162,7 +162,7 @@ export function IntegrationSettings() {
       ) : null}
 
       {connectionsQuery.isLoading ? (
-        <div className="grid gap-[var(--workspace-gap)] xl:grid-cols-2">
+        <div className="desktop:grid-cols-2 grid gap-[var(--workspace-gap)]">
           {[0, 1].map((i) => (
             <Card key={i}>
               <CardContent>

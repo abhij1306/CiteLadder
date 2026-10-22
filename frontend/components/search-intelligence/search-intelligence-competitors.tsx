@@ -9,7 +9,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Pressable } from '@/components/ui/pressable';
 import { TextLink } from '@/components/ui/text-link';
 import type {
@@ -45,7 +45,7 @@ export function SearchIntelligenceCompetitors({
       <CardHeader bordered>
         <CardTitle>Competitive footprint</CardTitle>
       </CardHeader>
-      <CardContent flush>
+      <CardContent>
         <Table minWidth="md">
           <TableHeader>
             <TableRow>
@@ -119,7 +119,7 @@ export function SearchIntelligenceCompetitors({
           </TableBody>
         </Table>
         {!competitors.length ? (
-          <InlineEmpty className="p-4">No competitors saved for this project.</InlineEmpty>
+          <QueryState kind="empty" inline message="No competitors saved for this project." />
         ) : null}
       </CardContent>
     </Card>

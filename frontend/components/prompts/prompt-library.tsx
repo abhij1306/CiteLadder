@@ -45,7 +45,7 @@ import type { PendingDelete } from './confirm-delete-dialog';
 import { PromptLibraryDialogs } from './prompt-library-dialogs';
 import { PromptTable } from './prompt-table';
 import { useLatestPromptMeasurements } from './use-latest-prompt-measurements';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { ResizableSplitPane } from '@/components/ui/split-pane';
 
@@ -308,9 +308,9 @@ export function PromptLibrary({
 
   if (!requestScope.enabled) {
     return (
-      <PageShell>
+      <ListScreen>
         <ProjectRequiredState />
-      </PageShell>
+      </ListScreen>
     );
   }
 
@@ -367,14 +367,14 @@ export function PromptLibrary({
 
   if (isLoading) {
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" />
-      </PageShell>
+      </ListScreen>
     );
   }
 
   return (
-    <PageShell
+    <ListScreen
       actions={
         <PromptActions
           onImport={() => setImportOpen(true)}
@@ -494,6 +494,6 @@ export function PromptLibrary({
           retrySets={retry}
         />
       </>
-    </PageShell>
+    </ListScreen>
   );
 }

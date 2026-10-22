@@ -43,7 +43,7 @@ export function EvidenceClaims({ claims }: Readonly<{ claims: readonly Execution
         {claims.map((claim) => (
           <li
             key={`${claim.start}:${claim.end}:${claim.topic}`}
-            className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid min-w-0 gap-1')}
+            className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-1')}
           >
             <span className="flex flex-wrap items-center gap-2">
               <span className={textRole('emphasis')}>“{claim.quote}”</span>

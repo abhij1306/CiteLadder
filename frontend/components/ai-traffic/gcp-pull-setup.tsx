@@ -22,7 +22,7 @@ function CodeText({ value, label }: Readonly<{ value: string; label: string }>) 
     <div className="grid gap-2">
       <pre
         className={panelClasses(
-          { tone: 'well', pad: 'compact' },
+          { tone: 'well' },
           'type-caption overflow-x-auto font-mono break-all whitespace-pre-wrap',
         )}
       >
@@ -43,7 +43,7 @@ export function GcpFields({ model }: Readonly<{ model: ReturnType<typeof useCraw
       <Field
         label="Pub/Sub subscription"
         hint="The full path. The commands shown after you create the source create it."
-        className="sm:col-span-2"
+        className="desktop:col-span-2"
       >
         {(field) => (
           <Input

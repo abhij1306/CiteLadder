@@ -7,6 +7,7 @@ import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
+import { splitPaneClasses, type SplitPaneRole } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
 
 import { CompactPageTitleContext } from './compact-page-title-context';
@@ -60,20 +61,9 @@ export type PageBack = Readonly<{
  * everywhere: the answer to "where does this page start" is structural, not a
  * judgement each route makes for itself.
  */
-export function PageShell<T extends string = string>({
-  title,
-  back,
-  actions,
-  tabs,
-  controls,
-  children,
-  className,
-  measure = 'analytical',
-}: Readonly<{
+type ScreenBands<T extends string> = Readonly<{
   /** Overrides the route-derived title (rare — prefer `page-titles.ts`). */
   title?: string;
-  /** A detail route's link back to its collection, above the title. */
-  back?: PageBack;
   /** Route-owned controls; their state and outcomes stay with the route owner. */
   actions?: ReactNode;
   /** The route's tabs, drawn as the `TabRow`; the route owns the `TabsRoot`. */
@@ -81,10 +71,83 @@ export function PageShell<T extends string = string>({
   /** Search, filters, status and export for the whole route, drawn as the `FilterBar`. */
   controls?: FilterBarProps;
   children?: ReactNode;
-  className?: string;
-  /** Content measure; page bands retain the analytical alignment. */
-  measure?: 'analytical' | 'workflow';
-}>) {
+}>;
+
+/**
+ * ListScreen — the template for a collection, dashboard or workspace route:
+ * identity band → optional `TabRow` → optional `FilterBar` → the content
+ * stack, its sections 24 apart.
+ *
+ *   `measure="workflow"` — the narrower reading measure (Agent, Billing).
+ *   `fill`               — the content is one column that fills the viewport
+ *                          below the shell chrome, so a chat's composer sits
+ *                          at the bottom of a short thread.
+ *
+ * A page passes data, organisms and slots; the template owns every band and
+ * every band-to-band gap.
+ */
+export function ListScreen<T extends string = string>({
+  measure = 'analytical',
+  fill = false,
+  ...bands
+}: ScreenBands<T> &
+  Readonly<{
+    measure?: 'analytical' | 'workflow';
+    fill?: boolean;
+  }>) {
+  return <PageShell {...bands} measure={measure} fill={fill} />;
+}
+
+/**
+ * DetailScreen — the template for one record: identity band with the way
+ * back above the title → optional tabs and controls → the content, either one
+ * stack or a split from `splitPaneClasses` when an `aside` is given
+ * (`main-aside` by default, `list-detail` for a list beside its selection).
+ */
+export function DetailScreen<T extends string = string>({
+  back,
+  aside,
+  split = 'main-aside',
+  children,
+  ...bands
+}: ScreenBands<T> &
+  Readonly<{
+    back: PageBack;
+    /** Supporting context beside the main content. */
+    aside?: ReactNode;
+    split?: Extract<SplitPaneRole, 'main-aside' | 'list-detail'>;
+  }>) {
+  return (
+    <PageShell {...bands} back={back} measure="analytical" fill={false}>
+      {aside ? (
+        <div className={splitPaneClasses(split)}>
+          <div className="grid min-w-0 content-start gap-[var(--page-section-gap)]">{children}</div>
+          <aside className="grid min-w-0 content-start gap-[var(--page-section-gap)]">
+            {aside}
+          </aside>
+        </div>
+      ) : (
+        children
+      )}
+    </PageShell>
+  );
+}
+
+function PageShell<T extends string>({
+  title,
+  back,
+  actions,
+  tabs,
+  controls,
+  children,
+  measure,
+  fill,
+}: ScreenBands<T> &
+  Readonly<{
+    back?: PageBack;
+    measure: 'analytical' | 'workflow';
+    fill: boolean;
+  }>) {
   return (
     <>
       <IdentityBand title={title} back={back} actions={actions} />
@@ -106,7 +169,10 @@ export function PageShell<T extends string = string>({
           pageGutterClasses,
           measure === 'workflow' && 'max-w-[var(--workflow-max-width)]',
           'grid grid-cols-[minmax(0,1fr)] content-start gap-[var(--page-section-gap)] pt-[var(--content-gutter)] pb-[var(--page-section-gap)]',
-          className,
+          // `--route-chrome-height` (globals.css) owns the chrome above the
+          // route at each breakpoint; the gutter is the shell's padding under it.
+          fill &&
+            'flex min-h-[calc(100dvh-var(--route-chrome-height)-var(--content-gutter))] flex-col pb-0',
         )}
       >
         {children}
@@ -174,28 +240,29 @@ function IdentityBand({
       data-page-band="identity"
       className={cn(
         'bg-panel border-border-subtle border-b',
-        // Below 701px the compact topbar already names the page, so a band
-        // holding only a screen-reader title would be an empty ruled row. A
-        // back link is visible content, so it keeps the band.
-        !actions && !back && 'max-[700px]:hidden',
+        // Below the desktop breakpoint the compact topbar already names the
+        // page, so a band holding only a screen-reader title would be an
+        // empty ruled row. A back link is visible content, so it keeps the band.
+        !actions && !back && 'hidden desktop:block',
       )}
     >
       <div
         className={cn(
           pageGutterClasses,
           'flex min-w-0 flex-col gap-[var(--page-header-gap)] pt-[var(--page-header-padding-top)] pb-[var(--page-header-padding-bottom)]',
-          'min-[701px]:flex-row min-[701px]:items-center min-[701px]:justify-between',
-          // Desktop: the sidebar's switcher line. The title centres on it, and
-          // the band below starts where the sidebar's second row starts.
-          'min-[981px]:min-h-[var(--page-band-identity)] min-[981px]:py-0',
+          // Desktop: one row on the sidebar's switcher line. The title centres
+          // on it, and the band below starts where the sidebar's second row
+          // starts.
+          'desktop:flex-row desktop:items-center desktop:justify-between',
+          'desktop:min-h-[var(--page-band-identity)] desktop:py-0',
         )}
       >
         {/* The title keeps a floor, so a long action row wraps rather than
             squeezing the page's name to nothing. */}
         <div
           className={cn(
-            'grid min-w-0 flex-1 gap-1 min-[701px]:min-w-[var(--page-title-min-width)]',
-            !back && 'max-[700px]:sr-only',
+            'grid min-w-0 flex-1 gap-1 desktop:min-w-[var(--page-title-min-width)]',
+            !back && 'sr-only desktop:not-sr-only',
           )}
         >
           {back ? (
@@ -212,7 +279,7 @@ function IdentityBand({
           {/* The route H1 is the top of the type ladder: nothing on the page
               out-ranks it except a figure. It stays the one H1 per route. */}
           {/* One row, always: a long title truncates rather than wrapping. */}
-          <h1 className={textRole('pageTitle', 'min-w-0 truncate max-[700px]:sr-only')}>
+          <h1 className={textRole('pageTitle', 'min-w-0 truncate sr-only desktop:not-sr-only')}>
             {resolved}
           </h1>
         </div>
@@ -223,10 +290,10 @@ function IdentityBand({
           // Desktop-only, because that is the only width the glyphs appear at.
           <div
             className={cn(
-              'flex min-w-0 min-h-[var(--control-height-md)] flex-wrap items-center gap-2 min-[701px]:justify-end',
+              'flex min-w-0 min-h-[var(--control-height-md)] flex-wrap items-center gap-2 desktop:justify-end',
               navigationMode(pathname) === 'dashboard'
-                ? 'min-[981px]:pe-[calc(3*var(--control-height-md)+1.25rem)]'
-                : 'min-[981px]:pe-[calc(2*var(--control-height-md)+1rem)]',
+                ? 'desktop:pe-[calc(3*var(--control-height-md)+1.25rem)]'
+                : 'desktop:pe-[calc(2*var(--control-height-md)+1rem)]',
             )}
           >
             {actions}

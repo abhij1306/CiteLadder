@@ -7,7 +7,7 @@ import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ClampText } from '@/components/ui/table';
 import { Delta } from '@/components/ui/delta';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -92,7 +92,7 @@ function MoverList({
           ))
         ) : (
           <div className={ROW}>
-            <InlineEmpty>No source moved this way.</InlineEmpty>
+            <QueryState kind="empty" inline message="No source moved this way." />
           </div>
         )}
         {Array.from({ length: padding }, (_, index) => (
@@ -116,7 +116,7 @@ function MoversBody({
   if (!comparable) {
     return (
       <div className={box}>
-        <InlineEmpty>{STATUS_COPY.no_baseline}</InlineEmpty>
+        <QueryState kind="empty" inline message={STATUS_COPY.no_baseline} />
       </div>
     );
   }
@@ -137,9 +137,11 @@ function MoversBody({
   if (data.comparison_status !== 'comparable') {
     return (
       <div className={box}>
-        <InlineEmpty>
-          {STATUS_COPY[data.comparison_status] ?? STATUS_COPY.identity_unavailable}
-        </InlineEmpty>
+        <QueryState
+          kind="empty"
+          inline
+          message={STATUS_COPY[data.comparison_status] ?? STATUS_COPY.identity_unavailable}
+        />
       </div>
     );
   }

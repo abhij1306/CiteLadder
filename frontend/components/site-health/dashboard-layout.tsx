@@ -4,7 +4,7 @@ import { ScoreSection } from '@/components/site-health/score-section';
 import { SiteFactsPanel } from '@/components/site-health/site-facts-panel';
 import { StatusStrip } from '@/components/site-health/status-strip';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import type { useSiteHealthScreen } from '@/lib/site-health/use-site-health-screen';
 import { ICONS } from '@/lib/icons';
@@ -45,7 +45,8 @@ export function SiteHealthDashboardLayout({
     <Stack gap="workspace" className="min-w-0" data-testid="site-health-canonical">
       {!crawl ? (
         <div data-testid="site-health-empty">
-          <EmptyState
+          <QueryState
+            kind="empty"
             icon={ICONS.siteHealth}
             heading="Run your first site crawl"
             description="Crawl your site to see page health, issues, and recommendations as results arrive."

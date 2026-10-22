@@ -2,7 +2,7 @@
 
 import { useId, useState, type ComponentPropsWithoutRef } from 'react';
 
-import { tagClasses, type TagTone } from './filter-chip-variants';
+import { tagClasses, type TagTone } from './tag-variants';
 
 /** Category labels share the existing chip owner; status remains Badge's job. */
 export function Tag({

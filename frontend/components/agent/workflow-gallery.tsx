@@ -57,7 +57,7 @@ export function WorkflowGallery({
               inert={!live}
               aria-hidden={!live || undefined}
               className={cn(
-                'col-start-1 row-start-1 grid content-start gap-2 sm:grid-cols-2',
+                'col-start-1 row-start-1 grid content-start gap-2 desktop:grid-cols-2',
                 !live && 'invisible',
               )}
             >
@@ -68,7 +68,7 @@ export function WorkflowGallery({
                     <Pressable
                       disabled={disabled}
                       onClick={() => onPick(workflow)}
-                      className={panelClasses({ pad: 'compact' }, 'hover:bg-hover grid gap-1')}
+                      className={panelClasses({}, 'hover:bg-hover grid gap-1')}
                     >
                       <span className={textRole('itemTitle')}>{workflow.label}</span>
                       <span className={textRole('caption')}>{workflow.description}</span>

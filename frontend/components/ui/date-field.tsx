@@ -81,7 +81,7 @@ export function DateField({
             type="button"
             aria-label={`${ariaLabel}: open calendar`}
             disabled={disabled}
-            className="text-muted enabled:hover:text-foreground enabled:hover:bg-hover enabled:active:bg-active data-[state=open]:bg-selected inline-flex size-[var(--control-height-sm)] shrink-0 items-center justify-center rounded-[var(--radius-control)]"
+            className="text-muted enabled:hover:text-foreground enabled:hover:bg-hover enabled:active:bg-active data-[state=open]:bg-selected inline-flex size-[var(--field-end-target)] shrink-0 items-center justify-center rounded-[var(--radius-control)]"
           >
             <CalendarDays className="size-4" aria-hidden />
           </Pressable>

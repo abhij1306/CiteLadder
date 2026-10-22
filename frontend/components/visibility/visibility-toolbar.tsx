@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarRange, CircleHelp, Download } from 'lucide-react';
+import { CircleHelp, Download } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,6 @@ import {
 import { Tooltip } from '@/components/ui/tooltip';
 import type { LogicalEngine } from '@/lib/api/types';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
-import { ICONS } from '@/lib/icons';
 import { isSearchSurfaceEngine } from '@/lib/providers/catalog';
 import {
   engineLabel,
@@ -96,7 +95,7 @@ export function VisibilityToolbar(props: ToolbarProps) {
       <MeasurementFilter {...props} />
       <RangeFilter {...props} />
       {props.activeTab === 'trends' ? <GranularityFilter {...props} /> : null}
-      <span className="bg-border mx-1 hidden h-5 w-px sm:block" aria-hidden />
+      <span className="bg-border desktop:block mx-1 hidden h-5 w-px" aria-hidden />
       <CohortFilter {...props} />
       <EngineFilterControl {...props} />
       {evidence ? <PromptFilter {...props} /> : null}
@@ -135,7 +134,6 @@ export function MarketFilter({
         label: option.label,
       }))}
       onChange={(value) => onChangeMarket(value === DEFAULT_MARKET ? null : value)}
-      icon={ICONS.market}
     />
   );
 }
@@ -154,7 +152,6 @@ function CohortFilter({ cohort, onChangeCohort }: ToolbarProps) {
       defaultValue="core"
       options={COHORT_OPTIONS}
       onChange={onChangeCohort}
-      icon={ICONS.prompts}
     />
   );
 }
@@ -187,7 +184,6 @@ function MeasurementFilter({
           hideLabel
           value={current}
           active={pooled || Boolean(selectedRunId)}
-          icon={ICONS.runs}
         />
       </DropdownTrigger>
       <DropdownContent>
@@ -240,7 +236,6 @@ function EngineFilterControl({ engine, onChangeEngine }: ToolbarProps) {
           hideLabel
           value={engine === 'all' ? 'All surfaces' : engineLabel(engine)}
           active={engine !== 'all'}
-          icon={ICONS.analytics}
         />
       </DropdownTrigger>
       <DropdownContent>
@@ -282,7 +277,6 @@ function RangeFilter({ range, onChangeRange }: ToolbarProps) {
       defaultValue="90d"
       options={RANGE_OPTIONS}
       onChange={onChangeRange}
-      icon={CalendarRange}
     />
   );
 }
@@ -310,7 +304,6 @@ function PromptFilter({ promptOptions, promptId, onChangePrompt }: ToolbarProps)
           hideLabel
           value={prompt?.label ?? 'Every prompt'}
           active={promptId !== null}
-          icon={ICONS.prompts}
           className="max-w-64"
         />
       </DropdownTrigger>

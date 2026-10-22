@@ -5,7 +5,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReadError } from '@/components/ui/read-error';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Label, textRole } from '@/components/ui/typography';
@@ -52,13 +52,13 @@ function rateStat({
   label,
   caption,
   rate,
-}: Readonly<{ key: string; label: string; caption: string; rate: AioRate }>) {
+}: Readonly<{ key: string; label: string; caption: string; rate: AioRate }>): StatSegment {
   return {
     key,
     label,
     value: rate.value === null ? null : ratePercent(rate.value),
     missingLabel: 'Unavailable',
-    detail: (
+    sub: (
       <>
         <span className="block">
           {rate.value === null
@@ -136,13 +136,10 @@ export function SurfaceRatesPanel({
           {`${data.successful} successfully observed ${data.successful === 1 ? 'search' : 'searches'}, ${data.with_overview} of which showed an overview. Each rate below states what it divided by.`}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-[var(--workspace-gap)] p-0">
+      <CardContent className="grid gap-[var(--workspace-gap)]">
         <div className="border-border-subtle border-b">
-          <StatGrid
-            surface="band"
-            columns={4}
-            size="figure"
-            items={[
+          <StatRow
+            segments={[
               rateStat({
                 key: 'trigger',
                 label: 'Overview shown',

@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import type { ArchitectureNode } from '@/lib/api/types';
 
@@ -57,9 +57,9 @@ export function HierarchyCard({
           Unresolved pages remain at the root.
         </CardDescription>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent>
         {roots.length === 0 ? (
-          <InlineEmpty>No hierarchy nodes were measured.</InlineEmpty>
+          <QueryState kind="empty" inline message="No hierarchy nodes were measured." />
         ) : (
           <section
             className="content-scroll max-h-96 overflow-y-auto overscroll-contain pr-2"

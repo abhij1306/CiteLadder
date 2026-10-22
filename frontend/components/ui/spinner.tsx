@@ -12,28 +12,14 @@ import { cn } from '@/lib/utils';
  * and vanished. The spinner is what occupies that slot until the answer
  * arrives.
  *
- * Hand-rolled `LoaderCircle animate-spin` recipes previously gave each caller
- * its own size and accessibility treatment. One owner keeps an
- * in-place loading state visually and semantically consistent.
+ * One form: the 16px glyph, the same size as every icon beside a control's
+ * text. It used to come in three sizes (14, 16, 20) chosen per call site, so
+ * the same "loading" read at a different weight on every screen.
  */
-
-const SIZES = {
-  /** Inside a dense row or a metric slot. */
-  sm: 'size-3.5',
-  /** A control or a section. */
-  md: 'size-4',
-  /** A whole region waiting on its first load. */
-  lg: 'size-5',
-} as const;
-
-export type SpinnerSize = keyof typeof SIZES;
-
 export function Spinner({
-  size = 'md',
   label,
   className,
 }: Readonly<{
-  size?: SpinnerSize;
   /**
    * What is loading, for assistive technology. Omit ONLY when a visible
    * label beside the spinner already says it — an unlabelled spinner in an
@@ -44,7 +30,7 @@ export function Spinner({
 }>) {
   return (
     <LoaderCircle
-      className={cn(SIZES[size], 'shrink-0 animate-spin', className)}
+      className={cn('size-4 shrink-0 animate-spin', className)}
       role={label ? 'status' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}

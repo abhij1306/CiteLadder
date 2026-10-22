@@ -9,7 +9,7 @@ function Snippet({ label, value }: Readonly<{ label: string; value: string }>) {
     <Stack as="section" gap="compact">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className={textRole('itemTitle')}>{label}</h3>
-        <CopyButton value={value} variant="ghost" size="sm" copiedLabel={`${label} copied`}>
+        <CopyButton value={value} variant="ghost" copiedLabel={`${label} copied`}>
           Copy
         </CopyButton>
       </div>

@@ -2,11 +2,11 @@ import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { PageDetail } from '@/lib/api/types';
 import { measurementCaveat } from '@/lib/site-health/status';
 import { ICONS } from '@/lib/icons';
-import { AuditMetricStrip } from './audit-metric-strip';
+import { AuditScores } from './overview-metrics';
 
 export function UrlScoreSummary({ detail }: Readonly<{ detail: PageDetail }>) {
   return (
-    <AuditMetricStrip
+    <AuditScores
       metrics={[
         {
           title: 'Web Fundamentals',

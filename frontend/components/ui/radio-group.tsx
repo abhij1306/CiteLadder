@@ -6,7 +6,7 @@ import { Check } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { Tooltip } from './tooltip';
-import { chipBaseClasses, chipRestingClasses } from '@/components/ui/filter-chip-variants';
+import { buttonVariants } from '@/components/ui/button-variants';
 
 export type RadioOption<T extends string> = {
   value: T;
@@ -135,9 +135,9 @@ function RadioChip<T extends string>({ option }: Readonly<{ option: RadioOption<
     <RadioGroupPrimitive.Item
       value={option.value}
       disabled={option.disabled}
+      // A chip the user clicks is a control: the 32px secondary button face.
       className={cn(
-        chipBaseClasses,
-        chipRestingClasses,
+        buttonVariants({ variant: 'secondary' }),
         'data-[state=checked]:bg-selected data-[state=checked]:text-foreground data-[state=checked]:enabled:hover:bg-selected data-[state=checked]:disabled:bg-disabled data-[state=checked]:disabled:text-muted disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle data-[state=checked]:disabled:border-border-subtle',
       )}
     >

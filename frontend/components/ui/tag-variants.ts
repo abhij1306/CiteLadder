@@ -1,28 +1,11 @@
 import { cn } from '@/lib/utils';
 
 /**
- * The chip geometry, shared by every chip-shaped control. `radio-group` renders
- * the same shape from Radix data attributes rather than a boolean, so it takes
- * the base and its own state classes instead of restating the recipe.
- */
-export const chipBaseClasses =
-  'focus-ring type-badge inline-flex h-[var(--badge-height-md)] items-center gap-2 rounded-full px-3 transition-[background-color,color,border-color] duration-[var(--motion-fast)] ease-[var(--ease-standard)]';
-
-export const chipRestingClasses =
-  'control-raised bg-panel text-secondary enabled:hover:bg-hover enabled:hover:text-foreground enabled:active:bg-active';
-
-const chipSelectedClasses =
-  'control-raised bg-selected text-foreground enabled:hover:bg-selected enabled:active:bg-active';
-
-/** Shared multi-select/filter chip recipe. */
-export function filterChipClasses(active: boolean): string {
-  return cn(chipBaseClasses, active ? chipSelectedClasses : chipRestingClasses);
-}
-
-/**
  * Tag — the small inline chip that labels a value: a provenance marker, a
  * count, a property name. Six of these were hand-rolled with three different
- * fills, so the same marker read differently on each screen. It is static: badge-height-sm sets the minimum, with no focus or hover.
+ * fills, so the same marker read differently on each screen. It is static: the
+ * one badge height (20) sets the minimum, with no focus or hover. Anything the
+ * user clicks is a 32px control, never a tag.
  */
 const TAG_TONE = {
   blue: 'bg-[var(--tag-blue-bg)] border border-[var(--tag-blue-border)] text-[var(--tag-blue-text)]',

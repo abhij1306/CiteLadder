@@ -45,7 +45,7 @@ export function VisibilityByMarket({
           Each market&apos;s latest run, with the change since its previous comparable run.
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent>
         {query.isError ? (
           <ReadError {...readErrorProps(query)} fallback="Could not load the markets." />
         ) : (

@@ -6,7 +6,7 @@ import { MessageSquare } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -167,12 +167,9 @@ function PromptRows({
     return <ReadError {...readErrorProps(query)} fallback="Buyer prompts could not be loaded." />;
   if (query.isPending) return <Skeleton className="h-24 w-full" />;
   if (!rows.length) {
-    // Left-hung and compactly padded, matching the shared empty-state shape.
-    // Centring one sentence inside full card padding made an absent list look
-    // like a large deliberate panel.
     return (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         icon={MessageSquare}
         heading="No prompts yet for this target"
         description="Generate a set, or add one manually."

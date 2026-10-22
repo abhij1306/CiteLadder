@@ -3,12 +3,12 @@ import { RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Drawer } from '@/components/ui/drawer';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
 import type { SearchIntelligenceRun } from '@/lib/api/search-intelligence';
 import { formatCount } from '@/lib/format';
@@ -101,7 +101,7 @@ export function CostDetails({
   error: unknown;
   onRetry: () => void;
 }>) {
-  let content = <InlineEmpty>No analysis has been run yet.</InlineEmpty>;
+  let content = <QueryState kind="empty" inline message="No analysis has been run yet." />;
   if (runs?.length) {
     content = (
       <ul className="grid gap-3">
@@ -115,9 +115,8 @@ export function CostDetails({
                 <DisplayTime value={run.created_at} />
               </p>
             </div>
-            <StatGrid
-              columns={2}
-              items={[
+            <StatRow
+              segments={[
                 {
                   key: 'estimated',
                   label: 'Estimated',

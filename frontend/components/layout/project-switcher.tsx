@@ -70,8 +70,6 @@ export function ProjectSwitcher({ className }: Readonly<{ className?: string }>)
           name={label}
           logoUrl={activeProject?.brand.logo_url}
           websiteUrl={activeProject?.website_url}
-          size="sm"
-          className="bg-foreground text-background size-6 rounded-[var(--radius-control)]"
         />
         <span className={textRole('itemTitle', 'min-w-0 flex-1 truncate')}>{label}</span>
         <ChevronsUpDown className="text-muted size-3.5 shrink-0" aria-hidden />
@@ -125,7 +123,6 @@ export function ProjectSwitcher({ className }: Readonly<{ className?: string }>)
                 name={project.brand_name || project.name}
                 logoUrl={project.brand.logo_url}
                 websiteUrl={project.website_url}
-                size="sm"
               />
               <span className="min-w-0 flex-1 truncate">{project.brand_name || project.name}</span>
               {selected ? <Check className="text-accent size-4 shrink-0" aria-hidden /> : null}

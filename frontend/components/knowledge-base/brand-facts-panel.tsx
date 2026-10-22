@@ -13,7 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
@@ -89,9 +89,11 @@ export function BrandFactsPanel({
         />
       ) : null}
       {!active.length ? (
-        <InlineEmpty>
-          No facts yet. Add pricing, plans, integrations or other facts to check.
-        </InlineEmpty>
+        <QueryState
+          kind="empty"
+          inline
+          message="No facts yet. Add pricing, plans, integrations or other facts to check."
+        />
       ) : (
         <ul className="grid gap-2">
           {active.map((fact) => (
@@ -122,7 +124,7 @@ function AddFact({
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   return (
     <form
-      className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid gap-3')}
+      className={panelClasses({ tone: 'well' }, 'grid gap-3')}
       onSubmit={(event) => {
         event.preventDefault();
         if (!draft.statement.trim()) return;
@@ -187,7 +189,7 @@ function FactRow({
 }>) {
   const [editing, setEditing] = useState<string | null>(null);
   return (
-    <li className={panelClasses({ tone: 'well', pad: 'compact' }, 'grid min-w-0 gap-2')}>
+    <li className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-2')}>
       <span className="flex flex-wrap items-center gap-2">
         <Badge>{TOPIC_LABELS[fact.topic]}</Badge>
         {fact.status === 'confirmed' ? (

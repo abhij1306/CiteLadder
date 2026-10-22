@@ -2,10 +2,10 @@ import type { ReactNode } from 'react';
 import { Database } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { DisplayTime } from '@/components/ui/display-time';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
+import { StatRow } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
-import { MetricGroup, MetricItem } from '@/components/ui/workspace';
 import type {
   SearchIntelligenceDataset,
   SearchIntelligenceReadiness,
@@ -25,15 +25,13 @@ export function SearchMetrics({ metrics }: Readonly<{ metrics: readonly SearchMe
   return (
     <Card>
       <CardContent>
-        <MetricGroup>
-          {metrics.map(([label, dataset, field]) => (
-            <MetricItem
-              key={label}
-              label={label}
-              value={<SearchValue value={dataset?.summary[field]} fetched={Boolean(dataset)} />}
-            />
-          ))}
-        </MetricGroup>
+        <StatRow
+          segments={metrics.map(([label, dataset, field]) => ({
+            key: label,
+            label,
+            value: <SearchValue value={dataset?.summary[field]} fetched={Boolean(dataset)} />,
+          }))}
+        />
       </CardContent>
     </Card>
   );
@@ -61,7 +59,8 @@ export function SearchIntelligenceOverview({
   );
   if (!footprint && !backlinks)
     return (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={Database}
         heading="See where you rank and where competitors outrank you"
         description="The first analysis reads your keyword footprint and rankings, plus the keywords one competitor ranks for and you don’t. You see the exact cost before anything is fetched."

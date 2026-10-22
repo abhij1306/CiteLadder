@@ -39,7 +39,7 @@ export function BriefingCard({
       ? `Reads your evidence and your top ${top.length} open ${actionLabel}.`
       : 'Reads your evidence across Visibility, Site Health, Demand and Performance.';
   return (
-    <section aria-labelledby="agent-briefing" className={panelClasses({ pad: 'compact' })}>
+    <section aria-labelledby="agent-briefing" className={panelClasses()}>
       <EditorialSectionHeader
         title="What should I work on?"
         headingId="agent-briefing"

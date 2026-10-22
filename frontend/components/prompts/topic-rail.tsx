@@ -27,11 +27,11 @@ function topicErrorMessage(loadError?: boolean, actionError?: string | null): st
 /**
  * Topics selection (prompt library). Two responsive variants sharing one
  * selection model:
- *  - Desktop (lg+): a contained `bg-panel` rail listing the
+ *  - Desktop: a contained `bg-panel` rail listing the
  *    project's topics with per-status counts, an "All topics" bucket, an inline
  *    add-topic form (optionally under a top-level topic, one level deep), and
  *    per-topic inline rename and delete.
- *  - Narrow (< lg): a compact full-width Topics picker stacked above the
+ *  - Narrow (below desktop): a compact full-width Topics picker stacked above the
  *    status tabs — the desktop rail would crush the table, so the rail
  *    collapses to a selector, preserving the IA with no overlap.
  * Selection filters the prompt table; deleting a topic detaches its prompts
@@ -99,7 +99,7 @@ export function TopicRail({
     <>
       {/* Desktop rail: raised surface that clips its own content
           so nothing from the right pane can overlap it. */}
-      <Card className="hidden min-w-0 p-2 lg:block">
+      <Card className="desktop:block hidden min-w-0">
         <nav aria-label="Topics" className="grid min-w-0 content-start gap-1">
           <div className="flex items-center justify-between px-1">
             <h3 className={textRole('label')}>Topics</h3>
@@ -205,7 +205,7 @@ function TopicSelect({
 }>) {
   const labelId = useId();
   return (
-    <div className="grid gap-2 lg:hidden">
+    <div className="desktop:hidden grid gap-2">
       <span id={labelId} className={textRole('label')}>
         Topics
       </span>
@@ -273,7 +273,7 @@ function TopicItem({
         aria-label={accessibleName}
         aria-current={selected ? 'true' : undefined}
         className={cn(
-          'focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-control)] px-3 py-2 text-left type-control',
+          'focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-control)] h-[var(--nav-item-height)] px-3 text-left type-control',
           selected && textRole('emphasis'),
         )}
       >

@@ -1047,6 +1047,85 @@ export function tsxGeometryFindings(source, label) {
   return findings;
 }
 
+/*
+ * Atomic layering (docs/design.md §Component recipes, app geometry decision 8).
+ * Geometry lives in `components/ui` (atoms, organisms, templates) and the
+ * shell in `components/layout`; a feature folder composes them and chooses
+ * none of its own. The website (`components/marketing`) keeps its own ladder,
+ * and so do the auth and onboarding flows for breakpoints.
+ */
+const LAYERING_OWNERS = new Set(['ui', 'layout', 'marketing']);
+const FLOW_FOLDERS = new Set(['auth', 'onboarding']);
+const LAYER_SPACING = /^-?(?:p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy])-(?:\d|px\b|\[|\()/;
+const LAYER_SIZE = /^-?(?:h|w|size)-(?:\d|px\b|\[|\()/;
+const LAYER_RADIUS = /^rounded(?:-|$)/;
+const LAYER_BREAKPOINT = /^(?:max-)?(?:sm|md|lg|xl|2xl)$|^(?:min|max)-\[/;
+const LAYER_GEOMETRY_PROPS = new Set(['size', 'padding']);
+
+/** `variant:variant:utility` split on the colons outside arbitrary brackets. */
+function splitVariants(token) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < token.length; index += 1) {
+    const character = token[index];
+    if (character === '[' || character === '(') depth += 1;
+    else if (character === ']' || character === ')') depth -= 1;
+    else if (character === ':' && depth === 0) {
+      parts.push(token.slice(start, index));
+      start = index + 1;
+    }
+  }
+  return { variants: parts, utility: token.slice(start).replace(/^!/, '') };
+}
+
+/** The components/ folder a non-test component file belongs to, or null. */
+function componentFolder(label) {
+  const match = /^components\/([^/]+)\//.exec(label);
+  if (!match || /\.(?:test|spec)\.tsx?$/.test(label) || !/\.tsx?$/.test(label)) return null;
+  return match[1];
+}
+
+/**
+ * Geometry a feature folder chose for itself: spacing, sized boxes and radii
+ * as utilities, and `size=`/`padding=` props; and, in every product folder
+ * including `ui/` and `layout/`, a breakpoint other than `desktop:`.
+ * Ratcheted per file by check-design-system.mjs, so the debt can only fall.
+ */
+export function featureLayeringFindings(source, label) {
+  const folder = componentFolder(label);
+  if (!folder || folder === 'marketing') return [];
+  const feature = !LAYERING_OWNERS.has(folder);
+  const product = !FLOW_FOLDERS.has(folder);
+  if (!feature && !product) return [];
+  const program = parseSource(source, label);
+  const lineOf = lineIndex(source);
+  const findings = [];
+  const push = (rule, line, message) => findings.push({ rule, file: label, line, message });
+  for (const { token, line } of classTokens(program, lineOf)) {
+    const { variants, utility } = splitVariants(token);
+    if (
+      feature &&
+      (LAYER_SPACING.test(utility) || LAYER_SIZE.test(utility) || LAYER_RADIUS.test(utility))
+    ) {
+      push('layer-geometry', line, `${token} — geometry belongs to a components/ui organism`);
+    }
+    if (product && variants.some((variant) => LAYER_BREAKPOINT.test(variant))) {
+      push('layer-breakpoint', line, `${token} — the product's one breakpoint is desktop:`);
+    }
+  }
+  if (!feature) return findings;
+  walk(program, (node) => {
+    if (node.type !== 'JSXAttribute' || !LAYER_GEOMETRY_PROPS.has(nameText(node.name))) return;
+    push(
+      'layer-size-prop',
+      lineOf(node.start),
+      `${nameText(node.name)}= — atoms have one form; a feature never picks a size`,
+    );
+  });
+  return findings;
+}
+
 export function textRoleBackgroundViolations(source, label) {
   if (!/\.(?:tsx|ts|mjs|js)$/.test(label)) return [];
   const program = parseSource(source, label);
@@ -1094,11 +1173,9 @@ export function productContractViolations(root) {
     '--page-section-gap',
     '--card-padding',
     '--modal-padding',
-    '--control-height-sm',
     '--control-height-md',
     '--menu-item-height',
     '--badge-height-sm',
-    '--badge-height-md',
     '--control-height-lg',
     '--radius-control',
     '--radius-card',

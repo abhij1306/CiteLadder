@@ -5,7 +5,7 @@ import { useState, type ReactNode } from 'react';
 
 import { BrandFactsPanel } from '@/components/knowledge-base/brand-facts-panel';
 import { BrandProfilePanel } from '@/components/knowledge-base/brand-profile-panel';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { CompetitorSuggestions } from '@/components/visibility/prompt-insights';
 import { Button } from '@/components/ui/button';
@@ -35,12 +35,12 @@ export function ContextScreen() {
   const { activeProject, activeWorkspaceId } = useProjectContext();
   if (!activeProject || !activeWorkspaceId)
     return (
-      <PageShell measure="workflow">
+      <ListScreen measure="workflow">
         <ProjectRequiredState />
-      </PageShell>
+      </ListScreen>
     );
   return (
-    <PageShell measure="workflow">
+    <ListScreen measure="workflow">
       <Stack gap="section">
         <AgentInstructions
           key={activeProject.id}
@@ -50,7 +50,7 @@ export function ContextScreen() {
         <CompanyFacts workspaceId={activeWorkspaceId} project={activeProject} />
         <BrandFacts workspaceId={activeWorkspaceId} projectId={activeProject.id} />
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }
 

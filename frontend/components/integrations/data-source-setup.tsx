@@ -109,7 +109,7 @@ function RowFrame({
 }>) {
   return (
     <li className="border-border-subtle grid gap-3 border-t py-3 first:border-t-0 first:pt-0 last:pb-0">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="desktop:flex-row desktop:items-center flex flex-col gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
           <span
             aria-hidden

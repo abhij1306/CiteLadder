@@ -6,13 +6,20 @@ import { logoDevUrl } from '@/lib/brand/logo-dev';
 import { brandInitials } from '@/lib/brand/initials';
 import { cn } from '@/lib/utils';
 
-const SIZE = {
-  xs: { pixels: 14, className: 'size-3.5 rounded-xs type-badge' },
-  sm: { pixels: 20, className: 'size-5 rounded-xs type-badge' },
-  md: { pixels: 24, className: 'size-6 rounded-[var(--radius-control)] type-badge' },
-  lg: { pixels: 32, className: 'size-8 rounded-[var(--radius-control)] type-control' },
-  xl: { pixels: 40, className: 'size-10 rounded-[var(--radius-card)] type-figure-sm' },
+/**
+ * A placement, never a size: each context draws the mark in one form.
+ *
+ *   - `mark`     (16px) — a favicon in a run of marks inside a cell.
+ *   - `row`      (20px) — beside a name in a row, a cell, a menu or the switcher.
+ *   - `identity` (40px) — the identity header of the brand or page itself.
+ */
+const PLACEMENT = {
+  mark: { pixels: 16, className: 'size-4 rounded-xs type-badge' },
+  row: { pixels: 20, className: 'size-5 rounded-xs type-badge' },
+  identity: { pixels: 40, className: 'size-10 rounded-[var(--radius-control)] type-figure-sm' },
 } as const;
+
+export type BrandLogoPlacement = keyof typeof PLACEMENT;
 
 /**
  * One brand-avatar treatment everywhere, with a three-step fallback:
@@ -30,18 +37,16 @@ export function BrandLogo({
   name,
   logoUrl,
   websiteUrl,
-  size = 'sm',
-  className,
+  placement = 'row',
 }: Readonly<{
   name: string;
   logoUrl?: string | null;
   /** Brand site, used to derive the Logo.dev fallback. */
   websiteUrl?: string | null;
-  size?: keyof typeof SIZE;
-  className?: string;
+  placement?: BrandLogoPlacement;
 }>) {
   const [failed, setFailed] = useState<Record<string, true>>({});
-  const spec = SIZE[size];
+  const spec = PLACEMENT[placement];
 
   const cached = logoUrl && !failed[logoUrl] ? logoUrl : null;
   const remote = logoDevUrl(websiteUrl, spec.pixels);
@@ -54,7 +59,6 @@ export function BrandLogo({
       className={cn(
         'relative grid shrink-0 place-items-center overflow-hidden uppercase',
         spec.className,
-        className,
       )}
     >
       {src ? (

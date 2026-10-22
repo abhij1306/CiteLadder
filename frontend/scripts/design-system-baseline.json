@@ -1,20 +1,564 @@
 {
   "format_version": 1,
   "files": {
+    "components/agent/action-declaration.tsx": {
+      "layer-geometry": 6
+    },
+    "components/agent/action-detail-screen.tsx": {
+      "layer-geometry": 12
+    },
+    "components/agent/agent-panel-host.tsx": {
+      "layer-geometry": 1,
+      "layer-size-prop": 1
+    },
+    "components/agent/agent-panel.tsx": {
+      "layer-geometry": 10
+    },
+    "components/agent/briefing-card.tsx": {
+      "layer-geometry": 1
+    },
+    "components/agent/chat-screen.tsx": {
+      "layer-geometry": 2
+    },
+    "components/agent/chat-thread.tsx": {
+      "layer-geometry": 1
+    },
+    "components/agent/command-menu.tsx": {
+      "layer-geometry": 5
+    },
+    "components/agent/composer.tsx": {
+      "layer-geometry": 14
+    },
+    "components/agent/context-screen.tsx": {
+      "layer-geometry": 4
+    },
+    "components/agent/conversation.tsx": {
+      "layer-geometry": 27
+    },
+    "components/agent/declaration-status.tsx": {
+      "layer-geometry": 7
+    },
+    "components/agent/evidence-chips.tsx": {
+      "layer-geometry": 2
+    },
+    "components/agent/live-reply.tsx": {
+      "layer-geometry": 2
+    },
+    "components/agent/new-chat-screen.tsx": {
+      "layer-geometry": 6
+    },
+    "components/agent/output-canvas.tsx": {
+      "layer-geometry": 11
+    },
+    "components/agent/output-editor.tsx": {
+      "layer-geometry": 2
+    },
+    "components/agent/output-history.tsx": {
+      "layer-geometry": 7
+    },
+    "components/agent/output-pane.tsx": {
+      "layer-geometry": 10
+    },
+    "components/agent/prompt-proposal-action.tsx": {
+      "layer-geometry": 1
+    },
+    "components/agent/skill-picker.tsx": {
+      "layer-geometry": 2
+    },
+    "components/agent/skills-screen.tsx": {
+      "layer-geometry": 2
+    },
+    "components/agent/workflow-gallery.tsx": {
+      "layer-geometry": 8
+    },
+    "components/ai-traffic/crawl-log-connections.tsx": {
+      "layer-geometry": 4
+    },
+    "components/ai-traffic/crawl-log-setup.tsx": {
+      "layer-geometry": 11
+    },
+    "components/ai-traffic/gcp-pull-setup.tsx": {
+      "layer-geometry": 3
+    },
+    "components/ai-traffic/insight-strip.tsx": {
+      "layer-geometry": 7
+    },
+    "components/ai-traffic/overview-signals.tsx": {
+      "layer-geometry": 8
+    },
+    "components/ai-traffic/pages-view.tsx": {
+      "layer-geometry": 1
+    },
+    "components/ai-traffic/referrals-dashboard.tsx": {
+      "layer-geometry": 6
+    },
+    "components/ai-traffic/traffic-controls.tsx": {
+      "layer-geometry": 4
+    },
+    "components/ai-traffic/traffic-views.tsx": {
+      "layer-geometry": 2
+    },
+    "components/ai-traffic/url-panel.tsx": {
+      "layer-geometry": 1
+    },
+    "components/demand/demand-evidence-drawer.tsx": {
+      "layer-geometry": 20
+    },
+    "components/demand/demand-latent-demand.tsx": {
+      "layer-geometry": 2
+    },
+    "components/demand/demand-projection.tsx": {
+      "layer-geometry": 7
+    },
+    "components/demand/demand-signal-filters.tsx": {
+      "layer-geometry": 1
+    },
+    "components/demand/demand-signal-insight.tsx": {
+      "layer-geometry": 5
+    },
+    "components/demand/demand-signal-table.tsx": {
+      "layer-geometry": 13
+    },
+    "components/integrations/data-source-setup.tsx": {
+      "layer-geometry": 17
+    },
+    "components/integrations/property-choice.tsx": {
+      "layer-geometry": 5
+    },
+    "components/knowledge-base/brand-facts-panel.tsx": {
+      "layer-geometry": 5
+    },
+    "components/knowledge-base/brand-profile-panel.tsx": {
+      "layer-geometry": 8
+    },
+    "components/knowledge-base/business-map-editor.tsx": {
+      "layer-geometry": 20,
+      "layer-size-prop": 3
+    },
     "components/layout/app-shell.tsx": {
       "tsx-size": 1
     },
+    "components/onboarding/choice-controls.tsx": {
+      "layer-geometry": 3,
+      "layer-size-prop": 1
+    },
+    "components/onboarding/flow-shell.tsx": {
+      "layer-geometry": 2
+    },
+    "components/onboarding/icp-confirmation.tsx": {
+      "layer-geometry": 1
+    },
+    "components/onboarding/onboarding-page-client.tsx": {
+      "layer-geometry": 1
+    },
+    "components/onboarding/onboarding-screen.tsx": {
+      "layer-size-prop": 6
+    },
+    "components/onboarding/onboarding-stages.tsx": {
+      "layer-geometry": 7,
+      "layer-size-prop": 2
+    },
+    "components/onboarding/review-step.tsx": {
+      "layer-geometry": 3
+    },
+    "components/opportunities/earned-page-handoff.tsx": {
+      "layer-geometry": 9
+    },
+    "components/opportunities/evidence-drawer.tsx": {
+      "layer-geometry": 11
+    },
+    "components/opportunities/opportunity-evidence-section.tsx": {
+      "layer-geometry": 9
+    },
+    "components/opportunities/opportunity-kv-row.tsx": {
+      "layer-geometry": 2
+    },
+    "components/opportunities/opportunity-source-pattern.tsx": {
+      "layer-geometry": 9
+    },
+    "components/opportunities/opportunity-summary-section.tsx": {
+      "layer-geometry": 3
+    },
+    "components/opportunities/verification-observations.tsx": {
+      "layer-geometry": 2
+    },
+    "components/performance/bing-panel.tsx": {
+      "layer-geometry": 1
+    },
+    "components/performance/date-range-dialog.tsx": {
+      "layer-geometry": 7
+    },
     "components/performance/dimension-table.tsx": {
+      "layer-geometry": 6,
       "tsx-size": 5
     },
+    "components/performance/metric-cards.tsx": {
+      "layer-geometry": 2,
+      "layer-size-prop": 1
+    },
+    "components/performance/performance-breakdowns.tsx": {
+      "layer-geometry": 1
+    },
+    "components/performance/performance-chart.tsx": {
+      "layer-geometry": 7,
+      "layer-size-prop": 1
+    },
+    "components/performance/performance-chrome.tsx": {
+      "layer-geometry": 5
+    },
+    "components/performance/performance-screen.tsx": {
+      "layer-geometry": 3
+    },
+    "components/performance/readiness-ladder.tsx": {
+      "layer-geometry": 11
+    },
+    "components/products/catalog-header.tsx": {
+      "layer-geometry": 1
+    },
+    "components/products/catalog-list.tsx": {
+      "layer-geometry": 19,
+      "layer-size-prop": 1
+    },
+    "components/products/commerce-workspace.tsx": {
+      "layer-geometry": 3
+    },
+    "components/products/target-competitors.tsx": {
+      "layer-geometry": 6
+    },
+    "components/products/target-prompts.tsx": {
+      "layer-geometry": 4
+    },
+    "components/products/target-shelf-band.tsx": {
+      "layer-geometry": 2
+    },
+    "components/products/target-shelf-evidence.tsx": {
+      "layer-geometry": 6
+    },
+    "components/projects/dashboard-controls.tsx": {
+      "layer-geometry": 5
+    },
+    "components/projects/dashboard-primitives.tsx": {
+      "layer-geometry": 18,
+      "layer-size-prop": 2
+    },
+    "components/projects/dashboard-sections.tsx": {
+      "layer-geometry": 14,
+      "layer-size-prop": 1
+    },
+    "components/projects/mention-rule-fields.tsx": {
+      "layer-geometry": 2
+    },
+    "components/projects/missing-prompts.tsx": {
+      "layer-geometry": 6
+    },
+    "components/projects/overview-grid.tsx": {
+      "layer-geometry": 8,
+      "layer-size-prop": 4
+    },
+    "components/projects/overview-layout-menu.tsx": {
+      "layer-geometry": 2
+    },
+    "components/projects/overview-library-widgets.tsx": {
+      "layer-geometry": 7
+    },
+    "components/projects/project-edit-panel.tsx": {
+      "layer-geometry": 13,
+      "layer-size-prop": 1
+    },
+    "components/projects/project-markets.tsx": {
+      "layer-geometry": 6,
+      "layer-size-prop": 1
+    },
+    "components/projects/projects-screen.tsx": {
+      "layer-geometry": 1
+    },
+    "components/projects/prompt-setup-card.tsx": {
+      "layer-geometry": 1,
+      "layer-size-prop": 2
+    },
+    "components/prompts/candidate-review.tsx": {
+      "layer-geometry": 14
+    },
+    "components/prompts/csv-import-dialog.tsx": {
+      "layer-geometry": 4
+    },
+    "components/prompts/generate-prompts-dialog-view.tsx": {
+      "layer-geometry": 7
+    },
+    "components/prompts/prompt-answer-states.tsx": {
+      "layer-geometry": 2
+    },
+    "components/prompts/prompt-detail-screen.tsx": {
+      "layer-geometry": 7
+    },
+    "components/prompts/prompt-form-dialog.tsx": {
+      "layer-geometry": 2
+    },
+    "components/prompts/prompt-library.tsx": {
+      "layer-geometry": 1
+    },
+    "components/prompts/prompt-table.tsx": {
+      "layer-geometry": 15,
+      "layer-size-prop": 1
+    },
+    "components/prompts/prompt-toolbar.tsx": {
+      "layer-geometry": 8
+    },
+    "components/prompts/topic-rail.tsx": {
+      "layer-geometry": 25,
+      "layer-size-prop": 3
+    },
+    "components/providers/provider-connection-fields.tsx": {
+      "layer-geometry": 1
+    },
+    "components/providers/provider-list.tsx": {
+      "layer-geometry": 2
+    },
+    "components/providers/provider-row.tsx": {
+      "layer-geometry": 11
+    },
+    "components/runs/audit-schedules.tsx": {
+      "layer-geometry": 14
+    },
+    "components/runs/evidence-ads.tsx": {
+      "layer-geometry": 4
+    },
+    "components/runs/evidence-card.tsx": {
+      "layer-geometry": 25
+    },
+    "components/runs/evidence-claims.tsx": {
+      "layer-geometry": 4
+    },
+    "components/runs/evidence-perception.tsx": {
+      "layer-geometry": 4
+    },
+    "components/runs/execution-evidence-drawer.tsx": {
+      "layer-geometry": 5
+    },
+    "components/runs/executions-table.tsx": {
+      "layer-geometry": 2
+    },
+    "components/runs/launch-audit-button.tsx": {
+      "layer-geometry": 1
+    },
+    "components/runs/launch-dialog-view.tsx": {
+      "layer-geometry": 14,
+      "layer-size-prop": 1
+    },
+    "components/runs/measurement-context.tsx": {
+      "layer-geometry": 1
+    },
+    "components/runs/progress-panel.tsx": {
+      "layer-geometry": 5
+    },
+    "components/runs/runs-screen.tsx": {
+      "layer-geometry": 3
+    },
+    "components/runs/surface-evidence.tsx": {
+      "layer-geometry": 17
+    },
+    "components/search-intelligence/search-intelligence-citation-matcher.tsx": {
+      "layer-geometry": 5
+    },
+    "components/search-intelligence/search-intelligence-collection.tsx": {
+      "layer-geometry": 4
+    },
+    "components/search-intelligence/search-intelligence-dataset-view.tsx": {
+      "layer-geometry": 7
+    },
+    "components/search-intelligence/search-intelligence-history.tsx": {
+      "layer-geometry": 11,
+      "layer-size-prop": 2
+    },
+    "components/search-intelligence/search-intelligence-overview.tsx": {
+      "layer-geometry": 2
+    },
+    "components/search-intelligence/search-intelligence-review-parts.tsx": {
+      "layer-geometry": 10
+    },
+    "components/search-intelligence/search-intelligence-runs.tsx": {
+      "layer-geometry": 11
+    },
+    "components/settings/api-keys.tsx": {
+      "layer-geometry": 6
+    },
+    "components/settings/backfill-progress.tsx": {
+      "layer-geometry": 1
+    },
+    "components/settings/integration-card-view.tsx": {
+      "layer-geometry": 9
+    },
+    "components/settings/integration-connection-row.tsx": {
+      "layer-geometry": 17
+    },
+    "components/settings/integration-settings.tsx": {
+      "layer-geometry": 6
+    },
+    "components/settings/mcp-connections.tsx": {
+      "layer-geometry": 3,
+      "layer-size-prop": 1
+    },
+    "components/settings/property-picker.tsx": {
+      "layer-geometry": 14
+    },
+    "components/settings/settings-screen.tsx": {
+      "layer-geometry": 4
+    },
+    "components/settings/settings-section.tsx": {
+      "layer-geometry": 7
+    },
+    "components/settings/time-zone-setting.tsx": {
+      "layer-geometry": 1
+    },
+    "components/site-health/aeo-readiness-panel.tsx": {
+      "layer-geometry": 30
+    },
+    "components/site-health/architecture-hierarchy.tsx": {
+      "layer-geometry": 5
+    },
+    "components/site-health/architecture-orphans.tsx": {
+      "layer-geometry": 2
+    },
+    "components/site-health/architecture-panel.tsx": {
+      "layer-geometry": 22
+    },
+    "components/site-health/changes-panel.tsx": {
+      "layer-geometry": 9
+    },
+    "components/site-health/cohort-composition-context.tsx": {
+      "layer-geometry": 3
+    },
+    "components/site-health/internal-link-review.tsx": {
+      "layer-geometry": 1
+    },
+    "components/site-health/internal-links-card.tsx": {
+      "layer-geometry": 7
+    },
+    "components/site-health/internal-links-panel.tsx": {
+      "layer-geometry": 3
+    },
     "components/site-health/inventory-section.tsx": {
+      "layer-geometry": 6,
       "tsx-size": 1
     },
+    "components/site-health/issue-detail-rail.tsx": {
+      "layer-geometry": 23
+    },
+    "components/site-health/issue-metadata.tsx": {
+      "layer-geometry": 1
+    },
+    "components/site-health/issues-catalog.tsx": {
+      "layer-geometry": 10
+    },
+    "components/site-health/overview-details.tsx": {
+      "layer-geometry": 12
+    },
+    "components/site-health/overview-panel.tsx": {
+      "layer-geometry": 1
+    },
+    "components/site-health/page-kind-scores.tsx": {
+      "layer-geometry": 2
+    },
+    "components/site-health/page-kind-select.tsx": {
+      "layer-geometry": 3
+    },
+    "components/site-health/pages-table.tsx": {
+      "layer-geometry": 3
+    },
+    "components/site-health/root-errors-block.tsx": {
+      "layer-geometry": 4
+    },
+    "components/site-health/site-facts-panel.tsx": {
+      "layer-geometry": 8
+    },
+    "components/site-health/site-health-screen.tsx": {
+      "layer-geometry": 1
+    },
+    "components/site-health/status-strip.tsx": {
+      "layer-geometry": 11
+    },
+    "components/site-health/url-detail-view.tsx": {
+      "layer-geometry": 7
+    },
+    "components/site-health/url-detail.tsx": {
+      "layer-geometry": 4
+    },
+    "components/visibility/active-run-banner.tsx": {
+      "layer-geometry": 1
+    },
+    "components/visibility/brand-on-page.tsx": {
+      "layer-geometry": 1
+    },
+    "components/visibility/evidence-states.tsx": {
+      "layer-geometry": 11
+    },
+    "components/visibility/fanout-evidence.tsx": {
+      "layer-geometry": 5
+    },
+    "components/visibility/prompt-insights.tsx": {
+      "layer-geometry": 7
+    },
+    "components/visibility/ranking-rows.tsx": {
+      "layer-geometry": 1
+    },
+    "components/visibility/source-breadcrumb.tsx": {
+      "layer-geometry": 4
+    },
+    "components/visibility/source-cells.tsx": {
+      "layer-geometry": 2
+    },
+    "components/visibility/source-charts.tsx": {
+      "layer-geometry": 1
+    },
+    "components/visibility/source-domain-detail.tsx": {
+      "layer-geometry": 2
+    },
+    "components/visibility/source-movers.tsx": {
+      "layer-geometry": 3
+    },
+    "components/visibility/source-near-misses.tsx": {
+      "layer-geometry": 1
+    },
     "components/visibility/source-prompts.tsx": {
+      "layer-geometry": 3,
       "tsx-size": 1
+    },
+    "components/visibility/source-rows.tsx": {
+      "layer-geometry": 8
+    },
+    "components/visibility/source-toolbar.tsx": {
+      "layer-geometry": 1
+    },
+    "components/visibility/source-url-cards.tsx": {
+      "layer-geometry": 3
+    },
+    "components/visibility/source-url-detail.tsx": {
+      "layer-geometry": 4
+    },
+    "components/visibility/source-url-page.tsx": {
+      "layer-geometry": 4
+    },
+    "components/visibility/surface-rates.tsx": {
+      "layer-geometry": 8
+    },
+    "components/visibility/visibility-accuracy.tsx": {
+      "layer-geometry": 7
+    },
+    "components/visibility/visibility-ads.tsx": {
+      "layer-geometry": 11
+    },
+    "components/visibility/visibility-perception.tsx": {
+      "layer-geometry": 8
     },
     "components/visibility/visibility-sources.tsx": {
       "tsx-size": 1
+    },
+    "components/visibility/visibility-toolbar.tsx": {
+      "layer-geometry": 5,
+      "layer-size-prop": 1
+    },
+    "components/visibility/visibility-trends.tsx": {
+      "layer-geometry": 4
     }
   }
 }

@@ -1,6 +1,6 @@
 import { useState, useSyncExternalStore } from 'react';
 
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { InternalLinksCard } from '@/components/site-health/internal-links-card';
@@ -10,8 +10,8 @@ import { UrlScoreSummary } from '@/components/site-health/url-score-summary';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
-import { StatGrid, StatItem } from '@/components/ui/stat-grid';
+import { QueryState } from '@/components/ui/query-state';
+import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
@@ -56,7 +56,7 @@ export function UrlDetailView({
   children?: React.ReactNode;
 }>) {
   return (
-    <PageShell
+    <ListScreen
       title={pageDisplayTitle(detail.title, detail.display_url)}
       actions={
         <>
@@ -76,9 +76,11 @@ export function UrlDetailView({
         <IssuesList issues={detail.issues} />
         {children}
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }
+
+const LINKS_NOT_MEASURED = 'Internal links not measured for this page.';
 
 const mobileMeasurementsQuery = '(max-width: 980px)';
 
@@ -124,7 +126,7 @@ function PageMeasurements({ detail }: Readonly<{ detail: PageDetail }>) {
             {detail.internal_links ? (
               <InternalLinksCard links={detail.internal_links} crawlId={detail.crawl_id} />
             ) : (
-              <InlineEmpty>Internal links not measured for this page.</InlineEmpty>
+              <QueryState kind="empty" inline message={LINKS_NOT_MEASURED} />
             )}
           </CardContent>
         </Card>
@@ -150,7 +152,7 @@ function PageMeasurements({ detail }: Readonly<{ detail: PageDetail }>) {
             {detail.internal_links ? (
               <InternalLinksCard links={detail.internal_links} crawlId={detail.crawl_id} />
             ) : (
-              <InlineEmpty>Internal links not measured for this page.</InlineEmpty>
+              <QueryState kind="empty" inline message={LINKS_NOT_MEASURED} />
             )}
           </TabPanel>
         </Tabs>
@@ -192,49 +194,54 @@ function PageMetadata({ detail }: Readonly<{ detail: PageDetail }>) {
   return (
     <Card className="min-w-0">
       <CardContent>
-        <StatGrid
-          columns={2}
-          className="min-[701px]:grid-cols-2 sm:grid-cols-1 xl:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]"
-        >
-          <StatItem
-            label="URL"
-            className="min-[701px]:col-span-2 xl:col-span-1"
-            value={
-              <TextLink
-                variant="external"
-                text="itemTitle"
-                href={detail.display_url}
-                className="min-w-0 [overflow-wrap:anywhere] tabular-nums"
-              >
-                {detail.display_url}
-              </TextLink>
-            }
-          />
-          <StatItem label="Page Kind" value={<PageKindBadge pageKind={detail.page_kind} />} />
-          <StatItem
-            label="Last Audit"
-            value={
-              <span className={textRole('itemTitle')}>
-                {formatAudited(detail.last_audited, timeZone)}
-              </span>
-            }
-          />
-          <StatItem
-            label="Status"
-            value={
-              <Badge variant="status" value={pageStatusBadgeValue(detail.analysis_status)}>
-                {statusLabel(detail.analysis_status)}
-              </Badge>
-            }
-          />
-        </StatGrid>
+        <StatRow
+          segments={[
+            {
+              key: 'url',
+              label: 'URL',
+              value: (
+                <TextLink
+                  variant="external"
+                  text="itemTitle"
+                  href={detail.display_url}
+                  className="min-w-0 [overflow-wrap:anywhere] tabular-nums"
+                >
+                  {detail.display_url}
+                </TextLink>
+              ),
+            },
+            {
+              key: 'kind',
+              label: 'Page Kind',
+              value: <PageKindBadge pageKind={detail.page_kind} />,
+            },
+            {
+              key: 'audit',
+              label: 'Last Audit',
+              value: (
+                <span className={textRole('itemTitle')}>
+                  {formatAudited(detail.last_audited, timeZone)}
+                </span>
+              ),
+            },
+            {
+              key: 'status',
+              label: 'Status',
+              value: (
+                <Badge variant="status" value={pageStatusBadgeValue(detail.analysis_status)}>
+                  {statusLabel(detail.analysis_status)}
+                </Badge>
+              ),
+            },
+          ]}
+        />
       </CardContent>
     </Card>
   );
 }
 
 function DeliveryMetrics({ delivery }: Readonly<{ delivery: DeliveryFacts }>) {
-  const items = [
+  const segments: StatSegment[] = [
     { key: 'ttfb', label: 'TTFB', value: formatMeasuredMs(delivery.ttfb_ms) },
     {
       key: 'size',
@@ -259,8 +266,8 @@ function DeliveryMetrics({ delivery }: Readonly<{ delivery: DeliveryFacts }>) {
   ];
   return (
     <Stack>
-      <p className={textRole('caption', 'max-[980px]:hidden')}>Static HTTP-level measurements</p>
-      <StatGrid columns={4} items={items} />
+      <p className={textRole('caption', 'hidden desktop:block')}>Static HTTP-level measurements</p>
+      <StatRow segments={segments} />
     </Stack>
   );
 }
@@ -274,13 +281,13 @@ function IssuesList({ issues }: Readonly<{ issues: IssueOccurrence[] }>) {
       </CardHeader>
       <CardContent>
         {ordered.length === 0 ? (
-          <InlineEmpty>No issues detected on this page.</InlineEmpty>
+          <QueryState kind="empty" inline message="No issues detected on this page." />
         ) : (
           <ol className={ledgerClasses()}>
             {ordered.map((issue) => (
               <li
                 key={issue.occurrence_id}
-                className="flex flex-col gap-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                className="desktop:flex-row desktop:items-start desktop:justify-between flex flex-col gap-3 py-3"
               >
                 <div className="grid min-w-0 gap-2">
                   <span className={textRole('itemTitle')}>{issue.issue_title}</span>

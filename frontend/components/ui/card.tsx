@@ -52,7 +52,13 @@ export function CardHeader({
     actions?: ReactNode;
   }
 >) {
-  const edge = cn('p-[var(--card-padding)] pb-3', bordered && 'border-border-subtle border-b');
+  // The card owns the 16 inset; the header only keeps the 12 heading→content
+  // step below it (and a hairline under it when `bordered`), and neither when
+  // it is the card's only content.
+  const edge = cn(
+    'not-last:pb-3',
+    bordered && 'border-border-subtle not-last:mb-3 not-last:border-b',
+  );
   if (!actions) {
     return (
       <header {...props} className={cn('flex flex-col gap-1', edge, className)}>
@@ -115,21 +121,17 @@ export function CardDescription({
 }
 
 /**
- * `flush` drops the inset for content that owns its own edges — a table, a
- * scrolling list — so the card's padding is a mode rather than something the
- * call site cancels with `p-0`.
+ * The card's body. The card element carries the one 16 inset, so content has
+ * no padding of its own and no mode to cancel it: a table or a scrolling list
+ * sits in the same inset as text.
  */
 export function CardContent({
   children,
   className,
-  flush,
   ...props
-}: Readonly<ComponentPropsWithoutRef<'div'> & { children: ReactNode; flush?: boolean }>) {
+}: Readonly<ComponentPropsWithoutRef<'div'> & { children: ReactNode }>) {
   return (
-    <div
-      {...props}
-      className={cn(flush ? '' : 'p-[var(--card-padding)] [header+&]:pt-0', className)}
-    >
+    <div {...props} className={className}>
       {children}
     </div>
   );

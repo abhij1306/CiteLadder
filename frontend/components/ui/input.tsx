@@ -13,17 +13,16 @@ const raisedClasses = 'border border-border-strong enabled:hover:border-border-s
  * The roomier field used on the standalone auth and onboarding screens, where a
  * form is the whole page rather than one control in a dense table.
  *
- * Large fields use the large control role.
+ * Large fields use the large control role. The product field is the 32px
+ * `md` everywhere; `lg` is the flow's rung only.
  */
 const inputSizes = {
   md: '',
-  compact: 'h-[var(--control-height-sm)] leading-[calc(var(--control-height-sm)_-_2px)]',
   lg: 'h-[var(--control-height-lg)] px-3 leading-[calc(var(--control-height-lg)_-_2px)]',
 } as const;
 
 const adornedLineHeights = {
   md: 'leading-[calc(var(--control-height-md)_-_2px)]',
-  compact: 'leading-[calc(var(--control-height-sm)_-_2px)]',
   lg: 'leading-[calc(var(--control-height-lg)_-_2px)]',
 } as const;
 
@@ -68,7 +67,6 @@ export function Input({
       className={cn(
         'focus-frame bg-input has-[[aria-invalid=true]]:border-danger has-[[aria-invalid=true]]:has-[:enabled]:hover:border-danger flex h-[var(--control-height-md)] w-full items-center gap-2 rounded-[var(--radius-control)] px-3 border border-border transition-[border-color,background-color] has-[:enabled]:hover:border-border-strong',
         size === 'lg' && 'h-[var(--control-height-lg)] px-3',
-        size === 'compact' && 'h-[var(--control-height-sm)]',
         raised && raisedClasses,
         props.disabled && 'cursor-not-allowed bg-disabled text-muted border-border-subtle',
         endContentFlush && 'pe-1',
