@@ -59,7 +59,7 @@ function DemandEvidenceContent({
       className="max-w-md sm:max-w-lg"
       footer={
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <Button variant="secondary" size="sm" asChild>
+          <Button variant="secondary" asChild>
             <ProjectLink
               href={demandSignalHandoffHref(signal)}
               className="inline-flex items-center"

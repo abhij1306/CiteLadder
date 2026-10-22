@@ -70,7 +70,7 @@ describe('application route recovery', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish session' }));
     const shell = screen.getByRole('region', { name: 'Application shell' });
-    expect(screen.getByTestId('page-loading')).toBeInTheDocument();
+    expect(await screen.findByRole('status', { name: 'Loading…' })).toBeInTheDocument();
     await act(async () => finish({ IssuesRoute: () => <h1>Issues</h1> }));
     expect(await screen.findByRole('heading', { name: 'Issues' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Application shell' })).toBe(shell);

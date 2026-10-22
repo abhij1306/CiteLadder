@@ -1,7 +1,8 @@
 import { BarChart3, SearchX } from 'lucide-react';
 
 import { DataSourceSetup } from '@/components/integrations/data-source-setup';
-import { EmptyState } from '@/components/ui/empty-state';
+import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { CrawlLogConnections } from './crawl-log-connections';
 
 /**
@@ -15,10 +16,10 @@ export function TrafficNoResults({
   connectLogs = false,
 }: Readonly<{ heading: string; description: string; connectLogs?: boolean }>) {
   return (
-    <div className="grid gap-4">
-      <EmptyState icon={SearchX} heading={heading} description={description} />
+    <Stack gap="workspace">
+      <QueryState kind="empty" icon={SearchX} heading={heading} description={description} />
       {connectLogs ? <CrawlLogConnections /> : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -34,7 +35,8 @@ export function AiReferralsEmptyState() {
       title="Connect Google Analytics 4"
       description="AI referrals come from this project's own GA4 sessions. Connect Google and choose the Analytics property for this site."
       whenReady={
-        <EmptyState
+        <QueryState
+          kind="empty"
           icon={BarChart3}
           heading="No AI-referral data yet"
           description="Referrals appear here once GA4 sessions have been imported."

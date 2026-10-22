@@ -5,7 +5,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import { useSearchParams } from 'react-router-dom';
 import { FileText } from 'lucide-react';
 
-import { PageLoading } from '@/components/layout/page-loading';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Label, textRole } from '@/components/ui/typography';
@@ -209,14 +209,15 @@ function ScoredInventoryBody({
 }>) {
   if (query.isError)
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={query.error}
         fallback="Could not load pages for this view."
         onRetry={() => void query.refetch()}
         pending={query.isFetching}
       />
     );
-  if (query.isLoading) return <PageLoading />;
+  if (query.isLoading) return <QueryState kind="loading" />;
   if (rows.length === 0 && rootErrors.length === 0)
     return (
       <EmptyState

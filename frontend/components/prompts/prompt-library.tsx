@@ -3,10 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
-import { EmptyState } from '@/components/ui/empty-state';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { PageLoading } from '@/components/layout/page-loading';
 import { ICONS } from '@/lib/icons';
 import {
   promptsApi,
@@ -50,7 +49,7 @@ import { PageShell } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { ResizableSplitPane } from '@/components/ui/split-pane';
 
-import { PromptActions, PromptFilterControls } from './prompt-toolbar';
+import { PromptActions, promptFilterControls } from './prompt-toolbar';
 import { TopicRail } from './topic-rail';
 import { useTopicMutations } from './use-topic-mutations';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
@@ -341,12 +340,25 @@ export function PromptLibrary({
     generateMutation.reset();
     setGenerateOpen(true);
   };
-  if (!hasPrompts) {
+  // A failed read with nothing to show takes the empty state's slot; a failed
+  // refresh keeps the prompts already shown and says so above them.
+  const failedEmpty = Boolean(error) && !hasPrompts;
+  if (failedEmpty) {
+    libraryBody = (
+      <QueryState
+        kind="error"
+        error={error}
+        fallback="Could not load prompts. Check your connection and try again."
+        onRetry={retry}
+        pending={retrying}
+      />
+    );
+  } else if (!hasPrompts) {
     libraryBody = <PromptEmptyState onGenerate={openGenerateDialog} onAdd={openAdd} />;
   } else if (visible.length === 0) {
     libraryBody = (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         icon={ICONS.prompts}
         heading="No prompts match your search or filters."
       />
@@ -356,7 +368,7 @@ export function PromptLibrary({
   if (isLoading) {
     return (
       <PageShell>
-        <PageLoading />
+        <QueryState kind="loading" />
       </PageShell>
     );
   }
@@ -371,18 +383,16 @@ export function PromptLibrary({
           hasActivePrompts={statusCounts.active > 0}
         />
       }
-      controls={
-        <PromptFilterControls
-          search={search}
-          onSearchChange={setSearch}
-          filters={filters}
-          onFiltersChange={setFilters}
-          personas={personas}
-        />
-      }
+      controls={promptFilterControls({
+        search,
+        onSearchChange: setSearch,
+        filters,
+        onFiltersChange: setFilters,
+        personas,
+      })}
     >
-      <Stack gap="workspace">
-        {error ? (
+      <>
+        {error && !failedEmpty ? (
           <ReadError
             error={error}
             fallback="Could not load prompts. Check your connection and try again."
@@ -483,7 +493,7 @@ export function PromptLibrary({
           setsError={error !== null}
           retrySets={retry}
         />
-      </Stack>
+      </>
     </PageShell>
   );
 }

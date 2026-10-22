@@ -93,32 +93,17 @@ export function RunActions({
   const cancelable = isAuditCancelable(audit.status);
   return (
     <>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => onExport('csv')}
-        disabled={exporting !== null}
-      >
+      <Button variant="secondary" onClick={() => onExport('csv')} disabled={exporting !== null}>
         {exporting === 'csv' ? 'Exporting…' : 'Export CSV'}
       </Button>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => onExport('md')}
-        disabled={exporting !== null}
-      >
+      <Button variant="secondary" onClick={() => onExport('md')} disabled={exporting !== null}>
         {exporting === 'md' ? 'Exporting…' : 'Export MD'}
       </Button>
-      <Button
-        variant="destructive"
-        size="sm"
-        onClick={onCancel}
-        disabled={!cancelable || cancelPending}
-      >
+      <Button variant="destructive" onClick={onCancel} disabled={!cancelable || cancelPending}>
         {cancelPending ? 'Cancelling…' : 'Cancel run'}
       </Button>
       {audit.failed_count > 0 && onRerunFailures ? (
-        <Button variant="secondary" size="sm" onClick={onRerunFailures} disabled={rerunPending}>
+        <Button variant="secondary" onClick={onRerunFailures} disabled={rerunPending}>
           {rerunPending ? 'Creating repair…' : 'Rerun failed'}
         </Button>
       ) : null}

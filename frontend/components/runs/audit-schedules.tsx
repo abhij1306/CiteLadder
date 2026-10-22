@@ -323,7 +323,7 @@ function ScheduleRow({
           {pauseLabel(schedule)}
           {/* A one-time schedule that ran is finished, not paused; resuming would run it again. */}
           {finishedOnce(schedule) ? null : (
-            <Button size="sm" variant="secondary" disabled={resuming} onClick={onResume}>
+            <Button variant="secondary" disabled={resuming} onClick={onResume}>
               Resume
             </Button>
           )}

@@ -5,7 +5,7 @@ import { Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { CardHeader } from '@/components/ui/card';
-import { FilterRow } from '@/components/ui/filter-row';
+import { FilterBar } from '@/components/ui/filter-bar';
 import { SearchField } from '@/components/ui/search-field';
 import { downloadCsv } from '@/lib/csv/download';
 import { standingLabel } from '@/lib/visibility/source-pages';
@@ -103,7 +103,7 @@ export function SourceTableToolbar({
 
   return (
     <CardHeader>
-      <FilterRow
+      <FilterBar
         search={
           <SearchField
             value={search}
@@ -113,17 +113,19 @@ export function SourceTableToolbar({
             aria-label={dimension === 'url' ? 'Search URLs' : 'Search domains'}
           />
         }
-        searchWidth="sm"
+        filters={
+          <>
+            {domainControl}
+            {typeControl}
+          </>
+        }
         actions={
           <Button variant="secondary" onClick={onExport} disabled={rows.length === 0}>
             <Download className="size-3.5" aria-hidden />
             Export
           </Button>
         }
-      >
-        {domainControl}
-        {typeControl}
-      </FilterRow>
+      />
     </CardHeader>
   );
 }

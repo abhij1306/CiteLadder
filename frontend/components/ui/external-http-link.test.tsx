@@ -32,7 +32,7 @@ describe('ExternalHttpLink', () => {
   it('keeps slotted button attributes and events on a valid contact link', () => {
     const onClick = vi.fn((event: MouseEvent<HTMLButtonElement>) => event.preventDefault());
     render(
-      <Button asChild variant="secondary" size="sm" onClick={onClick} aria-label="Contact sales">
+      <Button asChild variant="secondary" onClick={onClick} aria-label="Contact sales">
         <ExternalHttpLink href="https://example.com/contact">Sales</ExternalHttpLink>
       </Button>,
     );

@@ -62,12 +62,7 @@ export function RunNotice({
           <RefreshCw className="size-4 animate-spin" aria-hidden />
           Analysis in progress: {run.completed_calls} of {run.planned_calls} requests complete.
         </span>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={cancelling}
-          onClick={() => onCancel(run.id)}
-        >
+        <Button variant="secondary" disabled={cancelling} onClick={() => onCancel(run.id)}>
           Cancel
         </Button>
       </div>

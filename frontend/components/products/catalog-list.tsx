@@ -5,13 +5,12 @@ import { ChevronDown, ChevronRight, PackageOpen, SearchX } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { EmptyState } from '@/components/ui/empty-state';
 import { listRowClasses } from '@/components/ui/list-row';
 import { panelClasses } from '@/components/ui/panel';
 import { SearchField } from '@/components/ui/search-field';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Pressable } from '@/components/ui/pressable';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import { targetKey } from '@/lib/products/use-commerce-target';
 import { cn } from '@/lib/utils';
@@ -326,13 +325,13 @@ export function CatalogList({
   const shown = filteredCatalog(categories, products, needle);
   const empty = !shown.categories.length && !shown.uncategorized.length;
 
-  if (query.isPending) return <Skeleton className="h-96 w-full" />;
+  if (query.isPending) return <QueryState kind="loading" label="Loading the catalog…" />;
   if (query.isError)
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         {...readErrorProps(query)}
         fallback="The catalog could not be loaded."
-        className="p-[var(--card-padding)]"
       />
     );
   return (
@@ -350,13 +349,12 @@ export function CatalogList({
       </div>
       <div className="grid min-w-0 gap-3 p-[var(--card-padding)] pt-3">
         {empty ? (
-          <EmptyState
-            variant="compact"
+          <QueryState
+            kind="empty"
             icon={needle ? SearchX : PackageOpen}
             headingLevel={3}
             heading={needle ? `Nothing matches “${search.trim()}”.` : 'Nothing projected yet.'}
             description={needle ? undefined : emptyCatalogHint(query.data?.projection.applies)}
-            className="px-2"
           />
         ) : (
           <CatalogTree

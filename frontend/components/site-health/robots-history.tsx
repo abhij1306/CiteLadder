@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { PageLoading } from '@/components/layout/page-loading';
 import { useQuery } from '@tanstack/react-query';
 import type { robotsHistoryPageSchema } from '@citeladder/contracts/site-health';
 import type { z } from 'zod';
@@ -7,7 +6,7 @@ import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Pager } from '@/components/ui/pager';
 import { DisplayTime } from '@/components/ui/display-time';
 import { LineDiff } from '@/components/ui/line-diff';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import {
   Table,
@@ -36,10 +35,12 @@ export function RobotsHistory({
 }>) {
   const pager = useCursorTable(projectId);
   const query = useQuery(siteHealthQueries.robotsHistory(workspaceId, projectId, pager.cursor));
-  if (query.isPending) return <PageLoading label="Loading robots.txt observations…" />;
+  if (query.isPending)
+    return <QueryState kind="loading" label="Loading robots.txt observations…" />;
   if (query.isError)
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={query.error}
         fallback="robots.txt history is unavailable."
         onRetry={() => void query.refetch()}

@@ -34,7 +34,7 @@ export function MutationNotice({
         <span>{notice.message}</span>
         {notice.retryable && onRetry ? (
           <div>
-            <Button type="button" variant="ghost" size="sm" onClick={onRetry}>
+            <Button type="button" variant="ghost" onClick={onRetry}>
               Try again
             </Button>
           </div>

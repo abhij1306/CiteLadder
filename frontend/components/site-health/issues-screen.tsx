@@ -4,10 +4,9 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ProjectLink } from '@/components/layout/scoped-link';
 
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { IssuesCatalog } from '@/components/site-health/issues-catalog';
 import { ICONS } from '@/lib/icons';
@@ -65,7 +64,7 @@ function IssuesDataRegion({
   if (projectLoading || dashboard.isLoading)
     return (
       <PageShell>
-        <PageLoading label="Loading issues…" />
+        <QueryState kind="loading" label="Loading issues…" />
       </PageShell>
     );
 
@@ -74,7 +73,8 @@ function IssuesDataRegion({
   if (dashboard.isError && (accessDenied || !dashboard.data)) {
     return (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           error={dashboard.error}
           fallback={
             accessDenied
@@ -115,7 +115,8 @@ function IssuesLoadedRegion({
       />
     ) : (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           error={dashboard.error}
           fallback="Could not refresh Site Health."
           onRetry={() => void dashboard.refetch()}
@@ -127,7 +128,8 @@ function IssuesLoadedRegion({
   if (!crawl) {
     return (
       <PageShell>
-        <EmptyState
+        <QueryState
+          kind="empty"
           icon={ICONS.issues}
           heading="No Site Health crawl yet"
           description="Run Site Health to discover and analyze this project's pages — grouped issues will appear here once a crawl finishes."

@@ -1,7 +1,8 @@
 import { renderWithProviders as render } from '@/test/render';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { LOADING_INDICATOR_DELAY_MS } from '@/lib/config/operational';
 import type { FailureScope, SelectionStatus } from '@/lib/project/selection';
 
 const replace = vi.fn();
@@ -211,7 +212,7 @@ describe('OnboardingGate', () => {
     expect(screen.getByText('You have read-only access to this workspace.')).toBeInTheDocument();
   });
 
-  it('renders an authorized project without a loader', () => {
+  it('renders an authorized project without a loader', async () => {
     render(
       <OnboardingGate>
         <p>workspace</p>
@@ -219,6 +220,15 @@ describe('OnboardingGate', () => {
     );
 
     expect(screen.getByText('workspace')).toBeInTheDocument();
-    expect(screen.queryByTestId('page-loading')).not.toBeInTheDocument();
+    // A loading indicator announces itself only after its reveal delay, so wait
+    // that out before checking none was drawn.
+    await act(
+      () =>
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, LOADING_INDICATOR_DELAY_MS);
+        }),
+    );
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.getByText('workspace')).toBeInTheDocument();
   });
 });

@@ -54,10 +54,10 @@ export function PromptAnswerStates({ latest }: Readonly<{ latest: PromptMetricIt
 function ActionHandoff({ actionId }: Readonly<{ actionId: string }>) {
   return (
     <>
-      <Button asChild variant="secondary" size="sm">
+      <Button asChild variant="secondary">
         <ProjectLink href={`/agent/actions/${actionId}`}>Open the Action</ProjectLink>
       </Button>
-      <Button asChild size="sm">
+      <Button asChild>
         <ProjectLink href={agentHandoffHref({ actionId })}>Work on this</ProjectLink>
       </Button>
     </>

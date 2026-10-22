@@ -3,22 +3,24 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { AiReferralsEmptyState } from '@/components/ai-traffic/empty-state';
 import { Alert } from '@/components/ui/alert';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
+import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { rangeLabel, type AiReferralsRange } from '@/lib/ai-traffic/options';
 import { isAiReferralsEmpty } from '@/lib/ai-traffic/series';
 import type { AiReferrals } from '@/lib/api/ai-traffic';
 
 import { AiReferralsDashboard } from './referrals-dashboard';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
-import { TabPanel } from '@/components/ui/tabs';
+import { TabPanel, type TabRowProps } from '@/components/ui/tabs';
 
 export function AiReferralsContent({
   projectId,
   projectLoading,
   range,
   query,
-  toolbar,
+  controls,
   tabs,
   notice,
 }: Readonly<{
@@ -26,8 +28,8 @@ export function AiReferralsContent({
   projectLoading: boolean;
   range: AiReferralsRange;
   query: UseQueryResult<AiReferrals, Error>;
-  toolbar: React.ReactNode;
-  tabs?: React.ReactNode;
+  controls: FilterBarProps;
+  tabs?: TabRowProps;
   notice?: React.ReactNode;
 }>) {
   // The control band stays drawn while the project resolves. Hiding it left the
@@ -41,15 +43,15 @@ export function AiReferralsContent({
     />
   );
   const region = notice ? (
-    <div className="grid gap-4">
+    <Stack gap="section">
       {notice}
       {data}
-    </div>
+    </Stack>
   ) : (
     data
   );
   return (
-    <PageShell tabs={tabs} controls={toolbar}>
+    <PageShell tabs={tabs} controls={controls}>
       {tabs ? <TabPanel value="referrals">{region}</TabPanel> : region}
     </PageShell>
   );
@@ -60,13 +62,14 @@ function AiReferralsDataRegion({
   projectLoading,
   range,
   query,
-}: Omit<React.ComponentProps<typeof AiReferralsContent>, 'toolbar' | 'notice'>) {
+}: Omit<React.ComponentProps<typeof AiReferralsContent>, 'controls' | 'notice'>) {
   if (projectLoading || (Boolean(projectId) && query.isLoading))
-    return <PageLoading label="Loading AI referrals…" />;
+    return <QueryState kind="loading" label="Loading AI referrals…" />;
   if (!projectId) return <ProjectRequiredState />;
   if (query.isError) {
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         {...readErrorProps(query)}
         fallback="AI referrals could not be loaded. Check your connection and try again."
       />

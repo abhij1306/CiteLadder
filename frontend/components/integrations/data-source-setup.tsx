@@ -150,11 +150,7 @@ function ConnectRow({
       status={required ? 'Not connected' : 'Optional'}
       action={
         canManage ? (
-          <Button
-            size="sm"
-            variant={required ? 'primary' : 'secondary'}
-            onClick={() => startConnect(family)}
-          >
+          <Button variant={required ? 'primary' : 'secondary'} onClick={() => startConnect(family)}>
             Connect {FAMILY_META[family].title}
           </Button>
         ) : (
@@ -191,9 +187,7 @@ function SourceRow({
         status={`${familyName} needs your consent again. Imported data is kept.`}
         action={
           canManage ? (
-            <Button size="sm" onClick={() => startConnect(family)}>
-              Reconnect {familyName}
-            </Button>
+            <Button onClick={() => startConnect(family)}>Reconnect {familyName}</Button>
           ) : null
         }
       />

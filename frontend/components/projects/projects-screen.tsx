@@ -5,8 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
-import { PageLoading } from '@/components/layout/page-loading';
+import { QueryState } from '@/components/ui/query-state';
 import { PageShell } from '@/components/layout/page-shell';
 import type { Project } from '@/lib/api/types';
 import { useProjectCreation } from '@/components/layout/use-project-creation';
@@ -56,14 +55,15 @@ export function ProjectsScreen() {
   if (projects.length === 0 && !projectsSettled) {
     return (
       <PageShell>
-        <PageLoading label="Loading your projects…" />
+        <QueryState kind="loading" label="Loading your projects…" />
       </PageShell>
     );
   }
   if (projects.length === 0) {
     return (
       <PageShell>
-        <EmptyState
+        <QueryState
+          kind="empty"
           icon={FolderOpen}
           heading="No projects yet"
           description={

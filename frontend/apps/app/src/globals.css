@@ -266,15 +266,19 @@
   --badge-height-sm: 20px;
   --badge-height-md: 24px;
   --textarea-min-height: 112px;
+  /* The one footprint a read's loading, error and first-use empty states
+     share (QueryState), so a read changing state never moves the page. */
+  --query-state-height: 160px;
   /* Chart plot heights: a sparkline-scale summary, the default analytical
      chart and a page's primary history. */
   --chart-height-sm: 160px;
   --chart-height-md: 240px;
   --chart-height-lg: 320px;
   --tab-height: var(--control-height-md);
-  /* Labels sit 24px apart: two paddings and the gap. The padding is the
-     tab's hover box and underline inset. */
-  --tab-pad-x: 10px;
+  /* A tab is padded like a button (12), so labels sit 28px apart: two
+     paddings and the gap. The padding is the tab's hover box and underline
+     inset. */
+  --tab-pad-x: 12px;
   --tab-gap: 4px;
   /* The page grammar's rows. Every route draws the same bands in the same
      order, each closed by a full-bleed hairline: identity, then tabs, then
@@ -866,6 +870,13 @@ a.focus-ring:active .type-caption {
   padding: var(--compact-gap) 0;
 }
 
+/* Inside a card a query state shares the card's surface, but keeps its
+   padding and its reserved height: the footprint is the same either way. */
+:where(.surface-card, .surface-panel, [role='dialog'], .table-frame) .query-state {
+  background: transparent;
+  box-shadow: none;
+}
+
 .flow-content.app-pane {
   box-shadow: var(--elevation-flow);
 }
@@ -1208,11 +1219,6 @@ input:-webkit-autofill:focus {
   }
 }
 
-/* Keep wrapping filter rows off their rules, including narrow viewports. */
-[data-page-band='control'] > div {
-  padding-block: 8px;
-}
-
 /* Box shadows disappear in forced colours; retain a system-colour boundary. */
 @media (forced-colors: active) {
   .control-raised,
@@ -1225,7 +1231,6 @@ input:-webkit-autofill:focus {
 
 @media (max-width: 700px) {
   :root {
-    --tab-pad-x: 8px;
     --page-header-padding-top: 20px;
     --page-header-padding-bottom: 16px;
     --page-header-gap: 12px;

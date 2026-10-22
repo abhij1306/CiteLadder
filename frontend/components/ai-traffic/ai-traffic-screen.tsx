@@ -5,12 +5,12 @@ import { useProjectContext } from '@/lib/project/project-context';
 import { crawlLogsAvailable, useCrawlSources } from '@/lib/ai-traffic/use-crawl-connections';
 import { useTrafficData, type TrafficDataTab } from '@/lib/ai-traffic/use-traffic-data';
 import { PageShell } from '@/components/layout/page-shell';
-import { PageLoading } from '@/components/layout/page-loading';
 import { Stack } from '@/components/ui/layout';
-import { TabsRoot, TabsBar, TabPanel } from '@/components/ui/tabs';
+import { QueryState } from '@/components/ui/query-state';
+import { TabsRoot, TabPanel, type TabRowProps } from '@/components/ui/tabs';
 import { Alert } from '@/components/ui/alert';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { readErrorProps } from '@/components/ui/read-error';
 import { AiReferralsScreen } from './referrals-screen';
 import { TrafficControls } from './traffic-controls';
 import { TrafficOverview, TrafficCrawlers, TrafficActivity } from './traffic-views';
@@ -43,18 +43,15 @@ export function AiTrafficScreen() {
   if (sources.data) crawlAvailable = crawlLogsAvailable(sources.data);
   else if (sources.isError || !activeProject) crawlAvailable = true;
   const tab = resolveTab(requested, crawlAvailable);
-  const tabs = (
-    <TabsBar
-      variant="band"
-      ariaLabel="AI Traffic views"
-      items={crawlAvailable === false ? TRAFFIC_TABS.filter((t) => !t.crawlOnly) : TRAFFIC_TABS}
-    />
-  );
+  const tabs: TabRowProps = {
+    ariaLabel: 'AI Traffic views',
+    items: crawlAvailable === false ? TRAFFIC_TABS.filter((t) => !t.crawlOnly) : TRAFFIC_TABS,
+  };
   // The default view waits for crawl availability; the tab band needs a selected tab.
   if (tab === null)
     return (
       <PageShell>
-        <PageLoading label="Loading AI Traffic…" />
+        <QueryState kind="loading" label="Loading AI Traffic…" />
       </PageShell>
     );
   return (
@@ -78,51 +75,76 @@ function TrafficDataView({
   tab,
   tabs,
   crawlAvailable,
-}: Readonly<{ tab: TrafficDataTab; tabs: React.ReactNode; crawlAvailable: boolean }>) {
+}: Readonly<{ tab: TrafficDataTab; tabs: TabRowProps; crawlAvailable: boolean }>) {
   const model = useTrafficData(tab);
-  const { projectId, workspaceId, summary, crawlers, activity, catalog, pager, next } = model;
-  const controls = <TrafficControls model={model} crawlAvailable={crawlAvailable} />;
+  const { projectId } = model;
+  const controls = { filters: <TrafficControls model={model} crawlAvailable={crawlAvailable} /> };
   // First load keeps the identity, tab and control bands; only the work waits.
   if (model.isLoading || model.current.isLoading)
     return (
       <PageShell tabs={tabs} controls={controls}>
-        <PageLoading label="Loading AI Traffic…" />
+        <QueryState kind="loading" label="Loading AI Traffic…" />
+      </PageShell>
+    );
+  // A failed read with nothing to show is the region's state, in the same
+  // footprint its loading state took.
+  if (model.current.isError && projectId)
+    return (
+      <PageShell tabs={tabs} controls={controls}>
+        <QueryState
+          kind="error"
+          {...readErrorProps(model.current)}
+          fallback="Could not read AI Traffic"
+        />
       </PageShell>
     );
   return (
     <PageShell tabs={tabs} controls={controls}>
-      <Stack gap="workspace">
-        <TrafficStatus model={model} />
-        {tab === 'overview' && summary.data ? (
-          <TrafficOverview
-            data={summary.data}
-            projectId={projectId}
-            workspaceId={workspaceId}
-            range={model.selection.range}
-            crawlAvailable={crawlAvailable}
-          />
-        ) : null}
-        {tab === 'crawlers' && crawlers.data ? (
-          <TrafficCrawlers
-            data={crawlers.data}
-            filters={{
-              range: model.selection.range,
-              verification:
-                model.selection.verification === 'default'
-                  ? undefined
-                  : model.selection.verification,
-            }}
-          />
-        ) : null}
-        {tab === 'activity' && activity.data ? (
-          <TrafficActivity data={activity.data} catalog={catalog.data} />
-        ) : null}
-        {tab === 'pages' ? <PagesPanel model={model} /> : null}
-        {tab === 'overview' ? null : (
-          <Pager hideWhenSinglePage page={pager.page} {...cursorControls(pager, next)} />
-        )}
-      </Stack>
+      <TrafficTabContent tab={tab} model={model} crawlAvailable={crawlAvailable} />
     </PageShell>
+  );
+}
+
+function TrafficTabContent({
+  tab,
+  model,
+  crawlAvailable,
+}: Readonly<{
+  tab: TrafficDataTab;
+  model: ReturnType<typeof useTrafficData>;
+  crawlAvailable: boolean;
+}>) {
+  const { projectId, workspaceId, summary, crawlers, activity, catalog, pager, next } = model;
+  return (
+    <Stack gap="workspace">
+      <TrafficStatus model={model} />
+      {tab === 'overview' && summary.data ? (
+        <TrafficOverview
+          data={summary.data}
+          projectId={projectId}
+          workspaceId={workspaceId}
+          range={model.selection.range}
+          crawlAvailable={crawlAvailable}
+        />
+      ) : null}
+      {tab === 'crawlers' && crawlers.data ? (
+        <TrafficCrawlers
+          data={crawlers.data}
+          filters={{
+            range: model.selection.range,
+            verification:
+              model.selection.verification === 'default' ? undefined : model.selection.verification,
+          }}
+        />
+      ) : null}
+      {tab === 'activity' && activity.data ? (
+        <TrafficActivity data={activity.data} catalog={catalog.data} />
+      ) : null}
+      {tab === 'pages' ? <PagesPanel model={model} /> : null}
+      {tab === 'overview' ? null : (
+        <Pager hideWhenSinglePage page={pager.page} {...cursorControls(pager, next)} />
+      )}
+    </Stack>
   );
 }
 function PagesPanel({ model }: Readonly<{ model: ReturnType<typeof useTrafficData> }>) {
@@ -141,13 +163,10 @@ function PagesPanel({ model }: Readonly<{ model: ReturnType<typeof useTrafficDat
   );
 }
 function TrafficStatus({ model }: Readonly<{ model: ReturnType<typeof useTrafficData> }>) {
-  const { current, projectId, exporting } = model;
+  const { projectId, exporting } = model;
   return (
     <>
       {projectId ? null : <ProjectRequiredState />}
-      {current.isError ? (
-        <ReadError {...readErrorProps(current)} fallback="Could not read AI Traffic" />
-      ) : null}
       {exporting.isError ? <Alert tone="danger">{exporting.error.message}</Alert> : null}
     </>
   );

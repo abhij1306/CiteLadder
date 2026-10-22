@@ -14,7 +14,7 @@ import { McpConnections } from '@/components/settings/mcp-connections';
 import { ApiKeys } from '@/components/settings/api-keys';
 import { ProviderSettings } from '@/components/settings/provider-settings';
 import { TimeZoneSetting } from '@/components/settings/time-zone-setting';
-import { TabPanel, TabsBar, TabsRoot } from '@/components/ui/tabs';
+import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { PageShell } from '@/components/layout/page-shell';
 import { projectsApi } from '@/lib/api/projects';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -193,13 +193,10 @@ export function SettingsScreen() {
     <TabsRoot value={activeTab} onValueChange={setActiveTab}>
       <PageShell
         measure="workflow"
-        tabs={
-          <TabsBar
-            variant="band"
-            items={tabs.map((tab) => ({ value: tab.id, label: tab.label }))}
-            ariaLabel="Settings sections"
-          />
-        }
+        tabs={{
+          items: tabs.map((tab) => ({ value: tab.id, label: tab.label })),
+          ariaLabel: 'Settings sections',
+        }}
       >
         <TabPanel value="general" forceMount className="focus-ring data-[state=inactive]:hidden">
           <SettingsSections>

@@ -18,14 +18,13 @@ import { DataSourceSetup } from '@/components/integrations/data-source-setup';
 import { usePerformanceSelection } from './use-performance-selection';
 import { usePerformanceSync } from './use-performance-sync';
 import { useRangeProjection } from './use-range-projection';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Alert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { ChartNoAxesColumn } from 'lucide-react';
 import { integrationsApi } from '@/lib/api/integrations';
 import { performanceQueries, type PerformanceDashboard } from '@/lib/api/performance';
@@ -138,7 +137,8 @@ function PerformanceEmptyState({
 }: Readonly<{ data: PerformanceDashboard; projecting: boolean }>) {
   if (projecting) {
     return (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={ChartNoAxesColumn}
         heading="Building this performance range"
         description="CiteLadder is preparing this view from the traffic evidence already imported."
@@ -147,7 +147,8 @@ function PerformanceEmptyState({
   }
   const firstUse = data.coverage.covered_days === 0 && data.selected.snapshot_id === null;
   return (
-    <EmptyState
+    <QueryState
+      kind="empty"
       icon={ChartNoAxesColumn}
       heading={firstUse ? 'No search performance evidence yet' : 'No performance evidence here'}
       description={
@@ -280,13 +281,18 @@ export function PerformanceScreen() {
   if (!projectId)
     return (
       <PageShell>
-        {isLoading ? <PageLoading label="Loading performance…" /> : <ProjectRequiredState />}
+        {isLoading ? (
+          <QueryState kind="loading" label="Loading performance…" />
+        ) : (
+          <ProjectRequiredState />
+        )}
       </PageShell>
     );
   if (dashboard.isError)
     return (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           {...readErrorProps(dashboard)}
           fallback="Could not load performance data. Check your connection and try again."
         />
@@ -300,7 +306,7 @@ export function PerformanceScreen() {
   if (!dashboard.data)
     return (
       <PageShell>
-        <PageLoading label="Loading performance…" />
+        <QueryState kind="loading" label="Loading performance…" />
       </PageShell>
     );
 
@@ -332,23 +338,25 @@ export function PerformanceScreen() {
           sync={sync}
         />
       }
-      controls={
-        <PerformanceToolbar
-          selection={selection}
-          selectedLabel={selectedLabel}
-          onOpenRange={() => {
-            setDialogTab('filter');
-            setDialogOpen(true);
-          }}
-          onOpenCompare={() => {
-            setDialogTab('compare');
-            setDialogOpen(true);
-          }}
-          onSelectRange={setSelection}
-          comparing={selection.compare !== 'none'}
-          onReset={resetFilters}
-        />
-      }
+      controls={{
+        filters: (
+          <PerformanceToolbar
+            selection={selection}
+            selectedLabel={selectedLabel}
+            onOpenRange={() => {
+              setDialogTab('filter');
+              setDialogOpen(true);
+            }}
+            onOpenCompare={() => {
+              setDialogTab('compare');
+              setDialogOpen(true);
+            }}
+            onSelectRange={setSelection}
+            comparing={selection.compare !== 'none'}
+            onReset={resetFilters}
+          />
+        ),
+      }}
     >
       <Stack gap="workspace">
         <DataSourceSetup

@@ -14,24 +14,11 @@ type TabItem<T extends string> = {
 };
 const ActiveTabContext = createContext<string | null>(null);
 
-type TabsBarProps<T extends string> = {
+type TabStripProps<T extends string> = {
   items: readonly TabItem<T>[];
   ariaLabel: string;
   className?: string;
   onIntent?: (value: T) => void;
-  /**
-   * Where this strip sits.
-   *
-   *   `section` — tabs heading a section inside the content region. They draw
-   *               their own rule, because nothing around them does.
-   *   `band`    — the route's navigation band in `PageShell`. The band owns the
-   *               rule and runs it the full width of the paper, so the strip
-   *               must not draw a second one a pixel above it.
-   *
-   * A band strip carries tabs and nothing else: route actions belong to the
-   * identity band, and filters belong to the control band.
-   */
-  variant?: 'section' | 'band';
   /**
    * Triggers share the list's full width instead of hugging their labels.
    * For a tab strip that heads a card, so the row has no dead right edge.
@@ -39,7 +26,7 @@ type TabsBarProps<T extends string> = {
   fill?: boolean;
 };
 
-export type TabsProps<T extends string> = TabsBarProps<T> & {
+export type TabsProps<T extends string> = TabStripProps<T> & {
   value: T;
   onValueChange: (value: T) => void;
   children?: ReactNode;
@@ -78,20 +65,37 @@ export function TabsRoot<T extends string>({
   );
 }
 
+/** What a route passes to `PageShell`'s `tabs`. */
+export type TabRowProps<T extends string = string> = Readonly<
+  Pick<TabStripProps<T>, 'items' | 'ariaLabel' | 'onIntent'>
+>;
+
+/**
+ * TabRow — the route's navigation band: tabs and nothing else (route actions
+ * belong to the identity band, filters to the control band). `PageShell`
+ * renders it from its `tabs` prop inside a `TabsRoot` the route owns, so the
+ * selected value spans the band and the panels two bands below. The band owns
+ * the full-width rule, so the strip draws none of its own. Tabs share the
+ * buttons' 12px padding and 32px height.
+ */
+export function TabRow<T extends string>({ items, ariaLabel, onIntent }: TabRowProps<T>) {
+  return <TabStrip items={items} ariaLabel={ariaLabel} onIntent={onIntent} ruled={false} />;
+}
+
 /** The strip. Must be rendered inside a `TabsRoot` (or a `Tabs`). */
-export function TabsBar<T extends string>({
+function TabStrip<T extends string>({
   items,
   ariaLabel,
   className,
   onIntent,
-  variant = 'section',
+  ruled,
   fill = false,
-}: Readonly<TabsBarProps<T>>) {
+}: Readonly<TabStripProps<T> & { ruled: boolean }>) {
   const value = useContext(ActiveTabContext);
   return (
     // The rule sits on the wrapper; the strip overhangs it by the tab padding,
     // so a padded tab's label still starts on the content edge.
-    <div className={cn('min-w-0', variant === 'section' && 'border-border border-b')}>
+    <div className={cn('min-w-0', ruled && 'border-border border-b')}>
       <TabsPrimitive.List
         aria-label={ariaLabel}
         className={cn(
@@ -116,7 +120,7 @@ function TabTriggers<T extends string>({
   value,
   fill,
   onIntent,
-}: Readonly<Pick<TabsBarProps<T>, 'items' | 'onIntent'> & { value: unknown; fill: boolean }>) {
+}: Readonly<Pick<TabStripProps<T>, 'items' | 'onIntent'> & { value: unknown; fill: boolean }>) {
   return (
     <>
       {items.map((item) => (
@@ -164,7 +168,8 @@ export function Tabs<T extends string>({
 }: Readonly<TabsProps<T>>) {
   return (
     <TabsRoot value={value} onValueChange={onValueChange} className={rootClassName}>
-      <TabsBar {...bar} />
+      {/* Section tabs draw their own rule, because nothing around them does. */}
+      <TabStrip {...bar} ruled />
       {children}
     </TabsRoot>
   );

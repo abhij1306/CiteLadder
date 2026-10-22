@@ -79,15 +79,10 @@ function CompetitorRow({
           aria-label={`Website for ${displayName}`}
           className="my-1.5"
         />
-        <Button
-          type="button"
-          size="sm"
-          onClick={save}
-          disabled={!draft.trim() || !draftName.trim()}
-        >
+        <Button type="button" onClick={save} disabled={!draft.trim() || !draftName.trim()}>
           Save
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={cancel}>
+        <Button type="button" variant="ghost" onClick={cancel}>
           Cancel
         </Button>
       </li>
@@ -176,12 +171,7 @@ export function ReviewStep({
         meta={`${selectedCompetitors} of ${maximumCompetitors ?? '…'}`}
         help="Pick the brands to compare against in every answer."
         action={
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onAddCompetitor}
-            disabled={competitorLimitReached}
-          >
+          <Button variant="ghost" onClick={onAddCompetitor} disabled={competitorLimitReached}>
             <Plus className="size-3.5" aria-hidden />
             Add
           </Button>

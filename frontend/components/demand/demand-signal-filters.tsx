@@ -1,9 +1,7 @@
 'use client';
 
-import { FilterChip } from '@/components/ui/filter-chip';
-import { FilterRow } from '@/components/ui/filter-row';
+import { Button } from '@/components/ui/button';
 import { InfoHint } from '@/components/ui/info-hint';
-import { SearchField } from '@/components/ui/search-field';
 import type { DemandSnapshot } from '@/lib/api/demand';
 import { DEMAND_DETECTORS } from '@/lib/config/demand';
 import { detectorStates, FILTER_TABS, type FilterTab } from '@/lib/demand/signals';
@@ -30,25 +28,22 @@ function detectorStatus(state: string | undefined): string | null {
 }
 
 /**
- * The one control row over the signals table. Each filter chip carries its
- * signal count and, for a detector's filter, that detector's status when it
- * did not run in full; the hint beside it gives the detector's rule. Data
- * caveats shared by the signals sit in one hint at the end.
+ * The filters in the signals table's control band. Each filter is a pressed-
+ * state button carrying its signal count and, for a detector's filter, that
+ * detector's status when it did not run in full; the hint beside it gives the
+ * detector's rule. Data caveats shared by the signals sit in one hint at the
+ * end.
  */
 export function DemandSignalFilters({
   snapshot,
   activeTab,
   onTabChange,
   tabCounts,
-  searchQuery,
-  onSearchChange,
 }: Readonly<{
   snapshot: DemandSnapshot;
   activeTab: FilterTab;
   onTabChange: (tab: FilterTab) => void;
   tabCounts: ReadonlyMap<FilterTab, number>;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
 }>) {
   const detectors = detectorStates(snapshot.summary);
   const limitations = Array.from(
@@ -56,16 +51,7 @@ export function DemandSignalFilters({
   );
 
   return (
-    <FilterRow
-      search={
-        <SearchField
-          value={searchQuery}
-          onValueChange={onSearchChange}
-          placeholder="Filter queries or pages…"
-          aria-label="Filter queries or pages"
-        />
-      }
-    >
+    <>
       {FILTER_TABS.map(({ tab, label }) => {
         const count = tabCounts.get(tab) ?? 0;
         // Branded stays hidden while empty, but a tab the user has already
@@ -76,10 +62,15 @@ export function DemandSignalFilters({
         const status = detector ? detectorStatus(state?.state) : null;
         return (
           <span key={tab} className="inline-flex items-center gap-1">
-            <FilterChip active={activeTab === tab} onClick={() => onTabChange(tab)} count={count}>
+            <Button
+              variant="secondary"
+              aria-pressed={activeTab === tab}
+              onClick={() => onTabChange(tab)}
+            >
               {label}
               {status ? <span className="text-muted">{` · ${status}`}</span> : null}
-            </FilterChip>
+              <span className="text-muted tabular-nums">{count}</span>
+            </Button>
             {detector ? (
               <InfoHint label={`How the ${detector.label} detector works`}>
                 {[detector.rule, ...(state?.limitations ?? [])].join(' ')}
@@ -91,6 +82,6 @@ export function DemandSignalFilters({
       {limitations.length > 0 ? (
         <InfoHint label="Data caveats">{limitations.join(' ')}</InfoHint>
       ) : null}
-    </FilterRow>
+    </>
   );
 }

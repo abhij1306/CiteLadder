@@ -6,14 +6,12 @@ import { useSearchParams } from 'react-router-dom';
 import type { InternalLink, InternalLinkAnalysis } from '@citeladder/contracts/site-health';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { PageLoading } from '@/components/layout/page-loading';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
-import { EmptyState } from '@/components/ui/empty-state';
-import { FilterRow } from '@/components/ui/filter-row';
+import { FilterBar } from '@/components/ui/filter-bar';
 import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { SearchField } from '@/components/ui/search-field';
 import { Select } from '@/components/ui/select';
 import {
@@ -239,7 +237,8 @@ function Notices({ read }: Readonly<{ read: LinksRead }>) {
   return (
     <>
       {read.query.isError ? (
-        <ReadError
+        <QueryState
+          kind="error"
           error={read.query.error}
           fallback="Internal links could not be loaded."
           onRetry={() => void read.query.refetch()}
@@ -248,7 +247,7 @@ function Notices({ read }: Readonly<{ read: LinksRead }>) {
       {mutationError ? (
         <Alert>{humanizeApiError(mutationError, 'Analysis could not be started.').message}</Alert>
       ) : null}
-      {read.query.isPending ? <PageLoading label="Loading internal links…" /> : null}
+      {read.query.isPending ? <QueryState kind="loading" label="Loading internal links…" /> : null}
     </>
   );
 }
@@ -259,14 +258,16 @@ function StartState({ read }: Readonly<{ read: LinksRead }>) {
   if (!data) return null;
   if (!data.crawl_id)
     return (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={ICONS.site}
         heading="Run a crawl first"
         description="A completed crawl provides the pages and existing links to analyze."
       />
     );
   return (
-    <EmptyState
+    <QueryState
+      kind="empty"
       icon={ICONS.site}
       heading="Find missing internal links"
       description="Compare related pages from your latest crawl and suggest the contextual links each page is missing."
@@ -343,8 +344,7 @@ function LinksBody({
         </output>
       ) : null}
       {analysis.recommendations.length ? (
-        <FilterRow
-          searchWidth="lg"
+        <FilterBar
           search={
             <SearchField
               value={params.get('links_q') ?? ''}
@@ -353,17 +353,18 @@ function LinksBody({
               aria-label="Search pages and anchors"
             />
           }
-        >
-          <Select
-            ariaLabel="Action status"
-            value={params.get('links_status') ?? ''}
-            onValueChange={(value) => update('links_status', value)}
-            options={[
-              { value: '', label: 'All statuses' },
-              ...Object.entries(ACTION_STATUS_LABEL).map(([value, label]) => ({ value, label })),
-            ]}
-          />
-        </FilterRow>
+          filters={
+            <Select
+              ariaLabel="Action status"
+              value={params.get('links_status') ?? ''}
+              onValueChange={(value) => update('links_status', value)}
+              options={[
+                { value: '', label: 'All statuses' },
+                ...Object.entries(ACTION_STATUS_LABEL).map(([value, label]) => ({ value, label })),
+              ]}
+            />
+          }
+        />
       ) : null}
       <LinksTable
         links={links}
@@ -391,9 +392,7 @@ function LinksTable({
   const [pageSize, setPageSize] = useState<TablePageSize>(TABLE_DEFAULT_PAGE_SIZE);
   const pagination = useTablePage(links.length, pageSize);
   if (!links.length)
-    return (
-      <EmptyState variant="compact" icon={ICONS.site} heading={emptyReason} headingLevel={3} />
-    );
+    return <QueryState kind="empty" icon={ICONS.site} heading={emptyReason} headingLevel={3} />;
   return (
     <div className="min-w-0">
       <Table>

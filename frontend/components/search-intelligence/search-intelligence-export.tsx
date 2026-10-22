@@ -77,7 +77,7 @@ export function SearchIntelligenceExport({
   };
   return (
     <>
-      <Button variant="ghost" size="sm" disabled={exporting} onClick={() => void exportSaved()}>
+      <Button variant="ghost" disabled={exporting} onClick={() => void exportSaved()}>
         {exporting ? 'Exporting…' : 'Export saved CSV'}
       </Button>
       {exportError ? <Alert>{exportError}</Alert> : null}

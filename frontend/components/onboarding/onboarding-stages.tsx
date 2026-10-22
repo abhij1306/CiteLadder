@@ -160,7 +160,7 @@ export function DiscoveryStage({
                   ? 'The website address is invalid. Go back and correct it.'
                   : 'We could not confirm that this website exists. Check the address and try again.'}
               </span>
-              <Button size="sm" variant="ghost" onClick={onEdit}>
+              <Button variant="ghost" onClick={onEdit}>
                 Edit website
               </Button>
             </div>
@@ -170,7 +170,7 @@ export function DiscoveryStage({
           <Alert tone="warning">
             <div className="flex items-center justify-between gap-3">
               <span>{onboardingErrorMessage(discovery.error)}</span>
-              <Button size="sm" variant="ghost" onClick={discovery.retry}>
+              <Button variant="ghost" onClick={discovery.retry}>
                 Retry
               </Button>
             </div>
@@ -241,7 +241,7 @@ export function ReviewStage({
           <Alert tone="warning">
             <div className="flex items-center justify-between gap-3">
               <span>We could not load the competitor limit.</span>
-              <Button size="sm" variant="ghost" onClick={() => catalog.refetch()}>
+              <Button variant="ghost" onClick={() => catalog.refetch()}>
                 Try again
               </Button>
             </div>

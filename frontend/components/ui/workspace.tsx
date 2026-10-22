@@ -19,16 +19,6 @@ import { cn } from '@/lib/utils';
  */
 export const hairlineBandClasses = 'divide-border-subtle grid divide-y sm:divide-x sm:divide-y-0';
 
-/**
- * The pane's second row. Tabs, filter chips and toolbars are all shorter than
- * each other, so without a shared band each route's first row sat at its own
- * height and none of them lined up with the sidebar's search row. One
- * tab-height band, contents centred, puts every route's second row on the
- * sidebar's second line.
- */
-export const pageToolbarClasses =
-  'flex min-h-[var(--tab-height)] flex-wrap content-center items-center gap-2';
-
 export const hairlineBandItemClasses = 'min-w-0 py-3 sm:px-4 sm:first:ps-0 sm:last:pe-0';
 
 /**

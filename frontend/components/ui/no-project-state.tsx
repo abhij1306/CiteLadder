@@ -2,7 +2,7 @@ import { FolderOpen, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 
 /**
  * NoProjectState — what a project-scoped route shows when no project is
@@ -21,24 +21,22 @@ const NO_PROJECT_HEADING = 'No project selected';
 export function NoProjectState({
   createProjectHref,
   headingLevel = 2,
-  className,
 }: Readonly<{
   /** The new-project route; omit when the viewer cannot create one. */
   createProjectHref?: string | null;
   headingLevel?: 1 | 2 | 3;
-  className?: string;
 }>) {
   return (
-    <EmptyState
+    <QueryState
+      kind="empty"
       icon={FolderOpen}
       heading={NO_PROJECT_HEADING}
       // Without the action the only way forward is the project switcher.
       description={createProjectHref ? undefined : 'Select a project first.'}
       headingLevel={headingLevel}
-      className={className}
       action={
         createProjectHref ? (
-          <Button asChild size="sm">
+          <Button asChild>
             <Link to={createProjectHref}>
               <Plus className="size-4" aria-hidden />
               Create project

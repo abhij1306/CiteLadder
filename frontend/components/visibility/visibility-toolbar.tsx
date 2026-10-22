@@ -4,7 +4,7 @@ import { CalendarRange, CircleHelp, Download } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { Button } from '@/components/ui/button';
-import { FilterChoice, FilterTrigger } from '@/components/ui/filter-row';
+import { FilterChoice, FilterTrigger } from '@/components/ui/filter-bar';
 import {
   Dropdown,
   DropdownContent,

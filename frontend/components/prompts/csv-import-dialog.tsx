@@ -103,7 +103,7 @@ export function CsvImportDialog({
           <div className="min-w-60 flex-1">
             <CsvImportFileInput inputRef={inputRef} onSelect={(file) => void selectFile(file)} />
           </div>
-          <Button variant="secondary" size="sm" onClick={downloadSample}>
+          <Button variant="secondary" onClick={downloadSample}>
             <Download className="size-4" aria-hidden />
             Download sample CSV
           </Button>

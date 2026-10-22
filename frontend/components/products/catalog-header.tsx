@@ -204,11 +204,10 @@ function CatalogActions({
     <>
       <CsvImportTrigger
         accessibleLabel="Import catalog CSV"
-        size="sm"
         pending={importing}
         onSelect={onImport}
       />
-      <Button size="sm" disabled={refreshing} onClick={onRefresh}>
+      <Button disabled={refreshing} onClick={onRefresh}>
         {crawl ? 'Refresh from Site Health' : 'Run Site Health crawl'}
       </Button>
     </>

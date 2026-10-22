@@ -3,10 +3,10 @@
 import { Link } from 'react-router-dom';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { GateNoticeFrame } from '@/components/layout/gate-notice-frame';
 import { ShellFallback } from '@/components/layout/shell-fallback';
 import { Button } from '@/components/ui/button';
+import { QueryState } from '@/components/ui/query-state';
 import { WORKSPACE_LOADING_STALL_MS } from '@/lib/config/operational';
 import { workspaceDestination } from '@/lib/navigation/project-destination';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -76,7 +76,7 @@ function ProjectSetupLoading({
     return () => window.clearTimeout(timer);
   }, [attempt]);
 
-  if (!stalled) return <PageLoading label="Loading your workspace…" />;
+  if (!stalled) return <QueryState kind="loading" label="Loading your workspace…" />;
   return (
     <ProjectSetupBlocked
       title="Your workspace is taking longer to load"

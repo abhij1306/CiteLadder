@@ -1,6 +1,6 @@
 'use client';
 
-import { PageLoading } from '@/components/layout/page-loading';
+import { QueryState } from '@/components/ui/query-state';
 import { PageShell } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -22,7 +22,7 @@ export function ProductsScreen() {
   if (isLoading)
     return (
       <PageShell>
-        <PageLoading label="Loading Commerce…" />
+        <QueryState kind="loading" label="Loading Commerce…" />
       </PageShell>
     );
   if (!projectId)

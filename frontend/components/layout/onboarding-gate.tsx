@@ -3,9 +3,9 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, type ReactNode } from 'react';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { GateNoticeFrame } from '@/components/layout/gate-notice-frame';
 import { Button } from '@/components/ui/button';
+import { QueryState } from '@/components/ui/query-state';
 import { useCanonicalProjectUrl, workspaceDestination } from '@/lib/navigation/project-destination';
 import { isWorkspaceOnlyRoute, resolveGate, type NoticeKind } from '@/lib/project/bootstrap';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -43,8 +43,8 @@ export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) 
   useOnboardingRedirect(state === 'redirecting', activeWorkspaceId);
   useCanonicalProjectUrl(status === 'ready' && projectRequired);
 
-  if (state === 'redirecting') return <PageLoading label="Opening project setup…" />;
-  if (state === 'loading') return <PageLoading label="Loading your workspace…" />;
+  if (state === 'redirecting') return <QueryState kind="loading" label="Opening project setup…" />;
+  if (state === 'loading') return <QueryState kind="loading" label="Loading your workspace…" />;
   if (state !== 'ready') {
     return (
       <GateNotice

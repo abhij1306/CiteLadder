@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Select } from '@/components/ui/select';
 import { DisplayTime } from '@/components/ui/display-time';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { textRole } from '@/components/ui/typography';
 import type {
   SearchIntelligenceDataset,
@@ -47,7 +48,8 @@ export function SavedViewControls({
   );
 }
 
-export function ScopeBand({
+/** The saved view's scope, for `PageShell`'s control band. */
+export function scopeControls({
   data,
   tab,
   latest,
@@ -57,17 +59,21 @@ export function ScopeBand({
   tab: string;
   latest?: SearchIntelligenceDataset;
   marketControl?: ReactNode;
-}>) {
-  return (
-    <div className="flex w-full flex-wrap items-center gap-3 py-2 min-[981px]:py-0">
-      <span className={textRole('itemTitle')}>
-        {latest?.target_hostname ?? data.owned_targets[0]?.hostname}
-      </span>
+}>): FilterBarProps {
+  return {
+    filters: (
+      <>
+        <span className={textRole('itemTitle')}>
+          {latest?.target_hostname ?? data.owned_targets[0]?.hostname}
+        </span>
+        <span className={textRole('caption')}>
+          {tab === 'backlinks' ? 'All referring countries' : savedMarketLabel(latest, data)}
+        </span>
+        {marketControl}
+      </>
+    ),
+    actions: (
       <span className={textRole('caption')}>
-        {tab === 'backlinks' ? 'All referring countries' : savedMarketLabel(latest, data)}
-      </span>
-      {marketControl}
-      <span className={textRole('caption', 'ml-auto')}>
         {latest?.published_at ? (
           <>
             Saved <DisplayTime value={latest.published_at} />
@@ -76,8 +82,8 @@ export function ScopeBand({
           'No saved analysis'
         )}
       </span>
-    </div>
-  );
+    ),
+  };
 }
 
 function savedMarketLabel(

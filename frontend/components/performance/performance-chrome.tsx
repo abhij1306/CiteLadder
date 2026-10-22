@@ -110,7 +110,7 @@ export function PerformanceToolbar({
       {/* Reset belongs to the comparison: it is what returns "Compare" to
           "More". With no comparison active there is nothing it would undo. */}
       {comparing ? (
-        <Button variant="ghost" size="sm" onClick={onReset} data-testid="reset-filters-button">
+        <Button variant="ghost" onClick={onReset} data-testid="reset-filters-button">
           <RotateCcw className="size-4" aria-hidden />
           Reset filters
         </Button>
@@ -140,7 +140,6 @@ export function PerformanceActions({
       </span>
       <Button
         variant="secondary"
-        size="sm"
         onClick={() => sync.mutation.mutate()}
         disabled={!hasConnections}
         pending={sync.syncing || sync.mutation.isPending}

@@ -179,7 +179,6 @@ function SignalRow({
         <div className="flex justify-end gap-1">
           <Button
             variant="ghost"
-            size="sm"
             aria-label={`Inspect evidence for ${target}`}
             onClick={() => onInspect(signal)}
           >
@@ -187,7 +186,7 @@ function SignalRow({
           </Button>
           {/* A signal promoted into an Action opens it; any other is asked about. */}
           {signal.action_id ? (
-            <Button variant="secondary" size="sm" asChild>
+            <Button variant="secondary" asChild>
               <ProjectLink
                 href={`/agent/actions/${signal.action_id}`}
                 aria-label={`Open the Action for ${target}`}
@@ -197,7 +196,7 @@ function SignalRow({
               </ProjectLink>
             </Button>
           ) : (
-            <Button variant="ghost" size="sm" asChild>
+            <Button variant="ghost" asChild>
               <ProjectLink
                 href={demandSignalHandoffHref(signal)}
                 aria-label={`Ask agent about ${target}`}

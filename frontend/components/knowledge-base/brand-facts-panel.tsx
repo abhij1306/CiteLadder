@@ -220,18 +220,16 @@ function FactRow({
             <>
               {fact.status === 'draft' ? (
                 <Button
-                  size="sm"
                   disabled={pending}
                   onClick={() => void onChange({ status: 'confirmed' }).catch(() => undefined)}
                 >
                   Confirm
                 </Button>
               ) : null}
-              <Button size="sm" variant="secondary" onClick={() => setEditing(fact.statement)}>
+              <Button variant="secondary" onClick={() => setEditing(fact.statement)}>
                 Edit
               </Button>
               <Button
-                size="sm"
                 variant="ghost"
                 disabled={pending}
                 onClick={() => void onChange({ status: 'retired' }).catch(() => undefined)}
@@ -242,7 +240,6 @@ function FactRow({
           ) : (
             <>
               <Button
-                size="sm"
                 disabled={pending || !editing.trim()}
                 onClick={() => {
                   // Keep the draft open until the save lands, so a failed save loses nothing.
@@ -254,7 +251,7 @@ function FactRow({
               >
                 Save
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditing(null)}>
+              <Button variant="ghost" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
             </>

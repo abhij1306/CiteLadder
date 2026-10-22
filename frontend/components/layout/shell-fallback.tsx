@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { PageLoading } from '@/components/layout/page-loading';
+import { QueryState } from '@/components/ui/query-state';
 
 /**
  * The placeholder shown while the SESSION and the shell's opening decision are
@@ -28,7 +28,11 @@ export function ShellFallback({ children }: Readonly<{ children?: ReactNode }>) 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="h-[var(--compact-topbar-height)] shrink-0 min-[981px]:hidden" />
         <div className="app-pane app-pane-workspace flex min-w-0 flex-1 flex-col">
-          {children === undefined ? <PageLoading label="Loading your workspace…" /> : children}
+          {children === undefined ? (
+            <QueryState kind="loading" label="Loading your workspace…" />
+          ) : (
+            children
+          )}
         </div>
       </div>
     </div>

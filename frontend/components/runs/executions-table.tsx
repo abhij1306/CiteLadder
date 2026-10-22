@@ -84,7 +84,7 @@ export function ExecutionsTable({
             </TableCell>
             <TableCell className="text-right">
               {execution.status === 'succeeded' ? (
-                <Button variant="ghost" size="sm" onClick={() => onSelectEvidence(execution)}>
+                <Button variant="ghost" onClick={() => onSelectEvidence(execution)}>
                   Evidence
                 </Button>
               ) : (

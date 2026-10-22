@@ -121,7 +121,6 @@ export function SearchIntelligenceCitationMatcher({
       </div>
       <div>
         <Button
-          size="sm"
           disabled={!selectedAudits.length || derive.isPending}
           onClick={() => derive.mutate()}
         >

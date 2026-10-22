@@ -4,7 +4,6 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Settings2, Unplug } from 'lucide-react';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { SearchIntelligenceCitationMatcher } from '@/components/search-intelligence/search-intelligence-citation-matcher';
 import { SearchIntelligenceCollection } from './search-intelligence-collection';
@@ -14,13 +13,13 @@ import { referringLists } from './search-intelligence-format';
 import { CostDetails, RunNotice } from './search-intelligence-runs';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Drawer } from '@/components/ui/drawer';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
-import { SavedViewControls, ScopeBand } from './search-intelligence-scope';
+import { SavedViewControls, scopeControls } from './search-intelligence-scope';
 import { Stack } from '@/components/ui/layout';
-import { TabPanel, TabsBar, TabsRoot } from '@/components/ui/tabs';
+import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import {
   searchIntelligenceApi,
   type SearchIntelligenceDataset,
@@ -161,25 +160,27 @@ export function SearchIntelligencePage() {
   if (readiness.isPending)
     return (
       <PageShell>
-        <PageLoading label="Loading Search Intelligence…" />
+        <QueryState kind="loading" label="Loading Search Intelligence…" />
       </PageShell>
     );
   if (readiness.isError)
     return (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           {...readErrorProps(readiness)}
           fallback="Search Intelligence could not be loaded."
         />
       </PageShell>
     );
   const data = readiness.data;
-  const tabs = <TabsBar items={TABS} ariaLabel="Search Intelligence views" variant="band" />;
+  const tabs = { items: TABS, ariaLabel: 'Search Intelligence views' };
   if (!data.connected && !data.datasets.length)
     return (
       <TabsRoot value={tab} onValueChange={setTab}>
         <PageShell tabs={tabs}>
-          <EmptyState
+          <QueryState
+            kind="empty"
             icon={Unplug}
             heading="Connect DataForSEO"
             description="Search Intelligence uses your workspace’s own DataForSEO account. Add its login once; every analysis shows its cost before anything is fetched."
@@ -192,7 +193,8 @@ export function SearchIntelligencePage() {
     return (
       <TabsRoot value={tab} onValueChange={setTab}>
         <PageShell tabs={tabs}>
-          <EmptyState
+          <QueryState
+            kind="empty"
             icon={Settings2}
             heading="Add your website address"
             description="Search Intelligence researches the project’s own website, so the project needs its homepage address (for example https://www.example.com)."
@@ -213,32 +215,30 @@ export function SearchIntelligencePage() {
             onCost={() => setCostOpen(true)}
           />
         }
-        controls={
-          <ScopeBand
-            data={data}
-            tab={tab}
-            latest={datasets.find((item) =>
-              tab === 'backlinks' ? item.location_code === null : item.location_code !== null,
-            )}
-            marketControl={
-              <SavedViewControls
-                scopes={scopes}
-                scope={activeScope}
-                markets={markets}
-                market={activeMarket}
-                tab={tab}
-                onScope={(value) => {
-                  setScope(value);
-                  setComparison(null);
-                }}
-                onMarket={(value) => {
-                  setMarket(value);
-                  setComparison(null);
-                }}
-              />
-            }
-          />
-        }
+        controls={scopeControls({
+          data,
+          tab,
+          latest: datasets.find((item) =>
+            tab === 'backlinks' ? item.location_code === null : item.location_code !== null,
+          ),
+          marketControl: (
+            <SavedViewControls
+              scopes={scopes}
+              scope={activeScope}
+              markets={markets}
+              market={activeMarket}
+              tab={tab}
+              onScope={(value) => {
+                setScope(value);
+                setComparison(null);
+              }}
+              onMarket={(value) => {
+                setMarket(value);
+                setComparison(null);
+              }}
+            />
+          ),
+        })}
       >
         <Stack gap="workspace" className="min-w-0">
           <UnavailableNotice data={data} />
@@ -336,22 +336,18 @@ function PageActions({
 }>) {
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={onCost}>
+      <Button variant="ghost" onClick={onCost}>
         Cost details
       </Button>
       {hasDatasets ? (
         <>
-          <Button variant="secondary" size="sm" onClick={() => onReview('analysis')}>
+          <Button variant="secondary" onClick={() => onReview('analysis')}>
             New analysis
           </Button>
-          <Button size="sm" onClick={() => onReview('refresh')}>
-            Refresh
-          </Button>
+          <Button onClick={() => onReview('refresh')}>Refresh</Button>
         </>
       ) : (
-        <Button size="sm" onClick={() => onReview('analysis')}>
-          Review first analysis
-        </Button>
+        <Button onClick={() => onReview('analysis')}>Review first analysis</Button>
       )}
     </>
   );
@@ -374,7 +370,7 @@ function CollectionAction({
 }>) {
   if (tab === 'keywords')
     return (
-      <Button variant="secondary" size="sm" onClick={onSeed}>
+      <Button variant="secondary" onClick={onSeed}>
         Research a keyword
       </Button>
     );
@@ -385,7 +381,7 @@ function CollectionAction({
     referringLists(datasets).some((dataset) => dataset.target_origin === targetOrigin)
   )
     return (
-      <Button variant="secondary" size="sm" onClick={onMatch}>
+      <Button variant="secondary" onClick={onMatch}>
         Match with Visibility citations
       </Button>
     );

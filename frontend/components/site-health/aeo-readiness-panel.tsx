@@ -3,15 +3,14 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { Alert } from '@/components/ui/alert';
-import { ReadError } from '@/components/ui/read-error';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Drawer } from '@/components/ui/drawer';
 import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ScoreBar } from '@/components/ui/score-bar';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
@@ -105,11 +104,12 @@ export function AeoReadinessPanel({
   const [detailKey, setDetailKey] = useState<string | null>(null);
 
   if (readiness.isLoading) {
-    return <PageLoading label="Loading persisted AEO evaluations…" />;
+    return <QueryState kind="loading" label="Loading persisted AEO evaluations…" />;
   }
   if (readiness.isError)
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={readiness.error}
         fallback="Could not load AEO Readiness."
         onRetry={() => void readiness.refetch()}

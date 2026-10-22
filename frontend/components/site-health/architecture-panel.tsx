@@ -10,16 +10,15 @@ import {
   OrphanMetric,
   OrphanPageDrawer,
 } from '@/components/site-health/architecture-orphans';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import { Alert } from '@/components/ui/alert';
-import { ReadError } from '@/components/ui/read-error';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
 import { Meter } from '@/components/ui/meter';
 import { Pressable } from '@/components/ui/pressable';
+import { QueryState } from '@/components/ui/query-state';
 import { StatGrid, StatItem } from '@/components/ui/stat-grid';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
@@ -91,11 +90,12 @@ export function ArchitecturePanel({
   const architecture = useQuery(siteHealthQueries.architecture(workspaceId, projectId, crawlId));
 
   if (architecture.isLoading) {
-    return <PageLoading label="Loading the observed architecture" />;
+    return <QueryState kind="loading" label="Loading the observed architecture" />;
   }
   if (architecture.isError)
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={architecture.error}
         fallback="Could not load Architecture."
         onRetry={() => void architecture.refetch()}

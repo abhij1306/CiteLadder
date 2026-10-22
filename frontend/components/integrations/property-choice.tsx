@@ -81,7 +81,7 @@ export function PropertyChoice({
     return (
       <Alert tone="neutral">
         This account has no {source.noun}. Add and verify the site in {source.console}, then{' '}
-        <Button variant="ghost" size="sm" onClick={() => discovery.mutate()}>
+        <Button variant="ghost" onClick={() => discovery.mutate()}>
           check again
         </Button>
       </Alert>
@@ -92,7 +92,6 @@ export function PropertyChoice({
       {suggested ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button
-            size="sm"
             onClick={() => select.mutate(suggested.property_ref)}
             pending={select.isPending && select.variables === suggested.property_ref}
             pendingLabel="Importing…"
@@ -102,7 +101,7 @@ export function PropertyChoice({
             Use {suggested.label}
           </Button>
           {properties.length > 1 && !showAll ? (
-            <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>
+            <Button variant="ghost" onClick={() => setShowAll(true)}>
               Choose another
             </Button>
           ) : null}
@@ -134,7 +133,7 @@ function DiscoveryStatus({
   if (discovery.isIdle)
     return (
       <div>
-        <Button variant="secondary" size="sm" onClick={() => discovery.mutate()}>
+        <Button variant="secondary" onClick={() => discovery.mutate()}>
           Choose {noun}
         </Button>
       </div>
@@ -148,7 +147,7 @@ function DiscoveryStatus({
   return (
     <Alert tone="danger">
       Could not load your {noun}s. {humanizeApiError(discovery.error).message}{' '}
-      <Button variant="ghost" size="sm" onClick={() => discovery.mutate()}>
+      <Button variant="ghost" onClick={() => discovery.mutate()}>
         Try again
       </Button>
     </Alert>
@@ -181,7 +180,6 @@ function PropertyList({
             </span>
             <Button
               variant="secondary"
-              size="sm"
               disabled={foreign || pendingRef !== null}
               pending={pendingRef === property.property_ref}
               pendingLabel="Importing…"

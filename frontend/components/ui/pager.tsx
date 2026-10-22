@@ -146,13 +146,12 @@ function PagerSteps({
   return (
     <div className="flex items-center gap-1">
       {onFirst ? (
-        <Button variant="ghost" size="sm" disabled={!canPrev || busy} onClick={onFirst}>
+        <Button variant="ghost" disabled={!canPrev || busy} onClick={onFirst}>
           First page
         </Button>
       ) : null}
       <Button
         variant="ghost"
-        size="sm"
         aria-label="Previous page"
         disabled={!canPrev || busy}
         onClick={onPrev}
@@ -160,13 +159,7 @@ function PagerSteps({
         <ChevronLeft className="size-4" aria-hidden />
         Previous
       </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-label="Next page"
-        disabled={!canNext || busy}
-        onClick={onNext}
-      >
+      <Button variant="ghost" aria-label="Next page" disabled={!canNext || busy} onClick={onNext}>
         Next
         <ChevronRight className="size-4" aria-hidden />
       </Button>

@@ -142,7 +142,7 @@ export function TargetPrompts({
             placeholder="best instant read thermometer for grilling under $50"
           />
           <div>
-            <Button size="sm" disabled={!text.trim() || busy} onClick={() => manual.mutate()}>
+            <Button disabled={!text.trim() || busy} onClick={() => manual.mutate()}>
               Add prompt
             </Button>
           </div>
@@ -186,7 +186,6 @@ function PromptRows({
         <li key={row.id} className="flex flex-wrap items-center gap-3 py-2">
           <span className="text-secondary min-w-0 flex-1">{row.text}</span>
           <Button
-            size="sm"
             variant={row.enabled ? 'secondary' : 'primary'}
             disabled={pending}
             onClick={() => onToggle(row.id, !row.enabled)}

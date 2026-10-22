@@ -12,7 +12,6 @@ import {
 import { DeclarationStatus } from '@/components/agent/declaration-status';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { EvidenceDrawer } from '@/components/opportunities/evidence-drawer';
@@ -24,6 +23,7 @@ import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
@@ -55,7 +55,11 @@ export function ActionDetailScreen() {
   if (query.isError)
     return (
       <PageShell>
-        <ReadError {...readErrorProps(query)} fallback="This Action could not be loaded." />
+        <QueryState
+          kind="error"
+          {...readErrorProps(query)}
+          fallback="This Action could not be loaded."
+        />
       </PageShell>
     );
   if (!activeWorkspaceId)
@@ -67,7 +71,7 @@ export function ActionDetailScreen() {
   if (!query.data)
     return (
       <PageShell>
-        <PageLoading />
+        <QueryState kind="loading" />
       </PageShell>
     );
   if (query.data.project_id !== activeProjectId)

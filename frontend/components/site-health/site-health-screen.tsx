@@ -7,7 +7,7 @@ import { Alert } from '@/components/ui/alert';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { Button } from '@/components/ui/button';
 import { MutationNotice } from '@/components/ui/mutation-notice';
-import { TabsBar, TabsRoot } from '@/components/ui/tabs';
+import { TabsRoot } from '@/components/ui/tabs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { PageShell } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
@@ -17,7 +17,7 @@ import { ArchitecturePanel } from '@/components/site-health/architecture-panel';
 import { ChangesPanel } from '@/components/site-health/changes-panel';
 import { InternalLinksPanel } from '@/components/site-health/internal-links-panel';
 import { OverviewPanel } from '@/components/site-health/overview-panel';
-import { PageLoading } from '@/components/layout/page-loading';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { httpErrorStatus } from '@/lib/api/errors';
@@ -95,7 +95,7 @@ function SiteHealthContent({
   if (blockingState) {
     return (
       <PageShell>
-        <Stack gap="workspace" className="min-w-0">
+        <Stack gap="section" className="min-w-0">
           {refreshFailures}
           {blockingState}
         </Stack>
@@ -106,16 +106,9 @@ function SiteHealthContent({
     <TabsRoot value={tab as AnalysisTab} onValueChange={selectTab}>
       <PageShell
         actions={headerActions}
-        tabs={
-          <TabsBar
-            variant="band"
-            items={ANALYSIS_TABS}
-            ariaLabel="Website analysis"
-            onIntent={prefetchTab}
-          />
-        }
+        tabs={{ items: ANALYSIS_TABS, ariaLabel: 'Website analysis', onIntent: prefetchTab }}
       >
-        <Stack gap="workspace" className="min-w-0">
+        <Stack gap="section" className="min-w-0">
           <SiteHealthNotices screen={screen} />
           {refreshFailures}
           <AnalysisPanel
@@ -136,7 +129,8 @@ function projectBlockingState(
   projectLoading: boolean,
   screen: ReturnType<typeof useSiteHealthScreen>,
 ) {
-  if (projectLoading) return <PageLoading label="Loading your Site Health project…" />;
+  if (projectLoading)
+    return <QueryState kind="loading" label="Loading your Site Health project…" />;
   if (!projectId) return <ProjectRequiredState />;
   return screenBlockingState({ dashboard: screen.dashboardQuery, phase: screen.phase });
 }
@@ -299,7 +293,8 @@ function screenBlockingState({
 }>) {
   if (dashboard.isError && (!dashboard.data || isAccessFailure(dashboard.error)))
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={dashboard.error}
         fallback="Could not load Site Health."
         onRetry={() => void dashboard.refetch()}
@@ -307,7 +302,7 @@ function screenBlockingState({
       />
     );
   if (dashboard.isLoading || phase === 'resolving')
-    return <PageLoading label="Loading your latest Site Health crawl…" />;
+    return <QueryState kind="loading" label="Loading your latest Site Health crawl…" />;
   return null;
 }
 
