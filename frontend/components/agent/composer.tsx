@@ -1,11 +1,11 @@
 'use client';
 
-import { SendHorizontal, Square, X } from 'lucide-react';
+import { SendHorizontal, Square } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Pressable } from '@/components/ui/pressable';
-import { textRole } from '@/components/ui/typography';
+import { ComposerFrame, RemovableChip } from '@/components/ui/chat-dock';
+import { Icon } from '@/components/ui/icon';
 import type { ContextChip } from '@/lib/agent/handoff';
 
 import { CommandField, type ComposerCommands } from './command-menu';
@@ -55,78 +55,66 @@ export function Composer({
   stopping?: boolean;
 }>) {
   const canSend = !disabled && !submissionDisabled && !pending && value.trim().length > 0;
+  const hasChips = chips.length > 0 || (commands?.mentions.length ?? 0) > 0;
   return (
-    <form
-      className="bg-input border-border-strong grid gap-1 rounded-[var(--radius-card)] border p-2"
-      onSubmit={(event) => {
-        event.preventDefault();
+    <ComposerFrame
+      onSubmit={() => {
         if (canSend) onSubmit();
       }}
-    >
-      {chips.length > 0 || (commands?.mentions.length ?? 0) > 0 ? (
-        <ul aria-label="Context for this request" className="flex flex-wrap gap-2">
-          {chips.map((chip) => (
-            <Chip
-              key={chip.key}
-              label={chip.label}
-              onRemove={onRemoveChip ? () => onRemoveChip(chip) : undefined}
-            />
-          ))}
-          {commands?.mentions.map((mention) => (
-            <Chip
-              key={mention.id}
-              label={`@${mention.label}`}
-              onRemove={() => commands.onRemoveMention(mention.id)}
-            />
-          ))}
-        </ul>
-      ) : null}
-      <label htmlFor={id} className="sr-only">
-        {label}
-      </label>
-      <CommandField
-        id={id}
-        value={value}
-        onChange={onChange}
-        onEnter={() => {
-          if (canSend) onSubmit();
-        }}
-        commands={commands}
-        disabled={disabled}
-        placeholder={placeholder}
-        rows={rows}
-      />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1">{tools}</div>
-        {onStop ? (
+      chipsLabel="Context for this request"
+      chips={
+        hasChips ? (
+          <>
+            {chips.map((chip) => (
+              <RemovableChip
+                key={chip.key}
+                label={chip.label}
+                onRemove={onRemoveChip ? () => onRemoveChip(chip) : undefined}
+              />
+            ))}
+            {commands?.mentions.map((mention) => (
+              <RemovableChip
+                key={mention.id}
+                label={`@${mention.label}`}
+                onRemove={() => commands.onRemoveMention(mention.id)}
+              />
+            ))}
+          </>
+        ) : null
+      }
+      field={
+        <>
+          <label htmlFor={id} className="sr-only">
+            {label}
+          </label>
+          <CommandField
+            id={id}
+            value={value}
+            onChange={onChange}
+            onEnter={() => {
+              if (canSend) onSubmit();
+            }}
+            commands={commands}
+            disabled={disabled}
+            placeholder={placeholder}
+            rows={rows}
+          />
+        </>
+      }
+      tools={tools}
+      submit={
+        onStop ? (
           <Button type="button" variant="secondary" disabled={stopping} onClick={onStop}>
-            <Square className="size-4" aria-hidden />
+            <Icon icon={Square} />
             {stopping ? 'Stopping…' : 'Stop'}
           </Button>
         ) : (
           <Button type="submit" disabled={!canSend}>
-            <SendHorizontal className="size-4" aria-hidden />
+            <Icon icon={SendHorizontal} />
             {pending ? 'Sending…' : 'Send'}
           </Button>
-        )}
-      </div>
-    </form>
-  );
-}
-
-function Chip({ label, onRemove }: Readonly<{ label: string; onRemove?: () => void }>) {
-  return (
-    <li className="bg-background-alt text-secondary inline-flex max-w-full items-center gap-1 rounded-full px-3 py-0.5">
-      <span className={textRole('caption', 'truncate text-secondary')}>{label}</span>
-      {onRemove ? (
-        <Pressable
-          className="focus-ring hover:text-foreground rounded-full"
-          aria-label={`Remove ${label}`}
-          onClick={onRemove}
-        >
-          <X className="size-3" aria-hidden />
-        </Pressable>
-      ) : null}
-    </li>
+        )
+      }
+    />
   );
 }

@@ -19,7 +19,8 @@ import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
@@ -188,7 +189,7 @@ function PinnedWorkflow({
       onClick={onRemove}
     >
       {label ?? 'Workflow'}
-      <X aria-hidden className="size-3.5" />
+      <Icon icon={X} />
     </Button>
   );
 }
@@ -205,12 +206,12 @@ function AttachedAction({
   return (
     <Stack as="section" gap="tight" aria-label="Working on" className={panelClasses()}>
       <span className={textRole('label')}>Working on</span>
-      <div className="flex flex-wrap items-center gap-2">
+      <Inline className="flex-wrap">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
           {action.target_label}
         </TextLink>
         <ActionStatusBadge status={action.status} />
-      </div>
+      </Inline>
       <span className={textRole('caption')}>
         {[targetKindLabel(action.target_kind), approachLabel(action.approach)]
           .filter(Boolean)
@@ -249,7 +250,7 @@ function TopActions({
 
 function TopActionRow({ action }: Readonly<{ action: Action }>) {
   return (
-    <li className={panelClasses({}, 'flex flex-wrap items-center gap-3')}>
+    <Inline as="li" gap="compact" className={panelClasses({}, 'flex-wrap')}>
       <Stack gap="tight" className="min-w-0 flex-1">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle" className="truncate">
           {action.target_label}
@@ -263,6 +264,6 @@ function TopActionRow({ action }: Readonly<{ action: Action }>) {
       <Button asChild variant="secondary">
         <ProjectLink href={agentHandoffHref({ actionId: action.id })}>Work on this</ProjectLink>
       </Button>
-    </li>
+    </Inline>
   );
 }

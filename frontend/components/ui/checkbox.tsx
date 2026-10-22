@@ -17,6 +17,8 @@ export type CheckboxProps = AccessibleCheckbox & {
   onCheckedChange: (checked: boolean | 'indeterminate') => void;
   disabled?: boolean;
   className?: string;
+  /** A sub-option of the checkbox above it (a subtopic under its topic). */
+  nested?: boolean;
   id?: string;
   name?: string;
   required?: boolean;
@@ -39,6 +41,7 @@ export function Checkbox({
   label,
   disabled,
   className,
+  nested = false,
   id,
   name,
   required,
@@ -84,7 +87,14 @@ export function Checkbox({
   }
 
   return (
-    <label className={cn('type-body text-foreground inline-flex items-center gap-2', className)}>
+    <label
+      className={cn(
+        'type-body text-foreground inline-flex items-center gap-2',
+        // A sub-option sits one checkbox in from its parent, so the tree reads.
+        nested && 'ms-6',
+        className,
+      )}
+    >
       {control}
       <span className={cn(disabled && 'text-muted')}>{label}</span>
     </label>

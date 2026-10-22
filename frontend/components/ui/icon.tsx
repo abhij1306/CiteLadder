@@ -33,6 +33,24 @@ export function Icon({
 }
 
 /**
+ * IconTile — the 32px recessed square that names a row's kind (a data source,
+ * an integration) beside its title: the control height, the control radius,
+ * the hairline edge and the 16px glyph centred in it. Decorative; the title
+ * beside it carries the name.
+ */
+export function IconTile({ icon }: Readonly<{ icon: LucideIcon }>) {
+  return (
+    <span
+      aria-hidden
+      data-icon-tile=""
+      className="bg-well border-border text-secondary flex size-[var(--control-height-md)] shrink-0 items-center justify-center rounded-[var(--radius-control)] border"
+    >
+      <Icon icon={icon} />
+    </span>
+  );
+}
+
+/**
  * Dot — the 6px status marker a badge carries, for a live or severity mark
  * beside text that is not a badge (a polling indicator, a list bullet). The
  * caller supplies the fill (`bg-info`) and any motion class; colour is never

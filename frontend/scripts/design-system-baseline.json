@@ -1,70 +1,6 @@
 {
   "format_version": 1,
   "files": {
-    "components/agent/action-declaration.tsx": {
-      "layer-geometry": 1
-    },
-    "components/agent/action-detail-screen.tsx": {
-      "layer-geometry": 7
-    },
-    "components/agent/agent-panel-host.tsx": {
-      "layer-geometry": 1,
-      "layer-size-prop": 1
-    },
-    "components/agent/agent-panel.tsx": {
-      "layer-geometry": 6
-    },
-    "components/agent/briefing-card.tsx": {
-      "layer-geometry": 1
-    },
-    "components/agent/chat-screen.tsx": {
-      "layer-geometry": 2
-    },
-    "components/agent/chat-thread.tsx": {
-      "layer-geometry": 1
-    },
-    "components/agent/command-menu.tsx": {
-      "layer-geometry": 5
-    },
-    "components/agent/composer.tsx": {
-      "layer-geometry": 14
-    },
-    "components/agent/context-screen.tsx": {
-      "layer-geometry": 1
-    },
-    "components/agent/conversation.tsx": {
-      "layer-geometry": 16
-    },
-    "components/agent/declaration-status.tsx": {
-      "layer-geometry": 1
-    },
-    "components/agent/evidence-chips.tsx": {
-      "layer-geometry": 2
-    },
-    "components/agent/new-chat-screen.tsx": {
-      "layer-geometry": 3
-    },
-    "components/agent/output-canvas.tsx": {
-      "layer-geometry": 6
-    },
-    "components/agent/output-editor.tsx": {
-      "layer-geometry": 1
-    },
-    "components/agent/output-history.tsx": {
-      "layer-geometry": 2
-    },
-    "components/agent/output-pane.tsx": {
-      "layer-geometry": 7
-    },
-    "components/agent/skill-picker.tsx": {
-      "layer-geometry": 2
-    },
-    "components/agent/skills-screen.tsx": {
-      "layer-geometry": 1
-    },
-    "components/agent/workflow-gallery.tsx": {
-      "layer-geometry": 4
-    },
     "components/ai-traffic/traffic-controls.tsx": {
       "layer-geometry": 2
     },
@@ -93,95 +29,11 @@
     "components/performance/performance-chrome.tsx": {
       "layer-geometry": 1
     },
-    "components/projects/dashboard-controls.tsx": {
-      "layer-geometry": 4
-    },
-    "components/projects/dashboard-primitives.tsx": {
-      "layer-geometry": 13,
-      "layer-size-prop": 2
-    },
-    "components/projects/dashboard-sections.tsx": {
-      "layer-geometry": 7
-    },
-    "components/projects/mention-rule-fields.tsx": {
-      "layer-geometry": 1
-    },
-    "components/projects/missing-prompts.tsx": {
-      "layer-geometry": 3
-    },
-    "components/projects/overview-grid.tsx": {
-      "layer-geometry": 8,
-      "layer-size-prop": 4
-    },
-    "components/projects/overview-layout-menu.tsx": {
-      "layer-geometry": 1
-    },
-    "components/projects/overview-library-widgets.tsx": {
-      "layer-geometry": 4
-    },
-    "components/projects/project-edit-panel.tsx": {
-      "layer-geometry": 5,
-      "layer-size-prop": 1
-    },
-    "components/projects/project-markets.tsx": {
-      "layer-geometry": 4,
-      "layer-size-prop": 1
-    },
-    "components/projects/projects-screen.tsx": {
-      "layer-geometry": 1
-    },
-    "components/projects/prompt-setup-card.tsx": {
-      "layer-geometry": 1
-    },
-    "components/prompts/candidate-review.tsx": {
-      "layer-geometry": 11
-    },
-    "components/prompts/csv-import-dialog.tsx": {
-      "layer-geometry": 2
-    },
-    "components/prompts/generate-prompts-dialog-view.tsx": {
-      "layer-geometry": 4
-    },
-    "components/prompts/prompt-detail-screen.tsx": {
-      "layer-geometry": 3
-    },
-    "components/prompts/prompt-table.tsx": {
-      "layer-geometry": 7,
-      "layer-size-prop": 1
-    },
-    "components/prompts/prompt-toolbar.tsx": {
-      "layer-geometry": 8
-    },
-    "components/prompts/topic-rail.tsx": {
-      "layer-geometry": 13,
-      "layer-size-prop": 3
-    },
     "components/search-intelligence/search-intelligence-dataset-view.tsx": {
       "layer-geometry": 1
     },
-    "components/settings/backfill-progress.tsx": {
-      "layer-geometry": 1
-    },
-    "components/settings/integration-card-view.tsx": {
-      "layer-geometry": 3
-    },
-    "components/settings/integration-connection-row.tsx": {
-      "layer-geometry": 15
-    },
     "components/settings/mcp-connections.tsx": {
       "layer-geometry": 3
-    },
-    "components/settings/property-picker.tsx": {
-      "layer-geometry": 5
-    },
-    "components/settings/settings-screen.tsx": {
-      "layer-geometry": 3
-    },
-    "components/settings/settings-section.tsx": {
-      "layer-geometry": 5
-    },
-    "components/settings/time-zone-setting.tsx": {
-      "layer-geometry": 1
     }
   }
 }

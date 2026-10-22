@@ -16,7 +16,6 @@ import { ProviderSettings } from '@/components/settings/provider-settings';
 import { TimeZoneSetting } from '@/components/settings/time-zone-setting';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { ListScreen } from '@/components/layout/page-shell';
-import { Stack } from '@/components/ui/layout';
 import { projectsApi } from '@/lib/api/projects';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -24,7 +23,9 @@ import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project
 import { useSelectProject, workspaceDestination } from '@/lib/navigation/project-destination';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { textRole } from '@/components/ui/typography';
-import { SettingsSection, SettingsSections } from '@/components/settings/settings-section';
+import { SettingsSection, SettingsSections } from '@/components/ui/settings-section';
+import { Icon } from '@/components/ui/icon';
+import { IdentityRow } from '@/components/ui/workspace';
 
 const SETTINGS_TABS = [
   { id: 'general', label: 'General' },
@@ -95,28 +96,28 @@ function ProjectDeletionControls() {
       >
         {activeProject ? (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
+            <IdentityRow
+              media={
                 <BrandLogo
                   name={activeProject.brand_name}
                   logoUrl={activeProject.brand?.logo_url}
                   websiteUrl={activeProject.website_url}
                   placement="identity"
                 />
-                <Stack gap="tight" className="min-w-0">
-                  <div className={textRole('itemTitle', 'truncate')}>{activeProject.name}</div>
-                  <p className="type-caption">Brand: {activeProject.brand_name}</p>
-                </Stack>
-              </div>
-              <Button
-                variant="destructive"
-                onClick={() => setConfirmOpen(true)}
-                disabled={deleteMutation.isPending}
-              >
-                <Trash2 className="size-4 shrink-0" aria-hidden />
-                Delete project
-              </Button>
-            </div>
+              }
+              title={<div className={textRole('itemTitle', 'truncate')}>{activeProject.name}</div>}
+              caption={<p className="type-caption">Brand: {activeProject.brand_name}</p>}
+              actions={
+                <Button
+                  variant="destructive"
+                  onClick={() => setConfirmOpen(true)}
+                  disabled={deleteMutation.isPending}
+                >
+                  <Icon icon={Trash2} />
+                  Delete project
+                </Button>
+              }
+            />
             <Alert tone="danger">
               Deleting a project removes all of its prompts, topics, audits, visibility history, and
               generated content. This cannot be undone.

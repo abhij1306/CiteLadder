@@ -97,17 +97,14 @@ export function ReplyComposer({
 }
 
 /**
- * Floats above the sticky composer, out of flow, so showing it never moves the
- * input or changes the page height while a reply streams.
+ * Back to the newest message: a `ComposerDock`'s `floating` control, shown
+ * only while the reader has scrolled away from the end of the thread.
  */
-export function JumpToLatest({ show, onJump }: Readonly<{ show: boolean; onJump: () => void }>) {
-  if (!show) return null;
+export function JumpToLatest({ onJump }: Readonly<{ onJump: () => void }>) {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-full flex justify-center pb-2">
-      <Button variant="secondary" className="pointer-events-auto" onClick={onJump}>
-        Jump to latest
-      </Button>
-    </div>
+    <Button variant="secondary" onClick={onJump}>
+      Jump to latest
+    </Button>
   );
 }
 

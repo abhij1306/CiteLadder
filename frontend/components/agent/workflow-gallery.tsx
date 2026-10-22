@@ -6,11 +6,13 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Pressable } from '@/components/ui/pressable';
 import { textRole } from '@/components/ui/typography';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
 import { missingInputs, workflowMessage, type WorkflowValues } from '@/lib/agent/workflows';
 import type { AgentWorkflow } from '@/lib/api/agent';
@@ -32,7 +34,7 @@ export function WorkflowGallery({
       <h3 id="agent-workflows" className={textRole('label')}>
         Or start from a workflow
       </h3>
-      <fieldset className="flex flex-wrap gap-2">
+      <Inline as="fieldset" className="flex-wrap">
         <legend className="sr-only">Workflow type</legend>
         {catalog.workflow_groups.map((option) => (
           <Button
@@ -45,7 +47,7 @@ export function WorkflowGallery({
             {option.label}
           </Button>
         ))}
-      </fieldset>
+      </Inline>
       {/* Every group's cards share one grid cell, so the gallery is always as
           tall as its largest group: choosing a group never moves the page
           (which centres this column). Only the chosen group is live. */}
@@ -57,9 +59,9 @@ export function WorkflowGallery({
               key={option.id}
               inert={!live}
               aria-hidden={!live || undefined}
-              className={cn(
-                'col-start-1 row-start-1 grid content-start gap-2 desktop:grid-cols-2',
-                !live && 'invisible',
+              className={splitPaneClasses(
+                'peers',
+                cn('col-start-1 row-start-1 content-start items-stretch', !live && 'invisible'),
               )}
             >
               {catalog.workflows
@@ -149,15 +151,15 @@ export function WorkflowStart({
             )}
           </Field>
         ))}
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <Inline className="flex-wrap justify-between">
           <Button type="button" variant="ghost" onClick={onBack}>
-            <ArrowLeft aria-hidden className="size-4" />
+            <Icon icon={ArrowLeft} />
             All workflows
           </Button>
           <Button type="submit" disabled={disabled || pending}>
             {pending ? 'Starting…' : 'Start'}
           </Button>
-        </div>
+        </Inline>
       </Stack>
     </form>
   );

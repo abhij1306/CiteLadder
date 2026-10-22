@@ -4,7 +4,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { navigationMode } from '@/components/layout/nav-items';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useAgentPanel } from '@/lib/agent/panel-context';
 import { ICONS } from '@/lib/icons';
@@ -27,18 +27,14 @@ export function AgentPanelTrigger() {
   const panel = useAgentPanel();
   const available = useDashboardProject();
   if (!panel || !available) return null;
-  const Icon = ICONS.agent;
   return (
     <Tooltip content="Ask the agent about this screen" side="bottom">
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Open agent"
+      <IconButton
+        icon={ICONS.agent}
+        label="Open agent"
         aria-haspopup="dialog"
         onClick={() => panel.setOpen(true)}
-      >
-        <Icon className="size-4" aria-hidden />
-      </Button>
+      />
     </Tooltip>
   );
 }

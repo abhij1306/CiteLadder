@@ -15,6 +15,7 @@ import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { ComposerDock } from '@/components/ui/chat-dock';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import type { AgentChatDetail } from '@/lib/api/agent';
@@ -94,8 +95,7 @@ function ChatView({
         />
       </Stack>
       {/* The composer stays at the bottom of the window while the thread scrolls. */}
-      <div className="bg-panel z-sticky sticky bottom-0 pt-2 pb-4">
-        <JumpToLatest show={showJump} onJump={jumpToLatest} />
+      <ComposerDock floating={showJump ? <JumpToLatest onJump={jumpToLatest} /> : null}>
         <ReplyComposer
           id="chat-message"
           thread={thread}
@@ -106,7 +106,7 @@ function ChatView({
               : 'Ask a follow-up. / picks a skill, @ mentions an Action.'
           }
         />
-      </div>
+      </ComposerDock>
       <div ref={endRef} />
     </ListScreen>
   );

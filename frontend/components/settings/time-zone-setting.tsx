@@ -3,11 +3,10 @@ import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
+import { SettingsSection } from '@/components/ui/settings-section';
 import { textRole } from '@/components/ui/typography';
-
-import { SettingsSection } from './settings-section';
 import {
   saveTimeZonePreference,
   useDisplayTimeZone,
@@ -70,7 +69,7 @@ export function TimeZoneSetting() {
           <label htmlFor="named-display-timezone" className={textRole('label')}>
             IANA timezone
           </label>
-          <div className="flex flex-wrap items-center gap-2">
+          <Inline className="flex-wrap">
             <Input
               id="named-display-timezone"
               value={namedZone}
@@ -82,7 +81,7 @@ export function TimeZoneSetting() {
               aria-invalid={Boolean(error)}
             />
             <Button onClick={saveNamedZone}>Save timezone</Button>
-          </div>
+          </Inline>
         </Stack>
       ) : null}
       {error ? <Alert tone="danger">{error}</Alert> : null}

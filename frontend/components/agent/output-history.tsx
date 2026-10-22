@@ -6,12 +6,12 @@ import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { diffLines } from '@/lib/agent/diff';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { OUTPUT_PHASE_LABEL } from '@/lib/agent/vocabulary';
@@ -75,7 +75,7 @@ export function OutputHistory({
       ) : null}
       <ol aria-label="Revisions" className={ledgerClasses()}>
         {revisions.map((revision) => (
-          <Stack as="li" key={revision.id} className="py-3">
+          <Stack as="li" key={revision.id} className={ledgerItemClasses()}>
             <RevisionRow
               revision={revision}
               latest={revision.id === latestRevisionId}
@@ -114,7 +114,7 @@ function RevisionRow({
 }>) {
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <Inline className="flex-wrap">
         <span className={textRole('itemTitle')}>Revision {revision.number}</span>
         <span className={textRole('caption')}>
           {revision.author === 'user' ? 'Your edit' : 'Agent'} ·{' '}
@@ -140,7 +140,7 @@ function RevisionRow({
             Restore
           </Button>
         )}
-      </div>
+      </Inline>
       {open === 'view' ? (
         <Stack gap="compact">
           <h4 className={textRole('itemTitle')}>{revision.title}</h4>

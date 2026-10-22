@@ -18,8 +18,9 @@ import { navigationMode } from '@/components/layout/nav-items';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { DockedThread } from '@/components/ui/chat-dock';
 import { Drawer } from '@/components/ui/drawer';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
@@ -60,7 +61,7 @@ export function AgentPanel() {
       description="Ask about this screen. Chats are saved in the Agent workspace."
       closeLabel="Close agent"
       // The panel body lays out its own scroll area and bottom-pinned composer.
-      bodyClassName="flex flex-col pb-0"
+      body="dock"
       bodyLabel="Agent conversation"
     >
       {chatId ? (
@@ -71,7 +72,7 @@ export function AgentPanel() {
           projectId={activeProjectId}
           onLeave={close}
           toolbar={
-            <div className="flex flex-wrap justify-end gap-2">
+            <Inline className="flex-wrap justify-end">
               <Button variant="ghost" onClick={() => panel.setChat(null)}>
                 New chat
               </Button>
@@ -80,7 +81,7 @@ export function AgentPanel() {
                   Open in Agent
                 </ProjectLink>
               </Button>
-            </div>
+            </Inline>
           }
         />
       ) : (
@@ -116,8 +117,8 @@ function PanelStart({
   const create = useCreateChat(workspaceId, projectId, onStarted);
   const hasContext = contextChips(context).length > 0;
   return (
-    <PanelLayout
-      composer={
+    <DockedThread
+      dock={
         <Composer
           rows={2}
           id="agent-panel-message"
@@ -161,22 +162,7 @@ function PanelStart({
       </Stack>
       {access.canSend ? null : <Alert tone="info">{access.message}</Alert>}
       {create.failure ? <Alert tone="danger">{create.failure.message}</Alert> : null}
-    </PanelLayout>
-  );
-}
-
-/** Scrolling content above a composer pinned to the drawer's bottom edge. */
-function PanelLayout({
-  children,
-  composer,
-  end,
-}: Readonly<{ children: ReactNode; composer: ReactNode; end?: ReactNode }>) {
-  return (
-    <div className="flex min-h-full flex-1 flex-col gap-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">{children}</div>
-      <div className="bg-panel z-sticky sticky bottom-0 pt-2 pb-4">{composer}</div>
-      {end}
-    </div>
+    </DockedThread>
   );
 }
 
@@ -238,18 +224,16 @@ function PanelConversation({
   };
   const { endRef, showJump, jumpToLatest } = useFollowLatest(detail);
   return (
-    <PanelLayout
+    <DockedThread
       end={<div ref={endRef} />}
-      composer={
-        <>
-          <JumpToLatest show={showJump} onJump={jumpToLatest} />
-          <ReplyComposer
-            id="agent-panel-reply"
-            thread={thread}
-            detail={detail}
-            placeholder="Ask a follow-up. / picks a skill, @ mentions an Action."
-          />
-        </>
+      floating={showJump ? <JumpToLatest onJump={jumpToLatest} /> : null}
+      dock={
+        <ReplyComposer
+          id="agent-panel-reply"
+          thread={thread}
+          detail={detail}
+          placeholder="Ask a follow-up. / picks a skill, @ mentions an Action."
+        />
       }
     >
       {toolbar}
@@ -267,6 +251,6 @@ function PanelConversation({
           ) : null
         }
       />
-    </PanelLayout>
+    </DockedThread>
   );
 }

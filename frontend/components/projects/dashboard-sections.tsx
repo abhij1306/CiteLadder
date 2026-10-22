@@ -1,6 +1,6 @@
 import { ArrowRight, Download, TrendingUp } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { IdentityRow } from '@/components/ui/workspace';
 import { ProjectLink } from '@/components/layout/scoped-link';
 
 import { Badge } from '@/components/ui/badge';
@@ -16,8 +16,10 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Delta } from '@/components/ui/delta';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
+import { ReorderList } from '@/components/ui/reorder-list';
 import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
@@ -28,7 +30,7 @@ import type { CommandCenter, Project } from '@/lib/api/types';
 import { DisplayTime } from '@/components/ui/display-time';
 
 import { ProjectControls } from './dashboard-controls';
-import { ActionRow, metricValue, MovementChart, VS_PREVIOUS_RUN } from './dashboard-primitives';
+import { actionItem, metricValue, MovementChart, VS_PREVIOUS_RUN } from './dashboard-primitives';
 import { Tooltip } from '@/components/ui/tooltip';
 
 function brandName(data: CommandCenter) {
@@ -46,38 +48,44 @@ export function DashboardHeader({
   const website = data.project.website_url;
   return (
     <Card aria-labelledby="project-identity">
-      <CardContent className="flex min-w-0 items-center gap-4">
-        <BrandLogo
-          name={brandName(data)}
-          logoUrl={activeProject.brand.logo_url}
-          websiteUrl={website}
-          placement="identity"
+      <CardContent>
+        <IdentityRow
+          media={
+            <BrandLogo
+              name={brandName(data)}
+              logoUrl={activeProject.brand.logo_url}
+              websiteUrl={website}
+              placement="identity"
+            />
+          }
+          title={
+            <Inline className="flex-wrap">
+              <CardTitle id="project-identity" className="truncate">
+                {brandName(data)}
+              </CardTitle>
+              {website ? (
+                <TextLink
+                  variant="external"
+                  text="label"
+                  href={/^https?:\/\//i.test(website) ? website : `https://${website}`}
+                  className="min-w-0"
+                >
+                  <span className="truncate">
+                    {website.replace(/^https?:\/\//i, '').replace(/\/$/, '')}
+                  </span>
+                </TextLink>
+              ) : null}
+            </Inline>
+          }
+          caption={
+            data.measurement ? (
+              <p className={textRole('caption')}>
+                Tracked <DisplayTime value={data.measurement.completed_at} /> ·{' '}
+                {data.measurement.logical_engines.join(', ')}
+              </p>
+            ) : null
+          }
         />
-        <Stack gap="tight" className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle id="project-identity" className="truncate">
-              {brandName(data)}
-            </CardTitle>
-            {website ? (
-              <TextLink
-                variant="external"
-                text="label"
-                href={/^https?:\/\//i.test(website) ? website : `https://${website}`}
-                className="min-w-0"
-              >
-                <span className="truncate">
-                  {website.replace(/^https?:\/\//i, '').replace(/\/$/, '')}
-                </span>
-              </TextLink>
-            ) : null}
-          </div>
-          {data.measurement ? (
-            <p className={textRole('caption')}>
-              Tracked <DisplayTime value={data.measurement.completed_at} /> ·{' '}
-              {data.measurement.logical_engines.join(', ')}
-            </p>
-          ) : null}
-        </Stack>
       </CardContent>
     </Card>
   );
@@ -94,7 +102,7 @@ export function CompanyFacts({ data }: Readonly<{ data: CommandCenter }>) {
             <span className={textRole('label')}>{facts.industry || 'Industry not set'}</span>
             <Button asChild variant="ghost">
               <ProjectLink href="/agent/context">
-                Edit in Agent context <ArrowRight className="size-3.5" aria-hidden />
+                Edit in Agent context <Icon icon={ArrowRight} />
               </ProjectLink>
             </Button>
           </>
@@ -177,7 +185,7 @@ function PdfButton({
       pending={downloading}
       pendingLabel="Preparing…"
     >
-      <Download className="size-3.5" aria-hidden />
+      <Icon icon={Download} />
       Export PDF
     </Button>
   );
@@ -268,7 +276,7 @@ export function NextAction({ data }: Readonly<{ data: CommandCenter }>) {
         <Button asChild variant="primary">
           <ProjectLink href={data.next_action.href}>
             {NEXT_ACTION_COPY[data.next_action.kind].link}
-            <ArrowRight className="size-4" aria-hidden />
+            <Icon icon={ArrowRight} />
           </ProjectLink>
         </Button>
       </CardContent>
@@ -312,7 +320,7 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
       <CardContent className="flex justify-end">
         <Button asChild variant="ghost">
           <ProjectLink href="/visibility?tab=trends">
-            Open Trends <ArrowRight className="size-3.5" aria-hidden />
+            Open Trends <Icon icon={ArrowRight} />
           </ProjectLink>
         </Button>
       </CardContent>
@@ -370,19 +378,7 @@ export function RankedActionsCard({
         <CardDescription>Shared order · drag or use the arrow controls.</CardDescription>
       </CardHeader>
       <CardContent>
-        <ol className={ledgerClasses('open')}>
-          {actions.map((action, index) => (
-            <ActionRow
-              key={action.id}
-              action={action}
-              index={index}
-              total={actions.length}
-              onMove={onMove}
-              onDrop={onMove}
-              reorderPending={pending}
-            />
-          ))}
-        </ol>
+        <ReorderList items={actions.map(actionItem)} pending={pending} onMove={onMove} />
       </CardContent>
     </Card>
   );
@@ -408,7 +404,7 @@ function ViewAllActions() {
   return (
     <Button asChild variant="ghost">
       <ProjectLink href="/agent/actions">
-        View all <ArrowRight className="size-3.5" aria-hidden />
+        View all <Icon icon={ArrowRight} />
       </ProjectLink>
     </Button>
   );

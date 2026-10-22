@@ -23,7 +23,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
+import { MetaFooter } from '@/components/ui/workspace';
 import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { textRole } from '@/components/ui/typography';
@@ -241,8 +242,12 @@ function ConnectedCard({
         </Stack>
       </div>
       <CardContent>
-        <div className="border-border-subtle flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-          <div className="flex flex-wrap items-center gap-2">
+        <MetaFooter
+          trailing={
+            <span className="text-right">Reconnecting renews consent for the whole grant.</span>
+          }
+        >
+          <Inline className="flex-wrap">
             <Button
               variant={grant.status === 'connected' ? 'secondary' : 'primary'}
               onClick={() =>
@@ -252,11 +257,8 @@ function ConnectedCard({
               {grant.status === 'revoked' ? `Connect ${meta.title}` : 'Reconnect'}
             </Button>
             {isGrantGone(grant.status) ? null : <DisconnectGrant grant={grant} />}
-          </div>
-          <span className="type-caption text-right">
-            Reconnecting renews consent for the whole grant.
-          </span>
-        </div>
+          </Inline>
+        </MetaFooter>
       </CardContent>
     </Stack>
   );

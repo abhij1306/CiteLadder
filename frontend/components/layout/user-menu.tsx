@@ -55,7 +55,7 @@ function UserMenuContent({ presenter }: Readonly<{ presenter: UserMenuPresenter 
     <DropdownContent
       align={compact ? 'end' : 'start'}
       side={compact ? 'bottom' : 'top'}
-      className="w-56"
+      width="panel"
     >
       <DropdownLabel>{email}</DropdownLabel>
       <DropdownSeparator />

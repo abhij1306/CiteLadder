@@ -14,7 +14,8 @@ import { StatRow } from '@/components/ui/stat-row';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ValueLedger } from '@/components/ui/facts';
+import { Icon } from '@/components/ui/icon';
 import type { Project } from '@/lib/api/types';
 import { formatCount, formatPercent } from '@/lib/format';
 import { WIDGET_TITLES } from '@/lib/overview/layout';
@@ -49,7 +50,7 @@ function WidgetCard({
         actions={
           <Button asChild variant="ghost">
             <ProjectLink href={href}>
-              Open <ArrowRight className="size-3.5" aria-hidden />
+              Open <Icon icon={ArrowRight} />
             </ProjectLink>
           </Button>
         }
@@ -99,22 +100,7 @@ const count = (value: number | null) => (value === null ? null : formatCount(val
 
 /** A ledger padded to the widget's row count, so a short list keeps the card's height. */
 function Rows({ rows }: Readonly<{ rows: { key: string; label: ReactNode; value: ReactNode }[] }>) {
-  const padding = Array.from({
-    length: Math.max(0, WIDGET_ROWS - rows.length),
-  });
-  return (
-    <ol className={ledgerClasses('open')}>
-      {rows.map((row) => (
-        <li key={row.key} className="flex h-8 items-center justify-between gap-3">
-          <span className={textRole('body', 'min-w-0 truncate')}>{row.label}</span>
-          <span className={textRole('label', 'shrink-0 tabular-nums')}>{row.value}</span>
-        </li>
-      ))}
-      {padding.map((_, index) => (
-        <li key={`pad-${index}`} aria-hidden className="h-8" />
-      ))}
-    </ol>
-  );
+  return <ValueLedger items={rows} rows={WIDGET_ROWS} />;
 }
 
 export function VisibilityTrendWidget({ project }: Readonly<{ project: Project }>) {

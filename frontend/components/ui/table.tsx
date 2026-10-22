@@ -372,11 +372,14 @@ export function TableActionsCell({ children }: Readonly<{ children: ReactNode }>
 /** A selectable row's first cell: its checkbox, named for the row ("Select …"). */
 export function TableSelectCell({
   label,
+  describedBy,
   checked,
   onCheckedChange,
   disabled,
 }: Readonly<{
   label: string;
+  /** The id of a fact the row shows (its status) that describes the box. */
+  describedBy?: string;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   disabled?: boolean;
@@ -385,6 +388,7 @@ export function TableSelectCell({
     <td className={cellClasses({})}>
       <Checkbox
         aria-label={label}
+        aria-describedby={describedBy}
         checked={checked}
         disabled={disabled}
         onCheckedChange={(next) => onCheckedChange(next === true)}

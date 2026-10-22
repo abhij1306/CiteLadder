@@ -1,17 +1,14 @@
 'use client';
 
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
 import { useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Spinner } from '@/components/ui/spinner';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Stack } from '@/components/ui/layout';
-import { listRowClasses } from '@/components/ui/list-row';
-import { Pressable } from '@/components/ui/pressable';
+import { Inline, Stack } from '@/components/ui/layout';
+import { OptionRow } from '@/components/ui/list-row';
 import { QueryState } from '@/components/ui/query-state';
 import {
   integrationsApi,
@@ -20,8 +17,6 @@ import {
 } from '@/lib/api/integrations';
 import { humanizeApiError } from '@/lib/api/errors';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
-import { cn } from '@/lib/utils';
-import { textRole } from '@/components/ui/typography';
 import { tagClasses } from '@/components/ui/tag-variants';
 import {
   activeMappingFor,
@@ -51,24 +46,14 @@ function PropertyOption({
   onSelect: () => void;
 }>) {
   return (
-    <Pressable
-      type="button"
-      onClick={onSelect}
+    <OptionRow
+      title={property.label}
+      caption={property.property_ref}
+      selected={selected}
+      pending={pending}
       disabled={disabled}
-      aria-pressed={selected}
-      className={cn(
-        listRowClasses({ selected }),
-        'focus-ring flex w-full items-center gap-3 px-3 py-2 text-start',
-        'disabled:pointer-events-none disabled:[&_.type-item-title]:text-muted',
-      )}
-    >
-      <span className="min-w-0 flex-1">
-        <span className={textRole('itemTitle', 'block truncate')}>{property.label}</span>
-        <span className="type-caption block truncate tabular-nums">{property.property_ref}</span>
-      </span>
-      {pending ? <Spinner className="text-muted" /> : null}
-      {selected && !pending ? <Check className="text-accent size-4 shrink-0" aria-hidden /> : null}
-    </Pressable>
+      onSelect={onSelect}
+    />
   );
 }
 
@@ -137,7 +122,7 @@ function SelectedProperty({
 }>) {
   const verb = selected ? 'Change' : 'Select';
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       {selected ? (
         <span className={tagClasses('outline', 'max-w-full truncate tabular-nums')}>
           {selected}
@@ -158,7 +143,7 @@ function SelectedProperty({
           {verb}
         </Button>
       ) : null}
-    </div>
+    </Inline>
   );
 }
 

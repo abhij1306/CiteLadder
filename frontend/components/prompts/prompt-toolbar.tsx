@@ -16,6 +16,7 @@ import {
   DropdownTrigger,
 } from '@/components/ui/dropdown';
 import { FilterTrigger, type FilterBarProps } from '@/components/ui/filter-bar';
+import { Icon } from '@/components/ui/icon';
 import { SearchField } from '@/components/ui/search-field';
 import {
   buyerStageLabels,
@@ -100,7 +101,7 @@ export function promptFilterControls({
         <DropdownTrigger asChild>
           <FilterTrigger label="Filter" count={activeFilterCount} />
         </DropdownTrigger>
-        <DropdownContent align="end" className="w-56">
+        <DropdownContent align="end" width="panel">
           <DropdownLabel>Intent</DropdownLabel>
           {intentValues.map((value) => (
             <DropdownCheckboxItem
@@ -202,22 +203,22 @@ export function PromptActions({
       <Dropdown>
         <DropdownTrigger asChild>
           <Button variant="secondary">
-            <Plus className="size-4" aria-hidden />
+            <Icon icon={Plus} />
             Add prompts
-            <ChevronDown className="size-3.5 opacity-80" aria-hidden />
+            <Icon icon={ChevronDown} className="opacity-80" />
           </Button>
         </DropdownTrigger>
-        <DropdownContent align="end" className="w-56">
+        <DropdownContent align="end" width="panel">
           <DropdownItem onSelect={onAdd}>
-            <Plus className="size-4" aria-hidden />
+            <Icon icon={Plus} />
             Add prompt
           </DropdownItem>
           <DropdownItem onSelect={onGenerate}>
-            <Sparkles className="size-4" aria-hidden />
+            <Icon icon={Sparkles} />
             Generate prompts
           </DropdownItem>
           <DropdownItem onSelect={onImport}>
-            <Upload className="size-4" aria-hidden />
+            <Icon icon={Upload} />
             Bulk upload
           </DropdownItem>
           <DropdownSeparator />
@@ -229,7 +230,7 @@ export function PromptActions({
                   'Build a portfolio of distinct buyer questions for this project. Keep the existing topics. Read the current prompt portfolio and business evidence, identify meaningful buying decisions and gaps, and prepare new unbranded questions for prompt review.',
               })}
             >
-              <Bot className="size-4" aria-hidden />
+              <Icon icon={Bot} />
               Build with Agent
             </ProjectLink>
           </DropdownItem>

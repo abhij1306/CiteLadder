@@ -8,14 +8,12 @@ import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { DetailScreen } from '@/components/layout/page-shell';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { LegendSwatch } from '@/components/ui/chart';
-import type { DataTone } from '@/components/ui/data-tone';
+import { ChartKey } from '@/components/ui/chart';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { TrendChart } from '@/components/ui/trend-chart';
-import { textRole } from '@/components/ui/typography';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { MarketFilter } from '@/components/visibility/visibility-toolbar';
@@ -166,13 +164,15 @@ function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
               formatTick={formatWholePercent}
               className="h-auto w-full"
             />
-            <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <Key label="Mention rate" tone={{ series: 1 }} />
-              <Key label="Owned citation rate" tone={{ series: 2 }} />
-              {history.implementations.length ? (
-                <Key label="Marked implemented" tone={{ series: 6 }} />
-              ) : null}
-            </ul>
+            <ChartKey
+              entries={[
+                { label: 'Mention rate', tone: { series: 1 } },
+                { label: 'Owned citation rate', tone: { series: 2 } },
+                ...(history.implementations.length
+                  ? [{ label: 'Marked implemented', tone: { series: 6 } } as const]
+                  : []),
+              ]}
+            />
           </Stack>
         ) : (
           <QueryState
@@ -183,15 +183,6 @@ function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function Key({ label, tone }: Readonly<{ label: string; tone: DataTone }>) {
-  return (
-    <li className="flex items-center gap-2">
-      <LegendSwatch tone={tone} />
-      <span className={textRole('caption')}>{label}</span>
-    </li>
   );
 }
 

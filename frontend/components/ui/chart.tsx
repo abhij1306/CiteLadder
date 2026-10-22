@@ -145,6 +145,29 @@ export function LegendSwatch({
   );
 }
 
+/**
+ * A static legend: the key under a chart whose series are not interactive (a
+ * drawn SVG rather than a Recharts frame). One wrapping row of swatch-and-
+ * caption entries, 16 apart and 4 between wrapped lines — the same rhythm as
+ * the interactive `ChartLegend`, without the buttons.
+ */
+export function ChartKey({
+  entries,
+}: Readonly<{
+  entries: ReadonlyArray<Readonly<{ label: string; tone: DataTone; shape?: 'dot' | 'line' }>>;
+}>) {
+  return (
+    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      {entries.map((entry) => (
+        <li key={entry.label} className="flex items-center gap-2">
+          <LegendSwatch tone={entry.tone} shape={entry.shape} />
+          <span className={textRole('caption')}>{entry.label}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Axis defaults: no tick marks, one hairline, and room for the labels. */
 export const CHART_MARGIN = { top: 8, right: 8, bottom: 0, left: 0 } as const;
 

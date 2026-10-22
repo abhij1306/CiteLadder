@@ -6,11 +6,12 @@ import { useMemo } from 'react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { ReadError } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { missingPrompts, promptHistoryHref, type MissingPrompt } from '@/lib/prompts/history';
 import { resolveProjectRequestScope } from '@/lib/project/request-scope';
 import { engineLabel } from '@/lib/providers/catalog';
@@ -40,7 +41,7 @@ export function MissingPrompts({
           rows.length > SHOWN ? (
             <Button asChild variant="ghost">
               <ProjectLink href="/prompts">
-                All prompts <ArrowRight className="size-3.5" aria-hidden />
+                All prompts <Icon icon={ArrowRight} />
               </ProjectLink>
             </Button>
           ) : null
@@ -79,7 +80,7 @@ export function MissingPrompts({
 
 function MissingRow({ row }: Readonly<{ row: MissingPrompt }>) {
   return (
-    <li className="flex flex-wrap items-center justify-between gap-3 py-3">
+    <Inline as="li" gap="compact" className={ledgerItemClasses('flex-wrap justify-between')}>
       <Stack gap="tight" className="min-w-0">
         <TextLink href={promptHistoryHref(row.promptId)}>{row.text}</TextLink>
         <span className="type-caption">
@@ -93,6 +94,6 @@ function MissingRow({ row }: Readonly<{ row: MissingPrompt }>) {
       ) : (
         <span className="type-caption">No Action yet</span>
       )}
-    </li>
+    </Inline>
   );
 }

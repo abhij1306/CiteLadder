@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
@@ -131,7 +132,7 @@ function GenerationFooter({
         </Button>
       ) : (
         <Button variant="primary" onClick={onSubmit} disabled={isGenerating || !countValid}>
-          <Sparkles className="size-4" aria-hidden />
+          <Icon icon={Sparkles} />
           {isGenerating ? 'Generating…' : 'Generate'}
         </Button>
       )}
@@ -184,7 +185,7 @@ export function GeneratePromptsDialogView({
           ? 'Choose the questions your buyers would actually ask. Only accepted questions enter your tracked library.'
           : 'Draft distinct buying questions across your offerings and buying stages, then choose what to track. To target a place, persona or niche, use Build with Agent.'
       }
-      className={reviewing ? 'w-200' : 'w-130'}
+      width={reviewing ? 'review' : 'form'}
       footer={
         <GenerationFooter
           reviewing={reviewing}
@@ -236,7 +237,7 @@ export function GeneratePromptsDialogView({
                     <Checkbox
                       key={topic.id}
                       label={topic.name}
-                      className={nested ? 'ms-6' : undefined}
+                      nested={nested}
                       checked={selectedTopicIds.has(topic.id)}
                       onCheckedChange={(checked) => toggleTopic(topic.id, checked === true)}
                       disabled={isGenerating}

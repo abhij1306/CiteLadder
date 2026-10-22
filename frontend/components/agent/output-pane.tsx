@@ -18,7 +18,8 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
 import { agentWriteFailure } from '@/lib/agent/errors';
@@ -86,14 +87,14 @@ export function OutputPane({
         <h2 id="output-title" className={textRole('sectionTitle', 'min-w-0')}>
           {revision.title}
         </h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <Inline className="flex-wrap">
           <Badge>{kindLabel(output.kind)}</Badge>
           <Badge>{OUTPUT_PHASE_LABEL[output.phase]}</Badge>
           <span className={textRole('caption')}>Revision {revision.number}</span>
           {output.target_label ? (
             <span className={textRole('caption', 'truncate')}>{output.target_label}</span>
           ) : null}
-        </div>
+        </Inline>
         {editing ? null : (
           <OutputActions
             revision={revision}
@@ -132,13 +133,14 @@ export function OutputPane({
         value={tab}
         onValueChange={setTab}
         ariaLabel="Output views"
+        spaced
         items={[
           { value: 'output', label: OUTPUT_PHASE_LABEL[output.phase] },
           { value: 'sources', label: 'Sources' },
           { value: 'history', label: 'History' },
         ]}
       >
-        <TabPanel value="output" className="min-w-0 pt-3">
+        <TabPanel value="output" className="min-w-0">
           {draft ? (
             <OutputEditor
               workspaceId={workspaceId}
@@ -152,14 +154,14 @@ export function OutputPane({
             document
           )}
         </TabPanel>
-        <TabPanel value="sources" className="pt-3">
+        <TabPanel value="sources">
           {revision.source_refs.length === 0 ? (
             <p className={textRole('body')}>This revision cites no CiteLadder records.</p>
           ) : (
             <EvidenceChips refs={revision.source_refs} label="Sources" />
           )}
         </TabPanel>
-        <TabPanel value="history" className="pt-3">
+        <TabPanel value="history">
           {tab === 'history' ? (
             <OutputHistory
               workspaceId={workspaceId}
@@ -203,9 +205,9 @@ function OutputActions({
   onEdit,
 }: Readonly<{ revision: AgentRevision; locked: boolean; onEdit: () => void }>) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       <Button variant="secondary" disabled={locked} onClick={onEdit}>
-        <Pencil className="size-3.5" aria-hidden />
+        <Icon icon={Pencil} />
         Edit
       </Button>
       <CopyButton value={outputMarkdown(revision.title, revision.body)} variant="secondary">
@@ -215,10 +217,10 @@ function OutputActions({
         variant="secondary"
         onClick={() => downloadOutputMarkdown(revision.title, revision.body)}
       >
-        <Download className="size-3.5" aria-hidden />
+        <Icon icon={Download} />
         Export Markdown
       </Button>
-    </div>
+    </Inline>
   );
 }
 

@@ -9,7 +9,7 @@ import { Spinner } from './spinner';
 
 export type SearchFieldProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
-  'type' | 'value' | 'onChange' | 'size'
+  'type' | 'value' | 'onChange' | 'size' | 'width'
 > & {
   value: string;
   onValueChange: (value: string) => void;

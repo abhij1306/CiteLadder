@@ -5,7 +5,7 @@ import { X } from 'lucide-react';
 import { useInsertionEffect, useRef, type ReactNode, type RefObject } from 'react';
 
 import { cn } from '@/lib/utils';
-import { Button } from './button';
+import { IconButton } from './button';
 
 /**
  * Dialog — Radix modal. Scrim = --color-overlay-scrim, surface = bg-elevated,
@@ -15,11 +15,14 @@ import { Button } from './button';
  *
  * Width is a role, never a number a caller picks: `form` (30rem) for a short
  * form or a confirmation, `wide` (45rem) for a dialog that lays out a
- * selection grid or a preview beside its form.
+ * selection grid, a preview or a long form with rows of paired fields, and
+ * `review` (51.25rem) for a dialog whose body is a table or a review list the
+ * reader works through row by row.
  */
 const DIALOG_WIDTH = {
   form: 'w-[30rem]',
   wide: 'w-180',
+  review: 'w-205',
 } as const;
 
 export type DialogWidth = keyof typeof DIALOG_WIDTH;
@@ -31,7 +34,6 @@ export function Dialog({
   description,
   children,
   footer,
-  className,
   width = 'form',
   initialFocusRef,
 }: Readonly<{
@@ -41,7 +43,6 @@ export function Dialog({
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  className?: string;
   width?: DialogWidth;
   initialFocusRef?: RefObject<HTMLElement | null>;
 }>) {
@@ -85,7 +86,6 @@ export function Dialog({
           className={cn(
             'dialog-panel border-transparent bg-elevated shadow-modal z-modal fixed top-1/2 left-1/2 flex max-h-[calc(100dvh-2.5rem)] max-w-[calc(100vw-2.5rem)] min-w-0 -translate-x-1/2 -translate-y-1/2 flex-col box-border rounded-[var(--radius-card)] border focus-ring',
             DIALOG_WIDTH[width],
-            className,
           )}
         >
           <header className="border-border flex items-start justify-between gap-4 border-b px-[var(--modal-padding)] pt-[var(--modal-padding)] pb-4">
@@ -98,9 +98,7 @@ export function Dialog({
               ) : null}
             </div>
             <DialogPrimitive.Close asChild>
-              <Button variant="ghost" size="icon" aria-label="Close dialog">
-                <X className="size-4" aria-hidden />
-              </Button>
+              <IconButton icon={X} label="Close dialog" />
             </DialogPrimitive.Close>
           </header>
           <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-[var(--modal-padding)] py-4">

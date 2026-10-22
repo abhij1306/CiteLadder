@@ -4,6 +4,7 @@ import { ChevronDown } from 'lucide-react';
 import { Fragment } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import {
   Dropdown,
   DropdownContent,
@@ -75,10 +76,10 @@ export function SkillPicker({
       <DropdownTrigger asChild>
         <Button variant="ghost" disabled={disabled} aria-label={`Skill: ${current}`}>
           Skill: {current}
-          <ChevronDown className="size-3.5" aria-hidden />
+          <Icon icon={ChevronDown} />
         </Button>
       </DropdownTrigger>
-      <DropdownContent align="start" className="w-64" onCloseAutoFocus={onCloseAutoFocus}>
+      <DropdownContent align="start" width="panel" onCloseAutoFocus={onCloseAutoFocus}>
         <DropdownRadioGroup
           value={
             value === undefined && defaultLabel !== 'Automatic' ? INHERIT : (value ?? AUTOMATIC)

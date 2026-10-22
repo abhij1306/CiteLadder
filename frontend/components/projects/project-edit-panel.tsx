@@ -6,11 +6,12 @@ import { useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { QueryState } from '@/components/ui/query-state';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
 import { ProjectMarkets } from './project-markets';
 import { textRole } from '@/components/ui/typography';
@@ -189,7 +190,7 @@ export function ProjectEditPanel({
       onOpenChange={onOpenChange}
       title={`Edit ${project.brand_name || project.name}`}
       description="Changes apply to future audits. Existing results keep the settings they ran with."
-      className="w-155"
+      width="wide"
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={save.isPending}>
@@ -299,7 +300,7 @@ export function ProjectEditPanel({
         </Stack>
 
         <Stack gap="compact">
-          <div className="flex items-center gap-2">
+          <Inline>
             <p className={textRole('label')}>Competitors</p>
             <span className="type-caption">
               {competitors.length} of {maximumCompetitors ?? '…'}
@@ -322,17 +323,17 @@ export function ProjectEditPanel({
                 ])
               }
             >
-              <Plus className="size-3.5" aria-hidden />
+              <Icon icon={Plus} />
               Add
             </Button>
-          </div>
+          </Inline>
           {competitors.length === 0 ? (
             <QueryState kind="empty" inline message="None tracked." />
           ) : (
             <Stack as="ul" gap="compact" className="list-none">
               {competitors.map((competitor, index) => (
                 <Stack as="li" key={competitor.key} gap="compact">
-                  <div className="flex items-center gap-2">
+                  <Inline>
                     <Input
                       value={competitor.name}
                       onChange={(event) =>
@@ -350,15 +351,12 @@ export function ProjectEditPanel({
                       aria-label={`Competitor ${index + 1} domains`}
                       placeholder="Domains"
                     />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Remove ${competitorName(competitor.name, index)}`}
+                    <IconButton
+                      icon={X}
+                      label={`Remove ${competitorName(competitor.name, index)}`}
                       onClick={() => setCompetitors((prev) => prev.filter((_, i) => i !== index))}
-                    >
-                      <X className="size-4" aria-hidden />
-                    </Button>
-                  </div>
+                    />
+                  </Inline>
                   <MentionRuleFields
                     name={competitor.name}
                     rule={competitor.rule}

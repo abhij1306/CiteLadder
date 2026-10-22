@@ -74,7 +74,7 @@ export function ProjectSwitcher({ className }: Readonly<{ className?: string }>)
         <span className={textRole('itemTitle', 'min-w-0 flex-1 truncate')}>{label}</span>
         <ChevronsUpDown className="text-muted size-3.5 shrink-0" aria-hidden />
       </DropdownTrigger>
-      <DropdownContent align="start" className="w-56">
+      <DropdownContent align="start" width="panel">
         {workspaces.length > 1 ? (
           <>
             <DropdownLabel>Workspaces</DropdownLabel>
