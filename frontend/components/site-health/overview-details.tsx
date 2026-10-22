@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { TrendChart } from '@/components/ui/trend-chart';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { SiteHealthOverview } from '@/lib/api/types';
@@ -271,7 +271,7 @@ function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change
           </div>
         ))}
         {data.state === 'unavailable' ? (
-          <InlineEmpty>No comparable snapshot yet.</InlineEmpty>
+          <QueryState kind="empty" inline message="No comparable snapshot yet." />
         ) : null}
         <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
       </CardContent>
@@ -378,7 +378,7 @@ function WebFundamentalsDrawer({
             />
             <Stack>
               {area.top_findings.length === 0 ? (
-                <InlineEmpty>No missing HTTP-evidence checks.</InlineEmpty>
+                <QueryState kind="empty" inline message="No missing HTTP-evidence checks." />
               ) : (
                 area.top_findings.map((finding) => (
                   <div key={finding.rule_id} className="grid gap-1">

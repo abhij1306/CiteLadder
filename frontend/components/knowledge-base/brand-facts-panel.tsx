@@ -13,7 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
@@ -89,9 +89,11 @@ export function BrandFactsPanel({
         />
       ) : null}
       {!active.length ? (
-        <InlineEmpty>
-          No facts yet. Add pricing, plans, integrations or other facts to check.
-        </InlineEmpty>
+        <QueryState
+          kind="empty"
+          inline
+          message="No facts yet. Add pricing, plans, integrations or other facts to check."
+        />
       ) : (
         <ul className="grid gap-2">
           {active.map((fact) => (

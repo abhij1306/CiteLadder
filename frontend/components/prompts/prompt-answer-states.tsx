@@ -3,8 +3,9 @@
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
+import { StatRow } from '@/components/ui/stat-row';
 import {
   Table,
   TableBody,
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses, MetricGroup, MetricItem } from '@/components/ui/workspace';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import type { PromptMetricItem } from '@/lib/api/types';
@@ -81,21 +82,21 @@ function LatestRun({ latest }: Readonly<{ latest: PromptMetricItem }>) {
         </p>
       ) : null}
       {states ? (
-        <MetricGroup aria-label="Answers by state">
-          {ANSWER_STATES.map((state) => (
-            <MetricItem
-              key={state.key}
-              label={state.label}
-              value={states[state.key]}
-              detail={state.meaning}
-            />
-          ))}
-        </MetricGroup>
+        <StatRow
+          label="Answers by state"
+          segments={ANSWER_STATES.map((state) => ({
+            key: state.key,
+            label: state.label,
+            value: states[state.key],
+            sub: state.meaning,
+          }))}
+        />
       ) : (
-        <InlineEmpty>
-          No answer succeeded for this prompt in that run, so mentions and citations are unavailable
-          rather than zero.
-        </InlineEmpty>
+        <QueryState
+          kind="empty"
+          inline
+          message="No answer succeeded for this prompt in that run, so mentions and citations are unavailable rather than zero."
+        />
       )}
       {outcomes.length ? <EngineTable outcomes={outcomes} /> : null}
       <Stack gap="compact">
@@ -103,10 +104,7 @@ function LatestRun({ latest }: Readonly<{ latest: PromptMetricItem }>) {
         {gaps.length ? (
           <ul className={ledgerClasses('boxed')}>
             {gaps.map((gap) => (
-              <li
-                key={gap.name}
-                className="flex flex-wrap items-center justify-between gap-2 px-4 py-3"
-              >
+              <li key={gap.name} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <span className={textRole('itemTitle')}>{gap.name}</span>
                 <span className="type-caption">
                   {pluralCount(gap.answers, 'answer')} on {gap.engines.map(engineLabel).join(', ')}

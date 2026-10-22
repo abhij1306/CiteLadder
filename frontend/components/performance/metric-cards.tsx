@@ -5,8 +5,7 @@ import { LegendSwatch } from '@/components/ui/chart';
 import { InfoHint } from '@/components/ui/info-hint';
 import { Stack } from '@/components/ui/layout';
 import { MetricValue } from '@/components/ui/metric-value';
-import { StatGrid, StatItem } from '@/components/ui/stat-grid';
-import { MetricGroup, MetricItem } from '@/components/ui/workspace';
+import { StatRow } from '@/components/ui/stat-row';
 import type { PerformanceWindow } from '@/lib/api/performance';
 import { availabilityLabel, formatCount } from '@/lib/format';
 import {
@@ -35,7 +34,7 @@ function measured(key: PerformanceMetricKey, value: number | null | undefined): 
  * Selecting a card toggles its series on the chart below. At least one metric
  * always stays selected, so the chart never renders as an empty plot.
  *
- * The four render as ONE connected band (`StatGrid surface="band"`) rather
+ * The four render as ONE connected band (a `StatRow`) rather
  * than four detached cards: they are a single control group over one window.
  * The cards are neutral; the metric's chart colour appears only as the series
  * key beside the label, and only while the metric is plotted. Selection is the
@@ -83,7 +82,7 @@ function MetricCardComparison({
 /**
  * The label row's end: the series key (shown only while the metric is plotted
  * — a key on an unplotted metric would point at a line that is not there) and
- * the metric's definition. `StatItem` raises it above the cell's stretched
+ * the metric's definition. `StatRow` raises it above the cell's stretched
  * toggle, so the definition stays reachable.
  */
 function MetricMarker({
@@ -130,53 +129,45 @@ export function MetricCards({
   'data-testid'?: string;
 }>) {
   return (
-    <StatGrid
-      surface="band"
-      columns={4}
-      size="figure"
-      label="Search Console metrics"
-      className={className}
-      data-testid={testId}
-    >
-      {METRIC_CARDS.map((card) => {
-        const value = measured(card.key, selected.totals[card.key]);
-        const plotted = active.has(card.key);
-        return (
-          <StatItem
-            key={card.key}
-            label={card.label}
+    <div className={className}>
+      <StatRow
+        label="Search Console metrics"
+        testId={testId}
+        segments={METRIC_CARDS.map((card) => {
+          const plotted = active.has(card.key);
+          return {
+            key: card.key,
+            label: card.label,
             // The period labels earn their place only when TWO values stack:
             // with one number the range is already stated in the toolbar.
-            caption={comparison ? selectedLabel : undefined}
-            value={value}
-            missingLabel={NOT_MEASURED}
-            loading={loading}
-            detail={
-              comparison ? (
-                <MetricCardComparison
-                  metricKey={card.key}
-                  comparison={comparison}
-                  comparisonValue={comparison.totals[card.key]}
-                  compareLabel={compareLabel}
-                  loading={loading}
-                />
-              ) : undefined
-            }
-            marker={
+            caption: comparison ? selectedLabel : undefined,
+            value: measured(card.key, selected.totals[card.key]),
+            missingLabel: NOT_MEASURED,
+            loading,
+            sub: comparison ? (
+              <MetricCardComparison
+                metricKey={card.key}
+                comparison={comparison}
+                comparisonValue={comparison.totals[card.key]}
+                compareLabel={compareLabel}
+                loading={loading}
+              />
+            ) : undefined,
+            marker: (
               <MetricMarker
                 metricKey={card.key}
                 label={card.label}
                 color={colors[card.key]}
                 plotted={plotted}
               />
-            }
-            onSelect={() => onToggle(card.key)}
-            actionLabel={`Plot ${card.label.toLowerCase()}`}
-            selected={plotted}
-          />
-        );
-      })}
-    </StatGrid>
+            ),
+            onSelect: () => onToggle(card.key),
+            actionLabel: `Plot ${card.label.toLowerCase()}`,
+            selected: plotted,
+          };
+        })}
+      />
+    </div>
   );
 }
 
@@ -221,33 +212,24 @@ export function Ga4SummaryRow({
     <Card data-testid="ga4-summary">
       <CardContent>
         <Stack gap="compact">
-          <MetricGroup>
-            {GA4_SUMMARY_ENTRIES.map((entry) => {
+          <StatRow
+            segments={GA4_SUMMARY_ENTRIES.map((entry) => {
               const value = selected.totals[entry.key];
               const comparisonValue = comparison ? comparison.totals[entry.key] : undefined;
-              return (
-                <MetricItem
-                  key={entry.key}
-                  label={entry.label}
-                  value={
-                    <MetricValue
-                      size="figureSm"
-                      value={value === null ? null : formatCount(value)}
-                      label={NOT_MEASURED}
-                      loading={loading}
-                    />
-                  }
-                  detail={
-                    comparison ? (
-                      <span className="tabular-nums">
-                        {ga4ComparisonLabel(comparison, comparisonValue, compareLabel)}
-                      </span>
-                    ) : undefined
-                  }
-                />
-              );
+              return {
+                key: entry.key,
+                label: entry.label,
+                value: value === null || value === undefined ? null : formatCount(value),
+                missingLabel: NOT_MEASURED,
+                loading,
+                sub: comparison ? (
+                  <span className="tabular-nums">
+                    {ga4ComparisonLabel(comparison, comparisonValue, compareLabel)}
+                  </span>
+                ) : undefined,
+              };
             })}
-          </MetricGroup>
+          />
           <p className="type-caption">
             Google Analytics 4 · Property-wide organic and AI sessions · Key events as configured in
             GA4

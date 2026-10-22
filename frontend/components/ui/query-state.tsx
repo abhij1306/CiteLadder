@@ -10,24 +10,54 @@ import { Spinner } from './spinner';
 import { textRole } from './typography';
 
 /**
- * The three states a read can show before it has content, as one organism.
+ * The states a read can show instead of its content, as one organism.
  *
  *   `loading` — the first load: a calm, centred spinner, held back for a beat
  *               so a fast read never flashes one.
  *   `error`   — the read failed: what happened, Retry for exactly that read,
  *               and the support reference.
- *   `empty`   — first use: nothing exists yet, and the one thing to do.
+ *   `empty`   — nothing exists yet, and the one thing to do.
  *
- * All three render in ONE footprint: the same box (the card recipe: radius
- * 12, padding 16 on the box itself, the hairline edge) at the same reserved
- * height, so a read that goes loading → error → retry → empty never moves
- * the page around it. Before this the same failed read drew at 20, 32, 88,
- * 120 and 152px depending on which screen wrapped it. Inside a card the box
- * gives up its own surface and shares the card's, but keeps its footprint.
+ * Two presentations, one footprint each:
  *
- * Callers choose the state, never the geometry: there is no size, padding or
- * height prop.
+ *   block  — the region's whole purpose is the state (a route, a section, a
+ *            table body). The box recipe (radius 12, padding 16 on the box,
+ *            the hairline edge) at the one reserved height, so a read that
+ *            goes loading → error → retry → empty never moves the page. Inside
+ *            a card, panel, dialog or table the box gives up its own surface
+ *            and shares the container's, but keeps its footprint.
+ *   inline — `inline` on an empty state: the one-line "No …" inside a section
+ *            that otherwise has content ("No orphaned pages."). One 32px row:
+ *            an optional icon, the sentence in muted body ink, one action.
+ *
+ * This replaced `EmptyState` (page and compact variants), `InlineEmpty` and
+ * the router's `screen-states`, which drew the same absence at 20, 32, 88, 120
+ * and 152px. Callers choose the state, never the geometry: there is no size,
+ * padding or height prop.
  */
+type BlockEmpty = Readonly<{
+  kind: 'empty';
+  inline?: false;
+  icon: LucideIcon;
+  heading: string;
+  /** One sentence: what is missing and what to do about it. */
+  description?: string;
+  /** One primary control; a second only when both are equal choices. */
+  action?: ReactNode;
+  /** A route boundary that owns the page heading uses 1. */
+  headingLevel?: 1 | 2 | 3;
+}>;
+
+type InlineEmpty = Readonly<{
+  kind: 'empty';
+  inline: true;
+  /** One short sentence: what is absent. */
+  message: ReactNode;
+  icon?: LucideIcon;
+  /** One control (a `TextLink` or a `Button`). */
+  action?: ReactNode;
+}>;
+
 export type QueryStateProps =
   | Readonly<{
       kind: 'loading';
@@ -43,21 +73,13 @@ export type QueryStateProps =
       onRetry: () => void;
       pending?: boolean;
     }>
-  | Readonly<{
-      kind: 'empty';
-      icon: LucideIcon;
-      heading: string;
-      /** One sentence: what is missing and what to do about it. */
-      description?: string;
-      /** One primary control; a second only when both are equal choices. */
-      action?: ReactNode;
-      /** A route boundary that owns the page heading uses 1. */
-      headingLevel?: 1 | 2 | 3;
-    }>;
+  | BlockEmpty
+  | InlineEmpty;
 
 const HEADING_TAG = { 1: 'h1', 2: 'h2', 3: 'h3' } as const;
 
 export function QueryState(props: QueryStateProps) {
+  if (props.kind === 'empty' && props.inline) return <InlineState {...props} />;
   return (
     <div
       data-query-state={props.kind}
@@ -67,12 +89,26 @@ export function QueryState(props: QueryStateProps) {
         props.kind === 'loading' ? 'place-items-center' : 'content-start justify-items-start',
       )}
     >
-      <QueryStateBody {...props} />
+      <BlockBody {...props} />
     </div>
   );
 }
 
-function QueryStateBody(props: QueryStateProps) {
+function InlineState({ message, icon: Icon, action }: InlineEmpty) {
+  return (
+    <div
+      data-query-state="empty"
+      data-query-state-inline=""
+      className="flex min-h-[var(--control-height-md)] min-w-0 flex-wrap items-center gap-x-2"
+    >
+      {Icon ? <Icon className="text-muted size-4 shrink-0" aria-hidden /> : null}
+      <p className={textRole('body', 'text-muted min-w-0')}>{message}</p>
+      {action}
+    </div>
+  );
+}
+
+function BlockBody(props: Exclude<QueryStateProps, InlineEmpty>) {
   switch (props.kind) {
     case 'loading':
       return <DelayedSpinner label={props.label ?? 'Loading…'} />;
@@ -120,7 +156,7 @@ function DelayedSpinner({ label }: Readonly<{ label: string }>) {
   }, []);
   return (
     <span className="loading-delayed">
-      <Spinner size="lg" label={revealed ? label : undefined} className="text-muted" />
+      <Spinner label={revealed ? label : undefined} className="text-muted" />
     </span>
   );
 }

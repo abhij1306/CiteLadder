@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { Stack } from '@/components/ui/layout';
 import { Pager } from '@/components/ui/pager';
@@ -73,7 +73,7 @@ export function ActionsScreen() {
   const [target, setTarget] = useUrlState('target', TARGET_CODEC);
   const counts = useActionStatusCounts();
   return (
-    <PageShell
+    <ListScreen
       controls={{
         filters: (
           <>
@@ -103,7 +103,7 @@ export function ActionsScreen() {
       ) : (
         <ProjectRequired loading={isLoading} />
       )}
-    </PageShell>
+    </ListScreen>
   );
 }
 

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { robotsHistoryPageSchema } from '@citeladder/contracts/site-health';
 import type { z } from 'zod';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Pager } from '@/components/ui/pager';
 import { DisplayTime } from '@/components/ui/display-time';
 import { LineDiff } from '@/components/ui/line-diff';
@@ -51,7 +50,7 @@ export function RobotsHistory({
   return (
     <>
       {page.items.length === 0 ? (
-        <InlineEmpty>No robots.txt observations are available.</InlineEmpty>
+        <QueryState kind="empty" inline message="No robots.txt observations are available." />
       ) : (
         <Table>
           <caption className="sr-only">robots.txt observation sequence</caption>

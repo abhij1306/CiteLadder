@@ -15,9 +15,9 @@ import {
 import { cn } from '@/lib/utils';
 
 /**
- * What a route puts in its control band. A route passes these to
- * `PageShell`'s `controls`; it never renders a `FilterBar` itself, so no
- * feature draws a toolbar of its own.
+ * What a route puts in its control band. A route passes these to its screen
+ * template's `controls` (or a `DataTable`'s `toolbar`); it never renders a
+ * `FilterBar` itself, so no feature draws a toolbar of its own.
  */
 export type FilterBarProps = Readonly<{
   /** A `SearchField`. */

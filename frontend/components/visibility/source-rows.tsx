@@ -246,7 +246,7 @@ function MentionedChips({
               name={brand.name}
               logoUrl={brand.logo_url}
               websiteUrl={brand.website}
-              size="xs"
+              placement="mark"
             />
           </span>
         </Tooltip>

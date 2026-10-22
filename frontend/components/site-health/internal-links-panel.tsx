@@ -9,20 +9,13 @@ import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
-import { FilterBar } from '@/components/ui/filter-bar';
-import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
+import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { QueryState } from '@/components/ui/query-state';
 import { SearchField } from '@/components/ui/search-field';
 import { Select } from '@/components/ui/select';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { ACTION_STATUS_LABEL } from '@/lib/agent/vocabulary';
 import type { ActionStatus } from '@/lib/api/actions';
 import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
@@ -343,37 +336,50 @@ function LinksBody({
           page pairs checked. Suggestions appear as they are found.
         </output>
       ) : null}
-      {analysis.recommendations.length ? (
-        <FilterBar
-          search={
-            <SearchField
-              value={params.get('links_q') ?? ''}
-              onValueChange={(value) => update('links_q', value, 'replace')}
-              placeholder="Search pages and anchors"
-              aria-label="Search pages and anchors"
-            />
-          }
-          filters={
-            <Select
-              ariaLabel="Action status"
-              value={params.get('links_status') ?? ''}
-              onValueChange={(value) => update('links_status', value)}
-              options={[
-                { value: '', label: 'All statuses' },
-                ...Object.entries(ACTION_STATUS_LABEL).map(([value, label]) => ({ value, label })),
-              ]}
-            />
-          }
-        />
-      ) : null}
       <LinksTable
         links={links}
+        toolbar={
+          analysis.recommendations.length
+            ? {
+                search: (
+                  <SearchField
+                    value={params.get('links_q') ?? ''}
+                    onValueChange={(value) => update('links_q', value, 'replace')}
+                    placeholder="Search pages and anchors"
+                    aria-label="Search pages and anchors"
+                  />
+                ),
+                filters: (
+                  <Select
+                    ariaLabel="Action status"
+                    value={params.get('links_status') ?? ''}
+                    onValueChange={(value) => update('links_status', value)}
+                    options={[
+                      { value: '', label: 'All statuses' },
+                      ...Object.entries(ACTION_STATUS_LABEL).map(([value, label]) => ({
+                        value,
+                        label,
+                      })),
+                    ]}
+                  />
+                ),
+              }
+            : undefined
+        }
         emptyReason={emptyReason(analysis)}
         onSelect={(id) => update('link', id)}
       />
     </>
   );
 }
+
+const LINK_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'source', label: 'Source page' },
+  { key: 'target', label: 'Add link to' },
+  { key: 'anchor', label: 'Anchor text', width: 'name' },
+  { key: 'action', label: 'Action', width: 'status' },
+  { key: 'review', label: 'Review', width: 'action', hideLabel: true },
+];
 
 /** Distinguish "nothing to compare" from "compared and nothing qualified". */
 function emptyReason(analysis: InternalLinkAnalysis): string {
@@ -386,75 +392,80 @@ function emptyReason(analysis: InternalLinkAnalysis): string {
 
 function LinksTable({
   links,
+  toolbar,
   emptyReason,
   onSelect,
-}: Readonly<{ links: InternalLink[]; emptyReason: string; onSelect: (id: string) => void }>) {
+}: Readonly<{
+  links: InternalLink[];
+  toolbar?: FilterBarProps;
+  emptyReason: string;
+  onSelect: (id: string) => void;
+}>) {
   const [pageSize, setPageSize] = useState<TablePageSize>(TABLE_DEFAULT_PAGE_SIZE);
   const pagination = useTablePage(links.length, pageSize);
-  if (!links.length)
-    return <QueryState kind="empty" icon={ICONS.site} heading={emptyReason} headingLevel={3} />;
+  const paged = links.slice(pagination.from - 1, pagination.to);
   return (
-    <div className="min-w-0">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Source page</TableHead>
-            <TableHead>Add link to</TableHead>
-            <TableHead>Anchor text</TableHead>
-            <TableHead>Action</TableHead>
-            <TableHead>
-              <span className="sr-only">Review</span>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {links.slice(pagination.from - 1, pagination.to).map((link) => (
-            <TableRow key={link.id}>
-              <TableCell>
-                <PageCell title={link.source.title} url={link.source.url} />
-              </TableCell>
-              <TableCell>
-                <PageCell title={link.target.title} url={link.target.url} />
-              </TableCell>
-              <TableCell>{link.anchor}</TableCell>
-              <TableCell className="whitespace-nowrap">
-                {link.action_status && link.action_status in ACTION_STATUS_LABEL ? (
-                  <ActionStatusBadge status={link.action_status as ActionStatus} />
-                ) : (
-                  <span className="type-caption">No Action yet</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <Button
-                  variant="ghost"
-                  onClick={() => onSelect(link.id)}
-                  aria-label={`Review link from ${link.source.title || link.source.url} to ${link.target.title || link.target.url}`}
-                >
-                  Review
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <Pager
-        frame="table"
-        range={{
-          from: pagination.from,
-          to: pagination.to,
-          total: links.length,
-          noun: 'suggestions',
-        }}
-        pageSize={{
-          value: pageSize,
-          onChange: (size) => {
-            setPageSize(isTablePageSize(size) ? size : TABLE_DEFAULT_PAGE_SIZE);
-            pagination.setPage(1);
-          },
-        }}
-        {...pageNumberControls(pagination.page, pagination.pageCount, pagination.setPage)}
-      />
-    </div>
+    <DataTable
+      label="Internal link suggestions"
+      toolbar={toolbar}
+      columns={LINK_COLUMNS}
+      // A table of more than one page reserves a full page, so the pager stays put.
+      pageSize={links.length > pageSize ? pageSize : undefined}
+      rowCount={paged.length}
+      state={
+        links.length
+          ? undefined
+          : { kind: 'empty', icon: ICONS.site, heading: emptyReason, headingLevel: 3 }
+      }
+      pager={
+        links.length
+          ? {
+              range: {
+                from: pagination.from,
+                to: pagination.to,
+                total: links.length,
+                noun: 'suggestions',
+              },
+              pageSize: {
+                value: pageSize,
+                onChange: (size) => {
+                  setPageSize(isTablePageSize(size) ? size : TABLE_DEFAULT_PAGE_SIZE);
+                  pagination.setPage(1);
+                },
+              },
+              ...pageNumberControls(pagination.page, pagination.pageCount, pagination.setPage),
+            }
+          : undefined
+      }
+    >
+      {paged.map((link) => (
+        <TableRow key={link.id}>
+          <TableCell>
+            <PageCell title={link.source.title} url={link.source.url} />
+          </TableCell>
+          <TableCell>
+            <PageCell title={link.target.title} url={link.target.url} />
+          </TableCell>
+          <TableCell>{link.anchor}</TableCell>
+          <TableCell className="whitespace-nowrap">
+            {link.action_status && link.action_status in ACTION_STATUS_LABEL ? (
+              <ActionStatusBadge status={link.action_status as ActionStatus} />
+            ) : (
+              <span className="type-caption">No Action yet</span>
+            )}
+          </TableCell>
+          <TableCell>
+            <Button
+              variant="ghost"
+              onClick={() => onSelect(link.id)}
+              aria-label={`Review link from ${link.source.title || link.source.url} to ${link.target.title || link.target.url}`}
+            >
+              Review
+            </Button>
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 

@@ -112,27 +112,27 @@ describe('TargetDetail', () => {
       <ShelfHarness target={{ kind: 'product', id: PRODUCT_A }} label="Product A" />,
     );
 
-    expect(await screen.findByRole('heading', { name: '50.0%' })).toBeVisible();
+    expect(await screen.findByText('50.0%')).toBeVisible();
 
     rerender(<ShelfHarness target={productB} label="Product B" />);
     await waitFor(() => expect(holdB).toBe(true));
 
-    // Still product A's heading and content — no skeleton stood in for it,
+    // Still product A's figures and content — no skeleton stood in for them,
     // and no "Product B" caption sits over A's numbers while B is in flight.
-    expect(screen.getByRole('heading', { name: '50.0%' })).toBeVisible();
+    expect(screen.getByText('50.0%')).toBeVisible();
     expect(screen.getByLabelText('Updating target detail')).toBeInTheDocument();
 
     act(() => releaseB());
 
-    await waitFor(() => expect(screen.getByRole('heading', { name: '90.0%' })).toBeInTheDocument());
-    expect(screen.queryByRole('heading', { name: '50.0%' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('90.0%')).toBeInTheDocument());
+    expect(screen.queryByText('50.0%')).not.toBeInTheDocument();
 
     // The held target is adjusted DURING render, which loops if the query
     // result is not referentially stable across renders it did not cause.
     // Re-rendering the same selection repeatedly is what proves it settles.
     rerender(<ShelfHarness target={productB} label="Product B" />);
     rerender(<ShelfHarness target={productB} label="Product B" />);
-    expect(screen.getByRole('heading', { name: '90.0%' })).toBeVisible();
+    expect(screen.getByText('90.0%')).toBeVisible();
     expect(screen.queryByLabelText('Updating target detail')).not.toBeInTheDocument();
   });
 
@@ -146,7 +146,7 @@ describe('TargetDetail', () => {
     const { rerender } = renderWithProviders(
       <ShelfHarness target={{ kind: 'product', id: PRODUCT_A }} label="Product A" />,
     );
-    await screen.findByRole('heading', { name: '50.0%' });
+    await screen.findByText('50.0%');
     fireEvent.change(screen.getByRole('textbox', { name: 'Manual buyer prompt' }), {
       target: { value: 'waterproof trail shoe under 100' },
     });

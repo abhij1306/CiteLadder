@@ -1,15 +1,12 @@
 'use client';
 
+import type { ReactNode } from 'react';
+import { Play } from 'lucide-react';
+
 import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { pageNumberControls, useTablePage } from '@/components/ui/pager';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import type { Audit } from '@/lib/api/types';
 import { marketLabel } from '@citeladder/contracts/markets';
@@ -23,15 +20,41 @@ const sameLaunch = (audit: Audit, previous: Audit | undefined) =>
 /** Rows per page on the runs table (client-side; the list arrives whole). */
 const PAGE_SIZE = 10;
 
+const MARKET_COLUMN: DataTableColumn = { key: 'market', label: 'Market', width: 'name' };
+
+function runsColumns(showMarket: boolean): DataTableColumn[] {
+  return [
+    { key: 'status', label: 'Status', width: 'status' },
+    { key: 'scope', label: 'Scope' },
+    ...(showMarket ? [MARKET_COLUMN] : []),
+    { key: 'requested', label: 'Requested', width: 'figure', numeric: true },
+    { key: 'completed', label: 'Completed', width: 'figure', numeric: true },
+    { key: 'failed', label: 'Failed', width: 'figure', numeric: true },
+    { key: 'created', label: 'Created', width: 'date', numeric: true },
+    { key: 'actions', label: 'Actions', width: 'action', hideLabel: true },
+  ];
+}
+
 /**
- * Runs (audits) list table.
+ * Runs (audits) list table, on the shared `DataTable`.
  *
  * One row per audit: a run-status badge, the requested/completed/failed
  * counts, and the created timestamp. Each row links to the run detail page.
- * Client-side pagination footer (tabular page indicator + ghost buttons) per the
- * runs frame.
+ * A status filter that matches nothing keeps the header and the page's
+ * footprint and states the absence inside the table.
  */
-export function RunsTable({ audits }: Readonly<{ audits: Audit[] }>) {
+export function RunsTable({
+  audits,
+  status,
+  emptyHeading,
+}: Readonly<{
+  /** The runs the status filter left. */
+  audits: Audit[];
+  /** A live note in the table header, e.g. that the list is polling. */
+  status: ReactNode;
+  /** What the filtered-empty state says. */
+  emptyHeading: string;
+}>) {
   const timeZone = useDisplayTimeZone();
   const { page, setPage, pageCount, from, to } = useTablePage(audits.length, PAGE_SIZE);
   const pagedAudits = audits.slice(from - 1, to);
@@ -39,65 +62,50 @@ export function RunsTable({ audits }: Readonly<{ audits: Audit[] }>) {
   const showMarket = audits.some((audit) => audit.market.id !== null);
 
   return (
-    <div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Status</TableHead>
-            <TableHead>Scope</TableHead>
-            {showMarket ? <TableHead>Market</TableHead> : null}
-            <TableHead numeric>Requested</TableHead>
-            <TableHead numeric>Completed</TableHead>
-            <TableHead numeric>Failed</TableHead>
-            <TableHead numeric>Created</TableHead>
-            <TableHead className="sr-only">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pagedAudits.map((audit, index) => (
-            <TableRow key={audit.id}>
-              <TableCell>
-                <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
-                  {auditStatusLabel(audit.status)}
-                </Badge>
-              </TableCell>
-              <TableCell>
-                <Badge
-                  variant="status"
-                  value={audit.audit_scope === 'commerce' ? 'info' : 'success'}
-                >
-                  {audit.audit_scope === 'commerce' ? 'Commerce' : 'Brand'}
-                </Badge>
-              </TableCell>
-              {showMarket ? <TableCell>{marketLabel(audit.market)}</TableCell> : null}
-              <TableCell numeric className="tabular-nums">
-                {audit.requested_count}
-              </TableCell>
-              <TableCell numeric className="tabular-nums">
-                {audit.completed_count}
-              </TableCell>
-              <TableCell numeric className="tabular-nums">
-                {audit.failed_count}
-              </TableCell>
-              <TableCell numeric className="text-secondary">
-                {sameLaunch(audit, pagedAudits[index - 1])
-                  ? 'Same launch'
-                  : formatDateTime(audit.created_at, timeZone)}
-              </TableCell>
-              <TableCell>
-                <TextLink href={`/runs/${audit.id}`} text="itemTitle">
-                  View
-                </TextLink>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <Pager
-        frame="table"
-        range={{ from, to, total: audits.length, noun: 'runs' }}
-        {...pageNumberControls(page, pageCount, setPage)}
-      />
-    </div>
+    <DataTable
+      title="All runs"
+      toolbar={{ status }}
+      columns={runsColumns(showMarket)}
+      pageSize={PAGE_SIZE}
+      rowCount={pagedAudits.length}
+      state={
+        audits.length === 0
+          ? { kind: 'empty', headingLevel: 3, icon: Play, heading: emptyHeading }
+          : undefined
+      }
+      pager={{
+        range: { from, to, total: audits.length, noun: 'runs' },
+        ...pageNumberControls(page, pageCount, setPage),
+      }}
+    >
+      {pagedAudits.map((audit, index) => (
+        <TableRow key={audit.id}>
+          <TableCell>
+            <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
+              {auditStatusLabel(audit.status)}
+            </Badge>
+          </TableCell>
+          <TableCell>
+            <Badge variant="status" value={audit.audit_scope === 'commerce' ? 'info' : 'success'}>
+              {audit.audit_scope === 'commerce' ? 'Commerce' : 'Brand'}
+            </Badge>
+          </TableCell>
+          {showMarket ? <TableCell>{marketLabel(audit.market)}</TableCell> : null}
+          <TableCell numeric>{audit.requested_count}</TableCell>
+          <TableCell numeric>{audit.completed_count}</TableCell>
+          <TableCell numeric>{audit.failed_count}</TableCell>
+          <TableCell numeric className="text-secondary">
+            {sameLaunch(audit, pagedAudits[index - 1])
+              ? 'Same launch'
+              : formatDateTime(audit.created_at, timeZone)}
+          </TableCell>
+          <TableCell>
+            <TextLink href={`/runs/${audit.id}`} text="itemTitle">
+              View
+            </TextLink>
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }

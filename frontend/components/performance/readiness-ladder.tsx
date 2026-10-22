@@ -85,7 +85,7 @@ function StepMark({ state }: Readonly<{ state: 'done' | 'active' | 'pending' }>)
   if (state === 'active') {
     return (
       <span className="border-info-border text-info-text inline-flex size-5 shrink-0 items-center justify-center rounded-full border">
-        <Spinner size="sm" />
+        <Spinner />
       </span>
     );
   }

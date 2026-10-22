@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Line, LineChart, XAxis, YAxis, Tooltip } from 'recharts';
 import { axisProps, ChartContainer, LegendSwatch } from '@/components/ui/chart';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { textRole } from '@/components/ui/typography';
@@ -47,7 +47,11 @@ export function SearchIntelligenceHistory({
   const last = observations.at(-1);
   if (!first || !last || observations.length < 2)
     return (
-      <InlineEmpty>History needs at least two saved observations to show a trend.</InlineEmpty>
+      <QueryState
+        kind="empty"
+        inline
+        message="History needs at least two saved observations to show a trend."
+      />
     );
   const data = fillMonths(observations, first.date, last.date);
   return (

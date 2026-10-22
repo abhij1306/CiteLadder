@@ -7,7 +7,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from '@/components/ui/alert';
 import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Pager } from '@/components/ui/pager';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
@@ -28,7 +27,7 @@ import { cursorControls, useCursorTable } from '@/lib/table/use-cursor-table';
 
 import { UrlDetailView } from './url-detail-view';
 import { ledgerClasses } from '@/components/ui/workspace';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 const HISTORY_LIMIT = 25;
@@ -97,13 +96,13 @@ export function UrlDetail({
 
   if (detailQuery.isLoading)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" label="Loading page detail…" />
-      </PageShell>
+      </ListScreen>
     );
   if (detailQuery.isError || !detailQuery.data) {
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           error={detailQuery.error}
@@ -111,7 +110,7 @@ export function UrlDetail({
           onRetry={() => void detailQuery.refetch()}
           pending={detailQuery.isFetching}
         />
-      </PageShell>
+      </ListScreen>
     );
   }
 
@@ -224,12 +223,14 @@ function IssueHistory({ workspaceId, crawlId, siteUrlId }: HistoryTarget) {
       ) : null}
       {historyQuery.isLoading ? <QueryState kind="loading" label="Loading issue history" /> : null}
       {historyQuery.data && !historyQuery.data.current_analysis_finalized ? (
-        <InlineEmpty>
-          Resolved issues are known once this page’s current analysis finishes.
-        </InlineEmpty>
+        <QueryState
+          kind="empty"
+          inline
+          message="Resolved issues are known once this page’s current analysis finishes."
+        />
       ) : null}
       {historyQuery.data?.current_analysis_finalized && rows.length === 0 ? (
-        <InlineEmpty>No resolved issues for this page.</InlineEmpty>
+        <QueryState kind="empty" inline message="No resolved issues for this page." />
       ) : null}
       {rows.length > 0 ? <HistoryRows rows={rows} /> : null}
       {rows.length > 0 ? <Pager {...cursorControls(pager, nextCursor)} /> : null}

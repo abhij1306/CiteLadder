@@ -11,7 +11,7 @@ import {
 import { OutputPane } from '@/components/agent/output-pane';
 import { useFollowLatest } from '@/components/agent/use-follow-latest';
 import { useChatDetail } from '@/components/agent/use-chat-turns';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -30,7 +30,7 @@ export function ChatScreen() {
   // A failed background refresh keeps the chat on screen; only a first load fails the page.
   if (query.isError && !query.data)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           error={query.error}
@@ -38,19 +38,19 @@ export function ChatScreen() {
           onRetry={() => void query.refetch()}
           pending={query.isFetching}
         />
-      </PageShell>
+      </ListScreen>
     );
   if (!query.data)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" />
-      </PageShell>
+      </ListScreen>
     );
   if (query.data.chat.project_id !== activeProjectId)
     return (
-      <PageShell>
+      <ListScreen>
         <Alert tone="danger">This chat belongs to another project.</Alert>
-      </PageShell>
+      </ListScreen>
     );
   return (
     <ChatView key={`${workspaceId}:${chatId}`} detail={query.data} workspaceId={workspaceId} />
@@ -67,13 +67,11 @@ function ChatView({
   const { endRef, showJump, jumpToLatest } = useFollowLatest(detail);
 
   return (
-    <PageShell
+    <ListScreen
       measure="workflow"
       // Fill the viewport below the shell chrome so the composer sits at the
-      // bottom of a short thread. `--route-chrome-height` (globals.css) owns the
-      // chrome above the route at each breakpoint; the gutter is the shell's
-      // padding under the route. Kept identical in chat- and new-chat-screen.
-      className="flex min-h-[calc(100dvh-var(--route-chrome-height)-var(--content-gutter))] flex-col pb-0"
+      // bottom of a short thread. Kept identical in chat- and new-chat-screen.
+      fill
       actions={<ChatHeaderActions detail={detail} />}
     >
       <Stack gap="workspace" className="min-w-0 flex-1 content-start">
@@ -110,7 +108,7 @@ function ChatView({
         />
       </div>
       <div ref={endRef} />
-    </PageShell>
+    </ListScreen>
   );
 }
 

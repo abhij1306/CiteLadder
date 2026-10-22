@@ -10,7 +10,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { CopyButton } from '@/components/ui/copy-button';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { Pager } from '@/components/ui/pager';
 import { panelClasses } from '@/components/ui/panel';
@@ -197,7 +197,8 @@ function OccurrenceList({
       </ul>
     );
   }
-  if (detail.occurrences.length === 0) return <InlineEmpty>No affected URLs found.</InlineEmpty>;
+  if (detail.occurrences.length === 0)
+    return <QueryState kind="empty" inline message="No affected URLs found." />;
   return (
     <ul className={ledgerClasses('open')}>
       {detail.occurrences.map((occurrence) => (

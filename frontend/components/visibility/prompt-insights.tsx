@@ -5,7 +5,7 @@ import { useMutation, useQueryClient, type UseQueryResult } from '@tanstack/reac
 import { Alert } from '@/components/ui/alert';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses } from '@/components/ui/workspace';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import type { ObservedCompetitor } from '@/lib/api/types';
 import { Button } from '@/components/ui/button';
@@ -87,7 +87,7 @@ export function CompetitorSuggestions({
         </ul>
       ) : null}
       {!suggestionsQuery.data?.length && !suggestionsQuery.isLoading ? (
-        <InlineEmpty>No repeated citation candidates yet.</InlineEmpty>
+        <QueryState kind="empty" inline message="No repeated citation candidates yet." />
       ) : null}
       {acceptMutation.isError ? (
         <Alert tone="danger">Could not add that competitor. Try again.</Alert>

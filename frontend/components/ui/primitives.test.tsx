@@ -148,8 +148,8 @@ describe('ScoreRing', () => {
     expect(screen.getByText('100')).toBeInTheDocument();
   });
 
-  it('announces the score once even with a large numeral', () => {
-    render(<ScoreRing value={82} size={128} numeralSize="lg" />);
+  it('announces the score once, not again through its numeral', () => {
+    render(<ScoreRing value={82} />);
     const numeral = screen.getByText('82');
     expect(numeral).toHaveAttribute('aria-hidden', 'true');
     expect(screen.getByRole('img', { name: 'Visibility score: 82%' })).toBeInTheDocument();

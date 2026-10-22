@@ -8,7 +8,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
@@ -161,7 +161,7 @@ function SearchDemandView({
   }
 
   return (
-    <PageShell
+    <ListScreen
       actions={
         <Button
           variant="secondary"
@@ -250,7 +250,7 @@ function SearchDemandView({
           }}
         />
       </>
-    </PageShell>
+    </ListScreen>
   );
 }
 
@@ -285,13 +285,13 @@ export function DemandProjection() {
     );
   }
   return (
-    <PageShell>
+    <ListScreen>
       {demandFallback({
         projectLoading,
         hasProject: Boolean(activeProject),
         latest,
       })}
-    </PageShell>
+    </ListScreen>
   );
 }
 

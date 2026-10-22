@@ -19,7 +19,7 @@ import {
   visibleEngines,
   type VisibilityFilters,
 } from '@/lib/visibility/dashboard';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { textRole } from '@/components/ui/typography';
 
@@ -41,7 +41,7 @@ export function EngineComparison({
       </CardHeader>
       <CardContent>
         {!engines.length ? (
-          <InlineEmpty>No model observations.</InlineEmpty>
+          <QueryState kind="empty" inline message="No model observations." />
         ) : (
           <Table>
             <TableHeader>

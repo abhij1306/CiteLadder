@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Alert } from '@/components/ui/alert';
 import { Stack } from '@/components/ui/layout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
@@ -40,13 +40,13 @@ export function DashboardScreen({
   }
   if (!context.activeProject)
     return (
-      <PageShell>
+      <ListScreen>
         <ProjectRequiredState />
-      </PageShell>
+      </ListScreen>
     );
   if (commandCenter.isError || !commandCenter.data)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           error={commandCenter.error}
@@ -54,7 +54,7 @@ export function DashboardScreen({
           onRetry={() => void commandCenter.refetch()}
           pending={commandCenter.isFetching}
         />
-      </PageShell>
+      </ListScreen>
     );
 
   return (
@@ -69,9 +69,9 @@ export function DashboardScreen({
 
 function DashboardLoading() {
   return (
-    <PageShell>
+    <ListScreen>
       <QueryState kind="loading" label="Loading your command center…" />
-    </PageShell>
+    </ListScreen>
   );
 }
 
@@ -90,7 +90,7 @@ function DashboardData({
   const [editing, setEditing] = useState(false);
   if (layout.query.isError)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           error={layout.query.error}
@@ -98,12 +98,12 @@ function DashboardData({
           onRetry={() => void layout.query.refetch()}
           pending={layout.query.isFetching}
         />
-      </PageShell>
+      </ListScreen>
     );
   if (!layout.query.data) return <DashboardLoading />;
   const saved = layout.query.data;
   return (
-    <PageShell
+    <ListScreen
       actions={
         <DashboardActions
           activeProject={activeProject}
@@ -155,6 +155,6 @@ function DashboardData({
           )}
         />
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }

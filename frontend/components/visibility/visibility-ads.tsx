@@ -6,11 +6,10 @@ import { Megaphone } from 'lucide-react';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import {
   ClampText,
   Table,
@@ -114,8 +113,9 @@ function AdsState({
   return (
     <Card>
       <CardContent className="grid gap-2">
-        <EmptyState
-          variant="compact"
+        <QueryState
+          kind="empty"
+          headingLevel={3}
           icon={Megaphone}
           heading={copy.heading}
           description={copy.description}
@@ -143,24 +143,22 @@ function Headline({ data }: Readonly<{ data: VisibilityAdsResponse }>) {
   return (
     <Card>
       <CardContent className="grid gap-2">
-        <StatGrid
-          surface="well"
-          columns={3}
+        <StatRow
           label="Ads in ChatGPT answers"
-          items={[
+          segments={[
             {
               key: 'presence',
               label: 'Ad presence',
               value: measured(formatPercent(data.presence.rate)),
               missingLabel: 'Unavailable',
-              detail: presenceLine(data.presence),
+              sub: presenceLine(data.presence),
             },
             {
               key: 'brand',
               label: 'Your ad share',
               value: measured(formatPercent(data.brand.share)),
               missingLabel: 'Not advertising',
-              detail:
+              sub:
                 data.brand.best_rank === null
                   ? 'No ads of yours were seen.'
                   : `${data.brand.appearances} of your ads; best position ${data.brand.best_rank}`,
@@ -169,7 +167,7 @@ function Headline({ data }: Readonly<{ data: VisibilityAdsResponse }>) {
               key: 'advertisers',
               label: 'Advertisers seen',
               value: data.advertisers_seen,
-              detail: 'Distinct advertiser domains in these answers.',
+              sub: 'Distinct advertiser domains in these answers.',
             },
           ]}
         />
@@ -197,7 +195,7 @@ function AdvertiserTable({
       </CardHeader>
       <CardContent>
         {!advertisers.length ? (
-          <InlineEmpty>No ads in these answers.</InlineEmpty>
+          <QueryState kind="empty" inline message="No ads in these answers." />
         ) : (
           <Table>
             <TableHeader>
@@ -252,7 +250,7 @@ function PromptTable({ prompts }: Readonly<{ prompts: VisibilityAdsResponse['pro
       </CardHeader>
       <CardContent>
         {!prompts.length ? (
-          <InlineEmpty>No prompt surfaced an ad.</InlineEmpty>
+          <QueryState kind="empty" inline message="No prompt surfaced an ad." />
         ) : (
           <Table>
             <TableHeader>
@@ -309,7 +307,7 @@ function CreativeList({
       </CardHeader>
       <CardContent className="grid gap-3">
         {!creatives.items.length ? (
-          <InlineEmpty>No ads in these answers.</InlineEmpty>
+          <QueryState kind="empty" inline message="No ads in these answers." />
         ) : (
           <ul className="grid gap-3">
             {creatives.items.map((creative) => (

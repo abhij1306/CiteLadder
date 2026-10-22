@@ -3,7 +3,7 @@
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DonutChart } from '@/components/ui/donut-chart';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { SeriesChart } from '@/components/ui/series-chart';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -85,7 +85,7 @@ function UsagePlot({
   if (!series.length) {
     return (
       <div className={cn(USAGE_PLOT_BOX, 'grid place-items-center')}>
-        <InlineEmpty>No sources were used in this period.</InlineEmpty>
+        <QueryState kind="empty" inline message="No sources were used in this period." />
       </div>
     );
   }

@@ -5,7 +5,7 @@ import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -319,7 +319,7 @@ export function ProjectEditPanel({
             </Button>
           </div>
           {competitors.length === 0 ? (
-            <InlineEmpty>None tracked.</InlineEmpty>
+            <QueryState kind="empty" inline message="None tracked." />
           ) : (
             <ul className="grid list-none gap-2 p-0">
               {competitors.map((competitor, index) => (

@@ -1,7 +1,7 @@
 'use client';
 
 import { BrandLogo } from '@/components/ui/brand-logo';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { MissingValue } from '@/components/ui/unavailable-value';
@@ -17,7 +17,7 @@ export function SourceName({
 }: Readonly<{ name: string; host: string | null; secondary?: string | null }>) {
   return (
     <span className="flex min-w-0 items-center gap-2">
-      <BrandLogo name={name} websiteUrl={host ? `https://${host}` : null} size="sm" />
+      <BrandLogo name={name} websiteUrl={host ? `https://${host}` : null} />
       <span className="grid min-w-0">
         <ClampText lines={secondary ? 1 : 2}>{name}</ClampText>
         {secondary ? (
@@ -118,7 +118,7 @@ export function StateRows({
   return (
     <TableRow>
       <TableCell colSpan={columns.length}>
-        <InlineEmpty>{state.message}</InlineEmpty>
+        <QueryState kind="empty" inline message={state.message} />
       </TableCell>
     </TableRow>
   );

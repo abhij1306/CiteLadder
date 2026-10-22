@@ -9,7 +9,7 @@ import { SignalChip } from '@/components/demand/demand-signal-table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { DemandSignal } from '@/lib/api/demand';
@@ -97,10 +97,8 @@ function DemandEvidenceContent({
 
         <section className="grid gap-2">
           <h3 className={textRole('label')}>Search Console performance</h3>
-          <StatGrid
-            surface="well"
-            columns={4}
-            items={[
+          <StatRow
+            segments={[
               {
                 key: 'impressions',
                 label: 'Impressions',

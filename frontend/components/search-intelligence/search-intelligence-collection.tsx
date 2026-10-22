@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { textRole } from '@/components/ui/typography';
@@ -282,7 +282,8 @@ function CollectionResult({
           onExpand={onExpand}
         />
       ) : (
-        <EmptyState
+        <QueryState
+          kind="empty"
           icon={Database}
           heading={`No saved ${title.toLowerCase()}`}
           description="Choose it in a new analysis, then review the cost before anything is fetched."

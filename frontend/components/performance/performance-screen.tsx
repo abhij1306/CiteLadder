@@ -18,7 +18,7 @@ import { DataSourceSetup } from '@/components/integrations/data-source-setup';
 import { usePerformanceSelection } from './use-performance-selection';
 import { usePerformanceSync } from './use-performance-sync';
 import { useRangeProjection } from './use-range-projection';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Alert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
@@ -280,23 +280,23 @@ export function PerformanceScreen() {
   // when the real one arrives.
   if (!projectId)
     return (
-      <PageShell>
+      <ListScreen>
         {isLoading ? (
           <QueryState kind="loading" label="Loading performance…" />
         ) : (
           <ProjectRequiredState />
         )}
-      </PageShell>
+      </ListScreen>
     );
   if (dashboard.isError)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           {...readErrorProps(dashboard)}
           fallback="Could not load performance data. Check your connection and try again."
         />
-      </PageShell>
+      </ListScreen>
     );
   // Only the dashboard controls the screen's first paint. Connections feeds
   // one toolbar button and readiness one advisory ladder — both render into
@@ -305,9 +305,9 @@ export function PerformanceScreen() {
   // scope data (a placeholder) counts as paintable.
   if (!dashboard.data)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" label="Loading performance…" />
-      </PageShell>
+      </ListScreen>
     );
 
   const data = dashboard.data as PerformanceDashboard;
@@ -330,7 +330,7 @@ export function PerformanceScreen() {
   const coverage = performanceCoverage(data, hasEvidence);
 
   return (
-    <PageShell
+    <ListScreen
       actions={
         <PerformanceActions
           latestDate={data.coverage.latest_date}
@@ -443,6 +443,6 @@ export function PerformanceScreen() {
           )}
         />
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }

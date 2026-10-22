@@ -5,8 +5,8 @@ import { CheckCircle2, Quote, Search, XCircle } from 'lucide-react';
 import { MeasurementContext } from '@/components/runs/measurement-context';
 import { SurfaceEvidence } from '@/components/runs/surface-evidence';
 import { Badge } from '@/components/ui/badge';
-import { EmptyState } from '@/components/ui/empty-state';
-import { StatGrid, StatItem } from '@/components/ui/stat-grid';
+import { QueryState } from '@/components/ui/query-state';
+import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { Label, textRole } from '@/components/ui/typography';
 import { engineLabel, productModelLabel, productTransportLabel } from '@/lib/providers/catalog';
@@ -92,24 +92,29 @@ function EvidencePromptHeader({
 
 function EvidenceMetrics({ evidence }: Readonly<{ evidence: ExecutionEvidence }>) {
   return (
-    <StatGrid surface="well" columns={4}>
-      <StatItem
-        label="Brand"
-        value={evidence.brand_mentioned ? 'Mentioned' : 'Not mentioned'}
-        tone={outcomeTone(evidence.brand_mentioned)}
-      />
-      <StatItem
-        label="Owned sources"
-        value={evidence.owned_citation_count}
-        tone={outcomeTone(evidence.owned_citation_count > 0)}
-      />
-      <StatItem label="Citations" value={evidence.citation_count} />
-      <StatItem
-        label="Searches"
-        value={evidence.search_used ? evidence.search_query_count : 'Not used'}
-        tone={outcomeTone(evidence.search_used)}
-      />
-    </StatGrid>
+    <StatRow
+      segments={[
+        {
+          key: 'brand',
+          label: 'Brand',
+          value: evidence.brand_mentioned ? 'Mentioned' : 'Not mentioned',
+          tone: outcomeTone(evidence.brand_mentioned),
+        },
+        {
+          key: 'owned',
+          label: 'Owned sources',
+          value: evidence.owned_citation_count,
+          tone: outcomeTone(evidence.owned_citation_count > 0),
+        },
+        { key: 'citations', label: 'Citations', value: evidence.citation_count },
+        {
+          key: 'searches',
+          label: 'Searches',
+          value: evidence.search_used ? evidence.search_query_count : 'Not used',
+          tone: outcomeTone(evidence.search_used),
+        },
+      ]}
+    />
   );
 }
 
@@ -335,8 +340,8 @@ function EvidenceCitationsList({
         </span>
       </div>
       {citations.length === 0 ? (
-        <EmptyState
-          variant="compact"
+        <QueryState
+          kind="empty"
           headingLevel={3}
           icon={Quote}
           heading="No citations were captured from this response."

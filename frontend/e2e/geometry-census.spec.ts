@@ -64,6 +64,11 @@ const BOX_BORDER = 1;
 const QUERY_STATE_HEIGHT = 160;
 const TABLE_ROW_HEIGHT = 36;
 const TABLE_CELL_PADDING_Y = 6;
+/** A DataTable's header row is the control band again: 8 + 32 + 8 and its rule. */
+const DATA_TABLE_HEADER_HEIGHT = 49;
+/** A StatRow segment is padded 12 above and below; a row's segments share one height. */
+const STAT_SEGMENT_PADDING_Y = 12;
+const STAT_ROW_HEIGHT_SPREAD = 0;
 
 type Box = Readonly<{ route: string; role: string; label: string; value: number }>;
 
@@ -187,7 +192,7 @@ function measure(route: string) {
   // A state nested in a container shares that container's surface and inset
   // (globals.css), so it is not a box of its own.
   const nestedState = (element: Element) =>
-    element.matches('.query-state, .empty-state-surface') &&
+    element.matches('.query-state') &&
     element.parentElement?.closest(`${boxes}, [role="dialog"], .table-frame`) != null;
   for (const box of all(boxes)) {
     if (nestedState(box)) continue;
@@ -226,12 +231,27 @@ function measure(route: string) {
     add('card.inset-top', box, Math.min(...ink.map((rect) => rect.top)) - top);
     add('card.inset-left', box, Math.min(...ink.map((rect) => rect.left)) - left);
   }
-  for (const element of all('[data-query-state]')) {
+  for (const element of all('[data-query-state]:not([data-query-state-inline])')) {
     add('query-state.height', element, element.getBoundingClientRect().height);
     if (!nestedState(element))
       add('query-state.padding', element, px(getComputedStyle(element).paddingTop));
   }
-  for (const row of all('tbody tr')) {
+  // A DataTable's title-and-toolbar row, whatever it holds.
+  for (const element of all('[data-data-table-header]'))
+    add('data-table-header.height', element, element.getBoundingClientRect().height);
+  // A StatRow: every segment's padding, and the segments of one row at one
+  // height (the spread between the tallest and the shortest).
+  for (const element of all('[data-stat-segment]'))
+    add('stat-segment.padding-y', element, px(getComputedStyle(element).paddingTop));
+  for (const row of all('[data-stat-row] > dl')) {
+    const heights = Array.from(row.children)
+      .filter(visible)
+      .map((segment) => segment.getBoundingClientRect().height);
+    if (heights.length > 1)
+      add('stat-row.height-spread', row, Math.max(...heights) - Math.min(...heights));
+  }
+  // Rows only: a DataTable's state row holds a QueryState, measured above.
+  for (const row of all('tbody tr:not([data-table-state])')) {
     add('table-row.height', row, row.getBoundingClientRect().height);
     const cell = row.querySelector('td');
     if (cell) add('table-cell.padding-y', cell, px(getComputedStyle(cell).paddingTop));
@@ -344,6 +364,16 @@ async function expectOneGeometry(page: Page) {
   const runs = await census(page, '/runs');
   records.push(...runs.map((record) => ({ ...record, route: '/runs (rows)' })));
 
+  // One run's detail, so a StatRow (the run's progress figures) is measured.
+  const [run] = RUNS;
+  if (!run) throw new Error('the runs fixture has a first run');
+  await stubAuthedShell(page, [
+    [new RegExp(String.raw`/api/v1/audits/${run.id}$`), run],
+    [new RegExp(String.raw`/api/v1/audits/${run.id}/executions(\?.*)?$`), []],
+  ]);
+  const detail = await census(page, `/runs/${run.id}`);
+  records.push(...detail.map((record) => ({ ...record, route: '/runs/:id (detail)' })));
+
   // Neighbouring cards, so the card → card gap is measured, not assumed.
   await stubAuthedShell(page, [[/\/api\/v1\/integrations(\?.*)?$/, CONNECTIONS]]);
   const integrations = await census(page, '/settings?tab=integrations');
@@ -375,6 +405,9 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'query-state.padding', CARD_INSET);
   expectOneValue(records, 'table-row.height', TABLE_ROW_HEIGHT);
   expectOneValue(records, 'table-cell.padding-y', TABLE_CELL_PADDING_Y);
+  expectOneValue(records, 'data-table-header.height', DATA_TABLE_HEADER_HEIGHT);
+  expectOneValue(records, 'stat-segment.padding-y', STAT_SEGMENT_PADDING_Y);
+  expectOneValue(records, 'stat-row.height-spread', STAT_ROW_HEIGHT_SPREAD);
 
   // The account menu is a 32px control like every other one in its row.
   await expect(page.getByRole('button', { name: /^Account menu/ })).toHaveCSS('height', '32px');

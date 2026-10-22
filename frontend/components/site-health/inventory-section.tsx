@@ -7,7 +7,6 @@ import { FileText } from 'lucide-react';
 
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Label, textRole } from '@/components/ui/typography';
 import { Pager } from '@/components/ui/pager';
 import {
@@ -58,8 +57,8 @@ export function InventorySection({
   let content: ReactNode;
   if (mode === 'none' || !crawl) {
     content = (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         icon={FileText}
         heading="Pages appear here as discovery finds them."
         headingLevel={3}
@@ -220,8 +219,8 @@ function ScoredInventoryBody({
   if (query.isLoading) return <QueryState kind="loading" />;
   if (rows.length === 0 && rootErrors.length === 0)
     return (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         icon={FileText}
         heading={active ? 'Pages appear here as the audit reaches them.' : 'No pages in this view.'}
         headingLevel={3}

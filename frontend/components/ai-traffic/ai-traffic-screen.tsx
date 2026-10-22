@@ -4,7 +4,7 @@ import { useUrlState, type UrlCodec } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
 import { crawlLogsAvailable, useCrawlSources } from '@/lib/ai-traffic/use-crawl-connections';
 import { useTrafficData, type TrafficDataTab } from '@/lib/ai-traffic/use-traffic-data';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { TabsRoot, TabPanel, type TabRowProps } from '@/components/ui/tabs';
@@ -50,9 +50,9 @@ export function AiTrafficScreen() {
   // The default view waits for crawl availability; the tab band needs a selected tab.
   if (tab === null)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" label="Loading AI Traffic…" />
-      </PageShell>
+      </ListScreen>
     );
   return (
     <TabsRoot value={tab} onValueChange={setTab}>
@@ -82,26 +82,26 @@ function TrafficDataView({
   // First load keeps the identity, tab and control bands; only the work waits.
   if (model.isLoading || model.current.isLoading)
     return (
-      <PageShell tabs={tabs} controls={controls}>
+      <ListScreen tabs={tabs} controls={controls}>
         <QueryState kind="loading" label="Loading AI Traffic…" />
-      </PageShell>
+      </ListScreen>
     );
   // A failed read with nothing to show is the region's state, in the same
   // footprint its loading state took.
   if (model.current.isError && projectId)
     return (
-      <PageShell tabs={tabs} controls={controls}>
+      <ListScreen tabs={tabs} controls={controls}>
         <QueryState
           kind="error"
           {...readErrorProps(model.current)}
           fallback="Could not read AI Traffic"
         />
-      </PageShell>
+      </ListScreen>
     );
   return (
-    <PageShell tabs={tabs} controls={controls}>
+    <ListScreen tabs={tabs} controls={controls}>
       <TrafficTabContent tab={tab} model={model} crawlAvailable={crawlAvailable} />
-    </PageShell>
+    </ListScreen>
   );
 }
 

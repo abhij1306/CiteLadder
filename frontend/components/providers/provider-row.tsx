@@ -137,7 +137,6 @@ export function ProviderRow({
             name={group.label}
             logoUrl={TRANSPORT_LOGOS[group.transport]}
             websiteUrl={TRANSPORT_DOMAINS[group.transport]}
-            size="md"
           />
           <div className="grid min-w-0 gap-0.5">
             <h3 className={textRole('itemTitle')}>{group.label}</h3>

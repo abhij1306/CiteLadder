@@ -87,7 +87,7 @@ function NativeButton({
       </span>
       {pending ? (
         <span className="inline-flex items-center justify-center gap-2">
-          <Spinner size="md" />
+          <Spinner />
           {pendingLabel ?? children}
         </span>
       ) : null}

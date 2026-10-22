@@ -304,6 +304,10 @@
   --page-title-min-width: 10rem;
   --table-row-height: 36px;
   --table-header-height: var(--control-height-md);
+  /* A DataTable's title-and-toolbar row: the FilterBar's 8 + 32 + 8 and the
+     hairline under it — the same 49 as the page's control band, whether the
+     row holds a title alone or a toolbar too. */
+  --data-table-header-height: calc(var(--control-height-md) + 17px);
   --table-cell-padding-x: 12px;
   /* Every row, one line or two, keeps the same breathing room above and below. */
   --table-cell-padding-y: 6px;
@@ -872,22 +876,6 @@ a.focus-ring:active .type-caption {
 
 :where(.surface-card, [role='dialog']) .table-frame {
   box-shadow: none;
-}
-
-/* An empty state on the sheet is an object of its own (the shared card classes
-   plus card padding), so a "connect to start" prompt never floats as bare text. Nested in
-   a card, a panel, a dialog or a table it shares that container's surface and keeps
-   only a little vertical room — the container already supplies the inset. */
-.empty-state-surface {
-  padding: var(--card-padding);
-}
-
-:where(.surface-card, .surface-panel, [role='dialog'], .table-frame) .empty-state-surface {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  padding: var(--compact-gap) 0;
 }
 
 /* Inside a card a query state shares the card's surface and its padding

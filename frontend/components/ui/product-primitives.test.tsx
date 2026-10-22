@@ -11,13 +11,13 @@ import { Card, CardHeader, CardTitle } from './card';
 import { LegendSwatch } from './chart';
 import { Delta } from './delta';
 import { FilterBar, FilterTrigger } from './filter-bar';
-import { InlineEmpty } from './inline-empty';
+import { DataTable } from './data-table';
 import { Meter } from './meter';
 import { NoProjectState } from './no-project-state';
 import { Pager, pageNumberControls } from './pager';
 import { QueryState } from './query-state';
-import { StatGrid, StatItem } from './stat-grid';
-import { SortableTableHead, Table, TableHeader, TableRow } from './table';
+import { StatRow } from './stat-row';
+import { SortableTableHead, Table, TableCell, TableHeader, TableRow } from './table';
 import { TextLink } from './text-link';
 import { TooltipProvider } from './tooltip';
 
@@ -60,25 +60,71 @@ describe('Delta', () => {
   });
 });
 
-describe('StatGrid', () => {
-  it('names a missing value and makes a pressable stat a keyboard toggle', () => {
+describe('StatRow', () => {
+  it('names a missing value, draws a score as a ring and makes a pressable stat a toggle', () => {
     const onSelect = vi.fn();
     render(
-      <StatGrid label="Delivery" items={[{ key: 'ttfb', label: 'TTFB', value: null }]}>
-        <StatItem
-          label="Orphaned pages"
-          value={3}
-          actionLabel="View 3 orphaned pages"
-          onSelect={onSelect}
-          selected={false}
-        />
-      </StatGrid>,
+      <StatRow
+        label="Delivery"
+        segments={[
+          { key: 'ttfb', label: 'TTFB', value: null },
+          { key: 'score', label: 'Crawl', score: { value: 72, label: 'Crawl score: 72' } },
+          {
+            key: 'orphans',
+            label: 'Orphaned pages',
+            value: 3,
+            actionLabel: 'View 3 orphaned pages',
+            onSelect,
+            selected: false,
+          },
+        ]}
+      />,
     );
-    expect(screen.getByText('TTFB').closest('div')).toHaveTextContent('Not measured');
-    const toggle = screen.getByRole('button', { name: 'View 3 orphaned pages' });
+    const group = screen.getByRole('group', { name: 'Delivery' });
+    expect(within(group).getByText('TTFB').closest('[data-stat-segment]')).toHaveTextContent(
+      'Not measured',
+    );
+    expect(within(group).getByRole('img', { name: 'Crawl score: 72' })).toBeInTheDocument();
+    const toggle = within(group).getByRole('button', { name: 'View 3 orphaned pages' });
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(toggle);
     expect(onSelect).toHaveBeenCalledOnce();
+  });
+});
+
+describe('DataTable', () => {
+  const columns = [
+    { key: 'name', label: 'Name' },
+    { key: 'count', label: 'Count', width: 'figure', numeric: true },
+  ] as const;
+
+  it('pads a short page to the full page of rows and keeps the header over an empty state', () => {
+    const { container, rerender } = render(
+      <DataTable title="Runs" columns={columns} pageSize={5} rowCount={2}>
+        <TableRow>
+          <TableCell>Alpha</TableCell>
+          <TableCell numeric>1</TableCell>
+        </TableRow>
+        <TableRow>
+          <TableCell>Beta</TableCell>
+          <TableCell numeric>2</TableCell>
+        </TableRow>
+      </DataTable>,
+    );
+    expect(screen.getByRole('heading', { level: 3, name: 'Runs' })).toBeVisible();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(5);
+
+    rerender(
+      <DataTable
+        title="Runs"
+        columns={columns}
+        pageSize={5}
+        state={{ kind: 'empty', icon: Inbox, heading: 'No failed runs.', headingLevel: 3 }}
+      />,
+    );
+    expect(screen.getByRole('columnheader', { name: 'Count' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'No failed runs.' })).toBeVisible();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 });
 
@@ -218,15 +264,16 @@ describe('Pager', () => {
   });
 });
 
-describe('InlineEmpty', () => {
-  it('states the absence with its one action', () => {
-    render(<InlineEmpty action={<Button>Add rule</Button>}>No rules yet.</InlineEmpty>);
+describe('QueryState', () => {
+  it('states an inline absence as one line with its one action', () => {
+    render(
+      <QueryState kind="empty" inline message="No rules yet." action={<Button>Add rule</Button>} />,
+    );
     expect(screen.getByText('No rules yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('heading')).toBeNull();
     expect(screen.getByRole('button', { name: 'Add rule' })).toBeInTheDocument();
   });
-});
 
-describe('QueryState', () => {
   it('announces loading only after the delay, then reports a failed read with its retry', async () => {
     const onRetry = vi.fn();
     const { rerender } = render(<QueryState kind="loading" label="Loading issues…" />);

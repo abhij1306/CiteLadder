@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { ExecutionEvidenceDrawer } from '@/components/runs/execution-evidence-drawer';
 import { RunActions, useRunExport } from '@/components/runs/progress-panel';
 import { RunDetailView } from '@/components/runs/run-detail-view';
-import { PageShell } from '@/components/layout/page-shell';
+import { DetailScreen } from '@/components/layout/page-shell';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi } from '@/lib/api/runs';
@@ -86,7 +86,7 @@ export function RunDetailScreen() {
   const runExport = useRunExport(audit);
 
   return (
-    <PageShell
+    <DetailScreen
       back={{ href: '/runs', label: 'Back to runs', projectId: audit?.project_id }}
       actions={
         audit ? (
@@ -139,6 +139,6 @@ export function RunDetailScreen() {
           }
         }}
       />
-    </PageShell>
+    </DetailScreen>
   );
 }

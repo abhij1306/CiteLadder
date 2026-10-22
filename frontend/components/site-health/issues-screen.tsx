@@ -5,7 +5,7 @@ import { ProjectLink } from '@/components/layout/scoped-link';
 
 import { Button } from '@/components/ui/button';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { IssuesCatalog } from '@/components/site-health/issues-catalog';
@@ -57,22 +57,22 @@ function IssuesDataRegion({
 }>) {
   if (!projectId && !projectLoading)
     return (
-      <PageShell>
+      <ListScreen>
         <ProjectRequiredState />
-      </PageShell>
+      </ListScreen>
     );
   if (projectLoading || dashboard.isLoading)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" label="Loading issues…" />
-      </PageShell>
+      </ListScreen>
     );
 
   const status = httpErrorStatus(dashboard.error);
   const accessDenied = status === 401 || status === 403;
   if (dashboard.isError && (accessDenied || !dashboard.data)) {
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           error={dashboard.error}
@@ -84,7 +84,7 @@ function IssuesDataRegion({
           onRetry={() => void dashboard.refetch()}
           pending={dashboard.isFetching}
         />
-      </PageShell>
+      </ListScreen>
     );
   }
 
@@ -114,7 +114,7 @@ function IssuesLoadedRegion({
         }
       />
     ) : (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           error={dashboard.error}
@@ -122,12 +122,12 @@ function IssuesLoadedRegion({
           onRetry={() => void dashboard.refetch()}
           pending={dashboard.isFetching}
         />
-      </PageShell>
+      </ListScreen>
     );
   }
   if (!crawl) {
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="empty"
           icon={ICONS.issues}
@@ -139,7 +139,7 @@ function IssuesLoadedRegion({
             </Button>
           }
         />
-      </PageShell>
+      </ListScreen>
     );
   }
   return workspaceId ? <IssuesCatalog workspaceId={workspaceId} crawlId={crawl.id} /> : null;

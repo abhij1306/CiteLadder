@@ -141,7 +141,7 @@ function DiscoveryStatus({
   if (discovery.isPending)
     return (
       <output className="type-caption flex items-center gap-2">
-        <Spinner size="sm" /> Loading your {noun}s…
+        <Spinner /> Loading your {noun}s…
       </output>
     );
   return (

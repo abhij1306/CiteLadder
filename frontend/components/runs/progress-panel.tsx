@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Meter } from '@/components/ui/meter';
 import { MutationNotice } from '@/components/ui/mutation-notice';
-import { textRole } from '@/components/ui/typography';
-import { MetricGroup, MetricItem, metricItemClasses } from '@/components/ui/workspace';
+import { StatRow } from '@/components/ui/stat-row';
 import { humanizeApiError } from '@/lib/api/errors';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { runsApi } from '@/lib/api/runs';
@@ -160,25 +159,25 @@ function ProgressBar({
 
 function ProgressMetrics({ audit }: Readonly<{ audit: Audit }>) {
   const timeZone = useDisplayTimeZone();
-  const failedColor = audit.failed_count > 0 ? 'text-danger-text' : 'text-muted';
-
   return (
-    <MetricGroup>
-      <MetricItem label="Requested" value={audit.requested_count} />
-      <MetricItem
-        label="Completed"
-        value={<span className="text-success-text">{audit.completed_count}</span>}
-      />
-      <MetricItem
-        label="Failed"
-        value={<span className={failedColor}>{audit.failed_count}</span>}
-      />
-      {/* A timestamp is not a figure: same grid cell, item-title value. */}
-      <div className={metricItemClasses}>
-        <dt className={textRole('label')}>Created</dt>
-        <dd className={textRole('itemTitle')}>{formatDateTime(audit.created_at, timeZone)}</dd>
-      </div>
-    </MetricGroup>
+    <StatRow
+      segments={[
+        { key: 'requested', label: 'Requested', value: audit.requested_count },
+        {
+          key: 'completed',
+          label: 'Completed',
+          value: audit.completed_count,
+          tone: 'success',
+        },
+        {
+          key: 'failed',
+          label: 'Failed',
+          value: audit.failed_count,
+          tone: audit.failed_count > 0 ? 'danger' : 'muted',
+        },
+        { key: 'created', label: 'Created', value: formatDateTime(audit.created_at, timeZone) },
+      ]}
+    />
   );
 }
 

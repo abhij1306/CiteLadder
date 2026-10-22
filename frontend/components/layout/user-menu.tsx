@@ -94,7 +94,7 @@ export function UserMenuTrigger({
               : 'h-[var(--control-height-md)] flex-1 px-2',
           )}
         >
-          <Avatar name={email} className="size-6" />
+          <Avatar name={email} />
           {compact ? null : <span className="type-body min-w-0 flex-1 truncate">{email}</span>}
         </DropdownTrigger>
         {open ? <UserMenuContent presenter={presenter} /> : null}

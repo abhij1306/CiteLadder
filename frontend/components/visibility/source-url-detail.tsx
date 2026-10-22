@@ -5,7 +5,7 @@ import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ReadError } from '@/components/ui/read-error';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { splitPaneClasses } from '@/components/ui/workspace';
 import { SourceBreadcrumb } from '@/components/visibility/source-breadcrumb';
@@ -115,7 +115,11 @@ function PageIdentity({ title, url }: Readonly<{ title: string; url: string }>) 
   return (
     <CardHeader>
       <div className="flex min-w-0 items-start gap-3">
-        <BrandLogo name={host ?? url} websiteUrl={host ? `https://${host}` : null} size="lg" />
+        <BrandLogo
+          name={host ?? url}
+          websiteUrl={host ? `https://${host}` : null}
+          placement="identity"
+        />
         <div className="grid min-w-0 gap-1">
           <CardTitle className="truncate">{title}</CardTitle>
           {/* An unsafe cited URL renders as plain text rather than a link. */}
@@ -132,10 +136,8 @@ function Overview({
   data,
 }: Readonly<{ data: NonNullable<ReturnType<typeof useSourceUrl>['data']> }>) {
   return (
-    <StatGrid
-      columns={3}
-      size="figure"
-      items={[
+    <StatRow
+      segments={[
         { key: 'citation-rate', label: 'Citation rate', value: ratio(data.citation_rate) },
         { key: 'retrievals', label: 'Retrievals', value: count(data.retrievals) },
         { key: 'citations', label: 'Citations', value: count(data.citations) },

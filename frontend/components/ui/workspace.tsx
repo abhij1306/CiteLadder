@@ -1,26 +1,13 @@
-import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
+import { panelClasses } from '@/components/ui/panel';
 import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
-/** Shared editorial structures for authenticated analytical workspaces. */
-
 /**
- * The hairline band: a row of peers separated by rules rather than boxed
- * individually. `MetricGroup` is the `<dl>` flavour for label/value pairs;
- * these classes are the same recipe for bands whose cells are not `dt`/`dd`
- * (a score ring, an icon header with an action) and so cannot live in a `<dl>`.
- *
- * The caller supplies the column count — `desktop:grid-cols-3` — at the
- * product's one breakpoint, where the band becomes one row. Pairing the edge
- * padding with that same breakpoint is what keeps the first and last cells
- * flush with the page margin.
+ * Shared editorial structures for authenticated analytical workspaces. A row
+ * of label/value facts is a `StatRow` (`stat-row.tsx`), not a recipe here.
  */
-export const hairlineBandClasses =
-  'divide-border-subtle grid divide-y desktop:divide-x desktop:divide-y-0';
-
-export const hairlineBandItemClasses =
-  'min-w-0 py-3 desktop:px-4 desktop:first:ps-0 desktop:last:pe-0';
 
 /**
  * The sanctioned two-column splits. A screen picks a role, never a ratio:
@@ -33,7 +20,7 @@ export const hairlineBandItemClasses =
  *
  * All stack below the `desktop` breakpoint, with the first child first, and
  * share the workspace gap. Columns align to the top so a short aside never
- * stretches.
+ * stretches. A detail route takes its split from `DetailScreen`.
  */
 const SPLIT_PANE = {
   'list-detail': 'desktop:grid-cols-[var(--pane-list-detail)]',
@@ -73,75 +60,13 @@ export const stickyPaneClasses =
  *
  *   `open`  — the list sits on whatever surface already contains it; rows are
  *             divided, the list itself is never outlined.
- *   `boxed` — a standalone object with its own fill and edge (a card).
+ *   `boxed` — a standalone object: the one box recipe (`panelClasses`: radius
+ *             12, the hairline edge, padding 16), its rows divided inside it.
  */
-const LEDGER_SHELL = {
-  open: '',
-  boxed: 'surface-panel bg-panel border-border overflow-hidden rounded-[var(--radius-card)] border',
-} as const;
-
-export type LedgerShell = keyof typeof LEDGER_SHELL;
+export type LedgerShell = 'open' | 'boxed';
 
 export function ledgerClasses(shell: LedgerShell = 'open', className?: string) {
-  return cn('divide-border-subtle grid divide-y', LEDGER_SHELL[shell], className);
-}
-export function MetricGroup({
-  children,
-  className,
-  ...props
-}: Readonly<ComponentPropsWithoutRef<'dl'>>) {
-  return (
-    <dl
-      {...props}
-      className={cn(
-        // One row from the desktop breakpoint: the sheet beside a 224px rail
-        // is still ~700px wide at a 981px desktop, room for five figures.
-        // Below it the figures stack, so no two-column grid strands an odd
-        // figure beside an empty cell.
-        'divide-border-subtle grid divide-y',
-        'desktop:grid-flow-col desktop:auto-cols-fr desktop:divide-x desktop:divide-y-0',
-        className,
-      )}
-    >
-      {children}
-    </dl>
-  );
-}
-
-/**
- * One cell of a `MetricGroup`. The edge padding is paired with the breakpoint
- * the group reflows at, so the first and last cells stay flush with the card's
- * own padding. Exported because a band whose
- * cell is not a plain label/value pair still has to sit on this grid. The cell
- * owns its label → value rhythm (the 4px `tight` rung), so its children never
- * carry margins.
- */
-export const metricItemClasses =
-  'grid min-w-0 content-start gap-1 px-0 py-3 desktop:px-4 desktop:first:ps-0 desktop:last:pe-0';
-
-export function MetricItem({
-  label,
-  value,
-  detail,
-  marker,
-  className,
-}: Readonly<{
-  label: ReactNode;
-  value: ReactNode;
-  detail?: ReactNode;
-  marker?: ReactNode;
-  className?: string;
-}>) {
-  return (
-    <div className={cn(metricItemClasses, className)}>
-      <dt className={textRole('label', 'flex min-w-0 items-center justify-between gap-2')}>
-        <span className="truncate">{label}</span>
-        {marker}
-      </dt>
-      <dd className={textRole('figure')}>{value}</dd>
-      {detail ? <dd className={textRole('caption')}>{detail}</dd> : null}
-    </div>
-  );
+  return cn('divide-border-subtle grid divide-y', shell === 'boxed' && panelClasses(), className);
 }
 
 /**

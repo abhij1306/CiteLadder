@@ -36,7 +36,7 @@ export type TabsProps<T extends string> = TabStripProps<T> & {
 /**
  * The stateful wrapper, split out from the strip itself.
  *
- * A page's tabs live in `PageShell`'s navigation band while their panels live
+ * A page's tabs live in the screen template's navigation band while their panels live
  * in the content region, two bands below — so the thing that holds the selected
  * value has to be able to span both. Section-level tabs, whose strip and panels
  * are adjacent, use `Tabs` instead and never see this.
@@ -65,15 +65,15 @@ export function TabsRoot<T extends string>({
   );
 }
 
-/** What a route passes to `PageShell`'s `tabs`. */
+/** What a route passes to its screen template's `tabs`. */
 export type TabRowProps<T extends string = string> = Readonly<
   Pick<TabStripProps<T>, 'items' | 'ariaLabel' | 'onIntent'>
 >;
 
 /**
  * TabRow — the route's navigation band: tabs and nothing else (route actions
- * belong to the identity band, filters to the control band). `PageShell`
- * renders it from its `tabs` prop inside a `TabsRoot` the route owns, so the
+ * belong to the identity band, filters to the control band). `ListScreen`
+ * and `DetailScreen` render it from its `tabs` prop inside a `TabsRoot` the route owns, so the
  * selected value spans the band and the panels two bands below. The band owns
  * the full-width rule, so the strip draws none of its own. Tabs share the
  * buttons' 12px padding and 32px height.

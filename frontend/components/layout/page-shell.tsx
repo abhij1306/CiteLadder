@@ -7,6 +7,7 @@ import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
+import { splitPaneClasses, type SplitPaneRole } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
 
 import { CompactPageTitleContext } from './compact-page-title-context';
@@ -60,20 +61,9 @@ export type PageBack = Readonly<{
  * everywhere: the answer to "where does this page start" is structural, not a
  * judgement each route makes for itself.
  */
-export function PageShell<T extends string = string>({
-  title,
-  back,
-  actions,
-  tabs,
-  controls,
-  children,
-  className,
-  measure = 'analytical',
-}: Readonly<{
+type ScreenBands<T extends string> = Readonly<{
   /** Overrides the route-derived title (rare — prefer `page-titles.ts`). */
   title?: string;
-  /** A detail route's link back to its collection, above the title. */
-  back?: PageBack;
   /** Route-owned controls; their state and outcomes stay with the route owner. */
   actions?: ReactNode;
   /** The route's tabs, drawn as the `TabRow`; the route owns the `TabsRoot`. */
@@ -81,10 +71,83 @@ export function PageShell<T extends string = string>({
   /** Search, filters, status and export for the whole route, drawn as the `FilterBar`. */
   controls?: FilterBarProps;
   children?: ReactNode;
-  className?: string;
-  /** Content measure; page bands retain the analytical alignment. */
-  measure?: 'analytical' | 'workflow';
-}>) {
+}>;
+
+/**
+ * ListScreen — the template for a collection, dashboard or workspace route:
+ * identity band → optional `TabRow` → optional `FilterBar` → the content
+ * stack, its sections 24 apart.
+ *
+ *   `measure="workflow"` — the narrower reading measure (Agent, Billing).
+ *   `fill`               — the content is one column that fills the viewport
+ *                          below the shell chrome, so a chat's composer sits
+ *                          at the bottom of a short thread.
+ *
+ * A page passes data, organisms and slots; the template owns every band and
+ * every band-to-band gap.
+ */
+export function ListScreen<T extends string = string>({
+  measure = 'analytical',
+  fill = false,
+  ...bands
+}: ScreenBands<T> &
+  Readonly<{
+    measure?: 'analytical' | 'workflow';
+    fill?: boolean;
+  }>) {
+  return <PageShell {...bands} measure={measure} fill={fill} />;
+}
+
+/**
+ * DetailScreen — the template for one record: identity band with the way
+ * back above the title → optional tabs and controls → the content, either one
+ * stack or a split from `splitPaneClasses` when an `aside` is given
+ * (`main-aside` by default, `list-detail` for a list beside its selection).
+ */
+export function DetailScreen<T extends string = string>({
+  back,
+  aside,
+  split = 'main-aside',
+  children,
+  ...bands
+}: ScreenBands<T> &
+  Readonly<{
+    back: PageBack;
+    /** Supporting context beside the main content. */
+    aside?: ReactNode;
+    split?: Extract<SplitPaneRole, 'main-aside' | 'list-detail'>;
+  }>) {
+  return (
+    <PageShell {...bands} back={back} measure="analytical" fill={false}>
+      {aside ? (
+        <div className={splitPaneClasses(split)}>
+          <div className="grid min-w-0 content-start gap-[var(--page-section-gap)]">{children}</div>
+          <aside className="grid min-w-0 content-start gap-[var(--page-section-gap)]">
+            {aside}
+          </aside>
+        </div>
+      ) : (
+        children
+      )}
+    </PageShell>
+  );
+}
+
+function PageShell<T extends string>({
+  title,
+  back,
+  actions,
+  tabs,
+  controls,
+  children,
+  measure,
+  fill,
+}: ScreenBands<T> &
+  Readonly<{
+    back?: PageBack;
+    measure: 'analytical' | 'workflow';
+    fill: boolean;
+  }>) {
   return (
     <>
       <IdentityBand title={title} back={back} actions={actions} />
@@ -106,7 +169,10 @@ export function PageShell<T extends string = string>({
           pageGutterClasses,
           measure === 'workflow' && 'max-w-[var(--workflow-max-width)]',
           'grid grid-cols-[minmax(0,1fr)] content-start gap-[var(--page-section-gap)] pt-[var(--content-gutter)] pb-[var(--page-section-gap)]',
-          className,
+          // `--route-chrome-height` (globals.css) owns the chrome above the
+          // route at each breakpoint; the gutter is the shell's padding under it.
+          fill &&
+            'flex min-h-[calc(100dvh-var(--route-chrome-height)-var(--content-gutter))] flex-col pb-0',
         )}
       >
         {children}

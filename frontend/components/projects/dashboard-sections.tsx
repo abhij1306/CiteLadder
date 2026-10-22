@@ -1,11 +1,6 @@
 import { ArrowRight, Download, TrendingUp } from 'lucide-react';
 import type { ReactNode } from 'react';
-import {
-  hairlineBandClasses,
-  hairlineBandItemClasses,
-  ledgerClasses,
-  MetricGroup,
-} from '@/components/ui/workspace';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { ProjectLink } from '@/components/layout/scoped-link';
 
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +16,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Delta } from '@/components/ui/delta';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
+import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { MetricValue } from '@/components/ui/metric-value';
@@ -29,16 +25,9 @@ import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { availabilityLabel, pluralCount } from '@/lib/format';
 import type { CommandCenter, Project } from '@/lib/api/types';
 import { DisplayTime } from '@/components/ui/display-time';
-import { cn } from '@/lib/utils';
 
 import { ProjectControls } from './dashboard-controls';
-import {
-  ActionRow,
-  metricValue,
-  MovementChart,
-  StateMetric,
-  VS_PREVIOUS_RUN,
-} from './dashboard-primitives';
+import { ActionRow, metricValue, MovementChart, VS_PREVIOUS_RUN } from './dashboard-primitives';
 import { Tooltip } from '@/components/ui/tooltip';
 
 function brandName(data: CommandCenter) {
@@ -61,8 +50,7 @@ export function DashboardHeader({
           name={brandName(data)}
           logoUrl={activeProject.brand.logo_url}
           websiteUrl={website}
-          size="xl"
-          className="size-12 rounded-[var(--radius-control)]"
+          placement="identity"
         />
         <div className="grid min-w-0 gap-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -114,25 +102,30 @@ export function CompanyFacts({ data }: Readonly<{ data: CommandCenter }>) {
         <CardTitle id="company-facts">Company facts</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className={cn(hairlineBandClasses, 'desktop:grid-cols-3')}>
-          <FactSummary
-            label="Positioning"
-            value={facts.positioning || facts.description}
-            emptyState="not_set"
-          />
-          <FactSummary label="Target audience" value={facts.target_audience} emptyState="not_set" />
-          <div className={cn(hairlineBandItemClasses, 'grid content-start gap-2')}>
-            <p className={textRole('label')}>Offerings & competitors</p>
-            {offerings.length ? (
-              <TagGroup labels={offerings} tone="purple" />
-            ) : (
-              <UnavailableValue state="not_set" />
-            )}
-            <p className={textRole('caption')}>
-              {pluralCount(facts.competitors.length, 'tracked competitor')}
-            </p>
-          </div>
-        </div>
+        <StatRow
+          segments={[
+            {
+              key: 'positioning',
+              label: 'Positioning',
+              value: <FactSummary value={facts.positioning || facts.description} />,
+            },
+            {
+              key: 'audience',
+              label: 'Target audience',
+              value: <FactSummary value={facts.target_audience} />,
+            },
+            {
+              key: 'offerings',
+              label: 'Offerings & competitors',
+              value: offerings.length ? (
+                <TagGroup labels={offerings} tone="purple" />
+              ) : (
+                <UnavailableValue state="not_set" />
+              ),
+              sub: pluralCount(facts.competitors.length, 'tracked competitor'),
+            },
+          ]}
+        />
       </CardContent>
     </Card>
   );
@@ -161,28 +154,13 @@ export function DashboardActions({
   );
 }
 
-function FactSummary({
-  label,
-  value,
-  emptyState,
-}: Readonly<{
-  label: string;
-  value: string;
-  emptyState: 'not_set';
-}>) {
+/** A free-text fact, cut at two lines with the whole text behind a tooltip. */
+function FactSummary({ value }: Readonly<{ value: string }>) {
+  if (!value.trim()) return <UnavailableValue state="not_set" />;
   return (
-    <div className={cn(hairlineBandItemClasses, 'grid content-start gap-2')}>
-      <p className={textRole('label')}>{label}</p>
-      {value.trim() ? (
-        <div className="min-w-0">
-          <Tooltip content={value}>
-            <p className={textRole('body', 'line-clamp-2 overflow-hidden')}>{value}</p>
-          </Tooltip>
-        </div>
-      ) : (
-        <UnavailableValue state={emptyState} className="inline-flex justify-self-start" />
-      )}
-    </div>
+    <Tooltip content={value}>
+      <p className={textRole('body', 'line-clamp-2 overflow-hidden')}>{value}</p>
+    </Tooltip>
   );
 }
 
@@ -204,6 +182,33 @@ function PdfButton({
   );
 }
 
+/**
+ * One Project state figure. A missing value or a missing comparison has no
+ * change to report; the Movement card states why once, rather than a dash
+ * under every figure.
+ */
+function stateSegment(
+  key: string,
+  label: string,
+  metric: Readonly<{ value: number | null; delta: number | null }>,
+  suffix: string,
+  inverse = false,
+): StatSegment {
+  return {
+    key,
+    label,
+    value: metric.value === null ? null : metricValue(metric.value, suffix),
+    delta:
+      metric.value !== null && metric.delta !== null ? (
+        <Delta
+          value={metric.delta}
+          policy={inverse ? 'lower-is-better' : 'higher-is-better'}
+          {...VS_PREVIOUS_RUN}
+        />
+      ) : undefined,
+  };
+}
+
 export function ProjectStateCard({ data }: Readonly<{ data: CommandCenter }>) {
   return (
     <Card aria-labelledby="project-state" className="h-full">
@@ -213,11 +218,13 @@ export function ProjectStateCard({ data }: Readonly<{ data: CommandCenter }>) {
         <CardTitle id="project-state">Project state</CardTitle>
       </CardHeader>
       <CardContent>
-        <MetricGroup>
-          <StateMetric label="Visibility" {...data.state.visibility} suffix="%" />
-          <StateMetric label="Share of voice" {...data.state.share_of_voice} suffix="%" />
-          <StateMetric label="Brand rank" {...data.state.brand_rank} inverse />
-        </MetricGroup>
+        <StatRow
+          segments={[
+            stateSegment('visibility', 'Visibility', data.state.visibility, '%'),
+            stateSegment('share', 'Share of voice', data.state.share_of_voice, '%'),
+            stateSegment('rank', 'Brand rank', data.state.brand_rank, '', true),
+          ]}
+        />
       </CardContent>
     </Card>
   );
@@ -316,12 +323,11 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
 export function Movement({ data }: Readonly<{ data: CommandCenter }>) {
   if (data.movements.length === 0)
     return (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         icon={TrendingUp}
         heading="No comparable measurement yet"
         description="Needs a second run with the same prompts and engines."
-        className="h-full"
       />
     );
   return (
@@ -348,13 +354,12 @@ export function RankedActionsCard({
 }>) {
   if (!actions.length)
     return (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         icon={ArrowRight}
         heading="No open actions"
         description="Run another audit to look for new opportunities."
         action={<ViewAllActions />}
-        className="h-full"
       />
     );
   return (

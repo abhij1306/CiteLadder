@@ -11,12 +11,11 @@ import { ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import {
   Table,
   TableBody,
@@ -64,8 +63,9 @@ export function VisibilityAccuracy({
     return (
       <Card>
         <CardContent>
-          <EmptyState
-            variant="compact"
+          <QueryState
+            kind="empty"
+            headingLevel={3}
             icon={ShieldCheck}
             heading="No run selected"
             description="Choose a run to see how its answers state your facts."
@@ -120,8 +120,9 @@ function AccuracyState({
   return (
     <Card>
       <CardContent className="grid gap-2">
-        <EmptyState
-          variant="compact"
+        <QueryState
+          kind="empty"
+          headingLevel={3}
           icon={ShieldCheck}
           heading={copy.heading}
           description={copy.description}
@@ -141,37 +142,35 @@ function Headline({ data }: Readonly<{ data: AccuracyResponse }>) {
   return (
     <Card>
       <CardContent className="grid gap-2">
-        <StatGrid
-          surface="well"
-          columns={4}
+        <StatRow
           label="Fact checks"
-          items={[
+          segments={[
             {
               key: 'accuracy',
               label: 'Accuracy',
               value: formatShare(data.score.accuracy),
               missingLabel: 'Unavailable',
-              detail: 'Supported, of claims that were supported or contradicted.',
+              sub: 'Supported, of claims that were supported or contradicted.',
             },
             {
               key: 'supported',
               label: 'Supported',
               value: String(coverage.supported),
               tone: 'success',
-              detail: 'A confirmed fact states the same thing.',
+              sub: 'A confirmed fact states the same thing.',
             },
             {
               key: 'contradicted',
               label: 'Contradicted',
               value: String(coverage.contradicted),
               tone: 'danger',
-              detail: 'A confirmed fact states something incompatible.',
+              sub: 'A confirmed fact states something incompatible.',
             },
             {
               key: 'not_covered',
               label: 'Not covered',
               value: String(coverage.not_covered + coverage.inconclusive),
-              detail: `${coverage.not_covered} with no fact on the point, ${coverage.inconclusive} inconclusive.`,
+              sub: `${coverage.not_covered} with no fact on the point, ${coverage.inconclusive} inconclusive.`,
             },
           ]}
         />
@@ -200,7 +199,7 @@ function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
       </CardHeader>
       <CardContent>
         {!claims.length ? (
-          <InlineEmpty>No contradicted claims in these answers.</InlineEmpty>
+          <QueryState kind="empty" inline message="No contradicted claims in these answers." />
         ) : (
           <ul className="grid gap-3">
             {claims.map((claim) => (
@@ -285,7 +284,7 @@ function CitedTable({ cited }: Readonly<{ cited: AccuracyResponse['cited_alongsi
       </CardHeader>
       <CardContent>
         {!cited.length ? (
-          <InlineEmpty>No sources cited alongside contradictions.</InlineEmpty>
+          <QueryState kind="empty" inline message="No sources cited alongside contradictions." />
         ) : (
           <Table>
             <TableHeader>

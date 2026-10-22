@@ -15,7 +15,7 @@ import { ApiKeys } from '@/components/settings/api-keys';
 import { ProviderSettings } from '@/components/settings/provider-settings';
 import { TimeZoneSetting } from '@/components/settings/time-zone-setting';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { projectsApi } from '@/lib/api/projects';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -100,7 +100,7 @@ function ProjectDeletionControls() {
                   name={activeProject.brand_name}
                   logoUrl={activeProject.brand?.logo_url}
                   websiteUrl={activeProject.website_url}
-                  size="md"
+                  placement="identity"
                 />
                 <div className="grid min-w-0 gap-0.5">
                   <div className={textRole('itemTitle', 'truncate')}>{activeProject.name}</div>
@@ -191,7 +191,7 @@ export function SettingsScreen() {
 
   return (
     <TabsRoot value={activeTab} onValueChange={setActiveTab}>
-      <PageShell
+      <ListScreen
         measure="workflow"
         tabs={{
           items: tabs.map((tab) => ({ value: tab.id, label: tab.label })),
@@ -223,7 +223,7 @@ export function SettingsScreen() {
         <TabPanel value="api-keys" className="focus-ring">
           <ApiKeys />
         </TabPanel>
-      </PageShell>
+      </ListScreen>
     </TabsRoot>
   );
 }

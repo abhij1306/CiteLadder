@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { QueryState } from '@/components/ui/query-state';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import type { Project } from '@/lib/api/types';
 import { useProjectCreation } from '@/components/layout/use-project-creation';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -54,14 +54,14 @@ export function ProjectsScreen() {
   // who had just created their first project, until they refreshed.
   if (projects.length === 0 && !projectsSettled) {
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" label="Loading your projects…" />
-      </PageShell>
+      </ListScreen>
     );
   }
   if (projects.length === 0) {
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="empty"
           icon={FolderOpen}
@@ -83,11 +83,11 @@ export function ProjectsScreen() {
             ) : undefined
           }
         />
-      </PageShell>
+      </ListScreen>
     );
   }
 
-  // A fragment: the dashboard is a PageShell whose bands must meet flush, and
+  // A fragment: the dashboard is a ListScreen whose bands must meet flush, and
   // the edit panel is an overlay, so there is no rhythm here to own.
   return (
     <>

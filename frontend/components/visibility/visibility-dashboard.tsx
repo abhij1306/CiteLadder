@@ -13,7 +13,7 @@ import { VisibilityByMarket } from '@/components/visibility/visibility-by-market
 import { VisibilityActions, VisibilityToolbar } from '@/components/visibility/visibility-toolbar';
 import { VisibilityTrends } from '@/components/visibility/visibility-trends';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
@@ -93,17 +93,17 @@ function VisibilityWorkspace({
     useBrandFacts(queries.projectId ?? null, queries.workspaceId ?? null).data?.enabled ?? false;
   if (state === 'empty') {
     return (
-      <PageShell actions={<VisibilityActions />}>
+      <ListScreen actions={<VisibilityActions />}>
         {queries.activeRun ? <ActiveRunBanner run={queries.activeRun} /> : null}
         <VisibilityEmptyState hasActiveRun={Boolean(queries.activeRun)} />
-      </PageShell>
+      </ListScreen>
     );
   }
   // The root spans the whole page: the strip is the navigation band and its
   // panels are two bands below, in the content region.
   return (
     <TabsRoot value={filters.activeTab} onValueChange={filters.selectTab}>
-      <PageShell
+      <ListScreen
         actions={<VisibilityActions />}
         tabs={{
           items: visibleTabs(factChecking).map((tab) => ({
@@ -150,7 +150,7 @@ function VisibilityWorkspace({
             <DashboardPanel filters={filters} queries={queries} />
           )}
         </TabPanel>
-      </PageShell>
+      </ListScreen>
     </TabsRoot>
   );
 }

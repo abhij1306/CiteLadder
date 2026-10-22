@@ -97,7 +97,7 @@ function CompetitorRow({
       selected={competitor.selected}
       disabled={disabled}
       onToggle={onToggle}
-      leading={<BrandLogo name={displayName} websiteUrl={primaryDomain} size="md" />}
+      leading={<BrandLogo name={displayName} websiteUrl={primaryDomain} />}
       onEdit={() => {
         setDraft(primaryDomain);
         setDraftName(competitor.name);

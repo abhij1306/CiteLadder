@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
-import { InlineEmpty } from '@/components/ui/inline-empty';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { QueryState } from '@/components/ui/query-state';
+import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { Label, textRole } from '@/components/ui/typography';
 import type { PageDetail } from '@/lib/api/types';
@@ -60,7 +60,7 @@ export function InternalLinksCard({
       <p className={textRole('caption')}>
         {`Modelled over ${links.source_page_count} observed crawl page${links.source_page_count === 1 ? '' : 's'}${links.observed_crawl_incomplete ? '; this crawl is incomplete or sampled' : ''}`}
       </p>
-      <StatGrid columns={4} items={metrics.map((metric) => ({ key: metric.label, ...metric }))} />
+      <StatRow segments={metrics.map((metric) => ({ key: metric.label, ...metric }))} />
       <div className="desktop:grid-cols-2 grid min-w-0 gap-4">
         <NeighbourList
           heading="Top linking pages"
@@ -94,7 +94,7 @@ function NeighbourList({
     <section className="grid min-w-0 content-start gap-2 overflow-hidden">
       <Label>{heading}</Label>
       {neighbours.length === 0 ? (
-        <InlineEmpty>{emptyMessage}</InlineEmpty>
+        <QueryState kind="empty" inline message={emptyMessage} />
       ) : (
         <ul className={ledgerClasses()}>
           {neighbours.map((neighbour) => (

@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ResizableSplitPane } from '@/components/ui/split-pane';
 import { COMMERCE_TARGETS_MAX, type CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -23,7 +23,7 @@ import { CatalogList, catalogEntries } from './catalog-list';
 import { TargetDetail } from './target-detail';
 import { textRole } from '@/components/ui/typography';
 import { Stack } from '@/components/ui/layout';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 /** Selection-only bulk actions, including stale keys that still need a clear path. */
@@ -107,7 +107,7 @@ export function CommerceWorkspace({ projectId }: Readonly<{ projectId: string }>
       return [...next];
     });
   return (
-    <PageShell actions={header.actions}>
+    <ListScreen actions={header.actions}>
       <Stack gap="section">
         {header.stats}
         {header.notices}
@@ -155,13 +155,14 @@ export function CommerceWorkspace({ projectId }: Readonly<{ projectId: string }>
               discovery={discovery}
             />
           ) : (
-            <InlineEmpty>
-              Select a category or product to see its shelf position, its competitors, and the
-              prompts that measure it.
-            </InlineEmpty>
+            <QueryState
+              kind="empty"
+              inline
+              message="Select a category or product to see its shelf position, its competitors, and the prompts that measure it."
+            />
           )}
         </ResizableSplitPane>
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }

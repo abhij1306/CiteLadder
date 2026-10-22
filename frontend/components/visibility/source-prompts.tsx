@@ -11,7 +11,7 @@ import {
 } from '@/components/runs/execution-evidence-drawer';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -135,7 +135,13 @@ function PromptsBody({
   if (query.isLoading) return <Skeleton className="h-40" />;
   const items = query.data?.items ?? [];
   if (items.length === 0) {
-    return <InlineEmpty>No tracked answers in this selection used this source.</InlineEmpty>;
+    return (
+      <QueryState
+        kind="empty"
+        inline
+        message="No tracked answers in this selection used this source."
+      />
+    );
   }
   return (
     <Table>
@@ -180,11 +186,7 @@ function PromptRow({
     <TableRow>
       <TableCell className="max-w-[34rem]">
         <span className="flex min-w-0 items-start gap-2">
-          <BrandLogo
-            name={engineLabel(item.logical_engine) || item.logical_engine}
-            size="sm"
-            className="mt-0.5"
-          />
+          <BrandLogo name={engineLabel(item.logical_engine) || item.logical_engine} />
           <span className="grid min-w-0">
             <ClampText lines={1}>{item.prompt_text || 'Untitled prompt'}</ClampText>
             <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
@@ -247,7 +249,7 @@ function MentionChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>)
       {named.slice(0, MAX_CHIPS).map((mention) => (
         <Tooltip key={`${mention.kind}:${mention.name}`} content={mention.name}>
           <span className="inline-flex">
-            <BrandLogo name={mention.name || 'Brand'} size="xs" />
+            <BrandLogo name={mention.name || 'Brand'} placement="mark" />
           </span>
         </Tooltip>
       ))}
@@ -266,7 +268,7 @@ function SourceChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>) 
       {hosts.slice(0, MAX_CHIPS).map((host) => (
         <Tooltip key={host} content={host}>
           <span className="inline-flex">
-            <BrandLogo name={host} websiteUrl={`https://${host}`} size="xs" />
+            <BrandLogo name={host} websiteUrl={`https://${host}`} placement="mark" />
           </span>
         </Tooltip>
       ))}

@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,9 +40,9 @@ export function SkillsScreen() {
   else body = <SkillGroups skills={query.data.skills} />;
 
   return (
-    <PageShell measure="workflow">
+    <ListScreen measure="workflow">
       <Stack gap="section">
-        {/* PageShell has no description slot, so the route's intro is the body's first child. */}
+        {/* The template has no description slot, so the route's intro is the body's first child. */}
         <p className={textRole('body', 'max-w-[72ch]')}>
           Skills are the agent’s available methods. It selects a method when a deliverable needs
           one, or you can choose here or in the composer. Typing / opens that same skill menu.
@@ -50,7 +50,7 @@ export function SkillsScreen() {
         </p>
         {body}
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }
 

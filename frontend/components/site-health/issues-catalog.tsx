@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { IssueDetailRail } from '@/components/site-health/issue-detail-rail';
 import { IssueMetadata } from '@/components/site-health/issue-metadata';
@@ -164,12 +164,12 @@ export function IssuesCatalog({
   // showing nothing — and the filters stay in place while it loads.
   if (issuesQuery.isPending && !issuesQuery.data)
     return (
-      <PageShell controls={controls}>
+      <ListScreen controls={controls}>
         <Stack gap="section" className="min-w-0" aria-busy="true">
           {notice}
           <QueryState kind="loading" label="Loading issues…" />
         </Stack>
-      </PageShell>
+      </ListScreen>
     );
 
   let issuesBody: ReactNode = (
@@ -216,7 +216,7 @@ export function IssuesCatalog({
   }
 
   return (
-    <PageShell controls={controls}>
+    <ListScreen controls={controls}>
       <Stack gap="section" className="min-w-0">
         {notice}
         {summary ? <IssueSummary summary={summary} findingView={findingView} /> : null}
@@ -227,7 +227,7 @@ export function IssuesCatalog({
           <CatalogPager cursor={cursor} page={issuesQuery.data} onGo={catalog.goToPage} />
         ) : null}
       </Stack>
-    </PageShell>
+    </ListScreen>
   );
 }
 

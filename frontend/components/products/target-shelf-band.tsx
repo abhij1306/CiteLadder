@@ -3,15 +3,12 @@
 import type { Shelf } from '@citeladder/contracts/commerce-suite';
 
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Card, CardContent, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { DisplayTime } from '@/components/ui/display-time';
-import { Stack } from '@/components/ui/layout';
 import { Skeleton } from '@/components/ui/skeleton';
-import { textRole } from '@/components/ui/typography';
+import { StatRow } from '@/components/ui/stat-row';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { MetricGroup, metricItemClasses } from '@/components/ui/workspace';
 import { pluralCount } from '@/lib/format';
-import { cn } from '@/lib/utils';
 
 import type { CommerceQueries } from './commerce-queries';
 
@@ -64,27 +61,16 @@ export function TargetShelfBand({ query }: Readonly<{ query: CommerceQueries['sh
   return (
     <Card data-testid="target-shelf-band">
       <CardContent className="grid gap-3">
-        <MetricGroup>
-          {metrics(snapshot).map(({ label, definition, value }) => (
-            // The cell IS the stack: `dt`/`dd` have to stay direct children of
-            // the `<dl>`'s own child, so an extra wrapper here is invalid.
-            <Stack key={label} gap="tight" className={cn(metricItemClasses, 'content-start')}>
-              <dt className={textRole('label')}>{label}</dt>
-              <dd>
-                {value === null ? (
-                  <UnavailableValue
-                    state={unavailable ? 'unavailable' : 'not_measured'}
-                    className="inline-flex"
-                  />
-                ) : (
-                  // A heading: the KPI, not its label, is what a reader scans for.
-                  <CardTitle className={textRole('figure')}>{value}</CardTitle>
-                )}
-              </dd>
-              <dd className="type-caption">{definition}</dd>
-            </Stack>
-          ))}
-        </MetricGroup>
+        <StatRow
+          segments={metrics(snapshot).map(({ label, definition, value }) => ({
+            key: label,
+            label,
+            value: value ?? (
+              <UnavailableValue state={unavailable ? 'unavailable' : 'not_measured'} />
+            ),
+            sub: definition,
+          }))}
+        />
         {snapshot ? (
           <p className="type-caption">
             Measured <DisplayTime value={snapshot.measured_at} dateOnly /> from{' '}

@@ -5,7 +5,7 @@ import type { z } from 'zod';
 import { Badge } from '@/components/ui/badge';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ClampText,
@@ -85,7 +85,7 @@ function SectionBody({
   if (errored) return null;
   if (loading) return <Skeleton className="h-24" />;
   if (children) return <>{children}</>;
-  return <InlineEmpty>{empty}</InlineEmpty>;
+  return <QueryState kind="empty" inline message={empty} />;
 }
 
 export function EnginesCard({
@@ -166,12 +166,7 @@ export function BrandsCard({
         <ul className="grid gap-2">
           {brands.map((brand) => (
             <li key={`${brand.kind}:${brand.name}`} className="flex items-center gap-2">
-              <BrandLogo
-                name={brand.name}
-                logoUrl={brand.logo_url}
-                websiteUrl={brand.website}
-                size="sm"
-              />
+              <BrandLogo name={brand.name} logoUrl={brand.logo_url} websiteUrl={brand.website} />
               <span className="min-w-0 truncate">{brand.name}</span>
               <Badge
                 className="ml-auto shrink-0"

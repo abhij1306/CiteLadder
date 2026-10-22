@@ -4,20 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BusyBar } from '@/components/ui/busy-bar';
-import { FilterBar, FilterChoice } from '@/components/ui/filter-bar';
-import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { FilterChoice } from '@/components/ui/filter-bar';
+import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { SearchField } from '@/components/ui/search-field';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import {
   EvidenceEmpty,
   EvidenceError,
@@ -45,7 +36,7 @@ import { FANOUT_SEARCH_DEBOUNCE_MS } from '@/lib/config/operational';
 import {
   isSelectionWide,
   selectionMatchedQueries,
-  NoSearchMatch,
+  noSearchMatchState,
   SearchScopeNote,
   FanoutCounts,
 } from '@/components/visibility/fanout-totals';
@@ -62,6 +53,12 @@ export type FanoutScope = Readonly<{
 
 /** Rows (or groups) per page, matching the shared table footer. */
 const PAGE_SIZE = 10;
+
+const COLUMNS: readonly DataTableColumn[] = [
+  { key: 'search', label: 'Search' },
+  { key: 'model', label: 'Model', width: 'name' },
+  { key: 'occurrences', label: 'Occurrences', width: 'figure', numeric: true },
+];
 
 /** What a page of this grouping is counting, for the shared table footer. */
 const GROUP_NOUNS: Record<(typeof GROUP_OPTIONS)[number]['value'], string> = {
@@ -165,69 +162,51 @@ export function FanoutEvidence({
   }
 
   return (
-    <Card className="relative" aria-busy={query.isFetching}>
-      <BusyBar active={query.isFetching} label="Updating evidence" />
-      <CardHeader bordered>
-        <CardTitle>{TITLE}</CardTitle>
-        <FilterBar
-          search={
-            <SearchField
-              value={search ?? ''}
-              onValueChange={(value) => setSearch(value || null)}
-              placeholder="Search queries…"
-              aria-label="Filter searches by text"
-              maxLength={SEARCH_MAX_LENGTH}
-            />
-          }
-          status={
-            needle && matched != null ? <SearchScopeNote search={needle} matched={matched} /> : null
-          }
-          actions={
-            <>
-              <span aria-busy={!summaryMatchesInput}>
-                <FanoutCounts summary={summary} fallback={totals} selectionWide={selectionWide} />
-              </span>
-              <FilterChoice
-                label="Group searches by"
-                value={grouping}
-                options={GROUP_OPTIONS}
-                onChange={setGrouping}
-              />
-            </>
-          }
-        />
-      </CardHeader>
-      <CardContent className="grid">
-        {visible.length === 0 ? (
-          <NoSearchMatch search={needle} matched={matched} />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Search</TableHead>
-                <TableHead>Model</TableHead>
-                <TableHead numeric className="w-32">
-                  Occurrences
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paged.map((group) => (
-                <SearchGroupRows key={group.key} group={group} />
-              ))}
-            </TableBody>
-          </Table>
-        )}
-        {unit > PAGE_SIZE ? (
-          <Pager
-            frame="table"
-            range={{ from, to, total: unit, noun: GROUP_NOUNS[grouping] }}
-            {...pageNumberControls(page, pageCount, setPage)}
+    <DataTable
+      title={TITLE}
+      busy={{ active: query.isFetching, label: 'Updating evidence' }}
+      toolbar={{
+        search: (
+          <SearchField
+            value={search ?? ''}
+            onValueChange={(value) => setSearch(value || null)}
+            placeholder="Search queries…"
+            aria-label="Filter searches by text"
+            maxLength={SEARCH_MAX_LENGTH}
           />
-        ) : null}
-        {query.data?.truncated ? <TruncationNotice limit={limit} /> : null}
-      </CardContent>
-    </Card>
+        ),
+        status:
+          needle && matched != null ? <SearchScopeNote search={needle} matched={matched} /> : null,
+        actions: (
+          <>
+            <span aria-busy={!summaryMatchesInput}>
+              <FanoutCounts summary={summary} fallback={totals} selectionWide={selectionWide} />
+            </span>
+            <FilterChoice
+              label="Group searches by"
+              value={grouping}
+              options={GROUP_OPTIONS}
+              onChange={setGrouping}
+            />
+          </>
+        ),
+      }}
+      columns={COLUMNS}
+      state={visible.length === 0 ? noSearchMatchState(needle, matched) : undefined}
+      pager={
+        unit > PAGE_SIZE
+          ? {
+              range: { from, to, total: unit, noun: GROUP_NOUNS[grouping] },
+              ...pageNumberControls(page, pageCount, setPage),
+            }
+          : undefined
+      }
+      footer={query.data?.truncated ? <TruncationNotice limit={limit} /> : null}
+    >
+      {paged.map((group) => (
+        <SearchGroupRows key={group.key} group={group} />
+      ))}
+    </DataTable>
   );
 }
 

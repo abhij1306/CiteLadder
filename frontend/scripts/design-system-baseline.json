@@ -18,7 +18,7 @@
       "layer-geometry": 1
     },
     "components/agent/chat-screen.tsx": {
-      "layer-geometry": 3
+      "layer-geometry": 2
     },
     "components/agent/chat-thread.tsx": {
       "layer-geometry": 1
@@ -92,9 +92,6 @@
     "components/ai-traffic/referrals-dashboard.tsx": {
       "layer-geometry": 6
     },
-    "components/ai-traffic/referrals-screen.tsx": {
-      "layer-size-prop": 1
-    },
     "components/ai-traffic/traffic-controls.tsx": {
       "layer-geometry": 4
     },
@@ -126,15 +123,13 @@
       "layer-geometry": 17
     },
     "components/integrations/property-choice.tsx": {
-      "layer-geometry": 5,
-      "layer-size-prop": 1
+      "layer-geometry": 5
     },
     "components/knowledge-base/brand-facts-panel.tsx": {
       "layer-geometry": 5
     },
     "components/knowledge-base/brand-profile-panel.tsx": {
-      "layer-geometry": 8,
-      "layer-size-prop": 1
+      "layer-geometry": 8
     },
     "components/knowledge-base/business-map-editor.tsx": {
       "layer-geometry": 20,
@@ -164,8 +159,7 @@
       "layer-size-prop": 2
     },
     "components/onboarding/review-step.tsx": {
-      "layer-geometry": 3,
-      "layer-size-prop": 1
+      "layer-geometry": 3
     },
     "components/opportunities/earned-page-handoff.tsx": {
       "layer-geometry": 9
@@ -200,7 +194,7 @@
     },
     "components/performance/metric-cards.tsx": {
       "layer-geometry": 2,
-      "layer-size-prop": 3
+      "layer-size-prop": 1
     },
     "components/performance/performance-breakdowns.tsx": {
       "layer-geometry": 1
@@ -216,12 +210,10 @@
       "layer-geometry": 3
     },
     "components/performance/readiness-ladder.tsx": {
-      "layer-geometry": 11,
-      "layer-size-prop": 1
+      "layer-geometry": 11
     },
     "components/products/catalog-header.tsx": {
-      "layer-geometry": 1,
-      "layer-size-prop": 1
+      "layer-geometry": 1
     },
     "components/products/catalog-list.tsx": {
       "layer-geometry": 19,
@@ -250,8 +242,8 @@
       "layer-size-prop": 2
     },
     "components/projects/dashboard-sections.tsx": {
-      "layer-geometry": 18,
-      "layer-size-prop": 2
+      "layer-geometry": 14,
+      "layer-size-prop": 1
     },
     "components/projects/mention-rule-fields.tsx": {
       "layer-geometry": 2
@@ -294,10 +286,10 @@
       "layer-geometry": 7
     },
     "components/prompts/prompt-answer-states.tsx": {
-      "layer-geometry": 3
+      "layer-geometry": 2
     },
     "components/prompts/prompt-detail-screen.tsx": {
-      "layer-geometry": 8
+      "layer-geometry": 7
     },
     "components/prompts/prompt-form-dialog.tsx": {
       "layer-geometry": 2
@@ -323,8 +315,7 @@
       "layer-geometry": 2
     },
     "components/providers/provider-row.tsx": {
-      "layer-geometry": 11,
-      "layer-size-prop": 1
+      "layer-geometry": 11
     },
     "components/runs/audit-schedules.tsx": {
       "layer-geometry": 14
@@ -372,11 +363,8 @@
     "components/search-intelligence/search-intelligence-collection.tsx": {
       "layer-geometry": 4
     },
-    "components/search-intelligence/search-intelligence-competitors.tsx": {
-      "layer-geometry": 1
-    },
     "components/search-intelligence/search-intelligence-dataset-view.tsx": {
-      "layer-geometry": 11
+      "layer-geometry": 7
     },
     "components/search-intelligence/search-intelligence-history.tsx": {
       "layer-geometry": 11,
@@ -387,9 +375,6 @@
     },
     "components/search-intelligence/search-intelligence-review-parts.tsx": {
       "layer-geometry": 10
-    },
-    "components/search-intelligence/search-intelligence-rows-table.tsx": {
-      "layer-geometry": 2
     },
     "components/search-intelligence/search-intelligence-runs.tsx": {
       "layer-geometry": 11
@@ -417,8 +402,7 @@
       "layer-geometry": 14
     },
     "components/settings/settings-screen.tsx": {
-      "layer-geometry": 4,
-      "layer-size-prop": 1
+      "layer-geometry": 4
     },
     "components/settings/settings-section.tsx": {
       "layer-geometry": 7
@@ -436,12 +420,7 @@
       "layer-geometry": 2
     },
     "components/site-health/architecture-panel.tsx": {
-      "layer-geometry": 22,
-      "layer-size-prop": 1
-    },
-    "components/site-health/audit-metric-strip.tsx": {
-      "layer-geometry": 8,
-      "layer-size-prop": 1
+      "layer-geometry": 22
     },
     "components/site-health/changes-panel.tsx": {
       "layer-geometry": 9
@@ -514,21 +493,19 @@
       "layer-geometry": 11
     },
     "components/visibility/fanout-evidence.tsx": {
-      "layer-geometry": 6
+      "layer-geometry": 5
     },
     "components/visibility/prompt-insights.tsx": {
       "layer-geometry": 7
     },
     "components/visibility/ranking-rows.tsx": {
-      "layer-geometry": 1,
-      "layer-size-prop": 1
+      "layer-geometry": 1
     },
     "components/visibility/source-breadcrumb.tsx": {
       "layer-geometry": 4
     },
     "components/visibility/source-cells.tsx": {
-      "layer-geometry": 2,
-      "layer-size-prop": 1
+      "layer-geometry": 2
     },
     "components/visibility/source-charts.tsx": {
       "layer-geometry": 1
@@ -543,31 +520,26 @@
       "layer-geometry": 1
     },
     "components/visibility/source-prompts.tsx": {
-      "layer-geometry": 4,
-      "layer-size-prop": 3,
+      "layer-geometry": 3,
       "tsx-size": 1
     },
     "components/visibility/source-rows.tsx": {
-      "layer-geometry": 8,
-      "layer-size-prop": 1
+      "layer-geometry": 8
     },
     "components/visibility/source-toolbar.tsx": {
       "layer-geometry": 1
     },
     "components/visibility/source-url-cards.tsx": {
-      "layer-geometry": 3,
-      "layer-size-prop": 1
+      "layer-geometry": 3
     },
     "components/visibility/source-url-detail.tsx": {
-      "layer-geometry": 4,
-      "layer-size-prop": 2
+      "layer-geometry": 4
     },
     "components/visibility/source-url-page.tsx": {
       "layer-geometry": 4
     },
     "components/visibility/surface-rates.tsx": {
-      "layer-geometry": 8,
-      "layer-size-prop": 1
+      "layer-geometry": 8
     },
     "components/visibility/visibility-accuracy.tsx": {
       "layer-geometry": 7
@@ -586,7 +558,7 @@
       "layer-size-prop": 1
     },
     "components/visibility/visibility-trends.tsx": {
-      "layer-geometry": 6
+      "layer-geometry": 4
     }
   }
 }

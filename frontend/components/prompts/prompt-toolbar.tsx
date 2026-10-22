@@ -27,7 +27,7 @@ import type { EnabledFilter, PromptFilters } from '@/lib/prompts/filter';
 
 /**
  * The prompt library's narrowing controls: a search box and the intent /
- * enabled / branded filter menu. For `PageShell`'s control band.
+ * enabled / branded filter menu. For the `ListScreen` control band.
  *
  * The bulk-upload, generate and add buttons used to sit on this same row.
  * They are not filters — they act on the library rather than narrowing it — so
@@ -181,7 +181,7 @@ export function promptFilterControls({
 }
 
 /**
- * The library's own actions, for `PageShell`'s identity band: the four ways to
+ * The library's own actions, for the `ListScreen` identity band: the four ways to
  * add prompts share one menu, so the band holds one secondary and one primary
  * action at every width instead of wrapping five buttons over the title.
  */

@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Settings2, Unplug } from 'lucide-react';
 
-import { PageShell } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
 import { SearchIntelligenceCitationMatcher } from '@/components/search-intelligence/search-intelligence-citation-matcher';
 import { SearchIntelligenceCollection } from './search-intelligence-collection';
 import { SearchIntelligenceReviewDrawer } from '@/components/search-intelligence/search-intelligence-review-drawer';
@@ -159,26 +159,26 @@ export function SearchIntelligencePage() {
   };
   if (readiness.isPending)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState kind="loading" label="Loading Search Intelligence…" />
-      </PageShell>
+      </ListScreen>
     );
   if (readiness.isError)
     return (
-      <PageShell>
+      <ListScreen>
         <QueryState
           kind="error"
           {...readErrorProps(readiness)}
           fallback="Search Intelligence could not be loaded."
         />
-      </PageShell>
+      </ListScreen>
     );
   const data = readiness.data;
   const tabs = { items: TABS, ariaLabel: 'Search Intelligence views' };
   if (!data.connected && !data.datasets.length)
     return (
       <TabsRoot value={tab} onValueChange={setTab}>
-        <PageShell tabs={tabs}>
+        <ListScreen tabs={tabs}>
           <QueryState
             kind="empty"
             icon={Unplug}
@@ -186,13 +186,13 @@ export function SearchIntelligencePage() {
             description="Search Intelligence uses your workspace’s own DataForSEO account. Add its login once; every analysis shows its cost before anything is fetched."
             action={<TextLink href={PROVIDER_SETTINGS}>Open provider settings</TextLink>}
           />
-        </PageShell>
+        </ListScreen>
       </TabsRoot>
     );
   if (!data.owned_targets.length)
     return (
       <TabsRoot value={tab} onValueChange={setTab}>
-        <PageShell tabs={tabs}>
+        <ListScreen tabs={tabs}>
           <QueryState
             kind="empty"
             icon={Settings2}
@@ -200,13 +200,13 @@ export function SearchIntelligencePage() {
             description="Search Intelligence researches the project’s own website, so the project needs its homepage address (for example https://www.example.com)."
             action={<TextLink href="/projects">Edit the project</TextLink>}
           />
-        </PageShell>
+        </ListScreen>
       </TabsRoot>
     );
   const firstRun = <Button onClick={() => openReview('analysis')}>Review first analysis</Button>;
   return (
     <TabsRoot value={tab} onValueChange={setTab}>
-      <PageShell
+      <ListScreen
         tabs={tabs}
         actions={
           <PageActions
@@ -320,7 +320,7 @@ export function SearchIntelligencePage() {
             busy={reviewMutation.isPending || confirmMutation.isPending}
           />
         </Stack>
-      </PageShell>
+      </ListScreen>
     </TabsRoot>
   );
 }

@@ -305,7 +305,6 @@ function ProfileTabPanel({
                   name={competitor.name}
                   logoUrl={competitor.logo_url}
                   websiteUrl={competitor.domains[0]}
-                  size="sm"
                 />
                 <span className="truncate">{competitor.name}</span>
               </li>

@@ -6,7 +6,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/toast';
@@ -79,9 +79,11 @@ export function SearchIntelligenceCitationMatcher({
   const answered = audits.data.filter((audit) => audit.completed_count > 0);
   if (!answered.length)
     return (
-      <InlineEmpty>
-        No Visibility audit has answers yet. Run one in Visibility, then match its citations here.
-      </InlineEmpty>
+      <QueryState
+        kind="empty"
+        inline
+        message="No Visibility audit has answers yet. Run one in Visibility, then match its citations here."
+      />
     );
   const toggle = (auditId: string) =>
     setSelectedAudits((current) =>

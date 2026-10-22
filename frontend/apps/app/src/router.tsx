@@ -4,8 +4,7 @@ import { redirect, type RouteObject } from 'react-router-dom';
 import { ShellFallback } from '@/components/layout/shell-fallback';
 import { QueryState } from '@/components/ui/query-state';
 import { bootstrapPrivateRoutes } from '@/lib/project/bootstrap-loader';
-import { NotFoundScreen, ScreenError } from '@/components/layout/screen-states';
-import { RouteError } from './route-error';
+import { NotFoundScreen, RouteError, ScreenError } from './route-error';
 import { registerRouteChunk } from '@/lib/navigation/route-chunks';
 import { ApplicationRouteLayout, PrivateRouteLayout } from './private-routes';
 

@@ -386,8 +386,7 @@ export function CommandPalette() {
                             <BrandLogo
                               name={command.label}
                               logoUrl={command.logoUrl}
-                              size="xs"
-                              className="bg-foreground text-background"
+                              placement="mark"
                             />
                           )}
                           <span className="min-w-0 flex-1 truncate">{command.label}</span>

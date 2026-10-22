@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Drawer } from '@/components/ui/drawer';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { QueryState } from '@/components/ui/query-state';
 import { ScoreBar } from '@/components/ui/score-bar';
 import { TextLink } from '@/components/ui/text-link';
@@ -247,7 +246,7 @@ function CheckLedger({ checks }: Readonly<{ checks: ReadinessCheck[] }>) {
     <section className="grid gap-2">
       <EditorialSectionHeader title="Checks" />
       {checks.length === 0 ? (
-        <InlineEmpty>No determinate checks were recorded.</InlineEmpty>
+        <QueryState kind="empty" inline message="No determinate checks were recorded." />
       ) : (
         <ul className={ledgerClasses()}>
           {checks.map((check) => (

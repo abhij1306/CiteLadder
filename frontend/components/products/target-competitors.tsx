@@ -5,7 +5,7 @@ import { Users } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -125,8 +125,8 @@ function CompetitorRows({
   if (query.isPending) return <Skeleton className="h-24 w-full" />;
   if (!rows.length) {
     return (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         icon={Users}
         heading={running ? 'Looking for competitors…' : 'No candidates yet for this target'}
         description={running ? undefined : 'Run Find competitors.'}

@@ -10,11 +10,10 @@ import { MessageSquareQuote } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
-import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatGrid } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import {
   ClampText,
   Table,
@@ -106,8 +105,9 @@ function PerceptionState({
   return (
     <Card>
       <CardContent className="grid gap-2">
-        <EmptyState
-          variant="compact"
+        <QueryState
+          kind="empty"
+          headingLevel={3}
           icon={MessageSquareQuote}
           heading={copy.heading}
           description={copy.description}
@@ -128,17 +128,15 @@ function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
   return (
     <Card>
       <CardContent className="grid gap-2">
-        <StatGrid
-          surface="well"
-          columns={4}
+        <StatRow
           label="Brand perception"
-          items={[
+          segments={[
             {
               key: 'net',
               label: 'Net sentiment',
               value: formatNet(score?.net_sentiment ?? null),
               missingLabel: 'Unavailable',
-              detail: 'Positive minus negative, of classified mentions (−100 to +100).',
+              sub: 'Positive minus negative, of classified mentions (−100 to +100).',
             },
             {
               key: 'positive',
@@ -146,7 +144,7 @@ function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
               value: formatShare(score?.positive_share ?? null),
               tone: 'success',
               missingLabel: 'Unavailable',
-              detail: `${score?.positive ?? 0} of ${score?.classified ?? 0} classified mentions`,
+              sub: `${score?.positive ?? 0} of ${score?.classified ?? 0} classified mentions`,
             },
             {
               key: 'negative',
@@ -154,14 +152,14 @@ function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
               value: formatShare(score?.negative_share ?? null),
               tone: 'danger',
               missingLabel: 'Unavailable',
-              detail: `${score?.negative ?? 0} of ${score?.classified ?? 0} classified mentions`,
+              sub: `${score?.negative ?? 0} of ${score?.classified ?? 0} classified mentions`,
             },
             {
               key: 'recommended',
               label: 'Recommended',
               value: formatShare(recommended.rate),
               missingLabel: 'Unavailable',
-              detail:
+              sub:
                 `${recommended.recommended} of ${recommended.mentioned} answers naming you` +
                 (recommended.recommended_against
                   ? `; ${recommended.recommended_against} advised against`
@@ -234,7 +232,7 @@ function ThemeTable({ themes }: Readonly<{ themes: PerceptionResponse['themes'] 
       </CardHeader>
       <CardContent>
         {!themes.length ? (
-          <InlineEmpty>No themes in these answers.</InlineEmpty>
+          <QueryState kind="empty" inline message="No themes in these answers." />
         ) : (
           <Table>
             <TableHeader>
@@ -287,7 +285,11 @@ function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
       </CardHeader>
       <CardContent>
         {!quotes.length ? (
-          <InlineEmpty>No negative points about you in these answers.</InlineEmpty>
+          <QueryState
+            kind="empty"
+            inline
+            message="No negative points about you in these answers."
+          />
         ) : (
           <ul className="grid gap-3">
             {quotes.map((quote) => (
@@ -321,7 +323,7 @@ function DriverTable({ drivers }: Readonly<{ drivers: PerceptionResponse['driver
       </CardHeader>
       <CardContent>
         {!drivers.length ? (
-          <InlineEmpty>No sources cited alongside criticism.</InlineEmpty>
+          <QueryState kind="empty" inline message="No sources cited alongside criticism." />
         ) : (
           <Table>
             <TableHeader>

@@ -100,7 +100,7 @@ function referralsControls({
   return {
     status: fetching ? (
       <>
-        <Spinner size="sm" />
+        <Spinner />
         Updating data… Previous data shown.
       </>
     ) : null,

@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { SearchX } from 'lucide-react';
 
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableState } from '@/components/ui/data-table';
 import { Drawer } from '@/components/ui/drawer';
-import { FilterBar } from '@/components/ui/filter-bar';
-import { Pager } from '@/components/ui/pager';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -36,7 +36,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { SearchIntelligenceExport } from './search-intelligence-export';
-import { SearchIntelligenceRowsTable } from './search-intelligence-rows-table';
+import {
+  SearchIntelligenceRows,
+  searchIntelligenceColumns,
+} from './search-intelligence-rows-table';
 
 function useDatasetRows(
   datasetId: string,
@@ -113,90 +116,83 @@ export function SearchIntelligenceDatasetView({
     return <EmptyDataset dataset={dataset} title={title} />;
   const rows = page.rows;
   const range = pageRange(table.page, table.pageSize, rows.length);
+  let state: DataTableState | undefined;
+  if (query.isError)
+    state = {
+      kind: 'error',
+      ...readErrorProps(query),
+      fallback: 'Saved rows could not be updated.',
+    };
+  else if (!rows.length)
+    state = {
+      kind: 'empty',
+      icon: SearchX,
+      heading: 'No saved rows match this view.',
+      headingLevel: 3,
+    };
   return (
     <>
-      <Card className="min-w-0">
-        <DatasetHeader dataset={dataset} title={title} />
-        <CardContent>
-          <CardHeader bordered>
-            <FilterBar
-              search={
-                <SearchField
-                  value={filter}
-                  onValueChange={setFilter}
-                  aria-label="Filter saved results"
-                  placeholder="Filter saved results"
-                />
-              }
-              filters={
-                <KeywordFilters
-                  enabled={keywordDataset}
-                  minVolume={minVolume}
-                  setMinVolume={setMinVolume}
-                  intent={intent}
-                  setIntent={setIntent}
-                />
-              }
-              actions={
-                <>
-                  <SearchIntelligenceExport dataset={dataset} params={params} />
-                  {rows.length > 0 ? (
-                    <Button variant="secondary" asChild>
-                      <ProjectLink href={agentHandoffHref(rowsHandoff(dataset.id, rows, title))}>
-                        Ask agent
-                      </ProjectLink>
-                    </Button>
-                  ) : null}
-                  <DepthReviewAction onExpand={onExpand} />
-                </>
-              }
+      <DataTable
+        title={title}
+        toolbar={{
+          search: (
+            <SearchField
+              value={filter}
+              onValueChange={setFilter}
+              aria-label="Filter saved results"
+              placeholder="Filter saved results"
             />
-          </CardHeader>
-          {query.isError ? (
-            <ReadError
-              {...readErrorProps(query)}
-              fallback="Saved rows could not be updated."
-              className="px-[var(--table-cell-padding-x)] py-2"
+          ),
+          filters: (
+            <KeywordFilters
+              enabled={keywordDataset}
+              minVolume={minVolume}
+              setMinVolume={setMinVolume}
+              intent={intent}
+              setIntent={setIntent}
             />
-          ) : null}
-          <div
-            aria-busy={query.isFetching}
-            style={{
-              minHeight: `calc(var(--table-header-height) + ${table.pageSize} * var(--table-row-height))`,
-            }}
-          >
-            <SearchIntelligenceRowsTable
-              kind={dataset.dataset_kind}
-              rows={rows}
-              order={order}
-              onSelect={setSelected}
-              onSort={(sort) => {
-                setOrder({
-                  sort,
-                  direction: order.sort === sort && order.direction === 'asc' ? 'desc' : 'asc',
-                });
-                table.reset();
-              }}
-            />
-          </div>
-          <output
-            className={textRole(
-              'caption',
-              'flex h-6 items-center px-[var(--table-cell-padding-x)]',
-            )}
-            aria-live="polite"
-          >
-            {query.isFetching ? 'Updating saved rows…' : `${rows.length} rows shown`}
-          </output>
-          <Pager
-            frame="table"
-            range={{ ...range, total: filteredSavedCount(page.dataset), noun: 'evidence rows' }}
-            pageSize={{ value: table.pageSize, onChange: table.setPageSize }}
-            {...cursorControls(table, page.next_cursor)}
-            busy={query.isFetching}
-          />
-        </CardContent>
-      </Card>
+          ),
+          status: query.isFetching ? 'Updating saved rows…' : `${rows.length} rows shown`,
+          actions: (
+            <>
+              <SearchIntelligenceExport dataset={dataset} params={params} />
+              {rows.length > 0 ? (
+                <Button variant="secondary" asChild>
+                  <ProjectLink href={agentHandoffHref(rowsHandoff(dataset.id, rows, title))}>
+                    Ask agent
+                  </ProjectLink>
+                </Button>
+              ) : null}
+              <DepthReviewAction onExpand={onExpand} />
+            </>
+          ),
+        }}
+        columns={searchIntelligenceColumns({
+          kind: dataset.dataset_kind,
+          order,
+          onSort: (sort) => {
+            setOrder({
+              sort,
+              direction: order.sort === sort && order.direction === 'asc' ? 'desc' : 'asc',
+            });
+            table.reset();
+          },
+        })}
+        minWidth={dataset.dataset_kind === 'ranking_keywords' ? 'xl' : 'lg'}
+        pageSize={table.pageSize}
+        rowCount={rows.length}
+        state={state}
+        busy={{ active: query.isFetching, label: 'Updating saved rows' }}
+        pager={{
+          range: { ...range, total: filteredSavedCount(page.dataset), noun: 'evidence rows' },
+          pageSize: { value: table.pageSize, onChange: table.setPageSize },
+          ...cursorControls(table, page.next_cursor),
+          busy: query.isFetching,
+        }}
+        footer={<DatasetSummary dataset={dataset} />}
+      >
+        <SearchIntelligenceRows kind={dataset.dataset_kind} rows={rows} onSelect={setSelected} />
+      </DataTable>
       <EvidenceDrawer selected={selected} onClose={() => setSelected(null)} />
     </>
   );
@@ -378,13 +374,10 @@ function DepthReviewAction({ onExpand }: Readonly<{ onExpand?: () => void }>) {
   ) : null;
 }
 
-function DatasetHeader({
-  dataset,
-  title,
-}: Readonly<{ dataset: SearchIntelligenceDataset; title: string }>) {
+/** What the saved dataset covers, under its table. */
+function DatasetSummary({ dataset }: Readonly<{ dataset: SearchIntelligenceDataset }>) {
   return (
-    <CardHeader bordered>
-      <CardTitle>{title}</CardTitle>
+    <>
       <p className={textRole('caption')}>
         {searchNumber(dataset.unique_rows_saved)} saved rows
         {dataset.provider_total !== null
@@ -402,6 +395,6 @@ function DatasetHeader({
           <TextLink href="/agent/actions">Actions</TextLink>. Open a row to see its Action.
         </p>
       ) : null}
-    </CardHeader>
+    </>
   );
 }

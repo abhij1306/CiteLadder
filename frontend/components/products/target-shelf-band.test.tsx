@@ -31,7 +31,8 @@ describe('TargetShelfBand', () => {
   it('shows an unmeasured target as not measured, with no figures', () => {
     renderWithProviders(<TargetShelfBand query={shelfQuery(null)} />);
 
-    expect(screen.queryAllByRole('heading')).toHaveLength(0);
+    expect(screen.getAllByText('Not measured')).toHaveLength(4);
+    expect(screen.queryByText(/%$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^Measured/)).not.toBeInTheDocument();
     expect(screen.getByText('Share of answers that recommended you.')).toBeVisible();
   });
@@ -39,8 +40,8 @@ describe('TargetShelfBand', () => {
   it('shows observed values as figures with the answers they rest on', () => {
     renderWithProviders(<TargetShelfBand query={shelfQuery(snapshot)} />);
 
-    expect(screen.getByRole('heading', { name: '25.0%' })).toBeVisible();
-    expect(screen.getByRole('heading', { name: '0.0%' })).toBeVisible();
+    expect(screen.getByText('25.0%')).toBeVisible();
+    expect(screen.getByText('0.0%')).toBeVisible();
     expect(screen.getByText(/from 4 answers and 6 recognized recommendations/)).toBeVisible();
   });
 
@@ -59,7 +60,7 @@ describe('TargetShelfBand', () => {
       />,
     );
 
-    expect(screen.queryByRole('heading', { name: '0.0%' })).not.toBeInTheDocument();
+    expect(screen.queryByText('0.0%')).not.toBeInTheDocument();
     expect(screen.getAllByText('Unavailable')).toHaveLength(4);
   });
 });

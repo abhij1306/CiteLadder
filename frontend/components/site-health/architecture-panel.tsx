@@ -7,19 +7,18 @@ import { ChevronDown, ChevronRight, Link2, ListTree } from 'lucide-react';
 import { HierarchyCard } from '@/components/site-health/architecture-hierarchy';
 import {
   ORPHAN_SCOPE_NOTE,
-  OrphanMetric,
   OrphanPageDrawer,
+  orphanSegment,
 } from '@/components/site-health/architecture-orphans';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
 import { Meter } from '@/components/ui/meter';
 import { Pressable } from '@/components/ui/pressable';
 import { QueryState } from '@/components/ui/query-state';
-import { StatGrid, StatItem } from '@/components/ui/stat-grid';
+import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import {
@@ -32,7 +31,7 @@ import {
   TableRecordMetricCell,
   TableRow,
 } from '@/components/ui/table';
-import { MetricGroup, MetricItem, splitPaneClasses } from '@/components/ui/workspace';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import type {
   ArchitectureNode,
@@ -169,7 +168,7 @@ function ArchitectureLedger({ data }: Readonly<{ data: SiteArchitecture }>) {
           />
           <CoverageReasons reasons={data.coverage_reasons} />
           {pageKinds.length === 0 ? (
-            <InlineEmpty>No page kinds were measured.</InlineEmpty>
+            <QueryState kind="empty" inline message="No page kinds were measured." />
           ) : (
             <PageKindTable pageKinds={pageKinds} grouped={grouped} crawlId={data.crawl_id} />
           )}
@@ -215,16 +214,14 @@ function ArchitectureMetrics({
     ],
   ];
   return (
-    <MetricGroup>
-      {items.map(([label, value, supporting]) => (
-        <MetricItem
-          key={label}
-          label={label}
-          value={value === PLACEHOLDER ? <UnavailableValue state="not_measured" /> : value}
-          detail={supporting}
-        />
-      ))}
-    </MetricGroup>
+    <StatRow
+      segments={items.map(([label, value, supporting]) => ({
+        key: label,
+        label,
+        value: value === PLACEHOLDER ? <UnavailableValue state="not_measured" /> : value,
+        sub: supporting,
+      }))}
+    />
   );
 }
 
@@ -300,7 +297,11 @@ function PageKindPages({
     <TableRow className="bg-background-alt hover:bg-background-alt desktop:table-row desktop:h-[var(--table-row-height)] block h-auto">
       <TableCell colSpan={6} className="desktop:table-cell block py-3">
         {pages.length === 0 ? (
-          <InlineEmpty>No projected URLs are available for this kind.</InlineEmpty>
+          <QueryState
+            kind="empty"
+            inline
+            message="No projected URLs are available for this kind."
+          />
         ) : (
           <ul className="content-scroll grid max-h-64 gap-2 overflow-y-auto overscroll-contain pr-2 pl-6">
             {pages.map((page) => (
@@ -342,23 +343,27 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <StatGrid columns={3} size="figure">
-              <StatItem
-                label="In-content links"
-                value={linking.content_link_count}
-                detail={`${linking.internal_link_count} including menus`}
-              />
-              <StatItem
-                label="Have incoming links"
-                value={linkedShare === null ? null : formatPercentage(linkedShare)}
-                detail={`${linking.pages_with_incoming_count} pages`}
-              />
-              <OrphanMetric
-                pages={linking.orphan_pages}
-                total={linking.orphan_page_count}
-                onOpen={() => setOrphansOpen(true)}
-              />
-            </StatGrid>
+            <StatRow
+              segments={[
+                {
+                  key: 'content-links',
+                  label: 'In-content links',
+                  value: linking.content_link_count,
+                  sub: `${linking.internal_link_count} including menus`,
+                },
+                {
+                  key: 'incoming',
+                  label: 'Have incoming links',
+                  value: linkedShare === null ? null : formatPercentage(linkedShare),
+                  sub: `${linking.pages_with_incoming_count} pages`,
+                },
+                orphanSegment({
+                  pages: linking.orphan_pages,
+                  total: linking.orphan_page_count,
+                  onOpen: () => setOrphansOpen(true),
+                }),
+              ]}
+            />
             <OrphanPageDrawer
               pages={linking.orphan_pages}
               total={linking.orphan_page_count}
