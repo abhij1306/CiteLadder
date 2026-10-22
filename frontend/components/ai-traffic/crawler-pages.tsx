@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Drawer } from '@/components/ui/drawer';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { PageLoading } from '@/components/layout/page-loading';
 import { Pager } from '@/components/ui/pager';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { aiTrafficApi, type TrafficFilters } from '@/lib/api/ai-traffic';
 import { queryKeys } from '@/lib/api/query-keys';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -33,9 +33,13 @@ export function CrawlerPages({
       title="Observed crawler pages"
       description="Joinable path observations for the selected crawler."
     >
-      {query.isLoading ? <PageLoading label="Loading crawler paths…" /> : null}
+      {query.isLoading ? <QueryState kind="loading" label="Loading crawler paths…" /> : null}
       {query.isError ? (
-        <ReadError {...readErrorProps(query)} fallback="Could not read crawler pages" />
+        <QueryState
+          kind="error"
+          {...readErrorProps(query)}
+          fallback="Could not read crawler pages"
+        />
       ) : null}
       {query.data && !query.isError ? (
         <>

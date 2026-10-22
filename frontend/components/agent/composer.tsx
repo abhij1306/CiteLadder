@@ -99,12 +99,12 @@ export function Composer({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1">{tools}</div>
         {onStop ? (
-          <Button type="button" variant="secondary" size="sm" disabled={stopping} onClick={onStop}>
+          <Button type="button" variant="secondary" disabled={stopping} onClick={onStop}>
             <Square className="size-4" aria-hidden />
             {stopping ? 'Stopping…' : 'Stop'}
           </Button>
         ) : (
-          <Button type="submit" size="sm" disabled={!canSend}>
+          <Button type="submit" disabled={!canSend}>
             <SendHorizontal className="size-4" aria-hidden />
             {pending ? 'Sending…' : 'Send'}
           </Button>

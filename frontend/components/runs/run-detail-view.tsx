@@ -1,12 +1,10 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Stack } from '@/components/ui/layout';
-import { ReadError, readErrorProps, type RetryableRead } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { ExecutionsTable } from '@/components/runs/executions-table';
 import { ProgressPanel } from '@/components/runs/progress-panel';
-import { PageLoading } from '@/components/layout/page-loading';
 import { ICONS } from '@/lib/icons';
 import type { MutationNotice } from '@/lib/api/mutation-notice';
 import type { Audit, Execution } from '@/lib/api/types';
@@ -39,14 +37,15 @@ function AuditSection({
 }: Readonly<RunDetailViewProps>) {
   if (auditRead.error && !audit) {
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         {...readErrorProps(auditRead)}
         fallback="Something went wrong. Please try again."
       />
     );
   }
   if (auditLoading || !audit) {
-    return <PageLoading label="Loading run…" />;
+    return <QueryState kind="loading" label="Loading run…" />;
   }
   return (
     <ProgressPanel
@@ -72,22 +71,21 @@ function ExecutionsSection({
   >
 >) {
   if (executionsRead.error && !executions) {
-    return <ReadError {...readErrorProps(executionsRead)} fallback="Could not load executions." />;
+    return (
+      <QueryState
+        kind="error"
+        {...readErrorProps(executionsRead)}
+        fallback="Could not load executions."
+      />
+    );
   }
   if (executionsLoading || !executions) {
-    return (
-      <Card>
-        <CardContent className="grid gap-3">
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-        </CardContent>
-      </Card>
-    );
+    return <QueryState kind="loading" label="Loading executions…" />;
   }
   if (executions.length === 0) {
     return (
-      <EmptyState
-        variant="compact"
+      <QueryState
+        kind="empty"
         headingLevel={3}
         icon={ICONS.runs}
         heading="No executions yet."
@@ -106,7 +104,7 @@ function ExecutionsSection({
 
 export function RunDetailView(props: Readonly<RunDetailViewProps>) {
   return (
-    <Stack gap="workspace">
+    <Stack gap="section">
       <AuditSection {...props} />
       <Stack gap="compact">
         <EditorialSectionHeader title="Executions" />

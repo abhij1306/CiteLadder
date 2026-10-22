@@ -298,7 +298,6 @@ export function ProjectEditPanel({
             </span>
             <Button
               variant="ghost"
-              size="sm"
               className="ms-auto"
               aria-label="Add competitor"
               disabled={competitorLimitReached}

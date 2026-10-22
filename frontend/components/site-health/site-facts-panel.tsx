@@ -63,7 +63,7 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
     <Card className="min-w-0">
       <CardHeader
         actions={
-          <Button variant="secondary" size="sm" asChild>
+          <Button variant="secondary" asChild>
             <ProjectLink
               projectId={crawl.project_id}
               href={agentHandoffHref({

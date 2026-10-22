@@ -56,7 +56,6 @@ function ScopeControls({ model }: ControlProps) {
   return (
     <>
       <Input
-        size="compact"
         aria-label="Folder"
         placeholder="Folder"
         value={folder ?? ''}
@@ -135,7 +134,6 @@ function ActivityControls({ model }: ControlProps) {
         className={FIELD}
       />
       <Input
-        size="compact"
         aria-label="Response status"
         placeholder="Status code"
         type="number"

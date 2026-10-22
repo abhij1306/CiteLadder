@@ -9,10 +9,9 @@ import { Pressable } from '@/components/ui/pressable';
 import { MISSING_MARK } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { DisplayTime } from '@/components/ui/display-time';
-import { PageLoading } from '@/components/layout/page-loading';
 import { aiTrafficApi, type TrafficFilters } from '@/lib/api/ai-traffic';
 import { queryKeys } from '@/lib/api/query-keys';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -100,9 +99,10 @@ export function UrlPanel({
       title={page?.display_path ?? 'Path-level AI Traffic'}
       description="Persisted observations; requests, sessions and citations are separate units."
     >
-      {query.isLoading ? <PageLoading label="Loading URL evidence…" /> : null}
+      {query.isLoading ? <QueryState kind="loading" label="Loading URL evidence…" /> : null}
       {query.isError ? (
-        <ReadError
+        <QueryState
+          kind="error"
           error={query.error}
           fallback="Could not read URL evidence"
           onRetry={() => query.refetch()}
@@ -195,7 +195,7 @@ export function TrafficUrlButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="ghost" size="sm" onClick={() => setOpen(true)} aria-label={label}>
+      <Button variant="ghost" onClick={() => setOpen(true)} aria-label={label}>
         {children}
       </Button>
       <UrlPanel urlHash={open ? urlHash : null} onClose={() => setOpen(false)} filters={filters} />

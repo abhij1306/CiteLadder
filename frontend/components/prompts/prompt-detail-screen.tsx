@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +12,8 @@ import { LegendSwatch } from '@/components/ui/chart';
 import type { DataTone } from '@/components/ui/data-tone';
 import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Stack } from '@/components/ui/layout';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
@@ -58,7 +58,11 @@ export function PromptDetailScreen() {
   if (query.isError)
     return (
       <PageShell back={{ href: '/prompts', label: 'Back to Prompts' }}>
-        <ReadError {...readErrorProps(query)} fallback="This prompt could not be loaded." />
+        <QueryState
+          kind="error"
+          {...readErrorProps(query)}
+          fallback="This prompt could not be loaded."
+        />
       </PageShell>
     );
   if (!activeWorkspaceId)
@@ -70,7 +74,7 @@ export function PromptDetailScreen() {
   if (!query.data)
     return (
       <PageShell>
-        <PageLoading />
+        <QueryState kind="loading" />
       </PageShell>
     );
   const history = query.data;
@@ -80,13 +84,17 @@ export function PromptDetailScreen() {
       back={{ href: '/prompts', label: 'Back to Prompts' }}
       // A single market has nothing to choose, so the band is not drawn empty.
       controls={
-        markets.length > 1 ? (
-          <MarketFilter
-            markets={markets}
-            market={market}
-            onChangeMarket={(next) => setMarket(next)}
-          />
-        ) : undefined
+        markets.length > 1
+          ? {
+              filters: (
+                <MarketFilter
+                  markets={markets}
+                  market={market}
+                  onChangeMarket={(next) => setMarket(next)}
+                />
+              ),
+            }
+          : undefined
       }
     >
       <Stack gap="section" aria-busy={query.isFetching}>

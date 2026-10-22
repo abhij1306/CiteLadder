@@ -72,7 +72,6 @@ function Connections({
   const { setupAvailable, unavailable } = setupState(sources);
   const connect = unavailable ? undefined : (
     <Button
-      size="sm"
       onClick={() => {
         setIssued(null);
         setOpen(true);
@@ -263,7 +262,6 @@ function SourceDiagnostics({
                 <div className="flex gap-2">
                   {s.kind === 'webhook' ? (
                     <Button
-                      size="sm"
                       variant="secondary"
                       onClick={() => {
                         onRotate(s.id);
@@ -274,7 +272,6 @@ function SourceDiagnostics({
                   ) : null}
                   {s.kind === 'pull' ? (
                     <Button
-                      size="sm"
                       variant="secondary"
                       onClick={() => onSetup(s.id)}
                       aria-label={`Set up and verify ${s.host}`}
@@ -283,7 +280,6 @@ function SourceDiagnostics({
                     </Button>
                   ) : null}
                   <Button
-                    size="sm"
                     variant="secondary"
                     onClick={() => onRevoke(s)}
                     aria-label={`Revoke ${s.host}`}

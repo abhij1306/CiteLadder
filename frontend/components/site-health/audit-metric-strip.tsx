@@ -69,9 +69,9 @@ export function AuditMetricStrip({
               </div>
             </div>
             <div className="type-caption">{caveat === 'Not measured' ? null : caveat}</div>
-            <div className="min-h-[var(--control-height-sm)]">
+            <div className="min-h-[var(--control-height-md)]">
               {href ? (
-                <Button asChild variant="ghost" size="sm" className="-ms-3">
+                <Button asChild variant="ghost" className="-ms-3">
                   <ProjectLink href={href}>View details</ProjectLink>
                 </Button>
               ) : null}

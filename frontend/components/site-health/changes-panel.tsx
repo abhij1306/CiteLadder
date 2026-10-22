@@ -2,13 +2,12 @@
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { Alert } from '@/components/ui/alert';
-import { ReadError } from '@/components/ui/read-error';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Pager } from '@/components/ui/pager';
+import { QueryState } from '@/components/ui/query-state';
 import { StatGrid } from '@/components/ui/stat-grid';
 import {
   ClampText,
@@ -263,11 +262,12 @@ function changesState(
   pairAvailable: boolean,
 ) {
   const loading = summary.isLoading || (pairAvailable && changes.isLoading);
-  if (loading) return <PageLoading label="Loading persisted website changes…" />;
+  if (loading) return <QueryState kind="loading" label="Loading persisted website changes…" />;
   const failedRead = summary.isError ? summary : changes;
   if (failedRead.isError)
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={failedRead.error}
         fallback="Could not load Website Changes."
         onRetry={() => void failedRead.refetch()}

@@ -2,7 +2,7 @@
 
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { FilterChoice } from '@/components/ui/filter-row';
+import { FilterChoice } from '@/components/ui/filter-bar';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
@@ -14,11 +14,11 @@ import { Delta } from '@/components/ui/delta';
 import { Stack } from '@/components/ui/layout';
 import { InfoHint } from '@/components/ui/info-hint';
 import { InlineEmpty } from '@/components/ui/inline-empty';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
 import { MetricGroup, MetricItem, splitPaneClasses } from '@/components/ui/workspace';
-import { PageLoading } from '@/components/layout/page-loading';
 import { RankingRowsTable } from '@/components/visibility/ranking-rows';
 import { EngineComparison } from '@/components/visibility/engine-comparison';
 import { SurfaceRatesPanel } from '@/components/visibility/surface-rates';
@@ -81,7 +81,8 @@ export function VisibilityTrends({
         </Alert>
       );
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={visibilityQuery.error}
         fallback="Could not load the selected measurement."
         onRetry={() => void visibilityQuery.refetch()}
@@ -89,7 +90,7 @@ export function VisibilityTrends({
       />
     );
   }
-  if (!selected) return <PageLoading label="Loading selected measurement…" />;
+  if (!selected) return <QueryState kind="loading" label="Loading selected measurement…" />;
   // A `brand` carried in from another run's URL may name nobody in THIS
   // selection. Plotting it anyway drew an empty chart captioned with a brand
   // the run never measured, which reads as "measured, scored zero". An
@@ -326,7 +327,7 @@ function MeasurementHistory({
           ))}
           {focused ? (
             <li>
-              <Button variant="ghost" size="sm" onClick={onClearFocus}>
+              <Button variant="ghost" onClick={onClearFocus}>
                 Show all brands
               </Button>
             </li>

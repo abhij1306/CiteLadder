@@ -15,58 +15,51 @@ import {
 import { cn } from '@/lib/utils';
 
 /**
- * FilterRow — the control band's one composition: search, then filters, then
- * a status line, then trailing actions (export, columns) pushed to the end.
- *
- * The search width is a role, decided here once:
- *
- *   - `sm` (224px) — a short list or a secondary search inside a card.
- *   - `md` (288px) — the default for a route's control band.
- *   - `lg` (up to 384px, growing into spare width) — search is the row's
- *     primary control (Prompts, Internal links).
- *
- * Below `sm` the search and every filter take the full row, stacking beneath
- * each other; a filter never sizes itself for narrow screens.
- * The row adds no box, rule or height of its own: the `PageShell` control band
- * (or the card header holding it) owns those.
+ * What a route puts in its control band. A route passes these to
+ * `PageShell`'s `controls`; it never renders a `FilterBar` itself, so no
+ * feature draws a toolbar of its own.
  */
-const SEARCH_WIDTH = {
-  sm: 'w-full sm:w-56',
-  md: 'w-full sm:w-72',
-  lg: 'w-full sm:max-w-96 sm:min-w-56 sm:flex-1',
-} as const;
-
-export type SearchWidth = keyof typeof SEARCH_WIDTH;
-
-export function FilterRow({
-  search,
-  searchWidth = 'md',
-  children,
-  status,
-  actions,
-  className,
-}: Readonly<{
+export type FilterBarProps = Readonly<{
   /** A `SearchField`. */
   search?: ReactNode;
-  searchWidth?: SearchWidth;
-  /** The filters: `FilterTrigger` dropdowns, `FilterChip`s, a `SegmentedControl`. */
-  children?: ReactNode;
-  /** A live note such as "Updating data… Previous data shown." */
+  /**
+   * The filters: `FilterTrigger`/`FilterChoice` menus, `Select`s, pressed-state
+   * buttons, a `SegmentedControl`. A fragment, so each is one of the row's own
+   * items and shares its one gap.
+   */
+  filters?: ReactNode;
+  /**
+   * A live note such as "Updating data… Previous data shown." A row that
+   * reports status passes `null` while idle, so its live region is mounted
+   * before the first update and that update is announced.
+   */
   status?: ReactNode;
-  /** Row-level actions, aligned to the end. */
+  /** Row-level actions (export, columns), aligned to the end. */
   actions?: ReactNode;
-  className?: string;
-}>) {
+}>;
+
+/**
+ * FilterBar — the control band's one composition, in one row with one gap:
+ * search, then filters, then a status line, then trailing actions pushed to
+ * the end.
+ *
+ * It owns every number in the band: the 8px gap between items, the 8px above
+ * and below the row, the 32px row height and the one search width. The
+ * controls inside keep their one 32px height; nothing here resizes them.
+ * Below the phone breakpoint the search and every filter take the full row.
+ */
+export function FilterBar({ search, filters, status, actions }: FilterBarProps) {
   return (
-    <div className={cn('flex w-full min-w-0 flex-wrap items-center gap-2', className)}>
-      {search ? <div className={cn('min-w-0', SEARCH_WIDTH[searchWidth])}>{search}</div> : null}
-      {children ? (
+    <div
+      data-filter-bar=""
+      className="flex min-h-[var(--control-height-md)] w-full min-w-0 flex-wrap items-center gap-2 py-2"
+    >
+      {search ? <div className="w-full min-w-0 sm:w-72">{search}</div> : null}
+      {filters ? (
         // `contents` keeps the filters as the row's own flex items; it only
         // scopes the narrow-screen width to them (not the status or actions).
-        <div className="contents max-sm:[&>*]:w-full">{children}</div>
+        <div className="contents max-sm:[&>*]:w-full">{filters}</div>
       ) : null}
-      {/* A row that reports status keeps its live region mounted even while
-          idle (`status={null}`), so the first update is announced. */}
       {status === undefined ? null : (
         <output className="type-caption flex min-w-0 items-center gap-2 empty:hidden">
           {status}
@@ -120,7 +113,6 @@ export function FilterTrigger({
     <Button
       ref={ref}
       variant="secondary"
-      size="sm"
       data-active={active || showCount || undefined}
       className={cn((active || showCount) && 'bg-selected', className)}
       {...props}

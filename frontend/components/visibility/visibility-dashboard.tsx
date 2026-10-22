@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react';
 
 import { ActiveRunBanner } from '@/components/visibility/active-run-banner';
-import { PageLoading } from '@/components/layout/page-loading';
 import { VisibilityEmptyState } from '@/components/visibility/empty-state';
 import { FanoutEvidence } from '@/components/visibility/fanout-evidence';
 import { VisibilitySources } from '@/components/visibility/visibility-sources';
@@ -13,10 +12,10 @@ import { VisibilityAds } from '@/components/visibility/visibility-ads';
 import { VisibilityByMarket } from '@/components/visibility/visibility-by-market';
 import { VisibilityActions, VisibilityToolbar } from '@/components/visibility/visibility-toolbar';
 import { VisibilityTrends } from '@/components/visibility/visibility-trends';
-import { TabPanel, TabsBar, TabsRoot } from '@/components/ui/tabs';
+import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { PageShell } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { useProjectContext } from '@/lib/project/project-context';
 import { useBrandFacts } from '@/lib/project/use-brand-facts';
@@ -65,11 +64,12 @@ function DashboardState({
   state: Exclude<VisibilityDashboardState, 'empty' | null>;
   auditsQuery: ReturnType<typeof useVisibilityQueries>['auditsQuery'];
 }>) {
-  if (state === 'loading') return <PageLoading label="Loading visibility…" />;
+  if (state === 'loading') return <QueryState kind="loading" label="Loading visibility…" />;
   if (state === 'missing-project') return <ProjectRequiredState />;
   if (state === 'error')
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         error={auditsQuery.error}
         fallback="Could not load this project's runs. Check your connection and try again."
         onRetry={() => void auditsQuery.refetch()}
@@ -94,10 +94,8 @@ function VisibilityWorkspace({
   if (state === 'empty') {
     return (
       <PageShell actions={<VisibilityActions />}>
-        <Stack gap="workspace">
-          {queries.activeRun ? <ActiveRunBanner run={queries.activeRun} /> : null}
-          <VisibilityEmptyState hasActiveRun={Boolean(queries.activeRun)} />
-        </Stack>
+        {queries.activeRun ? <ActiveRunBanner run={queries.activeRun} /> : null}
+        <VisibilityEmptyState hasActiveRun={Boolean(queries.activeRun)} />
       </PageShell>
     );
   }
@@ -107,54 +105,51 @@ function VisibilityWorkspace({
     <TabsRoot value={filters.activeTab} onValueChange={filters.selectTab}>
       <PageShell
         actions={<VisibilityActions />}
-        tabs={
-          <TabsBar
-            variant="band"
-            items={visibleTabs(factChecking).map((tab) => ({
-              value: tab.id,
-              label: tab.label,
-            }))}
-            ariaLabel="Visibility views"
-            onIntent={queries.prefetchTab}
-          />
-        }
-        controls={
-          <VisibilityToolbar
-            activeTab={filters.activeTab}
-            runs={queries.runOptions}
-            selectedRunId={filters.selectedRunId}
-            onSelectMeasurement={filters.selectMeasurement}
-            engine={filters.engine}
-            onChangeEngine={filters.setEngine}
-            promptOptions={queries.promptOptions}
-            promptId={filters.promptId}
-            onChangePrompt={filters.setPromptId}
-            range={filters.range}
-            onChangeRange={filters.setRange}
-            granularity={filters.granularity}
-            onChangeGranularity={filters.setGranularity}
-            cohort={filters.cohort}
-            onChangeCohort={filters.setCohort}
-            selectionMode={filters.selectionMode}
-            onChangeSelectionMode={filters.setSelectionMode}
-            outcome={filters.outcome}
-            onChangeOutcome={filters.setOutcome}
-            markets={queries.markets}
-            market={filters.market}
-            onChangeMarket={filters.setMarket}
-          />
-        }
+        tabs={{
+          items: visibleTabs(factChecking).map((tab) => ({
+            value: tab.id,
+            label: tab.label,
+          })),
+          ariaLabel: 'Visibility views',
+          onIntent: queries.prefetchTab,
+        }}
+        controls={{
+          filters: (
+            <VisibilityToolbar
+              activeTab={filters.activeTab}
+              runs={queries.runOptions}
+              selectedRunId={filters.selectedRunId}
+              onSelectMeasurement={filters.selectMeasurement}
+              engine={filters.engine}
+              onChangeEngine={filters.setEngine}
+              promptOptions={queries.promptOptions}
+              promptId={filters.promptId}
+              onChangePrompt={filters.setPromptId}
+              range={filters.range}
+              onChangeRange={filters.setRange}
+              granularity={filters.granularity}
+              onChangeGranularity={filters.setGranularity}
+              cohort={filters.cohort}
+              onChangeCohort={filters.setCohort}
+              selectionMode={filters.selectionMode}
+              onChangeSelectionMode={filters.setSelectionMode}
+              outcome={filters.outcome}
+              onChangeOutcome={filters.setOutcome}
+              markets={queries.markets}
+              market={filters.market}
+              onChangeMarket={filters.setMarket}
+            />
+          ),
+        }}
       >
-        <Stack gap="workspace">
-          {queries.activeRun ? <ActiveRunBanner run={queries.activeRun} /> : null}
-          <TabPanel value={filters.activeTab} className="focus-ring">
-            {state ? (
-              <DashboardState state={state} auditsQuery={queries.auditsQuery} />
-            ) : (
-              <DashboardPanel filters={filters} queries={queries} />
-            )}
-          </TabPanel>
-        </Stack>
+        {queries.activeRun ? <ActiveRunBanner run={queries.activeRun} /> : null}
+        <TabPanel value={filters.activeTab} className="focus-ring">
+          {state ? (
+            <DashboardState state={state} auditsQuery={queries.auditsQuery} />
+          ) : (
+            <DashboardPanel filters={filters} queries={queries} />
+          )}
+        </TabPanel>
       </PageShell>
     </TabsRoot>
   );

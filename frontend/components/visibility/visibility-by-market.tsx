@@ -66,7 +66,6 @@ export function VisibilityByMarket({
                   <TableCell>
                     <Button
                       variant="ghost"
-                      size="sm"
                       aria-current={row.market.id === market ? 'true' : undefined}
                       onClick={() => onSelectMarket(row.market.id)}
                     >

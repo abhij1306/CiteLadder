@@ -6,7 +6,7 @@ import { Search } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BusyBar } from '@/components/ui/busy-bar';
-import { FilterChoice, FilterRow } from '@/components/ui/filter-row';
+import { FilterBar, FilterChoice } from '@/components/ui/filter-bar';
 import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { SearchField } from '@/components/ui/search-field';
 import {
@@ -167,12 +167,9 @@ export function FanoutEvidence({
   return (
     <Card className="relative" aria-busy={query.isFetching}>
       <BusyBar active={query.isFetching} label="Updating evidence" />
-      <CardHeader>
+      <CardHeader bordered>
         <CardTitle>{TITLE}</CardTitle>
-      </CardHeader>
-      <CardContent flush className="grid gap-0">
-        <FilterRow
-          className="border-border-subtle border-t px-[var(--card-padding)] py-3"
+        <FilterBar
           search={
             <SearchField
               value={search ?? ''}
@@ -199,6 +196,8 @@ export function FanoutEvidence({
             </>
           }
         />
+      </CardHeader>
+      <CardContent flush className="grid gap-0">
         {visible.length === 0 ? (
           <NoSearchMatch search={needle} matched={matched} />
         ) : (

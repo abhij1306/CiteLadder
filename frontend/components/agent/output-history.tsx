@@ -117,18 +117,12 @@ function RevisionRow({
         </span>
         {latest ? <span className={textRole('caption')}>Current</span> : null}
         <span className="flex-1" />
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-expanded={open === 'view'}
-          onClick={() => onToggle('view')}
-        >
+        <Button variant="ghost" aria-expanded={open === 'view'} onClick={() => onToggle('view')}>
           {open === 'view' ? 'Hide' : 'View'}
         </Button>
         {latest || !current ? null : (
           <Button
             variant="ghost"
-            size="sm"
             aria-expanded={open === 'compare'}
             onClick={() => onToggle('compare')}
           >
@@ -136,7 +130,7 @@ function RevisionRow({
           </Button>
         )}
         {latest || !canRestore ? null : (
-          <Button variant="secondary" size="sm" disabled={restoring} onClick={onRestore}>
+          <Button variant="secondary" disabled={restoring} onClick={onRestore}>
             Restore
           </Button>
         )}

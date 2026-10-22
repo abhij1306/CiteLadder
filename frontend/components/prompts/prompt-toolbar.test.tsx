@@ -6,19 +6,23 @@ import { describe, expect, it } from 'vite-plus/test';
 import { emptyFilters } from '@/lib/prompts/filter';
 import { renderWithProviders } from '@/test/render';
 
-import { PromptActions, PromptFilterControls } from './prompt-toolbar';
+import { FilterBar } from '@/components/ui/filter-bar';
 
-describe('PromptFilterControls', () => {
+import { PromptActions, promptFilterControls } from './prompt-toolbar';
+
+describe('promptFilterControls', () => {
   it('keeps search controlled and lets the reader clear it', async () => {
     const user = userEvent.setup();
     function Harness() {
       const [search, setSearch] = useState('citation');
       return (
-        <PromptFilterControls
-          search={search}
-          onSearchChange={setSearch}
-          filters={emptyFilters}
-          onFiltersChange={() => undefined}
+        <FilterBar
+          {...promptFilterControls({
+            search,
+            onSearchChange: setSearch,
+            filters: emptyFilters,
+            onFiltersChange: () => undefined,
+          })}
         />
       );
     }

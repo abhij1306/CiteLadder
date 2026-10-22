@@ -3,7 +3,7 @@
 import { MessageSquarePlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 
 /**
  * Shown when the active project's prompt set has no prompts. Onboarding creates
@@ -16,7 +16,8 @@ export function PromptEmptyState({
   onAdd,
 }: Readonly<{ onGenerate: () => void; onAdd: () => void }>) {
   return (
-    <EmptyState
+    <QueryState
+      kind="empty"
       icon={MessageSquarePlus}
       heading="Choose the questions you want to track"
       description="Generate buyer questions from your confirmed offerings, or add your own."

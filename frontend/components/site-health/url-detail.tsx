@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Alert } from '@/components/ui/alert';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
 import { InlineEmpty } from '@/components/ui/inline-empty';
 import { Pager } from '@/components/ui/pager';
@@ -28,7 +28,6 @@ import { cursorControls, useCursorTable } from '@/lib/table/use-cursor-table';
 
 import { UrlDetailView } from './url-detail-view';
 import { ledgerClasses } from '@/components/ui/workspace';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -99,13 +98,14 @@ export function UrlDetail({
   if (detailQuery.isLoading)
     return (
       <PageShell>
-        <PageLoading label="Loading page detail…" />
+        <QueryState kind="loading" label="Loading page detail…" />
       </PageShell>
     );
   if (detailQuery.isError || !detailQuery.data) {
     return (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           error={detailQuery.error}
           fallback="Could not load this page. It may not exist in this crawl."
           onRetry={() => void detailQuery.refetch()}
@@ -179,7 +179,6 @@ function IssueHistoryButton(target: HistoryTarget) {
     <>
       <Button
         variant="ghost"
-        size="sm"
         onClick={() => {
           setRequested(true);
           setOpen(true);
@@ -215,14 +214,15 @@ function IssueHistory({ workspaceId, crawlId, siteUrlId }: HistoryTarget) {
   return (
     <div className="grid gap-3">
       {historyQuery.isError ? (
-        <ReadError
+        <QueryState
+          kind="error"
           error={historyQuery.error}
           fallback="Could not load issue history."
           onRetry={() => void historyQuery.refetch()}
           pending={historyQuery.isFetching}
         />
       ) : null}
-      {historyQuery.isLoading ? <PageLoading label="Loading issue history" /> : null}
+      {historyQuery.isLoading ? <QueryState kind="loading" label="Loading issue history" /> : null}
       {historyQuery.data && !historyQuery.data.current_analysis_finalized ? (
         <InlineEmpty>
           Resolved issues are known once this page’s current analysis finishes.

@@ -52,7 +52,6 @@ export function ReadError({
     recovery = (
       <Button
         variant="secondary"
-        size="sm"
         className="w-fit"
         onClick={onRetry}
         pending={pending}

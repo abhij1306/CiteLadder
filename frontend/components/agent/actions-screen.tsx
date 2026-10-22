@@ -2,14 +2,12 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { EmptyState } from '@/components/ui/empty-state';
-import { FilterRow } from '@/components/ui/filter-row';
 import { Stack } from '@/components/ui/layout';
 import { Pager } from '@/components/ui/pager';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { Select } from '@/components/ui/select';
 import { TextLink } from '@/components/ui/text-link';
 import {
@@ -76,22 +74,24 @@ export function ActionsScreen() {
   const counts = useActionStatusCounts();
   return (
     <PageShell
-      controls={
-        <FilterRow>
-          <Select
-            ariaLabel="Status"
-            value={status}
-            options={statusOptions(target === ALL_TARGETS ? counts : undefined)}
-            onValueChange={(value) => setStatus(value, 'replace')}
-          />
-          <Select
-            ariaLabel="Target type"
-            value={target}
-            options={TARGET_OPTIONS}
-            onValueChange={(value) => setTarget(value, 'replace')}
-          />
-        </FilterRow>
-      }
+      controls={{
+        filters: (
+          <>
+            <Select
+              ariaLabel="Status"
+              value={status}
+              options={statusOptions(target === ALL_TARGETS ? counts : undefined)}
+              onValueChange={(value) => setStatus(value, 'replace')}
+            />
+            <Select
+              ariaLabel="Target type"
+              value={target}
+              options={TARGET_OPTIONS}
+              onValueChange={(value) => setTarget(value, 'replace')}
+            />
+          </>
+        ),
+      }}
     >
       {activeProjectId && activeWorkspaceId ? (
         <ActionsList
@@ -108,7 +108,7 @@ export function ActionsScreen() {
 }
 
 function ProjectRequired({ loading }: Readonly<{ loading: boolean }>) {
-  if (loading) return <PageLoading />;
+  if (loading) return <QueryState kind="loading" />;
   return <ProjectRequiredState />;
 }
 
@@ -133,21 +133,24 @@ function ActionsList({
     }),
   );
 
-  if (query.isPending) return <PageLoading label="Loading Actions…" />;
+  if (query.isPending) return <QueryState kind="loading" label="Loading Actions…" />;
   if (query.isError)
-    return <ReadError {...readErrorProps(query)} fallback="Actions could not be loaded." />;
+    return (
+      <QueryState kind="error" {...readErrorProps(query)} fallback="Actions could not be loaded." />
+    );
   const page = query.data;
   if (page.items.length === 0) {
     const anyActions = Object.values(page.status_counts).some((count) => count > 0);
     return anyActions ? (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={ICONS.opportunities}
-        variant="compact"
         heading="No Actions match these filters"
         description="Change the status or target type to see other Actions."
       />
     ) : (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={ICONS.opportunities}
         heading="No Actions yet"
         description="Actions appear when a crawl, visibility run or Search Console sync finds work on a target."

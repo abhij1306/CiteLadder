@@ -6,7 +6,6 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
-import { FilterChip } from '@/components/ui/filter-chip';
 import { Input } from '@/components/ui/input';
 import { panelClasses } from '@/components/ui/panel';
 import { Pressable } from '@/components/ui/pressable';
@@ -35,13 +34,15 @@ export function WorkflowGallery({
       <fieldset className="flex flex-wrap gap-2">
         <legend className="sr-only">Workflow type</legend>
         {catalog.workflow_groups.map((option) => (
-          <FilterChip
+          <Button
             key={option.id}
-            active={option.id === group}
+            type="button"
+            variant="secondary"
+            aria-pressed={option.id === group}
             onClick={() => setChosenGroup(option.id)}
           >
             {option.label}
-          </FilterChip>
+          </Button>
         ))}
       </fieldset>
       {/* Every group's cards share one grid cell, so the gallery is always as
@@ -142,7 +143,7 @@ export function WorkflowStart({
         </Field>
       ))}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+        <Button type="button" variant="ghost" onClick={onBack}>
           <ArrowLeft aria-hidden className="size-4" />
           All workflows
         </Button>

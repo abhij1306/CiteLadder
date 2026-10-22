@@ -9,15 +9,11 @@ import { AuditSchedules } from '@/components/runs/audit-schedules';
 import { LaunchDialog } from '@/components/runs/launch-dialog';
 import { RunsTable } from '@/components/runs/runs-table';
 import { PageShell } from '@/components/layout/page-shell';
-import { PageLoading } from '@/components/layout/page-loading';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
-import { FilterChip } from '@/components/ui/filter-chip';
-import { FilterRow } from '@/components/ui/filter-row';
-import { Stack } from '@/components/ui/layout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { ReadError, readErrorProps, type RetryableRead } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi } from '@/lib/api/runs';
 import type { Audit } from '@/lib/api/types';
@@ -90,61 +86,62 @@ export function RunsScreen() {
   // so gating the whole screen on it would pin the page on a spinner forever.
   // The page keeps its action and status filters while the first load lands.
   const actions = (
-    <Button size="sm" onClick={() => setLaunchOpen(true)} disabled={!projectId}>
+    <Button onClick={() => setLaunchOpen(true)} disabled={!projectId}>
       Launch audit
     </Button>
   );
-  const controls = (
-    <FilterRow>
+  // Each status is a control the user presses, so it is a 32px pressed-state
+  // button with 14px text, not a badge.
+  const controls = {
+    filters: (
       <fieldset className="contents" aria-label="Filter by status">
         {STATUS_FILTERS.map((filter) => (
-          <FilterChip
+          <Button
             key={filter.id}
-            active={statusFilter === filter.id}
+            variant="secondary"
+            aria-pressed={statusFilter === filter.id}
             onClick={() => setStatusFilter(filter.id)}
-            count={audits.filter(filter.match).length}
           >
             {filter.label}
-          </FilterChip>
+            <span className="text-muted tabular-nums">{audits.filter(filter.match).length}</span>
+          </Button>
         ))}
       </fieldset>
-    </FilterRow>
-  );
+    ),
+  };
 
   if (runsQuery.isLoading) {
     return (
       <PageShell actions={actions} controls={controls}>
-        <PageLoading label="Loading runs…" />
+        <QueryState kind="loading" label="Loading runs…" />
       </PageShell>
     );
   }
 
   return (
     <PageShell actions={actions} controls={controls}>
-      <Stack gap="section">
-        <RunsContent
+      <RunsContent
+        projectId={projectId}
+        read={runsQuery}
+        audits={audits}
+        filteredAudits={filteredAudits}
+        statusFilter={statusFilter}
+        anyActive={anyActive}
+        onLaunch={() => setLaunchOpen(true)}
+      />
+
+      {projectId && project ? (
+        <AuditSchedules projectId={projectId} promptSets={project.prompt_sets} />
+      ) : null}
+
+      {projectId ? (
+        <LaunchDialog
+          open={launchOpen}
+          onOpenChange={setLaunchOpen}
           projectId={projectId}
-          read={runsQuery}
-          audits={audits}
-          filteredAudits={filteredAudits}
-          statusFilter={statusFilter}
-          anyActive={anyActive}
-          onLaunch={() => setLaunchOpen(true)}
+          onLaunched={(audit) => router(projectHref(`/runs/${audit.id}`))}
         />
-
-        {projectId && project ? (
-          <AuditSchedules projectId={projectId} promptSets={project.prompt_sets} />
-        ) : null}
-
-        {projectId ? (
-          <LaunchDialog
-            open={launchOpen}
-            onOpenChange={setLaunchOpen}
-            projectId={projectId}
-            onLaunched={(audit) => router(projectHref(`/runs/${audit.id}`))}
-          />
-        ) : null}
-      </Stack>
+      ) : null}
     </PageShell>
   );
 }
@@ -170,7 +167,8 @@ function RunsContent({
   if (!projectId) return <ProjectRequiredState />;
   if (read.error) {
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         {...readErrorProps(read)}
         fallback="Could not load runs. Check your connection and try again."
       />
@@ -178,7 +176,8 @@ function RunsContent({
   }
   if (audits.length === 0) {
     return (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={Play}
         heading="No runs yet"
         description="Launch your first audit to measure how AI engines answer questions about your brand."
@@ -209,8 +208,8 @@ function RunsContent({
       </CardHeader>
       <CardContent className="p-0">
         {filteredAudits.length === 0 ? (
-          <EmptyState
-            variant="compact"
+          <QueryState
+            kind="empty"
             headingLevel={3}
             icon={Play}
             heading={`No ${filterLabel} runs.`}

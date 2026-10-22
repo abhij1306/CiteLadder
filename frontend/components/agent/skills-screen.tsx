@@ -2,7 +2,6 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { PageShell } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
@@ -10,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
@@ -29,14 +28,15 @@ export function SkillsScreen() {
   let body;
   if (query.isError)
     body = (
-      <ReadError
+      <QueryState
+        kind="error"
         error={query.error}
         fallback="Skills could not be loaded."
         onRetry={() => void query.refetch()}
         pending={query.isFetching}
       />
     );
-  else if (!query.data) body = <PageLoading />;
+  else if (!query.data) body = <QueryState kind="loading" />;
   else body = <SkillGroups skills={query.data.skills} />;
 
   return (
@@ -78,7 +78,7 @@ function SkillGroups({ skills }: Readonly<{ skills: AgentSkill[] }>) {
                 </Stack>
                 <div className="flex flex-wrap items-center justify-between gap-2 self-end">
                   <Badge>Produces {kindLabel(skill.output_kind).toLowerCase()}</Badge>
-                  <Button asChild variant="ghost" size="sm">
+                  <Button asChild variant="ghost">
                     <ProjectLink
                       href={agentHandoffHref({ skillId: skill.id })}
                       aria-label={`Start a chat with ${skill.label}`}

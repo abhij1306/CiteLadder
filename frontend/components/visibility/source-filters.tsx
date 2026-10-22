@@ -1,6 +1,6 @@
 'use client';
 
-import { FilterChoice } from '@/components/ui/filter-row';
+import { FilterChoice } from '@/components/ui/filter-bar';
 
 /** Narrows every table on the tab to one publisher. */
 export function DomainFilter({

@@ -3,7 +3,7 @@ import { Rocket } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { Button } from '@/components/ui/button';
-import { EmptyState } from '@/components/ui/empty-state';
+import { QueryState } from '@/components/ui/query-state';
 
 /**
  * Empty state for a project with no completed runs. The
@@ -20,7 +20,8 @@ export function VisibilityEmptyState({
   hasActiveRun = false,
 }: Readonly<{ hasActiveRun?: boolean }>) {
   return (
-    <EmptyState
+    <QueryState
+      kind="empty"
       icon={Rocket}
       heading="No completed runs yet"
       description={
@@ -30,11 +31,11 @@ export function VisibilityEmptyState({
       }
       action={
         hasActiveRun ? (
-          <Button asChild variant="secondary" size="md">
+          <Button asChild variant="secondary">
             <ProjectLink href="/runs">View runs</ProjectLink>
           </Button>
         ) : (
-          <LaunchAuditButton size="md">Launch your first audit</LaunchAuditButton>
+          <LaunchAuditButton>Launch your first audit</LaunchAuditButton>
         )
       }
     />

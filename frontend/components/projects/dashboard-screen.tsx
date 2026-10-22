@@ -3,12 +3,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { Alert } from '@/components/ui/alert';
 import { Stack } from '@/components/ui/layout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { CommandCenter, Project } from '@/lib/api/types';
@@ -48,7 +47,8 @@ export function DashboardScreen({
   if (commandCenter.isError || !commandCenter.data)
     return (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           error={commandCenter.error}
           fallback="The command center could not be loaded."
           onRetry={() => void commandCenter.refetch()}
@@ -70,7 +70,7 @@ export function DashboardScreen({
 function DashboardLoading() {
   return (
     <PageShell>
-      <PageLoading label="Loading your command center…" />
+      <QueryState kind="loading" label="Loading your command center…" />
     </PageShell>
   );
 }
@@ -91,7 +91,8 @@ function DashboardData({
   if (layout.query.isError)
     return (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           error={layout.query.error}
           fallback="The Overview layout could not be loaded."
           onRetry={() => void layout.query.refetch()}

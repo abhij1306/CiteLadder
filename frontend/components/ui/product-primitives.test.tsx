@@ -1,17 +1,21 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { Inbox } from 'lucide-react';
 import { describe, expect, it, vi } from 'vite-plus/test';
+
+import { ApiError } from '@/lib/api/errors';
 
 import { Avatar } from './avatar';
 import { Button } from './button';
 import { Card, CardHeader, CardTitle } from './card';
 import { LegendSwatch } from './chart';
 import { Delta } from './delta';
-import { FilterRow, FilterTrigger } from './filter-row';
+import { FilterBar, FilterTrigger } from './filter-bar';
 import { InlineEmpty } from './inline-empty';
 import { Meter } from './meter';
 import { NoProjectState } from './no-project-state';
 import { Pager, pageNumberControls } from './pager';
+import { QueryState } from './query-state';
 import { StatGrid, StatItem } from './stat-grid';
 import { SortableTableHead, Table, TableHeader, TableRow } from './table';
 import { TextLink } from './text-link';
@@ -21,7 +25,7 @@ describe('CardHeader actions', () => {
   it('keeps the actions in the header beside the title', () => {
     render(
       <Card aria-label="Issues">
-        <CardHeader actions={<Button size="sm">Export</Button>}>
+        <CardHeader actions={<Button>Export</Button>}>
           <CardTitle>Issues</CardTitle>
         </CardHeader>
       </Card>,
@@ -169,13 +173,18 @@ describe('TextLink', () => {
   });
 });
 
-describe('FilterRow and FilterTrigger', () => {
+describe('FilterBar and FilterTrigger', () => {
   it('names the trigger by its visible value and announces the active count', () => {
     render(
-      <FilterRow actions={<Button size="sm">Export</Button>}>
-        <FilterTrigger label="Surface" value="ChatGPT" hideLabel active />
-        <FilterTrigger label="Filter" count={2} />
-      </FilterRow>,
+      <FilterBar
+        filters={
+          <>
+            <FilterTrigger label="Surface" value="ChatGPT" hideLabel active />
+            <FilterTrigger label="Filter" count={2} />
+          </>
+        }
+        actions={<Button>Export</Button>}
+      />,
     );
     expect(screen.getByRole('button', { name: 'Surface: ChatGPT' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^Filter\W+2 active$/ })).toBeInTheDocument();
@@ -211,9 +220,45 @@ describe('Pager', () => {
 
 describe('InlineEmpty', () => {
   it('states the absence with its one action', () => {
-    render(<InlineEmpty action={<Button size="sm">Add rule</Button>}>No rules yet.</InlineEmpty>);
+    render(<InlineEmpty action={<Button>Add rule</Button>}>No rules yet.</InlineEmpty>);
     expect(screen.getByText('No rules yet.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add rule' })).toBeInTheDocument();
+  });
+});
+
+describe('QueryState', () => {
+  it('announces loading only after the delay, then reports a failed read with its retry', async () => {
+    const onRetry = vi.fn();
+    const { rerender } = render(<QueryState kind="loading" label="Loading issues…" />);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(await screen.findByRole('status', { name: 'Loading issues…' })).toBeInTheDocument();
+
+    rerender(
+      <QueryState
+        kind="error"
+        error={new ApiError('Temporarily unavailable', 503, '')}
+        fallback="Issues could not be loaded."
+        onRetry={onRetry}
+      />,
+    );
+    expect(screen.getByText('Temporarily unavailable')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(onRetry).toHaveBeenCalledOnce();
+  });
+
+  it('states a first-use absence with its heading and one action', () => {
+    render(
+      <QueryState
+        kind="empty"
+        icon={Inbox}
+        heading="No issues yet"
+        description="Run a crawl to find issues."
+        action={<Button>Run crawl</Button>}
+      />,
+    );
+    expect(screen.getByRole('heading', { level: 2, name: 'No issues yet' })).toBeVisible();
+    expect(screen.getByText('Run a crawl to find issues.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Run crawl' })).toBeVisible();
   });
 });
 

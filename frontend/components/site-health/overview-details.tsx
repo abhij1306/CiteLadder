@@ -67,7 +67,7 @@ function DimensionLedger({
       <CardHeader
         bordered
         actions={
-          <Button asChild variant="secondary" size="sm">
+          <Button asChild variant="secondary">
             <ProjectLink href="/site?tab=aeo-readiness">View details</ProjectLink>
           </Button>
         }
@@ -136,7 +136,7 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
       <CardHeader
         bordered
         actions={
-          <Button asChild variant="secondary" size="sm">
+          <Button asChild variant="secondary">
             <ProjectLink href="/issues">View all issues</ProjectLink>
           </Button>
         }
@@ -215,7 +215,7 @@ function WebFundamentalsCard({
             </div>
           ))}
         </div>
-        <Button variant="secondary" size="sm" onClick={onOpen} className="justify-self-start">
+        <Button variant="secondary" onClick={onOpen} className="justify-self-start">
           View evidence
         </Button>
       </CardContent>

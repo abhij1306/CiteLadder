@@ -127,7 +127,6 @@ function TrafficPageRow({
       <TableCell>
         <Button
           variant="ghost"
-          size="sm"
           onClick={() => onOpen(r.url_hash)}
           className="max-w-72"
           aria-label={`View AI Traffic for ${r.canonical_url}`}

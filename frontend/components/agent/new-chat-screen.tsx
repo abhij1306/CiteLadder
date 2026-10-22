@@ -182,7 +182,6 @@ function PinnedWorkflow({
   return (
     <Button
       variant="secondary"
-      size="sm"
       aria-label={`Remove workflow ${label ?? ''}`.trim()}
       onClick={onRemove}
     >
@@ -232,7 +231,7 @@ function TopActions({
         title="Recommended Actions"
         headingId="top-actions"
         actions={
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost">
             <ProjectLink href="/agent/actions">All Actions</ProjectLink>
           </Button>
         }
@@ -259,7 +258,7 @@ function TopActionRow({ action }: Readonly<{ action: Action }>) {
             .join(' · ')}
         </span>
       </div>
-      <Button asChild variant="secondary" size="sm">
+      <Button asChild variant="secondary">
         <ProjectLink href={agentHandoffHref({ actionId: action.id })}>Work on this</ProjectLink>
       </Button>
     </li>

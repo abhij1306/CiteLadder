@@ -143,11 +143,11 @@ function TurnActions({
   if (!ended && kind !== 'succeeded') return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="secondary" size="sm" onClick={() => onRetry(request)}>
+      <Button variant="secondary" onClick={() => onRetry(request)}>
         <RotateCcw aria-hidden className="size-4" />
         {ended ? 'Try again' : 'Regenerate'}
       </Button>
-      <Button variant="ghost" size="sm" onClick={() => onEdit(request)}>
+      <Button variant="ghost" onClick={() => onEdit(request)}>
         <Pencil aria-hidden className="size-4" />
         {hasDraft ? 'Replace draft with last request' : 'Edit last request'}
       </Button>
@@ -228,7 +228,7 @@ function MessageBubble({
       <ContentMarkdown markdown={message.content} density="compact" />
       <div className="flex flex-wrap items-center gap-2">
         <EvidenceChips refs={message.evidence_refs} />
-        <CopyButton value={message.content} size="sm" variant="ghost">
+        <CopyButton value={message.content} variant="ghost">
           Copy reply
         </CopyButton>
       </div>
@@ -328,12 +328,7 @@ function FollowUps({
       <fieldset aria-label="Suggested follow-ups" className="flex flex-wrap gap-2">
         <legend className={textRole('caption')}>Add a suggestion to your message:</legend>
         {presentation.refinements.map((instruction) => (
-          <Button
-            key={instruction}
-            variant="secondary"
-            size="sm"
-            onClick={() => onRefine(instruction)}
-          >
+          <Button key={instruction} variant="secondary" onClick={() => onRefine(instruction)}>
             {instruction}
           </Button>
         ))}
@@ -342,7 +337,7 @@ function FollowUps({
         <nav aria-label="Next steps" className="flex flex-wrap items-center gap-2">
           <span className={textRole('caption')}>Next, in a new chat:</span>
           {next.map(({ workflow, prompt }) => (
-            <Button key={workflow.id} asChild variant="ghost" size="sm">
+            <Button key={workflow.id} asChild variant="ghost">
               <ProjectLink
                 href={agentHandoffHref({
                   actionId,

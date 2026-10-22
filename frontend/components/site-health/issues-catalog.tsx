@@ -3,19 +3,16 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { IssueDetailRail } from '@/components/site-health/issue-detail-rail';
 import { IssueMetadata } from '@/components/site-health/issue-metadata';
 import { PageKindSelect } from '@/components/site-health/page-kind-select';
 import { Card } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
-import { FilterRow } from '@/components/ui/filter-row';
 import { listRowClasses } from '@/components/ui/list-row';
 import { Pager } from '@/components/ui/pager';
 import { Pressable } from '@/components/ui/pressable';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { SearchField } from '@/components/ui/search-field';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { splitPaneClasses } from '@/components/ui/workspace';
@@ -113,27 +110,25 @@ export function IssuesCatalog({
     catalog.occurrenceCursor,
   );
 
-  const controls = (
-    <FilterRow
-      searchWidth="md"
-      search={
-        <IssueSearch
-          key={filters.query}
-          query={filters.query}
-          onApply={(query) => updateFilters({ query })}
+  const controls = {
+    search: (
+      <IssueSearch
+        key={filters.query}
+        query={filters.query}
+        onApply={(query) => updateFilters({ query })}
+      />
+    ),
+    filters: (
+      <>
+        <PageKindSelect
+          value={filters.page_kind}
+          onChange={(page_kind) => updateFilters({ page_kind })}
         />
-      }
-    >
-      <PageKindSelect
-        value={filters.page_kind}
-        onChange={(page_kind) => updateFilters({ page_kind })}
-      />
-      <FindingClassFilter
-        value={findingView}
-        summary={summary}
-        onChange={(value) => updateFilters(findingClassChange(value))}
-      />
-      <div className="flex max-w-full min-w-0 flex-wrap items-end gap-4">
+        <FindingClassFilter
+          value={findingView}
+          summary={summary}
+          onChange={(value) => updateFilters(findingClassChange(value))}
+        />
         {(['All issues', 'Severity', 'Category'] as const).map((group) => {
           const keys = FILTER_GROUP_KEYS[group];
           const options = issueFilterClasses(findingView).filter((item) => keys.includes(item.key));
@@ -152,9 +147,9 @@ export function IssuesCatalog({
             />
           ) : null;
         })}
-      </div>
-    </FilterRow>
-  );
+      </>
+    ),
+  };
 
   // Wait for the issues page, and only for that.
   //
@@ -172,7 +167,7 @@ export function IssuesCatalog({
       <PageShell controls={controls}>
         <Stack gap="section" className="min-w-0" aria-busy="true">
           {notice}
-          <PageLoading label="Loading issues…" />
+          <QueryState kind="loading" label="Loading issues…" />
         </Stack>
       </PageShell>
     );
@@ -206,7 +201,8 @@ export function IssuesCatalog({
   );
   if (issuesQuery.isError) {
     issuesBody = (
-      <ReadError
+      <QueryState
+        kind="error"
         error={issuesQuery.error}
         fallback="Could not load issues for this crawl."
         onRetry={() => void issuesQuery.refetch()}
@@ -215,7 +211,7 @@ export function IssuesCatalog({
     );
   } else if (rows.length === 0) {
     issuesBody = (
-      <EmptyState variant="compact" icon={ICONS.issues} heading="No issues match this view." />
+      <QueryState kind="empty" icon={ICONS.issues} heading="No issues match this view." />
     );
   }
 
@@ -248,7 +244,6 @@ function IssueSearch({
       }}
     >
       <SearchField
-        size="compact"
         value={draft}
         onValueChange={setDraft}
         placeholder="Search issues…"

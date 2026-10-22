@@ -6,9 +6,8 @@ import type { ReactNode } from 'react';
 import { CoverageByKind } from './coverage-by-kind';
 import { OverviewDetails } from './overview-details';
 import { OverviewMetricCards } from './overview-metrics';
-import { PageLoading } from '@/components/layout/page-loading';
 import { Alert } from '@/components/ui/alert';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import { httpErrorStatus } from '@/lib/api/client';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
@@ -47,7 +46,8 @@ export function OverviewPanel({
   // now, and never the expected absence.
   if (terminal && overview.isError && httpErrorStatus(overview.error) !== 404) {
     overviewBody = (
-      <ReadError
+      <QueryState
+        kind="error"
         error={overview.error}
         fallback="Could not load the persisted Site Health Overview."
         onRetry={() => void overview.refetch()}
@@ -57,7 +57,7 @@ export function OverviewPanel({
   } else if (data) {
     overviewBody = <OverviewDetails data={data} />;
   } else if (terminal && overview.isLoading) {
-    overviewBody = <PageLoading label="Loading Overview details" />;
+    overviewBody = <QueryState kind="loading" label="Loading Overview details" />;
   }
 
   return (

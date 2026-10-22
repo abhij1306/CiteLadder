@@ -11,13 +11,12 @@ import {
 import { OutputPane } from '@/components/agent/output-pane';
 import { useFollowLatest } from '@/components/agent/use-follow-latest';
 import { useChatDetail } from '@/components/agent/use-chat-turns';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Stack } from '@/components/ui/layout';
-import { ReadError } from '@/components/ui/read-error';
+import { QueryState } from '@/components/ui/query-state';
 import type { AgentChatDetail } from '@/lib/api/agent';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 
@@ -32,7 +31,8 @@ export function ChatScreen() {
   if (query.isError && !query.data)
     return (
       <PageShell>
-        <ReadError
+        <QueryState
+          kind="error"
           error={query.error}
           fallback="This chat could not be loaded."
           onRetry={() => void query.refetch()}
@@ -43,7 +43,7 @@ export function ChatScreen() {
   if (!query.data)
     return (
       <PageShell>
-        <PageLoading />
+        <QueryState kind="loading" />
       </PageShell>
     );
   if (query.data.chat.project_id !== activeProjectId)
@@ -117,7 +117,7 @@ function ChatView({
 function ChatHeaderActions({ detail }: Readonly<{ detail: AgentChatDetail }>) {
   if (!detail.chat.action_id) return null;
   return (
-    <Button asChild variant="ghost" size="sm">
+    <Button asChild variant="ghost">
       <ProjectLink href={`/agent/actions/${detail.chat.action_id}`}>Open Action</ProjectLink>
     </Button>
   );

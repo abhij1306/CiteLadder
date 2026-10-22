@@ -4,7 +4,7 @@ import { CalendarRange, CircleHelp, Download } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { Button } from '@/components/ui/button';
-import { FilterChoice, FilterTrigger } from '@/components/ui/filter-row';
+import { FilterChoice, FilterTrigger } from '@/components/ui/filter-bar';
 import {
   Dropdown,
   DropdownContent,
@@ -339,9 +339,9 @@ function PromptFilter({ promptOptions, promptId, onChangePrompt }: ToolbarProps)
 export function VisibilityActions() {
   return (
     <>
-      <LaunchAuditButton size="sm" />
+      <LaunchAuditButton />
       <Tooltip content="How these metrics are calculated">
-        <Button variant="secondary" size="iconSm" asChild>
+        <Button variant="secondary" size="icon" asChild>
           <a href={METRICS_HELP_URL} aria-label="About these metrics">
             <CircleHelp className="size-3.5" aria-hidden />
           </a>
@@ -349,7 +349,7 @@ export function VisibilityActions() {
       </Tooltip>
       <Tooltip content="Export is available from a run (coming with reports)">
         <span>
-          <Button variant="secondary" size="sm" disabled aria-disabled="true">
+          <Button variant="secondary" disabled aria-disabled="true">
             <Download className="size-3.5" aria-hidden />
             Export
           </Button>

@@ -88,11 +88,13 @@ export function UserMenuTrigger({
         <DropdownTrigger
           aria-label={compact ? `Account menu for ${email}` : undefined}
           className={cn(
-            'focus-ring hover:bg-hover active:bg-active data-[state=open]:bg-selected hover:text-foreground flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-control)] px-2 text-left transition-colors',
-            compact ? 'min-h-11' : 'py-1',
+            'focus-ring hover:bg-hover active:bg-active data-[state=open]:bg-selected hover:text-foreground flex min-w-0 items-center gap-2 rounded-[var(--radius-control)] text-left transition-colors',
+            compact
+              ? 'size-[var(--control-height-md)] shrink-0 justify-center'
+              : 'h-[var(--control-height-md)] flex-1 px-2',
           )}
         >
-          <Avatar name={email} size="sm" />
+          <Avatar name={email} className="size-6" />
           {compact ? null : <span className="type-body min-w-0 flex-1 truncate">{email}</span>}
         </DropdownTrigger>
         {open ? <UserMenuContent presenter={presenter} /> : null}

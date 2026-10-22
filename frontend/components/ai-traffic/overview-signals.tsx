@@ -53,7 +53,7 @@ export function ReferralSignal({
       status={synced ? 'GA4 · Synced' : 'GA4 · Not synced'}
       action={
         synced ? null : (
-          <Button asChild variant="secondary" size="sm">
+          <Button asChild variant="secondary">
             {/* The referrals view connects GA4 in place. */}
             <ProjectLink href="/ai-traffic?tab=referrals">Connect GA4</ProjectLink>
           </Button>
@@ -95,7 +95,7 @@ export function CitationSignal({
     <SignalCard
       title="Tracked citations"
       action={
-        <Button asChild variant="secondary" size="sm">
+        <Button asChild variant="secondary">
           <Link to={projectDestination('/visibility', null, projectId)}>Open AI Visibility</Link>
         </Button>
       }
@@ -177,7 +177,7 @@ function CrawlSignal({
       }
       action={
         data.connection === 'not_connected' ? (
-          <Button variant="secondary" size="sm" onClick={onConnect}>
+          <Button variant="secondary" onClick={onConnect}>
             Connect crawl logs
           </Button>
         ) : null

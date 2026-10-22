@@ -133,12 +133,7 @@ export function TopicRail({
                   aria-label="Topic name"
                   className="h-8"
                 />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  size="sm"
-                  disabled={isCreating || !name.trim()}
-                >
+                <Button type="submit" variant="secondary" disabled={isCreating || !name.trim()}>
                   Add
                 </Button>
               </div>
@@ -372,7 +367,7 @@ function TopicRenameForm({
         aria-label={`New name for ${name}`}
         className="h-8"
       />
-      <Button type="submit" variant="secondary" size="sm" disabled={saving || !draft.trim()}>
+      <Button type="submit" variant="secondary" disabled={saving || !draft.trim()}>
         Save
       </Button>
     </form>

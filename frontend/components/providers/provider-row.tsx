@@ -93,7 +93,6 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
         <Button
           type="button"
           variant="secondary"
-          size="sm"
           onClick={() => testMutation.mutate()}
           disabled={busy || !state.connection}
         >
@@ -101,7 +100,6 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
         </Button>
         <Button
           type="button"
-          size="sm"
           onClick={() => saveMutation.mutate()}
           disabled={busy || hasPartialCredentialInput || (!hasCredentialInput && !configured)}
         >
@@ -151,7 +149,6 @@ export function ProviderRow({
           <Button
             type="button"
             variant={open ? 'ghost' : 'secondary'}
-            size="sm"
             aria-expanded={open}
             aria-controls={formId}
             aria-label={`${toggleLabel} ${group.label}`}

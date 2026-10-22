@@ -120,7 +120,6 @@ export function SearchIntelligenceCollection({
           {tab === 'competitors' ? (
             <Button
               variant="ghost"
-              size="sm"
               onClick={() => {
                 setPendingKind(null);
                 setSelectedId('');

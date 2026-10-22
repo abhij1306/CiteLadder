@@ -1,8 +1,8 @@
 import { lazy, Suspense, type ComponentType } from 'react';
 import { redirect, type RouteObject } from 'react-router-dom';
 
-import { PageLoading } from '@/components/layout/page-loading';
 import { ShellFallback } from '@/components/layout/shell-fallback';
+import { QueryState } from '@/components/ui/query-state';
 import { bootstrapPrivateRoutes } from '@/lib/project/bootstrap-loader';
 import { NotFoundScreen, ScreenError } from '@/components/layout/screen-states';
 import { RouteError } from './route-error';
@@ -30,7 +30,7 @@ function productRoute(
       return null;
     },
     element: (
-      <Suspense fallback={<PageLoading />}>
+      <Suspense fallback={<QueryState kind="loading" />}>
         <Screen />
       </Suspense>
     ),

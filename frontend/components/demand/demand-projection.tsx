@@ -8,9 +8,10 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { PageLoading } from '@/components/layout/page-loading';
 import { PageShell } from '@/components/layout/page-shell';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
+import { SearchField } from '@/components/ui/search-field';
 import { DemandEvidenceDrawer } from '@/components/demand/demand-evidence-drawer';
 import { DemandLatentDemand } from '@/components/demand/demand-latent-demand';
 import { DemandSignalFilters } from '@/components/demand/demand-signal-filters';
@@ -30,7 +31,6 @@ import {
 import { formatCount, formatWindowDate } from '@/lib/format';
 import { useProjectContext } from '@/lib/project/project-context';
 import { optionalStringUrlCodec, stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Stack } from '@/components/ui/layout';
 import { DataSourceSetup } from '@/components/integrations/data-source-setup';
 
@@ -120,14 +120,14 @@ function SearchDemandView({
   // An empty feed has two different causes, and they need different words:
   // nothing was detected at all, or the filter hid everything that was.
   let signalsFeed: ReactNode = (
-    <EmptyState
+    <QueryState
+      kind="empty"
       icon={Search}
       heading="No signals match your filter"
       description="Try choosing a different filter tab or clearing your search term."
       action={
         <Button
           variant="secondary"
-          size="sm"
           onClick={() => {
             setActiveTab('all');
             setSearchQuery('');
@@ -151,7 +151,8 @@ function SearchDemandView({
     );
   } else if (snapshot.signals.length === 0) {
     signalsFeed = (
-      <EmptyState
+      <QueryState
+        kind="empty"
         icon={Sparkles}
         heading="No qualifying search gaps observed"
         description="Search Console data was observed, but no configured detector emitted a signal in this window."
@@ -164,7 +165,6 @@ function SearchDemandView({
       actions={
         <Button
           variant="secondary"
-          size="sm"
           onClick={() => recomputeMutation.mutate()}
           pending={recomputeMutation.isPending}
           pendingLabel="Queueing…"
@@ -173,18 +173,26 @@ function SearchDemandView({
           Recompute signals
         </Button>
       }
-      controls={
-        <DemandSignalFilters
-          snapshot={snapshot}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          tabCounts={tabCounts}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-        />
-      }
+      controls={{
+        search: (
+          <SearchField
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+            placeholder="Filter queries or pages…"
+            aria-label="Filter queries or pages"
+          />
+        ),
+        filters: (
+          <DemandSignalFilters
+            snapshot={snapshot}
+            activeTab={activeTab}
+            onTabChange={setActiveTab}
+            tabCounts={tabCounts}
+          />
+        ),
+      }}
     >
-      <Stack gap="workspace">
+      <>
         {refreshError ? (
           <ReadError
             error={refreshError}
@@ -210,7 +218,7 @@ function SearchDemandView({
                   ? 'A recompute for this window is already queued.'
                   : 'Recompute queued. Signals refresh once the job finishes.'}
               </span>
-              <Button type="button" variant="ghost" size="sm" onClick={() => refreshSnapshot()}>
+              <Button type="button" variant="ghost" onClick={() => refreshSnapshot()}>
                 Check for the new snapshot
               </Button>
             </div>
@@ -218,7 +226,7 @@ function SearchDemandView({
         ) : null}
 
         {/* The summary line, then the table the top strip's filters narrow. */}
-        <div className="grid gap-3">
+        <Stack>
           <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span className="type-caption">
               {snapshot.signals.length === 1
@@ -232,7 +240,7 @@ function SearchDemandView({
             <DemandLatentDemand snapshot={snapshot} />
           </p>
           {signalsFeed}
-        </div>
+        </Stack>
 
         <DemandEvidenceDrawer
           signal={selectedSignal}
@@ -241,7 +249,7 @@ function SearchDemandView({
             if (!open) setSelectedSignalId(null);
           }}
         />
-      </Stack>
+      </>
     </PageShell>
   );
 }
@@ -297,12 +305,14 @@ function demandFallback({
   hasProject: boolean;
   latest: UseQueryResult<DemandSnapshot | null, Error>;
 }>) {
-  if (projectLoading || latest.isLoading) return <PageLoading label="Loading search demand…" />;
+  if (projectLoading || latest.isLoading)
+    return <QueryState kind="loading" label="Loading search demand…" />;
   if (!hasProject) return <ProjectRequiredState />;
   if (latest.data === null) return <SearchConsoleSetup />;
   if (latest.isError)
     return (
-      <ReadError
+      <QueryState
+        kind="error"
         {...readErrorProps(latest)}
         fallback="Search demand could not be loaded. Check your connection and try again."
       />
@@ -319,7 +329,8 @@ function SearchConsoleSetup() {
       title="Connect Search Console"
       description="Search Demand finds opportunities in this project's own search queries. Connect Google and use the property for this site."
       whenReady={
-        <EmptyState
+        <QueryState
+          kind="empty"
           icon={Search}
           heading="Search Demand appears after the next Search Console import."
         />

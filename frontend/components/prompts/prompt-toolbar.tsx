@@ -15,7 +15,7 @@ import {
   DropdownSeparator,
   DropdownTrigger,
 } from '@/components/ui/dropdown';
-import { FilterRow, FilterTrigger } from '@/components/ui/filter-row';
+import { FilterTrigger, type FilterBarProps } from '@/components/ui/filter-bar';
 import { SearchField } from '@/components/ui/search-field';
 import {
   buyerStageLabels,
@@ -47,7 +47,7 @@ const BRANDED_FILTER_LABEL: Record<'all' | 'enabled' | 'disabled', string> = {
   disabled: 'Unbranded only',
 };
 
-export function PromptFilterControls({
+export function promptFilterControls({
   search,
   onSearchChange,
   filters,
@@ -60,7 +60,7 @@ export function PromptFilterControls({
   onFiltersChange: (filters: PromptFilters) => void;
   /** The personas the library uses; the menu lists them when there are any. */
   personas?: readonly string[];
-}>) {
+}>): FilterBarProps {
   const activeFilterCount =
     filters.intents.length +
     filters.stages.length +
@@ -86,19 +86,16 @@ export function PromptFilterControls({
   const setEnabled = (value: EnabledFilter) => onFiltersChange({ ...filters, enabled: value });
   const setBranded = (value: EnabledFilter) => onFiltersChange({ ...filters, branded: value });
 
-  return (
-    <FilterRow
-      searchWidth="lg"
-      search={
-        <SearchField
-          size="compact"
-          value={search}
-          onValueChange={onSearchChange}
-          placeholder="Search prompts"
-          aria-label="Search prompts"
-        />
-      }
-    >
+  return {
+    search: (
+      <SearchField
+        value={search}
+        onValueChange={onSearchChange}
+        placeholder="Search prompts"
+        aria-label="Search prompts"
+      />
+    ),
+    filters: (
       <Dropdown>
         <DropdownTrigger asChild>
           <FilterTrigger label="Filter" icon={Filter} count={activeFilterCount} />
@@ -179,8 +176,8 @@ export function PromptFilterControls({
           ))}
         </DropdownContent>
       </Dropdown>
-    </FilterRow>
-  );
+    ),
+  };
 }
 
 /**
@@ -204,7 +201,7 @@ export function PromptActions({
     <>
       <Dropdown>
         <DropdownTrigger asChild>
-          <Button variant="secondary" size="sm">
+          <Button variant="secondary">
             <Plus className="size-4" aria-hidden />
             Add prompts
             <ChevronDown className="size-3.5 opacity-80" aria-hidden />
@@ -238,7 +235,7 @@ export function PromptActions({
           </DropdownItem>
         </DropdownContent>
       </Dropdown>
-      <LaunchAuditButton variant="primary" size="sm" disabled={!hasActivePrompts} />
+      <LaunchAuditButton variant="primary" disabled={!hasActivePrompts} />
     </>
   );
 }

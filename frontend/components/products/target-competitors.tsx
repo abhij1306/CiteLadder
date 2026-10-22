@@ -162,11 +162,10 @@ function CompetitorRows({
           </Badge>
           {row.state === 'pending' ? (
             <div className="flex gap-2">
-              <Button size="sm" disabled={pending} onClick={() => onDecide(row.id, 'approved')}>
+              <Button disabled={pending} onClick={() => onDecide(row.id, 'approved')}>
                 Approve
               </Button>
               <Button
-                size="sm"
                 variant="secondary"
                 disabled={pending}
                 onClick={() => onDecide(row.id, 'rejected')}

@@ -3,9 +3,10 @@
 import { useContext, useLayoutEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
+import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
+import { TabRow, type TabRowProps } from '@/components/ui/tabs';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { pageToolbarClasses } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
 
 import { CompactPageTitleContext } from './compact-page-title-context';
@@ -59,7 +60,7 @@ export type PageBack = Readonly<{
  * everywhere: the answer to "where does this page start" is structural, not a
  * judgement each route makes for itself.
  */
-export function PageShell({
+export function PageShell<T extends string = string>({
   title,
   back,
   actions,
@@ -75,10 +76,10 @@ export function PageShell({
   back?: PageBack;
   /** Route-owned controls; their state and outcomes stay with the route owner. */
   actions?: ReactNode;
-  /** The route's tab strip. Pass `<Tabs variant="band">`. */
-  tabs?: ReactNode;
-  /** Filters, search, range and export for the whole route. */
-  controls?: ReactNode;
+  /** The route's tabs, drawn as the `TabRow`; the route owns the `TabsRoot`. */
+  tabs?: TabRowProps<T>;
+  /** Search, filters, status and export for the whole route, drawn as the `FilterBar`. */
+  controls?: FilterBarProps;
   children?: ReactNode;
   className?: string;
   /** Content measure; page bands retain the analytical alignment. */
@@ -87,18 +88,24 @@ export function PageShell({
   return (
     <>
       <IdentityBand title={title} back={back} actions={actions} />
-      {tabs ? <PageBand kind="navigation">{tabs}</PageBand> : null}
-      {controls ? (
-        <PageBand kind="control" className={pageToolbarClasses}>
-          {controls}
+      {tabs ? (
+        <PageBand kind="navigation">
+          <TabRow {...tabs} />
         </PageBand>
       ) : null}
+      {controls ? (
+        <PageBand kind="control">
+          <FilterBar {...controls} />
+        </PageBand>
+      ) : null}
+      {/* The content region owns the section rhythm: its sections stand 24px
+          apart, whatever each one is. */}
       <div
         data-page-measure={measure}
         className={cn(
           pageGutterClasses,
           measure === 'workflow' && 'max-w-[var(--workflow-max-width)]',
-          'pt-[var(--content-gutter)] pb-[var(--page-section-gap)]',
+          'grid grid-cols-[minmax(0,1fr)] content-start gap-[var(--page-section-gap)] pt-[var(--content-gutter)] pb-[var(--page-section-gap)]',
           className,
         )}
       >
