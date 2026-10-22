@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 
+import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 
 /**
@@ -36,5 +37,27 @@ export function ShellFallback({ children }: Readonly<{ children?: ReactNode }>) 
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * GateScreen — a page the app shows instead of the workspace, in the
+ * fallback frame, before the shell can open: the Terms review, a workspace
+ * whose access ended. One narrow column (the form measure), its parts 16
+ * apart, centred in the pane and inset by the content gutter. The caller
+ * passes the content; the page owns every number.
+ */
+export function GateScreen({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <ShellFallback>
+      <Stack
+        as="main"
+        id="main"
+        gap="workspace"
+        className="mx-auto w-full max-w-xl content-center p-[var(--content-gutter)]"
+      >
+        {children}
+      </Stack>
+    </ShellFallback>
   );
 }

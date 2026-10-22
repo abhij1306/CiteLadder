@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 import { listRowClasses } from '@/components/ui/list-row';
-import { MetricValue } from '@/components/ui/metric-value';
+import { ComparisonValue, MetricValue } from '@/components/ui/metric-value';
 import { ScoreRing } from '@/components/ui/score-ring';
 import { textRole } from '@/components/ui/typography';
 import { availabilityLabel } from '@/lib/format';
@@ -30,7 +30,8 @@ import { cn } from '@/lib/utils';
  *
  * A segment's anatomy, in order: label (with an optional leading icon and a
  * trailing marker), an optional caption naming the value's period, the value
- * (the `figure` role, or a score ring), a delta, a sub-line, and one action.
+ * (the `figure` role, or a score ring), a delta, a sub-line, a comparison
+ * window's value, and one action.
  *
  * `value: null` is the missing state — the muted dash with `missingLabel`
  * (default "Not measured") as its accessible name. A string or number is the
@@ -78,6 +79,12 @@ export type StatSegment = Readonly<
     delta?: ReactNode;
     /** The sub-line under the value. */
     sub?: ReactNode;
+    /**
+     * A second window's own value under the first (never a ratio): a hairline,
+     * the label naming that window, and its figure in the smaller numeral.
+     * It shares the segment's `loading` and `missingLabel`.
+     */
+    comparison?: Readonly<{ label: ReactNode; value: string | null }>;
     /** One link or button at the segment's foot. */
     action?: ReactNode;
   } & StatValue &
@@ -174,6 +181,7 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
       </dd>
       {segment.delta ? <dd className="min-w-0">{segment.delta}</dd> : null}
       {segment.sub ? <dd className={textRole('caption', 'min-w-0')}>{segment.sub}</dd> : null}
+      <SegmentComparison segment={segment} />
       {segment.action ? (
         <dd className={cn('min-w-0', pressable && 'relative z-10')}>{segment.action}</dd>
       ) : null}
@@ -187,6 +195,24 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
         />
       ) : null}
     </div>
+  );
+}
+
+/** A second window's value under the first, or nothing without one. */
+function SegmentComparison({ segment }: Readonly<{ segment: StatSegment }>) {
+  if (!segment.comparison) return null;
+  return (
+    <dd
+      data-stat-comparison=""
+      className={textRole('caption', 'border-border-subtle grid min-w-0 border-t pt-1')}
+    >
+      <span>{segment.comparison.label}</span>
+      <ComparisonValue
+        value={segment.comparison.value}
+        label={segment.missingLabel ?? availabilityLabel('not_measured')}
+        loading={segment.loading ?? false}
+      />
+    </dd>
   );
 }
 

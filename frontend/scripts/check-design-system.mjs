@@ -23,7 +23,7 @@ import {
   textRoleBackgroundViolations,
   websiteContractViolations,
   tsxGeometryFindings,
-  featureLayeringFindings,
+  featureLayeringViolations,
 } from './design-system-source-checks.mjs';
 import { tokenAuditViolations } from './audit-design-tokens.mjs';
 import { brandTokenViolations, svgColorScan } from './design-system-asset-checks.mjs';
@@ -128,10 +128,11 @@ for (const path of files(root)) {
     ...nestedCardViolations(source, label, ownsProductUi),
     ...cardHeaderLayoutViolations(source, label, ownsProductUi),
     ...productControlViolations(source, label, ownsProductUi),
+    ...featureLayeringViolations(source, label),
   );
   advisories.push(...radiusRoleAdvisories(source, label, ownsProductUi));
   if (/^(?:apps|components|lib)\//.test(label))
-    findings.push(...tsxGeometryFindings(source, label), ...featureLayeringFindings(source, label));
+    findings.push(...tsxGeometryFindings(source, label));
   if (typeSource(label)) typeFindings.push(...typeDisciplineFindings(source, label));
 }
 

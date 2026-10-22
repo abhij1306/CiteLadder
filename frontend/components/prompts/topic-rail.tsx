@@ -8,7 +8,7 @@ import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
-import { RailItem, RailItemForm } from '@/components/ui/rail';
+import { RailItem, RailItemForm } from '@/components/ui/list-row';
 import { Select } from '@/components/ui/select';
 import type { Topic } from '@/lib/api/types';
 import { orderTopicsForRail } from '@/lib/prompts/topic-tree';

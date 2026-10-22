@@ -169,8 +169,6 @@
   --text-xs--line-height: 1rem;
   --text-sm: 0.875rem;
   --text-sm--line-height: 1.25rem;
-  --text-base: 1rem;
-  --text-base--line-height: 1.5rem;
   --text-2xl: 1.5rem;
   --text-2xl--line-height: 2rem;
   /* Field text: 14px on every surface. */
@@ -274,6 +272,9 @@
      less its 2px border inset on each side. It is part of the field, not a
      control of its own. */
   --field-end-target: calc(var(--control-height-md) - 4px);
+  /* The one width of a filter field (FilterField): a typed or picked filter
+     value beside the band's triggers. */
+  --filter-width: 160px;
   --menu-item-height: 32px;
   --badge-height-sm: 20px;
   --textarea-min-height: 112px;

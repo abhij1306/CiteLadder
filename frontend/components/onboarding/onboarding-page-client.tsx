@@ -3,7 +3,7 @@
 import { Link } from 'react-router-dom';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 
-import { GateNoticeFrame } from '@/components/layout/gate-notice-frame';
+import { GateNoticeScreen } from '@/components/layout/gate-notice-frame';
 import { ShellFallback } from '@/components/layout/shell-fallback';
 import { Button } from '@/components/ui/button';
 import { QueryState } from '@/components/ui/query-state';
@@ -104,21 +104,16 @@ function ProjectSetupBlocked({
   projectsHref: string;
 }>) {
   return (
-    <main
-      id="main"
-      className="bg-background grid min-h-dvh place-items-center p-[var(--page-section-gap)]"
-    >
-      <GateNoticeFrame title={title}>
-        <p>{children}</p>
-        {onRetry && (
-          <Button onClick={onRetry} className="w-fit">
-            Retry
-          </Button>
-        )}
-        <Button asChild variant="secondary" className="w-fit">
-          <Link to={projectsHref}>Back to projects</Link>
+    <GateNoticeScreen title={title}>
+      <p>{children}</p>
+      {onRetry && (
+        <Button onClick={onRetry} className="w-fit">
+          Retry
         </Button>
-      </GateNoticeFrame>
-    </main>
+      )}
+      <Button asChild variant="secondary" className="w-fit">
+        <Link to={projectsHref}>Back to projects</Link>
+      </Button>
+    </GateNoticeScreen>
   );
 }

@@ -35,6 +35,7 @@ import {
   SEARCH_COLUMNS_BY_KIND,
   searchScopeLabel,
 } from '@/lib/config/search-intelligence';
+import { FilterField } from '@/components/ui/filter-bar';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { SearchIntelligenceExport } from './search-intelligence-export';
@@ -338,20 +339,21 @@ function KeywordFilters({
   if (!enabled) return null;
   return (
     <>
-      <Input
-        aria-label="Minimum search volume"
-        placeholder="Min. search volume"
-        className="w-40"
-        type="number"
-        min={0}
-        value={minVolume}
-        step={1}
-        onChange={(event) => {
-          const value = event.target.value;
-          if (value === '' || (Number.isInteger(Number(value)) && Number(value) >= 0))
-            setMinVolume(value);
-        }}
-      />
+      <FilterField>
+        <Input
+          aria-label="Minimum search volume"
+          placeholder="Min. search volume"
+          type="number"
+          min={0}
+          value={minVolume}
+          step={1}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === '' || (Number.isInteger(Number(value)) && Number(value) >= 0))
+              setMinVolume(value);
+          }}
+        />
+      </FilterField>
       <Select
         ariaLabel="Saved keyword intent"
         value={intent || 'any'}

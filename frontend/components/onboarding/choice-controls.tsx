@@ -76,7 +76,7 @@ export function EntityRow({
           {meta ? <span className="flow-entity-meta">{meta}</span> : null}
         </span>
         <span className="flow-entity-mark" aria-hidden>
-          {selected ? <Check className="size-3.5" /> : null}
+          {selected ? <Check /> : null}
         </span>
       </Pressable>
       {onEdit ? (

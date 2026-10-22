@@ -145,7 +145,7 @@ export function DiscoveryStage({
           </ul>
         </section>
       ) : null}
-      <Stack gap="workspace" className="mt-[var(--flow-block)]">
+      <Stack gap="workspace" className="flow-stage-band">
         {(discovery.discovery?.warnings ?? []).map((warning) => (
           <Alert key={warning} tone="warning">
             {warningMessage(warning)}

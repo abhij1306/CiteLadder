@@ -4,7 +4,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { LegendSwatch } from '@/components/ui/chart';
 import { InfoHint } from '@/components/ui/info-hint';
 import { Stack } from '@/components/ui/layout';
-import { MetricValue } from '@/components/ui/metric-value';
 import { StatRow } from '@/components/ui/stat-row';
 import type { PerformanceWindow } from '@/lib/api/performance';
 import { availabilityLabel, formatCount } from '@/lib/format';
@@ -51,32 +50,16 @@ const METRIC_HELP: Record<PerformanceMetricKey, string> = {
  * The comparison half of a card: the comparison window's own absolute value,
  * under a label that names THAT window.
  */
-function MetricCardComparison({
-  metricKey,
-  comparison,
-  comparisonValue,
-  compareLabel,
-  loading,
-}: Readonly<{
-  metricKey: PerformanceMetricKey;
-  comparison: PerformanceWindow;
-  comparisonValue: number | null | undefined;
-  compareLabel: string;
-  loading: boolean;
-}>) {
-  const statusLabel =
-    comparison.evidence_state === 'not_run' ? `${compareLabel} — not imported` : compareLabel;
-  return (
-    <span className="border-border-subtle grid border-t pt-1">
-      <span>{statusLabel}</span>
-      <MetricValue
-        size="figureSm"
-        value={measured(metricKey, comparisonValue)}
-        label={NOT_MEASURED}
-        loading={loading}
-      />
-    </span>
-  );
+function metricComparison(
+  metricKey: PerformanceMetricKey,
+  comparison: PerformanceWindow,
+  compareLabel: string,
+) {
+  return {
+    label:
+      comparison.evidence_state === 'not_run' ? `${compareLabel} — not imported` : compareLabel,
+    value: measured(metricKey, comparison.totals[metricKey]),
+  };
 }
 
 /**
@@ -144,15 +127,9 @@ export function MetricCards({
             value: measured(card.key, selected.totals[card.key]),
             missingLabel: NOT_MEASURED,
             loading,
-            sub: comparison ? (
-              <MetricCardComparison
-                metricKey={card.key}
-                comparison={comparison}
-                comparisonValue={comparison.totals[card.key]}
-                compareLabel={compareLabel}
-                loading={loading}
-              />
-            ) : undefined,
+            comparison: comparison
+              ? metricComparison(card.key, comparison, compareLabel)
+              : undefined,
             marker: (
               <MetricMarker
                 metricKey={card.key}

@@ -1,5 +1,6 @@
 import { CopyButton } from '@/components/ui/copy-button';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
+import { panelClasses } from '@/components/ui/panel';
 import { textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { claudeCodeCommand, MCP_SERVER_URL, mcpServersJson } from '@/lib/config/mcp-clients';
@@ -7,13 +8,18 @@ import { claudeCodeCommand, MCP_SERVER_URL, mcpServersJson } from '@/lib/config/
 function Snippet({ label, value }: Readonly<{ label: string; value: string }>) {
   return (
     <Stack as="section" gap="compact">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <Inline className="flex-wrap justify-between">
         <h3 className={textRole('itemTitle')}>{label}</h3>
         <CopyButton value={value} variant="ghost" copiedLabel={`${label} copied`}>
           Copy
         </CopyButton>
-      </div>
-      <pre className="bg-well type-caption overflow-x-auto rounded-[var(--radius-control)] p-3">
+      </Inline>
+      <pre
+        className={panelClasses(
+          { tone: 'well' },
+          'type-caption overflow-x-auto font-mono whitespace-pre',
+        )}
+      >
         <code>{value}</code>
       </pre>
     </Stack>

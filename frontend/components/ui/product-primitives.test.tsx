@@ -91,6 +91,35 @@ describe('StatRow', () => {
     fireEvent.click(toggle);
     expect(onSelect).toHaveBeenCalledOnce();
   });
+
+  it('puts a comparison window under the value, its absence named like the value', () => {
+    render(
+      <StatRow
+        label="Search Console metrics"
+        segments={[
+          {
+            key: 'clicks',
+            label: 'Clicks',
+            value: '1,204',
+            comparison: { label: 'Previous 28 days', value: '980' },
+          },
+          {
+            key: 'ctr',
+            label: 'CTR',
+            value: '2.1%',
+            missingLabel: 'Not measured',
+            comparison: { label: 'Previous 28 days', value: null },
+          },
+        ]}
+      />,
+    );
+    const group = screen.getByRole('group', { name: 'Search Console metrics' });
+    const [clicks, ctr] = within(group).getAllByText('Previous 28 days');
+    expect(clicks?.closest('[data-stat-comparison]')).toHaveTextContent('Previous 28 days980');
+    expect(ctr?.closest('[data-stat-comparison]')).toHaveTextContent(
+      'Previous 28 days–Not measured',
+    );
+  });
 });
 
 describe('DataTable', () => {

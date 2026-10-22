@@ -100,3 +100,41 @@ export function Checkbox({
     </label>
   );
 }
+
+/**
+ * CheckboxCaption — a caption line under a labelled checkbox, starting where
+ * the label's text starts (the 32px target plus the label's 8px gap above),
+ * so a notice or an error reads as part of that choice. Point the checkbox's
+ * `aria-describedby` at its `id`.
+ *
+ * `tone="error"` is the danger ink and an alert while `shown`; while not
+ * shown it keeps its line (invisible and hidden from assistive tech), so the
+ * form does not move when the error appears.
+ */
+export function CheckboxCaption({
+  id,
+  tone = 'note',
+  shown = true,
+  children,
+}: Readonly<{
+  id: string;
+  tone?: 'note' | 'error';
+  shown?: boolean;
+  children: ReactNode;
+}>) {
+  const error = tone === 'error';
+  return (
+    <p
+      id={id}
+      role={error && shown ? 'alert' : undefined}
+      aria-hidden={shown ? undefined : true}
+      className={cn(
+        'type-caption ps-[calc(var(--control-height-md)+0.5rem)]',
+        error && 'text-danger-text',
+        !shown && 'invisible',
+      )}
+    >
+      {children}
+    </p>
+  );
+}

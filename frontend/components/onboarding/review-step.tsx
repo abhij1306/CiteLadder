@@ -67,7 +67,6 @@ function CompetitorRow({
           onChange={(event) => setDraftName(event.target.value)}
           placeholder="Competitor name"
           aria-label="Competitor name"
-          className="my-1.5"
         />
         <Input
           value={draft}
@@ -78,7 +77,6 @@ function CompetitorRow({
           }}
           placeholder="acme.com"
           aria-label={`Website for ${displayName}`}
-          className="my-1.5"
         />
         <Button type="button" onClick={save} disabled={!draft.trim() || !draftName.trim()}>
           Save

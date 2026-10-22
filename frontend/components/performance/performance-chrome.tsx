@@ -9,6 +9,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Icon } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
 import { Button } from '@/components/ui/button';
+import { FilterField } from '@/components/ui/filter-bar';
 import { SegmentedAction, SegmentedControl } from '@/components/ui/segmented-control';
 import { Select } from '@/components/ui/select';
 import type { PerformanceGranularity } from '@/lib/api/performance';
@@ -171,13 +172,14 @@ export function GranularitySelect({
   onChange: (next: PerformanceGranularity) => void;
 }>) {
   return (
-    <Select
-      value={value}
-      onValueChange={onChange}
-      options={GRANULARITY_OPTIONS}
-      ariaLabel="Chart bucket size"
-      className="w-36"
-    />
+    <FilterField>
+      <Select
+        value={value}
+        onValueChange={onChange}
+        options={GRANULARITY_OPTIONS}
+        ariaLabel="Chart bucket size"
+      />
+    </FilterField>
   );
 }
 

@@ -3,8 +3,8 @@
 import type { InputHTMLAttributes } from 'react';
 import { Search, X } from 'lucide-react';
 
-import { Input } from './input';
-import { Pressable } from './pressable';
+import { Icon } from './icon';
+import { FieldEndButton, Input } from './input';
 import { Spinner } from './spinner';
 
 export type SearchFieldProps = Omit<
@@ -38,23 +38,17 @@ export function SearchField({
       containerClassName={className}
       className="[appearance:textfield] [&::-webkit-search-cancel-button]:hidden"
       startContent={
-        pending ? (
-          <Spinner className="text-muted" />
-        ) : (
-          <Search className="text-muted size-4 shrink-0" aria-hidden />
-        )
+        pending ? <Spinner className="text-muted" /> : <Icon icon={Search} className="text-muted" />
       }
       endContentFlush
       endContent={
         value ? (
-          <Pressable
-            className="text-muted enabled:hover:bg-hover enabled:hover:text-foreground enabled:active:bg-active grid size-[var(--field-end-target)] place-items-center rounded-[var(--radius-control)]"
+          <FieldEndButton
+            icon={X}
+            label="Clear search"
             disabled={props.disabled}
             onClick={() => (onClear ? onClear() : onValueChange(''))}
-            aria-label="Clear search"
-          >
-            <X className="size-3.5" aria-hidden />
-          </Pressable>
+          />
         ) : null
       }
     />
