@@ -16,6 +16,7 @@ import { ProviderSettings } from '@/components/settings/provider-settings';
 import { TimeZoneSetting } from '@/components/settings/time-zone-setting';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { ListScreen } from '@/components/layout/page-shell';
+import { Stack } from '@/components/ui/layout';
 import { projectsApi } from '@/lib/api/projects';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -102,10 +103,10 @@ function ProjectDeletionControls() {
                   websiteUrl={activeProject.website_url}
                   placement="identity"
                 />
-                <div className="grid min-w-0 gap-0.5">
+                <Stack gap="tight" className="min-w-0">
                   <div className={textRole('itemTitle', 'truncate')}>{activeProject.name}</div>
                   <p className="type-caption">Brand: {activeProject.brand_name}</p>
-                </div>
+                </Stack>
               </div>
               <Button
                 variant="destructive"

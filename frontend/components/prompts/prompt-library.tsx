@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { ICONS } from '@/lib/icons';
 import {
   promptsApi,
   type PromptGenerateInput,
@@ -301,7 +300,10 @@ export function PromptLibrary({
   };
   const submitForm = async (values: PromptFormValues) => {
     const mutation = editing
-      ? updateMutation.mutateAsync({ id: editing.id, input: formValuesToPromptUpdate(values) })
+      ? updateMutation.mutateAsync({
+          id: editing.id,
+          input: formValuesToPromptUpdate(values),
+        })
       : createMutation.mutateAsync(formValuesToPromptInput(values));
     await mutation.catch(() => undefined);
   };
@@ -355,14 +357,6 @@ export function PromptLibrary({
     );
   } else if (!hasPrompts) {
     libraryBody = <PromptEmptyState onGenerate={openGenerateDialog} onAdd={openAdd} />;
-  } else if (visible.length === 0) {
-    libraryBody = (
-      <QueryState
-        kind="empty"
-        icon={ICONS.prompts}
-        heading="No prompts match your search or filters."
-      />
-    );
   }
 
   if (isLoading) {
@@ -446,7 +440,10 @@ export function PromptLibrary({
                   <>
                     {tab.label}
                     {statusCounts[tab.id] > 0 ? (
-                      <span className="type-caption ml-2 tabular-nums">{statusCounts[tab.id]}</span>
+                      <>
+                        {' '}
+                        <span className="type-caption tabular-nums">{statusCounts[tab.id]}</span>
+                      </>
                     ) : null}
                   </>
                 ),

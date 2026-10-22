@@ -18,6 +18,7 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
+import { Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
 import { agentWriteFailure } from '@/lib/agent/errors';
@@ -75,8 +76,13 @@ export function OutputPane({
       />
     );
   return (
-    <section aria-labelledby="output-title" className="grid min-w-0 content-start gap-3">
-      <header className="grid gap-2">
+    <Stack
+      as="section"
+      gap="compact"
+      aria-labelledby="output-title"
+      className="min-w-0 content-start"
+    >
+      <Stack as="header" gap="tight">
         <h2 id="output-title" className={textRole('sectionTitle', 'min-w-0')}>
           {revision.title}
         </h2>
@@ -94,7 +100,11 @@ export function OutputPane({
             locked={locked}
             onEdit={() => {
               setTab('output');
-              setDraft({ baseRevisionId: revision.id, title: revision.title, body: revision.body });
+              setDraft({
+                baseRevisionId: revision.id,
+                title: revision.title,
+                body: revision.body,
+              });
             }}
           />
         )}
@@ -117,7 +127,7 @@ export function OutputPane({
             disabled={locked || !canSend}
           />
         )}
-      </header>
+      </Stack>
       <Tabs
         value={tab}
         onValueChange={setTab}
@@ -160,7 +170,7 @@ export function OutputPane({
           ) : null}
         </TabPanel>
       </Tabs>
-    </section>
+    </Stack>
   );
 }
 
@@ -242,12 +252,15 @@ function OutlineApproval({
   const queryClient = useQueryClient();
   const approve = useMutation({
     ...agentMutations.approveOutline(workspaceId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(chatId) }),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agent.chat(chatId),
+      }),
   });
   if (revision.phase !== 'outline' || revision.approved_at) return null;
   const copy = OUTLINE_APPROVAL[kind] ?? OUTLINE_APPROVAL.content!;
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <p className={textRole('body')}>{copy.help}</p>
       {approve.isError ? (
         <Alert tone="danger">{agentWriteFailure(approve.error).message}</Alert>
@@ -256,11 +269,15 @@ function OutlineApproval({
         className="justify-self-start"
         disabled={!canSend || runActive || approve.isPending}
         onClick={() =>
-          approve.mutate({ chatId, revisionId: revision.id, idempotencyKey: newIdempotencyKey() })
+          approve.mutate({
+            chatId,
+            revisionId: revision.id,
+            idempotencyKey: newIdempotencyKey(),
+          })
         }
       >
         {copy.action}
       </Button>
-    </div>
+    </Stack>
   );
 }

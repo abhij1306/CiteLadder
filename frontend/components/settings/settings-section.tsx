@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from 'react';
 
+import { Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
@@ -32,13 +33,15 @@ export function SettingsSection({
         className,
       )}
     >
-      <div className="grid content-start gap-1">
+      <Stack gap="tight" className="content-start">
         <h2 id={headingId} className={textRole('sectionTitle')}>
           {title}
         </h2>
         {description ? <p className={textRole('caption')}>{description}</p> : null}
-      </div>
-      <div className="grid min-w-0 content-start gap-4">{children}</div>
+      </Stack>
+      <Stack gap="workspace" className="min-w-0 content-start">
+        {children}
+      </Stack>
     </section>
   );
 }

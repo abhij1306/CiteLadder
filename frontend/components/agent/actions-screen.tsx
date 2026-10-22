@@ -1,24 +1,15 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { Stack } from '@/components/ui/layout';
-import { Pager } from '@/components/ui/pager';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { Select } from '@/components/ui/select';
 import { TextLink } from '@/components/ui/text-link';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { textRole } from '@/components/ui/typography';
 import {
@@ -27,7 +18,7 @@ import {
   approachLabel,
   targetKindLabel,
 } from '@/lib/agent/vocabulary';
-import { actionsQueries, type Action, type ActionStatus } from '@/lib/api/actions';
+import { actionsQueries, type actionsApi, type Action, type ActionStatus } from '@/lib/api/actions';
 import { actionStatusSchema } from '@citeladder/contracts/actions';
 import { queueCount, useActionStatusCounts } from '@/lib/agent/use-action-status-counts';
 import { ICONS } from '@/lib/icons';
@@ -55,12 +46,18 @@ function statusCount(value: StatusFilter, counts: StatusCounts) {
 function statusOptions(counts: StatusCounts | undefined) {
   return STATUS_FILTERS.map((value) => {
     const label = value === QUEUE ? 'Open and in progress' : ACTION_STATUS_LABEL[value];
-    return { value, label: counts ? `${label} (${statusCount(value, counts)})` : label };
+    return {
+      value,
+      label: counts ? `${label} (${statusCount(value, counts)})` : label,
+    };
   });
 }
 const TARGET_OPTIONS = [
   { value: ALL_TARGETS, label: 'All targets' },
-  ...ACTION_TARGET_KINDS.map((kind) => ({ value: kind, label: targetKindLabel(kind) ?? kind })),
+  ...ACTION_TARGET_KINDS.map((kind) => ({
+    value: kind,
+    label: targetKindLabel(kind) ?? kind,
+  })),
 ];
 
 /**
@@ -133,90 +130,115 @@ function ActionsList({
     }),
   );
 
-  if (query.isPending) return <QueryState kind="loading" label="Loading Actions…" />;
-  if (query.isError)
-    return (
-      <QueryState kind="error" {...readErrorProps(query)} fallback="Actions could not be loaded." />
-    );
   const page = query.data;
-  if (page.items.length === 0) {
-    const anyActions = Object.values(page.status_counts).some((count) => count > 0);
-    return anyActions ? (
-      <QueryState
-        kind="empty"
-        icon={ICONS.opportunities}
-        heading="No Actions match these filters"
-        description="Change the status or target type to see other Actions."
-      />
-    ) : (
-      <QueryState
-        kind="empty"
-        icon={ICONS.opportunities}
-        heading="No Actions yet"
-        description="Actions appear when a crawl, visibility run or Search Console sync finds work on a target."
-      />
-    );
-  }
   return (
-    <Stack aria-busy={query.isFetching || undefined}>
-      <ActionsTable actions={page.items} />
-      <Pager
-        range={{ ...pageRange(pager.page, pager.pageSize, page.items.length), noun: 'Actions' }}
-        pageSize={{ value: pager.pageSize, onChange: pager.setPageSize }}
-        {...cursorControls(pager, page.next_cursor)}
-        busy={query.isFetching}
-      />
-    </Stack>
+    <DataTable
+      label="Actions"
+      columns={COLUMNS}
+      pageSize={pager.pageSize}
+      rowCount={page?.items.length}
+      state={actionsState(query)}
+      busy={{
+        active: query.isFetching && !query.isPending,
+        label: 'Updating Actions…',
+      }}
+      pager={
+        page && page.items.length > 0
+          ? {
+              range: {
+                ...pageRange(pager.page, pager.pageSize, page.items.length),
+                noun: 'Actions',
+              },
+              pageSize: { value: pager.pageSize, onChange: pager.setPageSize },
+              ...cursorControls(pager, page.next_cursor),
+              busy: query.isFetching,
+            }
+          : undefined
+      }
+    >
+      {page?.items.map((action) => (
+        <ActionRow key={action.id} action={action} />
+      ))}
+    </DataTable>
   );
 }
 
-function ActionsTable({ actions }: Readonly<{ actions: Action[] }>) {
+const COLUMNS: readonly DataTableColumn[] = [
+  { key: 'target', label: 'Target' },
+  { key: 'status', label: 'Status', width: 'status' },
+  { key: 'priority', label: 'Priority', width: 'figure', numeric: true },
+  {
+    key: 'families',
+    label: 'Evidence systems',
+    width: 'status',
+    numeric: true,
+  },
+  { key: 'approach', label: 'Approach', width: 'name' },
+];
+
+/** What the table shows instead of rows: the read's loading, error or empty. */
+function actionsState(
+  query: UseQueryResult<Awaited<ReturnType<typeof actionsApi.list>>>,
+): DataTableState | undefined {
+  if (query.isPending) return { kind: 'loading', label: 'Loading Actions…' };
+  if (query.isError)
+    return {
+      kind: 'error',
+      ...readErrorProps(query),
+      fallback: 'Actions could not be loaded.',
+    };
+  if (query.data.items.length > 0) return undefined;
+  const anyActions = Object.values(query.data.status_counts).some((count) => count > 0);
+  return anyActions
+    ? {
+        kind: 'empty',
+        icon: ICONS.opportunities,
+        headingLevel: 3,
+        heading: 'No Actions match these filters',
+        description: 'Change the status or target type to see other Actions.',
+      }
+    : {
+        kind: 'empty',
+        icon: ICONS.opportunities,
+        headingLevel: 3,
+        heading: 'No Actions yet',
+        description:
+          'Actions appear when a crawl, visibility run or Search Console sync finds work on a target.',
+      };
+}
+
+function ActionRow({ action }: Readonly<{ action: Action }>) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Target</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead numeric>Priority</TableHead>
-          <TableHead numeric>Evidence systems</TableHead>
-          <TableHead>Approach</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {actions.map((action) => (
-          <TableRow key={action.id}>
-            <TableCell>
-              <div className="grid max-w-96 min-w-0">
-                <ClampText lines={1} tooltip={action.target_label}>
-                  <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
-                    {action.target_label}
-                  </TextLink>
-                </ClampText>
-                <ClampText lines={1} className={textRole('caption')}>
-                  {[
-                    targetKindLabel(action.target_kind),
-                    action.origin === 'agent' ? 'From agent work' : null,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </ClampText>
-              </div>
-            </TableCell>
-            <TableCell>
-              <ActionStatusBadge status={action.status} />
-            </TableCell>
-            <TableCell numeric>
-              {action.priority_score === null ? (
-                <MissingValue state="not_measured" reason="No evidence scores this target yet." />
-              ) : (
-                action.priority_score.toFixed(1)
-              )}
-            </TableCell>
-            <TableCell numeric>{action.families.length}</TableCell>
-            <TableCell>{approachLabel(action.approach) ?? ''}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+    <TableRow>
+      <TableCell>
+        <div className="grid min-w-0">
+          <ClampText lines={1} tooltip={action.target_label}>
+            <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
+              {action.target_label}
+            </TextLink>
+          </ClampText>
+          <ClampText lines={1} className={textRole('caption')}>
+            {[
+              targetKindLabel(action.target_kind),
+              action.origin === 'agent' ? 'From agent work' : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </ClampText>
+        </div>
+      </TableCell>
+      <TableCell>
+        <ActionStatusBadge status={action.status} />
+      </TableCell>
+      <TableCell numeric>
+        {action.priority_score === null ? (
+          <MissingValue state="not_measured" reason="No evidence scores this target yet." />
+        ) : (
+          action.priority_score.toFixed(1)
+        )}
+      </TableCell>
+      <TableCell numeric>{action.families.length}</TableCell>
+      <TableCell>{approachLabel(action.approach) ?? ''}</TableCell>
+    </TableRow>
   );
 }

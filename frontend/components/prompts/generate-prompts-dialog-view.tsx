@@ -5,7 +5,9 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog } from '@/components/ui/dialog';
+import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
 import type { PromptGenerateResponse, Topic } from '@/lib/api/types';
 import { admissionDropSummary } from '@/lib/prompts/admission';
@@ -195,7 +197,7 @@ export function GeneratePromptsDialogView({
         />
       }
     >
-      <div className="grid gap-4">
+      <Stack gap="workspace">
         {isGenerating ? (
           <Alert tone="info">
             Writing and quality-checking questions can take a minute or two. Keep this open.
@@ -207,20 +209,22 @@ export function GeneratePromptsDialogView({
           review
         ) : (
           <>
-            <div className="grid gap-2">
-              <span className={textRole('label')}>Number of prompts (1–{maxCount})</span>
-              <Input
-                type="number"
-                min={1}
-                max={maxCount}
-                value={count}
-                onChange={(event) => setCount(event.target.value)}
-                aria-label="Number of prompts"
-                aria-invalid={!countValid}
-              />
-            </div>
+            <Field label={`Number of prompts (1–${maxCount})`}>
+              {(props) => (
+                <Input
+                  {...props}
+                  type="number"
+                  min={1}
+                  max={maxCount}
+                  value={count}
+                  onChange={(event) => setCount(event.target.value)}
+                  aria-label="Number of prompts"
+                  aria-invalid={!countValid}
+                />
+              )}
+            </Field>
             {topics.length > 0 ? (
-              <fieldset className="grid min-w-0 gap-2">
+              <Stack as="fieldset" gap="compact" className="min-w-0">
                 <legend className={textRole('label')}>Topics</legend>
                 <span className="type-caption">
                   {selectedTopicIds.size
@@ -239,7 +243,7 @@ export function GeneratePromptsDialogView({
                     />
                   ))}
                 </div>
-              </fieldset>
+              </Stack>
             ) : (
               <Alert tone="info">
                 No topics exist yet. CiteLadder will create them from your confirmed offerings, then
@@ -248,7 +252,7 @@ export function GeneratePromptsDialogView({
             )}
           </>
         )}
-      </div>
+      </Stack>
     </Dialog>
   );
 }

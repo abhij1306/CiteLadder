@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
@@ -16,7 +17,9 @@ import { RadioGroup } from '@/components/ui/radio-group';
 import { ReadError } from '@/components/ui/read-error';
 import { TagGroup } from '@/components/ui/tag';
 import { textRole } from '@/components/ui/typography';
-import { EditorialSectionHeader, ledgerClasses } from '@/components/ui/workspace';
+import { EditorialSectionHeader } from '@/components/ui/workspace';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import type { ApiKey, ApiKeyCreated, ApiKeyScope } from '@citeladder/contracts/api-keys';
 import { apiKeysApi } from '@/lib/api/api-keys';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -29,11 +32,17 @@ const API_BASE_URL = `${API_HOST_ORIGIN}/v1`;
 /** What each scope lets a key do; `read` is always granted. */
 const SCOPES: readonly { value: ApiKeyScope; label: string }[] = [
   { value: 'read', label: 'Read reports and settings' },
-  { value: 'prompts:write', label: 'Edit prompts and topics, run prompt generation' },
+  {
+    value: 'prompts:write',
+    label: 'Edit prompts and topics, run prompt generation',
+  },
   { value: 'competitors:write', label: 'Edit tracked competitors' },
   { value: 'audits:run', label: 'Launch and cancel audits' },
   { value: 'schedules:write', label: 'Edit audit schedules' },
-  { value: 'actions:write', label: 'Update actions and record implementations' },
+  {
+    value: 'actions:write',
+    label: 'Update actions and record implementations',
+  },
 ];
 
 const STATE_LABELS: Record<ApiKey['state'], string> = {
@@ -56,42 +65,58 @@ function KeyRow({
       ? 'All projects'
       : apiKey.project_ids.map((id) => projectNames.get(id) ?? 'A deleted project').join(', ');
   return (
-    <li className="flex flex-wrap items-start justify-between gap-4 py-3">
-      <div className="grid min-w-0 gap-1">
-        <p className={textRole('itemTitle')}>
-          {apiKey.name}{' '}
-          <span className={textRole('caption')}>
-            · <code>{apiKey.prefix}…</code> · {STATE_LABELS[apiKey.state]}
-          </span>
-        </p>
+    <TableRow>
+      <TableCell>
+        <div className="grid min-w-0">
+          <ClampText lines={1} className={textRole('itemTitle')}>
+            {apiKey.name}
+          </ClampText>
+          <ClampText lines={1} className={textRole('caption')}>
+            <code>{apiKey.prefix}…</code> · {STATE_LABELS[apiKey.state]} ·{' '}
+            {apiKey.created_by_email ? `Created by ${apiKey.created_by_email} · ` : null}
+            Created <DisplayTime value={apiKey.created_at} dateOnly />
+            {apiKey.expires_at ? (
+              <>
+                {' '}
+                · Expires <DisplayTime value={apiKey.expires_at} dateOnly />
+              </>
+            ) : null}
+          </ClampText>
+        </div>
+      </TableCell>
+      <TableCell>
         <TagGroup labels={apiKey.scopes} />
-        <p className={textRole('body')}>{projects}</p>
-        <p className={textRole('caption')}>
-          {apiKey.created_by_email ? `Created by ${apiKey.created_by_email} · ` : null}
-          Created <DisplayTime value={apiKey.created_at} dateOnly /> ·{' '}
-          {apiKey.last_used_at ? (
-            <>
-              Last used <DisplayTime value={apiKey.last_used_at} />
-            </>
-          ) : (
-            'Not used yet'
-          )}
-          {apiKey.expires_at ? (
-            <>
-              {' '}
-              · Expires <DisplayTime value={apiKey.expires_at} dateOnly />
-            </>
-          ) : null}
-        </p>
-      </div>
-      {apiKey.state === 'active' ? (
-        <Button variant="secondary" onClick={onRevoke}>
-          Revoke
-        </Button>
-      ) : null}
-    </li>
+      </TableCell>
+      <TableCell>
+        <ClampText lines={1}>{projects}</ClampText>
+      </TableCell>
+      <TableCell>
+        {apiKey.last_used_at ? <DisplayTime value={apiKey.last_used_at} /> : 'Not used yet'}
+      </TableCell>
+      <TableCell numeric="end">
+        {apiKey.state === 'active' ? (
+          <Button variant="secondary" onClick={onRevoke}>
+            Revoke
+          </Button>
+        ) : null}
+      </TableCell>
+    </TableRow>
   );
 }
+
+const KEY_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'key', label: 'Key' },
+  { key: 'scopes', label: 'Access', width: 'name' },
+  { key: 'projects', label: 'Projects', width: 'status' },
+  { key: 'used', label: 'Last used', width: 'date' },
+  {
+    key: 'revoke',
+    label: 'Revoke',
+    width: 'action',
+    numeric: 'end',
+    hideLabel: true,
+  },
+];
 
 function CreateKeyDialog({
   open,
@@ -175,7 +200,7 @@ function CreateKeyDialog({
               />
             )}
           </Field>
-          <fieldset className="grid gap-1">
+          <Stack as="fieldset" gap="tight">
             <legend className={textRole('label')}>What the key can do</legend>
             {SCOPES.map((scope) => (
               <Checkbox
@@ -189,7 +214,7 @@ function CreateKeyDialog({
             <p className={textRole('caption')}>
               A key never does more than the role of the person who created it allows.
             </p>
-          </fieldset>
+          </Stack>
           <RadioGroup
             ariaLabel="Projects the key can reach"
             value={projectMode}
@@ -200,7 +225,7 @@ function CreateKeyDialog({
             ]}
           />
           {projectMode === 'chosen' ? (
-            <fieldset className="grid gap-1">
+            <Stack as="fieldset" gap="tight">
               <legend className={textRole('label')}>Projects</legend>
               {projects.map((project) => (
                 <Checkbox
@@ -210,7 +235,7 @@ function CreateKeyDialog({
                   onCheckedChange={(on) => setChosen(toggle(chosen, project.id, on === true))}
                 />
               ))}
-            </fieldset>
+            </Stack>
           ) : null}
           <Field label="Expires" hint="Optional. The key stops working at the end of this day.">
             {(props) => (
@@ -230,6 +255,14 @@ function CreateKeyDialog({
       )}
     </Dialog>
   );
+}
+
+/** Keys in use, and the create action. */
+function keysToolbar({ live, onCreate }: Readonly<{ live: number; onCreate: () => void }>) {
+  return {
+    status: live === 1 ? '1 key in use' : `${live} keys in use`,
+    actions: <Button onClick={onCreate}>Create key</Button>,
+  };
 }
 
 export function ApiKeys() {
@@ -271,29 +304,34 @@ export function ApiKeys() {
           title="API keys"
           description={`Read your reports and manage prompts, competitors, audits and actions from your own code through the REST API at ${API_BASE_URL}.`}
         />
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className={textRole('caption')}>
-            {live === 1 ? '1 key in use' : `${live} keys in use`}
-          </p>
-          <Button onClick={() => setCreating(true)}>Create key</Button>
-        </div>
       </Stack>
-      {keys.length === 0 ? <p className={textRole('body')}>No API keys yet.</p> : null}
-      {keys.length === 0 ? null : (
-        <ul className={ledgerClasses('open')}>
-          {keys.map((key) => (
-            <KeyRow
-              key={key.id}
-              apiKey={key}
-              projectNames={projectNames}
-              onRevoke={() => {
-                revoke.reset();
-                setPending(key);
-              }}
-            />
-          ))}
-        </ul>
-      )}
+      <DataTable
+        title="Keys"
+        toolbar={keysToolbar({ live, onCreate: () => setCreating(true) })}
+        columns={KEY_COLUMNS}
+        state={
+          keys.length === 0
+            ? {
+                kind: 'empty',
+                icon: KeyRound,
+                headingLevel: 3,
+                heading: 'No API keys yet.',
+              }
+            : undefined
+        }
+      >
+        {keys.map((key) => (
+          <KeyRow
+            key={key.id}
+            apiKey={key}
+            projectNames={projectNames}
+            onRevoke={() => {
+              revoke.reset();
+              setPending(key);
+            }}
+          />
+        ))}
+      </DataTable>
       <CreateKeyDialog
         open={creating}
         workspaceId={workspaceId}

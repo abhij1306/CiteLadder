@@ -70,10 +70,11 @@ beforeEach(() => {
 it('lists a key by name, prefix, scopes and projects without its ID', async () => {
   list.mockResolvedValue({ keys: [ciKey] });
   renderTab();
-  const row = (await screen.findByText('Acme')).closest('li');
-  expect(row).toHaveTextContent('CI export · cl_live_Ab12Cd34… · Active');
-  expect(row).toHaveTextContent('readaudits:run');
-  expect(row).toHaveTextContent('Created by ana@example.test · Created Oct 1, 2026 · Not used yet');
+  const row = (await screen.findByText('Acme')).closest('tr');
+  expect(row).toHaveTextContent(
+    'CI exportcl_live_Ab12Cd34… · Active · Created by ana@example.test · Created Oct 1, 2026',
+  );
+  expect(row).toHaveTextContent('readaudits:runAcmeNot used yet');
   expect(row?.textContent).not.toContain(KEY);
   expect(screen.getByText('1 key in use')).toBeInTheDocument();
 });
@@ -97,7 +98,9 @@ it('creates a key for chosen projects and shows its secret once', async () => {
     project_ids: [ACME],
     expires_at: null,
   });
-  const shown = await screen.findByRole('dialog', { name: 'Copy your API key' });
+  const shown = await screen.findByRole('dialog', {
+    name: 'Copy your API key',
+  });
   expect(shown).toHaveTextContent(SHOWN_ONCE);
   expect(shown).toHaveTextContent('You won’t see this key again.');
   await user.click(within(shown).getByRole('button', { name: 'Done' }));

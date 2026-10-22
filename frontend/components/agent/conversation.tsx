@@ -12,6 +12,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Disclosure } from '@/components/ui/disclosure';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Spinner } from '@/components/ui/spinner';
 import { TextLink } from '@/components/ui/text-link';
@@ -54,18 +55,18 @@ export function Conversation({
   const output = detail.output;
   const outputMessageId = output?.message_id ?? revisionReplyMessage(detail);
   return (
-    <div className="grid gap-4">
+    <Stack gap="workspace">
       <ContextUsed context={detail.context} />
-      <ol aria-label="Messages" className="grid gap-4">
+      <Stack as="ol" gap="workspace" aria-label="Messages">
         {detail.messages.map((message) => (
-          <li key={message.id} className="grid gap-4">
+          <Stack as="li" gap="workspace" key={message.id}>
             <MessageBubble message={message} skill={skillLabel(skills, message.skill_id)} />
             {outputView && message.id === outputMessageId ? (
               <div className={panelClasses({}, 'min-w-0')}>{outputView}</div>
             ) : null}
-          </li>
+          </Stack>
         ))}
-      </ol>
+      </Stack>
       {outputView && !outputMessageId ? (
         <div className={panelClasses({}, 'min-w-0')}>{outputView}</div>
       ) : null}
@@ -88,7 +89,7 @@ export function Conversation({
           onRefine={onRefine}
         />
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -158,12 +159,12 @@ function TurnActions({
 function PendingMessage({ text }: Readonly<{ text: string }>) {
   return (
     <div className="flex justify-end">
-      <div className={panelClasses({ tone: 'well' }, 'grid max-w-[85%] gap-1')}>
+      <Stack gap="tight" className={panelClasses({ tone: 'well' }, 'max-w-[85%]')}>
         <p className={textRole('body', 'whitespace-pre-wrap')}>{text}</p>
         <output aria-live="polite" className={textRole('caption')}>
           Sending…
         </output>
-      </div>
+      </Stack>
     </div>
   );
 }
@@ -189,18 +190,20 @@ function MessageBubble({
 }: Readonly<{ message: AgentMessage; skill: string | null }>) {
   if (message.event?.kind === 'outline_approved')
     return (
-      <article
+      <Stack
+        as="article"
+        gap="tight"
         aria-label="Outline approval"
-        className={panelClasses({ tone: 'well' }, 'grid gap-1')}
+        className={panelClasses({ tone: 'well' })}
       >
         <span className={textRole('label')}>Outline approved</span>
         <p className={textRole('caption')}>Draft requested from the approved revision.</p>
-      </article>
+      </Stack>
     );
   if (message.role === 'user')
     return (
       <div className="flex justify-end">
-        <div className={panelClasses({ tone: 'well' }, 'grid max-w-[85%] gap-2')}>
+        <Stack gap="compact" className={panelClasses({ tone: 'well' }, 'max-w-[85%]')}>
           <p className={textRole('body', 'whitespace-pre-wrap')}>{message.content}</p>
           {message.mentions.length > 0 ? (
             <ul aria-label="Mentioned Actions" className="flex flex-wrap gap-2">
@@ -213,14 +216,14 @@ function MessageBubble({
               ))}
             </ul>
           ) : null}
-        </div>
+        </Stack>
       </div>
     );
   const calls = message.steps.filter((step) => step.kind === 'model').length;
   const tools = message.steps.filter((step) => step.kind === 'tool').length;
   const readsLabel = tools === 1 ? 'read' : 'reads';
   return (
-    <article aria-label="Agent reply" className="grid gap-2">
+    <Stack as="article" gap="compact" aria-label="Agent reply">
       <div className="flex flex-wrap items-center gap-2">
         <span className={textRole('label')}>Agent</span>
         {skill ? <span className={textRole('caption')}>Skill: {skill}</span> : null}
@@ -247,7 +250,7 @@ function MessageBubble({
           </ul>
         </details>
       ) : null}
-    </article>
+    </Stack>
   );
 }
 function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context'] }>) {
@@ -269,7 +272,7 @@ function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context']
   if (!Object.keys(context).length) return null;
   return (
     <Disclosure title="Context used">
-      <div className="grid gap-2">
+      <Stack gap="compact">
         <p className={textRole('caption')}>
           {included.some((section) => labels[String(section)])
             ? included.flatMap((section) => labels[String(section)] ?? []).join(' · ')
@@ -288,7 +291,7 @@ function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context']
             Some older messages or context were left out to fit this turn.
           </p>
         ) : null}
-      </div>
+      </Stack>
     </Disclosure>
   );
 }
@@ -324,7 +327,7 @@ function FollowUps({
   });
   if (!presentation) return null;
   return (
-    <div className="grid gap-3">
+    <Stack gap="compact">
       <fieldset aria-label="Suggested follow-ups" className="flex flex-wrap gap-2">
         <legend className={textRole('caption')}>Add a suggestion to your message:</legend>
         {presentation.refinements.map((instruction) => (
@@ -352,7 +355,7 @@ function FollowUps({
           ))}
         </nav>
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -361,7 +364,10 @@ function stepLabel(step: AgentMessage['steps'][number]): string {
   if (step.kind === 'document')
     return toolCallLabel({ tool: 'save_document', status: 'completed' });
   if (step.kind === 'tool')
-    return runStepLabel({ tool: step.tool ?? 'read_data', status: step.status ?? 'unknown' });
+    return runStepLabel({
+      tool: step.tool ?? 'read_data',
+      status: step.status ?? 'unknown',
+    });
   return step.ordinal ? `Model call ${step.ordinal}` : 'Worked on the reply';
 }
 
@@ -395,7 +401,7 @@ function RunningState({
   // The current model call's tool calls run at the same time.
   const current = live?.tools.filter((tool) => tool.ordinal === live.step) ?? [];
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <span className={cn('flex items-center gap-3', textRole('caption'))}>
         <Spinner className="text-muted" />
         <output aria-live="polite" className="flex-1">
@@ -404,16 +410,16 @@ function RunningState({
         </output>
       </span>
       {current.length > 1 ? (
-        <ul aria-label="Current reads" className="grid gap-1 ps-8">
+        <Stack as="ul" gap="tight" aria-label="Current reads" className="ps-8">
           {current.map((tool) => (
             <li key={tool.call_id} className={textRole('caption')}>
               {toolCallLabel(tool)}
             </li>
           ))}
-        </ul>
+        </Stack>
       ) : null}
       {run.progress.length > 0 ? <RunActivity progress={run.progress} /> : null}
-    </div>
+    </Stack>
   );
 }
 /** What the newest model call is doing: its running reads, else deciding. */

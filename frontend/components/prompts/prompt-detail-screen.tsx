@@ -16,7 +16,8 @@ import { readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { MarketFilter } from '@/components/visibility/visibility-toolbar';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate } from '@/lib/format';
@@ -45,7 +46,9 @@ export function PromptDetailScreen() {
   const [market, setMarket] = useUrlState('market', optionalStringUrlCodec);
   const markets = useProjectMarkets(projectId, activeWorkspaceId);
   const query = useQuery({
-    queryKey: queryKeys.visibility.promptHistory(projectId, promptId, { market }),
+    queryKey: queryKeys.visibility.promptHistory(projectId, promptId, {
+      market,
+    }),
     queryFn: ({ signal }) =>
       visibilityApi.getPromptHistory(
         projectId,
@@ -100,6 +103,7 @@ export function PromptDetailScreen() {
     >
       <Stack gap="section" aria-busy={query.isFetching}>
         <HistoryCard history={history} />
+        <Implementations history={history} />
         <PromptAnswerStates latest={history.latest} />
       </Stack>
     </DetailScreen>
@@ -177,7 +181,6 @@ function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
             message="No run has measured this prompt in this market yet."
           />
         )}
-        <Implementations history={history} />
       </CardContent>
     </Card>
   );
@@ -197,28 +200,35 @@ function Implementations({ history }: Readonly<{ history: PromptHistory }>) {
   const timeZone = useDisplayTimeZone();
   if (!history.implementations.length) return null;
   return (
-    <Stack gap="compact" className="pt-4">
-      <h3 className={textRole('sectionTitle')}>Work marked implemented</h3>
-      <ul className={ledgerClasses('boxed')}>
-        {history.implementations.map((item) => (
-          <li
-            key={`${item.action_id}:${item.implemented_at}`}
-            className="flex flex-wrap items-center justify-between gap-2 py-3"
-          >
-            <div className="grid gap-0.5">
+    <DataTable
+      title="Work marked implemented"
+      columns={IMPLEMENTATION_COLUMNS}
+      footer={
+        <p className="type-caption">
+          A marker shows when work went live, not that it changed these rates: other changes and
+          answer-engine updates can overlap.
+        </p>
+      }
+    >
+      {history.implementations.map((item) => (
+        <TableRow key={`${item.action_id}:${item.implemented_at}`}>
+          <TableCell>
+            <ClampText lines={1} tooltip={item.title}>
               <TextLink href={`/agent/actions/${item.action_id}`}>{item.title}</TextLink>
-              <span className="type-caption">
-                Live from {formatDisplayDate(item.implemented_at, timeZone)}
-              </span>
-            </div>
+            </ClampText>
+          </TableCell>
+          <TableCell>{formatDisplayDate(item.implemented_at, timeZone)}</TableCell>
+          <TableCell>
             <ActionStatusBadge status={item.status} />
-          </li>
-        ))}
-      </ul>
-      <p className="type-caption">
-        A marker shows when work went live, not that it changed these rates: other changes and
-        answer-engine updates can overlap.
-      </p>
-    </Stack>
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
+
+const IMPLEMENTATION_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'action', label: 'Action' },
+  { key: 'live', label: 'Live from', width: 'date' },
+  { key: 'status', label: 'Status', width: 'status' },
+];

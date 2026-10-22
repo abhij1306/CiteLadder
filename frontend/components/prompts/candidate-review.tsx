@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { InfoHint } from '@/components/ui/info-hint';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Tag } from '@/components/ui/tag';
 import { textRole } from '@/components/ui/typography';
@@ -67,7 +68,12 @@ export function CandidateReview({
   const review = (action: (ids: string[]) => void) => action(selected);
 
   return (
-    <section aria-labelledby="candidate-review-heading" className="grid min-w-0 gap-3">
+    <Stack
+      as="section"
+      gap="compact"
+      aria-labelledby="candidate-review-heading"
+      className="min-w-0"
+    >
       <div className="bg-panel sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 py-2">
         <h3 id="candidate-review-heading" className={textRole('itemTitle')}>
           Review {plural(candidates.length, 'suggestion')}
@@ -116,7 +122,7 @@ export function CandidateReview({
                 onCheckedChange={(checked) => toggle(candidate.id, checked === true)}
                 disabled={isReviewing}
               />
-              <div className="grid min-w-0 gap-0.5 py-2">
+              <Stack gap="tight" className="min-w-0">
                 <span className="type-body text-foreground">{candidate.text}</span>
                 {topicName ? <span className="type-caption">{topicName}</span> : null}
                 {candidate.grounded ? (
@@ -143,12 +149,12 @@ export function CandidateReview({
                     ))}
                   </span>
                 ) : null}
-              </div>
+              </Stack>
             </li>
           );
         })}
       </ul>
-    </section>
+    </Stack>
   );
 }
 

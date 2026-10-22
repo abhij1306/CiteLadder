@@ -7,6 +7,7 @@ import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Pressable } from '@/components/ui/pressable';
 import { textRole } from '@/components/ui/typography';
@@ -27,7 +28,7 @@ export function WorkflowGallery({
   const group = chosenGroup ?? catalog.workflow_groups[0]?.id;
   if (catalog.workflows.length === 0) return null;
   return (
-    <section aria-labelledby="agent-workflows" className="grid gap-3">
+    <Stack as="section" gap="compact" aria-labelledby="agent-workflows">
       <h3 id="agent-workflows" className={textRole('label')}>
         Or start from a workflow
       </h3>
@@ -68,10 +69,12 @@ export function WorkflowGallery({
                     <Pressable
                       disabled={disabled}
                       onClick={() => onPick(workflow)}
-                      className={panelClasses({}, 'hover:bg-hover grid gap-1')}
+                      className={panelClasses({}, 'hover:bg-hover')}
                     >
-                      <span className={textRole('itemTitle')}>{workflow.label}</span>
-                      <span className={textRole('caption')}>{workflow.description}</span>
+                      <Stack as="span" gap="tight">
+                        <span className={textRole('itemTitle')}>{workflow.label}</span>
+                        <span className={textRole('caption')}>{workflow.description}</span>
+                      </Stack>
                     </Pressable>
                   </li>
                 ))}
@@ -79,7 +82,7 @@ export function WorkflowGallery({
           );
         })}
       </div>
-    </section>
+    </Stack>
   );
 }
 
@@ -114,43 +117,48 @@ export function WorkflowStart({
       // One inline message per missing input instead of the browser's bubble.
       noValidate
       onSubmit={submit}
-      className={panelClasses({}, 'grid gap-4')}
+      className={panelClasses()}
     >
-      <div className="grid gap-1">
-        <h3 id="workflow-title" className={textRole('itemTitle')}>
-          {workflow.label}
-        </h3>
-        <p className={textRole('caption')}>{workflow.description}</p>
-      </div>
-      {workflow.inputs.map((input, index) => (
-        <Field
-          key={input.key}
-          label={input.label}
-          required={input.required}
-          error={attempted && missing.includes(input.key) ? 'Add this to start.' : undefined}
-        >
-          {(field) => (
-            <Input
-              {...field}
-              ref={index === 0 ? first : undefined}
-              value={values[input.key] ?? ''}
-              disabled={disabled || pending}
-              onChange={(event) =>
-                setValues((current) => ({ ...current, [input.key]: event.target.value }))
-              }
-            />
-          )}
-        </Field>
-      ))}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button type="button" variant="ghost" onClick={onBack}>
-          <ArrowLeft aria-hidden className="size-4" />
-          All workflows
-        </Button>
-        <Button type="submit" disabled={disabled || pending}>
-          {pending ? 'Starting…' : 'Start'}
-        </Button>
-      </div>
+      <Stack gap="workspace">
+        <Stack gap="tight">
+          <h3 id="workflow-title" className={textRole('itemTitle')}>
+            {workflow.label}
+          </h3>
+          <p className={textRole('caption')}>{workflow.description}</p>
+        </Stack>
+        {workflow.inputs.map((input, index) => (
+          <Field
+            key={input.key}
+            label={input.label}
+            required={input.required}
+            error={attempted && missing.includes(input.key) ? 'Add this to start.' : undefined}
+          >
+            {(field) => (
+              <Input
+                {...field}
+                ref={index === 0 ? first : undefined}
+                value={values[input.key] ?? ''}
+                disabled={disabled || pending}
+                onChange={(event) =>
+                  setValues((current) => ({
+                    ...current,
+                    [input.key]: event.target.value,
+                  }))
+                }
+              />
+            )}
+          </Field>
+        ))}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button type="button" variant="ghost" onClick={onBack}>
+            <ArrowLeft aria-hidden className="size-4" />
+            All workflows
+          </Button>
+          <Button type="submit" disabled={disabled || pending}>
+            {pending ? 'Starting…' : 'Start'}
+          </Button>
+        </div>
+      </Stack>
     </form>
   );
 }

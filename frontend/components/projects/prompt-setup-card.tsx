@@ -21,10 +21,10 @@ export function PromptSetupCard() {
         </p>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        <Button asChild variant="primary" size="md">
+        <Button asChild variant="primary">
           <ProjectLink href={PROMPTS_GENERATE_HREF}>Generate prompts</ProjectLink>
         </Button>
-        <Button asChild variant="secondary" size="md">
+        <Button asChild variant="secondary">
           <ProjectLink href={PROMPTS_HREF}>Add or import prompts</ProjectLink>
         </Button>
       </CardContent>

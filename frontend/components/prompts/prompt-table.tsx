@@ -14,19 +14,14 @@ import {
   DropdownSeparator,
   DropdownTrigger,
 } from '@/components/ui/dropdown';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { TableCell, TableRow } from '@/components/ui/table';
+import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Switch } from '@/components/ui/switch';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { Prompt, PromptStatus, Topic } from '@/lib/api/types';
+import { ICONS } from '@/lib/icons';
 import { buyerStageLabels, intentLabels } from '@/lib/prompts/forms';
 import { promptHistoryHref } from '@/lib/prompts/history';
 import { formatPosition, formatPositionExact, formatRate } from '@/lib/visibility/dashboard';
@@ -89,120 +84,127 @@ export function PromptTable({
   );
 
   return (
-    <>
-      {/* Fixed layout: paging or filtering never resizes the columns. */}
-      <Table minWidth="xl" fixed>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Prompt</TableHead>
-            <TableHead className="w-40">Topic</TableHead>
-            <TableHead className="w-56">Tags</TableHead>
-            {measured ? (
-              <TableHead numeric className="w-24">
-                Visibility
-              </TableHead>
-            ) : null}
-            {measured ? (
-              <TableHead numeric className="w-36">
-                Owned citations
-              </TableHead>
-            ) : null}
-            {/* A mean mention ordinal, not a competitive rank — the rankings
-                table owns that word. Named for what it measures. */}
-            {measured ? (
-              <TableHead numeric className="w-44">
-                Avg. mention position
-              </TableHead>
-            ) : null}
-            {measured ? (
-              <TableHead numeric className="w-24">
-                Change
-              </TableHead>
-            ) : null}
-            <TableHead className="w-40">Enabled</TableHead>
-            <TableHead className="w-16 text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pagedPrompts.map((prompt) => (
-            <TableRow key={prompt.id}>
-              <TableCell>
-                {/* The question is held to two lines, so the tooltip carries the
+    <DataTable
+      label="Prompts"
+      minWidth="xl"
+      columns={promptColumns(measured)}
+      pageSize={PAGE_SIZE}
+      rowCount={pagedPrompts.length}
+      state={
+        prompts.length === 0
+          ? {
+              kind: 'empty',
+              icon: ICONS.prompts,
+              headingLevel: 3,
+              heading: 'No prompts match your search or filters.',
+            }
+          : undefined
+      }
+      pager={{
+        range: { from, to, total: prompts.length, noun: 'prompts' },
+        ...pageNumberControls(page, pageCount, setPage),
+      }}
+    >
+      {pagedPrompts.map((prompt) => (
+        <TableRow key={prompt.id}>
+          <TableCell>
+            {/* The question is held to two lines, so the tooltip carries the
                     whole question. */}
-                <Tooltip content={prompt.text}>
-                  {/* The question opens its history: the prompt is the object. */}
-                  <ProjectLink
-                    href={promptHistoryHref(prompt.id)}
-                    className="text-foreground line-clamp-2 break-words hover:underline"
-                  >
-                    {prompt.text}
-                  </ProjectLink>
-                </Tooltip>
-              </TableCell>
-              <TableCell>
-                <TopicBadge name={prompt.topic_id ? topicNames.get(prompt.topic_id) : undefined} />
-              </TableCell>
-              <TableCell>
-                <PromptTags prompt={prompt} />
-              </TableCell>
-              {measured ? <MeasuredCells measurement={measurements?.get(prompt.id)} /> : null}
-              <TableCell>
-                <span className="flex items-center gap-2">
-                  <Switch
-                    checked={prompt.enabled}
-                    label={`${prompt.enabled ? 'Disable' : 'Enable'} prompt`}
-                    disabled={busyId === prompt.id}
-                    onCheckedChange={() => onToggleEnabled(prompt)}
-                  />
-                </span>
-              </TableCell>
-              <TableCell className="text-right">
-                <Dropdown>
-                  <DropdownTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="Prompt actions">
-                      <MoreHorizontal className="size-4" aria-hidden />
-                    </Button>
-                  </DropdownTrigger>
-                  <DropdownContent align="end">
-                    {onSetStatus && prompt.status === 'archived' ? (
-                      <DropdownItem onSelect={() => onSetStatus(prompt, 'active')}>
-                        <Check className="size-4" aria-hidden />
-                        Restore
-                      </DropdownItem>
-                    ) : null}
-                    <DropdownItem onSelect={() => onEdit(prompt)}>
-                      <Pencil className="size-4" aria-hidden />
-                      Edit
-                    </DropdownItem>
-                    {onSetStatus && prompt.status !== 'archived' ? (
-                      <DropdownItem onSelect={() => onSetStatus(prompt, 'archived')}>
-                        <Archive className="size-4" aria-hidden />
-                        Archive
-                      </DropdownItem>
-                    ) : null}
-                    <DropdownSeparator />
-                    <DropdownItem
-                      onSelect={() => onDelete(prompt)}
-                      className="text-danger-text data-[highlighted]:bg-danger-bg"
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                      Delete
-                    </DropdownItem>
-                  </DropdownContent>
-                </Dropdown>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-      <Pager
-        frame="table"
-        range={{ from, to, total: prompts.length, noun: 'prompts' }}
-        {...pageNumberControls(page, pageCount, setPage)}
-      />
-    </>
+            <Tooltip content={prompt.text}>
+              {/* The question opens its history: the prompt is the object. */}
+              <ProjectLink
+                href={promptHistoryHref(prompt.id)}
+                className="text-foreground line-clamp-2 break-words hover:underline"
+              >
+                {prompt.text}
+              </ProjectLink>
+            </Tooltip>
+          </TableCell>
+          <TableCell>
+            <TopicBadge name={prompt.topic_id ? topicNames.get(prompt.topic_id) : undefined} />
+          </TableCell>
+          <TableCell>
+            <PromptTags prompt={prompt} />
+          </TableCell>
+          {measured ? <MeasuredCells measurement={measurements?.get(prompt.id)} /> : null}
+          <TableCell>
+            <span className="flex items-center gap-2">
+              <Switch
+                checked={prompt.enabled}
+                label={`${prompt.enabled ? 'Disable' : 'Enable'} prompt`}
+                disabled={busyId === prompt.id}
+                onCheckedChange={() => onToggleEnabled(prompt)}
+              />
+            </span>
+          </TableCell>
+          <TableCell className="text-right">
+            <Dropdown>
+              <DropdownTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Prompt actions">
+                  <MoreHorizontal className="size-4" aria-hidden />
+                </Button>
+              </DropdownTrigger>
+              <DropdownContent align="end">
+                {onSetStatus && prompt.status === 'archived' ? (
+                  <DropdownItem onSelect={() => onSetStatus(prompt, 'active')}>
+                    <Check className="size-4" aria-hidden />
+                    Restore
+                  </DropdownItem>
+                ) : null}
+                <DropdownItem onSelect={() => onEdit(prompt)}>
+                  <Pencil className="size-4" aria-hidden />
+                  Edit
+                </DropdownItem>
+                {onSetStatus && prompt.status !== 'archived' ? (
+                  <DropdownItem onSelect={() => onSetStatus(prompt, 'archived')}>
+                    <Archive className="size-4" aria-hidden />
+                    Archive
+                  </DropdownItem>
+                ) : null}
+                <DropdownSeparator />
+                <DropdownItem
+                  onSelect={() => onDelete(prompt)}
+                  className="text-danger-text data-[highlighted]:bg-danger-bg"
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                  Delete
+                </DropdownItem>
+              </DropdownContent>
+            </Dropdown>
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
+
+/**
+ * The measured columns are drawn only once a run exists. "Avg. mention
+ * position" is a mean mention ordinal, not a competitive rank — the rankings
+ * table owns that word — so it is named for what it measures.
+ */
+function promptColumns(measured: boolean): DataTableColumn[] {
+  return [
+    { key: 'prompt', label: 'Prompt' },
+    { key: 'topic', label: 'Topic', width: 'status' },
+    { key: 'tags', label: 'Tags', width: 'name' },
+    ...(measured ? MEASURED_COLUMNS : []),
+    { key: 'enabled', label: 'Enabled', width: 'name' },
+    { key: 'actions', label: 'Actions', width: 'action', numeric: 'end' },
+  ];
+}
+
+const MEASURED_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'visibility', label: 'Visibility', width: 'figure', numeric: true },
+  { key: 'owned', label: 'Owned citations', width: 'figure', numeric: true },
+  {
+    key: 'position',
+    label: 'Avg. mention position',
+    width: 'figure',
+    numeric: true,
+  },
+  { key: 'change', label: 'Change', width: 'figure', numeric: true },
+];
 
 /** The row's topic; a prompt without one (or with a since-deleted one) has none. */
 function TopicBadge({ name }: Readonly<{ name?: string }>) {

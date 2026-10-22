@@ -8,6 +8,7 @@ import { VerificationObservations } from '@/components/opportunities/verificatio
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
+import { Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
@@ -31,7 +32,10 @@ import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project
  */
 const LEG_OWNER: Record<MeasurementLeg['leg'], { href: string; label: string } | null> = {
   next_visibility_run: { href: '/runs', label: 'Open Runs' },
-  next_search_console_window: { href: '/performance', label: 'Open Performance' },
+  next_search_console_window: {
+    href: '/performance',
+    label: 'Open Performance',
+  },
   // A crawl starts from here: Run crawl now.
   next_crawl: null,
 };
@@ -63,7 +67,7 @@ export function DeclarationStatus({
     (check) => check.leg === 'next_crawl' && check.state !== 'met',
   );
   return (
-    <div className="grid gap-3">
+    <Stack gap="compact">
       <p className={textRole('body')}>
         Went live on <DisplayTime value={declaration.declared_implemented_at} dateOnly />
         {revisionNote(declaration.output_revision_id, shownRevision)}
@@ -81,15 +85,15 @@ export function DeclarationStatus({
           <p className={textRole('body')} aria-live="polite">
             {IMPLEMENTATION_STATE_LABEL[declaration.state]}
           </p>
-          <ul className="grid gap-2" aria-label="Checks">
+          <Stack as="ul" gap="compact" aria-label="Checks">
             {declaration.checks.map((check) => (
               <CheckRow key={check.index} check={check} />
             ))}
-          </ul>
+          </Stack>
         </>
       )}
       {declaration.legs.length > 0 ? (
-        <ul className="grid gap-2" aria-label="Next readings">
+        <Stack as="ul" gap="compact" aria-label="Next readings">
           {declaration.legs.map((leg) => (
             <LegRow
               key={leg.leg}
@@ -98,7 +102,7 @@ export function DeclarationStatus({
               offerCrawl={leg.leg === 'next_crawl' && crawlOpen}
             />
           ))}
-        </ul>
+        </Stack>
       ) : null}
       {declaration.checks.length > 0 ? (
         <p className={textRole('caption')}>
@@ -108,17 +112,21 @@ export function DeclarationStatus({
         </p>
       ) : null}
       <VerificationObservations implementation={declaration} showAuditLink={hasVisibility} />
-    </div>
+    </Stack>
   );
 }
 
-const CHECK_TONE = { met: 'success', unmet: 'danger', unavailable: 'warning' } as const;
+const CHECK_TONE = {
+  met: 'success',
+  unmet: 'danger',
+  unavailable: 'warning',
+} as const;
 
 function CheckRow({ check }: Readonly<{ check: ActionDeclaration['checks'][number] }>) {
   const tone = check.state === 'waiting' ? null : CHECK_TONE[check.state];
   const reason = checkReasonLabel(check.reason);
   return (
-    <li className="grid gap-0.5">
+    <Stack as="li" gap="tight">
       <span className="flex flex-wrap items-center gap-2">
         <span className={textRole('itemTitle')}>{checkKindLabel(check.kind)}</span>
         {tone ? (
@@ -141,7 +149,7 @@ function CheckRow({ check }: Readonly<{ check: ActionDeclaration['checks'][numbe
           ) : null}
         </span>
       ) : null}
-    </li>
+    </Stack>
   );
 }
 
@@ -175,11 +183,15 @@ function LegRow({
   leg,
   workspaceId,
   offerCrawl,
-}: Readonly<{ leg: MeasurementLeg; workspaceId: string; offerCrawl: boolean }>) {
+}: Readonly<{
+  leg: MeasurementLeg;
+  workspaceId: string;
+  offerCrawl: boolean;
+}>) {
   const owner = LEG_OWNER[leg.leg];
   const waiting = leg.state !== 'observed';
   return (
-    <li className="grid gap-1">
+    <Stack as="li" gap="tight">
       <span className={textRole('itemTitle')}>{measurementLegLabel(leg.leg)}</span>
       <span className={textRole('caption')}>
         <LegWait leg={leg} />
@@ -193,7 +205,7 @@ function LegRow({
         ) : null}
       </span>
       {offerCrawl ? <RunCrawl workspaceId={workspaceId} /> : null}
-    </li>
+    </Stack>
   );
 }
 
@@ -204,7 +216,10 @@ function RunCrawl({ workspaceId }: Readonly<{ workspaceId: string }>) {
   const queryClient = useQueryClient();
   const start = useMutation({
     ...siteHealthMutations.createCrawl(workspaceId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.siteHealth.all }),
+    onSuccess: () =>
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.siteHealth.all,
+      }),
   });
   if (!mayWrite || !activeProjectId) return null;
   if (start.isSuccess)
@@ -217,7 +232,7 @@ function RunCrawl({ workspaceId }: Readonly<{ workspaceId: string }>) {
       </output>
     );
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <div>
         <Button
           variant="secondary"
@@ -230,11 +245,13 @@ function RunCrawl({ workspaceId }: Readonly<{ workspaceId: string }>) {
       </div>
       {start.isError ? (
         <MutationNotice
-          notice={mutationNoticeForError(start.error, { action: 'start a crawl' })}
+          notice={mutationNoticeForError(start.error, {
+            action: 'start a crawl',
+          })}
           onRetry={() => start.mutate({ project_id: activeProjectId })}
         />
       ) : null}
-    </div>
+    </Stack>
   );
 }
 

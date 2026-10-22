@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Stack } from '@/components/ui/layout';
 import { ReadError } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
@@ -39,7 +40,7 @@ export function MissingPrompts({
           rows.length > SHOWN ? (
             <Button asChild variant="ghost">
               <ProjectLink href="/prompts">
-                All prompts <ArrowRight className="ms-1 size-3.5" aria-hidden />
+                All prompts <ArrowRight className="size-3.5" aria-hidden />
               </ProjectLink>
             </Button>
           ) : null
@@ -50,7 +51,7 @@ export function MissingPrompts({
           Prompts in the latest run where an answer named a competitor but not you.
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <Stack as={CardContent} gap="compact">
         {query.isError ? (
           <ReadError
             error={query.error}
@@ -71,7 +72,7 @@ export function MissingPrompts({
             ))}
           </ul>
         ) : null}
-      </CardContent>
+      </Stack>
     </Card>
   );
 }
@@ -79,12 +80,12 @@ export function MissingPrompts({
 function MissingRow({ row }: Readonly<{ row: MissingPrompt }>) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-3">
-      <div className="grid min-w-0 gap-0.5">
+      <Stack gap="tight" className="min-w-0">
         <TextLink href={promptHistoryHref(row.promptId)}>{row.text}</TextLink>
         <span className="type-caption">
           {row.engines.map(engineLabel).join(', ')} named {row.competitors.join(', ')}
         </span>
-      </div>
+      </Stack>
       {row.actionId ? (
         <Button asChild variant="secondary">
           <ProjectLink href={`/agent/actions/${row.actionId}`}>Open the Action</ProjectLink>

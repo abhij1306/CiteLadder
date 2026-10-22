@@ -3,6 +3,7 @@
 import { memo, useDeferredValue } from 'react';
 
 import { Disclosure } from '@/components/ui/disclosure';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { textRole } from '@/components/ui/typography';
 import type { LiveTurn } from '@/lib/agent/live-turns';
@@ -18,7 +19,7 @@ export function LiveReply({ live: latest }: Readonly<{ live: LiveTurn | undefine
   const { thinking, reply, document } = live;
   if (!thinking && !reply && !document) return null;
   return (
-    <article aria-label="Agent reply in progress" aria-busy="true" className="grid gap-2">
+    <Stack as="article" gap="compact" aria-label="Agent reply in progress" aria-busy="true">
       <span className={textRole('label')}>Agent</span>
       {thinking?.text ? (
         <Disclosure title="Thinking">
@@ -27,7 +28,7 @@ export function LiveReply({ live: latest }: Readonly<{ live: LiveTurn | undefine
       ) : null}
       {reply?.text ? <ContentMarkdown markdown={reply.text} density="compact" /> : null}
       {document?.body ? <LiveDocument title={document.title} body={document.body} /> : null}
-    </article>
+    </Stack>
   );
 }
 
@@ -37,13 +38,15 @@ const LiveDocument = memo(function LiveDocument({
   body,
 }: Readonly<{ title: string | null; body: string }>) {
   return (
-    <section
+    <Stack
+      as="section"
+      gap="compact"
       aria-label={title ? `Writing ${title}` : 'Writing the document'}
-      className={panelClasses({}, 'grid min-w-0 gap-2')}
+      className={panelClasses({}, 'min-w-0')}
     >
       <span className={textRole('caption')}>Writing…</span>
       {title ? <h2 className={textRole('sectionTitle')}>{title}</h2> : null}
       <ContentMarkdown markdown={body} />
-    </section>
+    </Stack>
   );
 });
