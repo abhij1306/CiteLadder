@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { DeclarationStatus } from '@/components/agent/declaration-status';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { DateField } from '@/components/ui/date-field';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
@@ -93,7 +94,7 @@ export function MarkImplementedButton({
           setOpen(true);
         }}
       >
-        <CheckCircle2 className="size-3.5" aria-hidden />
+        <Icon icon={CheckCircle2} />
         Mark implemented
       </Button>
       <Dialog

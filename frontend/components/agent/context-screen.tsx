@@ -10,7 +10,7 @@ import { ProjectRequiredState } from '@/components/layout/project-required-state
 import { CompetitorSuggestions } from '@/components/visibility/prompt-insights';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
@@ -159,7 +159,7 @@ function InstructionsEditor({
           onRetry={() => save.variables && save.mutate(save.variables)}
         />
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <Inline className="flex-wrap justify-between">
         <span className={textRole('caption')}>
           {savedAt ? (
             <>
@@ -174,7 +174,7 @@ function InstructionsEditor({
             Save instructions
           </Button>
         ) : null}
-      </div>
+      </Inline>
     </Stack>
   );
 }

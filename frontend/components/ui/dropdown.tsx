@@ -34,14 +34,32 @@ export function DropdownSeparator({
 }
 export const DropdownRadioGroup = DropdownPrimitive.RadioGroup;
 
+/**
+ * Menu width is a role, never a number the caller picks. Unset, a menu hugs
+ * its items (at least 10rem). `panel` (16rem) is a menu whose items carry a
+ * caption or a long label — a filter menu, the account and project menus, a
+ * skill catalog — so every such menu opens at one width. `trigger` matches
+ * the control that opened it, for a menu that reads as that control's list.
+ */
+const DROPDOWN_WIDTH = {
+  panel: 'w-64',
+  trigger: 'w-[var(--radix-dropdown-menu-trigger-width)] min-w-0',
+} as const;
+
+export type DropdownWidth = keyof typeof DROPDOWN_WIDTH;
+
 export function DropdownContent({
-  className,
   align = 'start',
   sideOffset = 4,
   collisionPadding = 8,
+  width,
   children,
   ...props
-}: Readonly<ComponentPropsWithoutRef<typeof DropdownPrimitive.Content>>) {
+}: Readonly<
+  Omit<ComponentPropsWithoutRef<typeof DropdownPrimitive.Content>, 'className'> & {
+    width?: DropdownWidth;
+  }
+>) {
   return (
     <DropdownPrimitive.Portal>
       <DropdownPrimitive.Content
@@ -53,7 +71,7 @@ export function DropdownContent({
           // A long catalog must scroll inside the panel rather than be clipped
           // by it: Radix reports the space it actually has, so cap there.
           'max-h-[min(24rem,var(--radix-dropdown-menu-content-available-height))] min-w-40 overflow-auto',
-          className,
+          width ? DROPDOWN_WIDTH[width] : null,
         )}
         {...props}
       >

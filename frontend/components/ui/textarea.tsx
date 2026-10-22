@@ -8,22 +8,38 @@ const textareaClasses =
 /** Composer emphasis uses a stronger boundary, with no resting elevation. */
 const raisedClasses = 'border border-border-strong enabled:hover:border-border-strong';
 
+/**
+ * Inside a `ComposerFrame` the frame is the box: the field keeps its focus
+ * edge but drops its fill, resize handle and resting height, and takes the
+ * frame's tighter inset so its text lines up with the chips above it.
+ */
+const composerClasses =
+  'min-h-0 resize-none bg-transparent px-2 py-1 shadow-none hover:shadow-none';
+
 export function Textarea({
   className,
   raised = false,
+  placement = 'field',
   ref,
   ...props
 }: Readonly<
   ComponentPropsWithoutRef<'textarea'> & {
     /** The composer treatment — for a field that is the point of its screen. */
     raised?: boolean;
+    /** `composer`: the message field inside a `ComposerFrame`. */
+    placement?: 'field' | 'composer';
     ref?: Ref<HTMLTextAreaElement>;
   }
 >) {
   return (
     <textarea
       ref={ref}
-      className={cn(textareaClasses, raised && raisedClasses, className)}
+      className={cn(
+        textareaClasses,
+        raised && raisedClasses,
+        placement === 'composer' && composerClasses,
+        className,
+      )}
       {...props}
     />
   );

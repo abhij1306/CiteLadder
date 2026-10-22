@@ -21,6 +21,16 @@ const inputSizes = {
   lg: 'h-[var(--control-height-lg)] px-3 leading-[calc(var(--control-height-lg)_-_2px)]',
 } as const;
 
+/**
+ * A field fills its column (`fill`) unless its role is narrower: `quantity`
+ * is a small count beside the control that acts on it (4rem, centred,
+ * tabular figures), so every quantity picker reads at one width.
+ */
+const inputWidths = {
+  fill: '',
+  quantity: 'w-16 text-center tabular-nums',
+} as const;
+
 const adornedLineHeights = {
   md: 'leading-[calc(var(--control-height-md)_-_2px)]',
   lg: 'leading-[calc(var(--control-height-lg)_-_2px)]',
@@ -33,12 +43,15 @@ export function Input({
   endContent,
   endContentFlush = false,
   size = 'md',
+  width = 'fill',
   raised = false,
   ref,
   ...props
 }: Readonly<
-  Omit<ComponentPropsWithoutRef<'input'>, 'size'> & {
+  Omit<ComponentPropsWithoutRef<'input'>, 'size' | 'width'> & {
     size?: keyof typeof inputSizes;
+    /** The field's width role; see `inputWidths`. */
+    width?: keyof typeof inputWidths;
     /** The composer treatment — for a field that is the point of its screen. */
     raised?: boolean;
     /** Leading content rendered inside the shared input frame. */
@@ -56,7 +69,13 @@ export function Input({
     return (
       <input
         ref={ref}
-        className={cn(inputClasses, inputSizes[size], raised && raisedClasses, className)}
+        className={cn(
+          inputClasses,
+          inputSizes[size],
+          inputWidths[width],
+          raised && raisedClasses,
+          className,
+        )}
         {...props}
       />
     );

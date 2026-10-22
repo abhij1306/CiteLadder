@@ -5,6 +5,7 @@ import { Sparkles } from 'lucide-react';
 
 import type { NewChatInput } from '@/components/agent/use-chat-turns';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { panelClasses } from '@/components/ui/panel';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { actionsQueries } from '@/lib/api/actions';
@@ -56,7 +57,7 @@ export function BriefingCard({
               })
             }
           >
-            <Sparkles className="size-4" aria-hidden />
+            <Icon icon={Sparkles} />
             Brief me
           </Button>
         }

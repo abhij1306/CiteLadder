@@ -12,18 +12,19 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Disclosure } from '@/components/ui/disclosure';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Spinner } from '@/components/ui/spinner';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
+import { treeBranchClasses } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { runErrorCopy, runStepLabel, toolCallLabel } from '@/lib/agent/vocabulary';
 import { runOutcome } from '@/lib/agent/run-state';
 import { useLiveTurn, type LiveTurn } from '@/lib/agent/live-turns';
 import type { AgentChatDetail, AgentMessage, AgentRun } from '@/lib/api/agent';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
-import { cn } from '@/lib/utils';
 
 /**
  * Messages and the saved output in conversational order, followed by current
@@ -143,16 +144,16 @@ function TurnActions({
   const ended = ['failed', 'cancelled', 'stopped_at_limit'].includes(kind);
   if (!ended && kind !== 'succeeded') return null;
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       <Button variant="secondary" onClick={() => onRetry(request)}>
-        <RotateCcw aria-hidden className="size-4" />
+        <Icon icon={RotateCcw} />
         {ended ? 'Try again' : 'Regenerate'}
       </Button>
       <Button variant="ghost" onClick={() => onEdit(request)}>
-        <Pencil aria-hidden className="size-4" />
+        <Icon icon={Pencil} />
         {hasDraft ? 'Replace draft with last request' : 'Edit last request'}
       </Button>
-    </div>
+    </Inline>
   );
 }
 
@@ -206,7 +207,7 @@ function MessageBubble({
         <Stack gap="compact" className={panelClasses({ tone: 'well' }, 'max-w-[85%]')}>
           <p className={textRole('body', 'whitespace-pre-wrap')}>{message.content}</p>
           {message.mentions.length > 0 ? (
-            <ul aria-label="Mentioned Actions" className="flex flex-wrap gap-2">
+            <Inline as="ul" aria-label="Mentioned Actions" className="flex-wrap">
               {message.mentions.map((mention) => (
                 <li key={mention.id}>
                   <TextLink href={`/agent/actions/${mention.id}`} text="caption">
@@ -214,7 +215,7 @@ function MessageBubble({
                   </TextLink>
                 </li>
               ))}
-            </ul>
+            </Inline>
           ) : null}
         </Stack>
       </div>
@@ -224,31 +225,31 @@ function MessageBubble({
   const readsLabel = tools === 1 ? 'read' : 'reads';
   return (
     <Stack as="article" gap="compact" aria-label="Agent reply">
-      <div className="flex flex-wrap items-center gap-2">
+      <Inline className="flex-wrap">
         <span className={textRole('label')}>Agent</span>
         {skill ? <span className={textRole('caption')}>Skill: {skill}</span> : null}
-      </div>
+      </Inline>
       <ContentMarkdown markdown={message.content} density="compact" />
-      <div className="flex flex-wrap items-center gap-2">
+      <Inline className="flex-wrap">
         <EvidenceChips refs={message.evidence_refs} />
         <CopyButton value={message.content} variant="ghost">
           Copy reply
         </CopyButton>
-      </div>
+      </Inline>
       {message.steps.length > 0 ? (
-        <details className="group">
-          <summary className={textRole('caption', 'cursor-pointer')}>
-            Run complete · {calls} model {calls === 1 ? 'call' : 'calls'}
-            {tools > 0 ? ` · ${tools} data ${readsLabel}` : ''}
-          </summary>
-          <ul className="grid gap-1 ps-4 pt-2">
+        <Disclosure
+          title={`Run complete · ${calls} model ${calls === 1 ? 'call' : 'calls'}${
+            tools > 0 ? ` · ${tools} data ${readsLabel}` : ''
+          }`}
+        >
+          <Stack as="ul" gap="tight" className={treeBranchClasses()}>
             {message.steps.map((step, index) => (
               <li key={`${step.kind}-${index}`} className={textRole('caption')}>
                 {stepLabel(step)}
               </li>
             ))}
-          </ul>
-        </details>
+          </Stack>
+        </Disclosure>
       ) : null}
     </Stack>
   );
@@ -328,16 +329,16 @@ function FollowUps({
   if (!presentation) return null;
   return (
     <Stack gap="compact">
-      <fieldset aria-label="Suggested follow-ups" className="flex flex-wrap gap-2">
+      <Inline as="fieldset" aria-label="Suggested follow-ups" className="flex-wrap">
         <legend className={textRole('caption')}>Add a suggestion to your message:</legend>
         {presentation.refinements.map((instruction) => (
           <Button key={instruction} variant="secondary" onClick={() => onRefine(instruction)}>
             {instruction}
           </Button>
         ))}
-      </fieldset>
+      </Inline>
       {next.length > 0 ? (
-        <nav aria-label="Next steps" className="flex flex-wrap items-center gap-2">
+        <Inline as="nav" aria-label="Next steps" className="flex-wrap">
           <span className={textRole('caption')}>Next, in a new chat:</span>
           {next.map(({ workflow, prompt }) => (
             <Button key={workflow.id} asChild variant="ghost">
@@ -353,7 +354,7 @@ function FollowUps({
               </ProjectLink>
             </Button>
           ))}
-        </nav>
+        </Inline>
       ) : null}
     </Stack>
   );
@@ -402,15 +403,15 @@ function RunningState({
   const current = live?.tools.filter((tool) => tool.ordinal === live.step) ?? [];
   return (
     <Stack gap="compact">
-      <span className={cn('flex items-center gap-3', textRole('caption'))}>
+      <Inline as="span" gap="compact" className={textRole('caption')}>
         <Spinner className="text-muted" />
         <output aria-live="polite" className="flex-1">
           {label}
           <Elapsed since={live?.startedAt ?? Date.parse(run.created_at)} />
         </output>
-      </span>
+      </Inline>
       {current.length > 1 ? (
-        <Stack as="ul" gap="tight" aria-label="Current reads" className="ps-8">
+        <Stack as="ul" gap="tight" aria-label="Current reads" className={treeBranchClasses()}>
           {current.map((tool) => (
             <li key={tool.call_id} className={textRole('caption')}>
               {toolCallLabel(tool)}
@@ -452,9 +453,8 @@ function activeStepLabel(progress: AgentRun['progress'], attemptCount: number | 
 }
 function RunActivity({ progress }: Readonly<{ progress: AgentRun['progress'] }>) {
   return (
-    <details>
-      <summary className={textRole('caption', 'cursor-pointer')}>View activity</summary>
-      <ol aria-label="Agent progress" className="grid gap-1 ps-4 pt-2">
+    <Disclosure title="View activity">
+      <Stack as="ol" gap="tight" aria-label="Agent progress" className={treeBranchClasses()}>
         {progress.map((step) => (
           <li
             key={`${step.run_attempt}:${step.ordinal}:${step.call_id ?? 'model'}`}
@@ -463,7 +463,7 @@ function RunActivity({ progress }: Readonly<{ progress: AgentRun['progress'] }>)
             {runStepLabel(step)}
           </li>
         ))}
-      </ol>
-    </details>
+      </Stack>
+    </Disclosure>
   );
 }

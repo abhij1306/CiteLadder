@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from '@/components/ui/dropdown';
+import { Icon } from '@/components/ui/icon';
 import { useProjectCreation } from '@/components/layout/use-project-creation';
 import type { Project } from '@/lib/api/types';
 import { newProjectDestination } from '@/lib/navigation/project-destination';
@@ -23,13 +24,13 @@ export function ProjectControls({
     <Dropdown>
       <DropdownTrigger asChild>
         <Button variant="secondary">
-          Manage project <ChevronDown className="size-3.5 opacity-80" aria-hidden />
+          Manage project <Icon icon={ChevronDown} className="opacity-80" />
         </Button>
       </DropdownTrigger>
-      <DropdownContent align="end" className="w-56">
+      <DropdownContent align="end" width="panel">
         {onEditProject ? (
           <DropdownItem onSelect={() => onEditProject(activeProject)}>
-            <Pencil className="size-4" aria-hidden /> Edit active project
+            <Icon icon={Pencil} /> Edit active project
           </DropdownItem>
         ) : null}
         {mayCreate ? (
@@ -37,7 +38,7 @@ export function ProjectControls({
             disabled={!canAddProject}
             onSelect={() => router(newProjectDestination(activeWorkspaceId))}
           >
-            <Plus className="size-4" aria-hidden />
+            <Icon icon={Plus} />
             <span className="min-w-0 flex-1">Add project</span>
           </DropdownItem>
         ) : null}

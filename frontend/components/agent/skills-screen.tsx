@@ -7,7 +7,7 @@ import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
@@ -79,7 +79,7 @@ function SkillGroups({ skills }: Readonly<{ skills: AgentSkill[] }>) {
                   <h3 className={textRole('itemTitle')}>{skill.label}</h3>
                   <p className={textRole('body')}>{skill.description}</p>
                 </Stack>
-                <div className="flex flex-wrap items-center justify-between gap-2 self-end">
+                <Inline className="flex-wrap justify-between self-end">
                   <Badge>Produces {kindLabel(skill.output_kind).toLowerCase()}</Badge>
                   <Button asChild variant="ghost">
                     <ProjectLink
@@ -89,7 +89,7 @@ function SkillGroups({ skills }: Readonly<{ skills: AgentSkill[] }>) {
                       Start a chat
                     </ProjectLink>
                   </Button>
-                </div>
+                </Inline>
               </Stack>
             ))}
           </ul>

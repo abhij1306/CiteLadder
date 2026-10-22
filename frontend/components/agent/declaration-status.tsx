@@ -8,7 +8,7 @@ import { VerificationObservations } from '@/components/opportunities/verificatio
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
@@ -127,7 +127,7 @@ function CheckRow({ check }: Readonly<{ check: ActionDeclaration['checks'][numbe
   const reason = checkReasonLabel(check.reason);
   return (
     <Stack as="li" gap="tight">
-      <span className="flex flex-wrap items-center gap-2">
+      <Inline as="span" className="flex-wrap">
         <span className={textRole('itemTitle')}>{checkKindLabel(check.kind)}</span>
         {tone ? (
           <Badge variant="status" value={tone}>
@@ -136,7 +136,7 @@ function CheckRow({ check }: Readonly<{ check: ActionDeclaration['checks'][numbe
         ) : (
           <Badge>{CHECK_STATE_LABEL[check.state]}</Badge>
         )}
-      </span>
+      </Inline>
       {check.subject ? <CheckSubject subject={check.subject} promptId={check.prompt_id} /> : null}
       {reason || check.observed_at ? (
         <span className={textRole('caption')}>

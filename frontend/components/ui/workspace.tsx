@@ -95,13 +95,59 @@ export function treeBranchClasses(className?: string) {
 /**
  * The provenance line that closes a block: when it was captured, where, by
  * what — caption facts on one wrapping line, 16 apart, under a hairline 12
- * above them.
+ * above them. `trailing` (a status, a note) sits at the line's end and wraps
+ * under the facts when the line is full.
  */
-export function MetaFooter({ children }: Readonly<{ children: ReactNode }>) {
+export function MetaFooter({
+  children,
+  trailing,
+}: Readonly<{ children: ReactNode; trailing?: ReactNode }>) {
+  if (!trailing)
+    return (
+      <footer className="type-caption border-border-subtle flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3">
+        {children}
+      </footer>
+    );
   return (
-    <footer className="type-caption border-border-subtle flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3">
-      {children}
+    <footer className="type-caption border-border-subtle flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">{children}</div>
+      {trailing}
     </footer>
+  );
+}
+
+/**
+ * Who or what a screen or section is about: the 40px mark (a `BrandLogo` or
+ * `Avatar` at its `identity` placement), the title, one caption line under
+ * it, and the actions that act on it at the row's end, wrapping under the
+ * text when the row is full. The page supplies the text in its roles; the
+ * row owns the alignment and every gap.
+ */
+export function IdentityRow({
+  media,
+  title,
+  caption,
+  actions,
+}: Readonly<{
+  media: ReactNode;
+  title: ReactNode;
+  caption?: ReactNode;
+  actions?: ReactNode;
+}>) {
+  return (
+    <div
+      data-identity-row=""
+      className="flex min-w-0 flex-wrap items-center justify-between gap-[var(--compact-gap)]"
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-[var(--compact-gap)]">
+        {media}
+        <div className="grid min-w-0 flex-1 gap-1">
+          {title}
+          {caption}
+        </div>
+      </div>
+      {actions}
+    </div>
   );
 }
 

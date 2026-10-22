@@ -71,6 +71,12 @@ const STAT_SEGMENT_PADDING_Y = 12;
 const STAT_ROW_HEIGHT_SPREAD = 0;
 /** The Icon atom's one glyph size. */
 const ICON_SIZE = 16;
+/** A row's kind mark (an IconTile) is a control-sized square. */
+const ICON_TILE_SIZE = 32;
+/** A ControlRow and an IdentityRow hold their parts 12 apart. */
+const ROW_PART_GAP = 12;
+/** A ruled fact list pads each fact 8 above and below. */
+const FACT_ROW_PADDING_Y = 8;
 
 type Box = Readonly<{ route: string; role: string; label: string; value: number }>;
 
@@ -258,6 +264,36 @@ function measure(route: string) {
     add('icon.size', element, rect.width);
     add('icon.size', element, rect.height);
   }
+  for (const element of all('[data-icon-tile]')) {
+    const rect = element.getBoundingClientRect();
+    add('icon-tile.size', element, rect.width);
+    add('icon-tile.size', element, rect.height);
+  }
+  // A ControlRow's and an IdentityRow's parts: the drawn space between the
+  // leading mark and the text, and (ControlRow) the gap the row keeps open
+  // between the text and its controls.
+  for (const row of all('[data-control-row], [data-identity-row]')) {
+    const [lead] = Array.from(row.children).filter(visible);
+    const parts = lead ? Array.from(lead.children).filter(visible) : [];
+    const [media, text] = parts;
+    if (media && text && parts.length === 2)
+      add(
+        'row-part.gap',
+        row,
+        text.getBoundingClientRect().left - media.getBoundingClientRect().right,
+      );
+    add('row-part.gap', row, px(getComputedStyle(row).columnGap));
+  }
+  // A ruled fact list: each rule has 8 on both sides — below every fact but
+  // the last, above every fact but the first (the list's ends sit flush).
+  for (const list of all('[data-fact-list="ruled"]')) {
+    const facts = Array.from(list.children).filter(visible);
+    for (const [index, fact] of facts.entries()) {
+      const style = getComputedStyle(fact);
+      if (index > 0) add('fact-row.padding-y', fact, px(style.paddingTop));
+      if (index < facts.length - 1) add('fact-row.padding-y', fact, px(style.paddingBottom));
+    }
+  }
   // Rows only: a DataTable's state row holds a QueryState, measured above.
   for (const row of all('tbody tr:not([data-table-state])')) {
     add('table-row.height', row, row.getBoundingClientRect().height);
@@ -417,6 +453,9 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'stat-segment.padding-y', STAT_SEGMENT_PADDING_Y);
   expectOneValue(records, 'stat-row.height-spread', STAT_ROW_HEIGHT_SPREAD);
   expectOneValue(records, 'icon.size', ICON_SIZE);
+  expectOneValue(records, 'icon-tile.size', ICON_TILE_SIZE);
+  expectOneValue(records, 'row-part.gap', ROW_PART_GAP);
+  expectOneValue(records, 'fact-row.padding-y', FACT_ROW_PADDING_Y);
 
   // The account menu is a 32px control like every other one in its row.
   await expect(page.getByRole('button', { name: /^Account menu/ })).toHaveCSS('height', '32px');

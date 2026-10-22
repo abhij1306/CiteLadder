@@ -1,5 +1,7 @@
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Badge } from '@/components/ui/badge';
+import { badgeLinkClasses } from '@/components/ui/badge-variants';
+import { Inline } from '@/components/ui/layout';
 import { groupEvidence } from '@/lib/agent/evidence';
 
 /**
@@ -13,16 +15,13 @@ export function EvidenceChips({
   const groups = groupEvidence(refs);
   if (groups.length === 0) return null;
   return (
-    <ul aria-label={label} className="flex flex-wrap gap-2">
+    <Inline as="ul" aria-label={label} className="flex-wrap">
       {groups.map((group) => {
         const text = group.count > 1 ? `${group.label} · ${group.count}` : group.label;
         return (
           <li key={group.label}>
             {group.href ? (
-              <ProjectLink
-                href={group.href}
-                className="rounded-full underline-offset-2 hover:underline"
-              >
+              <ProjectLink href={group.href} className={badgeLinkClasses}>
                 <Badge>{text}</Badge>
               </ProjectLink>
             ) : (
@@ -31,6 +30,6 @@ export function EvidenceChips({
           </li>
         );
       })}
-    </ul>
+    </Inline>
   );
 }

@@ -6,7 +6,7 @@ import type { FormEvent } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Textarea } from '@/components/ui/textarea';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { agentMutations, type AgentRevision } from '@/lib/api/agent';
@@ -90,14 +90,14 @@ export function OutputEditor({
         className="tabular-nums"
       />
       {save.isError ? <Alert tone="danger">{agentWriteFailure(save.error).message}</Alert> : null}
-      <div className="flex justify-end gap-2">
+      <Inline className="justify-end">
         <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
           Cancel
         </Button>
         <Button type="submit" disabled={unchanged || blank || save.isPending}>
           Save as new revision
         </Button>
-      </div>
+      </Inline>
     </Stack>
   );
 }

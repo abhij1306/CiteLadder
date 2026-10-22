@@ -3,6 +3,7 @@
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Inline } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import { PROMPTS_GENERATE_HREF, PROMPTS_HREF } from '@/lib/prompts/routes';
 
@@ -20,14 +21,14 @@ export function PromptSetupCard() {
           Generate buyer questions from your confirmed offerings, or add your own.
         </p>
       </CardHeader>
-      <CardContent className="flex flex-wrap gap-2">
+      <Inline as={CardContent} className="flex-wrap">
         <Button asChild variant="primary">
           <ProjectLink href={PROMPTS_GENERATE_HREF}>Generate prompts</ProjectLink>
         </Button>
         <Button asChild variant="secondary">
           <ProjectLink href={PROMPTS_HREF}>Add or import prompts</ProjectLink>
         </Button>
-      </CardContent>
+      </Inline>
     </Card>
   );
 }

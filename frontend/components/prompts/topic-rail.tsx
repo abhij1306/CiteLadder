@@ -4,17 +4,14 @@ import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
 
 import { Alert } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
-import { listRowClasses } from '@/components/ui/list-row';
+import { Inline, Stack } from '@/components/ui/layout';
+import { RailItem, RailItemForm } from '@/components/ui/rail';
 import { Select } from '@/components/ui/select';
-import { Pressable } from '@/components/ui/pressable';
-import { Tooltip } from '@/components/ui/tooltip';
 import type { Topic } from '@/lib/api/types';
 import { orderTopicsForRail } from '@/lib/prompts/topic-tree';
-import { cn } from '@/lib/utils';
 import { textRole } from '@/components/ui/typography';
 
 const TOPICS_LOAD_ERROR = "Couldn't load topics. Check your connection and try again.";
@@ -100,17 +97,10 @@ export function TopicRail({
           so nothing from the right pane can overlap it. */}
       <Card className="desktop:block hidden min-w-0">
         <Stack as="nav" gap="tight" aria-label="Topics" className="min-w-0 content-start">
-          <div className="flex items-center justify-between">
+          <Inline className="justify-between">
             <h3 className={textRole('label')}>Topics</h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Add topic"
-              onClick={() => setAdding((v) => !v)}
-            >
-              <Plus className="size-4" aria-hidden />
-            </Button>
-          </div>
+            <IconButton icon={Plus} label="Add topic" onClick={() => setAdding((v) => !v)} />
+          </Inline>
 
           {errorBanner}
 
@@ -123,7 +113,7 @@ export function TopicRail({
                 void submit();
               }}
             >
-              <div className="flex items-center gap-2">
+              <Inline>
                 <Input
                   // oxlint-disable-next-line jsx-a11y/no-autofocus -- Add topic explicitly opens this form; focus follows the invoking action.
                   autoFocus
@@ -135,7 +125,7 @@ export function TopicRail({
                 <Button type="submit" variant="secondary" disabled={isCreating || !name.trim()}>
                   Add
                 </Button>
-              </div>
+              </Inline>
               {parents.length ? (
                 <Select
                   value={parentId}
@@ -262,55 +252,35 @@ function TopicItem({
       />
     );
   return (
-    <div
-      className={cn(
-        'group flex min-w-0 items-center gap-0.5 pe-0.5',
-        nested && 'ms-3',
-        listRowClasses({ selected }),
-      )}
-    >
-      <Pressable
-        type="button"
-        onClick={onSelect}
-        aria-label={accessibleName}
-        aria-current={selected ? 'true' : undefined}
-        className={cn(
-          'focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-control)] h-[var(--nav-item-height)] px-3 text-left type-control',
-          selected && textRole('emphasis'),
-        )}
-      >
-        <Tooltip content={label}>
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-        </Tooltip>
-        {typeof activeCount === 'number' ? (
-          <span className="type-caption shrink-0 tabular-nums">{activeCount}</span>
-        ) : null}
-      </Pressable>
-      {onRename ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={`Rename topic ${name}`}
-          onClick={() => setRenaming(true)}
-          className="shrink-0"
-        >
-          <Pencil className="size-4" aria-hidden />
-        </Button>
-      ) : null}
-      {onDelete ? (
-        <Button
-          type="button"
-          variant="destructiveGhost"
-          size="icon"
-          aria-label={`Delete topic ${name}`}
-          onClick={onDelete}
-          className="shrink-0"
-        >
-          <Trash2 className="size-4" aria-hidden />
-        </Button>
-      ) : null}
-    </div>
+    <RailItem
+      label={label}
+      accessibleName={accessibleName}
+      count={activeCount}
+      selected={selected}
+      nested={nested}
+      onSelect={onSelect}
+      actions={
+        <>
+          {onRename ? (
+            <IconButton
+              icon={Pencil}
+              label={`Rename topic ${name}`}
+              onClick={() => setRenaming(true)}
+              className="shrink-0"
+            />
+          ) : null}
+          {onDelete ? (
+            <IconButton
+              icon={Trash2}
+              variant="destructiveGhost"
+              label={`Delete topic ${name}`}
+              onClick={onDelete}
+              className="shrink-0"
+            />
+          ) : null}
+        </>
+      }
+    />
   );
 }
 
@@ -351,13 +321,7 @@ function TopicRenameForm({
     }
   };
   return (
-    <form
-      className={cn('flex items-center gap-2', nested && 'ms-3')}
-      onSubmit={(event) => {
-        event.preventDefault();
-        void submit();
-      }}
-    >
+    <RailItemForm nested={nested} onSubmit={() => void submit()}>
       <Input
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- Rename explicitly opens this field; focus follows the invoking action.
         autoFocus
@@ -371,6 +335,6 @@ function TopicRenameForm({
       <Button type="submit" variant="secondary" disabled={saving || !draft.trim()}>
         Save
       </Button>
-    </form>
+    </RailItemForm>
   );
 }

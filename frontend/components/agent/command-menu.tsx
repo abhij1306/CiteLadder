@@ -2,16 +2,14 @@
 
 import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 
-import { menuItemVariants, menuPanelClasses } from '@/components/ui/menu-variants';
+import { SuggestionList } from '@/components/ui/chat-dock';
 import { Textarea } from '@/components/ui/textarea';
-import { textRole } from '@/components/ui/typography';
 import {
   applyOption,
   tokenAt,
   type CommandOption,
   type CommandToken,
 } from '@/lib/agent/composer-commands';
-import { cn } from '@/lib/utils';
 
 /** Inline `/` and `@` commands: the options for a token, and what a pick does. */
 export type ComposerCommands = {
@@ -116,8 +114,7 @@ export function CommandField({
         id={id}
         rows={rows}
         // The text field owns focus; the surrounding form keeps its resting edge.
-        className="min-h-0 resize-none bg-transparent px-2 py-1 shadow-none hover:shadow-none"
-
+        placement="composer"
         value={value}
         disabled={disabled}
         placeholder={placeholder}
@@ -199,34 +196,16 @@ function CommandList({
   onPick: (option: CommandOption) => void;
 }>): ReactNode {
   return (
-    <ul
+    <SuggestionList
       id={listId}
-      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/no-noninteractive-element-to-interactive-role -- The popup uses ARIA options while focus remains in the editable combobox.
-      role="listbox"
-      aria-label={state.token ? MENU_LABEL[state.token.trigger] : 'Commands'}
-      hidden={!open}
-      className={cn(menuPanelClasses, 'absolute inset-x-0 bottom-full mb-0.5 grid')}
-    >
-      {state.options.map((option, index) => (
-        <li
-          key={option.key}
-          id={`${listId}-${index}`}
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/no-noninteractive-element-to-interactive-role -- ARIA listbox options keep focus on the editable field.
-          role="option"
-          aria-selected={index === state.selected}
-          data-active={index === state.selected}
-          className={cn(menuItemVariants(), 'grid gap-0.5 py-2')}
-          onMouseDown={(event) => {
-            event.preventDefault();
-            onPick(option);
-          }}
-        >
-          <span className="truncate">{option.label}</span>
-          {option.detail ? (
-            <span className={textRole('caption', 'truncate')}>{option.detail}</span>
-          ) : null}
-        </li>
-      ))}
-    </ul>
+      label={state.token ? MENU_LABEL[state.token.trigger] : 'Commands'}
+      open={open}
+      options={state.options}
+      selected={state.selected}
+      onPick={(index) => {
+        const option = state.options[index];
+        if (option) onPick(option);
+      }}
+    />
   );
 }

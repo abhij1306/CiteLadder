@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { QueryState } from '@/components/ui/query-state';
 import { ListScreen } from '@/components/layout/page-shell';
 import type { Project } from '@/lib/api/types';
@@ -77,7 +78,7 @@ export function ProjectsScreen() {
                 disabled={!canAddProject}
                 onClick={() => navigate(newProjectDestination(activeWorkspaceId))}
               >
-                <Plus className="size-4" aria-hidden />
+                <Icon icon={Plus} />
                 Add project
               </Button>
             ) : undefined

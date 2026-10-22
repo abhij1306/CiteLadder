@@ -6,17 +6,22 @@ import { useId, useMemo, useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Icon } from '@/components/ui/icon';
 import { InfoHint } from '@/components/ui/info-hint';
-import { Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { Inline, Stack } from '@/components/ui/layout';
+import { TableCell, TableCellLines, TableRow, TableSelectCell } from '@/components/ui/table';
 import { Tag } from '@/components/ui/tag';
-import { textRole } from '@/components/ui/typography';
 import type { PromptCandidate, Topic } from '@/lib/api/types';
 import { qualityFlagLabel, qualityStatusLabel } from '@/lib/prompts/candidate-quality';
 import type { usePromptCandidates } from '@/lib/prompts/use-prompt-candidates';
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+const COLUMNS: readonly DataTableColumn[] = [
+  { key: 'suggestion', label: 'Suggestion' },
+  { key: 'checks', label: 'Checks', width: 'name' },
+];
 
 /**
  * Generated prompts awaiting review. Only accepted candidates become tracked
@@ -68,92 +73,89 @@ export function CandidateReview({
   const review = (action: (ids: string[]) => void) => action(selected);
 
   return (
-    <Stack
-      as="section"
-      gap="compact"
-      aria-labelledby="candidate-review-heading"
-      className="min-w-0"
-    >
-      <div className="bg-panel sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 py-2">
-        <h3 id="candidate-review-heading" className={textRole('itemTitle')}>
-          Review {plural(candidates.length, 'suggestion')}
-        </h3>
-        <div className="flex gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => review(onReject)}
-            disabled={isReviewing || selected.length === 0}
-          >
-            <X className="size-4" aria-hidden />
-            Reject selected
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => review(onAccept)}
-            disabled={isReviewing || selected.length === 0}
-          >
-            <Check className="size-4" aria-hidden />
-            Accept selected
-          </Button>
-        </div>
-      </div>
+    <Stack gap="compact" className="min-w-0">
       {error ? <Alert tone="danger">{error}</Alert> : null}
       {notice ? <Alert tone="success">{notice}</Alert> : null}
-      <div className={panelClasses({ tone: 'tonal' }, 'flex items-center justify-between gap-3')}>
-        <Checkbox
-          label="Select all"
-          checked={allState}
-          onCheckedChange={(checked) =>
-            setPicked(checked === true ? new Set(candidates.map((c) => c.id)) : new Set())
-          }
-          disabled={isReviewing}
-        />
-        <span className="type-caption tabular-nums">{selected.length} selected</span>
-      </div>
-      <ul className="divide-border grid min-w-0 divide-y" aria-label="Suggested prompts">
+      <DataTable
+        nested
+        title={`Review ${plural(candidates.length, 'suggestion')}`}
+        toolbar={{
+          status: <span className="type-caption tabular-nums">{selected.length} selected</span>,
+          actions: (
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => review(onReject)}
+                disabled={isReviewing || selected.length === 0}
+              >
+                <Icon icon={X} />
+                Reject selected
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => review(onAccept)}
+                disabled={isReviewing || selected.length === 0}
+              >
+                <Icon icon={Check} />
+                Accept selected
+              </Button>
+            </>
+          ),
+        }}
+        selection={{
+          all: allState,
+          onAllChange: (checked) =>
+            setPicked(checked ? new Set(candidates.map((c) => c.id)) : new Set()),
+          noun: 'suggestions',
+        }}
+        columns={COLUMNS}
+        rowLines={2}
+      >
         {candidates.map((candidate) => {
           const topicName = candidate.topic_id ? topicNames.get(candidate.topic_id) : undefined;
+          const statusId = `${descriptionId}-${candidate.id}`;
           return (
-            <li key={candidate.id} className="flex min-w-0 items-start gap-2 py-3">
-              <Checkbox
-                aria-label={`Select “${candidate.text}”`}
-                aria-describedby={`${descriptionId}-${candidate.id}`}
+            <TableRow key={candidate.id}>
+              <TableSelectCell
+                label={`Select “${candidate.text}”`}
+                describedBy={statusId}
                 checked={picked.has(candidate.id)}
-                onCheckedChange={(checked) => toggle(candidate.id, checked === true)}
+                onCheckedChange={(checked) => toggle(candidate.id, checked)}
                 disabled={isReviewing}
               />
-              <Stack gap="tight" className="min-w-0">
-                <span className="type-body text-foreground">{candidate.text}</span>
-                {topicName ? <span className="type-caption">{topicName}</span> : null}
-                {candidate.grounded ? (
-                  <span className="flex items-center gap-1">
-                    <Tag>Informed by your search data</Tag>
-                    <InfoHint label="About search data">
-                      Phrasing was guided by queries from your connected Search Console or keyword
-                      research. The prompt itself was written for AI assistants.
-                    </InfoHint>
-                  </span>
-                ) : null}
-                <span
-                  id={`${descriptionId}-${candidate.id}`}
-                  className="type-caption text-secondary"
-                >
-                  {qualityStatusLabel(candidate)}
-                </span>
-                {candidate.quality_flags.length ? (
-                  <span className="flex flex-wrap gap-1">
-                    {candidate.quality_flags.map((flag) => (
-                      <Badge key={flag} variant="status" value="warning">
-                        {qualityFlagLabel(flag)}
-                      </Badge>
-                    ))}
-                  </span>
-                ) : null}
-              </Stack>
-            </li>
+              <TableCell>
+                <TableCellLines
+                  primary={candidate.text}
+                  secondary={
+                    <>
+                      {topicName ? `${topicName} · ` : null}
+                      <span id={statusId}>{qualityStatusLabel(candidate)}</span>
+                    </>
+                  }
+                />
+              </TableCell>
+              <TableCell>
+                <Inline as="span" gap="tight">
+                  {candidate.grounded ? (
+                    <>
+                      <Tag>Informed by your search data</Tag>
+                      <InfoHint label="About search data">
+                        Phrasing was guided by queries from your connected Search Console or keyword
+                        research. The prompt itself was written for AI assistants.
+                      </InfoHint>
+                    </>
+                  ) : null}
+                  {candidate.quality_flags.map((flag) => (
+                    <Badge key={flag} variant="status" value="warning">
+                      {qualityFlagLabel(flag)}
+                    </Badge>
+                  ))}
+                </Inline>
+              </TableCell>
+            </TableRow>
           );
         })}
-      </ul>
+      </DataTable>
     </Stack>
   );
 }
@@ -220,14 +222,14 @@ export function PendingReviewNotice({
   if (!count || hidden) return null;
   return (
     <Alert tone="info">
-      <span className="flex flex-wrap items-center justify-between gap-2">
+      <Inline as="span" className="flex-wrap justify-between">
         {count === 1
           ? '1 generated prompt is waiting for review.'
           : `${count} generated prompts are waiting for review.`}
         <Button variant="secondary" onClick={onReview}>
           Review suggestions
         </Button>
-      </span>
+      </Inline>
     </Alert>
   );
 }

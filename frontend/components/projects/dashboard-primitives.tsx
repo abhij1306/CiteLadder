@@ -1,17 +1,13 @@
-import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react';
-import { useState } from 'react';
-
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Delta } from '@/components/ui/delta';
 import type { DataTone } from '@/components/ui/data-tone';
-import { Stack } from '@/components/ui/layout';
-import { Meter } from '@/components/ui/meter';
+import { Inline, Stack } from '@/components/ui/layout';
+import { MeterRow } from '@/components/ui/meter';
+import type { ReorderItem } from '@/components/ui/reorder-list';
 import { TextLink } from '@/components/ui/text-link';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { CommandCenter, Opportunity } from '@/lib/api/types';
 import { availabilityLabel } from '@/lib/format';
-import { cn } from '@/lib/utils';
 import { textRole } from '@/components/ui/typography';
 import { splitPaneClasses } from '@/components/ui/workspace';
 
@@ -38,10 +34,10 @@ export function MovementChart({ movements }: Readonly<{ movements: CommandCenter
     <div className={splitPaneClasses('peers')}>
       {movements.map((row) => (
         <Stack key={row.label} gap="compact" className="min-w-0 content-start">
-          <div className="flex items-center justify-between gap-2">
+          <Inline className="justify-between">
             <span className={textRole('label', 'capitalize')}>{row.label}</span>
             <Delta value={row.delta} {...VS_PREVIOUS_RUN} />
-          </div>
+          </Inline>
           <MovementMeter engine={row.label} period="Previous" value={row.previous} tone="neutral" />
           <MovementMeter
             engine={row.label}
@@ -67,62 +63,25 @@ function MovementMeter({
   tone: DataTone;
 }>) {
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className={textRole('caption', 'w-16 shrink-0')}>{period}</span>
-      <Meter
-        value={value}
-        label={`${engine} ${period.toLowerCase()} mention rate`}
-        tone={tone}
-        className="min-w-0 flex-1"
-      />
-      <span className={textRole('caption', 'w-12 shrink-0 text-end tabular-nums')}>
-        {value === null ? <MissingValue /> : metricValue(value, '%')}
-      </span>
-    </div>
+    <MeterRow
+      name={period}
+      figure={value === null ? <MissingValue /> : metricValue(value, '%')}
+      value={value}
+      label={`${engine} ${period.toLowerCase()} mention rate`}
+      tone={tone}
+    />
   );
 }
 
-export function ActionRow({
-  action,
-  index,
-  total,
-  onMove,
-  onDrop,
-  reorderPending,
-}: Readonly<{
-  action: Opportunity;
-  index: number;
-  total: number;
-  onMove: (from: number, to: number) => void;
-  onDrop: (from: number, to: number) => void;
-  reorderPending: boolean;
-}>) {
-  const [dragging, setDragging] = useState(false);
-  return (
-    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Pointer drag is progressive enhancement; adjacent buttons provide the complete keyboard reorder path.
-    <li
-      draggable={!reorderPending}
-      onDragStart={(event) => {
-        event.dataTransfer.setData('text/plain', String(index));
-        setDragging(true);
-      }}
-      onDragEnd={() => setDragging(false)}
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        if (!reorderPending) onDrop(Number(event.dataTransfer.getData('text/plain')), index);
-      }}
-      className={cn(
-        'border-border-subtle hover:bg-hover active:bg-active grid gap-3 border-b py-3 transition-colors last:border-b-0 desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center',
-        dragging && 'opacity-60',
-      )}
-    >
-      <div className="flex items-center gap-2">
-        <GripVertical className="text-muted hover:text-foreground size-4 cursor-grab" aria-hidden />
-        <span className={textRole('label', 'w-5 text-center tabular-nums')}>{index + 1}</span>
-      </div>
-      <Stack gap="tight" className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
+/** One ranked action, as a row of the shared reorderable list. */
+export function actionItem(action: Opportunity): ReorderItem {
+  return {
+    key: action.id,
+    name: action.title,
+    figure: <span className={textRole('figureSm')}>{action.priority_score.toFixed(1)}</span>,
+    content: (
+      <Stack gap="tight">
+        <Inline className="flex-wrap">
           <TextLink
             text="itemTitle"
             href={action.action_id ? `/agent/actions/${action.action_id}` : '/agent/actions'}
@@ -136,33 +95,12 @@ export function ActionRow({
           ) : (
             <Badge>{action.severity}</Badge>
           )}
-        </div>
+        </Inline>
         <p className="type-caption truncate">
           {action.target_label ?? 'Project-wide'} · {action.evidence_summary.count} persisted
           evidence item(s)
         </p>
       </Stack>
-      <div className="flex items-center justify-end gap-2">
-        <span className={textRole('figureSm')}>{action.priority_score.toFixed(1)}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onMove(index, index - 1)}
-          disabled={reorderPending || index === 0}
-          aria-label={`Move ${action.title} up`}
-        >
-          <ArrowUp className="size-4" aria-hidden />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onMove(index, index + 1)}
-          disabled={reorderPending || index === total - 1}
-          aria-label={`Move ${action.title} down`}
-        >
-          <ArrowDown className="size-4" aria-hidden />
-        </Button>
-      </div>
-    </li>
-  );
+    ),
+  };
 }

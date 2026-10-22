@@ -4,7 +4,8 @@ import { ArrowDown, ArrowUp, Maximize2, Minimize2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { OverviewWidget } from '@citeladder/contracts/overview';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/button';
+import { FloatingToolbar } from '@/components/ui/floating-toolbar';
 import { splitPaneClasses } from '@/components/ui/workspace';
 import { moveWidget, removeWidget, toggleWidth, WIDGET_TITLES } from '@/lib/overview/layout';
 import { cn } from '@/lib/utils';
@@ -80,49 +81,31 @@ function WidgetControls({
   const title = WIDGET_TITLES[widget.key];
   const wide = widget.size === 'full';
   return (
-    // A floating cluster of 32px icon controls, not a box: it lifts off the
-    // widget like a menu and hugs the controls with a 4px inset.
-    <div className="bg-elevated shadow-overlay absolute end-3 top-3 z-10 flex gap-1 rounded-[var(--radius-card)] p-1">
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={`Move ${title} earlier`}
+    <FloatingToolbar>
+      <IconButton
+        icon={ArrowUp}
+        label={`Move ${title} earlier`}
         disabled={pending || first}
         onClick={() => onMove(index - 1)}
-      >
-        <ArrowUp className="size-3.5" aria-hidden />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={`Move ${title} later`}
+      />
+      <IconButton
+        icon={ArrowDown}
+        label={`Move ${title} later`}
         disabled={pending || last}
         onClick={() => onMove(index + 1)}
-      >
-        <ArrowDown className="size-3.5" aria-hidden />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={wide ? `Make ${title} half width` : `Make ${title} full width`}
+      />
+      <IconButton
+        icon={wide ? Minimize2 : Maximize2}
+        label={wide ? `Make ${title} half width` : `Make ${title} full width`}
         disabled={pending}
         onClick={onResize}
-      >
-        {wide ? (
-          <Minimize2 className="size-3.5" aria-hidden />
-        ) : (
-          <Maximize2 className="size-3.5" aria-hidden />
-        )}
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label={`Remove ${title}`}
+      />
+      <IconButton
+        icon={X}
+        label={`Remove ${title}`}
         disabled={pending || only}
         onClick={onRemove}
-      >
-        <X className="size-3.5" aria-hidden />
-      </Button>
-    </div>
+      />
+    </FloatingToolbar>
   );
 }

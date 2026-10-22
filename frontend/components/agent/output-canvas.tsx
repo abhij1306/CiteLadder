@@ -6,11 +6,13 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
+import { treeBranchClasses } from '@/components/ui/workspace';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { replaceSection, splitSections, type OutputSection } from '@/lib/agent/sections';
 import { agentMutations, type AgentRevision } from '@/lib/api/agent';
@@ -51,7 +53,7 @@ export function OutputCanvas({
       {titled.length >= CONTENTS_MIN_SECTIONS ? (
         <Stack as="nav" gap="tight" aria-label="Contents">
           <span className={textRole('label')}>Contents</span>
-          <Stack as="ol" gap="tight" className="ps-4">
+          <Stack as="ol" gap="tight" className={treeBranchClasses()}>
             {sections.map((section, index) =>
               section.heading === null ? null : (
                 <li key={section.start}>
@@ -140,7 +142,7 @@ function SectionBlock({
       {mode === 'edit' ? editor : <ContentMarkdown markdown={section.text} density="compact" />}
       {locked || mode === 'edit' ? null : (
         // Quiet until the section is hovered or focused; always shown on touch.
-        <div className="flex flex-wrap gap-2 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
+        <Inline className="flex-wrap transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100">
           <Button
             variant="ghost"
             disabled={!canSend}
@@ -148,14 +150,14 @@ function SectionBlock({
             aria-label={`Ask the agent to revise ${name}`}
             onClick={() => onMode(mode === 'revise' ? null : 'revise')}
           >
-            <Sparkles className="size-3.5" aria-hidden />
+            <Icon icon={Sparkles} />
             Revise
           </Button>
           <Button variant="ghost" aria-label={`Edit ${name}`} onClick={() => onMode('edit')}>
-            <Pencil className="size-3.5" aria-hidden />
+            <Icon icon={Pencil} />
             Edit
           </Button>
-        </div>
+        </Inline>
       )}
       {mode === 'revise' ? (
         <ReviseForm name={name} onCancel={() => onMode(null)} onSubmit={onRevise} />
@@ -176,9 +178,10 @@ function ReviseForm({
   const [instruction, setInstruction] = useState('');
   const inputId = `revise-${name.replaceAll(/\W+/g, '-').toLowerCase()}`;
   return (
-    <form
-      className="flex flex-wrap items-center gap-2"
-      onSubmit={(event) => {
+    <Inline
+      as="form"
+      className="flex-wrap"
+      onSubmit={(event: FormEvent) => {
         event.preventDefault();
         if (instruction.trim()) onSubmit(instruction);
       }}
@@ -199,7 +202,7 @@ function ReviseForm({
       <Button type="button" variant="ghost" onClick={onCancel}>
         Cancel
       </Button>
-    </form>
+    </Inline>
   );
 }
 
@@ -264,14 +267,14 @@ function SectionEditor({
         onChange={(event) => setText(event.target.value)}
       />
       {save.isError ? <Alert tone="danger">{agentWriteFailure(save.error).message}</Alert> : null}
-      <div className="flex justify-end gap-2">
+      <Inline className="justify-end">
         <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
           Cancel
         </Button>
         <Button type="submit" disabled={body === revision.body || !body.trim() || save.isPending}>
           Save section
         </Button>
-      </div>
+      </Inline>
     </Stack>
   );
 }

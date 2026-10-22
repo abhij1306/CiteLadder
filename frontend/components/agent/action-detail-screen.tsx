@@ -19,14 +19,19 @@ import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Button } from '@/components/ui/button';
-import { Stack } from '@/components/ui/layout';
+import { FactList, type Fact } from '@/components/ui/facts';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
-import { EditorialSectionHeader, ledgerClasses } from '@/components/ui/workspace';
+import {
+  EditorialSectionHeader,
+  ledgerClasses,
+  ledgerItemClasses,
+} from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import {
   approachLabel,
@@ -181,7 +186,7 @@ function ActionControls({
 }
 
 function ActionFacts({ action }: Readonly<{ action: ActionDetail }>) {
-  const facts: { label: string; value: React.ReactNode }[] = [
+  const facts: Fact[] = [
     { label: 'Status', value: <ActionStatusBadge status={action.status} /> },
     {
       label: 'Priority',
@@ -206,14 +211,7 @@ function ActionFacts({ action }: Readonly<{ action: ActionDetail }>) {
         </TextLink>
       ) : null}
 
-      <dl className="flex flex-wrap items-center gap-x-6 gap-y-3">
-        {facts.map((fact) => (
-          <div key={fact.label} className="flex items-center gap-2">
-            <dt className={textRole('label')}>{fact.label}</dt>
-            <dd className={textRole('body')}>{fact.value}</dd>
-          </div>
-        ))}
-      </dl>
+      <FactList layout="inline" facts={facts} />
       {action.evidence_cleared_at ? (
         <Alert tone="info">No current evidence targets this Action. Its chats are kept.</Alert>
       ) : null}
@@ -236,7 +234,12 @@ function Diagnosis({
         ) : (
           <ul className={ledgerClasses()}>
             {action.members.map((member) => (
-              <li key={member.id} className="flex flex-wrap items-start gap-3 py-3">
+              <Inline
+                as="li"
+                key={member.id}
+                gap="compact"
+                className={ledgerItemClasses('flex-wrap items-start')}
+              >
                 <Stack as="span" gap="tight" className="min-w-0 flex-1">
                   <span className={textRole('itemTitle')}>{member.title}</span>
                   <span className={textRole('caption')}>{member.remediation}</span>
@@ -244,7 +247,7 @@ function Diagnosis({
                 <Button variant="ghost" onClick={() => onOpenEvidence(member.id)}>
                   View evidence
                 </Button>
-              </li>
+              </Inline>
             ))}
           </ul>
         )}
@@ -323,7 +326,7 @@ function TextList({ title, items }: Readonly<{ title: string; items: string[] }>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <Stack as="ul" gap="tight" className="list-disc ps-5">
+        <Stack as="ul" gap="tight" className="list-inside list-disc">
           {items.map((item) => (
             <li key={item} className={textRole('body')}>
               {item}
@@ -394,16 +397,18 @@ function ActionEvidence({ action }: Readonly<{ action: ActionDetail }>) {
   const supporting = families.filter(([, state]) => state === 'observed');
   const other = families.filter(([, state]) => state !== 'observed');
   const sources = (rows: typeof families) => (
-    <Stack as="dl" gap="compact">
-      {rows.map(([family, state]) => (
-        <div key={family} className="flex flex-wrap items-center justify-between gap-2">
-          <dt className={textRole(state === 'observed' ? 'itemTitle' : 'body')}>
+    <FactList
+      layout="spread"
+      facts={rows.map(([family, state]) => ({
+        key: family,
+        label: (
+          <span className={textRole(state === 'observed' ? 'itemTitle' : 'body')}>
             {familyLabel(family)}
-          </dt>
-          <dd className={textRole('caption')}>{FAMILY_STATE_LABEL[state]}</dd>
-        </div>
-      ))}
-    </Stack>
+          </span>
+        ),
+        value: <span className={textRole('caption')}>{FAMILY_STATE_LABEL[state]}</span>,
+      }))}
+    />
   );
   return (
     <Card>

@@ -5,7 +5,9 @@ import { Archive, Check, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Tag } from '@/components/ui/tag';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
 import { Delta } from '@/components/ui/delta';
 import {
   Dropdown,
@@ -15,7 +17,7 @@ import {
   DropdownTrigger,
 } from '@/components/ui/dropdown';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { TableCell, TableRow } from '@/components/ui/table';
+import { TableActionsCell, TableCell, TableRow } from '@/components/ui/table';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Switch } from '@/components/ui/switch';
@@ -128,36 +130,34 @@ export function PromptTable({
           </TableCell>
           {measured ? <MeasuredCells measurement={measurements?.get(prompt.id)} /> : null}
           <TableCell>
-            <span className="flex items-center gap-2">
+            <Inline as="span">
               <Switch
                 checked={prompt.enabled}
                 label={`${prompt.enabled ? 'Disable' : 'Enable'} prompt`}
                 disabled={busyId === prompt.id}
                 onCheckedChange={() => onToggleEnabled(prompt)}
               />
-            </span>
+            </Inline>
           </TableCell>
-          <TableCell className="text-right">
+          <TableActionsCell>
             <Dropdown>
               <DropdownTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label="Prompt actions">
-                  <MoreHorizontal className="size-4" aria-hidden />
-                </Button>
+                <IconButton icon={MoreHorizontal} label="Prompt actions" />
               </DropdownTrigger>
               <DropdownContent align="end">
                 {onSetStatus && prompt.status === 'archived' ? (
                   <DropdownItem onSelect={() => onSetStatus(prompt, 'active')}>
-                    <Check className="size-4" aria-hidden />
+                    <Icon icon={Check} />
                     Restore
                   </DropdownItem>
                 ) : null}
                 <DropdownItem onSelect={() => onEdit(prompt)}>
-                  <Pencil className="size-4" aria-hidden />
+                  <Icon icon={Pencil} />
                   Edit
                 </DropdownItem>
                 {onSetStatus && prompt.status !== 'archived' ? (
                   <DropdownItem onSelect={() => onSetStatus(prompt, 'archived')}>
-                    <Archive className="size-4" aria-hidden />
+                    <Icon icon={Archive} />
                     Archive
                   </DropdownItem>
                 ) : null}
@@ -166,12 +166,12 @@ export function PromptTable({
                   onSelect={() => onDelete(prompt)}
                   className="text-danger-text data-[highlighted]:bg-danger-bg"
                 >
-                  <Trash2 className="size-4" aria-hidden />
+                  <Icon icon={Trash2} />
                   Delete
                 </DropdownItem>
               </DropdownContent>
             </Dropdown>
-          </TableCell>
+          </TableActionsCell>
         </TableRow>
       ))}
     </DataTable>
@@ -221,14 +221,14 @@ function TopicBadge({ name }: Readonly<{ name?: string }>) {
 /** Whether the prompt names a brand, then its intent, buyer stage and persona when set. */
 function PromptTags({ prompt }: Readonly<{ prompt: Prompt }>) {
   return (
-    <span className="flex flex-wrap gap-1">
+    <Inline as="span" gap="tight" className="flex-wrap">
       <Tag tone={prompt.branded ? 'amber' : 'neutral'}>
         {prompt.branded ? 'Branded' : 'Unbranded'}
       </Tag>
       {prompt.intent ? <Tag tone="outline">{intentLabels[prompt.intent]}</Tag> : null}
       {prompt.buyer_stage ? <Tag tone="outline">{buyerStageLabels[prompt.buyer_stage]}</Tag> : null}
       {prompt.persona ? <Tag tone="outline">{prompt.persona}</Tag> : null}
-    </span>
+    </Inline>
   );
 }
 

@@ -4,6 +4,7 @@ import { LayoutGrid } from 'lucide-react';
 
 import type { OverviewLayout, OverviewWidget } from '@citeladder/contracts/overview';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import {
   Dropdown,
   DropdownContent,
@@ -37,7 +38,7 @@ export function OverviewLayoutMenu({
     <Dropdown>
       <DropdownTrigger asChild>
         <Button variant="secondary" pending={pending}>
-          <LayoutGrid className="size-3.5" aria-hidden />
+          <Icon icon={LayoutGrid} />
           Layout
         </Button>
       </DropdownTrigger>

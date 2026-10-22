@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
+import { Inline } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import { integrationsApi, type IntegrationBackfillProgress } from '@/lib/api/integrations';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -37,10 +38,10 @@ export function BackfillProgress({
   if (!progress || progress.state === 'not_started') return null;
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <Inline className="flex-wrap">
       <span className={textRole('label')}>History</span>
       <span className="type-caption tabular-nums">{progressLabel(progress)}</span>
-    </div>
+    </Inline>
   );
 }
 

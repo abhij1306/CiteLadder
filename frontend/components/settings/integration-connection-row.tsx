@@ -23,9 +23,12 @@ import {
   SYNC_RUN_BADGE,
   SYNC_RUN_POLL_MS,
 } from '@/lib/integrations/sync-runs';
-import { textRole } from '@/components/ui/typography';
-import { Stack } from '@/components/ui/layout';
+import { ControlRow } from '@/components/ui/control-row';
+import { IconTile } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
+import { textRole } from '@/components/ui/typography';
+import { MetaFooter } from '@/components/ui/workspace';
 
 type ConnectionMutation = {
   isPending: boolean;
@@ -91,55 +94,49 @@ function ConnectionActions({
   const syncDisabled = busy || runInFlight || !hasProperty || grant.status !== 'connected';
 
   return (
-    <div className="desktop:flex-row desktop:items-center flex flex-col justify-between gap-3">
-      <div className="flex min-w-0 flex-1 items-start gap-3">
-        <span
-          aria-hidden
-          className="bg-well border-border text-secondary mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] border"
-        >
-          <Icon className="size-4" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className={textRole('itemTitle', 'truncate')}>{label}</div>
-          <PropertyPicker connection={connection} disabled={busy} />
-        </div>
-      </div>
-      <div className="desktop:self-auto flex shrink-0 items-center gap-2 self-end">
-        <Button
-          variant="secondary"
-          className="min-w-14"
-          onClick={onTest}
-          disabled={busy}
-          aria-label={`Test ${label}`}
-        >
-          {testPending ? 'Testing…' : 'Test'}
-        </Button>
-        <Button
-          variant="secondary"
-          className="min-w-22"
-          onClick={onSync}
-          title={hasProperty ? undefined : 'Select a property first'}
-          disabled={syncDisabled}
-          pending={syncPending}
-          pendingLabel="Syncing…"
-          aria-label={`Sync ${label} now`}
-        >
-          Sync now
-        </Button>
-        {hasProperty ? (
+    <ControlRow
+      media={<IconTile icon={Icon} />}
+      controls={
+        <>
           <Button
-            variant="destructiveGhost"
-            onClick={onRemove}
+            variant="secondary"
+            className="min-w-14"
+            onClick={onTest}
             disabled={busy}
-            pending={removePending}
-            pendingLabel="Removing…"
-            aria-label={`Remove ${label} property from this project`}
+            aria-label={`Test ${label}`}
           >
-            Remove
+            {testPending ? 'Testing…' : 'Test'}
           </Button>
-        ) : null}
-      </div>
-    </div>
+          <Button
+            variant="secondary"
+            className="min-w-22"
+            onClick={onSync}
+            title={hasProperty ? undefined : 'Select a property first'}
+            disabled={syncDisabled}
+            pending={syncPending}
+            pendingLabel="Syncing…"
+            aria-label={`Sync ${label} now`}
+          >
+            Sync now
+          </Button>
+          {hasProperty ? (
+            <Button
+              variant="destructiveGhost"
+              onClick={onRemove}
+              disabled={busy}
+              pending={removePending}
+              pendingLabel="Removing…"
+              aria-label={`Remove ${label} property from this project`}
+            >
+              Remove
+            </Button>
+          ) : null}
+        </>
+      }
+    >
+      <div className={textRole('itemTitle', 'truncate')}>{label}</div>
+      <PropertyPicker connection={connection} disabled={busy} />
+    </ControlRow>
   );
 }
 
@@ -149,7 +146,7 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
   const window = `window ${formatShortDate(run.window_start)}–${formatShortDate(run.window_end)}`;
   if (runActive)
     return (
-      <div className="flex items-center gap-2">
+      <Inline>
         <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
           {SYNC_RUN_LABEL[run.status]}
         </Badge>
@@ -162,28 +159,28 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
             </>
           )}
         </span>
-      </div>
+      </Inline>
     );
   if (run.processing)
     return (
-      <div className="flex items-center gap-2">
+      <Inline>
         <Badge variant="run-status" value="running">
           Processing
         </Badge>
         <span className="type-caption whitespace-nowrap tabular-nums">
           {`${rows} imported · updating reports`}
         </span>
-      </div>
+      </Inline>
     );
   return (
-    <div className="flex items-center gap-2">
+    <Inline>
       <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
         {SYNC_RUN_LABEL[run.status]}
       </Badge>
       <span className="type-caption whitespace-nowrap tabular-nums">
         {run.status === 'succeeded' ? `${rows} imported · ${window}` : run.error_detail || window}
       </span>
-    </div>
+    </Inline>
   );
 }
 
@@ -197,18 +194,15 @@ function ConnectionMetadata({
   runActive: boolean;
 }>) {
   return (
-    <div className="border-border-subtle flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2">
-          <span className={textRole('label')}>Last synced</span>
-          <span className="type-caption tabular-nums">
-            <DisplayTime value={connection.last_synced_at} fallback="Never" />
-          </span>
-        </div>
-        <BackfillProgress workspaceId={connection.workspace_id} connectionId={connection.id} />
-      </div>
-      {activeRun ? <RunSummary run={activeRun} runActive={runActive} /> : null}
-    </div>
+    <MetaFooter trailing={activeRun ? <RunSummary run={activeRun} runActive={runActive} /> : null}>
+      <Inline>
+        <span className={textRole('label')}>Last synced</span>
+        <span className="type-caption tabular-nums">
+          <DisplayTime value={connection.last_synced_at} fallback="Never" />
+        </span>
+      </Inline>
+      <BackfillProgress workspaceId={connection.workspace_id} connectionId={connection.id} />
+    </MetaFooter>
   );
 }
 

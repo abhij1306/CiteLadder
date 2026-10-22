@@ -110,7 +110,7 @@ describe('CandidateReview', () => {
       </TooltipProvider>,
     );
 
-    const rows = screen.getAllByRole('listitem');
+    const rows = screen.getAllByRole('row').filter((row) => row.closest('tbody'));
     expect(rows.map((row) => row.textContent?.includes('Informed by your search data'))).toEqual([
       true,
       false,

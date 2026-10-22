@@ -6,12 +6,12 @@ import { useState } from 'react';
 
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 
-import { Button } from '@/components/ui/button';
-import { Stack } from '@/components/ui/layout';
+import { Button, IconButton } from '@/components/ui/button';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -64,22 +64,23 @@ export function ProjectMarkets({
       {extra.length ? (
         <ul className={ledgerClasses('boxed')}>
           {extra.map((market) => (
-            <li key={market.id} className="type-body flex items-center justify-between gap-2 py-2">
+            <Inline
+              as="li"
+              key={market.id}
+              className={ledgerItemClasses('type-body justify-between')}
+            >
               <span>{market.label}</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove ${market.label}`}
+              <IconButton
+                icon={X}
+                label={`Remove ${market.label}`}
                 disabled={remove.isPending}
                 onClick={() => market.id && remove.mutate(market.id)}
-              >
-                <X className="size-4" aria-hidden />
-              </Button>
-            </li>
+              />
+            </Inline>
           ))}
         </ul>
       ) : null}
-      <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+      <Stack gap="item" className="grid-cols-[1fr_1fr_auto] items-end">
         <MarketSelect
           ariaLabel="Market country"
           value={country}
@@ -99,7 +100,7 @@ export function ProjectMarkets({
         >
           {add.isPending ? 'Adding…' : 'Add market'}
         </Button>
-      </div>
+      </Stack>
       {failed ? (
         <MutationNotice
           notice={mutationNoticeForError(failed, {

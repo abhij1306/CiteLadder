@@ -16,7 +16,7 @@ export function Drawer({
   children,
   footer,
   className,
-  bodyClassName,
+  body = 'scroll',
   bodyLabel,
   closeLabel = 'Close drawer',
   side = 'right',
@@ -30,7 +30,12 @@ export function Drawer({
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
-  bodyClassName?: string;
+  /**
+   * `scroll`: the body scrolls as one padded column. `dock`: the body is a
+   * `DockedThread` — its content scrolls and a composer docks to the bottom
+   * edge, so the body drops its bottom inset and lays out as a column.
+   */
+  body?: 'scroll' | 'dock';
   /** Names a scrolling content region when it has independent navigation. */
   bodyLabel?: string;
   closeLabel?: string;
@@ -124,7 +129,7 @@ export function Drawer({
             aria-label={bodyLabel}
             className={cn(
               'min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-[var(--modal-padding)] py-4',
-              bodyClassName,
+              body === 'dock' && 'flex flex-col pb-0',
             )}
           >
             {children}

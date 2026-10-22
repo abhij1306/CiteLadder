@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Switch } from '@/components/ui/switch';
 import { textRole } from '@/components/ui/typography';
 import type { EntityMatching } from '@/lib/api/types';
@@ -56,7 +56,7 @@ export function MentionRuleFields({
       aria-label={`Mention rule for ${name || 'this name'}`}
       className="min-w-0"
     >
-      <div className="flex items-center gap-3">
+      <Inline gap="compact">
         <Switch
           checked={rule.mode === 'context_required'}
           onCheckedChange={(checked) => update({ mode: checked ? 'context_required' : 'always' })}
@@ -65,7 +65,7 @@ export function MentionRuleFields({
         <span aria-hidden className={textRole('body')}>
           Needs context to count as a mention
         </span>
-      </div>
+      </Inline>
       {rule.mode === 'context_required' ? (
         <Field
           label="Context words"
