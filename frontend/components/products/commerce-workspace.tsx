@@ -48,7 +48,7 @@ export function BulkActions({
   else if (count) hint = 'Find competitors for every checked target.';
   return (
     <Card className="flex flex-wrap items-center justify-between gap-3">
-      <div className="grid gap-0.5">
+      <Stack gap="tight">
         <span aria-live="polite" className={textRole('itemTitle')}>
           {count ? `${count} ${noun} selected` : 'No targets selected'}
         </span>
@@ -58,7 +58,7 @@ export function BulkActions({
             {humanizeApiError(error, 'Competitor discovery could not start.').message}
           </span>
         ) : null}
-      </div>
+      </Stack>
       <div className="flex flex-wrap items-center gap-1">
         <Button
           disabled={!count || tooMany}

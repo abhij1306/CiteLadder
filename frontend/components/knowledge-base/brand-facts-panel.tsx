@@ -95,7 +95,7 @@ export function BrandFactsPanel({
           message="No facts yet. Add pricing, plans, integrations or other facts to check."
         />
       ) : (
-        <ul className="grid gap-2">
+        <Stack as="ul" gap="compact">
           {active.map((fact) => (
             <FactRow
               key={fact.id}
@@ -105,7 +105,7 @@ export function BrandFactsPanel({
               onChange={(update) => change.mutateAsync({ fact, update })}
             />
           ))}
-        </ul>
+        </Stack>
       )}
       {retired.length ? (
         <p className={textRole('caption', 'text-muted')}>
@@ -123,8 +123,10 @@ function AddFact({
 }: Readonly<{ pending: boolean; onAdd: (draft: Draft) => void }>) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   return (
-    <form
-      className={panelClasses({ tone: 'well' }, 'grid gap-3')}
+    <Stack
+      as="form"
+      gap="compact"
+      className={panelClasses({ tone: 'well' })}
       onSubmit={(event) => {
         event.preventDefault();
         if (!draft.statement.trim()) return;
@@ -171,7 +173,7 @@ function AddFact({
           Add draft fact
         </Button>
       </div>
-    </form>
+    </Stack>
   );
 }
 
@@ -189,7 +191,7 @@ function FactRow({
 }>) {
   const [editing, setEditing] = useState<string | null>(null);
   return (
-    <li className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-2')}>
+    <Stack as="li" gap="compact" className={panelClasses({ tone: 'well' }, 'min-w-0')}>
       <span className="flex flex-wrap items-center gap-2">
         <Badge>{TOPIC_LABELS[fact.topic]}</Badge>
         {fact.status === 'confirmed' ? (
@@ -260,6 +262,6 @@ function FactRow({
           )}
         </span>
       ) : null}
-    </li>
+    </Stack>
   );
 }

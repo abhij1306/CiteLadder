@@ -67,7 +67,7 @@ function MetricCardComparison({
   const statusLabel =
     comparison.evidence_state === 'not_run' ? `${compareLabel} — not imported` : compareLabel;
   return (
-    <span className="border-border-subtle grid gap-0.5 border-t pt-1">
+    <span className="border-border-subtle grid border-t pt-1">
       <span>{statusLabel}</span>
       <MetricValue
         size="figureSm"

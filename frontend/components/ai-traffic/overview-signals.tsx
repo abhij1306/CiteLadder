@@ -9,17 +9,18 @@ import { projectDestination } from '@/lib/navigation/project-destination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { DisplayTime } from '@/components/ui/display-time';
+import { Stack } from '@/components/ui/layout';
 import { MetricValue } from '@/components/ui/metric-value';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { TableCell, TableRow } from '@/components/ui/table';
+
+const PURPOSE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'day', label: 'Reporting day', width: 'date', numeric: true },
+  { key: 'purpose', label: 'Purpose' },
+  { key: 'requests', label: 'Requests', width: 'figure', numeric: true },
+];
 
 /** One Overview signal: title and state, the figure or why it is missing, one action. */
 function SignalCard({
@@ -33,10 +34,11 @@ function SignalCard({
       <CardHeader actions={status ? <Badge>{status}</Badge> : null}>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col gap-3">
-        {children}
-        {action ? <div className="mt-auto pt-1">{action}</div> : null}
-      </CardContent>
+      {/* The action sits at the card's foot so a row of signals aligns its actions. */}
+      <Stack gap="workspace" className="flex-1 content-between">
+        <Stack>{children}</Stack>
+        {action ? <div>{action}</div> : null}
+      </Stack>
     </Card>
   );
 }
@@ -61,7 +63,7 @@ export function ReferralSignal({
       }
     >
       {data.referral_volume.length ? (
-        <div className="grid gap-1">
+        <Stack gap="tight">
           <p className="type-label">AI referral sessions in the latest day</p>
           <MetricValue
             value={latest?.value == null ? null : String(latest.value)}
@@ -70,7 +72,7 @@ export function ReferralSignal({
           <p className="type-caption">
             Share of sessions: {formatPercent(data.referral_share.at(-1)?.value ?? null, 1)}
           </p>
-        </div>
+        </Stack>
       ) : (
         <p className="type-body text-secondary">
           Connect GA4 and sync a source/medium report to measure referral sessions.
@@ -100,10 +102,10 @@ export function CitationSignal({
         </Button>
       }
     >
-      <div className="grid gap-1">
+      <Stack gap="tight">
         <p className="type-label">{data.label}</p>
         <MetricValue value={data.count === null ? null : String(data.count)} label="Unavailable" />
-      </div>
+      </Stack>
     </SignalCard>
   );
 }
@@ -111,30 +113,15 @@ export function RequestsByPurpose({
   series,
 }: Readonly<{ series: z.infer<typeof crawlSummarySchema>['series'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Recognized requests by purpose</CardTitle>
-      </CardHeader>
-      <Table>
-        <caption className="sr-only">Daily recognized automated requests</caption>
-        <TableHeader>
-          <TableRow>
-            <TableHead numeric>Reporting day</TableHead>
-            <TableHead>Purpose</TableHead>
-            <TableHead numeric>Requests</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {series.map((s) => (
-            <TableRow key={s.date + s.purpose}>
-              <TableCell numeric>{s.date}</TableCell>
-              <TableCell>{words(s.purpose)}</TableCell>
-              <TableCell numeric>{s.requests}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </Card>
+    <DataTable title="Recognized requests by purpose" columns={PURPOSE_COLUMNS}>
+      {series.map((s) => (
+        <TableRow key={s.date + s.purpose}>
+          <TableCell numeric>{s.date}</TableCell>
+          <TableCell>{words(s.purpose)}</TableCell>
+          <TableCell numeric>{s.requests}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 export function CrawlSignalPanel({
@@ -186,26 +173,26 @@ function CrawlSignal({
       {data.requests === null ? (
         <p className="type-body text-secondary">{emptyMessage}</p>
       ) : (
-        <dl className="grid gap-3">
-          <div className="grid gap-1">
+        <Stack as="dl">
+          <Stack gap="tight">
             <dt className="type-label">Recognized automated requests</dt>
             <dd>
               <MetricValue value={String(data.requests)} label="Unavailable" />
             </dd>
-          </div>
-          <div className="grid gap-1">
+          </Stack>
+          <Stack gap="tight">
             <dt className="type-label">Path-level pages · active bots</dt>
             <dd className="type-body">
               {data.pages ?? 'Unavailable'} pages · {data.active_bots ?? 'Unavailable'} bots
             </dd>
-          </div>
-          <div className="grid gap-1">
+          </Stack>
+          <Stack gap="tight">
             <dt className="type-label">Error share within the selected requests</dt>
             <dd className="type-body">
               {data.error_share === null ? 'Unavailable' : errorShare(data.error_share)}
             </dd>
-          </div>
-        </dl>
+          </Stack>
+        </Stack>
       )}
       {data.coverage === 'partial' ? (
         <p className="type-caption">

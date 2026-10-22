@@ -86,7 +86,7 @@ export function EntityRow({
           size="icon"
           onClick={onEdit}
           aria-label={editLabel ?? `Edit ${name}`}
-          className="size-8 shrink-0"
+          className="shrink-0"
         >
           <Pencil className="size-3.5" aria-hidden />
         </Button>

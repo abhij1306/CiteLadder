@@ -15,6 +15,7 @@ import { RadioGroup } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
 import { brandProfileDraftSchema } from '@citeladder/contracts';
@@ -147,7 +148,7 @@ export function BrandProfilePanel({
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <Stack gap="workspace">
       <Header
         actions={
           <Button
@@ -193,7 +194,7 @@ export function BrandProfilePanel({
           )}
         </TabPanel>
       </Tabs>
-    </div>
+    </Stack>
   );
 }
 
@@ -287,12 +288,12 @@ function ProfileTabPanel({
 
   return (
     <Stack gap="workspace">
-      <section aria-labelledby="tracked-competitors" className="grid gap-2">
+      <Stack as="section" gap="compact" aria-labelledby="tracked-competitors">
         <h3 id="tracked-competitors" className={textRole('itemTitle')}>
           Tracked competitors
         </h3>
         {competitors.length ? (
-          <ul className="desktop:grid-cols-2 grid gap-2">
+          <Stack as="ul" gap="compact" className="desktop:grid-cols-2">
             {competitors.map((competitor) => (
               <li
                 key={`${competitor.name}:${competitor.domains[0] ?? ''}`}
@@ -309,11 +310,11 @@ function ProfileTabPanel({
                 <span className="truncate">{competitor.name}</span>
               </li>
             ))}
-          </ul>
+          </Stack>
         ) : (
           <UnavailableValue state="not_set" />
         )}
-      </section>
+      </Stack>
       {competitorSuggestions}
     </Stack>
   );
@@ -347,7 +348,7 @@ function IdentityFields({
           />
         )}
       </Field>
-      <div className="desktop:grid-cols-2 grid gap-4">
+      <div className={splitPaneClasses('peers')}>
         <FacetChoice
           label="Who buys it"
           value={identity.buyer_type}
@@ -381,7 +382,7 @@ function FacetChoice<T extends string>({
   onPick: (value: T) => void;
 }>) {
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <span className={textRole('label')} aria-hidden>
         {label}
       </span>
@@ -394,7 +395,7 @@ function FacetChoice<T extends string>({
           if (next && !disabled) onPick(next);
         }}
       />
-    </div>
+    </Stack>
   );
 }
 

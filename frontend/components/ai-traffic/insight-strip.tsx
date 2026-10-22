@@ -5,7 +5,9 @@ import { projectDestination } from '@/lib/navigation/project-destination';
 import { Alert } from '@/components/ui/alert';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Stack } from '@/components/ui/layout';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { TrafficUrlButton } from './url-panel';
 import { patternLabel } from '@/lib/ai-traffic/vocabulary';
 
@@ -26,7 +28,7 @@ export function InsightStrip({
       <CardHeader>
         <CardTitle>Observed patterns</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3">
+      <Stack>
         {query.isError ? (
           <ReadError {...readErrorProps(query)} fallback="Could not read insights" />
         ) : null}
@@ -41,9 +43,9 @@ export function InsightStrip({
           </p>
         ) : null}
         {data?.patterns.length ? (
-          <ul className="divide-border-subtle grid divide-y">
+          <ul className={ledgerClasses()}>
             {data.patterns.map((r) => (
-              <li key={r.pattern} className="grid gap-2 py-3 first:pt-0 last:pb-0">
+              <Stack as="li" key={r.pattern} className="py-3 first:pt-0 last:pb-0">
                 <p className="type-body">{r.copy}</p>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <TextLink
@@ -75,11 +77,11 @@ export function InsightStrip({
                     </TrafficUrlButton>
                   ))}
                 </div>
-              </li>
+              </Stack>
             ))}
           </ul>
         ) : null}
-      </CardContent>
+      </Stack>
     </Card>
   );
 }

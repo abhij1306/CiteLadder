@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Database } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Disclosure } from '@/components/ui/disclosure';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -104,29 +105,26 @@ export function SearchSummaryEvidence({
   datasets,
 }: Readonly<{ datasets: SearchIntelligenceDataset[] }>) {
   return (
-    <details className={textRole('caption')}>
-      <summary>Metric definitions and sources</summary>
-      <Stack gap="tight" className="pt-2">
-        <p>
-          Organic positions exclude other result types; absolute position includes them. Estimated
-          traffic and CPC (USD) are provider estimates. Difficulty is organic keyword difficulty.
-          DataForSEO Rank uses a 0–100 scale for the named object. Referring domains and referring
-          root domains are distinct totals.
-        </p>
-        <ul className="grid gap-1">
-          {datasets.map((dataset) => (
-            <li key={dataset.id}>
-              {SEARCH_DATASET_LABELS[dataset.dataset_kind] ?? dataset.dataset_kind} for{' '}
-              {dataset.target_hostname}, collected{' '}
-              <DisplayTime
-                value={dataset.collection_ended_at}
-                dateOnly
-                fallback="at an unknown time"
-              />
-            </li>
-          ))}
-        </ul>
+    <Disclosure title="Metric definitions and sources">
+      <p className={textRole('caption')}>
+        Organic positions exclude other result types; absolute position includes them. Estimated
+        traffic and CPC (USD) are provider estimates. Difficulty is organic keyword difficulty.
+        DataForSEO Rank uses a 0–100 scale for the named object. Referring domains and referring
+        root domains are distinct totals.
+      </p>
+      <Stack as="ul" gap="tight" className={textRole('caption')}>
+        {datasets.map((dataset) => (
+          <li key={dataset.id}>
+            {SEARCH_DATASET_LABELS[dataset.dataset_kind] ?? dataset.dataset_kind} for{' '}
+            {dataset.target_hostname}, collected{' '}
+            <DisplayTime
+              value={dataset.collection_ended_at}
+              dateOnly
+              fallback="at an unknown time"
+            />
+          </li>
+        ))}
       </Stack>
-    </details>
+    </Disclosure>
   );
 }

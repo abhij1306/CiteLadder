@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Stack } from '@/components/ui/layout';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { Pressable } from '@/components/ui/pressable';
 import { MISSING_MARK } from '@/lib/format';
@@ -27,7 +28,7 @@ export function TrafficPages({
   const [urlHash, setUrlHash] = useState<string | null>(null),
     coverage = data.observed_crawl_coverage;
   return (
-    <div className="grid gap-[var(--workspace-gap)]">
+    <Stack gap="workspace">
       <p className="type-caption">
         {coverage.share === null
           ? 'Crawl coverage unavailable'
@@ -73,7 +74,7 @@ export function TrafficPages({
         </Table>
       ) : null}
       <UrlPanel urlHash={urlHash} onClose={() => setUrlHash(null)} filters={filters} />
-    </div>
+    </Stack>
   );
 }
 

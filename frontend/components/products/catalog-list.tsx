@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, PackageOpen, SearchX } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Stack } from '@/components/ui/layout';
 import { listRowClasses } from '@/components/ui/list-row';
 import { panelClasses } from '@/components/ui/panel';
 import { SearchField } from '@/components/ui/search-field';
@@ -174,7 +175,7 @@ function CatalogTree({
   const shownKeys = shownTargetKeys(categories, uncategorized);
   const shownSelectionCount = shownKeys.filter((key) => checkedKeys.has(key)).length;
   return (
-    <fieldset className="grid min-w-0 gap-3">
+    <Stack as="fieldset" className="min-w-0">
       <legend className="sr-only">Catalog targets</legend>
       <div className={panelClasses({ tone: 'tonal' }, 'flex items-center justify-between gap-3')}>
         <Checkbox
@@ -188,7 +189,7 @@ function CatalogTree({
         <span>Categories</span>
         <span className="tabular-nums">{categories.length}</span>
       </div>
-      <ul className="grid min-w-0 gap-1">
+      <Stack as="ul" gap="tight" className="min-w-0">
         {categories.map((category) => {
           const selectionKeys = [
             category.key,
@@ -240,9 +241,9 @@ function CatalogTree({
             </CatalogRow>
           );
         })}
-      </ul>
+      </Stack>
       {uncategorized.length ? (
-        <div className="grid min-w-0 gap-1">
+        <Stack gap="tight" className="min-w-0">
           <div className={textRole('label', 'px-2')}>Uncategorized</div>
           <ul className="grid min-w-0">
             {uncategorized.map((product) => (
@@ -257,9 +258,9 @@ function CatalogTree({
               />
             ))}
           </ul>
-        </div>
+        </Stack>
       ) : null}
-    </fieldset>
+    </Stack>
   );
 }
 
@@ -331,7 +332,7 @@ export function CatalogList({
     );
   return (
     <div className="grid min-w-0 content-start">
-      <div className="border-border-subtle bg-panel sticky top-0 z-20 grid gap-2 border-b pb-3">
+      <Stack className="border-border-subtle bg-panel sticky top-0 z-20 border-b pb-3">
         <SearchField
           aria-label="Search the catalog"
           placeholder="Search categories and products"
@@ -341,8 +342,8 @@ export function CatalogList({
         <p className="type-caption">
           Check items for bulk actions. Select a name to view its details.
         </p>
-      </div>
-      <div className="grid min-w-0 gap-3 pt-3">
+      </Stack>
+      <Stack className="min-w-0 pt-3">
         {empty ? (
           <QueryState
             kind="empty"
@@ -362,7 +363,7 @@ export function CatalogList({
             searching={Boolean(needle)}
           />
         )}
-      </div>
+      </Stack>
     </div>
   );
 }

@@ -57,7 +57,12 @@ export function RunNotice({
   if (!run) return null;
   if (run.status === 'queued' || run.status === 'running')
     return (
-      <div className="type-body bg-info-bg text-info-text flex flex-wrap items-center justify-between gap-3 rounded-[var(--radius-control)] p-3">
+      <div
+        className={panelClasses(
+          { tone: 'none' },
+          'type-body bg-info-bg text-info-text flex flex-wrap items-center justify-between gap-3',
+        )}
+      >
         <span className="flex items-center gap-2">
           <RefreshCw className="size-4 animate-spin" aria-hidden />
           Analysis in progress: {run.completed_calls} of {run.planned_calls} requests complete.
@@ -69,7 +74,7 @@ export function RunNotice({
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
   return (
-    <output className="type-body bg-warning-bg block rounded-[var(--radius-control)] p-3">
+    <output className={panelClasses({ tone: 'none' }, 'type-body bg-warning-bg block')}>
       <Stack gap="tight">
         <p className={textRole('itemTitle')}>
           Analysis {RUN_STATUS_LABELS[run.status]?.toLowerCase()}
@@ -104,17 +109,17 @@ export function CostDetails({
   let content = <QueryState kind="empty" inline message="No analysis has been run yet." />;
   if (runs?.length) {
     content = (
-      <ul className="grid gap-3">
+      <Stack as="ul" gap="compact">
         {runs.map((run) => (
-          <li key={run.id} className={panelClasses({ tone: 'well' }, 'grid gap-3')}>
-            <div className="grid gap-1">
+          <Stack as="li" gap="compact" key={run.id} className={panelClasses({ tone: 'well' })}>
+            <Stack gap="tight">
               <p className={textRole('itemTitle')}>
                 {words(run.action)} · {RUN_STATUS_LABELS[run.status] ?? run.status}
               </p>
               <p className={textRole('caption')}>
                 <DisplayTime value={run.created_at} />
               </p>
-            </div>
+            </Stack>
             <StatRow
               segments={[
                 {
@@ -140,9 +145,9 @@ export function CostDetails({
                 },
               ]}
             />
-          </li>
+          </Stack>
         ))}
-      </ul>
+      </Stack>
     );
   }
   if (error)

@@ -17,6 +17,7 @@ import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Select } from '@/components/ui/select';
 import { textRole } from '@/components/ui/typography';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { formatCount, pluralCount } from '@/lib/format';
 import type {
   DatasetSelection,
@@ -120,7 +121,7 @@ function DatasetGroup({
   return (
     <fieldset className={panelClasses({ tone: 'panel' })}>
       <legend className={textRole('label', 'px-1')}>{legend}</legend>
-      <div className="grid gap-3">
+      <Stack gap="compact">
         {options.map((option) => {
           const checked = isSelected(option);
           const label = SEARCH_DATASET_LABELS[option.kind] ?? option.kind;
@@ -142,7 +143,7 @@ function DatasetGroup({
             </div>
           );
         })}
-      </div>
+      </Stack>
     </fieldset>
   );
 }
@@ -351,13 +352,13 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
       {review.call_plan.length ? (
         <Stack as="section" gap="compact">
           <h3 className={textRole('sectionTitle')}>Requests</h3>
-          <ul className="type-body grid gap-2">
+          <ul className={ledgerClasses('boxed', 'type-body')}>
             {review.call_plan.map((call) => {
               const target = hostOf(call.target),
                 comparison = hostOf(call.comparison);
               return (
                 <li
-                  className="border-border-subtle flex justify-between gap-3 rounded-[var(--radius-control)] border p-2"
+                  className="flex justify-between gap-3 py-2"
                   key={`${String(call.dataset_key)}:${String(call.page)}`}
                 >
                   <span>

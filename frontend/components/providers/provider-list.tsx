@@ -2,8 +2,9 @@
 
 import { useQuery } from '@tanstack/react-query';
 
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { providersApi } from '@/lib/api/providers';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { LogicalEngine } from '@/lib/api/types';
@@ -61,13 +62,7 @@ export function ProviderList({
     );
   }
   if (catalogQuery.isLoading || connectionsQuery.isLoading) {
-    return (
-      <div className="grid gap-4" aria-busy="true">
-        {[0, 1, 2].map((row) => (
-          <Skeleton key={row} className="h-10 w-full" />
-        ))}
-      </div>
-    );
+    return <QueryState kind="loading" />;
   }
 
   const groups = buildProviderGroups(
@@ -76,7 +71,7 @@ export function ProviderList({
   const connections = connectionsQuery.data ?? [];
   const expand = expandEngine ? transportForEngine(groups, expandEngine) : null;
   return (
-    <ul className="divide-border grid divide-y">
+    <ul className={ledgerClasses()}>
       {groups.map((group) => (
         <ProviderRow
           key={group.transport}

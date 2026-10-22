@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Stack } from '@/components/ui/layout';
 import { commerceApi } from '@/lib/api/commerce';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
@@ -102,51 +102,54 @@ export function TargetPrompts({
             : 'Approve at least one prompt to launch an audit for this target.'}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        {failed ? (
-          <Alert tone="danger">The buyer-prompt update failed. Please try again.</Alert>
-        ) : null}
-        {shortfall !== null ? (
-          <Alert tone="info">
-            {shortfall} of {GENERATED_COUNT} generated prompts were usable. Generate again for more.
-          </Alert>
-        ) : null}
-        {launchedAuditId ? (
-          <Alert tone="info">
-            Audit launched. Shelf metrics update here when it finishes.{' '}
-            <ProjectLink href={`/runs/${launchedAuditId}`}>View the run</ProjectLink>
-          </Alert>
-        ) : null}
-        <LaunchDialog
-          open={launchOpen}
-          onOpenChange={setLaunchOpen}
-          projectId={projectId}
-          fixedPromptIds={approvedIds}
-          promptSelectionLabel={`${approvedIds.length} approved prompts for ${targetLabel}`}
-          auditScope="commerce"
-          onLaunched={(audit) => setLaunchedAuditId(audit.id)}
-        />
-        <PromptRows
-          query={query}
-          rows={rows}
-          pending={busy}
-          onToggle={(id, approved) => decide.mutate({ id, approved })}
-        />
-        {/* Manual entry is the fallback for an unconfigured model, so it is
-            folded away rather than given equal billing beside Generate. */}
-        <Disclosure title="Add a prompt manually">
-          <Textarea
-            aria-label="Manual buyer prompt"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="best instant read thermometer for grilling under $50"
+      <CardContent>
+        <Stack>
+          {failed ? (
+            <Alert tone="danger">The buyer-prompt update failed. Please try again.</Alert>
+          ) : null}
+          {shortfall !== null ? (
+            <Alert tone="info">
+              {shortfall} of {GENERATED_COUNT} generated prompts were usable. Generate again for
+              more.
+            </Alert>
+          ) : null}
+          {launchedAuditId ? (
+            <Alert tone="info">
+              Audit launched. Shelf metrics update here when it finishes.{' '}
+              <ProjectLink href={`/runs/${launchedAuditId}`}>View the run</ProjectLink>
+            </Alert>
+          ) : null}
+          <LaunchDialog
+            open={launchOpen}
+            onOpenChange={setLaunchOpen}
+            projectId={projectId}
+            fixedPromptIds={approvedIds}
+            promptSelectionLabel={`${approvedIds.length} approved prompts for ${targetLabel}`}
+            auditScope="commerce"
+            onLaunched={(audit) => setLaunchedAuditId(audit.id)}
           />
-          <div>
-            <Button disabled={!text.trim() || busy} onClick={() => manual.mutate()}>
-              Add prompt
-            </Button>
-          </div>
-        </Disclosure>
+          <PromptRows
+            query={query}
+            rows={rows}
+            pending={busy}
+            onToggle={(id, approved) => decide.mutate({ id, approved })}
+          />
+          {/* Manual entry is the fallback for an unconfigured model, so it is
+            folded away rather than given equal billing beside Generate. */}
+          <Disclosure title="Add a prompt manually">
+            <Textarea
+              aria-label="Manual buyer prompt"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="best instant read thermometer for grilling under $50"
+            />
+            <div>
+              <Button disabled={!text.trim() || busy} onClick={() => manual.mutate()}>
+                Add prompt
+              </Button>
+            </div>
+          </Disclosure>
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -165,7 +168,7 @@ function PromptRows({
 }>) {
   if (query.isError)
     return <ReadError {...readErrorProps(query)} fallback="Buyer prompts could not be loaded." />;
-  if (query.isPending) return <Skeleton className="h-24 w-full" />;
+  if (query.isPending) return <QueryState kind="loading" />;
   if (!rows.length) {
     return (
       <QueryState

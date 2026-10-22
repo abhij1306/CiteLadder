@@ -1,5 +1,4 @@
 'use client';
-import { useId } from 'react';
 import {
   collectionPointLabel,
   COLLECTION_POINTS,
@@ -68,7 +67,7 @@ export function CrawlLogSetup({
             value: s.value,
             disabled: unavailable,
             label: (
-              <span className="grid gap-0.5 py-2">
+              <span className="grid py-2">
                 <span className="type-control text-foreground">{s.label}</span>
                 <span className="type-caption">
                   {unavailable ? 'Not available in this environment.' : s.description}
@@ -78,19 +77,19 @@ export function CrawlLogSetup({
           };
         })}
       />
-      <div className={panelClasses({ tone: 'well' }, 'grid gap-2')}>
+      <Stack className={panelClasses({ tone: 'well' })}>
         {steps ? <p className="type-body text-secondary">{steps}</p> : null}
         {firehose ? <FirehoseSteps interval={model.bufferInterval} /> : null}
         {gcp ? <GcpSteps /> : null}
-      </div>
-      <div className="desktop:grid-cols-2 grid gap-4">
+      </Stack>
+      <Stack gap="workspace" className="desktop:grid-cols-2">
         <Field label="Site origin" className="desktop:col-span-2">
           {(field) => (
             <Input {...field} value={origin} onChange={(e) => setOrigin(e.target.value)} />
           )}
         </Field>
         {fields}
-      </div>
+      </Stack>
       {mutation.isError ? <Alert tone="danger">{mutation.error.message}</Alert> : null}
       {setup === 'upload' ? <UploadForm model={model} /> : null}
     </Stack>
@@ -187,7 +186,7 @@ function FirehoseFields({ model }: Readonly<{ model: ReturnType<typeof useCrawlC
 /** Generated AWS console steps; the endpoint and token appear once the source exists. */
 function FirehoseSteps({ interval }: Readonly<{ interval: string }>) {
   return (
-    <ol className="type-body text-secondary grid list-decimal gap-1 pl-5">
+    <Stack as="ol" gap="tight" className="type-body text-secondary list-decimal pl-5">
       <li>
         In us-east-1, create an Amazon Data Firehose stream: source Direct PUT, destination HTTP
         endpoint. Use the endpoint URL and the token (as the access key) shown after you create the
@@ -211,7 +210,7 @@ function FirehoseSteps({ interval }: Readonly<{ interval: string }>) {
         console&apos;s test data is not CloudFront logs and shows as an unsupported-format batch;
         test with a real page visit instead.
       </li>
-    </ol>
+    </Stack>
   );
 }
 export function CrawlLogCredential({
@@ -235,7 +234,7 @@ export function CrawlLogCredential({
     );
   return issued ? (
     <Alert tone="info">
-      <div className="grid gap-3">
+      <Stack>
         {issued.token ? (
           <>
             <p>Copy this token now. It is shown once.</p>
@@ -244,7 +243,7 @@ export function CrawlLogCredential({
             <CopyButton value={endpoint}>Copy endpoint</CopyButton>
           </>
         ) : null}
-      </div>
+      </Stack>
     </Alert>
   ) : null;
 }
@@ -265,7 +264,6 @@ export function CrawlLogSetupSubmit({
 }
 
 function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
-  const formId = useId();
   const {
     sources,
     sourceId,
@@ -290,7 +288,7 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
     );
   }
   return (
-    <div className="grid gap-4">
+    <Stack gap="workspace">
       <Field label="Upload source">
         {({ id }) => (
           <Select
@@ -305,19 +303,19 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
           />
         )}
       </Field>
-      <label htmlFor={`${formId}-file`} className="type-label grid gap-2">
-        Log file
-        <Input
-          id={`${formId}-file`}
-          type="file"
-          accept=".log,.txt,.json,.ndjson,.gz"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-      </label>
-      <label htmlFor={`${formId}-resume`} className="type-label grid gap-2">
-        Resume upload ID (optional)
-        <Input id={`${formId}-resume`} value={resume} onChange={(e) => setResume(e.target.value)} />
-      </label>
+      <Field label="Log file">
+        {(field) => (
+          <Input
+            {...field}
+            type="file"
+            accept=".log,.txt,.json,.ndjson,.gz"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+        )}
+      </Field>
+      <Field label="Resume upload ID (optional)">
+        {(field) => <Input {...field} value={resume} onChange={(e) => setResume(e.target.value)} />}
+      </Field>
       <Button
         variant="secondary"
         className="w-fit"
@@ -341,7 +339,7 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
       ) : null}
       {upload.isError ? (
         <Alert tone="danger">
-          <div className="grid gap-2">
+          <Stack>
             <p>{upload.error.message}</p>
             {progress ? (
               <Button
@@ -352,9 +350,9 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
                 Resume upload
               </Button>
             ) : null}
-          </div>
+          </Stack>
         </Alert>
       ) : null}
-    </div>
+    </Stack>
   );
 }

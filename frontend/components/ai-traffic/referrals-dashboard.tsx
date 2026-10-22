@@ -1,4 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import {
   Table,
@@ -36,7 +37,7 @@ export function AiReferralsDashboard({
 }: Readonly<{ data: AiReferrals; fetching: boolean }>) {
   const [tab, setTab] = useState('overview');
   return (
-    <div aria-busy={fetching} className="grid gap-[var(--workspace-gap)]">
+    <Stack gap="workspace" aria-busy={fetching}>
       <ReferralQuality data={data} />
       <Tabs
         value={tab}
@@ -49,10 +50,10 @@ export function AiReferralsDashboard({
         ]}
       >
         <TabPanel value="overview">
-          <div className="desktop:grid-cols-2 grid gap-[var(--workspace-gap)]">
+          <Stack gap="workspace" className="desktop:grid-cols-2">
             <ReferralVolumeCard data={data} />
             <ReferralShareCard data={data} />
-          </div>
+          </Stack>
           <ReferralComparison data={data} />
         </TabPanel>
         <TabPanel value="sources">
@@ -62,7 +63,7 @@ export function AiReferralsDashboard({
           <ReferralLandingPages data={data} />
         </TabPanel>
       </Tabs>
-    </div>
+    </Stack>
   );
 }
 
@@ -96,7 +97,7 @@ function TrendCard({
               <span key={label}>{label}</span>
             ))}
           </div>
-          <div className="grid min-w-0 flex-1 gap-1">
+          <Stack gap="tight" className="min-w-0 flex-1">
             <TrendChart
               label={title}
               data={points}
@@ -111,7 +112,7 @@ function TrendCard({
                 <span>{lastLabel}</span>
               </div>
             ) : null}
-          </div>
+          </Stack>
         </div>
       </CardContent>
     </Card>

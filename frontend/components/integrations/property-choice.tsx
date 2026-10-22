@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Stack } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -88,7 +89,7 @@ export function PropertyChoice({
     );
   const suggested = suggestedProperty(provider, properties);
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       {suggested ? (
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -118,7 +119,7 @@ export function PropertyChoice({
       {select.isError ? (
         <Alert tone="danger">{humanizeApiError(select.error).message}</Alert>
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -167,7 +168,7 @@ function PropertyList({
   onSelect: (propertyRef: string) => void;
 }>) {
   return (
-    <ul className="grid gap-1" aria-label={`${source.noun}s`}>
+    <Stack as="ul" gap="tight" aria-label={`${source.noun}s`}>
       {properties.map((property) => {
         const foreign = property.matches_project === false;
         return (
@@ -191,6 +192,6 @@ function PropertyList({
           </li>
         );
       })}
-    </ul>
+    </Stack>
   );
 }

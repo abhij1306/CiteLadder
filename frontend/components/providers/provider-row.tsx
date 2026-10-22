@@ -5,6 +5,7 @@ import { useId, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { textRole } from '@/components/ui/typography';
 import type { ProviderConnection } from '@/lib/api/types';
@@ -87,7 +88,7 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
   const saveVerb = configured ? 'Update' : 'Save';
   const saveLabel = saveMutation.isPending ? 'Saving & testing…' : `${saveVerb} ${noun}`;
   return (
-    <div id={id} className={panelClasses({ tone: 'tonal' }, 'grid gap-3')}>
+    <Stack gap="compact" id={id} className={panelClasses({ tone: 'tonal' })}>
       <ProviderConnectionFields state={state} />
       <div className="flex flex-wrap items-center justify-end gap-2">
         <Button
@@ -106,7 +107,7 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
           {saveLabel}
         </Button>
       </div>
-    </div>
+    </Stack>
   );
 }
 
@@ -130,7 +131,7 @@ export function ProviderRow({
   const closedAction = state.configured ? 'Manage' : 'Connect';
   const toggleLabel = open ? 'Close' : closedAction;
   return (
-    <li className="grid gap-3 py-4 first:pt-0 last:pb-0">
+    <Stack as="li" gap="compact" className="py-4 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <BrandLogo
@@ -138,7 +139,7 @@ export function ProviderRow({
             logoUrl={TRANSPORT_LOGOS[group.transport]}
             websiteUrl={TRANSPORT_DOMAINS[group.transport]}
           />
-          <div className="grid min-w-0 gap-0.5">
+          <div className="grid min-w-0">
             <h3 className={textRole('itemTitle')}>{group.label}</h3>
             <p className={textRole('caption')}>{group.engines.map(engineSummary).join(' · ')}</p>
           </div>
@@ -159,6 +160,6 @@ export function ProviderRow({
       </div>
       <LastFailure group={group} />
       {open ? <CredentialForm id={formId} state={state} /> : null}
-    </li>
+    </Stack>
   );
 }

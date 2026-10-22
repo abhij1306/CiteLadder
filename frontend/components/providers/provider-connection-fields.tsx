@@ -3,6 +3,7 @@
 import { Alert } from '@/components/ui/alert';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { errorMessage, type useProviderConnection } from '@/lib/providers/use-provider-connection';
 
 type ConnectionState = ReturnType<typeof useProviderConnection>;
@@ -38,7 +39,7 @@ function ApiKeyField({ state }: Readonly<{ state: ConnectionState }>) {
 function BasicAuthFields({ state }: Readonly<{ state: ConnectionState }>) {
   const { configured, apiLogin, setApiLogin, apiPassword, setApiPassword } = state;
   return (
-    <div className="desktop:grid-cols-2 grid gap-3">
+    <div className={splitPaneClasses('peers')}>
       <Field label={configured ? 'API login (enter both fields to rotate)' : 'API login'}>
         {(props) => (
           <Input

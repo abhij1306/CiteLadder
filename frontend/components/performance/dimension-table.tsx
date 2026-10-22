@@ -89,7 +89,7 @@ function orderableSort(
 function StaticHead({ label, sublabel }: Readonly<{ label: string; sublabel: string }>) {
   return (
     <TableHead numeric className="min-w-[7.5rem]">
-      <span className="inline-flex w-full flex-col items-center gap-0.5 text-center">
+      <span className="inline-flex w-full flex-col items-center text-center">
         <span>{label}</span>
         <span className={textRole('caption', 'max-w-full truncate')} title={sublabel}>
           {sublabel}

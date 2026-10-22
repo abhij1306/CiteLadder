@@ -11,8 +11,8 @@ import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Select } from '@/components/ui/select';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
 import { projectsApi, type BusinessMapUpdateInput } from '@/lib/api/projects';
@@ -67,10 +67,14 @@ export function BusinessMapEditor({
     queryKey: queryKeys.projects.businessMap(projectId),
     queryFn: ({ signal }) => projectsApi.getBusinessMap(projectId, { signal, workspaceId }),
   });
-  if (query.isPending) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending) return <QueryState kind="loading" />;
   if (query.isError)
     return (
-      <ReadError {...readErrorProps(query)} fallback="The business map could not be loaded." />
+      <QueryState
+        kind="error"
+        {...readErrorProps(query)}
+        fallback="The business map could not be loaded."
+      />
     );
   return (
     <BusinessMapForm
@@ -228,7 +232,7 @@ function EntryList({
     setValue('');
   };
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <span className={textRole('label')}>{label}</span>
       {entries.length ? (
         <ul className="flex flex-wrap gap-2" aria-label={label}>
@@ -290,7 +294,7 @@ function EntryList({
           Add
         </Button>
       </div>
-    </div>
+    </Stack>
   );
 }
 
@@ -319,10 +323,10 @@ function ExclusionEditor({
   );
   const canAdd = first !== '' && second !== '' && !sameValue(first, second) && !duplicate;
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <span className={textRole('label')}>Combinations that never apply</span>
       {exclusions.length ? (
-        <ul className="grid gap-1" aria-label="Excluded combinations">
+        <Stack as="ul" gap="tight" aria-label="Excluded combinations">
           {exclusions.map((pair) => (
             <li
               key={`${pair.first}|${pair.second}`}
@@ -342,7 +346,7 @@ function ExclusionEditor({
               </Button>
             </li>
           ))}
-        </ul>
+        </Stack>
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Select value={first} onValueChange={setFirst} ariaLabel="First entry" options={options} />
@@ -365,6 +369,6 @@ function ExclusionEditor({
           Add exclusion
         </Button>
       </div>
-    </div>
+    </Stack>
   );
 }

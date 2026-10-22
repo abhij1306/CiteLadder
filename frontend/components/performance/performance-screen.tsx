@@ -21,7 +21,7 @@ import { useRangeProjection } from './use-range-projection';
 import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Alert } from '@/components/ui/alert';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
@@ -188,10 +188,13 @@ function SearchConsoleWorkspace({
   if (!available) return null;
   return (
     <Card className="overflow-hidden">
-      <div className="border-border-subtle desktop:flex-row desktop:items-stretch desktop:justify-between flex flex-col border-b">
+      <CardHeader
+        bordered
+        actions={<GranularitySelect value={granularity} onChange={onGranularityChange} />}
+      >
         <MetricCards
           data-testid="metric-card-strip"
-          className="min-w-0 flex-1"
+          className="min-w-0"
           selected={selected}
           comparison={comparison}
           compareLabel={compareLabel}
@@ -201,13 +204,10 @@ function SearchConsoleWorkspace({
           colors={METRIC_COLORS}
           loading={refreshing}
         />
-        <div className="border-border-subtle desktop:border-t-0 desktop:border-l flex shrink-0 items-center justify-end border-t px-3 py-2">
-          <GranularitySelect value={granularity} onChange={onGranularityChange} />
-        </div>
-      </div>
-      <div className="p-3">
+      </CardHeader>
+      <CardContent>
         <PerformanceChart series={series} />
-      </div>
+      </CardContent>
     </Card>
   );
 }

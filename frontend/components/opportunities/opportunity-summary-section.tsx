@@ -5,6 +5,7 @@ import type { OpportunityDetail } from '@/lib/api/types';
 import { formatAudited } from '@/lib/site-health/status';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { ledgerClasses } from '@/components/ui/workspace';
+import { Stack } from '@/components/ui/layout';
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -38,7 +39,7 @@ export function OpportunitySummarySection({ detail }: Readonly<{ detail: Opportu
   const siteUrlId = asString(evidence.site_url_id);
 
   return (
-    <section className="grid gap-2">
+    <Stack as="section">
       <Label>Supporting result</Label>
       <div className={ledgerClasses()}>
         <OpportunityKvRow label="Found" value={formatAudited(detail.created_at, timeZone)} />
@@ -56,6 +57,6 @@ export function OpportunitySummarySection({ detail }: Readonly<{ detail: Opportu
           <SourceLink label="Question" href="/prompts" linkText="Open prompt library" />
         ) : null}
       </div>
-    </section>
+    </Stack>
   );
 }

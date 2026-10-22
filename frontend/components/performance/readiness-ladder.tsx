@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Check } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
@@ -135,8 +136,10 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
 
   const reached = stageIndex(data.stage);
   return (
-    <section
-      className={cn(panelClasses({ tone: 'panel' }), 'grid gap-2')}
+    <Stack
+      as="section"
+      gap="compact"
+      className={panelClasses({ tone: 'panel' })}
       aria-label="Data readiness"
       data-testid="readiness-ladder"
     >
@@ -167,6 +170,6 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
           ? ` Imported through ${formatWindowDate(data.imported_through)}.`
           : ''}
       </p>
-    </section>
+    </Stack>
   );
 }

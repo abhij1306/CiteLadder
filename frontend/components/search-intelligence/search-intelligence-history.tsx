@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Line, LineChart, XAxis, YAxis, Tooltip } from 'recharts';
 import { axisProps, ChartContainer, LegendSwatch } from '@/components/ui/chart';
+import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -61,14 +62,13 @@ export function SearchIntelligenceHistory({
         Coverage includes the provider’s historical link population and may differ from the live
         summary. Missing observations are gaps.
       </p>
-      <div className="grid min-w-0 content-start gap-2">
+      <Stack gap="compact" className="min-w-0 content-start">
         <h3 className={textRole('itemTitle', 'flex min-h-6 items-center gap-2')}>
           <LegendSwatch color="var(--color-chart-1)" shape="line" />
           Total backlinks
         </h3>
         <ChartContainer
           config={{ backlinks: { label: 'Backlinks', color: 'var(--color-chart-1)' } }}
-          size="md"
           description="Saved monthly backlink totals; missing observations break the line."
         >
           <LineChart data={data}>
@@ -83,8 +83,8 @@ export function SearchIntelligenceHistory({
             />
           </LineChart>
         </ChartContainer>
-      </div>
-      <div className="grid min-w-0 content-start gap-2">
+      </Stack>
+      <Stack gap="compact" className="min-w-0 content-start">
         <div className="flex min-h-6 flex-wrap items-center gap-x-4 gap-y-1">
           <h3 className={textRole('itemTitle')}>Monthly changes</h3>
           <div className="type-caption flex flex-wrap gap-x-4 gap-y-1">
@@ -103,7 +103,6 @@ export function SearchIntelligenceHistory({
             new: { label: 'New backlinks', color: 'var(--color-chart-2)' },
             lost: { label: 'Lost backlinks', color: 'var(--color-chart-3)' },
           }}
-          size="md"
           description="Saved monthly new and lost backlinks, shown as separate labelled lines."
         >
           <LineChart data={data}>
@@ -127,7 +126,7 @@ export function SearchIntelligenceHistory({
             />
           </LineChart>
         </ChartContainer>
-      </div>
+      </Stack>
     </section>
   );
 }

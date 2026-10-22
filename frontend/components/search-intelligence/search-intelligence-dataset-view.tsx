@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableState } from '@/components/ui/data-table';
 import { Drawer } from '@/components/ui/drawer';
+import { Stack } from '@/components/ui/layout';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -276,12 +278,12 @@ function RowFields({ row }: Readonly<{ row: SearchIntelligenceRow }>) {
     (SEARCH_COLUMNS_BY_KIND[row.row_kind] ?? []).map((column) => [column.field, column.label]),
   );
   return (
-    <dl className="type-body grid gap-3">
+    <dl className={ledgerClasses('open', 'type-body')}>
       {evidenceFields(row, labels, timeZone).map((field) => (
-        <div key={field.key} className="border-border-subtle grid gap-1 border-b pb-2">
+        <Stack key={field.key} gap="tight" className="py-2">
           <dt className="text-muted">{field.label}</dt>
           <dd className="break-all">{field.value ?? <MissingValue />}</dd>
-        </div>
+        </Stack>
       ))}
     </dl>
   );
@@ -296,23 +298,25 @@ function EmptyDataset({
       <CardHeader bordered>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-2">
-        <p className={textRole('itemTitle')}>
-          {dataset.coverage === 'unknown'
-            ? 'Provider evidence is unavailable for this saved scope.'
-            : 'The provider returned no data for this saved scope.'}
-        </p>
-        <p className={textRole('body')}>
-          Requests can incur charges even when no results are returned. Check the website and market
-          before reviewing another analysis.
-        </p>
-        <p className={textRole('caption')}>
-          {dataset.target_hostname}
-          {dataset.comparison_origin
-            ? ` · compared with ${new URL(dataset.comparison_origin).hostname}`
-            : ''}{' '}
-          · 0 saved rows
-        </p>
+      <CardContent>
+        <Stack gap="compact">
+          <p className={textRole('itemTitle')}>
+            {dataset.coverage === 'unknown'
+              ? 'Provider evidence is unavailable for this saved scope.'
+              : 'The provider returned no data for this saved scope.'}
+          </p>
+          <p className={textRole('body')}>
+            Requests can incur charges even when no results are returned. Check the website and
+            market before reviewing another analysis.
+          </p>
+          <p className={textRole('caption')}>
+            {dataset.target_hostname}
+            {dataset.comparison_origin
+              ? ` · compared with ${new URL(dataset.comparison_origin).hostname}`
+              : ''}{' '}
+            · 0 saved rows
+          </p>
+        </Stack>
       </CardContent>
     </Card>
   );

@@ -43,6 +43,16 @@ import { TrafficNoResults } from './empty-state';
 import { Pager } from '@/components/ui/pager';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import type { TrafficFilters } from '@/lib/api/ai-traffic';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+
+const ACTIVITY_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'observed', label: 'Observed', width: 'date', numeric: true },
+  { key: 'bot', label: 'Bot', width: 'status' },
+  { key: 'path', label: 'Host and path' },
+  { key: 'resource', label: 'Resource', width: 'status' },
+  { key: 'status', label: 'Status', width: 'figure', numeric: true },
+  { key: 'verification', label: 'Verification' },
+];
 export function TrafficOverview({
   data,
   projectId,
@@ -62,7 +72,7 @@ export function TrafficOverview({
     <TabPanel value="overview">
       <Stack gap="workspace">
         <InsightStrip projectId={projectId} workspaceId={workspaceId} range={range} />
-        <div className="desktop:grid-cols-3 grid gap-[var(--workspace-gap)]">
+        <Stack gap="workspace" className="desktop:grid-cols-3">
           <CrawlSignalPanel
             data={data.crawl}
             available={crawlAvailable}
@@ -70,7 +80,7 @@ export function TrafficOverview({
           />
           <ReferralSignal data={data.referrals} />
           <CitationSignal data={data.citations} projectId={projectId} />
-        </div>
+        </Stack>
         {data.crawl.series.length ? <RequestsByPurpose series={data.crawl.series} /> : null}
         {crawlAvailable ? (
           <CrawlLogConnections
@@ -162,54 +172,45 @@ export function TrafficActivity({
   return (
     <TabPanel value="activity">
       {data.items.length ? (
-        <Table>
-          <caption className="sr-only">Retained automated request activity</caption>
-          <TableHeader>
-            <TableRow>
-              <TableHead numeric>Observed</TableHead>
-              <TableHead>Bot</TableHead>
-              <TableHead>Host and path</TableHead>
-              <TableHead>Resource</TableHead>
-              <TableHead numeric>Status</TableHead>
-              <TableHead>Verification</TableHead>
+        <DataTable
+          label="Retained automated request activity"
+          columns={ACTIVITY_COLUMNS}
+          minWidth="md"
+        >
+          {data.items.map((r) => (
+            <TableRow key={r.id}>
+              <TableCell numeric>
+                <DisplayTime value={r.occurred_at} />
+              </TableCell>
+              <TableCell>
+                {catalog?.bots.find((b) => b.bot_id === r.bot_id)?.label ?? r.bot_id}
+              </TableCell>
+              <TableCell>
+                <CellLines
+                  lines={[
+                    r.host + r.display_path,
+                    r.identity === 'non_joinable'
+                      ? 'Redacted; non-joinable'
+                      : 'Path-level identity',
+                  ]}
+                />
+              </TableCell>
+              <TableCell>{words(r.resource_class)}</TableCell>
+              <TableCell numeric>{r.status_code}</TableCell>
+              <TableCell>
+                <CellLines
+                  lines={[
+                    words(r.verification) +
+                      (r.verification_reason ? ' · ' + reasonLabel(r.verification_reason) : ''),
+                    r.verification_basis === 'later_snapshot'
+                      ? 'Verified using a later IP-range snapshot.'
+                      : '',
+                  ]}
+                />
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.items.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell numeric>
-                  <DisplayTime value={r.occurred_at} />
-                </TableCell>
-                <TableCell>
-                  {catalog?.bots.find((b) => b.bot_id === r.bot_id)?.label ?? r.bot_id}
-                </TableCell>
-                <TableCell>
-                  <CellLines
-                    lines={[
-                      r.host + r.display_path,
-                      r.identity === 'non_joinable'
-                        ? 'Redacted; non-joinable'
-                        : 'Path-level identity',
-                    ]}
-                  />
-                </TableCell>
-                <TableCell>{words(r.resource_class)}</TableCell>
-                <TableCell numeric>{r.status_code}</TableCell>
-                <TableCell>
-                  <CellLines
-                    lines={[
-                      words(r.verification) +
-                        (r.verification_reason ? ' · ' + reasonLabel(r.verification_reason) : ''),
-                      r.verification_basis === 'later_snapshot'
-                        ? 'Verified using a later IP-range snapshot.'
-                        : '',
-                    ]}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+          ))}
+        </DataTable>
       ) : (
         <TrafficNoResults
           heading="No matching requests"
@@ -267,7 +268,7 @@ function CoverageTable({
   });
   const data = query.data;
   return (
-    <section className="grid gap-3" aria-labelledby="ai-traffic-coverage">
+    <Stack as="section" aria-labelledby="ai-traffic-coverage">
       <EditorialSectionHeader
         headingId="ai-traffic-coverage"
         title="Coverage by source and reporting day"
@@ -323,6 +324,6 @@ function CoverageTable({
           />
         </>
       ) : null}
-    </section>
+    </Stack>
   );
 }

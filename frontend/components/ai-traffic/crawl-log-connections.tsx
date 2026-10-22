@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Alert } from '@/components/ui/alert';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Stack } from '@/components/ui/layout';
 import { DisplayTime } from '@/components/ui/display-time';
 import {
   ClampText,
@@ -138,16 +139,16 @@ function Connections({
   // page: title left, its one action right, the sources beneath.
   if (!showHeader)
     return (
-      <section id="crawl-log-connections" className="grid gap-3" aria-label="Crawl log connections">
+      <Stack as="section" id="crawl-log-connections" aria-label="Crawl log connections">
         {body}
-      </section>
+      </Stack>
     );
   return (
     <Card id="crawl-log-connections" aria-label="Crawl log connections">
       <CardHeader actions={connect}>
         <CardTitle>Crawl logs</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3 empty:hidden">{body}</CardContent>
+      <Stack className="empty:hidden">{body}</Stack>
     </Card>
   );
 }

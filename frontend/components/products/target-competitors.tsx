@@ -9,7 +9,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Stack } from '@/components/ui/layout';
 import { commerceApi } from '@/lib/api/commerce';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -76,32 +76,34 @@ export function TargetCompetitors({
         <CardTitle>Competitors on this shelf</CardTitle>
         <CardDescription>Candidates do not enter measurement until approved.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        {tasks.map((task) => (
-          <Alert key={task.id} tone={task.status === 'failed' ? 'danger' : 'info'}>
-            {discoveryMessage(task.status, task.target.kind, task.error_code)}
-          </Alert>
-        ))}
-        {discovery.discover.isError ? (
-          <Alert tone="danger">
-            {
-              humanizeApiError(
-                discovery.discover.error,
-                'Competitor discovery could not start. Please try again.',
-              ).message
-            }
-          </Alert>
-        ) : null}
-        {decide.isError ? (
-          <Alert tone="danger">The competitor decision failed. Please try again.</Alert>
-        ) : null}
-        <CompetitorRows
-          query={query}
-          rows={rows}
-          running={running}
-          pending={!workspaceId || decide.isPending}
-          onDecide={(id, decision) => decide.mutate({ id, decision })}
-        />
+      <CardContent>
+        <Stack>
+          {tasks.map((task) => (
+            <Alert key={task.id} tone={task.status === 'failed' ? 'danger' : 'info'}>
+              {discoveryMessage(task.status, task.target.kind, task.error_code)}
+            </Alert>
+          ))}
+          {discovery.discover.isError ? (
+            <Alert tone="danger">
+              {
+                humanizeApiError(
+                  discovery.discover.error,
+                  'Competitor discovery could not start. Please try again.',
+                ).message
+              }
+            </Alert>
+          ) : null}
+          {decide.isError ? (
+            <Alert tone="danger">The competitor decision failed. Please try again.</Alert>
+          ) : null}
+          <CompetitorRows
+            query={query}
+            rows={rows}
+            running={running}
+            pending={!workspaceId || decide.isPending}
+            onDecide={(id, decision) => decide.mutate({ id, decision })}
+          />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -122,7 +124,7 @@ function CompetitorRows({
 }>) {
   if (query.isError)
     return <ReadError {...readErrorProps(query)} fallback="Competitors could not be loaded." />;
-  if (query.isPending) return <Skeleton className="h-24 w-full" />;
+  if (query.isPending) return <QueryState kind="loading" />;
   if (!rows.length) {
     return (
       <QueryState
@@ -138,7 +140,7 @@ function CompetitorRows({
     <ul className={ledgerClasses()}>
       {rows.map((row) => (
         <li key={row.id} className="flex flex-wrap items-center gap-3 py-2">
-          <div className="grid min-w-0 flex-1 gap-0.5">
+          <Stack gap="tight" className="min-w-0 flex-1">
             <a
               className={textRole('emphasis', 'text-link truncate')}
               href={row.canonical_url}
@@ -156,7 +158,7 @@ function CompetitorRows({
                 .filter(Boolean)
                 .join(' · ')}
             </span>
-          </div>
+          </Stack>
           <Badge variant="status" value={competitorState(row.state).tone}>
             {competitorState(row.state).label}
           </Badge>

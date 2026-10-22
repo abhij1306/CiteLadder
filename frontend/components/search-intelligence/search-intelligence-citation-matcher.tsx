@@ -6,6 +6,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Stack } from '@/components/ui/layout';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -92,7 +94,7 @@ export function SearchIntelligenceCitationMatcher({
   return (
     // The drawer is the surface and its title the heading; a Card here would
     // nest one object inside another.
-    <div className="grid gap-3">
+    <Stack gap="compact">
       <p className="type-body">
         Choose the Visibility audits whose cited sources to compare with the domains that link to
         you.
@@ -106,12 +108,9 @@ export function SearchIntelligenceCitationMatcher({
           options={lists.map((dataset) => ({ value: dataset.id, label: dataset.target_hostname }))}
         />
       ) : null}
-      <div className="grid max-h-64 gap-2 overflow-y-auto">
+      <div className={ledgerClasses('open', 'max-h-64 overflow-y-auto')}>
         {answered.map((audit) => (
-          <label
-            key={audit.id}
-            className="type-body border-border-subtle flex items-center justify-between gap-3 border-b py-2"
-          >
+          <label key={audit.id} className="type-body flex items-center justify-between gap-3 py-2">
             <Checkbox
               checked={selectedAudits.includes(audit.id)}
               onCheckedChange={() => toggle(audit.id)}
@@ -129,6 +128,6 @@ export function SearchIntelligenceCitationMatcher({
           Match citations
         </Button>
       </div>
-    </div>
+    </Stack>
   );
 }
