@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { FlowGroup } from '@/components/onboarding/flow-shell';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { RadioGroup } from '@/components/ui/radio-group';
 import type { DiscoveryProfile } from '@/lib/api/brand-discoveries';
 import { BUYER_TYPE_CHOICES, MARKET_SCOPE_CHOICES } from '@/lib/project/identity-facets';
@@ -84,37 +85,36 @@ export function IcpCategory({ profile, onChange }: IcpPart) {
       title="What you sell"
       help="Your competitors and tracked questions are built from this."
     >
-      <RadioGroup
-        variant="row"
-        className="border-y-0"
-        ariaLabel="What you sell"
-        value={isOther ? OTHER_CATEGORY : profile.category}
-        options={[
-          // The value stays exactly as discovery supplied it — this is only
-          // the label. `brand_audit_services` was the first thing a new
-          // customer read on this screen.
-          ...choices.map((option) => ({
-            value: option,
-            label: titleCaseStatus(option),
-          })),
-          {
-            value: OTHER_CATEGORY,
-            label: choices.length > 0 ? 'None of these' : 'Other',
-          },
-        ]}
-        onValueChange={(value) => {
-          if (value === OTHER_CATEGORY) {
-            setIsOther(true);
-            if (choices.includes(profile.category)) update('category', '');
-          } else {
-            setIsOther(false);
-            update('category', value);
-          }
-        }}
-      />
-
-      {isOther ? (
-        <div className="pt-1">
+      <Stack gap="tight">
+        <RadioGroup
+          variant="row"
+          className="border-y-0"
+          ariaLabel="What you sell"
+          value={isOther ? OTHER_CATEGORY : profile.category}
+          options={[
+            // The value stays exactly as discovery supplied it — this is only
+            // the label. `brand_audit_services` was the first thing a new
+            // customer read on this screen.
+            ...choices.map((option) => ({
+              value: option,
+              label: titleCaseStatus(option),
+            })),
+            {
+              value: OTHER_CATEGORY,
+              label: choices.length > 0 ? 'None of these' : 'Other',
+            },
+          ]}
+          onValueChange={(value) => {
+            if (value === OTHER_CATEGORY) {
+              setIsOther(true);
+              if (choices.includes(profile.category)) update('category', '');
+            } else {
+              setIsOther(false);
+              update('category', value);
+            }
+          }}
+        />
+        {isOther ? (
           <Input
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- Choosing Other explicitly reveals this field; focus follows that user action.
             autoFocus
@@ -124,8 +124,8 @@ export function IcpCategory({ profile, onChange }: IcpPart) {
             placeholder="e.g. ecommerce implementation agency"
             className="max-w-md"
           />
-        </div>
-      ) : null}
+        ) : null}
+      </Stack>
     </FlowGroup>
   );
 }

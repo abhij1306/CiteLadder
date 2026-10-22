@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 
 type Source = z.infer<typeof crawlSourceSchema>;
@@ -19,7 +20,7 @@ type GcpPull = z.infer<typeof crawlSourceListSchema>['gcp_pull'];
 /** Copyable preformatted text: generated commands or the sink filter. */
 function CodeText({ value, label }: Readonly<{ value: string; label: string }>) {
   return (
-    <div className="grid gap-2">
+    <Stack>
       <pre
         className={panelClasses(
           { tone: 'well' },
@@ -31,7 +32,7 @@ function CodeText({ value, label }: Readonly<{ value: string; label: string }>) 
       <CopyButton value={value} className="w-fit">
         {label}
       </CopyButton>
-    </div>
+    </Stack>
   );
 }
 
@@ -95,7 +96,7 @@ export function GcpSourceSetup({
   if (!pull || !gcp.reader_email) return null;
   const outcome = verify.data;
   return (
-    <div className="grid gap-3">
+    <Stack>
       <p className="type-body">
         Run these in Cloud Shell, then enable logging on each load balancer backend service. The
         label lets CiteLadder confirm the subscription is yours.
@@ -125,7 +126,7 @@ export function GcpSourceSetup({
         <Alert tone="danger">{verificationFailureLabel(outcome.failure ?? 'unavailable')}</Alert>
       ) : null}
       {verify.isError ? <Alert tone="danger">{verify.error.message}</Alert> : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -167,7 +168,7 @@ function SinkFilterUpdate({
   confirmFilter: ReturnType<typeof useGcpPullActions>['confirmFilter'];
 }>) {
   return (
-    <section className="grid gap-2" aria-label={`Sink filter update for ${source.host}`}>
+    <Stack as="section" aria-label={`Sink filter update for ${source.host}`}>
       <Alert tone="warning">
         Update your sink filter. CiteLadder recognizes new crawlers; until the sink uses this
         filter, coverage stays partial.
@@ -184,6 +185,6 @@ function SinkFilterUpdate({
         </Button>
       ) : null}
       {confirmFilter.isError ? <Alert tone="danger">{confirmFilter.error.message}</Alert> : null}
-    </section>
+    </Stack>
   );
 }

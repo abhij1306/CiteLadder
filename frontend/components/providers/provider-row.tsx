@@ -5,7 +5,9 @@ import { useId, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
+import { ledgerItemClasses } from '@/components/ui/workspace';
 import { textRole } from '@/components/ui/typography';
 import type { ProviderConnection } from '@/lib/api/types';
 import {
@@ -87,9 +89,9 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
   const saveVerb = configured ? 'Update' : 'Save';
   const saveLabel = saveMutation.isPending ? 'Saving & testing…' : `${saveVerb} ${noun}`;
   return (
-    <div id={id} className={panelClasses({ tone: 'tonal' }, 'grid gap-3')}>
+    <Stack gap="compact" id={id} className={panelClasses({ tone: 'tonal' })}>
       <ProviderConnectionFields state={state} />
-      <div className="flex flex-wrap items-center justify-end gap-2">
+      <Inline className="flex-wrap justify-end">
         <Button
           type="button"
           variant="secondary"
@@ -105,8 +107,8 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
         >
           {saveLabel}
         </Button>
-      </div>
-    </div>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -130,20 +132,20 @@ export function ProviderRow({
   const closedAction = state.configured ? 'Manage' : 'Connect';
   const toggleLabel = open ? 'Close' : closedAction;
   return (
-    <li className="grid gap-3 py-4 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+    <Stack as="li" gap="compact" className={ledgerItemClasses()}>
+      <Inline gap="workspace" className="flex-wrap">
+        <Inline gap="compact" className="flex-1">
           <BrandLogo
             name={group.label}
             logoUrl={TRANSPORT_LOGOS[group.transport]}
             websiteUrl={TRANSPORT_DOMAINS[group.transport]}
           />
-          <div className="grid min-w-0 gap-0.5">
+          <div className="grid min-w-0">
             <h3 className={textRole('itemTitle')}>{group.label}</h3>
             <p className={textRole('caption')}>{group.engines.map(engineSummary).join(' · ')}</p>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
+        </Inline>
+        <Inline>
           <StatusBadge group={group} connection={state.connection} />
           <Button
             type="button"
@@ -155,10 +157,10 @@ export function ProviderRow({
           >
             {toggleLabel}
           </Button>
-        </div>
-      </div>
+        </Inline>
+      </Inline>
       <LastFailure group={group} />
       {open ? <CredentialForm id={formId} state={state} /> : null}
-    </li>
+    </Stack>
   );
 }

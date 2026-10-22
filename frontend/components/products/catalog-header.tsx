@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { CsvImportTrigger } from '@/components/ui/csv-import';
+import { Stack } from '@/components/ui/layout';
 import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
 import { commerceApi } from '@/lib/api/commerce';
@@ -222,12 +223,12 @@ function CatalogNotices({
 }: Readonly<{ result: string; importFailed: boolean; refreshFailed: boolean }>) {
   if (!result && !importFailed && !refreshFailed) return null;
   return (
-    <div className="grid gap-[var(--compact-gap)]">
+    <Stack>
       {result ? <p className={textRole('body')}>{result}</p> : null}
       {importFailed ? <Alert tone="danger">The catalog import failed.</Alert> : null}
       {refreshFailed ? (
         <Alert tone="danger">Site Health progress could not be refreshed.</Alert>
       ) : null}
-    </div>
+    </Stack>
   );
 }

@@ -10,8 +10,9 @@ import { OpportunityTypeBadge } from '@/components/opportunities/opportunity-typ
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Drawer } from '@/components/ui/drawer';
+import { Inline, Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Label, textRole } from '@/components/ui/typography';
 import { opportunitiesQueries } from '@/lib/api/opportunities';
 import type { OpportunityDetail } from '@/lib/api/types';
@@ -57,13 +58,7 @@ export function EvidenceDrawer({
       </Alert>
     );
   } else if (detailQuery.isLoading || !detail) {
-    body = (
-      <div className="grid gap-3">
-        <Skeleton className="h-8 w-3/4" />
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-32 w-full" />
-      </div>
-    );
+    body = <QueryState kind="loading" />;
   } else {
     body = <OpportunityDetailBody detail={detail} />;
   }
@@ -83,28 +78,28 @@ export function EvidenceDrawer({
 /** Everything the drawer shows once a detail for THIS project has loaded. */
 function OpportunityDetailBody({ detail }: Readonly<{ detail: OpportunityDetail }>) {
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-2">
+    <Stack gap="workspace">
+      <Stack>
         <h2 className={textRole('sectionTitle')}>{detail.title}</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        <Inline className="flex-wrap">
           <Badge variant="status" value={severityBadgeValue(detail.severity)}>
             {severityLabel(detail.severity)} impact
           </Badge>
           <OpportunityTypeBadge type={detail.opportunity_type} />
-        </div>
-      </div>
+        </Inline>
+      </Stack>
       <OpportunityEvidenceSection detail={detail} />
       {detail.remediation ? (
-        <section className="grid gap-2">
+        <Stack as="section">
           <Label>Recommended improvements</Label>
           <div className={panelClasses({ tone: 'well' })}>
             <p className="type-body whitespace-pre-line">{detail.remediation}</p>
           </div>
-        </section>
+        </Stack>
       ) : null}
       <OpportunitySummarySection detail={detail} />
       <ActionHandoff detail={detail} />
-    </div>
+    </Stack>
   );
 }
 
@@ -121,12 +116,12 @@ function ActionHandoff({ detail }: Readonly<{ detail: OpportunityDetail }>) {
     return <EarnedPageHandoff detail={detail} />;
   }
   return (
-    <section className="grid gap-2">
+    <Stack as="section">
       <Label>Action handoff</Label>
-      <div className={panelClasses({}, 'grid gap-2')}>
+      <Stack className={panelClasses()}>
         <p className={textRole('body')}>Create or improve content the brand controls.</p>
         <Limitations items={detail.content_handoff.limitations} />
-      </div>
-    </section>
+      </Stack>
+    </Stack>
   );
 }

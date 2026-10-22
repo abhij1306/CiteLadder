@@ -6,6 +6,8 @@ import { INITIAL_SELECTION, type RangeSelection } from '@/lib/performance/perfor
 import type { usePerformanceSync } from './use-performance-sync';
 import { Alert } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
+import { Icon } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
 import { Button } from '@/components/ui/button';
 import { SegmentedAction, SegmentedControl } from '@/components/ui/segmented-control';
 import { Select } from '@/components/ui/select';
@@ -99,7 +101,7 @@ export function PerformanceToolbar({
             onClick={comparing ? onOpenCompare : onOpenRange}
           >
             {moreLabel}
-            <ChevronDown className="size-3.5 opacity-70" aria-hidden />
+            <Icon icon={ChevronDown} className="opacity-70" />
           </SegmentedAction>
         }
       />
@@ -111,7 +113,7 @@ export function PerformanceToolbar({
           "More". With no comparison active there is nothing it would undo. */}
       {comparing ? (
         <Button variant="ghost" onClick={onReset} data-testid="reset-filters-button">
-          <RotateCcw className="size-4" aria-hidden />
+          <Icon icon={RotateCcw} />
           Reset filters
         </Button>
       ) : null}
@@ -146,7 +148,7 @@ export function PerformanceActions({
         pendingLabel="Syncing…"
         data-testid="sync-now-button"
       >
-        <RefreshCw className="size-4" aria-hidden />
+        <Icon icon={RefreshCw} />
         Sync now
       </Button>
     </>
@@ -218,13 +220,13 @@ export function PerformanceNotices({
     <>
       {sync.syncing ? (
         <Alert tone="info" hideIcon>
-          <span className="flex items-center gap-2" data-testid="sync-status-banner">
+          <Inline as="span" data-testid="sync-status-banner">
             <Spinner />
             <span>
               Sync in progress — importing the dates not yet covered. Charts and tables update when
               it completes.
             </span>
-          </span>
+          </Inline>
         </Alert>
       ) : null}
       {sync.notice ? <Alert tone="info">{sync.notice}</Alert> : null}

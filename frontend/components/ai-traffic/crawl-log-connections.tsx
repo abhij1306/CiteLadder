@@ -11,17 +11,11 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Alert } from '@/components/ui/alert';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
+import { Stack } from '@/components/ui/layout';
 import { DisplayTime } from '@/components/ui/display-time';
-import {
-  ClampText,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { CrawlLogSetup, CrawlLogSetupSubmit, CrawlLogCredential } from './crawl-log-setup';
 import { CrawlLogAvailabilityNotice } from './crawl-log-availability';
 import {
@@ -33,6 +27,13 @@ import {
 import { SinkFilterUpdates } from './gcp-pull-setup';
 import { CRAWL_LOG_SETUPS } from '@/lib/config/crawl-logs';
 
+const SOURCE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'source', label: 'Source' },
+  { key: 'collection', label: 'Collection and sampling' },
+  { key: 'freshness', label: 'Freshness' },
+  { key: 'diagnostics', label: 'Diagnostics' },
+  { key: 'manage', label: 'Manage', width: 'rowActions' },
+];
 const setupLabel = (setup: string) =>
   CRAWL_LOG_SETUPS.find((option) => option.value === setup)?.label ?? words(setup);
 export function CrawlLogConnections({
@@ -126,7 +127,7 @@ function Connections({
             ? 'Choose the collection method you operate. One live source per host; uploads are backfill.'
             : 'Crawl log collection availability'
         }
-        className="w-144"
+        width="wide"
         footer={setupAvailable ? <CrawlLogSetupSubmit model={model} /> : undefined}
       >
         <CrawlLogCredential model={model} />
@@ -138,16 +139,16 @@ function Connections({
   // page: title left, its one action right, the sources beneath.
   if (!showHeader)
     return (
-      <section id="crawl-log-connections" className="grid gap-3" aria-label="Crawl log connections">
+      <Stack as="section" id="crawl-log-connections" aria-label="Crawl log connections">
         {body}
-      </section>
+      </Stack>
     );
   return (
     <Card id="crawl-log-connections" aria-label="Crawl log connections">
       <CardHeader actions={connect}>
         <CardTitle>Crawl logs</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3 empty:hidden">{body}</CardContent>
+      <Stack className="empty:hidden">{body}</Stack>
     </Card>
   );
 }
@@ -206,41 +207,37 @@ function SourceDiagnostics({
   /** Reopen a Google Cloud source's setup commands and subscription check. */
   onSetup: (id: string) => void;
 }>) {
+  // The sources sit in the Crawl logs card under its header, so the table is
+  // nested in that card rather than a card of its own.
   return (
-    <Table>
-      <caption className="sr-only">Crawl log source diagnostics</caption>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Source</TableHead>
-          <TableHead>Collection and sampling</TableHead>
-          <TableHead>Freshness</TableHead>
-          <TableHead>Diagnostics</TableHead>
-          <TableHead>Manage</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {items.map((s) => (
-          <TableRow key={s.id}>
-            <TableCell>
-              <div className="grid min-w-0">
-                <ClampText lines={1}>{s.host}</ClampText>
-                <ClampText lines={1} className="type-caption">
+    <DataTable nested label="Crawl log source diagnostics" columns={SOURCE_COLUMNS} minWidth="lg">
+      {items.map((s) => (
+        <TableRow key={s.id}>
+          <TableCell>
+            <TableCellLines
+              primary={s.host}
+              secondary={
+                <>
                   {setupLabel(s.setup)} · {words(s.connection)} · {words(s.state)}
                   <StallDetail source={s} />
-                </ClampText>
-              </div>
-            </TableCell>
-            <TableCell>
-              {collectionPointLabel(s.collection_point)} · {words(s.sampling.kind)}
-              {s.sampling.kind === 'sampled' ? ' ' + s.sampling.rate : ''}
-              {s.sampling.kind === 'filtered' ? ' ' + s.sampling.description : ''}
-            </TableCell>
-            <TableCell>
-              <div className="grid min-w-0">
-                <ClampText lines={1}>
+                </>
+              }
+            />
+          </TableCell>
+          <TableCell>
+            {collectionPointLabel(s.collection_point)} · {words(s.sampling.kind)}
+            {s.sampling.kind === 'sampled' ? ' ' + s.sampling.rate : ''}
+            {s.sampling.kind === 'filtered' ? ' ' + s.sampling.description : ''}
+          </TableCell>
+          <TableCell>
+            <TableCellLines
+              primary={
+                <>
                   Accepted: <DisplayTime value={s.last_accepted_batch} fallback="Awaiting data" />
-                </ClampText>
-                <ClampText lines={1} className="type-caption">
+                </>
+              }
+              secondary={
+                <>
                   Processed:{' '}
                   <DisplayTime value={s.last_processed_at} fallback="Awaiting processing" />
                   {s.pull ? (
@@ -249,50 +246,50 @@ function SourceDiagnostics({
                       <DisplayTime value={s.pull.last_drained_at} fallback="Not drained yet" />
                     </>
                   ) : null}
-                </ClampText>
-              </div>
-            </TableCell>
-            <TableCell>
-              {s.rejected_lines} rejected · {s.overlapping_lines} overlapping ·{' '}
-              {s.unsupported_uploads} unsupported uploads · {s.unsupported_batches} unsupported
-              batches
-            </TableCell>
-            <TableCell className="whitespace-nowrap">
-              {canManage && s.status === 'active' ? (
-                <div className="flex gap-2">
-                  {s.kind === 'webhook' ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        onRotate(s.id);
-                      }}
-                    >
-                      Rotate token
-                    </Button>
-                  ) : null}
-                  {s.kind === 'pull' ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => onSetup(s.id)}
-                      aria-label={`Set up and verify ${s.host}`}
-                    >
-                      Set up and verify
-                    </Button>
-                  ) : null}
+                </>
+              }
+            />
+          </TableCell>
+          <TableCell>
+            {s.rejected_lines} rejected · {s.overlapping_lines} overlapping ·{' '}
+            {s.unsupported_uploads} unsupported uploads · {s.unsupported_batches} unsupported
+            batches
+          </TableCell>
+          <TableActionsCell>
+            {canManage && s.status === 'active' ? (
+              <>
+                {s.kind === 'webhook' ? (
                   <Button
                     variant="secondary"
-                    onClick={() => onRevoke(s)}
-                    aria-label={`Revoke ${s.host}`}
+                    onClick={() => {
+                      onRotate(s.id);
+                    }}
                   >
-                    Revoke
+                    Rotate token
                   </Button>
-                </div>
-              ) : null}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                ) : null}
+                {s.kind === 'pull' ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => onSetup(s.id)}
+                    aria-label={`Set up and verify ${s.host}`}
+                  >
+                    Set up and verify
+                  </Button>
+                ) : null}
+                <Button
+                  variant="secondary"
+                  onClick={() => onRevoke(s)}
+                  aria-label={`Revoke ${s.host}`}
+                >
+                  Revoke
+                </Button>
+              </>
+            ) : null}
+          </TableActionsCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 /** Revoking stops ingestion for a host, so it is confirmed by name. */

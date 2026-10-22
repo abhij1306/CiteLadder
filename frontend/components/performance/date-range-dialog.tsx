@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { DateField } from '@/components/ui/date-field';
 import { Field } from '@/components/ui/field';
+import { Inline, Stack } from '@/components/ui/layout';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import {
@@ -92,9 +93,9 @@ function DateRangeFields({
   max?: string;
 }>) {
   return (
-    <fieldset className="grid gap-2">
+    <Stack as="fieldset" gap="compact">
       <legend className="sr-only">{legend}</legend>
-      <div className="flex flex-wrap items-end gap-3">
+      <Inline gap="compact" className="flex-wrap">
         <Field label="Start date" hint="YYYY-MM-DD">
           {(props) => (
             <DateField
@@ -107,7 +108,7 @@ function DateRangeFields({
             />
           )}
         </Field>
-        <span className="text-muted pb-2">–</span>
+        <span className="text-muted">–</span>
         <Field label="End date" hint="YYYY-MM-DD">
           {(props) => (
             <DateField
@@ -120,8 +121,8 @@ function DateRangeFields({
             />
           )}
         </Field>
-      </div>
-    </fieldset>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -188,7 +189,7 @@ export function DateRangeDialog({
           : 'No imported history yet.'
       }
       footer={
-        <div className="flex justify-end gap-2">
+        <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -201,7 +202,7 @@ export function DateRangeDialog({
           >
             Apply
           </Button>
-        </div>
+        </>
       }
     >
       <Tabs
@@ -212,48 +213,52 @@ export function DateRangeDialog({
           { value: 'compare', label: 'Compare' },
         ]}
         ariaLabel="Date range mode"
-        rootClassName="grid gap-4"
+        spaced
       >
-        <TabPanel value="filter" className="grid gap-3">
-          <RadioGroup
-            ariaLabel="Date range"
-            value={draft.range}
-            onValueChange={(range) => patch({ range })}
-            options={DIALOG_RANGE_OPTIONS.map((option) => ({
-              value: option.value,
-              label: option.label,
-            }))}
-          />
-          {/* Always visible: the dates are the point of the Custom option, so
-              hiding them behind selecting the radio first costs a click for
-              no benefit. Typing a date IS choosing Custom, so the inputs
-              select the radio themselves. */}
-          <DateRangeFields
-            legend="Custom date range"
-            from={draft.from}
-            to={draft.to}
-            min={coverage.earliest ?? undefined}
-            max={coverage.latest ?? undefined}
-            onFrom={(from) => patch({ from, range: 'custom' })}
-            onTo={(to) => patch({ to, range: 'custom' })}
-          />
+        <TabPanel value="filter">
+          <Stack gap="compact">
+            <RadioGroup
+              ariaLabel="Date range"
+              value={draft.range}
+              onValueChange={(range) => patch({ range })}
+              options={DIALOG_RANGE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+            />
+            {/* Always visible: the dates are the point of the Custom option, so
+                hiding them behind selecting the radio first costs a click for
+                no benefit. Typing a date IS choosing Custom, so the inputs
+                select the radio themselves. */}
+            <DateRangeFields
+              legend="Custom date range"
+              from={draft.from}
+              to={draft.to}
+              min={coverage.earliest ?? undefined}
+              max={coverage.latest ?? undefined}
+              onFrom={(from) => patch({ from, range: 'custom' })}
+              onTo={(to) => patch({ to, range: 'custom' })}
+            />
+          </Stack>
         </TabPanel>
-        <TabPanel value="compare" className="grid gap-3">
-          <RadioGroup
-            ariaLabel="Comparison"
-            value={draft.compare}
-            onValueChange={(compare) => patch({ compare })}
-            options={compareOptions}
-          />
-          <DateRangeFields
-            legend="Custom comparison range"
-            from={draft.compareFrom}
-            to={draft.compareTo}
-            min={coverage.earliest ?? undefined}
-            max={coverage.latest ?? undefined}
-            onFrom={(compareFrom) => patch({ compareFrom, compare: 'custom' })}
-            onTo={(compareTo) => patch({ compareTo, compare: 'custom' })}
-          />
+        <TabPanel value="compare">
+          <Stack gap="compact">
+            <RadioGroup
+              ariaLabel="Comparison"
+              value={draft.compare}
+              onValueChange={(compare) => patch({ compare })}
+              options={compareOptions}
+            />
+            <DateRangeFields
+              legend="Custom comparison range"
+              from={draft.compareFrom}
+              to={draft.compareTo}
+              min={coverage.earliest ?? undefined}
+              max={coverage.latest ?? undefined}
+              onFrom={(compareFrom) => patch({ compareFrom, compare: 'custom' })}
+              onTo={(compareTo) => patch({ compareTo, compare: 'custom' })}
+            />
+          </Stack>
         </TabPanel>
       </Tabs>
     </Dialog>

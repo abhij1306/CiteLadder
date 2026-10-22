@@ -1,19 +1,14 @@
+import { SearchX } from 'lucide-react';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { textRole } from '@/components/ui/typography';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Stack } from '@/components/ui/layout';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { TrendChart, type TrendPoint } from '@/components/ui/trend-chart';
 import type { AiReferrals } from '@/lib/api/ai-traffic';
 import {
   aiSourceLabel,
   countDomainMax,
-  countYLabels,
   toCountChartPoints,
   toPercentChartPoints,
   totalSourceSessions,
@@ -36,7 +31,7 @@ export function AiReferralsDashboard({
 }: Readonly<{ data: AiReferrals; fetching: boolean }>) {
   const [tab, setTab] = useState('overview');
   return (
-    <div aria-busy={fetching} className="grid gap-[var(--workspace-gap)]">
+    <Stack gap="workspace" aria-busy={fetching}>
       <ReferralQuality data={data} />
       <Tabs
         value={tab}
@@ -49,10 +44,10 @@ export function AiReferralsDashboard({
         ]}
       >
         <TabPanel value="overview">
-          <div className="desktop:grid-cols-2 grid gap-[var(--workspace-gap)]">
+          <Stack gap="workspace" className="desktop:grid-cols-2">
             <ReferralVolumeCard data={data} />
             <ReferralShareCard data={data} />
-          </div>
+          </Stack>
           <ReferralComparison data={data} />
         </TabPanel>
         <TabPanel value="sources">
@@ -62,27 +57,33 @@ export function AiReferralsDashboard({
           <ReferralLandingPages data={data} />
         </TabPanel>
       </Tabs>
-    </div>
+    </Stack>
   );
 }
 
+/**
+ * A referral trend in a card: the series on the chart's own axes (dates
+ * under the plot, the scale in its gutter), so no hand-placed labels drift
+ * from the line they name.
+ */
 function TrendCard({
   title,
   description,
   badge,
   points,
-  yLabels,
+  unit,
   domainMax,
+  formatTick,
 }: Readonly<{
   title: string;
   description: string;
   badge: string;
   points: TrendPoint[];
-  yLabels: string[];
+  /** The y axis's title. */
+  unit: string;
   domainMax?: number;
+  formatTick?: (value: number) => string;
 }>) {
-  const firstLabel = points[0]?.label ?? '';
-  const lastLabel = points.at(-1)?.label ?? '';
   return (
     <Card>
       <CardHeader actions={<span className="type-caption">{badge}</span>}>
@@ -90,29 +91,17 @@ function TrendCard({
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-3">
-          <div className="type-caption flex flex-col justify-between py-1 tabular-nums" aria-hidden>
-            {yLabels.map((label) => (
-              <span key={label}>{label}</span>
-            ))}
-          </div>
-          <div className="grid min-w-0 flex-1 gap-1">
-            <TrendChart
-              label={title}
-              data={points}
-              width={680}
-              height={145}
-              domainMax={domainMax}
-              className="h-36 w-full"
-            />
-            {points.length > 1 ? (
-              <div className="type-caption flex justify-between tabular-nums" aria-hidden>
-                <span>{firstLabel}</span>
-                <span>{lastLabel}</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
+        <TrendChart
+          label={title}
+          data={points}
+          width={360}
+          height={160}
+          domainMax={domainMax}
+          xAxisLabel="Date"
+          yAxisLabel={unit}
+          formatTick={formatTick}
+          className="h-auto w-full"
+        />
       </CardContent>
     </Card>
   );
@@ -122,15 +111,14 @@ function ReferralVolumeCard({ data }: Readonly<{ data: AiReferrals }>) {
   const values = data.referral_volume.flatMap((point) =>
     point.value === null ? [] : [point.value],
   );
-  const domainMax = countDomainMax(values);
   return (
     <TrendCard
       title="AI-referred sessions"
       description="GA4 sessions whose source matches a known AI assistant"
       badge={bucketCountLabel(data.granularity, data.referral_volume.length)}
       points={toCountChartPoints(data.referral_volume)}
-      yLabels={countYLabels(domainMax)}
-      domainMax={domainMax}
+      unit="Sessions"
+      domainMax={countDomainMax(values)}
     />
   );
 }
@@ -142,7 +130,8 @@ function ReferralShareCard({ data }: Readonly<{ data: AiReferrals }>) {
       description="AI-referred sessions divided by all sessions in the same GA4 source report"
       badge={bucketCountLabel(data.granularity, data.referral_share.length)}
       points={toPercentChartPoints(data.referral_share)}
-      yLabels={['100%', '75%', '50%', '25%', '0%']}
+      unit="Share"
+      formatTick={(value) => `${Math.round(value)}%`}
     />
   );
 }
@@ -151,80 +140,84 @@ function SourceTotals({ data }: Readonly<{ data: AiReferrals }>) {
   const total = totalSourceSessions(data.sources);
   const measured = data.referral_volume.some((point) => point.value !== null);
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>AI referral sources</CardTitle>
-        <CardDescription>
+    <DataTable
+      title="AI referral sources"
+      description={
+        <>
           {formatCount(total)} identified sessions for {formatWindowDate(data.window_start)} –{' '}
           {formatWindowDate(data.window_end)}. Shares use all GA4 source-report sessions as the
           denominator.
-        </CardDescription>
-      </CardHeader>
-      {data.sources.length ? (
-        <SourceTotalsTable data={data} />
-      ) : (
-        <CardContent>
-          <p className={textRole('body')}>
-            {measured
-              ? 'GA4 data was measured, but no sessions matched a known AI source in this window.'
-              : 'AI-referral classification is not complete for this window, so source totals are unavailable.'}
-          </p>
-        </CardContent>
-      )}
-    </Card>
+        </>
+      }
+      columns={sourceColumns(data.currency_code)}
+      minWidth="lg"
+      state={
+        data.sources.length
+          ? undefined
+          : {
+              kind: 'empty',
+              icon: SearchX,
+              heading: measured
+                ? 'GA4 data was measured, but no sessions matched a known AI source in this window.'
+                : 'AI-referral classification is not complete for this window, so source totals are unavailable.',
+            }
+      }
+    >
+      <SourceTotalsRows data={data} />
+    </DataTable>
   );
 }
 
-function SourceTotalsTable({ data }: Readonly<{ data: AiReferrals }>) {
+function sourceColumns(currency: string | null): DataTableColumn[] {
+  return [
+    { key: 'source', label: 'Source' },
+    { key: 'sessions', label: 'Sessions', width: 'figure', numeric: true },
+    { key: 'share', label: 'Share of GA4 sessions', width: 'metric', numeric: true },
+    { key: 'engagement', label: 'Engagement rate', width: 'metric', numeric: true },
+    { key: 'key-events', label: 'Key events', width: 'figure', numeric: true },
+    { key: 'transactions', label: 'Transactions', width: 'figure', numeric: true },
+    {
+      key: 'revenue',
+      label: `Purchase revenue (${currency ?? 'currency unavailable'})`,
+      width: 'metric',
+      numeric: true,
+    },
+  ];
+}
+
+function SourceTotalsRows({ data }: Readonly<{ data: AiReferrals }>) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Source</TableHead>
-          <TableHead numeric>Sessions</TableHead>
-          <TableHead numeric>Share of GA4 sessions</TableHead>
-          <TableHead numeric>Engagement rate</TableHead>
-          <TableHead numeric>Key events</TableHead>
-          <TableHead numeric>Transactions</TableHead>
-          <TableHead numeric>
-            Purchase revenue ({data.currency_code ?? 'currency unavailable'})
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {data.sources.map((source) => {
-          const measures = data.source_measures.find((r) => r.ai_source === source.ai_source);
-          return (
-            <TableRow key={source.ai_source}>
-              <TableCell>{aiSourceLabel(source.ai_source)}</TableCell>
-              <TableCell numeric>
-                <span className="tabular-nums">{formatCount(source.sessions)}</span>
-              </TableCell>
-              <TableCell numeric>
-                <Measure value={source.share} format={(v) => formatPercent(v, 1)} />
-              </TableCell>
-              <TableCell numeric>
-                <Measure
-                  value={measures?.engagement_rate ?? null}
-                  format={(v) => formatPercent(v, 1)}
-                />
-              </TableCell>
-              <TableCell numeric>
-                <Measure value={measures?.key_events ?? null} format={formatCount} />
-              </TableCell>
-              <TableCell numeric>
-                <Measure value={measures?.transactions ?? null} format={formatCount} />
-              </TableCell>
-              <TableCell numeric>
-                <Measure
-                  value={measures?.purchase_revenue ?? null}
-                  format={(v) => formatRevenue(v, data.currency_code)}
-                />
-              </TableCell>
-            </TableRow>
-          );
-        })}
-      </TableBody>
-    </Table>
+    <>
+      {data.sources.map((source) => {
+        const measures = data.source_measures.find((r) => r.ai_source === source.ai_source);
+        return (
+          <TableRow key={source.ai_source}>
+            <TableCell>{aiSourceLabel(source.ai_source)}</TableCell>
+            <TableCell numeric>{formatCount(source.sessions)}</TableCell>
+            <TableCell numeric>
+              <Measure value={source.share} format={(v) => formatPercent(v, 1)} />
+            </TableCell>
+            <TableCell numeric>
+              <Measure
+                value={measures?.engagement_rate ?? null}
+                format={(v) => formatPercent(v, 1)}
+              />
+            </TableCell>
+            <TableCell numeric>
+              <Measure value={measures?.key_events ?? null} format={formatCount} />
+            </TableCell>
+            <TableCell numeric>
+              <Measure value={measures?.transactions ?? null} format={formatCount} />
+            </TableCell>
+            <TableCell numeric>
+              <Measure
+                value={measures?.purchase_revenue ?? null}
+                format={(v) => formatRevenue(v, data.currency_code)}
+              />
+            </TableCell>
+          </TableRow>
+        );
+      })}
+    </>
   );
 }

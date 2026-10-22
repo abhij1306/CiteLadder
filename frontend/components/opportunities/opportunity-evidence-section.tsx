@@ -1,4 +1,5 @@
 import { OpportunityKvRow } from '@/components/opportunities/opportunity-kv-row';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { OpportunitySourcePattern } from '@/components/opportunities/opportunity-source-pattern';
 import { Badge } from '@/components/ui/badge';
@@ -25,14 +26,14 @@ function KeywordGapEvidence({ evidence }: Readonly<{ evidence: Record<string, un
   if (!parsed.success) return null;
   const { search_volume: volume, competitors, statement } = parsed.data;
   return (
-    <div className="grid gap-2">
+    <Stack>
       {volume === null ? null : (
         <OpportunityKvRow
           label="Monthly searches (DataForSEO estimate)"
           value={formatCount(volume)}
         />
       )}
-      <ul className="type-body grid gap-1">
+      <Stack as="ul" gap="tight" className="type-body">
         {competitors.map((item) => (
           <li key={item.row_id}>
             {item.name} ranks
@@ -40,9 +41,9 @@ function KeywordGapEvidence({ evidence }: Readonly<{ evidence: Record<string, un
             {item.url ? ` with ${item.url}` : ''}
           </li>
         ))}
-      </ul>
+      </Stack>
       <p className="type-caption">{statement}</p>
-    </div>
+    </Stack>
   );
 }
 
@@ -50,13 +51,13 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
   const evidence = detail.evidence;
   if (detail.rule_id === 'search_keyword_gap')
     return (
-      <section className="grid gap-2">
+      <Stack as="section">
         <Label>Evidence</Label>
         {detail.target_theme ? (
           <OpportunityKvRow label="Search" value={detail.target_theme} />
         ) : null}
         <KeywordGapEvidence evidence={evidence} />
-      </section>
+      </Stack>
     );
   const promptText = asString(evidence.prompt_text);
   const url = asString(evidence.url) ?? detail.target_url;
@@ -65,7 +66,7 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
   const sourcePattern = parseSourcePattern(evidence);
 
   return (
-    <section className="grid gap-2">
+    <Stack as="section">
       <Label>Evidence</Label>
       {promptText ? (
         <blockquote className={panelClasses({ tone: 'accent' })}>
@@ -73,24 +74,29 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
         </blockquote>
       ) : null}
       {url ? (
-        <p className="type-caption text-foreground bg-background-alt rounded-[var(--radius-control)] px-3 py-2 break-all tabular-nums">
+        <p
+          className={panelClasses(
+            { tone: 'tonal' },
+            'type-caption text-foreground break-all tabular-nums',
+          )}
+        >
           {url}
         </p>
       ) : null}
       {theme ? <OpportunityKvRow label="Topic" value={theme} /> : null}
       {competitors.length > 0 ? (
-        <div className="grid gap-1">
+        <Stack gap="tight">
           <span className="type-caption">Competitors mentioned</span>
-          <div className="flex flex-wrap gap-2">
+          <Inline className="flex-wrap">
             {competitors.map((name) => (
               <Badge key={name} variant="classification" value="competitor">
                 {name}
               </Badge>
             ))}
-          </div>
-        </div>
+          </Inline>
+        </Stack>
       ) : null}
       {sourcePattern ? <OpportunitySourcePattern pattern={sourcePattern} /> : null}
-    </section>
+    </Stack>
   );
 }

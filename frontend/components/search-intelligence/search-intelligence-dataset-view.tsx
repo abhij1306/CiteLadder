@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableState } from '@/components/ui/data-table';
 import { Drawer } from '@/components/ui/drawer';
+import { Inline, Stack } from '@/components/ui/layout';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
-import { Skeleton } from '@/components/ui/skeleton';
+import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { agentHandoffHref, type HandoffInput } from '@/lib/agent/handoff';
@@ -109,7 +111,7 @@ export function SearchIntelligenceDatasetView({
   );
   useRowsPanelSeed(dataset.id, selected, page?.rows, title);
   const keywordDataset = KEYWORD_DATASET_KINDS.includes(dataset.dataset_kind);
-  if (query.isPending && !page) return <Skeleton className="h-80 w-full" />;
+  if (query.isPending && !page) return <QueryState kind="loading" label="Loading saved rows…" />;
   if (!page)
     return <ReadError {...readErrorProps(query)} fallback="Dataset rows could not be loaded." />;
   if (!dataset.unique_rows_saved && !page.rows.length)
@@ -243,7 +245,7 @@ function EvidenceDrawer({
       description="What the provider reported for this result when it was saved."
     >
       {selected ? (
-        <div className="flex flex-wrap gap-2">
+        <Inline className="flex-wrap">
           {selected.action_id ? (
             <Button asChild className="w-fit">
               <ProjectLink href={`/agent/actions/${selected.action_id}`}>Open Action</ProjectLink>
@@ -254,7 +256,7 @@ function EvidenceDrawer({
               Ask agent about this row
             </ProjectLink>
           </Button>
-        </div>
+        </Inline>
       ) : null}
       {selected?.row_kind === 'citation_match' &&
       typeof selected.auxiliary.audit_id === 'string' ? (
@@ -276,12 +278,12 @@ function RowFields({ row }: Readonly<{ row: SearchIntelligenceRow }>) {
     (SEARCH_COLUMNS_BY_KIND[row.row_kind] ?? []).map((column) => [column.field, column.label]),
   );
   return (
-    <dl className="type-body grid gap-3">
+    <dl className={ledgerClasses('open', 'type-body')}>
       {evidenceFields(row, labels, timeZone).map((field) => (
-        <div key={field.key} className="border-border-subtle grid gap-1 border-b pb-2">
+        <Stack key={field.key} gap="tight" className={ledgerItemClasses()}>
           <dt className="text-muted">{field.label}</dt>
           <dd className="break-all">{field.value ?? <MissingValue />}</dd>
-        </div>
+        </Stack>
       ))}
     </dl>
   );
@@ -296,23 +298,25 @@ function EmptyDataset({
       <CardHeader bordered>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-2">
-        <p className={textRole('itemTitle')}>
-          {dataset.coverage === 'unknown'
-            ? 'Provider evidence is unavailable for this saved scope.'
-            : 'The provider returned no data for this saved scope.'}
-        </p>
-        <p className={textRole('body')}>
-          Requests can incur charges even when no results are returned. Check the website and market
-          before reviewing another analysis.
-        </p>
-        <p className={textRole('caption')}>
-          {dataset.target_hostname}
-          {dataset.comparison_origin
-            ? ` · compared with ${new URL(dataset.comparison_origin).hostname}`
-            : ''}{' '}
-          · 0 saved rows
-        </p>
+      <CardContent>
+        <Stack gap="compact">
+          <p className={textRole('itemTitle')}>
+            {dataset.coverage === 'unknown'
+              ? 'Provider evidence is unavailable for this saved scope.'
+              : 'The provider returned no data for this saved scope.'}
+          </p>
+          <p className={textRole('body')}>
+            Requests can incur charges even when no results are returned. Check the website and
+            market before reviewing another analysis.
+          </p>
+          <p className={textRole('caption')}>
+            {dataset.target_hostname}
+            {dataset.comparison_origin
+              ? ` · compared with ${new URL(dataset.comparison_origin).hostname}`
+              : ''}{' '}
+            · 0 saved rows
+          </p>
+        </Stack>
       </CardContent>
     </Card>
   );

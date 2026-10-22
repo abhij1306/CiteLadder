@@ -9,12 +9,14 @@ import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
 import { brandProfileDraftSchema } from '@citeladder/contracts';
@@ -147,7 +149,7 @@ export function BrandProfilePanel({
   });
 
   return (
-    <div className="flex flex-col gap-4">
+    <Stack gap="workspace">
       <Header
         actions={
           <Button
@@ -156,7 +158,7 @@ export function BrandProfilePanel({
             onClick={() => saveMutation.mutate()}
             disabled={!workspaceId || saveMutation.isPending}
           >
-            <Save className="size-4" aria-hidden />
+            <Icon icon={Save} />
             {saveMutation.isPending ? 'Saving…' : 'Save brand knowledge'}
           </Button>
         }
@@ -172,7 +174,7 @@ export function BrandProfilePanel({
         onValueChange={setActiveTab}
         items={PROFILE_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
         ariaLabel="Company facts sections"
-        rootClassName="grid gap-4"
+        spaced
       >
         <TabPanel value={activeTab} className="focus-ring">
           {activeTab === 'map' ? (
@@ -193,7 +195,7 @@ export function BrandProfilePanel({
           )}
         </TabPanel>
       </Tabs>
-    </div>
+    </Stack>
   );
 }
 
@@ -287,19 +289,17 @@ function ProfileTabPanel({
 
   return (
     <Stack gap="workspace">
-      <section aria-labelledby="tracked-competitors" className="grid gap-2">
+      <Stack as="section" gap="compact" aria-labelledby="tracked-competitors">
         <h3 id="tracked-competitors" className={textRole('itemTitle')}>
           Tracked competitors
         </h3>
         {competitors.length ? (
-          <ul className="desktop:grid-cols-2 grid gap-2">
+          <Stack as="ul" gap="compact" className="desktop:grid-cols-2">
             {competitors.map((competitor) => (
-              <li
+              <Inline
+                as="li"
                 key={`${competitor.name}:${competitor.domains[0] ?? ''}`}
-                className={panelClasses(
-                  { tone: 'well' },
-                  textRole('label', 'flex min-w-0 items-center gap-2'),
-                )}
+                className={panelClasses({ tone: 'well' }, textRole('label'))}
               >
                 <BrandLogo
                   name={competitor.name}
@@ -307,13 +307,13 @@ function ProfileTabPanel({
                   websiteUrl={competitor.domains[0]}
                 />
                 <span className="truncate">{competitor.name}</span>
-              </li>
+              </Inline>
             ))}
-          </ul>
+          </Stack>
         ) : (
           <UnavailableValue state="not_set" />
         )}
-      </section>
+      </Stack>
       {competitorSuggestions}
     </Stack>
   );
@@ -347,7 +347,7 @@ function IdentityFields({
           />
         )}
       </Field>
-      <div className="desktop:grid-cols-2 grid gap-4">
+      <div className={splitPaneClasses('peers')}>
         <FacetChoice
           label="Who buys it"
           value={identity.buyer_type}
@@ -381,7 +381,7 @@ function FacetChoice<T extends string>({
   onPick: (value: T) => void;
 }>) {
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <span className={textRole('label')} aria-hidden>
         {label}
       </span>
@@ -394,7 +394,7 @@ function FacetChoice<T extends string>({
           if (next && !disabled) onPick(next);
         }}
       />
-    </div>
+    </Stack>
   );
 }
 

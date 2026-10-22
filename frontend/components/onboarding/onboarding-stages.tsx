@@ -6,7 +6,9 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 import { discoveryActivity } from '@/lib/onboarding/discovery-activity';
 import { onboardingErrorMessage, type BrandStepValues } from '@/lib/onboarding/forms';
@@ -43,11 +45,9 @@ export function BrandStage({
       <StageHeader title={isAdditional ? 'Add a project' : "Let's get started"}>
         We&apos;ll review your website, suggest comparable brands, and prepare balanced questions.
       </StageHeader>
-      <div className="grid items-start gap-x-5 gap-y-4 sm:grid-cols-2">
+      <div className={splitPaneClasses('peers')}>
         <Field label="Brand name" required error={form.formState.errors.brand_name?.message}>
-          {(props) => (
-            <Input {...props} {...form.register('brand_name')} placeholder="Acme" size="lg" />
-          )}
+          {(props) => <Input {...props} {...form.register('brand_name')} placeholder="Acme" />}
         </Field>
         <Field label="Website" required error={form.formState.errors.website_url?.message}>
           {(props) => (
@@ -56,7 +56,6 @@ export function BrandStage({
               {...form.register('website_url')}
               placeholder="acme.com"
               inputMode="url"
-              size="lg"
             />
           )}
         </Field>
@@ -146,7 +145,7 @@ export function DiscoveryStage({
           </ul>
         </section>
       ) : null}
-      <div className="mt-[var(--flow-block)] grid gap-[var(--flow-answer)]">
+      <Stack gap="workspace" className="mt-[var(--flow-block)]">
         {(discovery.discovery?.warnings ?? []).map((warning) => (
           <Alert key={warning} tone="warning">
             {warningMessage(warning)}
@@ -154,7 +153,7 @@ export function DiscoveryStage({
         ))}
         {discovery.discovery?.status === 'failed' ? (
           <Alert tone="danger">
-            <div className="flex items-center justify-between gap-3">
+            <Inline gap="compact" className="justify-between">
               <span>
                 {discovery.discovery.error_code === 'invalid_url'
                   ? 'The website address is invalid. Go back and correct it.'
@@ -163,20 +162,20 @@ export function DiscoveryStage({
               <Button variant="ghost" onClick={onEdit}>
                 Edit website
               </Button>
-            </div>
+            </Inline>
           </Alert>
         ) : null}
         {discovery.error ? (
           <Alert tone="warning">
-            <div className="flex items-center justify-between gap-3">
+            <Inline gap="compact" className="justify-between">
               <span>{onboardingErrorMessage(discovery.error)}</span>
               <Button variant="ghost" onClick={discovery.retry}>
                 Retry
               </Button>
-            </div>
+            </Inline>
           </Alert>
         ) : null}
-      </div>
+      </Stack>
     </div>
   );
 }
@@ -239,12 +238,12 @@ export function ReviewStage({
       <ReviewNotices failed={complete.isError}>
         {catalog.isError ? (
           <Alert tone="warning">
-            <div className="flex items-center justify-between gap-3">
+            <Inline gap="compact" className="justify-between">
               <span>We could not load the competitor limit.</span>
               <Button variant="ghost" onClick={() => catalog.refetch()}>
                 Try again
               </Button>
-            </div>
+            </Inline>
           </Alert>
         ) : null}
         {complete.isError ? (

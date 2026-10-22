@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Database } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -111,12 +112,12 @@ export function SearchIntelligenceCollection({
     return competitor?.label ?? item.target_hostname;
   };
   return (
-    <div className="grid min-w-0 gap-4">
+    <Stack gap="workspace" className="min-w-0">
       {tab === 'backlinks' ? (
         <BacklinkMetrics datasets={datasets} targetOrigin={activeTarget} />
       ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-3">
+      <Inline gap="compact" className="flex-wrap justify-between">
+        <Inline gap="compact" className="flex-wrap">
           {tab === 'competitors' ? (
             <Button
               variant="ghost"
@@ -157,9 +158,9 @@ export function SearchIntelligenceCollection({
               options={candidates.map((item) => ({ value: item.id, label: label(item) }))}
             />
           ) : null}
-        </div>
+        </Inline>
         {action?.(activeTarget)}
-      </div>
+      </Inline>
       <CollectionResult
         dataset={dataset}
         title={title}
@@ -167,7 +168,7 @@ export function SearchIntelligenceCollection({
         label={label}
         onExpand={onExpand}
       />
-    </div>
+    </Stack>
   );
 }
 
@@ -268,7 +269,7 @@ function CollectionResult({
   onExpand?: () => void;
 }>) {
   return (
-    <div className="grid min-w-0 gap-4">
+    <Stack gap="workspace" className="min-w-0">
       {comparison && dataset ? (
         <p className={textRole('itemTitle')}>
           {label(dataset)} compared with {dataset.target_hostname}
@@ -289,6 +290,6 @@ function CollectionResult({
           description="Choose it in a new analysis, then review the cost before anything is fetched."
         />
       )}
-    </div>
+    </Stack>
   );
 }

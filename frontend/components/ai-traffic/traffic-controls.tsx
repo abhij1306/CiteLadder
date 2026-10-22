@@ -7,6 +7,7 @@ import { TRAFFIC_RANGES, VERIFICATION_OPTIONS } from '@/lib/config/crawl-logs';
 import { Select } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 type ControlProps = Readonly<{ model: ReturnType<typeof useTrafficData> }>;
 type TrafficControlsProps = ControlProps & Readonly<{ crawlAvailable: boolean }>;
 /** Narrow screens give every field the band's full width instead of a ragged wrap. */
@@ -44,7 +45,7 @@ export function TrafficControls({ model, crawlAvailable }: TrafficControlsProps)
           pending={model.exporting.isPending}
           onClick={() => model.exporting.mutate()}
         >
-          <Download className="size-4" aria-hidden />
+          <Icon icon={Download} />
           Export CSV
         </Button>
       )}
@@ -60,7 +61,7 @@ function ScopeControls({ model }: ControlProps) {
         placeholder="Folder"
         value={folder ?? ''}
         onChange={(e) => setFolder(e.target.value || null)}
-        startContent={<Folder className="size-4" aria-hidden />}
+        startContent={<Icon icon={Folder} />}
         containerClassName="w-full desktop:w-44"
       />
       <Select

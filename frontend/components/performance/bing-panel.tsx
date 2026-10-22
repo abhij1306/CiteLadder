@@ -49,7 +49,7 @@ export function BingPanel({
         onValueChange={setDimension}
         items={BING_DIMENSION_TABS.map((tab) => ({ value: tab.value, label: tab.label }))}
         ariaLabel="Bing breakdowns"
-        rootClassName="grid gap-3"
+        spaced
         fill
       >
         {BING_DIMENSION_TABS.map((tab) => (

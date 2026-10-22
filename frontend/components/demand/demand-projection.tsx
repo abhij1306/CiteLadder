@@ -31,7 +31,8 @@ import {
 import { formatCount, formatWindowDate } from '@/lib/format';
 import { useProjectContext } from '@/lib/project/project-context';
 import { optionalStringUrlCodec, stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { Stack } from '@/components/ui/layout';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { DataSourceSetup } from '@/components/integrations/data-source-setup';
 
 const DEMAND_TAB_CODEC = stringUrlCodec(
@@ -169,7 +170,7 @@ function SearchDemandView({
           pending={recomputeMutation.isPending}
           pendingLabel="Queueing…"
         >
-          <RefreshCw className="size-3.5" aria-hidden />
+          <Icon icon={RefreshCw} />
           Recompute signals
         </Button>
       }
@@ -212,7 +213,7 @@ function SearchDemandView({
 
         {recomputeMutation.isSuccess ? (
           <Alert tone="info">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Inline className="flex-wrap">
               <span>
                 {recomputeMutation.data.status === 'already_queued'
                   ? 'A recompute for this window is already queued.'
@@ -221,24 +222,24 @@ function SearchDemandView({
               <Button type="button" variant="ghost" onClick={() => refreshSnapshot()}>
                 Check for the new snapshot
               </Button>
-            </div>
+            </Inline>
           </Alert>
         ) : null}
 
         {/* The summary line, then the table the top strip's filters narrow. */}
         <Stack>
-          <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <Inline as="p" gap="meta">
             <span className="type-caption">
               {snapshot.signals.length === 1
                 ? '1 signal observed'
                 : `${formatCount(snapshot.signals.length)} signals observed`}
             </span>
-            <span className="type-caption inline-flex items-center gap-1">
-              <Calendar className="size-3.5" aria-hidden="true" />
+            <Inline as="span" gap="tight" className="type-caption">
+              <Icon icon={Calendar} />
               {windowLabel}
-            </span>
+            </Inline>
             <DemandLatentDemand snapshot={snapshot} />
-          </p>
+          </Inline>
           {signalsFeed}
         </Stack>
 

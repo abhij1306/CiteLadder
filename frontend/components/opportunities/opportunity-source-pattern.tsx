@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Label, textRole } from '@/components/ui/typography';
 import {
@@ -21,8 +22,8 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
   const action = recommendedActionLabel(pattern.recommendedAction);
 
   return (
-    <section className="grid gap-2">
-      <div className="flex items-baseline justify-between gap-3">
+    <Stack as="section">
+      <Inline gap="compact" className="items-baseline justify-between">
         <Label>Observed sources</Label>
         <span className="type-caption">
           {pattern.distinctDomainCount} {pattern.distinctDomainCount === 1 ? 'domain' : 'domains'}
@@ -30,10 +31,10 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
             ? ` · ${pattern.independentDomainCount} independent`
             : null}
         </span>
-      </div>
+      </Inline>
 
       {pattern.classCounts.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <Inline className="flex-wrap">
           {pattern.classCounts.map(({ sourceClass, count }) => (
             <Badge
               key={sourceClass}
@@ -43,37 +44,39 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
               {sourceClassLabel(sourceClass)} · {count}
             </Badge>
           ))}
-        </div>
+        </Inline>
       ) : null}
 
       {pattern.competitorSourceDomains.length > 0 ? (
-        <div className="grid gap-1">
+        <Stack gap="tight">
           <span className="type-caption">Sources matched to a tracked competitor</span>
           {pattern.competitorSourceDomains.map(({ competitor, domains }) => (
-            <div key={competitor} className="flex items-start justify-between gap-3 py-0.5">
+            <Inline key={competitor} gap="compact" className="items-start justify-between">
               <span className={textRole('body', 'shrink-0')}>{competitor}</span>
               <span className="type-caption text-right break-all tabular-nums">
                 {domains.join(', ')}
               </span>
-            </div>
+            </Inline>
           ))}
-        </div>
+        </Stack>
       ) : null}
 
       {pattern.topCitations.length > 0 ? (
-        <ul className="grid gap-1">
+        <Stack as="ul" gap="tight">
           {pattern.topCitations.map((citation) => (
-            <li
+            <Stack
+              as="li"
+              gap="tight"
               key={citation.url || citation.domain}
-              className={panelClasses({ tone: 'well' }, 'grid gap-0.5')}
+              className={panelClasses({ tone: 'well' })}
             >
               <span className="type-caption text-foreground">
                 {citation.title || citation.domain}
               </span>
               <span className="type-caption break-all tabular-nums">{citation.domain}</span>
-            </li>
+            </Stack>
           ))}
-        </ul>
+        </Stack>
       ) : null}
 
       {pattern.topCitationsTruncated ? (
@@ -84,11 +87,11 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
       ) : null}
 
       {action ? (
-        <div className={panelClasses({ tone: 'accent' }, 'grid gap-1')}>
+        <Stack gap="tight" className={panelClasses({ tone: 'accent' })}>
           <span className="type-caption">Suggested next action</span>
           <p className="type-body text-foreground">{action}</p>
-        </div>
+        </Stack>
       ) : null}
-    </section>
+    </Stack>
   );
 }

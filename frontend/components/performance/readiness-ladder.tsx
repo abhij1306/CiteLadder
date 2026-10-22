@@ -1,9 +1,11 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Check } from 'lucide-react';
+import { Circle, CircleCheck } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
@@ -74,27 +76,11 @@ function stageIndex(stage: ProjectReadinessStage): number {
   return index;
 }
 
+/** A rung's mark, at the one glyph size: reached, in flight, or still ahead. */
 function StepMark({ state }: Readonly<{ state: 'done' | 'active' | 'pending' }>) {
-  if (state === 'done') {
-    return (
-      <span className="bg-success-bg text-success-text inline-flex size-5 shrink-0 items-center justify-center rounded-full">
-        <Check className="size-3" aria-hidden />
-      </span>
-    );
-  }
-  if (state === 'active') {
-    return (
-      <span className="border-info-border text-info-text inline-flex size-5 shrink-0 items-center justify-center rounded-full border">
-        <Spinner />
-      </span>
-    );
-  }
-  return (
-    <span
-      aria-hidden
-      className="border-border-strong inline-flex size-5 shrink-0 rounded-full border"
-    />
-  );
+  if (state === 'done') return <Icon icon={CircleCheck} className="text-success-text" />;
+  if (state === 'active') return <Spinner className="text-info-text" />;
+  return <Icon icon={Circle} className="text-border-strong" />;
 }
 
 /**
@@ -135,20 +121,18 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
 
   const reached = stageIndex(data.stage);
   return (
-    <section
-      className={cn(panelClasses({ tone: 'panel' }), 'grid gap-2')}
+    <Stack
+      as="section"
+      gap="compact"
+      className={panelClasses({ tone: 'panel' })}
       aria-label="Data readiness"
       data-testid="readiness-ladder"
     >
-      <ol className="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <Inline as="ol" gap="meta">
         {LADDER.map((step, index) => {
           const state = ladderStepState(index, reached);
           return (
-            <li
-              key={step.stage}
-              className="flex items-center gap-2"
-              aria-current={state === 'active' ? 'step' : undefined}
-            >
+            <Inline as="li" key={step.stage} aria-current={state === 'active' ? 'step' : undefined}>
               <StepMark state={state} />
               <span
                 className={cn(
@@ -157,16 +141,16 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
               >
                 {step.label}
               </span>
-            </li>
+            </Inline>
           );
         })}
-      </ol>
+      </Inline>
       <p className={textRole('caption')}>
         {EXPLANATION[data.stage]}
         {data.imported_through
           ? ` Imported through ${formatWindowDate(data.imported_through)}.`
           : ''}
       </p>
-    </section>
+    </Stack>
   );
 }

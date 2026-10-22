@@ -15,7 +15,7 @@
 import { Check, Pencil } from 'lucide-react';
 import { useId, type ReactNode } from 'react';
 
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/button';
 import { Pressable } from '@/components/ui/pressable';
 
 /**
@@ -80,16 +80,12 @@ export function EntityRow({
         </span>
       </Pressable>
       {onEdit ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
+        <IconButton
+          icon={Pencil}
           onClick={onEdit}
-          aria-label={editLabel ?? `Edit ${name}`}
-          className="size-8 shrink-0"
-        >
-          <Pencil className="size-3.5" aria-hidden />
-        </Button>
+          label={editLabel ?? `Edit ${name}`}
+          className="shrink-0"
+        />
       ) : null}
       {trailing}
     </li>

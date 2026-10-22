@@ -685,7 +685,7 @@ describe('AI Traffic state and navigation', () => {
     // No retained rows: one contextual empty state instead of headers over nothing.
     expect(await screen.findByRole('heading', { name: 'No matching requests' })).toBeVisible();
     expect(
-      screen.queryByRole('table', { name: 'Retained automated request activity' }),
+      screen.queryByRole('region', { name: 'Retained automated request activity' }),
     ).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Response status' }), {
       target: { value: '404' },

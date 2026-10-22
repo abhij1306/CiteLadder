@@ -17,19 +17,10 @@ import { MISSING_MARK } from '@/lib/format';
 import { CalendarX } from 'lucide-react';
 import { TabPanel } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { DisplayTime } from '@/components/ui/display-time';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import {
-  ClampText,
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { readErrorProps } from '@/components/ui/read-error';
+import { TableRow, TableCell, TableCellLines } from '@/components/ui/table';
 import { CrawlLogConnections } from './crawl-log-connections';
 import { InsightStrip } from './insight-strip';
 import {
@@ -40,9 +31,34 @@ import {
 } from './overview-signals';
 import { CrawlerPages } from './crawler-pages';
 import { TrafficNoResults } from './empty-state';
-import { Pager } from '@/components/ui/pager';
-import { EditorialSectionHeader } from '@/components/ui/workspace';
 import type { TrafficFilters } from '@/lib/api/ai-traffic';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+
+const CRAWLER_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'crawler', label: 'Crawler', width: 'name' },
+  { key: 'purpose', label: 'Purpose', width: 'category' },
+  { key: 'requests', label: 'Requests', width: 'figure', numeric: true },
+  { key: 'pages', label: 'Path-level pages', width: 'metric', numeric: true },
+  { key: 'last-seen', label: 'Last observed', width: 'date', numeric: true },
+  { key: 'status', label: 'Status and verification' },
+  { key: 'breakdown', label: 'Folder and resource breakdown' },
+];
+const COVERAGE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'day', label: 'Day', width: 'date' },
+  { key: 'source', label: 'Source', width: 'name' },
+  { key: 'coverage', label: 'Coverage' },
+  { key: 'counts', label: 'Batch / heartbeat count', width: 'metric', numeric: true },
+  { key: 'gap', label: 'Longest receipt gap', width: 'metric', numeric: true },
+];
+
+const ACTIVITY_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'observed', label: 'Observed', width: 'date', numeric: true },
+  { key: 'bot', label: 'Bot', width: 'status' },
+  { key: 'path', label: 'Host and path' },
+  { key: 'resource', label: 'Resource', width: 'status' },
+  { key: 'status', label: 'Status', width: 'figure', numeric: true },
+  { key: 'verification', label: 'Verification' },
+];
 export function TrafficOverview({
   data,
   projectId,
@@ -62,7 +78,7 @@ export function TrafficOverview({
     <TabPanel value="overview">
       <Stack gap="workspace">
         <InsightStrip projectId={projectId} workspaceId={workspaceId} range={range} />
-        <div className="desktop:grid-cols-3 grid gap-[var(--workspace-gap)]">
+        <Stack gap="workspace" className="desktop:grid-cols-3">
           <CrawlSignalPanel
             data={data.crawl}
             available={crawlAvailable}
@@ -70,7 +86,7 @@ export function TrafficOverview({
           />
           <ReferralSignal data={data.referrals} />
           <CitationSignal data={data.citations} projectId={projectId} />
-        </div>
+        </Stack>
         {data.crawl.series.length ? <RequestsByPurpose series={data.crawl.series} /> : null}
         {crawlAvailable ? (
           <CrawlLogConnections
@@ -94,53 +110,39 @@ export function TrafficCrawlers({
   return (
     <TabPanel value="crawlers">
       {data.items.length ? (
-        <Table>
-          <caption className="sr-only">Recognized crawlers</caption>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Crawler</TableHead>
-              <TableHead>Purpose</TableHead>
-              <TableHead numeric>Requests</TableHead>
-              <TableHead numeric>Path-level pages</TableHead>
-              <TableHead numeric>Last observed</TableHead>
-              <TableHead>Status and verification</TableHead>
-              <TableHead>Folder and resource breakdown</TableHead>
+        <DataTable label="Recognized crawlers" columns={CRAWLER_COLUMNS} minWidth="xl">
+          {data.items.map((b) => (
+            <TableRow key={b.bot_id}>
+              <TableCell>{b.label}</TableCell>
+              <TableCell>{words(b.purpose)}</TableCell>
+              <TableCell numeric>{b.requests}</TableCell>
+              <TableCell numeric>
+                <Button
+                  variant="ghost"
+                  onClick={() => setBotId(b.bot_id)}
+                  aria-label={`View paths requested by ${b.label}`}
+                >
+                  {b.pages ?? MISSING_MARK} paths
+                </Button>
+              </TableCell>
+              <TableCell numeric>
+                <DisplayTime value={b.last_seen} />
+              </TableCell>
+              <TableCell>
+                <CellLines
+                  lines={[
+                    entries(b.status_codes),
+                    entries(b.verification),
+                    reasonEntries(b.verification_reasons),
+                  ]}
+                />
+              </TableCell>
+              <TableCell>
+                <CellLines lines={[entries(b.folders), entries(b.resources)]} />
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.items.map((b) => (
-              <TableRow key={b.bot_id}>
-                <TableCell>{b.label}</TableCell>
-                <TableCell>{words(b.purpose)}</TableCell>
-                <TableCell numeric>{b.requests}</TableCell>
-                <TableCell numeric>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setBotId(b.bot_id)}
-                    aria-label={`View paths requested by ${b.label}`}
-                  >
-                    {b.pages ?? MISSING_MARK} paths
-                  </Button>
-                </TableCell>
-                <TableCell numeric>
-                  <DisplayTime value={b.last_seen} />
-                </TableCell>
-                <TableCell>
-                  <CellLines
-                    lines={[
-                      entries(b.status_codes),
-                      entries(b.verification),
-                      reasonEntries(b.verification_reasons),
-                    ]}
-                  />
-                </TableCell>
-                <TableCell>
-                  <CellLines lines={[entries(b.folders), entries(b.resources)]} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+          ))}
+        </DataTable>
       ) : (
         <TrafficNoResults
           heading="No matching requests were observed"
@@ -162,54 +164,45 @@ export function TrafficActivity({
   return (
     <TabPanel value="activity">
       {data.items.length ? (
-        <Table>
-          <caption className="sr-only">Retained automated request activity</caption>
-          <TableHeader>
-            <TableRow>
-              <TableHead numeric>Observed</TableHead>
-              <TableHead>Bot</TableHead>
-              <TableHead>Host and path</TableHead>
-              <TableHead>Resource</TableHead>
-              <TableHead numeric>Status</TableHead>
-              <TableHead>Verification</TableHead>
+        <DataTable
+          label="Retained automated request activity"
+          columns={ACTIVITY_COLUMNS}
+          minWidth="md"
+        >
+          {data.items.map((r) => (
+            <TableRow key={r.id}>
+              <TableCell numeric>
+                <DisplayTime value={r.occurred_at} />
+              </TableCell>
+              <TableCell>
+                {catalog?.bots.find((b) => b.bot_id === r.bot_id)?.label ?? r.bot_id}
+              </TableCell>
+              <TableCell>
+                <CellLines
+                  lines={[
+                    r.host + r.display_path,
+                    r.identity === 'non_joinable'
+                      ? 'Redacted; non-joinable'
+                      : 'Path-level identity',
+                  ]}
+                />
+              </TableCell>
+              <TableCell>{words(r.resource_class)}</TableCell>
+              <TableCell numeric>{r.status_code}</TableCell>
+              <TableCell>
+                <CellLines
+                  lines={[
+                    words(r.verification) +
+                      (r.verification_reason ? ' · ' + reasonLabel(r.verification_reason) : ''),
+                    r.verification_basis === 'later_snapshot'
+                      ? 'Verified using a later IP-range snapshot.'
+                      : '',
+                  ]}
+                />
+              </TableCell>
             </TableRow>
-          </TableHeader>
-          <TableBody>
-            {data.items.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell numeric>
-                  <DisplayTime value={r.occurred_at} />
-                </TableCell>
-                <TableCell>
-                  {catalog?.bots.find((b) => b.bot_id === r.bot_id)?.label ?? r.bot_id}
-                </TableCell>
-                <TableCell>
-                  <CellLines
-                    lines={[
-                      r.host + r.display_path,
-                      r.identity === 'non_joinable'
-                        ? 'Redacted; non-joinable'
-                        : 'Path-level identity',
-                    ]}
-                  />
-                </TableCell>
-                <TableCell>{words(r.resource_class)}</TableCell>
-                <TableCell numeric>{r.status_code}</TableCell>
-                <TableCell>
-                  <CellLines
-                    lines={[
-                      words(r.verification) +
-                        (r.verification_reason ? ' · ' + reasonLabel(r.verification_reason) : ''),
-                      r.verification_basis === 'later_snapshot'
-                        ? 'Verified using a later IP-range snapshot.'
-                        : '',
-                    ]}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+          ))}
+        </DataTable>
       ) : (
         <TrafficNoResults
           heading="No matching requests"
@@ -231,16 +224,7 @@ function SourceLines({
  */
 function CellLines({ lines }: Readonly<{ lines: string[] }>) {
   const [first, ...rest] = lines.filter(Boolean);
-  return (
-    <div className="grid min-w-0">
-      <ClampText lines={1}>{first}</ClampText>
-      {rest.length > 0 ? (
-        <ClampText lines={1} className="type-caption">
-          {rest.join(' · ')}
-        </ClampText>
-      ) : null}
-    </div>
-  );
+  return <TableCellLines primary={first} secondary={rest.join(' · ')} />;
 }
 /** Reasons survive raw retention because rollups keep them. */
 function reasonEntries(values: Record<string, number>) {
@@ -266,63 +250,40 @@ function CoverageTable({
     queryFn: ({ signal }) => aiTrafficApi.coverage(projectId, filters, { workspaceId, signal }),
   });
   const data = query.data;
+  let state: DataTableState | undefined;
+  if (query.isError)
+    state = { kind: 'error', ...readErrorProps(query), fallback: 'Could not read coverage' };
+  else if (!data) state = { kind: 'loading', label: 'Loading coverage…' };
+  else if (!data.items.length && !pager.canPrev)
+    state = { kind: 'empty', icon: CalendarX, heading: 'No persisted coverage in this range' };
+  const paged = Boolean(data?.next_cursor) || pager.canPrev;
   return (
-    <section className="grid gap-3" aria-labelledby="ai-traffic-coverage">
-      <EditorialSectionHeader
-        headingId="ai-traffic-coverage"
-        title="Coverage by source and reporting day"
-      />
-      {query.isError ? (
-        <ReadError {...readErrorProps(query)} fallback="Could not read coverage" />
-      ) : null}
-      {data && !data.items.length && !pager.canPrev ? (
-        <QueryState
-          kind="empty"
-          headingLevel={3}
-          icon={CalendarX}
-          heading="No persisted coverage in this range"
-        />
-      ) : null}
-      {data && (data.items.length || pager.canPrev) ? (
-        <>
-          <Table>
-            <caption className="sr-only">Crawl log coverage and receipt gaps</caption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Day</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Coverage</TableHead>
-                <TableHead numeric>Batch / heartbeat count</TableHead>
-                <TableHead numeric>Longest receipt gap</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.items.map((r) => (
-                <TableRow key={r.source_id + r.reporting_date + r.reporting_timezone}>
-                  <TableCell>
-                    <CellLines lines={[r.reporting_date, r.reporting_timezone]} />
-                  </TableCell>
-                  <TableCell>
-                    <SourceLines source={data.sources.find((s) => s.id === r.source_id)} />
-                  </TableCell>
-                  <TableCell>
-                    <CellLines lines={[coverageLabel(r.coverage), reasonLabel(r.reason)]} />
-                  </TableCell>
-                  <TableCell numeric>
-                    {r.batch_count} / {r.heartbeat_count}
-                  </TableCell>
-                  <TableCell numeric>{r.max_gap_minutes.toFixed(1)} minutes</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <Pager
-            hideWhenSinglePage
-            page={pager.page}
-            {...cursorControls(pager, data.next_cursor)}
-          />
-        </>
-      ) : null}
-    </section>
+    <DataTable
+      title="Coverage by source and reporting day"
+      columns={COVERAGE_COLUMNS}
+      minWidth="md"
+      state={state}
+      pager={
+        data && paged ? { page: pager.page, ...cursorControls(pager, data.next_cursor) } : undefined
+      }
+    >
+      {data?.items.map((r) => (
+        <TableRow key={r.source_id + r.reporting_date + r.reporting_timezone}>
+          <TableCell>
+            <CellLines lines={[r.reporting_date, r.reporting_timezone]} />
+          </TableCell>
+          <TableCell>
+            <SourceLines source={data.sources.find((s) => s.id === r.source_id)} />
+          </TableCell>
+          <TableCell>
+            <CellLines lines={[coverageLabel(r.coverage), reasonLabel(r.reason)]} />
+          </TableCell>
+          <TableCell numeric>
+            {r.batch_count} / {r.heartbeat_count}
+          </TableCell>
+          <TableCell numeric>{r.max_gap_minutes.toFixed(1)} minutes</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }

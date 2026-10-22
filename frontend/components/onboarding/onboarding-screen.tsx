@@ -132,13 +132,13 @@ function OnboardingActions({
         secondary={
           // Same rule as the exit above: cancelling has to lead somewhere.
           flow.isAdditional && projectsHref ? (
-            <Button asChild variant="ghost" size="md">
+            <Button asChild variant="ghost">
               <Link to={projectsHref}>Cancel</Link>
             </Button>
           ) : undefined
         }
         primary={
-          <Button type="submit" form="onboarding-brand-form" size="md">
+          <Button type="submit" form="onboarding-brand-form">
             Continue
           </Button>
         }
@@ -152,12 +152,12 @@ function OnboardingActions({
     return (
       <FlowActions
         secondary={
-          <Button variant="ghost" size="md" onClick={() => flow.setStep(0)}>
+          <Button variant="ghost" onClick={() => flow.setStep(0)}>
             Back
           </Button>
         }
         primary={
-          <Button size="md" onClick={() => flow.setStep(2)} disabled={!discoveryReady}>
+          <Button onClick={() => flow.setStep(2)} disabled={!discoveryReady}>
             {flow.discovery.isRunning ? 'Searching…' : 'Review'}
           </Button>
         }
@@ -169,18 +169,12 @@ function OnboardingActions({
     <FlowActions
       wide
       secondary={
-        <Button
-          variant="ghost"
-          size="md"
-          onClick={() => flow.setStep(1)}
-          disabled={flow.isCompleting}
-        >
+        <Button variant="ghost" onClick={() => flow.setStep(1)} disabled={flow.isCompleting}>
           Back
         </Button>
       }
       primary={
         <Button
-          size="md"
           onClick={() => flow.complete.mutate()}
           pending={flow.isCompleting}
           pendingLabel="Creating…"

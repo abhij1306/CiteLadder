@@ -3,8 +3,10 @@
 import type { DemandSignal } from '@/lib/api/demand';
 import { numericMetric, signalTypeMeta } from '@/lib/demand/signals';
 import { availabilityLabel, formatCount } from '@/lib/format';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { textRole } from '@/components/ui/typography';
+import { splitPaneClasses } from '@/components/ui/workspace';
 
 /**
  * The plain-language reading of one signal, for its evidence drawer.
@@ -17,10 +19,10 @@ import { textRole } from '@/components/ui/typography';
 export function SignalInsight({ signal }: Readonly<{ signal: DemandSignal }>) {
   const detail = (DETAIL[signal.signal_type] ?? (() => null))(signal);
   return (
-    <section className="grid gap-2" aria-label="Reading">
+    <Stack as="section" aria-label="Reading">
       <p className={textRole('body')}>{detail ?? signalTypeMeta(signal.signal_type).definition}</p>
       <QueryRelevanceEvidence signal={signal} />
-    </section>
+    </Stack>
   );
 }
 
@@ -86,14 +88,14 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
   if (!relevance) return null;
   if (relevance.state !== 'measured') {
     return (
-      <div className={panelClasses({ tone: 'well' }, 'grid gap-1')}>
+      <Stack gap="tight" className={panelClasses({ tone: 'well' })}>
         <span className={textRole('label')}>Query relevance unavailable</span>
         <p className="type-caption">
           {relevance.reason === 'page_content_unavailable'
             ? 'The resolved page had no usable inspected content.'
             : 'No usable query terms were available for comparison.'}
         </p>
-      </div>
+      </Stack>
     );
   }
   const missing = Array.from(
@@ -101,15 +103,15 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
   );
   return (
     <section className={panelClasses({ tone: 'well' })} aria-label="Query relevance">
-      <div className="grid gap-2">
-        <div>
+      <Stack>
+        <Stack gap="tight">
           <span className={textRole('label')}>Query relevance</span>
-          <p className="type-caption mt-0.5">
+          <p className="type-caption">
             {relevance.statement ??
               'Query-term coverage measured against the currently inspected page.'}
           </p>
-        </div>
-        <dl className="type-caption grid grid-cols-3 gap-3">
+        </Stack>
+        <dl className={splitPaneClasses('thirds', 'type-caption')}>
           <div>
             <dt className="text-muted">Title</dt>
             <dd className={textRole('emphasis', 'tabular-nums')}>
@@ -135,7 +137,7 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
             {missing.join(', ')}
           </p>
         ) : null}
-      </div>
+      </Stack>
     </section>
   );
 }

@@ -10,6 +10,7 @@ import {
   axisProps,
   type ChartConfig,
 } from '@/components/ui/chart';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import {
   axisDomainMax,
@@ -22,7 +23,6 @@ import {
   type PerformanceMetricKey,
 } from '@/lib/performance/performance';
 import { formatShortDate } from '@/lib/format';
-import { cn } from '@/lib/utils';
 
 /**
  * The combined Performance chart: every selected GSC metric on one hoverable
@@ -119,8 +119,8 @@ export function PerformanceChart({
   );
 
   return (
-    <div className={cn('grid gap-2', className)}>
-      <ChartContainer config={config} size="md" description={summary}>
+    <Stack gap="compact" className={className}>
+      <ChartContainer config={config} description={summary}>
         <LineChart data={toRows(series, columnCount)} margin={CHART_MARGIN}>
           <XAxis
             {...axisProps}
@@ -178,16 +178,16 @@ export function PerformanceChart({
         </LineChart>
       </ChartContainer>
 
-      <ul className="flex flex-wrap gap-x-4 gap-y-1">
+      <Inline as="ul" gap="meta">
         {series.map((entry) => (
-          <li key={entry.key} className="type-caption flex items-center gap-2">
+          <Inline as="li" key={entry.key} className="type-caption">
             <LegendSwatch color={entry.color} shape="line" />
             {entry.label}
             <span className="tabular-nums">0–{formatAxisTick(entry.key, domainFor(entry)[1])}</span>
-          </li>
+          </Inline>
         ))}
-      </ul>
-    </div>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -216,28 +216,30 @@ function ChartTooltip({
   const selectedDate = dateSource?.selected[index]?.date ?? null;
   const comparisonDate = dateSource?.comparison?.[index]?.date ?? null;
   return (
-    <ChartTooltipPanel className="type-caption grid gap-1">
-      <p className="type-badge">
-        Day <span className="tabular-nums">{index + 1}</span>
-        {selectedDate ? ` · ${selectedDate}` : ''}
-      </p>
-      <ul className="grid gap-0.5">
-        {series.map((entry) => (
-          <li key={entry.key} className="flex items-center gap-2">
-            <LegendSwatch color={entry.color} shape="line" />
-            <span>{entry.label}</span>
-            <span className="tabular-nums">
-              {formatMetric(entry.key, entry.selected[index]?.value ?? null)}
-            </span>
-            {entry.comparison ? (
+    <ChartTooltipPanel className="type-caption">
+      <Stack gap="tight">
+        <p className="type-badge">
+          Day <span className="tabular-nums">{index + 1}</span>
+          {selectedDate ? ` · ${selectedDate}` : ''}
+        </p>
+        <Stack as="ul" gap="tight">
+          {series.map((entry) => (
+            <Inline as="li" key={entry.key}>
+              <LegendSwatch color={entry.color} shape="line" />
+              <span>{entry.label}</span>
               <span className="tabular-nums">
-                vs {formatMetric(entry.key, entry.comparison[index]?.value ?? null)}
+                {formatMetric(entry.key, entry.selected[index]?.value ?? null)}
               </span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {comparisonDate ? <p>Comparison day · {comparisonDate}</p> : null}
+              {entry.comparison ? (
+                <span className="tabular-nums">
+                  vs {formatMetric(entry.key, entry.comparison[index]?.value ?? null)}
+                </span>
+              ) : null}
+            </Inline>
+          ))}
+        </Stack>
+        {comparisonDate ? <p>Comparison day · {comparisonDate}</p> : null}
+      </Stack>
     </ChartTooltipPanel>
   );
 }

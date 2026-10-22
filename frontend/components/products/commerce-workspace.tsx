@@ -22,7 +22,7 @@ import { useCatalogHeader } from './catalog-header';
 import { CatalogList, catalogEntries } from './catalog-list';
 import { TargetDetail } from './target-detail';
 import { textRole } from '@/components/ui/typography';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { ListScreen } from '@/components/layout/page-shell';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -47,31 +47,33 @@ export function BulkActions({
     hint = `Competitors can be found for up to ${COMMERCE_TARGETS_MAX} targets at a time.`;
   else if (count) hint = 'Find competitors for every checked target.';
   return (
-    <Card className="flex flex-wrap items-center justify-between gap-3">
-      <div className="grid gap-0.5">
-        <span aria-live="polite" className={textRole('itemTitle')}>
-          {count ? `${count} ${noun} selected` : 'No targets selected'}
-        </span>
-        <span className="type-caption">{hint}</span>
-        {error ? (
-          <span role="alert" className="type-caption text-danger-text">
-            {humanizeApiError(error, 'Competitor discovery could not start.').message}
+    <Card>
+      <Inline gap="compact" className="flex-wrap justify-between">
+        <Stack gap="tight">
+          <span aria-live="polite" className={textRole('itemTitle')}>
+            {count ? `${count} ${noun} selected` : 'No targets selected'}
           </span>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-1">
-        <Button
-          disabled={!count || tooMany}
-          pending={pending}
-          pendingLabel="Finding…"
-          onClick={onDiscover}
-        >
-          Find competitors
-        </Button>
-        <Button variant="ghost" disabled={pending} onClick={onClear}>
-          Clear selection
-        </Button>
-      </div>
+          <span className="type-caption">{hint}</span>
+          {error ? (
+            <span role="alert" className="type-caption text-danger-text">
+              {humanizeApiError(error, 'Competitor discovery could not start.').message}
+            </span>
+          ) : null}
+        </Stack>
+        <Inline className="flex-wrap">
+          <Button
+            disabled={!count || tooMany}
+            pending={pending}
+            pendingLabel="Finding…"
+            onClick={onDiscover}
+          >
+            Find competitors
+          </Button>
+          <Button variant="ghost" disabled={pending} onClick={onClear}>
+            Clear selection
+          </Button>
+        </Inline>
+      </Inline>
     </Card>
   );
 }

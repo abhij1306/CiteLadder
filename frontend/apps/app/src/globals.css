@@ -117,7 +117,6 @@
   --color-danger-text: var(--color-danger);
   --color-info: #2f6fdb;
   --color-info-bg: #eef4fd;
-  --color-info-border: #c5d7f5;
   --color-info-text: #1d4fae;
   --color-neutral: #aab2ad;
   --color-neutral-bg: var(--color-well);
@@ -1115,7 +1114,6 @@ input:-webkit-autofill:focus {
   --color-danger-fg: #350b10;
   --color-info: #7aa7f5;
   --color-info-bg: rgb(122 167 245 / 13%);
-  --color-info-border: rgb(122 167 245 / 38%);
   --color-info-text: #a9c6f8;
   --color-neutral: #5f6762;
   --color-neutral-bg: #212523;

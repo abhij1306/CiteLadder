@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
+import { Inline, Stack } from '@/components/ui/layout';
 import { OnPageEntities } from '@/components/ui/on-page-entities';
 import { panelClasses } from '@/components/ui/panel';
 import { TextLink } from '@/components/ui/text-link';
@@ -29,23 +30,23 @@ export function EarnedPageHandoff({ detail }: Readonly<{ detail: OpportunityDeta
   const handoff = detail.content_handoff;
   const format = urlTypeLabel(handoff.page_format);
   return (
-    <section className="grid gap-2">
+    <Stack as="section">
       <Label>Action handoff</Label>
-      <div className={panelClasses({}, 'grid gap-3')}>
+      <Stack className={panelClasses()}>
         <p className={textRole('body')}>
           Get listed on this page. Competitors are on it and you are not.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <Inline className="flex-wrap">
           {handoff.canonical_domain ? (
             <Badge variant="neutral">{handoff.canonical_domain}</Badge>
           ) : null}
           {format ? <Badge variant="neutral">{format}</Badge> : null}
-        </div>
+        </Inline>
         {handoff.ask ? (
-          <div className="grid gap-1">
+          <Stack gap="tight">
             <p className={textRole('label')}>What to ask for</p>
             <p className={textRole('body')}>{handoff.ask}</p>
-          </div>
+          </Stack>
         ) : null}
         <OnPageEntities
           heading="Found on this page"
@@ -56,8 +57,8 @@ export function EarnedPageHandoff({ detail }: Readonly<{ detail: OpportunityDeta
         <NamedInAnswers names={handoff.answer_competitors} />
         <Coverage handoff={handoff} />
         <Limitations items={handoff.limitations} />
-      </div>
-    </section>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -77,9 +78,9 @@ function Brand({ handoff }: Readonly<{ handoff: Handoff }>) {
 function Prompts({ prompts }: Readonly<{ prompts?: Handoff['affected_prompts'] }>) {
   if (!prompts?.length) return null;
   return (
-    <div className="grid gap-1">
+    <Stack gap="tight">
       <p className={textRole('label')}>Prompts that cite this page</p>
-      <ul className="grid gap-1">
+      <Stack as="ul" gap="tight">
         {prompts.map((prompt) => (
           <li key={prompt.prompt_id} className={textRole('body')}>
             <TextLink href={promptHistoryHref(prompt.prompt_id)} text="inherit">
@@ -87,12 +88,12 @@ function Prompts({ prompts }: Readonly<{ prompts?: Handoff['affected_prompts'] }
             </TextLink>
           </li>
         ))}
-      </ul>
+      </Stack>
       <p className="type-caption">
         Once you mark this done, visibility on these prompts is measured after the next runs. The
         history of each prompt marks when the work went live.
       </p>
-    </div>
+    </Stack>
   );
 }
 
@@ -106,20 +107,20 @@ function Prompts({ prompts }: Readonly<{ prompts?: Handoff['affected_prompts'] }
 function NamedInAnswers({ names }: Readonly<{ names?: string[] }>) {
   if (!names?.length) return null;
   return (
-    <div className="grid gap-2">
+    <Stack>
       <p className={textRole('label')}>Named in the answers, not on the page</p>
-      <div className="flex flex-wrap gap-2">
+      <Inline className="flex-wrap">
         {names.map((name) => (
           <Badge key={name} variant="neutral">
             {name}
           </Badge>
         ))}
-      </div>
+      </Inline>
       <p className="type-caption">
         These appeared somewhere in an answer that cited this page. They are not a finding about the
         page and did not affect this task&apos;s priority.
       </p>
-    </div>
+    </Stack>
   );
 }
 
@@ -128,7 +129,7 @@ function Coverage({ handoff }: Readonly<{ handoff: Handoff }>) {
   const frequency = handoff.observed_citation_frequency;
   if (!sentence && !frequency) return null;
   return (
-    <div className="grid gap-1">
+    <Stack gap="tight">
       <p className={textRole('label')}>Coverage</p>
       {sentence ? <p className={textRole('caption')}>{sentence}</p> : null}
       {frequency ? (
@@ -136,6 +137,6 @@ function Coverage({ handoff }: Readonly<{ handoff: Handoff }>) {
           Cited by {frequency.answers_citing_page} of {frequency.eligible_answers} analyzed answers.
         </p>
       ) : null}
-    </div>
+    </Stack>
   );
 }

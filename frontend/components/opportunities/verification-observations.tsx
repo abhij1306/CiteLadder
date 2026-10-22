@@ -2,6 +2,7 @@
 
 import { ProjectLink } from '@/components/layout/scoped-link';
 
+import { Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import { movementLegLabel, movementStateLabel } from '@/lib/agent/vocabulary';
 
@@ -23,7 +24,7 @@ export function VerificationObservations({
   const result = implementation?.verification_events?.at(-1)?.result;
   if (!result) return null;
   return (
-    <div className="type-caption grid gap-2">
+    <Stack className="type-caption">
       <ComparableMovement result={result} />
       <GapChanges result={result} />
       {showAuditLink ? (
@@ -31,7 +32,7 @@ export function VerificationObservations({
           Run a comparable audit
         </ProjectLink>
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -45,14 +46,14 @@ function ComparableMovement({ result }: Readonly<{ result: VerificationResult | 
   });
   if (!entries.length) return null;
   return (
-    <div className="grid gap-0.5">
+    <Stack gap="tight">
       <p className={textRole('label')}>Comparable movement</p>
       {entries.map(([label, leg]) => (
         <p key={label}>
           {label}: {movementStateLabel(legState(leg))}
         </p>
       ))}
-    </div>
+    </Stack>
   );
 }
 

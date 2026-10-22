@@ -6,13 +6,14 @@ import { useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Select } from '@/components/ui/select';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
+import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
 import { projectsApi, type BusinessMapUpdateInput } from '@/lib/api/projects';
@@ -67,10 +68,14 @@ export function BusinessMapEditor({
     queryKey: queryKeys.projects.businessMap(projectId),
     queryFn: ({ signal }) => projectsApi.getBusinessMap(projectId, { signal, workspaceId }),
   });
-  if (query.isPending) return <Skeleton className="h-64 w-full" />;
+  if (query.isPending) return <QueryState kind="loading" />;
   if (query.isError)
     return (
-      <ReadError {...readErrorProps(query)} fallback="The business map could not be loaded." />
+      <QueryState
+        kind="error"
+        {...readErrorProps(query)}
+        fallback="The business map could not be loaded."
+      />
     );
   return (
     <BusinessMapForm
@@ -115,16 +120,16 @@ function BusinessMapForm({
 
   return (
     <Stack gap="workspace">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <Inline className="flex-wrap justify-between">
         <p className={textRole('body', 'text-secondary')}>
           Describe each offering so generated prompts cover real buyer situations. Leave anything
           you are unsure of empty.
         </p>
         <Button variant="primary" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-          <Save className="size-4" aria-hidden />
+          <Icon icon={Save} />
           {mutation.isPending ? 'Saving…' : 'Save business map'}
         </Button>
-      </div>
+      </Inline>
       {mutation.isError ? (
         <Alert tone="danger">{humanizeApiError(mutation.error).message}</Alert>
       ) : null}
@@ -228,23 +233,19 @@ function EntryList({
     setValue('');
   };
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <span className={textRole('label')}>{label}</span>
       {entries.length ? (
-        <ul className="flex flex-wrap gap-2" aria-label={label}>
+        <Stack as="ul" gap="tight" aria-label={label}>
           {entries.map((entry) => (
-            <li
-              key={entry.value}
-              className="type-body text-foreground bg-panel flex items-center gap-2 rounded-[var(--radius-control)] py-1 pr-1 pl-3"
-            >
+            <Inline as="li" key={entry.value} className="type-body text-foreground">
               <span>{entry.value}</span>
               {entry.review_state === 'suggested' ? (
                 <>
                   <Badge>{originOf(entry.value) === 'model' ? 'AI suggested' : 'Suggested'}</Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Confirm ${entry.value}`}
+                  <IconButton
+                    icon={Check}
+                    label={`Confirm ${entry.value}`}
                     disabled={disabled}
                     onClick={() =>
                       onChange(
@@ -253,25 +254,20 @@ function EntryList({
                         ),
                       )
                     }
-                  >
-                    <Check className="size-4" aria-hidden />
-                  </Button>
+                  />
                 </>
               ) : null}
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove ${entry.value}`}
+              <IconButton
+                icon={X}
+                label={`Remove ${entry.value}`}
                 disabled={disabled}
                 onClick={() => onChange(entries.filter((item) => item !== entry))}
-              >
-                <X className="size-4" aria-hidden />
-              </Button>
-            </li>
+              />
+            </Inline>
           ))}
-        </ul>
+        </Stack>
       ) : null}
-      <div className="flex gap-2">
+      <Inline>
         <Input
           value={value}
           placeholder={placeholder}
@@ -286,11 +282,11 @@ function EntryList({
           }}
         />
         <Button variant="secondary" onClick={add} disabled={disabled || !canAdd}>
-          <Plus className="size-4" aria-hidden />
+          <Icon icon={Plus} />
           Add
         </Button>
-      </div>
-    </div>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -319,32 +315,30 @@ function ExclusionEditor({
   );
   const canAdd = first !== '' && second !== '' && !sameValue(first, second) && !duplicate;
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <span className={textRole('label')}>Combinations that never apply</span>
       {exclusions.length ? (
-        <ul className="grid gap-1" aria-label="Excluded combinations">
+        <Stack as="ul" gap="tight" aria-label="Excluded combinations">
           {exclusions.map((pair) => (
-            <li
+            <Inline
+              as="li"
               key={`${pair.first}|${pair.second}`}
-              className="type-body text-foreground flex items-center gap-2"
+              className="type-body text-foreground"
             >
               <span>
                 {pair.first} + {pair.second}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`Remove ${pair.first} + ${pair.second}`}
+              <IconButton
+                icon={X}
+                label={`Remove ${pair.first} + ${pair.second}`}
                 disabled={disabled}
                 onClick={() => onChange(exclusions.filter((item) => item !== pair))}
-              >
-                <X className="size-4" aria-hidden />
-              </Button>
-            </li>
+              />
+            </Inline>
           ))}
-        </ul>
+        </Stack>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <Inline className="flex-wrap">
         <Select value={first} onValueChange={setFirst} ariaLabel="First entry" options={options} />
         <Select
           value={second}
@@ -361,10 +355,10 @@ function ExclusionEditor({
             setSecond('');
           }}
         >
-          <Plus className="size-4" aria-hidden />
+          <Icon icon={Plus} />
           Add exclusion
         </Button>
-      </div>
-    </div>
+      </Inline>
+    </Stack>
   );
 }

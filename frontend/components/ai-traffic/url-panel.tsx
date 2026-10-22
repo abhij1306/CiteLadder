@@ -10,6 +10,7 @@ import { MISSING_MARK } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { QueryState } from '@/components/ui/query-state';
+import { Stack } from '@/components/ui/layout';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { DisplayTime } from '@/components/ui/display-time';
 import { aiTrafficApi, type TrafficFilters } from '@/lib/api/ai-traffic';
@@ -131,7 +132,7 @@ function UrlEvidence({
   const link = (tab: string) =>
     projectDestination('/ai-traffic', new URLSearchParams({ tab }), projectId);
   return (
-    <div className="grid gap-4">
+    <Stack gap="workspace">
       <p className="type-caption">
         {data.window_start} – {data.window_end} · Path-level identity
       </p>
@@ -177,7 +178,7 @@ function UrlEvidence({
           ' Inventory unavailable'
         )}
       </p>
-    </div>
+    </Stack>
   );
 }
 export function TrafficUrlButton({
@@ -195,7 +196,12 @@ export function TrafficUrlButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="ghost" onClick={() => setOpen(true)} aria-label={label}>
+      <Button
+        variant="ghost"
+        onClick={() => setOpen(true)}
+        aria-label={label}
+        className="max-w-full"
+      >
         {children}
       </Button>
       <UrlPanel urlHash={open ? urlHash : null} onClose={() => setOpen(false)} filters={filters} />

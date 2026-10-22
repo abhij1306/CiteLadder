@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Line, LineChart, XAxis, YAxis, Tooltip } from 'recharts';
 import { axisProps, ChartContainer, LegendSwatch } from '@/components/ui/chart';
+import { Inline, Stack } from '@/components/ui/layout';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -32,7 +34,7 @@ export function SearchIntelligenceHistory({
   });
   if (query.isError)
     return <ReadError {...readErrorProps(query)} fallback="Saved history could not be loaded." />;
-  if (query.isPending) return <Skeleton className="h-48 w-full" />;
+  if (query.isPending) return <Skeleton shape="chart" />;
   const rows = query.data.rows;
   const observations = rows
     .map((row) => ({
@@ -55,20 +57,19 @@ export function SearchIntelligenceHistory({
     );
   const data = fillMonths(observations, first.date, last.date);
   return (
-    <section className="desktop:grid-cols-2 grid gap-4" aria-label="Saved backlink history">
+    <section className={splitPaneClasses('peers')} aria-label="Saved backlink history">
       <p className={textRole('caption', 'desktop:col-span-2')}>
         Monthly domain-level history for {dataset.target_domain}, {first.date} to {last.date}.
         Coverage includes the provider’s historical link population and may differ from the live
         summary. Missing observations are gaps.
       </p>
-      <div className="grid min-w-0 content-start gap-2">
-        <h3 className={textRole('itemTitle', 'flex min-h-6 items-center gap-2')}>
+      <Stack gap="compact" className="min-w-0 content-start">
+        <Inline as="h3" className={textRole('itemTitle', 'min-h-6')}>
           <LegendSwatch color="var(--color-chart-1)" shape="line" />
           Total backlinks
-        </h3>
+        </Inline>
         <ChartContainer
           config={{ backlinks: { label: 'Backlinks', color: 'var(--color-chart-1)' } }}
-          size="md"
           description="Saved monthly backlink totals; missing observations break the line."
         >
           <LineChart data={data}>
@@ -83,27 +84,26 @@ export function SearchIntelligenceHistory({
             />
           </LineChart>
         </ChartContainer>
-      </div>
-      <div className="grid min-w-0 content-start gap-2">
-        <div className="flex min-h-6 flex-wrap items-center gap-x-4 gap-y-1">
+      </Stack>
+      <Stack gap="compact" className="min-w-0 content-start">
+        <Inline gap="meta" className="min-h-6">
           <h3 className={textRole('itemTitle')}>Monthly changes</h3>
-          <div className="type-caption flex flex-wrap gap-x-4 gap-y-1">
-            <span className="flex items-center gap-2">
+          <Inline gap="meta" className="type-caption">
+            <Inline as="span">
               <LegendSwatch color="var(--color-chart-2)" shape="line" />
               New backlinks
-            </span>
-            <span className="flex items-center gap-2">
+            </Inline>
+            <Inline as="span">
               <LegendSwatch color="var(--color-chart-3)" shape="line" />
               Lost backlinks
-            </span>
-          </div>
-        </div>
+            </Inline>
+          </Inline>
+        </Inline>
         <ChartContainer
           config={{
             new: { label: 'New backlinks', color: 'var(--color-chart-2)' },
             lost: { label: 'Lost backlinks', color: 'var(--color-chart-3)' },
           }}
-          size="md"
           description="Saved monthly new and lost backlinks, shown as separate labelled lines."
         >
           <LineChart data={data}>
@@ -127,7 +127,7 @@ export function SearchIntelligenceHistory({
             />
           </LineChart>
         </ChartContainer>
-      </div>
+      </Stack>
     </section>
   );
 }

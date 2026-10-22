@@ -24,8 +24,10 @@ import {
 import { DisplayTime } from '@/components/ui/display-time';
 import { formatCount, formatPercent } from '@/lib/format';
 import { textRole } from '@/components/ui/typography';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 
 export function DemandEvidenceDrawer({
   signal,
@@ -58,28 +60,28 @@ function DemandEvidenceContent({
       title="Signal evidence"
       className="desktop:max-w-lg max-w-md"
       footer={
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between">
           <Button variant="secondary" asChild>
             <ProjectLink
               href={demandSignalHandoffHref(signal)}
               className="inline-flex items-center"
             >
-              <ArrowUpRight className="size-3.5" aria-hidden />
+              <Icon icon={ArrowUpRight} />
               Ask agent
             </ProjectLink>
           </Button>
         </div>
       }
     >
-      <div className="grid gap-[var(--workspace-gap)]">
-        <div className="border-border-subtle grid gap-2 border-b pb-4">
-          <div className="flex flex-wrap items-center gap-2">
+      <Stack gap="workspace">
+        <Stack>
+          <Inline className="flex-wrap">
             <Badge variant="neutral">{details.targetKind}</Badge>
             <SignalChip signalType={signal.signal_type} />
-          </div>
+          </Inline>
           <h2 className={textRole('sectionTitle', 'break-words')}>{details.target}</h2>
           {details.linkablePageUrl && (
-            <div className="type-caption flex items-center gap-2">
+            <Inline className="type-caption">
               <span className={textRole('emphasis', 'shrink-0')}>Landing page</span>
               <TextLink
                 variant="external"
@@ -89,13 +91,13 @@ function DemandEvidenceContent({
               >
                 <span className="truncate">{details.linkablePageUrl}</span>
               </TextLink>
-            </div>
+            </Inline>
           )}
-        </div>
+        </Stack>
 
         <SignalInsight signal={signal} />
 
-        <section className="grid gap-2">
+        <Stack as="section">
           <h3 className={textRole('label')}>Search Console performance</h3>
           <StatRow
             segments={[
@@ -133,19 +135,19 @@ function DemandEvidenceContent({
               },
             ]}
           />
-        </section>
+        </Stack>
 
         {/* Cannibalization only. Bounded by the rule itself: each competing
             page holds at least a 10% share, so there are never more than 10. */}
         {details.pages.length > 0 && (
-          <section className="grid gap-2">
-            <h3 className={textRole('label', 'flex items-center gap-2')}>
-              <Split className="text-muted size-3.5" aria-hidden />
+          <Stack as="section">
+            <Inline as="h3" className={textRole('label')}>
+              <Icon icon={Split} className="text-muted" />
               Competing pages ({details.pages.length})
-            </h3>
+            </Inline>
             <div className={ledgerClasses('boxed')}>
               {details.pages.map((page) => (
-                <div key={page.url} className="type-caption grid gap-1 p-3">
+                <Stack key={page.url} gap="tight" className={ledgerItemClasses('type-caption')}>
                   <div className={textRole('emphasis', 'text-foreground break-all')}>
                     {page.url}
                   </div>
@@ -155,16 +157,16 @@ function DemandEvidenceContent({
                       {(page.share * 100).toFixed(0)}% query share
                     </span>
                   </div>
-                </div>
+                </Stack>
               ))}
             </div>
-          </section>
+          </Stack>
         )}
 
         {details.cohortMedianCtr !== null && (
-          <section className="grid gap-2">
+          <Stack as="section">
             <h3 className={textRole('label')}>Position benchmark</h3>
-            <div className={panelClasses({}, 'type-caption grid gap-2')}>
+            <Stack className={panelClasses({}, 'type-caption')}>
               <div className="flex justify-between">
                 <span className="text-muted">Position band</span>
                 {details.positionBand !== null ? (
@@ -191,17 +193,17 @@ function DemandEvidenceContent({
                   <UnavailableValue state="not_measured" />
                 )}
               </div>
-            </div>
-          </section>
+            </Stack>
+          </Stack>
         )}
 
         {/* Where the figures came from, as counts and a date; internal IDs stay out of view. */}
-        <section aria-labelledby="demand-provenance" className="grid gap-2">
-          <h3 id="demand-provenance" className={textRole('label', 'flex items-center gap-2')}>
-            <ShieldCheck className="text-muted size-3.5" aria-hidden />
+        <Stack as="section" aria-labelledby="demand-provenance">
+          <Inline as="h3" id="demand-provenance" className={textRole('label')}>
+            <Icon icon={ShieldCheck} className="text-muted" />
             Provenance
-          </h3>
-          <dl className={panelClasses({ tone: 'well' }, 'type-caption grid gap-2')}>
+          </Inline>
+          <Stack as="dl" className={panelClasses({ tone: 'well' }, 'type-caption')}>
             <ProvenanceRow label="Search Console rows">
               <ProvenanceCount value={details.metricRowCount} />
             </ProvenanceRow>
@@ -211,19 +213,19 @@ function DemandEvidenceContent({
             <ProvenanceRow label="Evaluated">
               <DisplayTime value={signal.created_at} dateOnly />
             </ProvenanceRow>
-          </dl>
-        </section>
-      </div>
+          </Stack>
+        </Stack>
+      </Stack>
     </Drawer>
   );
 }
 
 function ProvenanceRow({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
-    <div className="flex justify-between gap-4">
+    <Inline gap="workspace" className="justify-between">
       <dt className="text-muted">{label}</dt>
       <dd className="text-foreground tabular-nums">{children}</dd>
-    </div>
+    </Inline>
   );
 }
 

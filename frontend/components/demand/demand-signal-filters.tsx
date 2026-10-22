@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { InfoHint } from '@/components/ui/info-hint';
+import { Inline } from '@/components/ui/layout';
 import type { DemandSnapshot } from '@/lib/api/demand';
 import { DEMAND_DETECTORS } from '@/lib/config/demand';
 import { detectorStates, FILTER_TABS, type FilterTab } from '@/lib/demand/signals';
@@ -61,7 +62,7 @@ export function DemandSignalFilters({
         const state = detector ? detectors[detector.key] : undefined;
         const status = detector ? detectorStatus(state?.state) : null;
         return (
-          <span key={tab} className="inline-flex items-center gap-1">
+          <Inline as="span" key={tab} gap="tight">
             <Button
               variant="secondary"
               aria-pressed={activeTab === tab}
@@ -76,7 +77,7 @@ export function DemandSignalFilters({
                 {[detector.rule, ...(state?.limitations ?? [])].join(' ')}
               </InfoHint>
             ) : null}
-          </span>
+          </Inline>
         );
       })}
       {limitations.length > 0 ? (

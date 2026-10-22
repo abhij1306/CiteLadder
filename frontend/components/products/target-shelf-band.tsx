@@ -5,7 +5,8 @@ import type { Shelf } from '@citeladder/contracts/commerce-suite';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Card, CardContent } from '@/components/ui/card';
 import { DisplayTime } from '@/components/ui/display-time';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { StatRow } from '@/components/ui/stat-row';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { pluralCount } from '@/lib/format';
@@ -48,7 +49,7 @@ function metrics(snapshot: Snapshot | null): Metric[] {
  * what each number means, and how many answers it rests on.
  */
 export function TargetShelfBand({ query }: Readonly<{ query: CommerceQueries['shelf'] }>) {
-  if (query.isPending) return <Skeleton className="h-24 w-full" />;
+  if (query.isPending) return <QueryState kind="loading" />;
   // A failed read is not an unmeasured target: rendering "Not measured" for a
   // request that never landed would report a missing metric as an observed absence.
   if (query.isError)
@@ -60,24 +61,26 @@ export function TargetShelfBand({ query }: Readonly<{ query: CommerceQueries['sh
   const unavailable = snapshot !== null && snapshot.successful_execution_count === 0;
   return (
     <Card data-testid="target-shelf-band">
-      <CardContent className="grid gap-3">
-        <StatRow
-          segments={metrics(snapshot).map(({ label, definition, value }) => ({
-            key: label,
-            label,
-            value: value ?? (
-              <UnavailableValue state={unavailable ? 'unavailable' : 'not_measured'} />
-            ),
-            sub: definition,
-          }))}
-        />
-        {snapshot ? (
-          <p className="type-caption">
-            Measured <DisplayTime value={snapshot.measured_at} dateOnly /> from{' '}
-            {pluralCount(snapshot.successful_execution_count, 'answer')} and{' '}
-            {pluralCount(snapshot.recognized_slot_count, 'recognized recommendation')}.
-          </p>
-        ) : null}
+      <CardContent>
+        <Stack>
+          <StatRow
+            segments={metrics(snapshot).map(({ label, definition, value }) => ({
+              key: label,
+              label,
+              value: value ?? (
+                <UnavailableValue state={unavailable ? 'unavailable' : 'not_measured'} />
+              ),
+              sub: definition,
+            }))}
+          />
+          {snapshot ? (
+            <p className="type-caption">
+              Measured <DisplayTime value={snapshot.measured_at} dateOnly /> from{' '}
+              {pluralCount(snapshot.successful_execution_count, 'answer')} and{' '}
+              {pluralCount(snapshot.recognized_slot_count, 'recognized recommendation')}.
+            </p>
+          ) : null}
+        </Stack>
       </CardContent>
     </Card>
   );
