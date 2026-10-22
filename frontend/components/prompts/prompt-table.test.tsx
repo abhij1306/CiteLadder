@@ -207,14 +207,10 @@ describe('PromptTable pagination', () => {
         </TooltipProvider>
       </MemoryRouter>,
     );
-    expect(
-      screen.getByText(
-        (_, el) =>
-          el?.tagName === 'SPAN' &&
-          el.textContent?.replace(/\s+/g, ' ').trim() === '1–5 of 5 prompts',
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+    // Five prompts fit on one page, so the table shows them with no pager.
+    expect(screen.getByText('Prompt number 1')).toBeInTheDocument();
+    expect(screen.getByText('Prompt number 5')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull();
   });
 
   it('keeps row actions wired on paginated rows', async () => {

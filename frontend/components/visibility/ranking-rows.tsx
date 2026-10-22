@@ -16,7 +16,6 @@ import {
   measured,
 } from '@/lib/visibility/dashboard';
 import { Delta } from '@/components/ui/delta';
-import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { textRole } from '@/components/ui/typography';
 import { tagClasses } from '@/components/ui/tag-variants';
 
@@ -37,9 +36,9 @@ import { tagClasses } from '@/components/ui/tag-variants';
  * asymmetric with every other column. The measure still exists on
  * `RankingRow.gap_count` and in the backend's `gap_counts` projection, where
  * opportunity analysis can use it; it is simply not a column of this table.
+ *
+ * The table is never paged: it holds at most six brands (owner, 2026-10-21).
  */
-/** Rows per page, matching the shared table footer used across the app. */
-const PAGE_SIZE = 10;
 
 /** Stable identity for one row, matching the React key used below. */
 function rowKey(row: RankingRow): string {
@@ -185,8 +184,6 @@ export function RankingRowsTable({
   const ordered = [...rows].sort(
     (a, b) => (b.mention_rate ?? -1) - (a.mention_rate ?? -1) || a.name.localeCompare(b.name),
   );
-  const { page, setPage, pageCount, from, to } = useTablePage(ordered.length, PAGE_SIZE);
-  const paged = ordered.slice(from - 1, to);
   // With no prior run there is no change for ANY brand, and a column of
   // "No comparable change" told the reader nothing seven times over. The reason
   // is stated once above the table instead.
@@ -202,8 +199,6 @@ export function RankingRowsTable({
     <DataTable
       title="Brand and competitors"
       columns={rankingColumns({ anyPosition, anyChange })}
-      pageSize={PAGE_SIZE}
-      rowCount={paged.length}
       state={
         ordered.length
           ? undefined
@@ -214,13 +209,9 @@ export function RankingRowsTable({
               heading: 'No measured responses in this selection.',
             }
       }
-      pager={{
-        range: { from, to, total: ordered.length, noun: 'brands' },
-        ...pageNumberControls(page, pageCount, setPage),
-      }}
       footer="How often each brand is named, across the same answers. Select a row to plot it on its own."
     >
-      {paged.map((row) => {
+      {ordered.map((row) => {
         // A matched-subset delta is the same measurement taken over the cells
         // both runs share. Which one it is belongs to the note above the
         // table, not to a disclosure inside every cell.

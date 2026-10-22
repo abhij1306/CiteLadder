@@ -105,6 +105,36 @@ describe('DataTable', () => {
     expect(blanks.map((row) => row.textContent)).toEqual(['  ', '  ']);
   });
 
+  it('draws the pager and blank rows only once the rows run past one page', () => {
+    const table = (total: number) => (
+      <DataTable
+        label="Runs"
+        columns={[{ key: 'run', label: 'Run' }]}
+        pageSize={10}
+        rowCount={1}
+        pager={{
+          canPrev: false,
+          canNext: false,
+          onPrev: () => undefined,
+          onNext: () => undefined,
+          range: { from: 1, to: 1, total, noun: 'runs' },
+          pageSize: { value: 10, onChange: () => undefined },
+        }}
+      >
+        <TableRow>
+          <TableCell>Run one</TableCell>
+        </TableRow>
+      </DataTable>
+    );
+    const { container, rerender } = render(table(1));
+    expect(screen.queryByRole('button', { name: 'Next page' })).toBeNull();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
+
+    rerender(table(11));
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeInTheDocument();
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(10);
+  });
+
   it('keeps a row’s actions together in its trailing cell', () => {
     render(
       <DataTable
