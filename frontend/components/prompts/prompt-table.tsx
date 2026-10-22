@@ -6,6 +6,7 @@ import { Archive, Check, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { IconButton } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
 import { Delta } from '@/components/ui/delta';
 import {
   Dropdown,
