@@ -3,7 +3,7 @@
    (globals.css); this scope changes type scale only. Every size is a rung of
    the one globals.css scale. */
 :where([data-flow-surface]) {
-  /* Switzer carries body, UI and data, IBM Plex Sans the display headings, as in
+  /* Geist carries body, UI and data, Sora the display headings, as in
      the product. The scale is the product's (globals.css @theme), unchanged;
      being "roomier" is a job for measure and rhythm, not for resizing rungs. */
   --tracking-tight: -0.02em;
@@ -42,7 +42,7 @@
   font-size: 1.75rem;
   line-height: 2.25rem;
   font-weight: 500;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.026em;
   color: var(--color-foreground);
 }
 
@@ -79,7 +79,7 @@
 :where([data-flow-surface]) :where(h1, h2, h3, h4, h5, h6) {
   font-family: var(--font-display);
   font-weight: 500;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.022em;
 }
 
 :where([data-flow-surface]) [data-button-size='md'],

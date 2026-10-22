@@ -12,40 +12,41 @@
     <link rel="icon" href="/citeladder-favicon.ico" sizes="any" />
     <title>CiteLadder</title>
     <style>
-      /* Switzer and IBM Plex Sans are used when the reader has them installed;
+      /* Geist and Sora are used when the reader has them installed;
          otherwise these metric-matched Arial faces stand in, so the layout is
          the same either way. */
-      /* Match Arial's x-height to Switzer's (0.531em vs 0.519em). Vertical
-         overrides use Switzer's 980/-250/90 hhea metrics (1000 UPM), divided
-         by size-adjust. */
+      /* Match Arial's x-height to Geist's (0.530em vs 0.519em). Vertical
+         overrides use Geist's 1005/-295/0 hhea metrics (1000 UPM), divided by
+         size-adjust. */
       @font-face {
-        font-family: 'Switzer Fallback';
+        font-family: 'Geist Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 102.31%;
-        ascent-override: 95.79%;
-        descent-override: 24.44%;
-        line-gap-override: 8.8%;
+        size-adjust: 102.12%;
+        ascent-override: 98.41%;
+        descent-override: 28.89%;
+        line-gap-override: 0%;
       }
 
-      /* Match Arial's x-height to IBM Plex Sans's (0.516em vs 0.519em). Vertical
-         overrides use Plex Sans's 1025/-275/0 hhea metrics (1000 UPM), divided
-         by size-adjust. */
+      /* Match Arial's x-height to Sora's (0.534em vs 0.519em). Vertical
+         overrides use Sora's 970/-290/0 hhea metrics (1000 UPM), divided by
+         size-adjust. */
       @font-face {
-        font-family: 'IBM Plex Sans Fallback';
+        font-family: 'Sora Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 99.42%;
-        ascent-override: 103.1%;
-        descent-override: 27.66%;
+        size-adjust: 102.89%;
+        ascent-override: 94.28%;
+        descent-override: 28.19%;
         line-gap-override: 0%;
       }
 
       :root {
         font-synthesis-weight: none;
-        /* Switzer carries body, UI and data; IBM Plex Sans carries display headings. */
-        --font-text: 'Switzer Variable', 'Switzer Fallback', Arial;
-        --font-heading: 'IBM Plex Sans Variable', 'IBM Plex Sans Fallback', Arial;
+        /* Geist carries body, UI and data (its tabular figures line up
+           columns); Sora carries display headings. */
+        --font-text: 'Geist Variable', 'Geist Fallback', Arial;
+        --font-heading: 'Sora Variable', 'Sora Fallback', Arial;
       }
     </style>
   </head>

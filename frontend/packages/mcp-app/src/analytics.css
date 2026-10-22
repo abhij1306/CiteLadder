@@ -8,6 +8,6 @@
    shells define these families with hosted faces; here they resolve to an
    installed copy or the system stack, never to an undefined var(). */
 :root {
-  --font-text: 'Switzer Variable', 'Switzer', ui-sans-serif, system-ui;
-  --font-heading: 'IBM Plex Sans Variable', 'IBM Plex Sans', ui-sans-serif, system-ui;
+  --font-text: 'Geist Variable', 'Geist', ui-sans-serif, system-ui;
+  --font-heading: 'Sora Variable', 'Sora', ui-sans-serif, system-ui;
 }

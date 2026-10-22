@@ -70,17 +70,20 @@
      reading inks is a type decision, not a brand or material one. */
   --color-brand-ink: #0b0f0d;
 
-  /* Forest is the one action and brand colour: filled controls, links, focus,
-     selection markers and the bars of the mark. It never means success. */
-  --color-accent: #14532d;
-  --color-accent-hover: #166534;
-  --color-accent-active: #0b3d20;
-  --color-accent-fg: #ffffff;
-  --color-accent-subtle: #dcfce7;
-  --color-accent-soft: #f0fdf4;
-  --color-accent-border: #86efac;
-  --color-accent-text: var(--color-accent);
-  --color-selection: #bbf7d0;
+  /* Signal green is the one action and brand colour (owner decision,
+     2026-10-21): filled controls, selection markers and the bars of the mark.
+     It is bright, so a filled control carries near-black ink (5.8:1) and the
+     fill still holds 3:1 on white; links and focus take the deeper
+     `accent-text` (5.7:1). It never means success. */
+  --color-accent: #00a650;
+  --color-accent-hover: #00b85a;
+  --color-accent-active: #009447;
+  --color-accent-fg: #04170c;
+  --color-accent-subtle: #d3f6df;
+  --color-accent-soft: #edfbf2;
+  --color-accent-border: #7fdca7;
+  --color-accent-text: #08773b;
+  --color-selection: #b5efca;
   --color-selection-fg: var(--color-foreground);
 
   /* The outcome scale. Five families carry every state in the product: run
@@ -727,7 +730,7 @@ body {
      rendered size: a flat 2 paints a 1px stem at 12px and a 2px stem at
      24px, which is why large icons currently read heavier than small ones.
      These rungs compensate so every glyph lands near a 1.3px stem, in step
-     with Switzer at body sizes. Compensation is partial on purpose: an
+     with Geist at body sizes. Compensation is partial on purpose: an
      identical absolute stem at 12px closes up the counters and muddies the
      glyph.
 
@@ -821,13 +824,13 @@ a.focus-ring:active .type-caption {
    Borderless controls use the same inset edge without changing their size. */
 :focus-visible,
 .focus-ring:focus-visible {
-  outline: 1px solid var(--color-accent);
+  outline: 1px solid var(--color-accent-text);
   outline-offset: -1px;
 }
 
 .focus-input:focus-visible,
 .focus-frame:has(:where(input:focus-visible, textarea:focus-visible, select:focus-visible)) {
-  border-color: var(--color-accent);
+  border-color: var(--color-accent-text);
   outline: none;
 }
 
