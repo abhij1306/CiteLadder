@@ -6,10 +6,10 @@ import { useEffect, useState } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { CrawlLogConnections } from '@/components/ai-traffic/crawl-log-connections';
-import { Card, CardContent } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
+import { splitPaneClasses } from '@/components/ui/workspace';
 import { GRANT_FAMILY, type GrantFamily, type GrantModel } from '@/components/settings/grant-model';
 import { IntegrationCardView } from '@/components/settings/integration-card-view';
 import { IntegrationsEmptyState } from '@/components/settings/integrations-empty-state';
@@ -129,7 +129,9 @@ export function IntegrationSettings() {
     if (!hasCallbackParams) return;
     // A fresh connect changes the list — refetch before stripping the params.
     if (notice.connected) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.integrations.all,
+      });
     }
     // Shallow URL cleanup, NOT a redirect: the params have already been captured
     // into `notice`, so this only rewrites the address bar. A route navigation
@@ -162,19 +164,7 @@ export function IntegrationSettings() {
       ) : null}
 
       {connectionsQuery.isLoading ? (
-        <div className="desktop:grid-cols-2 grid gap-[var(--workspace-gap)]">
-          {[0, 1].map((i) => (
-            <Card key={i}>
-              <CardContent>
-                <Stack gap="compact">
-                  <Skeleton className="h-5 w-24" />
-                  <Skeleton className="h-8 w-full" />
-                  <Skeleton className="h-8 w-full" />
-                </Stack>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+        <QueryState kind="loading" label="Loading integrations…" />
       ) : null}
 
       {!connectionsQuery.isLoading && !connectionsQuery.isError && connections.length === 0 ? (
@@ -182,7 +172,7 @@ export function IntegrationSettings() {
       ) : null}
 
       {!connectionsQuery.isLoading && !connectionsQuery.isError && connections.length > 0 ? (
-        <div className="grid [grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr))] gap-[var(--workspace-gap)]">
+        <div className={splitPaneClasses('peers', 'items-stretch')}>
           {FAMILY_ORDER.map((family) => (
             <IntegrationCardView
               workspaceId={workspaceId}

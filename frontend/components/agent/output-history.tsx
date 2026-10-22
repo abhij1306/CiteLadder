@@ -6,10 +6,12 @@ import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
+import { Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
 import { textRole } from '@/components/ui/typography';
+import { ledgerClasses } from '@/components/ui/workspace';
 import { diffLines } from '@/lib/agent/diff';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { OUTPUT_PHASE_LABEL } from '@/lib/agent/vocabulary';
@@ -42,8 +44,12 @@ export function OutputHistory({
     onSuccess: async () => {
       setViewing(null);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(chatId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.revisions(chatId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agent.chat(chatId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agent.revisions(chatId),
+        }),
       ]);
     },
   });
@@ -57,19 +63,19 @@ export function OutputHistory({
         pending={query.isFetching}
       />
     );
-  if (!query.data) return <Skeleton className="h-32 w-full" />;
+  if (!query.data) return <QueryState kind="loading" label="Loading revisions…" />;
   const revisions = [...query.data.items].sort((a, b) => b.number - a.number);
   const current = revisions.find((revision) => revision.id === latestRevisionId);
   const toggle = (id: string, mode: 'view' | 'compare') =>
     setViewing((open) => (open?.id === id && open.mode === mode ? null : { id, mode }));
   return (
-    <div className="grid gap-3">
+    <Stack gap="compact">
       {restore.isError ? (
         <Alert tone="danger">{agentWriteFailure(restore.error).message}</Alert>
       ) : null}
-      <ol aria-label="Revisions" className="divide-border-subtle grid divide-y">
+      <ol aria-label="Revisions" className={ledgerClasses()}>
         {revisions.map((revision) => (
-          <li key={revision.id} className="grid gap-2 py-3">
+          <Stack as="li" key={revision.id} className="py-3">
             <RevisionRow
               revision={revision}
               latest={revision.id === latestRevisionId}
@@ -80,10 +86,10 @@ export function OutputHistory({
               canRestore={canRestore}
               onRestore={() => restore.mutate({ chatId, revisionId: revision.id })}
             />
-          </li>
+          </Stack>
         ))}
       </ol>
-    </div>
+    </Stack>
   );
 }
 
@@ -136,10 +142,10 @@ function RevisionRow({
         )}
       </div>
       {open === 'view' ? (
-        <div className="grid gap-2">
+        <Stack gap="compact">
           <h4 className={textRole('itemTitle')}>{revision.title}</h4>
           <ContentMarkdown markdown={revision.body} density="compact" />
-        </div>
+        </Stack>
       ) : null}
       {open === 'compare' && current ? <RevisionDiff before={revision} after={current} /> : null}
     </>
@@ -165,11 +171,11 @@ function RevisionDiff({
   const noun = changed === 1 ? 'line' : 'lines';
   const summary = changed === 0 ? 'no changes' : `${changed} changed ${noun}`;
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       <p className={textRole('caption')}>
         Revision {before.number} → current (revision {after.number}): {summary}
       </p>
       <LineDiff lines={lines} label={`Changes from revision ${before.number}`} />
-    </div>
+    </Stack>
   );
 }

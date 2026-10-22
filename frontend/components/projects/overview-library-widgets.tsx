@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Stack } from '@/components/ui/layout';
 import { StatRow } from '@/components/ui/stat-row';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
@@ -38,45 +38,58 @@ function WidgetCard({
   id,
   href,
   children,
-}: Readonly<{ id: keyof typeof WIDGET_TITLES; href: string; children: ReactNode }>) {
+}: Readonly<{
+  id: keyof typeof WIDGET_TITLES;
+  href: string;
+  children: ReactNode;
+}>) {
   return (
     <Card aria-labelledby={`widget-${id}`} className="flex h-full min-h-64 flex-col">
       <CardHeader
         actions={
           <Button asChild variant="ghost">
             <ProjectLink href={href}>
-              Open <ArrowRight className="ms-1 size-3.5" aria-hidden />
+              Open <ArrowRight className="size-3.5" aria-hidden />
             </ProjectLink>
           </Button>
         }
       >
         <CardTitle id={`widget-${id}`}>{WIDGET_TITLES[id]}</CardTitle>
       </CardHeader>
-      <CardContent className="grid flex-1 content-start gap-3">{children}</CardContent>
+      <Stack as={CardContent} gap="compact" className="flex-1 content-start">
+        {children}
+      </Stack>
     </Card>
   );
 }
 
-/** Loading, failed or loaded, in the same footprint. */
+/**
+ * Loading, failed or loaded, in the same footprint. A read that waits on the
+ * latest run (`waitsOn`) stays disabled while that read fails, so the failure
+ * shown is the one that can be retried.
+ */
 function Loaded<T>({
   query,
+  waitsOn,
   fallback,
   children,
 }: Readonly<{
   query: UseQueryResult<T>;
+  waitsOn?: UseQueryResult<unknown>;
   fallback: string;
   children: (data: T) => ReactNode;
 }>) {
-  if (query.isError)
+  const failed = waitsOn?.isError ? waitsOn : query;
+  if (failed.isError)
     return (
       <ReadError
-        error={query.error}
+        error={failed.error}
         fallback={fallback}
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
+        onRetry={() => void failed.refetch()}
+        pending={failed.isFetching}
       />
     );
-  if (query.data === undefined) return <Skeleton className="h-32 w-full" />;
+  if (query.data === undefined) return <QueryState kind="loading" />;
   return children(query.data);
 }
 
@@ -86,7 +99,9 @@ const count = (value: number | null) => (value === null ? null : formatCount(val
 
 /** A ledger padded to the widget's row count, so a short list keeps the card's height. */
 function Rows({ rows }: Readonly<{ rows: { key: string; label: ReactNode; value: ReactNode }[] }>) {
-  const padding = Array.from({ length: Math.max(0, WIDGET_ROWS - rows.length) });
+  const padding = Array.from({
+    length: Math.max(0, WIDGET_ROWS - rows.length),
+  });
   return (
     <ol className={ledgerClasses('open')}>
       {rows.map((row) => (
@@ -192,7 +207,11 @@ export function RetrievalWidget({ project }: Readonly<{ project: Project }>) {
       {noRun ? (
         <QueryState kind="empty" inline message="No completed runs yet." />
       ) : (
-        <Loaded query={misses} fallback="Retrieved sources could not be loaded.">
+        <Loaded
+          query={misses}
+          waitsOn={visibility}
+          fallback="Retrieved sources could not be loaded."
+        >
           {(data) => (
             <>
               <p className={textRole('caption')}>
@@ -216,10 +235,16 @@ export function RetrievalWidget({ project }: Readonly<{ project: Project }>) {
 }
 
 export function PerceptionWidget({ project }: Readonly<{ project: Project }>) {
-  const { perception } = useLatestPerception(project);
+  const { visibility, perception } = useLatestPerception(project);
+  if (visibility.data !== undefined && !visibility.data.audit_id)
+    return (
+      <WidgetCard id="perception" href="/visibility?tab=perception">
+        <QueryState kind="empty" inline message="No completed runs yet." />
+      </WidgetCard>
+    );
   return (
     <WidgetCard id="perception" href="/visibility?tab=perception">
-      <Loaded query={perception} fallback="Perception could not be loaded.">
+      <Loaded query={perception} waitsOn={visibility} fallback="Perception could not be loaded.">
         {(data) => {
           const score = data.brand?.score ?? null;
           return (
@@ -264,7 +289,11 @@ export function AiTrafficWidget({ project }: Readonly<{ project: Project }>) {
                   label: 'AI crawler requests',
                   value: valueOr(count(crawl.requests)),
                 },
-                { key: 'bots', label: 'Active bots', value: valueOr(count(crawl.active_bots)) },
+                {
+                  key: 'bots',
+                  label: 'Active bots',
+                  value: valueOr(count(crawl.active_bots)),
+                },
                 {
                   key: 'referrals',
                   label: 'Latest AI referrals',
@@ -294,7 +323,11 @@ export function SearchConsoleWidget({ project }: Readonly<{ project: Project }>)
           ) : (
             <StatRow
               segments={[
-                { key: 'clicks', label: 'Clicks', value: valueOr(count(selected.totals.clicks)) },
+                {
+                  key: 'clicks',
+                  label: 'Clicks',
+                  value: valueOr(count(selected.totals.clicks)),
+                },
                 {
                   key: 'impressions',
                   label: 'Impressions',

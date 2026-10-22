@@ -24,6 +24,7 @@ import {
   SYNC_RUN_POLL_MS,
 } from '@/lib/integrations/sync-runs';
 import { textRole } from '@/components/ui/typography';
+import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 
 type ConnectionMutation = {
@@ -239,7 +240,11 @@ function ConnectionRowView({
   const { label, Icon } = PROVIDER_META[connection.provider];
 
   return (
-    <div className={panelClasses()} data-testid={`connection-row-${connection.provider}`}>
+    <Stack
+      gap="compact"
+      className={panelClasses()}
+      data-testid={`connection-row-${connection.provider}`}
+    >
       <ConnectionActions
         connection={connection}
         grant={grant}
@@ -257,18 +262,14 @@ function ConnectionRowView({
       />
       <ConnectionMetadata connection={connection} activeRun={activeRun} runActive={runActive} />
       {testState ? (
-        <div className="pt-3">
-          <Alert tone={testState.ok ? 'success' : 'danger'}>{testState.message}</Alert>
-        </div>
+        <Alert tone={testState.ok ? 'success' : 'danger'}>{testState.message}</Alert>
       ) : null}
       {syncMutation.isError || removeMutation.isError ? (
-        <div className="pt-3">
-          <Alert tone="danger">
-            {humanizeApiError(syncMutation.error ?? removeMutation.error).message}
-          </Alert>
-        </div>
+        <Alert tone="danger">
+          {humanizeApiError(syncMutation.error ?? removeMutation.error).message}
+        </Alert>
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -278,7 +279,10 @@ export function ConnectionRow({
   grant,
 }: Readonly<{ connection: IntegrationConnection; grant: GrantModel }>) {
   const queryClient = useQueryClient();
-  const [testState, setTestState] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testState, setTestState] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
   const { activeProject } = useProjectContext();
   const refreshAfterMapping = useRefreshAfterMapping();
   const mapping = useActiveMapping(
@@ -288,7 +292,10 @@ export function ConnectionRow({
   );
   const [activeSyncId, setActiveSyncId] = useState<string | null>(null);
   const testMutation = useMutation({
-    mutationFn: () => integrationsApi.test(connection.id, { workspaceId: connection.workspace_id }),
+    mutationFn: () =>
+      integrationsApi.test(connection.id, {
+        workspaceId: connection.workspace_id,
+      }),
     onSuccess: (result) => {
       setTestState(
         result.status === 'ok'
@@ -337,7 +344,9 @@ export function ConnectionRow({
 
   useEffect(() => {
     if (runTerminal) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.integrations.all,
+      });
     }
   }, [queryClient, runTerminal]);
 
@@ -346,7 +355,9 @@ export function ConnectionRow({
     mutationFn: async () => {
       // Remove renders only with a mapping; a stale click after it is gone is a no-op.
       if (mapping)
-        await integrationsApi.deleteMapping(mapping.id, { workspaceId: connection.workspace_id });
+        await integrationsApi.deleteMapping(mapping.id, {
+          workspaceId: connection.workspace_id,
+        });
     },
     onSuccess: () => refreshAfterMapping(),
   });

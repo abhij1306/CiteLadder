@@ -36,7 +36,7 @@ export function OverviewLayoutMenu({
   return (
     <Dropdown>
       <DropdownTrigger asChild>
-        <Button variant="secondary" className="gap-2" pending={pending}>
+        <Button variant="secondary" pending={pending}>
           <LayoutGrid className="size-3.5" aria-hidden />
           Layout
         </Button>

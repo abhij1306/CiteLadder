@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 
 import { Button } from '@/components/ui/button';
+import { Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { textRole } from '@/components/ui/typography';
@@ -55,7 +56,7 @@ export function ProjectMarkets({
   const extra = markets.filter((market) => !market.is_default);
   const failed = add.error ?? remove.error;
   return (
-    <section aria-label="Additional markets" className="grid gap-2">
+    <Stack as="section" gap="compact" aria-label="Additional markets">
       <p className={textRole('label')}>Additional markets</p>
       <p className="type-caption text-muted">
         Measure the same prompts from other countries. Each market runs and reports separately.
@@ -63,10 +64,7 @@ export function ProjectMarkets({
       {extra.length ? (
         <ul className={ledgerClasses('boxed')}>
           {extra.map((market) => (
-            <li
-              key={market.id}
-              className="type-body flex items-center justify-between gap-2 px-3 py-2"
-            >
+            <li key={market.id} className="type-body flex items-center justify-between gap-2 py-2">
               <span>{market.label}</span>
               <Button
                 variant="ghost"
@@ -109,6 +107,6 @@ export function ProjectMarkets({
           })}
         />
       ) : null}
-    </section>
+    </Stack>
   );
 }

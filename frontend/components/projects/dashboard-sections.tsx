@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Delta } from '@/components/ui/delta';
+import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
@@ -52,7 +53,7 @@ export function DashboardHeader({
           websiteUrl={website}
           placement="identity"
         />
-        <div className="grid min-w-0 gap-1">
+        <Stack gap="tight" className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <CardTitle id="project-identity" className="truncate">
               {brandName(data)}
@@ -76,7 +77,7 @@ export function DashboardHeader({
               {data.measurement.logical_engines.join(', ')}
             </p>
           ) : null}
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -93,7 +94,7 @@ export function CompanyFacts({ data }: Readonly<{ data: CommandCenter }>) {
             <span className={textRole('label')}>{facts.industry || 'Industry not set'}</span>
             <Button asChild variant="ghost">
               <ProjectLink href="/agent/context">
-                Edit in Agent context <ArrowRight className="ms-1 size-3.5" aria-hidden />
+                Edit in Agent context <ArrowRight className="size-3.5" aria-hidden />
               </ProjectLink>
             </Button>
           </>
@@ -146,11 +147,12 @@ export function DashboardActions({
   layoutMenu?: ReactNode;
 }>) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    // A fragment: the identity band owns the gap between route actions.
+    <>
       <ProjectControls activeProject={activeProject} onEditProject={onEditProject} />
       {layoutMenu}
       <PdfButton downloading={downloading} onDownload={onDownload} />
-    </div>
+    </>
   );
 }
 
@@ -174,7 +176,6 @@ function PdfButton({
       onClick={onDownload}
       pending={downloading}
       pendingLabel="Preparing…"
-      className="gap-2"
     >
       <Download className="size-3.5" aria-hidden />
       Export PDF
@@ -264,7 +265,7 @@ export function NextAction({ data }: Readonly<{ data: CommandCenter }>) {
         <CardTitle id="next-action">{data.next_action.title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <Button asChild variant="primary" size="md">
+        <Button asChild variant="primary">
           <ProjectLink href={data.next_action.href}>
             {NEXT_ACTION_COPY[data.next_action.kind].link}
             <ArrowRight className="size-4" aria-hidden />
@@ -289,7 +290,7 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
       >
         <CardTitle id="citation-share-track">Citation share</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-1">
+      <Stack as={CardContent} gap="tight">
         <span className={textRole('label')}>AI Visibility Track</span>
         <MetricValue
           value={
@@ -307,11 +308,11 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
         ) : (
           <p className={textRole('caption')}>{data.track.limitations[0]}</p>
         )}
-      </CardContent>
+      </Stack>
       <CardContent className="flex justify-end">
         <Button asChild variant="ghost">
           <ProjectLink href="/visibility?tab=trends">
-            Open Trends <ArrowRight className="ms-1 size-3.5" aria-hidden />
+            Open Trends <ArrowRight className="size-3.5" aria-hidden />
           </ProjectLink>
         </Button>
       </CardContent>
@@ -407,7 +408,7 @@ function ViewAllActions() {
   return (
     <Button asChild variant="ghost">
       <ProjectLink href="/agent/actions">
-        View all <ArrowRight className="ms-1 size-3.5" aria-hidden />
+        View all <ArrowRight className="size-3.5" aria-hidden />
       </ProjectLink>
     </Button>
   );

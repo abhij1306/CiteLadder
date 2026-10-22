@@ -65,7 +65,11 @@ function NewChat({
   workspaceId,
   projectId,
   searchParams,
-}: Readonly<{ workspaceId: string; projectId: string; searchParams: URLSearchParams }>) {
+}: Readonly<{
+  workspaceId: string;
+  projectId: string;
+  searchParams: URLSearchParams;
+}>) {
   const handoff = useMemo(() => parseAgentHandoff(searchParams), [searchParams]);
   const [message, setMessage] = useState(handoff.prompt ?? '');
   const [context, setContext] = useState(handoff.context);
@@ -199,7 +203,7 @@ function AttachedAction({
   if (!query.data) return null;
   const action = query.data;
   return (
-    <section aria-label="Working on" className={panelClasses({}, 'grid gap-1')}>
+    <Stack as="section" gap="tight" aria-label="Working on" className={panelClasses()}>
       <span className={textRole('label')}>Working on</span>
       <div className="flex flex-wrap items-center gap-2">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
@@ -212,7 +216,7 @@ function AttachedAction({
           .filter(Boolean)
           .join(' · ')}
       </span>
-    </section>
+    </Stack>
   );
 }
 
@@ -234,11 +238,11 @@ function TopActions({
           </Button>
         }
       />
-      <ul className="grid gap-2">
+      <Stack as="ul">
         {top.map((action) => (
           <TopActionRow key={action.id} action={action} />
         ))}
-      </ul>
+      </Stack>
     </Stack>
   );
 }
@@ -246,7 +250,7 @@ function TopActions({
 function TopActionRow({ action }: Readonly<{ action: Action }>) {
   return (
     <li className={panelClasses({}, 'flex flex-wrap items-center gap-3')}>
-      <div className="grid min-w-0 flex-1 gap-0.5">
+      <Stack gap="tight" className="min-w-0 flex-1">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle" className="truncate">
           {action.target_label}
         </TextLink>
@@ -255,7 +259,7 @@ function TopActionRow({ action }: Readonly<{ action: Action }>) {
             .filter(Boolean)
             .join(' · ')}
         </span>
-      </div>
+      </Stack>
       <Button asChild variant="secondary">
         <ProjectLink href={agentHandoffHref({ actionId: action.id })}>Work on this</ProjectLink>
       </Button>

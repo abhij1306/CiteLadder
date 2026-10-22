@@ -8,8 +8,11 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { Dialog } from '@/components/ui/dialog';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Stack } from '@/components/ui/layout';
+import { listRowClasses } from '@/components/ui/list-row';
 import { Pressable } from '@/components/ui/pressable';
+import { QueryState } from '@/components/ui/query-state';
 import {
   integrationsApi,
   type IntegrationConnection,
@@ -54,10 +57,9 @@ function PropertyOption({
       disabled={disabled}
       aria-pressed={selected}
       className={cn(
-        'flex w-full items-center gap-3 rounded-[var(--radius-control)] px-3 py-2 text-start',
-        'focus-ring enabled:hover:bg-hover enabled:active:bg-active',
+        listRowClasses({ selected }),
+        'focus-ring flex w-full items-center gap-3 px-3 py-2 text-start',
         'disabled:pointer-events-none disabled:[&_.type-item-title]:text-muted',
-        selected && 'bg-selected text-foreground enabled:hover:bg-selected',
       )}
     >
       <span className="min-w-0 flex-1">
@@ -135,20 +137,15 @@ function SelectedProperty({
 }>) {
   const verb = selected ? 'Change' : 'Select';
   return (
-    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+    <div className="flex flex-wrap items-center gap-2">
       {selected ? (
         <span className={tagClasses('outline', 'max-w-full truncate tabular-nums')}>
           {selected}
         </span>
       ) : (
-        <span
-          className={textRole(
-            'label',
-            'text-warning-text bg-warning-bg/50 max-w-full truncate rounded-xs px-2 py-0.5',
-          )}
-        >
+        <Badge variant="status" value="warning">
           No {noun} selected
-        </span>
+        </Badge>
       )}
       {canChoose ? (
         <Button
@@ -258,7 +255,7 @@ export function PropertyPicker({
             : 'Select a project before choosing a property.'
         }
       >
-        <div className="grid gap-2 py-3">
+        <Stack gap="compact">
           {!activeProject ? (
             <Alert tone="warning">
               No active project. Create or select a project first — a property must be imported into
@@ -266,12 +263,7 @@ export function PropertyPicker({
             </Alert>
           ) : null}
 
-          {discovery.isPending ? (
-            <>
-              <Skeleton className="h-12 w-full" />
-              <Skeleton className="h-12 w-full" />
-            </>
-          ) : null}
+          {discovery.isPending ? <QueryState kind="loading" label={`Loading ${noun}s…`} /> : null}
 
           {discovery.isError ? (
             <Alert tone="danger">
@@ -287,18 +279,20 @@ export function PropertyPicker({
             </Alert>
           ) : null}
 
-          <PropertyOptions
-            properties={discovery.data ?? []}
-            selected={selected}
-            blocked={!activeProject || selectMutation.isPending}
-            selecting={selectMutation}
-            onSelect={(propertyRef) => selectMutation.mutate(propertyRef)}
-          />
+          <Stack gap="tight">
+            <PropertyOptions
+              properties={discovery.data ?? []}
+              selected={selected}
+              blocked={!activeProject || selectMutation.isPending}
+              selecting={selectMutation}
+              onSelect={(propertyRef) => selectMutation.mutate(propertyRef)}
+            />
+          </Stack>
 
           {selectMutation.isError ? (
             <Alert tone="danger">{humanizeApiError(selectMutation.error).message}</Alert>
           ) : null}
-        </div>
+        </Stack>
       </Dialog>
     </>
   );

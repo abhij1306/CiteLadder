@@ -7,6 +7,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { CsvImportFileInput, CsvImportPreview, useCsvImportFile } from '@/components/ui/csv-import';
 import { Dialog } from '@/components/ui/dialog';
+import { Stack } from '@/components/ui/layout';
 import {
   ClampText,
   Table,
@@ -96,18 +97,16 @@ export function CsvImportDialog({
         </>
       }
     >
-      <div className="grid gap-4">
+      <Stack gap="workspace">
         {error ? <Alert tone="danger">{error}</Alert> : null}
 
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-60 flex-1">
-            <CsvImportFileInput inputRef={inputRef} onSelect={(file) => void selectFile(file)} />
-          </div>
-          <Button variant="secondary" onClick={downloadSample}>
+        <Stack gap="compact">
+          <CsvImportFileInput inputRef={inputRef} onSelect={(file) => void selectFile(file)} />
+          <Button variant="secondary" className="justify-self-start" onClick={downloadSample}>
             <Download className="size-4" aria-hidden />
             Download sample CSV
           </Button>
-        </div>
+        </Stack>
 
         {parsed && parsed.errors.length > 0 ? (
           <Alert tone="danger">{parsed.errors.join(' ')}</Alert>
@@ -152,7 +151,7 @@ export function CsvImportDialog({
             </Table>
           </CsvImportPreview>
         ) : null}
-      </div>
+      </Stack>
     </Dialog>
   );
 }

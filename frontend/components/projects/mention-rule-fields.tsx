@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { Switch } from '@/components/ui/switch';
 import { textRole } from '@/components/ui/typography';
 import type { EntityMatching } from '@/lib/api/types';
@@ -49,7 +50,12 @@ export function MentionRuleFields({
   const update = (patch: Partial<MentionRuleDraft>) =>
     onChange({ ...rule, ...patch, touched: true });
   const fields: ReactNode = (
-    <fieldset aria-label={`Mention rule for ${name || 'this name'}`} className="grid min-w-0 gap-3">
+    <Stack
+      as="fieldset"
+      gap="compact"
+      aria-label={`Mention rule for ${name || 'this name'}`}
+      className="min-w-0"
+    >
       <div className="flex items-center gap-3">
         <Switch
           checked={rule.mode === 'context_required'}
@@ -88,7 +94,7 @@ export function MentionRuleFields({
           />
         )}
       </Field>
-    </fieldset>
+    </Stack>
   );
   // Decided once per draft, so toggling the switch never remounts the fields.
   if (rule.open) return fields;

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import type { Prompt, Topic } from '@/lib/api/types';
@@ -23,8 +24,14 @@ import {
   type PromptFormValues,
 } from '@/lib/prompts/forms';
 
-const INTENT_OPTIONS = intentValues.map((value) => ({ value, label: intentLabels[value] }));
-const STAGE_OPTIONS = buyerStageValues.map((value) => ({ value, label: buyerStageLabels[value] }));
+const INTENT_OPTIONS = intentValues.map((value) => ({
+  value,
+  label: intentLabels[value],
+}));
+const STAGE_OPTIONS = buyerStageValues.map((value) => ({
+  value,
+  label: buyerStageLabels[value],
+}));
 
 /**
  * Add / edit prompt dialog. react-hook-form + zod; the same form serves
@@ -106,83 +113,85 @@ export function PromptFormDialog({
         </>
       }
     >
-      <form noValidate onSubmit={submit} className="grid gap-4">
-        {error ? <Alert tone="danger">{error}</Alert> : null}
+      <form noValidate onSubmit={submit}>
+        <Stack gap="workspace">
+          {error ? <Alert tone="danger">{error}</Alert> : null}
 
-        <Field label="Topic">
-          {(props) => (
-            <Controller
-              control={control}
-              name="topicId"
-              render={({ field }) => (
-                <Select
-                  {...props}
-                  ariaLabel="Topic"
-                  value={field.value}
-                  onValueChange={field.onChange}
-                  options={topicOptions}
-                />
-              )}
-            />
-          )}
-        </Field>
+          <Field label="Topic">
+            {(props) => (
+              <Controller
+                control={control}
+                name="topicId"
+                render={({ field }) => (
+                  <Select
+                    {...props}
+                    ariaLabel="Topic"
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    options={topicOptions}
+                  />
+                )}
+              />
+            )}
+          </Field>
 
-        <Field label="Prompt" required error={errors.text?.message}>
-          {(props) => (
-            <Textarea
-              {...props}
-              {...register('text')}
-              placeholder="What are the best running shoes for flat feet?"
-            />
-          )}
-        </Field>
+          <Field label="Prompt" required error={errors.text?.message}>
+            {(props) => (
+              <Textarea
+                {...props}
+                {...register('text')}
+                placeholder="What are the best running shoes for flat feet?"
+              />
+            )}
+          </Field>
 
-        {/* Tags are set on generation or import; editing corrects them. */}
-        {isEdit ? (
-          <div className="desktop:grid-cols-2 grid gap-4">
-            <Field label="Intent">
-              {(props) => (
-                <Controller
-                  control={control}
-                  name="intent"
-                  render={({ field }) => (
-                    <Select
-                      {...props}
-                      ariaLabel="Intent"
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      options={INTENT_OPTIONS}
-                    />
-                  )}
-                />
-              )}
-            </Field>
-            <Field label="Buyer stage">
-              {(props) => (
-                <Controller
-                  control={control}
-                  name="buyerStage"
-                  render={({ field }) => (
-                    <Select
-                      {...props}
-                      ariaLabel="Buyer stage"
-                      value={field.value}
-                      onValueChange={field.onChange}
-                      options={STAGE_OPTIONS}
-                    />
-                  )}
-                />
-              )}
-            </Field>
-            {/* Tags are not part of a run's frozen prompt panel, so a
+          {/* Tags are set on generation or import; editing corrects them. */}
+          {isEdit ? (
+            <Stack gap="workspace" className="desktop:grid-cols-2">
+              <Field label="Intent">
+                {(props) => (
+                  <Controller
+                    control={control}
+                    name="intent"
+                    render={({ field }) => (
+                      <Select
+                        {...props}
+                        ariaLabel="Intent"
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={INTENT_OPTIONS}
+                      />
+                    )}
+                  />
+                )}
+              </Field>
+              <Field label="Buyer stage">
+                {(props) => (
+                  <Controller
+                    control={control}
+                    name="buyerStage"
+                    render={({ field }) => (
+                      <Select
+                        {...props}
+                        ariaLabel="Buyer stage"
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        options={STAGE_OPTIONS}
+                      />
+                    )}
+                  />
+                )}
+              </Field>
+              {/* Tags are not part of a run's frozen prompt panel, so a
                 correction keeps the prompt's comparison series. */}
-            <Field label="Persona" error={errors.persona?.message} className="desktop:col-span-2">
-              {(props) => (
-                <Input {...props} {...register('persona')} placeholder="Marathon runners" />
-              )}
-            </Field>
-          </div>
-        ) : null}
+              <Field label="Persona" error={errors.persona?.message} className="desktop:col-span-2">
+                {(props) => (
+                  <Input {...props} {...register('persona')} placeholder="Marathon runners" />
+                )}
+              </Field>
+            </Stack>
+          ) : null}
+        </Stack>
       </form>
     </Dialog>
   );

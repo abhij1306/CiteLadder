@@ -1,5 +1,4 @@
 import { useMutation } from '@tanstack/react-query';
-import { Info } from 'lucide-react';
 import { useState } from 'react';
 
 import { ConnectionRow } from '@/components/settings/integration-connection-row';
@@ -25,7 +24,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
 import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { textRole } from '@/components/ui/typography';
@@ -126,7 +124,7 @@ function ConnectCard({
   const meta = FAMILY_META[family];
 
   return (
-    <Card data-testid={`grant-card-${family}`} className="flex flex-col justify-between gap-3">
+    <Stack as={Card} gap="compact" data-testid={`grant-card-${family}`} className="content-between">
       <div>
         <GrantHeader family={family} grant={null} />
         <CardContent>
@@ -146,7 +144,7 @@ function ConnectCard({
           Connect {meta.title}
         </Button>
       </CardContent>
-    </Card>
+    </Stack>
   );
 }
 
@@ -163,7 +161,9 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
   const [connection] = grant.connections;
   const disconnect = useMutation({
     mutationFn: () =>
-      integrationsApi.delete(connection.id, { workspaceId: connection.workspace_id }),
+      integrationsApi.delete(connection.id, {
+        workspaceId: connection.workspace_id,
+      }),
     onSuccess: async () => {
       setOpen(false);
       await refresh();
@@ -202,7 +202,7 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
           </>
         }
       >
-        <div className="grid gap-2">
+        <Stack gap="compact">
           <p className={textRole('body')}>
             Previously imported data is kept. Reconnecting resumes from it; to stop importing just
             one property, use Remove on its row instead.
@@ -210,7 +210,7 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
           {disconnect.isError ? (
             <Alert tone="danger">{humanizeApiError(disconnect.error).message}</Alert>
           ) : null}
-        </div>
+        </Stack>
       </Dialog>
     </>
   );
@@ -224,24 +224,21 @@ function ConnectedCard({
   const meta = FAMILY_META[family];
 
   return (
-    <Card data-testid={`grant-card-${family}`} className="flex flex-col justify-between gap-3">
+    <Stack as={Card} gap="compact" data-testid={`grant-card-${family}`} className="content-between">
       <div>
         <GrantHeader family={family} grant={grant} />
-        <CardContent className="grid gap-3">
+        <Stack as={CardContent} gap="compact">
           <GrantAlert family={family} status={grant.status} />
-          <div className={panelClasses({ tone: 'well' }, 'type-caption flex items-center gap-2')}>
-            <Info className="text-secondary size-3.5 shrink-0" aria-hidden />
-            <span>
-              One OAuth grant shared by {grant.connections.length}{' '}
-              {grant.connections.length === 1 ? 'connection' : 'connections'}.
-            </span>
-          </div>
+          <p className={textRole('caption')}>
+            One OAuth grant shared by {grant.connections.length}{' '}
+            {grant.connections.length === 1 ? 'connection' : 'connections'}.
+          </p>
           <Stack gap="compact">
             {grant.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} grant={grant} />
             ))}
           </Stack>
-        </CardContent>
+        </Stack>
       </div>
       <CardContent>
         <div className="border-border-subtle flex flex-wrap items-center justify-between gap-2 border-t pt-3">
@@ -261,7 +258,7 @@ function ConnectedCard({
           </span>
         </div>
       </CardContent>
-    </Card>
+    </Stack>
   );
 }
 
@@ -269,7 +266,11 @@ export function IntegrationCardView({
   workspaceId,
   family,
   grant,
-}: Readonly<{ workspaceId: string; family: GrantFamily; grant: GrantModel | null }>) {
+}: Readonly<{
+  workspaceId: string;
+  family: GrantFamily;
+  grant: GrantModel | null;
+}>) {
   return grant ? (
     <ConnectedCard workspaceId={workspaceId} family={family} grant={grant} />
   ) : (

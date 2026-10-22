@@ -20,10 +20,17 @@ const { getPromptHistory } = vi.hoisted(() => ({
       (projectId: string, promptId: string, params: { market?: string }) => Promise<PromptHistory>
     >(),
 }));
-vi.mock('@/lib/api/visibility', () => ({ visibilityApi: { getPromptHistory } }));
-vi.mock('@/lib/project/use-project-markets', () => ({ useProjectMarkets: () => [] }));
+vi.mock('@/lib/api/visibility', () => ({
+  visibilityApi: { getPromptHistory },
+}));
+vi.mock('@/lib/project/use-project-markets', () => ({
+  useProjectMarkets: () => [],
+}));
 vi.mock('@/lib/project/project-context', () => {
-  const context = () => ({ activeProjectId: PROJECT, activeWorkspaceId: WORKSPACE });
+  const context = () => ({
+    activeProjectId: PROJECT,
+    activeWorkspaceId: WORKSPACE,
+  });
   return { useProjectContext: context, useOptionalProjectContext: context };
 });
 
@@ -144,11 +151,18 @@ beforeEach(() => {
 
 it('charts the prompt over time with declared work marked, and hands off to its Action', async () => {
   getPromptHistory.mockResolvedValue(
-    history({ mentioned_and_cited: 1, mentioned_only: 0, cited_only: 0, neither: 1 }),
+    history({
+      mentioned_and_cited: 1,
+      mentioned_only: 0,
+      cited_only: 0,
+      neither: 1,
+    }),
   );
   renderScreen();
 
-  const chart = await screen.findByRole('img', { name: /^Mention rate over time/ });
+  const chart = await screen.findByRole('img', {
+    name: /^Mention rate over time/,
+  });
   expect(chart).toHaveAccessibleName(/Marked: Marked implemented .+: reviews\.example\/crm\.$/);
   expect(getPromptHistory).toHaveBeenCalledWith(
     PROJECT,
@@ -168,7 +182,8 @@ it('charts the prompt over time with declared work marked, and hands off to its 
   expect(states.getByText('Neither').closest('div')).toHaveTextContent(
     'Neither1Did not name you or cite your site.',
   );
-  expect(screen.getByText('1 answer on ChatGPT API')).toBeInTheDocument();
+  const gaps = within(screen.getByRole('region', { name: 'Competitors named without you' }));
+  expect(gaps.getByRole('row', { name: /Globex/ })).toHaveTextContent('Globex1ChatGPT API');
   expect(screen.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
     'href',
     `/agent/actions/${ACTION}?project=${PROJECT}`,

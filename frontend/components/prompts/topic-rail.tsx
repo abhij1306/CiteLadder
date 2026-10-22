@@ -1,12 +1,13 @@
 'use client';
 
 import { Pencil, Plus, Trash2 } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { listRowClasses } from '@/components/ui/list-row';
 import { Select } from '@/components/ui/select';
 import { Pressable } from '@/components/ui/pressable';
@@ -90,9 +91,7 @@ export function TopicRail({
   };
 
   const errorBanner = topicErrorMessage(loadError, actionError) ? (
-    <Alert tone="danger" className="mx-1">
-      {topicErrorMessage(loadError, actionError)}
-    </Alert>
+    <Alert tone="danger">{topicErrorMessage(loadError, actionError)}</Alert>
   ) : null;
 
   return (
@@ -100,8 +99,8 @@ export function TopicRail({
       {/* Desktop rail: raised surface that clips its own content
           so nothing from the right pane can overlap it. */}
       <Card className="desktop:block hidden min-w-0">
-        <nav aria-label="Topics" className="grid min-w-0 content-start gap-1">
-          <div className="flex items-center justify-between px-1">
+        <Stack as="nav" gap="tight" aria-label="Topics" className="min-w-0 content-start">
+          <div className="flex items-center justify-between">
             <h3 className={textRole('label')}>Topics</h3>
             <Button
               variant="ghost"
@@ -116,9 +115,10 @@ export function TopicRail({
           {errorBanner}
 
           {adding ? (
-            <form
-              className="grid gap-2 px-1 pb-1"
-              onSubmit={(event) => {
+            <Stack
+              as="form"
+              gap="compact"
+              onSubmit={(event: FormEvent) => {
                 event.preventDefault();
                 void submit();
               }}
@@ -131,7 +131,6 @@ export function TopicRail({
                   onChange={(event) => setName(event.target.value)}
                   placeholder="Topic name"
                   aria-label="Topic name"
-                  className="h-8"
                 />
                 <Button type="submit" variant="secondary" disabled={isCreating || !name.trim()}>
                   Add
@@ -152,7 +151,7 @@ export function TopicRail({
                   ]}
                 />
               ) : null}
-            </form>
+            </Stack>
           ) : null}
 
           <TopicItem
@@ -173,7 +172,7 @@ export function TopicRail({
               onRename={onRename ? (next) => onRename(topic, next) : undefined}
             />
           ))}
-        </nav>
+        </Stack>
       </Card>
 
       {/* Narrow selector: full-width Topics picker shown below the lg
@@ -205,7 +204,7 @@ function TopicSelect({
 }>) {
   const labelId = useId();
   return (
-    <div className="desktop:hidden grid gap-2">
+    <Stack gap="compact" className="desktop:hidden">
       <span id={labelId} className={textRole('label')}>
         Topics
       </span>
@@ -217,13 +216,16 @@ function TopicSelect({
         className="w-full"
         options={[
           { value: '', label: 'All topics' },
-          ...orderTopicsForRail(topics).map(({ topic, label }) => ({ value: topic.id, label })),
+          ...orderTopicsForRail(topics).map(({ topic, label }) => ({
+            value: topic.id,
+            label,
+          })),
         ]}
       />
       {topicErrorMessage(loadError, actionError) ? (
         <Alert tone="danger">{topicErrorMessage(loadError, actionError)}</Alert>
       ) : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -291,7 +293,7 @@ function TopicItem({
           size="icon"
           aria-label={`Rename topic ${name}`}
           onClick={() => setRenaming(true)}
-          className="size-8 shrink-0"
+          className="shrink-0"
         >
           <Pencil className="size-4" aria-hidden />
         </Button>
@@ -303,7 +305,7 @@ function TopicItem({
           size="icon"
           aria-label={`Delete topic ${name}`}
           onClick={onDelete}
-          className="size-8 shrink-0"
+          className="shrink-0"
         >
           <Trash2 className="size-4" aria-hidden />
         </Button>
@@ -350,7 +352,7 @@ function TopicRenameForm({
   };
   return (
     <form
-      className={cn('flex items-center gap-2 px-1', nested && 'ms-3')}
+      className={cn('flex items-center gap-2', nested && 'ms-3')}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -365,7 +367,6 @@ function TopicRenameForm({
           if (event.key === 'Escape') onDone();
         }}
         aria-label={`New name for ${name}`}
-        className="h-8"
       />
       <Button type="submit" variant="secondary" disabled={saving || !draft.trim()}>
         Save

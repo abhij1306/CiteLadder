@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Delta } from '@/components/ui/delta';
 import type { DataTone } from '@/components/ui/data-tone';
+import { Stack } from '@/components/ui/layout';
 import { Meter } from '@/components/ui/meter';
 import { TextLink } from '@/components/ui/text-link';
 import { MissingValue } from '@/components/ui/unavailable-value';
@@ -12,6 +13,7 @@ import type { CommandCenter, Opportunity } from '@/lib/api/types';
 import { availabilityLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { textRole } from '@/components/ui/typography';
+import { splitPaneClasses } from '@/components/ui/workspace';
 
 /** A change against the previous comparable run, as every Command Center delta reads it. */
 export const VS_PREVIOUS_RUN = {
@@ -33,9 +35,9 @@ export function metricValue(value: number | null, suffix = '') {
  */
 export function MovementChart({ movements }: Readonly<{ movements: CommandCenter['movements'] }>) {
   return (
-    <div className="desktop:grid-cols-2 grid gap-x-6 gap-y-4">
+    <div className={splitPaneClasses('peers')}>
       {movements.map((row) => (
-        <div key={row.label} className="grid min-w-0 content-start gap-2">
+        <Stack key={row.label} gap="compact" className="min-w-0 content-start">
           <div className="flex items-center justify-between gap-2">
             <span className={textRole('label', 'capitalize')}>{row.label}</span>
             <Delta value={row.delta} {...VS_PREVIOUS_RUN} />
@@ -47,7 +49,7 @@ export function MovementChart({ movements }: Readonly<{ movements: CommandCenter
             value={row.current}
             tone={{ series: 1 }}
           />
-        </div>
+        </Stack>
       ))}
     </div>
   );
@@ -119,7 +121,7 @@ export function ActionRow({
         <GripVertical className="text-muted hover:text-foreground size-4 cursor-grab" aria-hidden />
         <span className={textRole('label', 'w-5 text-center tabular-nums')}>{index + 1}</span>
       </div>
-      <div className="grid min-w-0 gap-1">
+      <Stack gap="tight" className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <TextLink
             text="itemTitle"
@@ -139,9 +141,9 @@ export function ActionRow({
           {action.target_label ?? 'Project-wide'} · {action.evidence_summary.count} persisted
           evidence item(s)
         </p>
-      </div>
+      </Stack>
       <div className="flex items-center justify-end gap-2">
-        <span className={textRole('figureSm', 'me-2')}>{action.priority_score.toFixed(1)}</span>
+        <span className={textRole('figureSm')}>{action.priority_score.toFixed(1)}</span>
         <Button
           variant="ghost"
           size="icon"

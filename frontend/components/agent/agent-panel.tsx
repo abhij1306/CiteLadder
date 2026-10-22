@@ -19,8 +19,9 @@ import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
+import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
 import { textRole } from '@/components/ui/typography';
 import { contextChips, withoutContext, type AgentHandoff } from '@/lib/agent/handoff';
 import { useAgentPanel } from '@/lib/agent/panel-context';
@@ -150,14 +151,14 @@ function PanelStart({
         />
       }
     >
-      <div className="grid flex-1 content-center justify-items-center gap-2 py-4 text-center">
+      <Stack gap="tight" className="flex-1 content-center justify-items-center text-center">
         <p className={textRole('sectionTitle')}>Ask about this screen</p>
         <p className={textRole('caption', 'max-w-xs')}>
           {hasContext
             ? 'The references below go with your question; remove any you do not need.'
             : 'The agent reads your CiteLadder evidence and answers with sources.'}
         </p>
-      </div>
+      </Stack>
       {access.canSend ? null : <Alert tone="info">{access.message}</Alert>}
       {create.failure ? <Alert tone="danger">{create.failure.message}</Alert> : null}
     </PanelLayout>
@@ -202,7 +203,7 @@ function PanelChat({
         pending={query.isFetching}
       />
     );
-  if (!query.data) return <Skeleton className="h-48 w-full" />;
+  if (!query.data) return <QueryState kind="loading" label="Loading chat…" />;
   if (query.data.chat.project_id !== projectId)
     return <Alert tone="danger">This chat belongs to another project.</Alert>;
   return (
@@ -257,12 +258,12 @@ function PanelConversation({
         detail={detail}
         output={
           detail.output?.latest_revision ? (
-            <div className="grid justify-items-start gap-2">
+            <Stack gap="compact" className="justify-items-start">
               <span className={textRole('itemTitle')}>{detail.output.latest_revision.title}</span>
               <Button variant="secondary" onClick={openOutput}>
                 Open output
               </Button>
-            </div>
+            </Stack>
           ) : null
         }
       />

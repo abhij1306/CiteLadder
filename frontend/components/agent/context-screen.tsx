@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 
 import { BrandFactsPanel } from '@/components/knowledge-base/brand-facts-panel';
 import { BrandProfilePanel } from '@/components/knowledge-base/brand-profile-panel';
@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/button';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
+import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
@@ -69,7 +69,7 @@ function AgentInstructions({
       {query.isError ? (
         <ReadError {...readErrorProps(query)} fallback="Agent instructions could not be loaded." />
       ) : null}
-      {query.isPending ? <Skeleton className="h-32 w-full" /> : null}
+      {query.isPending ? <QueryState kind="loading" label="Loading agent instructions…" /> : null}
       {query.data ? (
         // Keyed by project so an unsaved draft never carries to another project.
         <InstructionsEditor
@@ -89,11 +89,20 @@ function InstructionsEditor({
   projectId,
   text,
   savedAt,
-}: Readonly<{ workspaceId: string; projectId: string; text: string; savedAt: string | null }>) {
+}: Readonly<{
+  workspaceId: string;
+  projectId: string;
+  text: string;
+  savedAt: string | null;
+}>) {
   const mayEdit = useWorkspaceCapability('run');
   const queryClient = useQueryClient();
   // Null follows persisted data; a local edit survives background refreshes.
-  const [edit, setEdit] = useState<{ text: string | null; baseline: string; version: number }>({
+  const [edit, setEdit] = useState<{
+    text: string | null;
+    baseline: string;
+    version: number;
+  }>({
     text: null,
     baseline: text,
     version: 0,
@@ -116,9 +125,10 @@ function InstructionsEditor({
   });
   const dirty = draft.trim() !== text.trim();
   return (
-    <form
-      className="grid gap-2"
-      onSubmit={(event) => {
+    <Stack
+      as="form"
+      gap="compact"
+      onSubmit={(event: FormEvent) => {
         event.preventDefault();
         save.mutate({ projectId, text: draft });
       }}
@@ -143,7 +153,9 @@ function InstructionsEditor({
       />
       {save.isError ? (
         <MutationNotice
-          notice={mutationNoticeForError(save.error, { action: 'save the instructions' })}
+          notice={mutationNoticeForError(save.error, {
+            action: 'save the instructions',
+          })}
           onRetry={() => save.variables && save.mutate(save.variables)}
         />
       ) : null}
@@ -163,7 +175,7 @@ function InstructionsEditor({
           </Button>
         ) : null}
       </div>
-    </form>
+    </Stack>
   );
 }
 
@@ -206,7 +218,10 @@ function CompanyFacts({
   const suggestions = useQuery({
     queryKey: queryKeys.visibility.competitorSuggestions(project.id),
     queryFn: ({ signal }) =>
-      visibilityApi.listCompetitorSuggestions(project.id, { signal, workspaceId }),
+      visibilityApi.listCompetitorSuggestions(project.id, {
+        signal,
+        workspaceId,
+      }),
   });
   return (
     <Stack as="section" aria-labelledby="company-facts">
@@ -214,7 +229,7 @@ function CompanyFacts({
       {profile.isError ? (
         <ReadError {...readErrorProps(profile)} fallback="Company facts could not be loaded." />
       ) : null}
-      {profile.isPending ? <Skeleton className="h-48 w-full" /> : null}
+      {profile.isPending ? <QueryState kind="loading" label="Loading company facts…" /> : null}
       {profile.data ? (
         <BrandProfilePanel
           key={project.id}

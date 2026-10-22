@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Stack } from '@/components/ui/layout';
 import { promptsApi } from '@/lib/api/prompts';
 import { queryKeys } from '@/lib/api/query-keys';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -71,7 +72,7 @@ export function PromptProposalAction({
     },
   });
   return (
-    <div className="grid gap-2">
+    <Stack gap="compact">
       {stage.isError ? <Alert tone="warning">{humanizeApiError(stage.error).message}</Alert> : null}
       <Button
         className="justify-self-start"
@@ -82,6 +83,6 @@ export function PromptProposalAction({
       >
         Review in Prompts
       </Button>
-    </div>
+    </Stack>
   );
 }

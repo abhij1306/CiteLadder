@@ -1,17 +1,23 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { FormEvent } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { Textarea } from '@/components/ui/textarea';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { agentMutations, type AgentRevision } from '@/lib/api/agent';
 import { queryKeys } from '@/lib/api/query-keys';
 
 /** An edit in progress, bound to the revision it started from. */
-export type OutputDraft = { baseRevisionId: string; title: string; body: string };
+export type OutputDraft = {
+  baseRevisionId: string;
+  title: string;
+  body: string;
+};
 
 /**
  * A direct edit: saved as a new user revision on top of the one being edited.
@@ -39,8 +45,12 @@ export function OutputEditor({
     ...agentMutations.editOutput(workspaceId),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(chatId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.revisions(chatId) }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agent.chat(chatId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agent.revisions(chatId),
+        }),
       ]);
       onDone();
     },
@@ -48,11 +58,17 @@ export function OutputEditor({
   const unchanged = title === revision.title && body === revision.body;
   const blank = !title.trim() || !body.trim();
   return (
-    <form
-      className="grid gap-3"
-      onSubmit={(event) => {
+    <Stack
+      as="form"
+      gap="compact"
+      onSubmit={(event: FormEvent) => {
         event.preventDefault();
-        save.mutate({ chatId, baseRevisionId: draft.baseRevisionId, title, body });
+        save.mutate({
+          chatId,
+          baseRevisionId: draft.baseRevisionId,
+          title,
+          body,
+        });
       }}
     >
       <label htmlFor="agent-output-title" className="sr-only">
@@ -82,6 +98,6 @@ export function OutputEditor({
           Save as new revision
         </Button>
       </div>
-    </form>
+    </Stack>
   );
 }

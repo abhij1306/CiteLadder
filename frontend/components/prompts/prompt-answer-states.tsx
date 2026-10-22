@@ -6,23 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { StatRow } from '@/components/ui/stat-row';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
-import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import type { PromptMetricItem } from '@/lib/api/types';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate, pluralCount } from '@/lib/format';
-import { ANSWER_STATES, competitorGaps } from '@/lib/prompts/history';
+import { ANSWER_STATES, competitorGaps, type CompetitorGap } from '@/lib/prompts/history';
 import { engineLabel } from '@/lib/providers/catalog';
 
 /**
@@ -33,22 +25,28 @@ import { engineLabel } from '@/lib/providers/catalog';
 export function PromptAnswerStates({ latest }: Readonly<{ latest: PromptMetricItem | null }>) {
   const timeZone = useDisplayTimeZone();
   const actionId = latest?.action_id ?? null;
+  const outcomes = latest?.outcomes ?? [];
+  const gaps = competitorGaps(outcomes);
   return (
-    <Card>
-      <CardHeader actions={actionId ? <ActionHandoff actionId={actionId} /> : null}>
-        <CardTitle>Mentions and citations</CardTitle>
-        <CardDescription>
-          {latest
-            ? `Latest run that measured this prompt, ${formatDisplayDate(latest.created_at, timeZone)}.`
-            : 'No run has measured this prompt in this market yet.'}
-        </CardDescription>
-      </CardHeader>
-      {latest ? (
-        <CardContent>
-          <LatestRun latest={latest} />
-        </CardContent>
-      ) : null}
-    </Card>
+    <>
+      <Card>
+        <CardHeader actions={actionId ? <ActionHandoff actionId={actionId} /> : null}>
+          <CardTitle>Mentions and citations</CardTitle>
+          <CardDescription>
+            {latest
+              ? `Latest run that measured this prompt, ${formatDisplayDate(latest.created_at, timeZone)}.`
+              : 'No run has measured this prompt in this market yet.'}
+          </CardDescription>
+        </CardHeader>
+        {latest ? (
+          <CardContent>
+            <LatestRun latest={latest} />
+          </CardContent>
+        ) : null}
+      </Card>
+      {outcomes.length ? <EngineTable outcomes={outcomes} /> : null}
+      {gaps.length ? <CompetitorGapTable gaps={gaps} /> : null}
+    </>
   );
 }
 
@@ -69,7 +67,6 @@ function LatestRun({ latest }: Readonly<{ latest: PromptMetricItem }>) {
   const counts = latest.counts;
   const states = latest.answer_states ?? null;
   const outcomes = latest.outcomes ?? [];
-  const gaps = competitorGaps(outcomes);
   return (
     <Stack gap="workspace">
       {counts ? (
@@ -98,66 +95,73 @@ function LatestRun({ latest }: Readonly<{ latest: PromptMetricItem }>) {
           message="No answer succeeded for this prompt in that run, so mentions and citations are unavailable rather than zero."
         />
       )}
-      {outcomes.length ? <EngineTable outcomes={outcomes} /> : null}
-      <Stack gap="compact">
-        <h3 className={textRole('sectionTitle')}>Competitors named without you</h3>
-        {gaps.length ? (
-          <ul className={ledgerClasses('boxed')}>
-            {gaps.map((gap) => (
-              <li key={gap.name} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <span className={textRole('itemTitle')}>{gap.name}</span>
-                <span className="type-caption">
-                  {pluralCount(gap.answers, 'answer')} on {gap.engines.map(engineLabel).join(', ')}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="type-caption">
-            {states
-              ? 'No answer named a tracked competitor while leaving you out.'
-              : 'Unavailable until an answer succeeds.'}
-          </p>
-        )}
-      </Stack>
+      {/* Only a measured, empty gap list is "none"; absent outcomes are unavailable. */}
+      {states && latest.outcomes && competitorGaps(latest.outcomes).length === 0 ? (
+        <QueryState
+          kind="empty"
+          inline
+          message="No answer named a tracked competitor while leaving you out."
+        />
+      ) : null}
     </Stack>
+  );
+}
+
+const GAP_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'competitor', label: 'Competitor' },
+  { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
+  { key: 'engines', label: 'Engines', width: 'name' },
+];
+
+/** Competitors named where the brand was not, most answers first. */
+function CompetitorGapTable({ gaps }: Readonly<{ gaps: readonly CompetitorGap[] }>) {
+  return (
+    <DataTable title="Competitors named without you" columns={GAP_COLUMNS}>
+      {gaps.map((gap) => (
+        <TableRow key={gap.name}>
+          <TableCell>
+            <ClampText lines={1}>{gap.name}</ClampText>
+          </TableCell>
+          <TableCell numeric>{gap.answers}</TableCell>
+          <TableCell>{gap.engines.map(engineLabel).join(', ')}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 
 type Outcome = NonNullable<PromptMetricItem['outcomes']>[number];
 
 /** Engine coverage: each engine and model that answered, by answer state. */
+const ENGINE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'engine', label: 'Engine' },
+  { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
+  ...ANSWER_STATES.map((state): DataTableColumn => ({
+    key: state.key,
+    label: state.label,
+    width: 'figure',
+    numeric: true,
+  })),
+];
+
 function EngineTable({ outcomes }: Readonly<{ outcomes: readonly Outcome[] }>) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Engine</TableHead>
-          <TableHead numeric>Answers</TableHead>
+    <DataTable title="Engine coverage" columns={ENGINE_COLUMNS}>
+      {outcomes.map((outcome) => (
+        <TableRow key={`${outcome.logical_engine}:${outcome.transport_model}`}>
+          <TableCell>{engineLabel(outcome.logical_engine)}</TableCell>
+          <TableCell numeric>{outcome.counts.responses}</TableCell>
           {ANSWER_STATES.map((state) => (
-            <TableHead key={state.key} numeric>
-              {state.label}
-            </TableHead>
+            <TableCell key={state.key} numeric>
+              {outcome.answer_states ? (
+                outcome.answer_states[state.key]
+              ) : (
+                <UnavailableValue state="not_measured" />
+              )}
+            </TableCell>
           ))}
         </TableRow>
-      </TableHeader>
-      <TableBody>
-        {outcomes.map((outcome) => (
-          <TableRow key={`${outcome.logical_engine}:${outcome.transport_model}`}>
-            <TableCell>{engineLabel(outcome.logical_engine)}</TableCell>
-            <TableCell numeric>{outcome.counts.responses}</TableCell>
-            {ANSWER_STATES.map((state) => (
-              <TableCell key={state.key} numeric>
-                {outcome.answer_states ? (
-                  outcome.answer_states[state.key]
-                ) : (
-                  <UnavailableValue state="not_measured" />
-                )}
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+      ))}
+    </DataTable>
   );
 }

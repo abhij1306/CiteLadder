@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
 import { ProjectMarkets } from './project-markets';
 import { textRole } from '@/components/ui/typography';
@@ -95,12 +96,19 @@ export function ProjectEditPanel({
   project,
   open,
   onOpenChange,
-}: Readonly<{ project: Project; open: boolean; onOpenChange: (open: boolean) => void }>) {
+}: Readonly<{
+  project: Project;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}>) {
   const queryClient = useQueryClient();
   const discoveryCatalog = useQuery({
     queryKey: brandDiscoveryKeys.catalog(project.workspace_id),
     queryFn: ({ signal }) =>
-      brandDiscoveriesApi.catalog({ signal, workspaceId: project.workspace_id }),
+      brandDiscoveriesApi.catalog({
+        signal,
+        workspaceId: project.workspace_id,
+      }),
     enabled: open,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -193,10 +201,10 @@ export function ProjectEditPanel({
         </>
       }
     >
-      <div className="grid gap-[var(--workspace-gap)]">
+      <Stack gap="workspace">
         {save.isError ? <Alert tone="danger">{humanizeApiError(save.error).message}</Alert> : null}
 
-        <div className="grid gap-4">
+        <Stack gap="workspace">
           <Field label="Project name" hint="How this project appears in your project list.">
             {(props) => (
               <Input {...props} value={name} onChange={(event) => setName(event.target.value)} />
@@ -238,7 +246,7 @@ export function ProjectEditPanel({
             )}
           </Field>
           <MentionRuleFields name={brandName} rule={brandRule} onChange={setBrandRule} />
-          <div className="grid grid-cols-2 gap-3">
+          <Stack gap="compact" className="grid-cols-2">
             <Field label="Country">
               {(props) => (
                 <MarketSelect
@@ -261,13 +269,13 @@ export function ProjectEditPanel({
                 />
               )}
             </Field>
-          </div>
+          </Stack>
           {open ? (
             <ProjectMarkets projectId={project.id} workspaceId={project.workspace_id} />
           ) : null}
-        </div>
+        </Stack>
 
-        <div className="grid gap-4">
+        <Stack gap="workspace">
           <p className={textRole('label')}>Domains</p>
           <Field label="Owned" hint="Comma separated">
             {(props) => (
@@ -288,9 +296,9 @@ export function ProjectEditPanel({
               />
             )}
           </Field>
-        </div>
+        </Stack>
 
-        <div className="grid gap-2">
+        <Stack gap="compact">
           <div className="flex items-center gap-2">
             <p className={textRole('label')}>Competitors</p>
             <span className="type-caption">
@@ -321,9 +329,9 @@ export function ProjectEditPanel({
           {competitors.length === 0 ? (
             <QueryState kind="empty" inline message="None tracked." />
           ) : (
-            <ul className="grid list-none gap-2 p-0">
+            <Stack as="ul" gap="compact" className="list-none">
               {competitors.map((competitor, index) => (
-                <li key={competitor.key} className="grid gap-2">
+                <Stack as="li" key={competitor.key} gap="compact">
                   <div className="flex items-center gap-2">
                     <Input
                       value={competitor.name}
@@ -356,12 +364,12 @@ export function ProjectEditPanel({
                     rule={competitor.rule}
                     onChange={(rule) => updateCompetitor(index, { rule })}
                   />
-                </li>
+                </Stack>
               ))}
-            </ul>
+            </Stack>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
     </Dialog>
   );
 }
