@@ -2,8 +2,10 @@
 
 import type { ComponentPropsWithoutRef, ReactNode, Ref } from 'react';
 import type { VariantProps } from 'class-variance-authority';
+import type { LucideIcon } from 'lucide-react';
 
 import { Slot } from '@radix-ui/react-slot';
+import { Icon } from '@/components/ui/icon';
 import { Spinner } from '@/components/ui/spinner';
 
 import { cn } from '@/lib/utils';
@@ -97,4 +99,40 @@ function NativeButton({
 
 export function Button(props: Readonly<ButtonProps>) {
   return props.asChild ? <SlottedButton {...props} /> : <NativeButton {...props} />;
+}
+
+/**
+ * IconButton — the product's one icon-only control: a 32px square, no
+ * padding, the 16px glyph, and a required accessible name. A feature never
+ * picks the `icon` size itself; it names the glyph and what the press does.
+ */
+export function IconButton({
+  icon,
+  label,
+  href,
+  variant = 'ghost',
+  ...props
+}: Readonly<
+  Omit<ButtonProps, 'size' | 'children' | 'asChild' | 'aria-label'> & {
+    icon: LucideIcon;
+    /** The accessible name: what pressing it does. */
+    label: string;
+    /** An external or help link that looks like the icon control. */
+    href?: string;
+  }
+>) {
+  if (href) {
+    return (
+      <Button {...props} variant={variant} size="icon" asChild>
+        <a href={href} aria-label={label}>
+          <Icon icon={icon} />
+        </a>
+      </Button>
+    );
+  }
+  return (
+    <Button {...props} variant={variant} size="icon" aria-label={label}>
+      <Icon icon={icon} />
+    </Button>
+  );
 }

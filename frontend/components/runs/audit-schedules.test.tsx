@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { ApiError } from '@/lib/api/errors';
 import { runsApi } from '@/lib/api/runs';
 import { renderWithProviders } from '@/test/render';
 
@@ -65,6 +66,15 @@ describe('AuditSchedules', () => {
       ),
     );
     await waitFor(() => expect(listSchedules).toHaveBeenCalledTimes(2));
+  });
+
+  it('reports a failed schedules read without calling the list empty', async () => {
+    listSchedules.mockRejectedValue(new ApiError('Schedules are unavailable.', 400, ''));
+    renderWithProviders(
+      <AuditSchedules projectId="11111111-1111-4111-8111-111111111111" promptSets={[]} />,
+    );
+    expect(await screen.findByText('Schedules are unavailable.')).toBeVisible();
+    expect(screen.queryByText('No scheduled audits yet.')).toBeNull();
   });
 
   it('offers no Resume for a one-time schedule that already ran', async () => {

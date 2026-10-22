@@ -9,16 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Delta } from '@/components/ui/delta';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ScoreBar } from '@/components/ui/score-bar';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
@@ -27,8 +20,14 @@ import type { SiteHealthOverview } from '@/lib/api/types';
 import { formatScore, PLACEHOLDER, statusLabel } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import { panelClasses } from '@/components/ui/panel';
-import { Stack } from '@/components/ui/layout';
-import { EditorialSectionHeader, ledgerClasses, splitPaneClasses } from '@/components/ui/workspace';
+import { Inline, Stack } from '@/components/ui/layout';
+import {
+  EditorialSectionHeader,
+  ledgerClasses,
+  ledgerItemClasses,
+  splitPaneClasses,
+} from '@/components/ui/workspace';
+import { ICONS } from '@/lib/icons';
 
 function percent(value: number | null): string {
   return value === null ? PLACEHOLDER : `${Math.round(value * 100)}%`;
@@ -42,7 +41,7 @@ export function OverviewDetails({ data }: Readonly<{ data: SiteHealthOverview }>
         <DimensionLedger dimensions={data.aeo_dimensions} />
         <TopIssues issues={data.top_issues} />
       </div>
-      <div className="desktop:grid-cols-3 grid gap-[var(--workspace-gap)]">
+      <div className={splitPaneClasses('thirds')}>
         <WebFundamentalsCard
           data={data.web_fundamentals}
           onOpen={() => setWebFundamentalsOpen(true)}
@@ -63,131 +62,114 @@ function DimensionLedger({
   dimensions,
 }: Readonly<{ dimensions: SiteHealthOverview['aeo_dimensions'] }>) {
   return (
-    <Card id="site-readiness-pillars">
-      <CardHeader
-        bordered
-        actions={
+    <DataTable
+      title="AEO Readiness by pillar"
+      toolbar={{
+        actions: (
           <Button asChild variant="secondary">
             <ProjectLink href="/site?tab=aeo-readiness">View details</ProjectLink>
           </Button>
-        }
-      >
-        <CardTitle>AEO Readiness by pillar</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Pillar</TableHead>
-              <TableHead numeric>Score</TableHead>
-              <TableHead>Quality</TableHead>
-              <TableHead numeric>Coverage</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {dimensions.map((dimension) => (
-              <TableRow key={dimension.key}>
-                <TableCell>
-                  {/* Name over one caption line: the ledger is a scanning
-                      surface, and a wrapping sentence pushes the score columns
-                      off a screenful. Full text stays available on hover. */}
-                  <div className="grid max-w-md min-w-0">
-                    <ClampText lines={1} className={textRole('emphasis', 'text-foreground')}>
-                      {dimension.label}
-                    </ClampText>
-                    <ClampText lines={1} className="type-caption">
-                      {dimension.reason === 'measured_at_site_scope'
-                        ? `Measured at site scope · ${dimension.description}`
-                        : dimension.description}
-                    </ClampText>
-                  </div>
-                </TableCell>
-                <TableCell numeric>{formatScore(dimension.score)}</TableCell>
-                <TableCell className="min-w-32">
-                  {dimension.score === null ? (
-                    <ClampText lines={1} className="type-caption">
-                      {dimension.reason === 'measured_at_site_scope'
-                        ? 'Site-scoped evidence'
-                        : statusLabel(dimension.dimension_measurement_state)}
-                    </ClampText>
-                  ) : (
-                    <ScoreBar value={dimension.score} label={`${dimension.label} score`} />
-                  )}
-                </TableCell>
-                <TableCell numeric>
-                  {dimension.coverage === null ? (
-                    <UnavailableValue state="not_measured" />
-                  ) : (
-                    percent(dimension.coverage)
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+        ),
+      }}
+      columns={PILLAR_COLUMNS}
+      minWidth="sm"
+    >
+      {dimensions.map((dimension) => (
+        <TableRow key={dimension.key}>
+          <TableCell>
+            {/* Name over one caption line: the ledger is a scanning
+                surface, and a wrapping sentence pushes the score columns
+                off a screenful. Full text stays available on hover. */}
+            <div className="grid min-w-0">
+              <ClampText lines={1} className={textRole('emphasis', 'text-foreground')}>
+                {dimension.label}
+              </ClampText>
+              <ClampText lines={1} className="type-caption">
+                {dimension.reason === 'measured_at_site_scope'
+                  ? `Measured at site scope · ${dimension.description}`
+                  : dimension.description}
+              </ClampText>
+            </div>
+          </TableCell>
+          <TableCell numeric>{formatScore(dimension.score)}</TableCell>
+          <TableCell>
+            {dimension.score === null ? (
+              <ClampText lines={1} className="type-caption">
+                {dimension.reason === 'measured_at_site_scope'
+                  ? 'Site-scoped evidence'
+                  : statusLabel(dimension.dimension_measurement_state)}
+              </ClampText>
+            ) : (
+              <ScoreBar value={dimension.score} label={`${dimension.label} score`} />
+            )}
+          </TableCell>
+          <TableCell numeric>
+            {dimension.coverage === null ? (
+              <UnavailableValue state="not_measured" />
+            ) : (
+              percent(dimension.coverage)
+            )}
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 
+const PILLAR_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'pillar', label: 'Pillar' },
+  { key: 'score', label: 'Score', width: 'figure', numeric: true },
+  { key: 'quality', label: 'Quality', width: 'status' },
+  { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
+];
+
+const TOP_ISSUE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'impact', label: 'Impact', width: 'figure' },
+  { key: 'issue', label: 'Issue' },
+  { key: 'type', label: 'Type', width: 'figure' },
+  { key: 'pages', label: 'Pages', width: 'figure', numeric: true },
+  { key: 'effect', label: 'Effect', width: 'figure' },
+];
+
 function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues'] }>) {
   return (
-    <Card>
-      <CardHeader
-        bordered
-        actions={
+    <DataTable
+      title="Top issues"
+      toolbar={{
+        actions: (
           <Button asChild variant="secondary">
             <ProjectLink href="/issues">View all issues</ProjectLink>
           </Button>
-        }
-      >
-        <CardTitle>Top issues</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Impact</TableHead>
-              <TableHead>Issue</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead numeric>Pages</TableHead>
-              <TableHead>Effect</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {issues.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className={textRole('body')}>
-                  No persisted issues.
-                </TableCell>
-              </TableRow>
-            ) : (
-              issues.map((issue) => (
-                <TableRow key={`${issue.rule_id}-${issue.finding_class}`}>
-                  <TableCell className="whitespace-nowrap">
-                    <Badge variant="status" value={impactTone(issue.impact_band)}>
-                      {impactLabel(issue.impact_band)}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <TextLink text="inherit" href={issueHref(issue.rule_id, issue.finding_class)}>
-                      <ClampText>{issue.description || issue.rule_id}</ClampText>
-                    </TextLink>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {statusLabel(issue.finding_class)}
-                  </TableCell>
-                  <TableCell numeric>{issue.affected_pages}</TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    <ScoreEffect roles={issue.score_roles} />
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+        ),
+      }}
+      columns={TOP_ISSUE_COLUMNS}
+      minWidth="md"
+      state={
+        issues.length === 0
+          ? { kind: 'empty', icon: ICONS.issues, headingLevel: 3, heading: 'No persisted issues.' }
+          : undefined
+      }
+    >
+      {issues.map((issue) => (
+        <TableRow key={`${issue.rule_id}-${issue.finding_class}`}>
+          <TableCell className="whitespace-nowrap">
+            <Badge variant="status" value={impactTone(issue.impact_band)}>
+              {impactLabel(issue.impact_band)}
+            </Badge>
+          </TableCell>
+          <TableCell>
+            <TextLink text="inherit" href={issueHref(issue.rule_id, issue.finding_class)}>
+              <ClampText>{issue.description || issue.rule_id}</ClampText>
+            </TextLink>
+          </TableCell>
+          <TableCell className="whitespace-nowrap">{statusLabel(issue.finding_class)}</TableCell>
+          <TableCell numeric>{issue.affected_pages}</TableCell>
+          <TableCell className="whitespace-nowrap">
+            <ScoreEffect roles={issue.score_roles} />
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 
@@ -201,20 +183,26 @@ function WebFundamentalsCard({
         <CardTitle>Web Fundamentals</CardTitle>
         <CardDescription>Persisted HTTP evidence across four areas.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-4">
-        <div className="grid grid-cols-2 gap-2">
-          {data.areas.map((area) => (
-            <div key={area.key} className={panelClasses({ tone: 'well' }, 'grid gap-1')}>
-              <span className={textRole('label', 'capitalize')}>{area.key}</span>
-              <Badge variant="status" value={measurementTone(area.state)}>
-                {statusLabel(area.state)}
-              </Badge>
-            </div>
-          ))}
-        </div>
-        <Button variant="secondary" onClick={onOpen} className="justify-self-start">
-          View evidence
-        </Button>
+      <CardContent>
+        <Stack gap="workspace">
+          <div className={splitPaneClasses('peers')}>
+            {data.areas.map((area) => (
+              <Stack
+                gap="tight"
+                key={area.key}
+                className={panelClasses({ tone: 'well' }, 'justify-items-start')}
+              >
+                <span className={textRole('label', 'capitalize')}>{area.key}</span>
+                <Badge variant="status" value={measurementTone(area.state)}>
+                  {statusLabel(area.state)}
+                </Badge>
+              </Stack>
+            ))}
+          </div>
+          <Button variant="secondary" onClick={onOpen} className="justify-self-start">
+            View evidence
+          </Button>
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -227,17 +215,19 @@ function TrendCard({ data }: Readonly<{ data: SiteHealthOverview['trend'] }>) {
         <CardTitle>AEO Readiness trend</CardTitle>
         <CardDescription>Comparable terminal crawl snapshots only.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-2">
-        <TrendChart
-          data={data.series}
-          label="AEO Readiness trend"
-          height={96}
-          className="h-auto w-full"
-        />
-        {data.state === 'unavailable' ? (
-          <p className="type-caption">Run a second comparable crawl to establish a trend.</p>
-        ) : null}
-        <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
+      <CardContent>
+        <Stack gap="item">
+          <TrendChart
+            data={data.series}
+            label="AEO Readiness trend"
+            height={96}
+            className="h-auto w-full"
+          />
+          {data.state === 'unavailable' ? (
+            <p className="type-caption">Run a second comparable crawl to establish a trend.</p>
+          ) : null}
+          <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -261,19 +251,21 @@ function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change
         <CardTitle>Change summary</CardTitle>
         <CardDescription>Change since the previous comparable crawl.</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        {data.metrics.map((metric) => (
-          <div key={metric.key} className="type-body flex items-center justify-between gap-3">
-            <span className="text-secondary">
-              {CHANGE_METRIC_LABELS[metric.key] ?? metric.label}
-            </span>
-            <ChangeDelta metricKey={metric.key} delta={metric.delta} />
-          </div>
-        ))}
-        {data.state === 'unavailable' ? (
-          <QueryState kind="empty" inline message="No comparable snapshot yet." />
-        ) : null}
-        <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
+      <CardContent>
+        <Stack>
+          {data.metrics.map((metric) => (
+            <Inline gap="compact" key={metric.key} className="type-body justify-between">
+              <span className="text-secondary">
+                {CHANGE_METRIC_LABELS[metric.key] ?? metric.label}
+              </span>
+              <ChangeDelta metricKey={metric.key} delta={metric.delta} />
+            </Inline>
+          ))}
+          {data.state === 'unavailable' ? (
+            <QueryState kind="empty" inline message="No comparable snapshot yet." />
+          ) : null}
+          <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -311,11 +303,11 @@ function ScoreEffect({ roles }: Readonly<{ roles: readonly string[] }>) {
   });
   if (labels.length === 0) return <UnavailableValue state="not_measured" />;
   return (
-    <div className="flex gap-1">
+    <Inline gap="tight">
       {labels.map(([role, label]) => (
         <Badge key={role}>{label}</Badge>
       ))}
-    </div>
+    </Inline>
   );
 }
 
@@ -361,7 +353,7 @@ function WebFundamentalsDrawer({
     >
       <div className={ledgerClasses()}>
         {data.areas.map((area) => (
-          <section key={area.key} className="grid gap-3 py-4 first:pt-0">
+          <Stack as="section" key={area.key} className={ledgerItemClasses()}>
             <EditorialSectionHeader
               title={<span className="capitalize">{area.key}</span>}
               description={
@@ -381,16 +373,16 @@ function WebFundamentalsDrawer({
                 <QueryState kind="empty" inline message="No missing HTTP-evidence checks." />
               ) : (
                 area.top_findings.map((finding) => (
-                  <div key={finding.rule_id} className="grid gap-1">
+                  <Stack gap="tight" key={finding.rule_id}>
                     <span className={textRole('itemTitle')}>{finding.title}</span>
                     <span className="type-caption">
                       {finding.affected_pages} affected pages · {finding.remediation}
                     </span>
-                  </div>
+                  </Stack>
                 ))
               )}
             </Stack>
-          </section>
+          </Stack>
         ))}
       </div>
     </Drawer>

@@ -1,4 +1,5 @@
 import { Alert } from '@/components/ui/alert';
+import { Inline } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
 import { auditStatusLabel } from '@/lib/runs/status';
 import type { ActiveRun } from '@/lib/visibility/dashboard';
@@ -13,7 +14,7 @@ import { TextLink } from '@/components/ui/text-link';
 export function ActiveRunBanner({ run }: Readonly<{ run: ActiveRun }>) {
   return (
     <Alert tone="info" hideIcon>
-      <div className="flex flex-wrap items-center gap-2">
+      <Inline className="flex-wrap">
         <Spinner />
         <span>
           A run is in progress ({auditStatusLabel(run.status)}). Results appear here when it
@@ -22,7 +23,7 @@ export function ActiveRunBanner({ run }: Readonly<{ run: ActiveRun }>) {
         <TextLink text="emphasis" className="whitespace-nowrap" href={`/runs/${run.id}`}>
           Watch live progress →
         </TextLink>
-      </div>
+      </Inline>
     </Alert>
   );
 }

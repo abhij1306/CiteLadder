@@ -1,3 +1,4 @@
+import { Stack } from '@/components/ui/layout';
 import { Passage } from '@/components/ui/passage';
 import { textRole } from '@/components/ui/typography';
 import { absenceBasis, presenceLabel, type PageEntity } from '@/lib/visibility/source-pages';
@@ -15,7 +16,7 @@ export function BrandOnPage({
   const verdict = presenceLabel(brand.presence);
   const basis = absenceBasis(brand.presence, brand.match_method, extractedChars);
   return (
-    <div className="grid gap-2">
+    <Stack gap="item">
       <p className={textRole('label')}>{heading}</p>
       <p className={textRole('itemTitle')}>
         {brand.entity_name}
@@ -25,6 +26,6 @@ export function BrandOnPage({
         <Passage key={passage}>{passage}</Passage>
       ))}
       {basis ? <p className="type-caption">{basis}</p> : null}
-    </div>
+    </Stack>
   );
 }

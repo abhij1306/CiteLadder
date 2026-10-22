@@ -26,7 +26,8 @@ import type {
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { DisplayTime } from '@/components/ui/display-time';
 import { textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Inline, Stack } from '@/components/ui/layout';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import { ENGINE_ORDER, ENGINE_LABELS } from '@/lib/providers/catalog';
@@ -123,115 +124,121 @@ function WorkspaceSchedules({
         <CardTitle>Scheduled audits</CardTitle>
         <p className="type-caption">Runs use the selected prompt set and your connected engines.</p>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        {schedulesQuery.isError ? (
-          <ReadError
-            {...readErrorProps(schedulesQuery)}
-            fallback="Could not load scheduled audits."
-          />
-        ) : null}
-        {schedulesQuery.data?.length ? (
-          <ul className={ledgerClasses('boxed')}>
-            {schedulesQuery.data.map((schedule) => (
-              <ScheduleRow
-                key={schedule.id}
-                schedule={schedule}
-                markets={markets}
-                resuming={resumeMutation.isPending}
-                onResume={() => resumeMutation.mutate(schedule.id)}
-              />
-            ))}
-          </ul>
-        ) : null}
-        {!schedulesQuery.data?.length && !schedulesQuery.isLoading ? (
-          <QueryState kind="empty" inline message="No scheduled audits yet." />
-        ) : null}
-        {promptSets.length === 0 ? (
-          <Alert tone="info">Add prompts before scheduling an audit.</Alert>
-        ) : (
-          <div className="desktop:grid-cols-3 grid gap-3">
-            <div className={textRole('label', 'grid gap-1')}>
-              <span>Prompt set</span>
-              <Select
-                ariaLabel="Prompt set"
-                value={promptSetId}
-                onValueChange={setPromptSetId}
-                options={promptSets.map((set) => ({ value: set.id, label: set.name }))}
-              />
-            </div>
-            <div className={textRole('label', 'grid gap-1')}>
-              <span>Measurement scope</span>
-              <Select
-                ariaLabel="Measurement scope"
-                value={auditScope}
-                onValueChange={setAuditScope}
-                options={[
-                  { value: 'brand', label: 'Brand visibility' },
-                  { value: 'commerce', label: 'Commerce AI Shelf' },
-                ]}
-              />
-            </div>
-            <div className={textRole('label', 'grid gap-1')}>
-              <span>Cadence</span>
-              <Select
-                ariaLabel="Cadence"
-                value={cadence}
-                onValueChange={setCadence}
-                options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({
-                  value: value as AuditScheduleCadence,
-                  label,
-                }))}
-              />
-            </div>
-            {cadence === 'every_n_minutes' ? (
-              <label htmlFor="audit-schedule-minutes" className={textRole('label', 'grid gap-1')}>
-                <span>Minutes</span>
-                <Input
-                  id="audit-schedule-minutes"
-                  min="5"
-                  type="number"
-                  value={intervalMinutes}
-                  onChange={(event) => setIntervalMinutes(event.target.value)}
+      <CardContent>
+        <Stack>
+          {schedulesQuery.isError ? (
+            <ReadError
+              {...readErrorProps(schedulesQuery)}
+              fallback="Could not load scheduled audits."
+            />
+          ) : null}
+          {schedulesQuery.data?.length ? (
+            <ul className={ledgerClasses('boxed')}>
+              {schedulesQuery.data.map((schedule) => (
+                <ScheduleRow
+                  key={schedule.id}
+                  schedule={schedule}
+                  markets={markets}
+                  resuming={resumeMutation.isPending}
+                  onResume={() => resumeMutation.mutate(schedule.id)}
                 />
-              </label>
-            ) : null}
-            <fieldset className="desktop:col-span-2 grid gap-1">
-              <legend className={textRole('label')}>Engines</legend>
-              <div className="flex flex-wrap gap-2">
-                {ENGINE_ORDER.map((engine) => (
-                  <Checkbox
-                    key={engine}
-                    label={ENGINE_LABELS[engine]}
-                    checked={engines.includes(engine)}
-                    onCheckedChange={() =>
-                      setEngines((current) =>
-                        current.includes(engine)
-                          ? current.filter((value) => value !== engine)
-                          : [...current, engine],
-                      )
-                    }
-                  />
-                ))}
+              ))}
+            </ul>
+          ) : null}
+          {schedulesQuery.isSuccess && schedulesQuery.data.length === 0 ? (
+            <QueryState kind="empty" inline message="No scheduled audits yet." />
+          ) : null}
+          {promptSets.length === 0 ? (
+            <Alert tone="info">Add prompts before scheduling an audit.</Alert>
+          ) : (
+            <Stack className="desktop:grid-cols-3">
+              <Stack gap="item" className={textRole('label')}>
+                <span>Prompt set</span>
+                <Select
+                  ariaLabel="Prompt set"
+                  value={promptSetId}
+                  onValueChange={setPromptSetId}
+                  options={promptSets.map((set) => ({ value: set.id, label: set.name }))}
+                />
+              </Stack>
+              <Stack gap="item" className={textRole('label')}>
+                <span>Measurement scope</span>
+                <Select
+                  ariaLabel="Measurement scope"
+                  value={auditScope}
+                  onValueChange={setAuditScope}
+                  options={[
+                    { value: 'brand', label: 'Brand visibility' },
+                    { value: 'commerce', label: 'Commerce AI Shelf' },
+                  ]}
+                />
+              </Stack>
+              <Stack gap="item" className={textRole('label')}>
+                <span>Cadence</span>
+                <Select
+                  ariaLabel="Cadence"
+                  value={cadence}
+                  onValueChange={setCadence}
+                  options={Object.entries(CADENCE_LABELS).map(([value, label]) => ({
+                    value: value as AuditScheduleCadence,
+                    label,
+                  }))}
+                />
+              </Stack>
+              {cadence === 'every_n_minutes' ? (
+                <label htmlFor="audit-schedule-minutes" className={textRole('label')}>
+                  <Stack as="span" gap="item">
+                    <span>Minutes</span>
+                    <Input
+                      id="audit-schedule-minutes"
+                      min="5"
+                      type="number"
+                      value={intervalMinutes}
+                      onChange={(event) => setIntervalMinutes(event.target.value)}
+                    />
+                  </Stack>
+                </label>
+              ) : null}
+              <Stack as="fieldset" gap="item" className="desktop:col-span-2">
+                <legend className={textRole('label')}>Engines</legend>
+                <Inline className="flex-wrap">
+                  {ENGINE_ORDER.map((engine) => (
+                    <Checkbox
+                      key={engine}
+                      label={ENGINE_LABELS[engine]}
+                      checked={engines.includes(engine)}
+                      onCheckedChange={() =>
+                        setEngines((current) =>
+                          current.includes(engine)
+                            ? current.filter((value) => value !== engine)
+                            : [...current, engine],
+                        )
+                      }
+                    />
+                  ))}
+                </Inline>
+              </Stack>
+              <MarketChecklist markets={markets} marketIds={marketIds} onToggle={setMarketIds} />
+              <div className="flex items-end">
+                <Button onClick={() => createMutation.mutate()} disabled={!canCreate}>
+                  {createMutation.isPending ? 'Scheduling…' : 'Schedule audit'}
+                </Button>
               </div>
-            </fieldset>
-            <MarketChecklist markets={markets} marketIds={marketIds} onToggle={setMarketIds} />
-            <div className="flex items-end">
-              <Button onClick={() => createMutation.mutate()} disabled={!canCreate}>
-                {createMutation.isPending ? 'Scheduling…' : 'Schedule audit'}
-              </Button>
-            </div>
-          </div>
-        )}
-        {createMutation.isError ? (
-          <MutationNotice
-            notice={mutationNoticeForError(createMutation.error, { action: 'schedule the audit' })}
-            onRetry={() => createMutation.mutate()}
+            </Stack>
+          )}
+          {createMutation.isError ? (
+            <MutationNotice
+              notice={mutationNoticeForError(createMutation.error, {
+                action: 'schedule the audit',
+              })}
+              onRetry={() => createMutation.mutate()}
+            />
+          ) : null}
+          <ResumeNotice
+            error={resumeMutation.error}
+            onRetry={() => resumeMutation.mutate(resumeMutation.variables!)}
           />
-        ) : null}
-        <ResumeNotice
-          error={resumeMutation.error}
-          onRetry={() => resumeMutation.mutate(resumeMutation.variables!)}
-        />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -255,9 +262,9 @@ function MarketChecklist({
 }>) {
   if (markets.length < 2) return null;
   return (
-    <fieldset className="desktop:col-span-2 grid gap-1">
+    <Stack as="fieldset" gap="item" className="desktop:col-span-2">
       <legend className={textRole('label')}>Markets</legend>
-      <div className="flex flex-wrap gap-2">
+      <Inline className="flex-wrap">
         {markets.map((market) => (
           <Checkbox
             key={market.id ?? 'default'}
@@ -266,8 +273,8 @@ function MarketChecklist({
             onCheckedChange={() => onToggle((current) => toggleMarket(current, market.id))}
           />
         ))}
-      </div>
-    </fieldset>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -302,7 +309,7 @@ function ScheduleRow({
   onResume: () => void;
 }>) {
   return (
-    <li className="type-body flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+    <Inline as="li" className={ledgerItemClasses('type-body flex-wrap justify-between')}>
       <span className={textRole('emphasis', 'text-foreground')}>
         {CADENCE_LABELS[schedule.cadence]}
       </span>
@@ -319,7 +326,7 @@ function ScheduleRow({
           {marketSummary(schedule, markets)}
         </span>
       ) : (
-        <span className="text-secondary flex flex-wrap items-center gap-2">
+        <Inline as="span" className="text-secondary flex-wrap">
           {pauseLabel(schedule)}
           {/* A one-time schedule that ran is finished, not paused; resuming would run it again. */}
           {finishedOnce(schedule) ? null : (
@@ -327,9 +334,9 @@ function ScheduleRow({
               Resume
             </Button>
           )}
-        </span>
+        </Inline>
       )}
-    </li>
+    </Inline>
   );
 }
 

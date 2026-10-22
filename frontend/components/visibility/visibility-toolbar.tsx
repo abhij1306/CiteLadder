@@ -3,8 +3,9 @@
 import { CircleHelp, Download } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
-import { Button } from '@/components/ui/button';
-import { FilterChoice, FilterTrigger } from '@/components/ui/filter-bar';
+import { Button, IconButton } from '@/components/ui/button';
+import { FilterChoice, FilterDivider, FilterTrigger } from '@/components/ui/filter-bar';
+import { Icon } from '@/components/ui/icon';
 import {
   Dropdown,
   DropdownContent,
@@ -95,7 +96,7 @@ export function VisibilityToolbar(props: ToolbarProps) {
       <MeasurementFilter {...props} />
       <RangeFilter {...props} />
       {props.activeTab === 'trends' ? <GranularityFilter {...props} /> : null}
-      <span className="bg-border desktop:block mx-1 hidden h-5 w-px" aria-hidden />
+      <FilterDivider />
       <CohortFilter {...props} />
       <EngineFilterControl {...props} />
       {evidence ? <PromptFilter {...props} /> : null}
@@ -334,16 +335,17 @@ export function VisibilityActions() {
     <>
       <LaunchAuditButton />
       <Tooltip content="How these metrics are calculated">
-        <Button variant="secondary" size="icon" asChild>
-          <a href={METRICS_HELP_URL} aria-label="About these metrics">
-            <CircleHelp className="size-3.5" aria-hidden />
-          </a>
-        </Button>
+        <IconButton
+          variant="secondary"
+          icon={CircleHelp}
+          label="About these metrics"
+          href={METRICS_HELP_URL}
+        />
       </Tooltip>
       <Tooltip content="Export is available from a run (coming with reports)">
         <span>
           <Button variant="secondary" disabled aria-disabled="true">
-            <Download className="size-3.5" aria-hidden />
+            <Icon icon={Download} />
             Export
           </Button>
         </span>

@@ -1,17 +1,10 @@
 'use client';
 
-import { Card, CardContent } from '@/components/ui/card';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { scoreTextClass } from '@/components/ui/score-band';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Label, textRole } from '@/components/ui/typography';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { ICONS } from '@/lib/icons';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
 import { byPageKindRows } from '@/lib/site-health/page-kinds';
@@ -45,68 +38,66 @@ export function PageKindScores({
   const rows = byPageKindRows(summary.by_page_kind);
 
   return (
-    <Card data-testid="page-kind-scores">
-      <CardContent className="grid gap-3">
-        <div className="grid gap-0.5">
-          <Label>Scores by Page Kind</Label>
-          <span className={textRole('body')}>
-            Mean scores across the analyzed pages of each type.
-          </span>
-        </div>
-        {rows.length === 0 ? (
-          <p className={textRole('body')}>
-            Per-page-kind scores appear once the analysis classifies your pages.
-          </p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Page Kind</TableHead>
-                <TableHead numeric>Analyzed</TableHead>
-                <TableHead numeric>Web Fundamentals</TableHead>
-                <TableHead numeric>AEO Readiness</TableHead>
-                <TableHead numeric>AEO Coverage</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.page_kind}>
-                  <TableCell className="whitespace-nowrap">
-                    <PageKindBadge pageKind={row.page_kind} />
-                  </TableCell>
-                  <TableCell numeric className="text-secondary tabular-nums">
-                    {row.analyzed_count}
-                  </TableCell>
-                  <TableCell numeric className={scoreTextClass(row.web_fundamentals_score)}>
-                    <MeasurementValue
-                      score={row.web_fundamentals_score}
-                      coverage={row.web_fundamentals_coverage}
-                      state={row.web_fundamentals_state}
-                    />
-                  </TableCell>
-                  <TableCell numeric className={scoreTextClass(row.aeo_readiness_score)}>
-                    <MeasurementValue
-                      score={row.aeo_readiness_score}
-                      coverage={row.aeo_measurement_coverage}
-                      state={row.aeo_measurement_state}
-                    />
-                  </TableCell>
-                  <TableCell numeric>
-                    {row.aeo_measurement_coverage === null ? (
-                      <UnavailableValue state="not_measured" />
-                    ) : (
-                      `${Math.round(row.aeo_measurement_coverage * 100)}%`
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <div data-testid="page-kind-scores" className="grid min-w-0">
+      <DataTable
+        title="Scores by Page Kind"
+        columns={COLUMNS}
+        minWidth="md"
+        footer="Mean scores across the analyzed pages of each type."
+        state={
+          rows.length === 0
+            ? {
+                kind: 'empty',
+                icon: ICONS.siteHealth,
+                headingLevel: 3,
+                heading: 'Per-page-kind scores appear once the analysis classifies your pages.',
+              }
+            : undefined
+        }
+      >
+        {rows.map((row) => (
+          <TableRow key={row.page_kind}>
+            <TableCell className="whitespace-nowrap">
+              <PageKindBadge pageKind={row.page_kind} />
+            </TableCell>
+            <TableCell numeric className="text-secondary tabular-nums">
+              {row.analyzed_count}
+            </TableCell>
+            <TableCell numeric className={scoreTextClass(row.web_fundamentals_score)}>
+              <MeasurementValue
+                score={row.web_fundamentals_score}
+                coverage={row.web_fundamentals_coverage}
+                state={row.web_fundamentals_state}
+              />
+            </TableCell>
+            <TableCell numeric className={scoreTextClass(row.aeo_readiness_score)}>
+              <MeasurementValue
+                score={row.aeo_readiness_score}
+                coverage={row.aeo_measurement_coverage}
+                state={row.aeo_measurement_state}
+              />
+            </TableCell>
+            <TableCell numeric>
+              {row.aeo_measurement_coverage === null ? (
+                <UnavailableValue state="not_measured" />
+              ) : (
+                `${Math.round(row.aeo_measurement_coverage * 100)}%`
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
+    </div>
   );
 }
+
+const COLUMNS: readonly DataTableColumn[] = [
+  { key: 'kind', label: 'Page Kind' },
+  { key: 'analyzed', label: 'Analyzed', width: 'figure', numeric: true },
+  { key: 'web', label: 'Web Fundamentals', width: 'date', numeric: true },
+  { key: 'aeo', label: 'AEO Readiness', width: 'status', numeric: true },
+  { key: 'coverage', label: 'AEO Coverage', width: 'status', numeric: true },
+];
 
 function MeasurementValue({
   score,

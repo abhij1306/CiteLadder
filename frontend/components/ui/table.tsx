@@ -158,12 +158,22 @@ export function TableFillerRows({
   ));
 }
 
+/**
+ * A column the narrow layout drops: secondary figures a phone has no width
+ * for. The header and every cell of the column carry it, so the column
+ * disappears whole.
+ */
+const desktopOnlyClasses = 'hidden desktop:table-cell';
+
+type CellOptions = { numeric?: boolean | 'end'; desktopOnly?: boolean };
+
 export function TableHead({
   children,
   className,
   numeric,
+  desktopOnly,
   ...props
-}: Readonly<ThHTMLAttributes<HTMLTableCellElement> & { numeric?: boolean | 'end' }>) {
+}: Readonly<ThHTMLAttributes<HTMLTableCellElement> & CellOptions>) {
   return (
     <th
       {...props}
@@ -173,11 +183,34 @@ export function TableHead({
         'border-border bg-panel-tonal sticky top-0 z-10 h-[var(--table-header-height)] border-b px-[var(--table-cell-padding-x)] text-left align-middle',
         numeric && 'tabular-nums',
         numeric === 'end' ? 'text-right' : numeric && 'text-center',
+        desktopOnly && desktopOnlyClasses,
         className,
       )}
     >
       {children}
     </th>
+  );
+}
+
+/**
+ * A plain column label with the column's shared caveat behind a tooltip —
+ * the unsortable twin of `SortableTableHead`'s `hint`. A shared reason is
+ * said once, on the header, rather than once per cell that lacks a value.
+ */
+export function HintedTableHead({
+  label,
+  hint,
+  numeric,
+  desktopOnly,
+}: Readonly<{ label: string; hint: string } & CellOptions>) {
+  return (
+    <TableHead numeric={numeric} desktopOnly={desktopOnly}>
+      <Tooltip content={hint}>
+        <button type="button" className="focus-ring cursor-default rounded-xs">
+          {label}
+        </button>
+      </Tooltip>
+    </TableHead>
   );
 }
 
@@ -248,22 +281,37 @@ export function ClampText({
   );
 }
 
+const cellClasses = ({ numeric, desktopOnly }: CellOptions) =>
+  cn(
+    'type-body text-foreground border-border-subtle px-[var(--table-cell-padding-x)] py-[var(--table-cell-padding-y)] text-left align-middle',
+    // Row rule, dropped on the last row.
+    'border-b [tr:last-child>&]:border-b-0',
+    // A value never wraps: "Not measured" split over two lines read as two values.
+    numeric && 'whitespace-nowrap tabular-nums',
+    numeric === 'end' ? 'text-right' : numeric && 'text-center',
+    desktopOnly && desktopOnlyClasses,
+  );
+
 export function TableCell({
   children,
   className,
   numeric,
+  desktopOnly,
+  nested,
   ...props
-}: Readonly<TdHTMLAttributes<HTMLTableCellElement> & { numeric?: boolean | 'end' }>) {
+}: Readonly<
+  TdHTMLAttributes<HTMLTableCellElement> &
+    CellOptions & {
+      /** The first cell of a row grouped under a group-label row: inset one step. */
+      nested?: boolean;
+    }
+>) {
   return (
     <td
       {...props}
       className={cn(
-        'type-body text-foreground border-border-subtle px-[var(--table-cell-padding-x)] py-[var(--table-cell-padding-y)] text-left align-middle',
-        // Row rule, dropped on the last row.
-        'border-b [tr:last-child>&]:border-b-0',
-        // A value never wraps: "Not measured" split over two lines read as two values.
-        numeric && 'whitespace-nowrap tabular-nums',
-        numeric === 'end' ? 'text-right' : numeric && 'text-center',
+        cellClasses({ numeric, desktopOnly }),
+        nested && 'ps-[calc(var(--table-cell-padding-x)+16px)]',
         className,
       )}
     >
@@ -272,26 +320,18 @@ export function TableCell({
   );
 }
 
-/** Numeric table cell that becomes a labelled key/value row below `md`. */
-export function TableRecordMetricCell({
+/**
+ * The cell that names its row (`<th scope="row">`): a cell's geometry with
+ * the item-title ink, so a row header reads as the row's title.
+ */
+export function TableRowHeader({
   children,
   className,
-  label,
-  ...props
-}: Readonly<Omit<TdHTMLAttributes<HTMLTableCellElement>, 'data-label'> & { label: string }>) {
+}: Readonly<{ children: ReactNode; className?: string }>) {
   return (
-    <TableCell
-      {...props}
-      numeric
-      data-label={label}
-      className={cn(
-        'grid grid-cols-[1fr_auto] gap-3 border-b-0 px-4 py-1 type-label-before before:text-left before:content-[attr(data-label)]',
-        'desktop:table-cell desktop:border-b desktop:px-[var(--table-cell-padding-x)] desktop:py-[var(--table-cell-padding-y)] desktop:before:hidden',
-        className,
-      )}
-    >
-      {children}
-    </TableCell>
+    <th scope="row" className={cn(cellClasses({}), 'type-item-title', className)}>
+      {isPlainText(children) ? <ClampText>{children}</ClampText> : children}
+    </th>
   );
 }
 
@@ -320,8 +360,10 @@ export function SortableTableHead({
   numeric,
   sublabel,
   hint,
+  desktopOnly,
   className,
 }: Readonly<{
+  desktopOnly?: boolean;
   label: string;
   /** This column is the current sort key. */
   active: boolean;
@@ -368,7 +410,12 @@ export function SortableTableHead({
     </button>
   );
   return (
-    <TableHead numeric={numeric} aria-sort={ariaSort} className={className}>
+    <TableHead
+      numeric={numeric}
+      desktopOnly={desktopOnly}
+      aria-sort={ariaSort}
+      className={className}
+    >
       {hint ? <Tooltip content={hint}>{button}</Tooltip> : button}
     </TableHead>
   );

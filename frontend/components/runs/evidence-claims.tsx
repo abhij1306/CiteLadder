@@ -3,6 +3,7 @@
 import type { ExecutionClaim } from '@citeladder/contracts/fact-checking';
 
 import { Badge } from '@/components/ui/badge';
+import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Label, textRole } from '@/components/ui/typography';
 import type { Highlight } from '@/lib/markdown/highlight';
@@ -37,18 +38,20 @@ function VerdictChip({ claim }: Readonly<{ claim: ExecutionClaim }>) {
 export function EvidenceClaims({ claims }: Readonly<{ claims: readonly ExecutionClaim[] }>) {
   if (!claims.length) return null;
   return (
-    <section className="grid gap-2">
+    <Stack as="section" gap="item">
       <Label>Fact checks</Label>
-      <ul className="grid gap-2">
+      <Stack as="ul" gap="item">
         {claims.map((claim) => (
-          <li
+          <Stack
+            as="li"
+            gap="tight"
             key={`${claim.start}:${claim.end}:${claim.topic}`}
-            className={panelClasses({ tone: 'well' }, 'grid min-w-0 gap-1')}
+            className={panelClasses({ tone: 'well' }, 'min-w-0')}
           >
-            <span className="flex flex-wrap items-center gap-2">
+            <Inline as="span" className="flex-wrap">
               <span className={textRole('emphasis')}>“{claim.quote}”</span>
               <VerdictChip claim={claim} />
-            </span>
+            </Inline>
             <span className="type-caption text-secondary">
               {TOPIC_LABELS[claim.topic]}: {claim.claim}
             </span>
@@ -57,9 +60,9 @@ export function EvidenceClaims({ claims }: Readonly<{ claims: readonly Execution
                 Your fact: {fact.statement}
               </span>
             ))}
-          </li>
+          </Stack>
         ))}
-      </ul>
-    </section>
+      </Stack>
+    </Stack>
   );
 }

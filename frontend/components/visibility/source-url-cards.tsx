@@ -1,21 +1,17 @@
 'use client';
 
+import type { ReactNode } from 'react';
+import { Bot } from 'lucide-react';
 import type { z } from 'zod';
 
 import { Badge } from '@/components/ui/badge';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { visibilitySourceUrlSchema } from '@citeladder/contracts/visibility-evidence';
@@ -47,7 +43,7 @@ function SectionCard({
   /** A read that FAILED has no data, so its empty sentence would be a lie. */
   errored?: boolean;
   empty: string;
-  children: React.ReactNode | null;
+  children: ReactNode | null;
 }>) {
   return (
     <Card>
@@ -80,10 +76,10 @@ function SectionBody({
   loading: boolean;
   errored?: boolean;
   empty: string;
-  children: React.ReactNode | null;
+  children: ReactNode | null;
 }>) {
   if (errored) return null;
-  if (loading) return <Skeleton className="h-24" />;
+  if (loading) return <Skeleton shape="block" />;
   if (children) return <>{children}</>;
   return <QueryState kind="empty" inline message={empty} />;
 }
@@ -97,46 +93,53 @@ export function EnginesCard({
   loading: boolean;
   errored?: boolean;
 }>) {
+  // A failed read shows no state of its own: "no engine used this page" and
+  // "we could not find out" are different answers, and the page's own alert
+  // already reports the failure, so rows kept from an earlier read are not
+  // shown as current either. Only a returned, empty list is "no engine".
+  const rows = errored ? [] : (engines ?? []);
+  let state: DataTableState | undefined;
+  if (!errored && loading) state = { kind: 'loading', label: 'Loading retrievals…' };
+  else if (!errored && engines?.length === 0) {
+    state = {
+      kind: 'empty',
+      headingLevel: 3,
+      icon: Bot,
+      heading: 'No engine used this page in this selection.',
+    };
+  }
   return (
-    <SectionCard
+    <DataTable
       title="Retrievals by AI model"
-      caption="Which engines used this page as a source."
-      loading={loading}
-      errored={errored}
-      empty="No engine used this page in this selection."
+      columns={ENGINE_COLUMNS}
+      state={state}
+      footer="Which engines used this page as a source."
     >
-      {engines?.length ? (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Model</TableHead>
-              <TableHead numeric>Retrievals</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {engines.map((row) => (
-              <TableRow key={`${row.logical_engine}:${row.transport_model ?? ''}`}>
-                <TableCell>
-                  <span className="grid min-w-0">
-                    <ClampText lines={1}>
-                      {engineLabel(row.logical_engine) || row.logical_engine}
-                    </ClampText>
-                    {productModelLabel(row.logical_engine, row.transport_model) ? (
-                      <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
-                        {productModelLabel(row.logical_engine, row.transport_model)}
-                      </ClampText>
-                    ) : null}
-                  </span>
-                </TableCell>
-                <TableCell numeric>{count(row.retrievals) ?? <MissingValue />}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      ) : null}
-    </SectionCard>
+      {rows.map((row) => (
+        <TableRow key={`${row.logical_engine}:${row.transport_model ?? ''}`}>
+          <TableCell>
+            <span className="grid min-w-0">
+              <ClampText lines={1}>
+                {engineLabel(row.logical_engine) || row.logical_engine}
+              </ClampText>
+              {productModelLabel(row.logical_engine, row.transport_model) ? (
+                <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
+                  {productModelLabel(row.logical_engine, row.transport_model)}
+                </ClampText>
+              ) : null}
+            </span>
+          </TableCell>
+          <TableCell numeric>{count(row.retrievals) ?? <MissingValue />}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
+
+const ENGINE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'model', label: 'Model' },
+  { key: 'retrievals', label: 'Retrievals', width: 'figure', numeric: true },
+];
 
 /**
  * The brands named in the answers that cited this page.
@@ -163,21 +166,21 @@ export function BrandsCard({
       empty="No tracked brand was named in the answers citing this URL."
     >
       {brands?.length ? (
-        <ul className="grid gap-2">
+        <Stack as="ul" gap="item">
           {brands.map((brand) => (
-            <li key={`${brand.kind}:${brand.name}`} className="flex items-center gap-2">
+            <Inline as="li" key={`${brand.kind}:${brand.name}`}>
               <BrandLogo name={brand.name} logoUrl={brand.logo_url} websiteUrl={brand.website} />
-              <span className="min-w-0 truncate">{brand.name}</span>
+              <span className="min-w-0 flex-1 truncate">{brand.name}</span>
               <Badge
-                className="ml-auto shrink-0"
+                className="shrink-0"
                 variant="classification"
                 value={brand.kind === 'brand' ? 'owned' : 'competitor'}
               >
                 {count(brand.responses) ?? '0'}
               </Badge>
-            </li>
+            </Inline>
           ))}
-        </ul>
+        </Stack>
       ) : null}
     </SectionCard>
   );

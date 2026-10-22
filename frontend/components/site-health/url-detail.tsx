@@ -26,7 +26,8 @@ import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { cursorControls, useCursorTable } from '@/lib/table/use-cursor-table';
 
 import { UrlDetailView } from './url-detail-view';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Inline, Stack } from '@/components/ui/layout';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { ListScreen } from '@/components/layout/page-shell';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -211,7 +212,7 @@ function IssueHistory({ workspaceId, crawlId, siteUrlId }: HistoryTarget) {
   const nextCursor = historyQuery.data?.next_cursor ?? null;
 
   return (
-    <div className="grid gap-3">
+    <Stack>
       {historyQuery.isError ? (
         <QueryState
           kind="error"
@@ -234,7 +235,7 @@ function IssueHistory({ workspaceId, crawlId, siteUrlId }: HistoryTarget) {
       ) : null}
       {rows.length > 0 ? <HistoryRows rows={rows} /> : null}
       {rows.length > 0 ? <Pager {...cursorControls(pager, nextCursor)} /> : null}
-    </div>
+    </Stack>
   );
 }
 
@@ -243,7 +244,12 @@ function HistoryRows({ rows }: Readonly<{ rows: IssueHistoryPage['items'] }>) {
   return (
     <ul className={ledgerClasses()}>
       {rows.map((row) => (
-        <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+        <Inline
+          as="li"
+          gap="compact"
+          key={row.id}
+          className={ledgerItemClasses('flex-wrap justify-between')}
+        >
           <span className="flex min-w-0 flex-col">
             <span className="type-body text-foreground [overflow-wrap:anywhere]">
               {issueTitle(row)}
@@ -252,13 +258,13 @@ function HistoryRows({ rows }: Readonly<{ rows: IssueHistoryPage['items'] }>) {
               Last found {formatAudited(row.created_at, timeZone)}
             </span>
           </span>
-          <span className="flex shrink-0 items-center gap-2">
+          <Inline as="span" className="shrink-0">
             <Badge>{dimensionLabel(row.dimension)}</Badge>
             <Badge variant="status" value={severityBadgeValue(row.severity)}>
               {severityLabel(row.severity)}
             </Badge>
-          </span>
-        </li>
+          </Inline>
+        </Inline>
       ))}
     </ul>
   );

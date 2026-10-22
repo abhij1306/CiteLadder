@@ -1,5 +1,6 @@
 'use client';
 
+import { Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { SourceBreadcrumb } from '@/components/visibility/source-breadcrumb';
@@ -37,14 +38,14 @@ export function SourceDomainDetail({
   const [tab, setTab] = useUrlState('source_view', optionalStringUrlCodec);
   const active = tab === 'prompts' ? 'prompts' : 'urls';
   return (
-    <div className="grid gap-[var(--workspace-gap)]">
+    <Stack gap="workspace">
       <SourceBreadcrumb trail={[{ label: 'Sources', onClick: onBack }]} current={domain} />
       <Tabs
         value={active}
         onValueChange={(value) => setTab(value === 'urls' ? null : value)}
         items={TABS.map((entry) => ({ value: entry.value, label: entry.label }))}
         ariaLabel="Domain views"
-        rootClassName="grid gap-[var(--workspace-gap)]"
+        spaced
       >
         <TabPanel value={active} className="focus-ring">
           {active === 'prompts' ? (
@@ -60,6 +61,6 @@ export function SourceDomainDetail({
           )}
         </TabPanel>
       </Tabs>
-    </div>
+    </Stack>
   );
 }

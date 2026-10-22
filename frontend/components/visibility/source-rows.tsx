@@ -1,18 +1,14 @@
 'use client';
 
+import type { ComponentProps, ReactNode } from 'react';
+
 import { Badge } from '@/components/ui/badge';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Inline } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
 import { TextLink } from '@/components/ui/text-link';
 import { BrandLogo } from '@/components/ui/brand-logo';
-import {
-  ClampText,
-  SortableTableHead,
-  Table,
-  TableBody,
-  TableCell,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Tooltip } from '@/components/ui/tooltip';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { textRole } from '@/components/ui/typography';
@@ -35,48 +31,35 @@ import {
   retrievedHint,
   SourceName,
   sortProps,
-  StateRows,
-  type SourceTableState,
 } from '@/components/visibility/source-cells';
-import { HintedHead } from '@/components/visibility/source-heads';
 import { standingLabel } from '@/lib/visibility/source-pages';
 import { pageFormatBasis } from '@/lib/visibility/vocabulary';
 import type { useVisibilityFilters } from '@/lib/visibility/use-visibility-dashboard';
 
 export type SourceFilters = ReturnType<typeof useVisibilityFilters>;
-export type { SourceTableState } from '@/components/visibility/source-cells';
 
 /**
- * Each table's columns, as the classes that govern them.
- *
- * One list per table, shared by the header, the rows and the loading state, so
- * a column that is hidden below `lg` is hidden in ALL THREE. A skeleton that
- * rendered seven cells under a five-column header put a placeholder in every
- * wrong place and shifted the columns the moment the real rows arrived --
- * which is the movement this state exists to prevent.
+ * What the panel around a source table supplies: its toolbar, pager, the
+ * background-refetch bar, the state that replaces the rows, and the page size
+ * the body reserves. Loading, error and empty render inside the body under
+ * the same header, so a filter change never moves the columns or the pager.
  */
-const DOMAIN_COLUMNS = [
-  'w-[26%]',
-  'w-[13%]',
-  '',
-  '',
-  'hidden desktop:table-cell',
-  '',
-  'hidden desktop:table-cell',
-  'hidden desktop:table-cell',
-] as const;
+export type SourceTableFrame = Pick<
+  ComponentProps<typeof DataTable>,
+  'toolbar' | 'pager' | 'busy' | 'state' | 'pageSize'
+>;
 
-const URL_COLUMNS = [
-  'w-[26%]',
-  'w-[11%]',
-  'hidden desktop:table-cell w-[13%]',
-  '',
-  '',
-  '',
-  'hidden desktop:table-cell',
-  'hidden desktop:table-cell',
-  'hidden desktop:table-cell',
-] as const;
+/** The name cell: the whole cell opens the source's own level. */
+function OpenSource({ onOpen, children }: Readonly<{ onOpen: () => void; children: ReactNode }>) {
+  return (
+    <Pressable
+      onClick={onOpen}
+      className="hover:text-accent-text flex max-w-full min-w-0 items-center transition-colors"
+    >
+      {children}
+    </Pressable>
+  );
+}
 
 /** A source's type, with the basis for the claim behind a tooltip and in hidden text. */
 function TypeChip({
@@ -102,6 +85,70 @@ function TypeChip({
   );
 }
 
+function domainColumns(
+  sort: SortState,
+  onSort: (column: string) => void,
+  retrieval: SourcesData['retrieval'] | undefined,
+): DataTableColumn[] {
+  return [
+    { key: 'source', label: 'Source', width: 'lead', sort: sortProps(sort, onSort, 'key') },
+    {
+      key: 'type',
+      label: 'Domain type',
+      width: 'status',
+      hint: 'How this publisher is classified. A domain nobody has classified yet has no type.',
+    },
+    {
+      key: 'cited',
+      label: 'Cited in',
+      numeric: true,
+      sort: sortProps(sort, onSort, 'response_rate'),
+      hint: 'Answers that cited at least one page from this domain, as a share of all answers in the selection.',
+    },
+    {
+      key: 'retrieved',
+      label: 'Retrieved',
+      numeric: true,
+      sort: sortProps(sort, onSort, 'retrieved'),
+      hint: retrievedHint(
+        'Answers that read at least one page from this domain, cited or not, as a share of the answers whose engine exposes what it read.',
+        retrieval,
+      ),
+    },
+    {
+      key: 'pages',
+      label: 'Pages cited',
+      numeric: true,
+      desktopOnly: true,
+      sort: sortProps(sort, onSort, 'retrieval_rate'),
+      hint: 'Unique pages cited from this domain per answer in the selection.',
+    },
+    {
+      key: 'citations',
+      label: 'Citations',
+      numeric: true,
+      sort: sortProps(sort, onSort, 'annotations'),
+      hint: 'Every inline citation belonging to this domain.',
+    },
+    {
+      key: 'share',
+      label: 'Citation share',
+      numeric: true,
+      desktopOnly: true,
+      sort: sortProps(sort, onSort, 'citation_share'),
+      hint: "This domain's citations as a share of every citation in the current filtered view.",
+    },
+    {
+      key: 'rate',
+      label: 'Citation rate',
+      numeric: true,
+      desktopOnly: true,
+      sort: sortProps(sort, onSort, 'citation_rate'),
+      hint: 'Citations per answer that cited this domain — not per answer in the selection.',
+    },
+  ];
+}
+
 /**
  * The cited domains.
  *
@@ -117,107 +164,44 @@ export function DomainTable({
   onSort,
   onOpenDomain,
   retrieval,
-  state = { kind: 'rows' },
+  frame = {},
 }: Readonly<{
   rows: readonly SourceItem[];
   sort: SortState;
   onSort: (column: string) => void;
   onOpenDomain?: (domain: string) => void;
   retrieval?: SourcesData['retrieval'];
-  /** Loading or empty fills the body; the header and footer stay put. */
-  state?: SourceTableState;
+  frame?: SourceTableFrame;
 }>) {
   const observed = retrieval?.responses ?? 0;
   return (
-    // `table-fixed` with explicit column widths: without it every column sizes
-    // to its own longest cell, so filtering to a shorter set of domains
-    // re-lays out the whole table under the reader's pointer.
-    <Table className="table-fixed">
-      <TableHeader>
-        <TableRow>
-          <SortableTableHead
-            label="Source"
-            {...sortProps(sort, onSort, 'key')}
-            className={DOMAIN_COLUMNS[0]}
+    <DataTable
+      label="Cited domains"
+      columns={domainColumns(sort, onSort, retrieval)}
+      rowCount={rows.length}
+      {...frame}
+    >
+      {rows.map((row) => (
+        <TableRow key={row.key}>
+          <TableCell>
+            <OpenSource onOpen={() => onOpenDomain?.(row.key)}>
+              <SourceName name={row.key || 'Domain unavailable'} host={row.key} />
+            </OpenSource>
+          </TableCell>
+          <TableCell>
+            <TypeChip token={itemType(row)} dimension="domain" />
+          </TableCell>
+          <NumericCell value={percent(row.response_rate)} />
+          <RetrievedCell
+            value={row.retrieved === null ? null : percent(row.retrieved / observed)}
           />
-          <HintedHead
-            label="Domain type"
-            hint="How this publisher is classified. A domain nobody has classified yet has no type."
-            className={DOMAIN_COLUMNS[1]}
-          />
-          <SortableTableHead
-            label="Cited in"
-            {...sortProps(sort, onSort, 'response_rate')}
-            numeric
-            hint="Answers that cited at least one page from this domain, as a share of all answers in the selection."
-          />
-          <SortableTableHead
-            label="Retrieved"
-            {...sortProps(sort, onSort, 'retrieved')}
-            numeric
-            hint={retrievedHint(
-              'Answers that read at least one page from this domain, cited or not, as a share of the answers whose engine exposes what it read.',
-              retrieval,
-            )}
-          />
-          <SortableTableHead
-            label="Pages cited"
-            {...sortProps(sort, onSort, 'retrieval_rate')}
-            numeric
-            className={DOMAIN_COLUMNS[4]}
-            hint="Unique pages cited from this domain per answer in the selection."
-          />
-          <SortableTableHead
-            label="Citations"
-            {...sortProps(sort, onSort, 'annotations')}
-            numeric
-            hint="Every inline citation belonging to this domain."
-          />
-          <SortableTableHead
-            label="Citation share"
-            {...sortProps(sort, onSort, 'citation_share')}
-            numeric
-            className={DOMAIN_COLUMNS[6]}
-            hint="This domain's citations as a share of every citation in the current filtered view."
-          />
-          <SortableTableHead
-            label="Citation rate"
-            {...sortProps(sort, onSort, 'citation_rate')}
-            numeric
-            className={DOMAIN_COLUMNS[7]}
-            hint="Citations per answer that cited this domain — not per answer in the selection."
-          />
+          <NumericCell value={ratio(row.retrieval_rate)} desktopOnly />
+          <NumericCell value={count(row.annotations)} />
+          <NumericCell value={percent(row.citation_share, 1)} desktopOnly />
+          <NumericCell value={ratio(row.citation_rate)} desktopOnly />
         </TableRow>
-      </TableHeader>
-      <TableBody>
-        {state.kind !== 'rows' ? <StateRows state={state} columns={DOMAIN_COLUMNS} /> : null}
-        {state.kind !== 'rows'
-          ? null
-          : rows.map((row) => (
-              <TableRow key={row.key}>
-                <TableCell>
-                  <Pressable
-                    onClick={() => onOpenDomain?.(row.key)}
-                    className="hover:text-accent-text flex max-w-full min-w-0 items-center transition-colors"
-                  >
-                    <SourceName name={row.key || 'Domain unavailable'} host={row.key} />
-                  </Pressable>
-                </TableCell>
-                <TableCell>
-                  <TypeChip token={itemType(row)} dimension="domain" />
-                </TableCell>
-                <NumericCell value={percent(row.response_rate)} />
-                <RetrievedCell
-                  value={row.retrieved === null ? null : percent(row.retrieved / observed)}
-                />
-                <NumericCell value={ratio(row.retrieval_rate)} className={DOMAIN_COLUMNS[4]} />
-                <NumericCell value={count(row.annotations)} />
-                <NumericCell value={percent(row.citation_share, 1)} className={DOMAIN_COLUMNS[6]} />
-                <NumericCell value={ratio(row.citation_rate)} className={DOMAIN_COLUMNS[7]} />
-              </TableRow>
-            ))}
-      </TableBody>
-    </Table>
+      ))}
+    </DataTable>
   );
 }
 
@@ -235,7 +219,7 @@ function MentionedChips({
   if (!brands.length) return <MissingValue />;
   const overflow = total - brands.length;
   return (
-    <span className="flex items-center gap-1">
+    <Inline as="span" gap="tight">
       {brands.map((brand) => (
         <Tooltip
           key={`${brand.kind}:${brand.name}`}
@@ -254,7 +238,7 @@ function MentionedChips({
       {overflow > 0 ? (
         <span className={textRole('caption', 'text-secondary tabular-nums')}>+{overflow}</span>
       ) : null}
-    </span>
+    </Inline>
   );
 }
 
@@ -275,7 +259,7 @@ function PageStandingCell({
   const label = standingLabel(standing);
   const tone = standingTone(standing);
   return (
-    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+    <Inline as="span" gap="meta">
       {tone ? (
         <Badge variant="status" value={tone}>
           {label}
@@ -286,8 +270,77 @@ function PageStandingCell({
         </ClampText>
       )}
       {actionId ? <TextLink href={`/agent/actions/${actionId}`}>Action</TextLink> : null}
-    </span>
+    </Inline>
   );
+}
+
+function urlColumns(
+  sort: SortState,
+  onSort: (column: string) => void,
+  retrieval: SourcesData['retrieval'] | undefined,
+): DataTableColumn[] {
+  return [
+    { key: 'url', label: 'URL', width: 'lead', sort: sortProps(sort, onSort, 'key') },
+    {
+      key: 'type',
+      label: 'URL type',
+      width: 'status',
+      hint: 'What kind of page this is: from the page itself once it has been read, otherwise from its address. A page whose kind is not evident shows as Other.',
+    },
+    {
+      key: 'standing',
+      label: 'On the page',
+      width: 'status',
+      desktopOnly: true,
+      hint: 'Whether this page has been read, and where you stand on it. A gap lists competitors and not you.',
+    },
+    {
+      key: 'cited',
+      label: 'Cited in',
+      numeric: true,
+      sort: sortProps(sort, onSort, 'responses'),
+      hint: 'Answers that cited this URL.',
+    },
+    {
+      key: 'retrieved',
+      label: 'Retrieved',
+      numeric: true,
+      sort: sortProps(sort, onSort, 'retrieved'),
+      hint: retrievedHint(
+        'Answers that read this URL, cited or not, among those whose engine exposes what it read.',
+        retrieval,
+      ),
+    },
+    {
+      key: 'rate',
+      label: 'Citation rate',
+      numeric: true,
+      sort: sortProps(sort, onSort, 'citation_rate'),
+      hint: 'Citations of this URL per answer that cited it.',
+    },
+    {
+      key: 'mentions',
+      label: 'Mentions',
+      numeric: true,
+      desktopOnly: true,
+      sort: sortProps(sort, onSort, 'mentions'),
+      hint: 'Distinct brands named in the answers that cited this URL. Co-occurrence in the answer, not presence on the page.',
+    },
+    {
+      key: 'mentioned',
+      label: 'Mentioned',
+      desktopOnly: true,
+      hint: 'The brands named in the answers that cited this URL. Co-occurrence in the answer, not presence on the page.',
+    },
+    {
+      key: 'seen',
+      label: 'Last seen',
+      numeric: true,
+      desktopOnly: true,
+      sort: sortProps(sort, onSort, 'last_cited_at'),
+      hint: 'The most recent run in this selection whose answer used this URL as a source.',
+    },
+  ];
 }
 
 /**
@@ -304,116 +357,49 @@ export function UrlTable({
   onSort,
   onOpenUrl,
   retrieval,
-  state = { kind: 'rows' },
+  frame = {},
 }: Readonly<{
   rows: readonly SourceItem[];
   sort: SortState;
   onSort: (column: string) => void;
   onOpenUrl: (url: string) => void;
   retrieval?: SourcesData['retrieval'];
-  /** Loading or empty fills the body; the header and footer stay put. */
-  state?: SourceTableState;
+  frame?: SourceTableFrame;
 }>) {
   return (
-    <Table className="table-fixed">
-      <TableHeader>
-        <TableRow>
-          <SortableTableHead
-            label="URL"
-            {...sortProps(sort, onSort, 'key')}
-            className={URL_COLUMNS[0]}
-          />
-          <HintedHead
-            label="URL type"
-            hint="What kind of page this is: from the page itself once it has been read, otherwise from its address. A page whose kind is not evident shows as Other."
-            className={URL_COLUMNS[1]}
-          />
-          <HintedHead
-            label="On the page"
-            hint="Whether this page has been read, and where you stand on it. A gap lists competitors and not you."
-            className={URL_COLUMNS[2]}
-          />
-          <SortableTableHead
-            label="Cited in"
-            {...sortProps(sort, onSort, 'responses')}
-            numeric
-            hint="Answers that cited this URL."
-          />
-          <SortableTableHead
-            label="Retrieved"
-            {...sortProps(sort, onSort, 'retrieved')}
-            numeric
-            hint={retrievedHint(
-              'Answers that read this URL, cited or not, among those whose engine exposes what it read.',
-              retrieval,
-            )}
-          />
-          <SortableTableHead
-            label="Citation rate"
-            {...sortProps(sort, onSort, 'citation_rate')}
-            numeric
-            hint="Citations of this URL per answer that cited it."
-          />
-          <SortableTableHead
-            label="Mentions"
-            {...sortProps(sort, onSort, 'mentions')}
-            numeric
-            className={URL_COLUMNS[6]}
-            hint="Distinct brands named in the answers that cited this URL. Co-occurrence in the answer, not presence on the page."
-          />
-          <HintedHead
-            label="Mentioned"
-            hint="The brands named in the answers that cited this URL. Co-occurrence in the answer, not presence on the page."
-            className={URL_COLUMNS[7]}
-          />
-          <SortableTableHead
-            label="Last seen"
-            {...sortProps(sort, onSort, 'last_cited_at')}
-            numeric
-            className={URL_COLUMNS[8]}
-            hint="The most recent run in this selection whose answer used this URL as a source."
-          />
+    <DataTable
+      label="Cited URLs"
+      columns={urlColumns(sort, onSort, retrieval)}
+      rowCount={rows.length}
+      {...frame}
+    >
+      {rows.map((row) => (
+        <TableRow key={row.key}>
+          <TableCell>
+            <OpenSource onOpen={() => onOpenUrl(row.key)}>
+              <SourceName
+                name={row.title?.trim() || pathOf(row.key)}
+                host={hostOf(row.key)}
+                secondary={row.title?.trim() ? pathOf(row.key) : null}
+              />
+            </OpenSource>
+          </TableCell>
+          <TableCell>
+            <TypeChip token={row.page_format} dimension="url" method={row.page_format_method} />
+          </TableCell>
+          <TableCell desktopOnly>
+            <PageStandingCell standing={row.standing} actionId={row.action_id} />
+          </TableCell>
+          <NumericCell value={count(row.responses)} />
+          <RetrievedCell value={row.retrieved === null ? null : count(row.retrieved)} />
+          <NumericCell value={ratio(row.citation_rate)} />
+          <NumericCell value={count(row.mentions)} desktopOnly />
+          <TableCell desktopOnly>
+            <MentionedChips brands={row.brands} total={row.mentions} />
+          </TableCell>
+          <NumericCell value={sinceLabel(row.last_cited_at)} desktopOnly />
         </TableRow>
-      </TableHeader>
-      <TableBody>
-        {state.kind !== 'rows' ? <StateRows state={state} columns={URL_COLUMNS} /> : null}
-        {state.kind !== 'rows'
-          ? null
-          : rows.map((row) => (
-              <TableRow key={row.key}>
-                <TableCell>
-                  <Pressable
-                    onClick={() => onOpenUrl(row.key)}
-                    className="hover:text-accent-text flex max-w-full min-w-0 items-center transition-colors"
-                  >
-                    <SourceName
-                      name={row.title?.trim() || pathOf(row.key)}
-                      host={hostOf(row.key)}
-                      secondary={row.title?.trim() ? pathOf(row.key) : null}
-                    />
-                  </Pressable>
-                </TableCell>
-                <TableCell>
-                  <TypeChip
-                    token={row.page_format}
-                    dimension="url"
-                    method={row.page_format_method}
-                  />
-                </TableCell>
-                <TableCell className={URL_COLUMNS[2]}>
-                  <PageStandingCell standing={row.standing} actionId={row.action_id} />
-                </TableCell>
-                <NumericCell value={count(row.responses)} />
-                <RetrievedCell value={row.retrieved === null ? null : count(row.retrieved)} />
-                <NumericCell value={ratio(row.citation_rate)} />
-                <NumericCell value={count(row.mentions)} className={URL_COLUMNS[6]} />
-                <TableCell className={URL_COLUMNS[7]}>
-                  <MentionedChips brands={row.brands} total={row.mentions} />
-                </TableCell>
-                <NumericCell value={sinceLabel(row.last_cited_at)} className={URL_COLUMNS[8]} />
-              </TableRow>
-            ))}
-      </TableBody>
-    </Table>
+      ))}
+    </DataTable>
   );
 }

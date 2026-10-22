@@ -4,18 +4,15 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { ListScreen } from '@/components/layout/page-shell';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { IssueDetailRail } from '@/components/site-health/issue-detail-rail';
 import { IssueMetadata } from '@/components/site-health/issue-metadata';
 import { PageKindSelect } from '@/components/site-health/page-kind-select';
-import { Card } from '@/components/ui/card';
-import { listRowClasses } from '@/components/ui/list-row';
+import { ListDetailCard, ListDetailRow } from '@/components/ui/list-detail';
 import { Pager } from '@/components/ui/pager';
-import { Pressable } from '@/components/ui/pressable';
 import { QueryState } from '@/components/ui/query-state';
 import { SearchField } from '@/components/ui/search-field';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import { ICONS } from '@/lib/icons';
 import { ISSUE_OCCURRENCE_LIMIT, ISSUE_PAGE_LIMIT } from '@/lib/config/site-health';
@@ -32,7 +29,6 @@ import {
   type IssueFilters,
 } from '@/lib/site-health/issue-filters';
 import { issueTitle } from '@/lib/site-health/issues';
-import { cn } from '@/lib/utils';
 import { textRole } from '@/components/ui/typography';
 
 const FILTER_GROUP_KEYS: Record<'All issues' | 'Severity' | 'Category', readonly string[]> = {
@@ -173,31 +169,31 @@ export function IssuesCatalog({
     );
 
   let issuesBody: ReactNode = (
-    <Card
-      // `overflow-clip` (not `hidden`) rounds the corners without becoming a
-      // scroll container, so the detail rail stays sticky against the page.
-      className={splitPaneClasses('list-detail', 'gap-0 overflow-clip')}
-      aria-busy={issuesQuery.isFetching}
-    >
-      <IssueGroupList
-        rows={rows}
-        selectedGroupId={selected?.group_id}
-        onSelect={catalog.selectIssue}
-      />
-      {shown ? (
-        <IssueDetailRail
-          issue={shown}
-          crawlId={crawlId}
-          detailQuery={detailQuery}
-          canPrevious={catalog.canPageOccurrencesBack}
-          onPrevious={catalog.previousOccurrences}
-          onNext={() => {
-            const next = detailQuery.data?.next_cursor;
-            if (next) catalog.nextOccurrences(next);
-          }}
+    <ListDetailCard
+      busy={issuesQuery.isFetching}
+      list={
+        <IssueGroupList
+          rows={rows}
+          selectedGroupId={selected?.group_id}
+          onSelect={catalog.selectIssue}
         />
-      ) : null}
-    </Card>
+      }
+      detail={
+        shown ? (
+          <IssueDetailRail
+            issue={shown}
+            crawlId={crawlId}
+            detailQuery={detailQuery}
+            canPrevious={catalog.canPageOccurrencesBack}
+            onPrevious={catalog.previousOccurrences}
+            onNext={() => {
+              const next = detailQuery.data?.next_cursor;
+              if (next) catalog.nextOccurrences(next);
+            }}
+          />
+        ) : null
+      }
+    />
   );
   if (issuesQuery.isError) {
     issuesBody = (
@@ -307,20 +303,20 @@ function IssueSummary({
   const typeCount =
     findingView === 'defect' ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
   return (
-    <div className="border-border-subtle desktop:border-b-0 desktop:pb-0 flex flex-wrap gap-x-8 gap-y-3 border-b pb-3">
+    <Inline gap="meta">
       <SummaryMeasure value={typeCount} label={`${findingView} issue types`} />
       <SummaryMeasure value={summary.occurrence_count} label={`${findingView} occurrences`} />
       <SummaryMeasure value={summary.affected_url_count} label="affected URLs" />
-    </div>
+    </Inline>
   );
 }
 
 function SummaryMeasure({ value, label }: Readonly<{ value: number; label: string }>) {
   return (
-    <span className="flex items-baseline gap-2">
+    <Inline as="span" className="items-baseline">
       <span className={textRole('sectionTitle', 'tabular-nums')}>{value}</span>{' '}
       <span className="type-caption">{label}</span>
-    </span>
+    </Inline>
   );
 }
 
@@ -355,35 +351,20 @@ function IssueGroupList({
   selectedGroupId: string | undefined;
   onSelect: (groupId: string) => void;
 }>) {
-  return (
-    // One vertical list at every width: above the detail when the panes
-    // stack, beside it on desktop. A sideways strip of fixed-width cards left
-    // a lone issue stranded at a third of the width.
-    <div className="border-border-subtle divide-border-subtle desktop:border-r desktop:border-b-0 grid min-w-0 divide-y border-b">
-      {rows.map((issue) => {
-        const selected = issue.group_id === selectedGroupId;
-        return (
-          <Pressable
-            key={issue.group_id}
-            type="button"
-            onClick={() => onSelect(issue.group_id)}
-            aria-pressed={selected}
-            className={cn(
-              'focus-ring grid w-full gap-2 px-4 py-3 text-left',
-              listRowClasses({ selected }),
-            )}
-          >
-            <span className={textRole('itemTitle')}>{issueTitle(issue)}</span>
-            <span className="flex flex-wrap items-center justify-between gap-2">
-              <IssueMetadata issue={issue} />
-              <span className="type-caption whitespace-nowrap">
-                {issue.affected_url_count} {issue.affected_url_count === 1 ? 'page' : 'pages'}
-              </span>
-            </span>
-            <span className="type-caption line-clamp-2">{issue.description}</span>
-          </Pressable>
-        );
-      })}
-    </div>
-  );
+  return rows.map((issue) => (
+    <ListDetailRow
+      key={issue.group_id}
+      selected={issue.group_id === selectedGroupId}
+      onSelect={() => onSelect(issue.group_id)}
+    >
+      <span className={textRole('itemTitle')}>{issueTitle(issue)}</span>
+      <Inline as="span" className="flex-wrap justify-between">
+        <IssueMetadata issue={issue} />
+        <span className="type-caption whitespace-nowrap">
+          {issue.affected_url_count} {issue.affected_url_count === 1 ? 'page' : 'pages'}
+        </span>
+      </Inline>
+      <span className="type-caption line-clamp-2">{issue.description}</span>
+    </ListDetailRow>
+  ));
 }

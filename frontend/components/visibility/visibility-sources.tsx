@@ -1,10 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { Globe } from 'lucide-react';
 
-import { BusyBar } from '@/components/ui/busy-bar';
-import { Card, CardContent } from '@/components/ui/card';
-import { ReadError } from '@/components/ui/read-error';
+import type { DataTableState } from '@/components/ui/data-table';
 import { Stack } from '@/components/ui/layout';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { splitPaneClasses } from '@/components/ui/workspace';
@@ -16,16 +15,16 @@ import {
   type PageStandingFilter,
 } from '@/components/visibility/source-filters';
 import { TopMoversCard, useSourceMovers } from '@/components/visibility/source-movers';
-import { NearMissBody, useSourceNearMisses } from '@/components/visibility/source-near-misses';
-import { SourceTableToolbar } from '@/components/visibility/source-toolbar';
+import { NearMissTable, useSourceNearMisses } from '@/components/visibility/source-near-misses';
+import { sourceTableToolbar } from '@/components/visibility/source-toolbar';
 import { TypesCard, UsageCard } from '@/components/visibility/source-charts';
 import { SourceUrlDetail } from '@/components/visibility/source-url-detail';
-import { SourcePaging } from '@/components/visibility/source-panels';
+import { sourcePager } from '@/components/visibility/source-panels';
 import {
   DomainTable,
   UrlTable,
   type SourceFilters,
-  type SourceTableState,
+  type SourceTableFrame,
 } from '@/components/visibility/source-rows';
 import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
 import { optionalStringUrlCodec, setUrlParams, useUrlState } from '@/lib/navigation/url-state';
@@ -271,6 +270,31 @@ export function SourcesPanel({
         : { column, direction: 'desc' },
     );
 
+  // One toolbar for both bodies, so switching to near misses moves nothing.
+  const toolbar = sourceTableToolbar({
+    dimension,
+    search,
+    onSearch: setSearch,
+    rows,
+    domain: activeDomain,
+    domainControl: domain ? null : (
+      <DomainFilter value={pickedDomain} options={domainOptions} onChange={setPickedDomain} />
+    ),
+    typeControl: (
+      <>
+        <TypeFilter
+          dimension={dimension}
+          value={sourceType}
+          options={types}
+          onChange={setSourceType}
+        />
+        {dimension === 'url' ? (
+          <StandingFilter value={standingFilter} onChange={setStanding} />
+        ) : null}
+      </>
+    ),
+  });
+
   return (
     <Stack gap="workspace">
       {onChangeDimension ? (
@@ -282,78 +306,46 @@ export function SourcesPanel({
         />
       ) : null}
 
-      <Card className="relative">
-        <BusyBar active={sourceQuery.isFetching} label="Updating sources" />
-        <SourceTableToolbar
-          dimension={dimension}
-          search={search}
-          onSearch={setSearch}
-          rows={rows}
-          domain={activeDomain}
-          domainControl={
-            domain ? null : (
-              <DomainFilter
-                value={pickedDomain}
-                options={domainOptions}
-                onChange={setPickedDomain}
-              />
-            )
-          }
-          typeControl={
-            <>
-              <TypeFilter
-                dimension={dimension}
-                value={sourceType}
-                options={types}
-                onChange={setSourceType}
-              />
-              {dimension === 'url' ? (
-                <StandingFilter value={standingFilter} onChange={setStanding} />
-              ) : null}
-            </>
-          }
+      {nearMiss ? (
+        <NearMissTable
+          query={nearMissQuery}
+          pageSize={pageSize}
+          toolbar={toolbar}
+          onOpenUrl={onOpenUrl}
+          onPageSizeChange={onPageSizeChange}
         />
-        {/* A floor, with the footer pinned to the bottom of it. The card used
-            to be exactly as tall as whatever it was showing, so a filter that
-            returned three rows instead of ten pulled everything below it up
-            by seven rows -- and then pushed it back down when the filter was
-            cleared. The height is the toolbar plus a full page of rows. */}
-        <CardContent className="flex min-h-[560px] flex-col justify-between">
-          {nearMiss ? (
-            <NearMissBody
-              query={nearMissQuery}
-              pageSize={pageSize}
-              onOpenUrl={onOpenUrl}
-              onPageSizeChange={onPageSizeChange}
-            />
-          ) : (
-            <>
-              <SourceTable
-                dimension={dimension}
-                query={sourceQuery}
-                rows={rows}
-                sort={sort}
-                onSort={onSort}
-                onOpenUrl={onOpenUrl}
-                onOpenDomain={onOpenDomain}
-                pageSize={pageSize}
-                narrowed={Boolean(search || sourceType)}
-                searching={Boolean(search)}
-                gapOnly={gapOnly}
-              />
-              <SourcePaging
-                data={data}
-                domain={activeDomain}
-                dimension={dimension}
-                offset={Math.max(0, Number.parseInt(offset ?? '0', 10) || 0)}
-                pageSize={pageSize}
-                busy={sourceQuery.isFetching}
-                onPageSizeChange={onPageSizeChange}
-              />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      ) : (
+        <SourceTable
+          dimension={dimension}
+          query={sourceQuery}
+          rows={rows}
+          sort={sort}
+          onSort={onSort}
+          onOpenUrl={onOpenUrl}
+          onOpenDomain={onOpenDomain}
+          frame={{
+            toolbar,
+            pageSize,
+            busy: { active: sourceQuery.isFetching, label: 'Updating sources' },
+            state: tableState({
+              query: sourceQuery,
+              rows,
+              narrowed: Boolean(search || sourceType),
+              searching: Boolean(search),
+              gapOnly,
+            }),
+            pager: sourcePager({
+              data,
+              domain: activeDomain,
+              dimension,
+              offset: Math.max(0, Number.parseInt(offset ?? '0', 10) || 0),
+              pageSize,
+              busy: sourceQuery.isFetching,
+              onPageSizeChange,
+            }),
+          }}
+        />
+      )}
 
       {/* The table leads; the usage over time and the type mix explain it below. */}
       <div className={splitPaneClasses('main-aside')}>
@@ -390,28 +382,42 @@ function useStanding(dimension: 'domain' | 'url') {
 function tableState({
   query,
   rows,
-  pageSize,
   narrowed,
   searching,
   gapOnly,
 }: Readonly<{
   query: ReturnType<typeof useSourceAnalysis>['sourceQuery'];
   rows: ReturnType<typeof sortItems>;
-  pageSize: number;
   narrowed: boolean;
   searching: boolean;
   gapOnly: boolean;
-}>): SourceTableState {
-  if (query.isLoading) return { kind: 'loading', rows: pageSize };
-  if (rows.length) return { kind: 'rows' };
-  if (searching) return { kind: 'empty', message: 'No sources on this page match your search.' };
-  if (gapOnly)
+}>): DataTableState | undefined {
+  // A failed read keeps the header and columns, with the fault stated in the
+  // body: an error is a fault to retry, never presented as an empty finding.
+  if (query.isError) {
     return {
-      kind: 'empty',
-      message: 'No read page in this selection lists competitors without you.',
+      kind: 'error',
+      error: query.error,
+      fallback: 'Could not load sources. Check your connection and try again.',
+      onRetry: () => void query.refetch(),
+      pending: query.isFetching,
     };
-  if (narrowed) return { kind: 'empty', message: 'No sources of this type in this selection.' };
-  return { kind: 'empty', message: 'No cited sources in this selection.' };
+  }
+  if (query.isLoading) return { kind: 'loading', label: 'Loading sources…' };
+  if (rows.length) return undefined;
+  return {
+    kind: 'empty',
+    headingLevel: 3,
+    icon: Globe,
+    heading: emptyHeading(searching, gapOnly, narrowed),
+  };
+}
+
+function emptyHeading(searching: boolean, gapOnly: boolean, narrowed: boolean): string {
+  if (searching) return 'No sources on this page match your search.';
+  if (gapOnly) return 'No read page in this selection lists competitors without you.';
+  if (narrowed) return 'No sources of this type in this selection.';
+  return 'No cited sources in this selection.';
 }
 
 /** Whichever table the dimension calls for, carrying its own state inside it. */
@@ -423,10 +429,7 @@ function SourceTable({
   onSort,
   onOpenUrl,
   onOpenDomain,
-  pageSize,
-  narrowed,
-  searching,
-  gapOnly,
+  frame,
 }: Readonly<{
   dimension: 'domain' | 'url';
   query: ReturnType<typeof useSourceAnalysis>['sourceQuery'];
@@ -435,25 +438,8 @@ function SourceTable({
   onSort: (column: string) => void;
   onOpenUrl: (url: string) => void;
   onOpenDomain?: (domain: string) => void;
-  pageSize: number;
-  narrowed: boolean;
-  searching: boolean;
-  gapOnly: boolean;
+  frame: SourceTableFrame;
 }>) {
-  // A failed read is the one state that has no table to fill: there are no
-  // columns to be honest about, and leaving an empty grid under an error
-  // presents a fault as a finding.
-  if (query.isError) {
-    return (
-      <ReadError
-        error={query.error}
-        fallback="Could not load sources. Check your connection and try again."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
-      />
-    );
-  }
-  const state = tableState({ query, rows, pageSize, narrowed, searching, gapOnly });
   const retrieval = query.data?.retrieval;
   return dimension === 'url' ? (
     <UrlTable
@@ -462,7 +448,7 @@ function SourceTable({
       onSort={onSort}
       onOpenUrl={onOpenUrl}
       retrieval={retrieval}
-      state={state}
+      frame={frame}
     />
   ) : (
     <DomainTable
@@ -471,7 +457,7 @@ function SourceTable({
       onSort={onSort}
       onOpenDomain={onOpenDomain}
       retrieval={retrieval}
-      state={state}
+      frame={frame}
     />
   );
 }

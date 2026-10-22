@@ -10,23 +10,16 @@ import { MessageSquareQuote } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatRow } from '@/components/ui/stat-row';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
-import { Stack } from '@/components/ui/layout';
 import { engineLabel } from '@/lib/visibility/dashboard';
 import {
   coverageLine,
@@ -71,8 +64,8 @@ export function VisibilityPerception({
 function PerceptionLoading() {
   return (
     <Stack gap="workspace" aria-busy>
-      <Skeleton className="h-28" />
-      <Skeleton className="h-64" />
+      <Skeleton shape="block" />
+      <Skeleton shape="chart" />
     </Stack>
   );
 }
@@ -104,15 +97,17 @@ function PerceptionState({
   const copy = stateCopy(state, reason);
   return (
     <Card>
-      <CardContent className="grid gap-2">
-        <QueryState
-          kind="empty"
-          headingLevel={3}
-          icon={MessageSquareQuote}
-          heading={copy.heading}
-          description={copy.description}
-        />
-        {coverage?.mentions ? <CoverageNote coverage={coverage} /> : null}
+      <CardContent>
+        <Stack gap="item">
+          <QueryState
+            kind="empty"
+            headingLevel={3}
+            icon={MessageSquareQuote}
+            heading={copy.heading}
+            description={copy.description}
+          />
+          {coverage?.mentions ? <CoverageNote coverage={coverage} /> : null}
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -127,47 +122,49 @@ function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
   const recommended = data.recommended;
   return (
     <Card>
-      <CardContent className="grid gap-2">
-        <StatRow
-          label="Brand perception"
-          segments={[
-            {
-              key: 'net',
-              label: 'Net sentiment',
-              value: formatNet(score?.net_sentiment ?? null),
-              missingLabel: 'Unavailable',
-              sub: 'Positive minus negative, of classified mentions (−100 to +100).',
-            },
-            {
-              key: 'positive',
-              label: 'Positive',
-              value: formatShare(score?.positive_share ?? null),
-              tone: 'success',
-              missingLabel: 'Unavailable',
-              sub: `${score?.positive ?? 0} of ${score?.classified ?? 0} classified mentions`,
-            },
-            {
-              key: 'negative',
-              label: 'Negative',
-              value: formatShare(score?.negative_share ?? null),
-              tone: 'danger',
-              missingLabel: 'Unavailable',
-              sub: `${score?.negative ?? 0} of ${score?.classified ?? 0} classified mentions`,
-            },
-            {
-              key: 'recommended',
-              label: 'Recommended',
-              value: formatShare(recommended.rate),
-              missingLabel: 'Unavailable',
-              sub:
-                `${recommended.recommended} of ${recommended.mentioned} answers naming you` +
-                (recommended.recommended_against
-                  ? `; ${recommended.recommended_against} advised against`
-                  : ''),
-            },
-          ]}
-        />
-        <CoverageNote coverage={data.coverage} />
+      <CardContent>
+        <Stack gap="item">
+          <StatRow
+            label="Brand perception"
+            segments={[
+              {
+                key: 'net',
+                label: 'Net sentiment',
+                value: formatNet(score?.net_sentiment ?? null),
+                missingLabel: 'Unavailable',
+                sub: 'Positive minus negative, of classified mentions (−100 to +100).',
+              },
+              {
+                key: 'positive',
+                label: 'Positive',
+                value: formatShare(score?.positive_share ?? null),
+                tone: 'success',
+                missingLabel: 'Unavailable',
+                sub: `${score?.positive ?? 0} of ${score?.classified ?? 0} classified mentions`,
+              },
+              {
+                key: 'negative',
+                label: 'Negative',
+                value: formatShare(score?.negative_share ?? null),
+                tone: 'danger',
+                missingLabel: 'Unavailable',
+                sub: `${score?.negative ?? 0} of ${score?.classified ?? 0} classified mentions`,
+              },
+              {
+                key: 'recommended',
+                label: 'Recommended',
+                value: formatShare(recommended.rate),
+                missingLabel: 'Unavailable',
+                sub:
+                  `${recommended.recommended} of ${recommended.mentioned} answers naming you` +
+                  (recommended.recommended_against
+                    ? `; ${recommended.recommended_against} advised against`
+                    : ''),
+              },
+            ]}
+          />
+          <CoverageNote coverage={data.coverage} />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -175,94 +172,75 @@ function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
 
 function EntityTable({ entities }: Readonly<{ entities: PerceptionResponse['entities'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>You and competitors</CardTitle>
-        <CardDescription>
-          Classified mentions of each business in the selected answers.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Business</TableHead>
-              <TableHead numeric>Classified</TableHead>
-              <TableHead numeric>Positive</TableHead>
-              <TableHead numeric>Negative</TableHead>
-              <TableHead numeric>Net sentiment</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {entities.map((entity) => (
-              <TableRow key={entity.name}>
-                <TableCell>
-                  <span className="flex min-w-0 items-center gap-2">
-                    <ClampText>{entity.name}</ClampText>
-                    {entity.is_brand ? (
-                      <span className={textRole('caption', 'text-muted shrink-0')}>You</span>
-                    ) : null}
-                  </span>
-                </TableCell>
-                <TableCell numeric>
-                  {entity.score.classified} of {entity.coverage.mentions}
-                </TableCell>
-                <TableCell numeric>{entity.score.positive}</TableCell>
-                <TableCell numeric>{entity.score.negative}</TableCell>
-                <TableCell numeric>
-                  {formatNet(entity.score.net_sentiment) ?? <MissingValue />}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <DataTable
+      title="You and competitors"
+      columns={ENTITY_COLUMNS}
+      footer="Classified mentions of each business in the selected answers."
+    >
+      {entities.map((entity) => (
+        <TableRow key={entity.name}>
+          <TableCell>
+            <Inline as="span">
+              <ClampText>{entity.name}</ClampText>
+              {entity.is_brand ? (
+                <span className={textRole('caption', 'text-muted shrink-0')}>You</span>
+              ) : null}
+            </Inline>
+          </TableCell>
+          <TableCell numeric>
+            {entity.score.classified} of {entity.coverage.mentions}
+          </TableCell>
+          <TableCell numeric>{entity.score.positive}</TableCell>
+          <TableCell numeric>{entity.score.negative}</TableCell>
+          <TableCell numeric>{formatNet(entity.score.net_sentiment) ?? <MissingValue />}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
+}
+
+const ENTITY_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'business', label: 'Business' },
+  { key: 'classified', label: 'Classified', width: 'figure', numeric: true },
+  { key: 'positive', label: 'Positive', width: 'figure', numeric: true },
+  { key: 'negative', label: 'Negative', width: 'figure', numeric: true },
+  { key: 'net', label: 'Net sentiment', width: 'figure', numeric: true },
+];
+
+const THEME_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'theme', label: 'Theme', width: 'name' },
+  { key: 'positive', label: 'Positive', width: 'figure', numeric: true },
+  { key: 'negative', label: 'Negative', width: 'figure', numeric: true },
+  { key: 'quote', label: 'Top quote' },
+];
+
+function noneHere(heading: string): DataTableState {
+  return { kind: 'empty', headingLevel: 3, icon: MessageSquareQuote, heading };
 }
 
 function ThemeTable({ themes }: Readonly<{ themes: PerceptionResponse['themes'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Themes</CardTitle>
-        <CardDescription>
-          What answers praised or criticised about you, with a verified quote.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!themes.length ? (
-          <QueryState kind="empty" inline message="No themes in these answers." />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Theme</TableHead>
-                <TableHead numeric>Positive</TableHead>
-                <TableHead numeric>Negative</TableHead>
-                <TableHead>Top quote</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {themes.map((theme) => (
-                <TableRow key={theme.theme}>
-                  <TableCell>{themeLabel(theme.theme)}</TableCell>
-                  <TableCell numeric>{theme.positive}</TableCell>
-                  <TableCell numeric>{theme.negative}</TableCell>
-                  <TableCell>
-                    {theme.quotes[0] ? (
-                      <ClampText tooltip={`“${theme.quotes[0].text}”`}>
-                        <QuoteLink quote={theme.quotes[0]} />
-                      </ClampText>
-                    ) : null}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <DataTable
+      title="Themes"
+      columns={THEME_COLUMNS}
+      footer="What answers praised or criticised about you, with a verified quote."
+      state={themes.length ? undefined : noneHere('No themes in these answers.')}
+    >
+      {themes.map((theme) => (
+        <TableRow key={theme.theme}>
+          <TableCell>{themeLabel(theme.theme)}</TableCell>
+          <TableCell numeric>{theme.positive}</TableCell>
+          <TableCell numeric>{theme.negative}</TableCell>
+          <TableCell>
+            {theme.quotes[0] ? (
+              <ClampText tooltip={`“${theme.quotes[0].text}”`}>
+                <QuoteLink quote={theme.quotes[0]} />
+              </ClampText>
+            ) : null}
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 
@@ -291,21 +269,19 @@ function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
             message="No negative points about you in these answers."
           />
         ) : (
-          <ul className="grid gap-3">
+          <Stack as="ul">
             {quotes.map((quote) => (
-              <li key={`${quote.execution_id}:${quote.text}`} className="grid gap-1">
+              <Stack as="li" gap="tight" key={`${quote.execution_id}:${quote.text}`}>
                 <QuoteLink quote={quote} />
-                <span
-                  className={textRole('caption', 'text-muted flex flex-wrap items-center gap-2')}
-                >
+                <Inline as="span" className={textRole('caption', 'text-muted flex-wrap')}>
                   <Badge variant="sentiment" value="negative">
                     {themeLabel(quote.theme)}
                   </Badge>
                   {engineLabel(quote.logical_engine)} · {quote.prompt}
-                </span>
-              </li>
+                </Inline>
+              </Stack>
             ))}
-          </ul>
+          </Stack>
         )}
       </CardContent>
     </Card>
@@ -314,35 +290,21 @@ function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
 
 function DriverTable({ drivers }: Readonly<{ drivers: PerceptionResponse['drivers'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sources cited alongside criticism</CardTitle>
-        <CardDescription>
-          Domains cited in answers that criticised you. Cited alongside, not shown to be the cause.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!drivers.length ? (
-          <QueryState kind="empty" inline message="No sources cited alongside criticism." />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Domain</TableHead>
-                <TableHead numeric>Answers</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {drivers.map((driver) => (
-                <TableRow key={driver.domain}>
-                  <TableCell>{driver.domain}</TableCell>
-                  <TableCell numeric>{driver.answers}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <DataTable
+      title="Sources cited alongside criticism"
+      columns={[
+        { key: 'domain', label: 'Domain' },
+        { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
+      ]}
+      footer="Domains cited in answers that criticised you. Cited alongside, not shown to be the cause."
+      state={drivers.length ? undefined : noneHere('No sources cited alongside criticism.')}
+    >
+      {drivers.map((driver) => (
+        <TableRow key={driver.domain}>
+          <TableCell>{driver.domain}</TableCell>
+          <TableCell numeric>{driver.answers}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }

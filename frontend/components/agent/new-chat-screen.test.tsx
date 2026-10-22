@@ -310,6 +310,9 @@ describe('NewChatScreen', () => {
     await user.type(message, '/');
     await user.click(await screen.findByRole('menuitemradio', { name: 'Growth plan' }));
     expect(screen.getByRole('button', { name: 'Skill: Growth plan' })).toBeVisible();
+    // The pick hands focus and the caret back to the field on the next frame;
+    // typing before then lands ahead of the restored caret.
+    await waitFor(() => expect(message).toHaveFocus());
     await user.type(message, 'Compare @pric');
     await user.click(await screen.findByRole('option', { name: /Pricing page/ }));
     expect(message).toHaveValue('Compare @Pricing page ');

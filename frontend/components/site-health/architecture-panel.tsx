@@ -14,23 +14,16 @@ import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Stack } from '@/components/ui/layout';
-import { Meter } from '@/components/ui/meter';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
+import { MeterRow } from '@/components/ui/meter';
 import { Pressable } from '@/components/ui/pressable';
 import { QueryState } from '@/components/ui/query-state';
 import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRecordMetricCell,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { splitPaneClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import type {
@@ -40,7 +33,6 @@ import type {
   SiteArchitecture,
 } from '@/lib/api/types';
 import { PLACEHOLDER } from '@/lib/site-health/status';
-import { textRole } from '@/components/ui/typography';
 
 const COVERAGE_LABELS: Record<CoverageState, string> = {
   complete: 'Complete coverage',
@@ -158,22 +150,25 @@ function ArchitectureLedger({ data }: Readonly<{ data: SiteArchitecture }>) {
             URLs grouped by their persisted structural purpose for this crawl.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
-          <ArchitectureMetrics
-            pageKinds={pageKinds.length}
-            pages={data.page_count}
-            medianDepth={median(depths)}
-            duplicatePages={duplicatePages}
-            orphanCount={data.internal_linking.orphan_page_count}
-          />
-          <CoverageReasons reasons={data.coverage_reasons} />
-          {pageKinds.length === 0 ? (
-            <QueryState kind="empty" inline message="No page kinds were measured." />
-          ) : (
-            <PageKindTable pageKinds={pageKinds} grouped={grouped} crawlId={data.crawl_id} />
-          )}
+        <CardContent>
+          <Stack>
+            <ArchitectureMetrics
+              pageKinds={pageKinds.length}
+              pages={data.page_count}
+              medianDepth={median(depths)}
+              duplicatePages={duplicatePages}
+              orphanCount={data.internal_linking.orphan_page_count}
+            />
+            <CoverageReasons reasons={data.coverage_reasons} />
+            {pageKinds.length === 0 ? (
+              <QueryState kind="empty" inline message="No page kinds were measured." />
+            ) : null}
+          </Stack>
         </CardContent>
       </Card>
+      {pageKinds.length === 0 ? null : (
+        <PageKindTable pageKinds={pageKinds} grouped={grouped} crawlId={data.crawl_id} />
+      )}
       <HierarchyCard nodes={data.nodes} crawlId={data.crawl_id} />
     </Stack>
   );
@@ -236,66 +231,62 @@ function PageKindTable({
 }>) {
   const [openKind, setOpenKind] = useState<string | null>(null);
   return (
-    <Table className="desktop:table block" wrapperClassName="overflow-hidden desktop:overflow-auto">
-      <TableHeader className="desktop:table-header-group hidden">
-        <TableRow>
-          <TableHead>Page kind</TableHead>
-          <TableHead numeric>Pages</TableHead>
-          <TableHead numeric>Median depth</TableHead>
-          <TableHead numeric>Indexable</TableHead>
-          <TableHead numeric>Duplicate metadata</TableHead>
-          <TableHead numeric>Orphaned</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody className="desktop:table-row-group block">
-        {pageKinds.map((pageKind) => {
-          const open = openKind === pageKind.page_kind;
-          const pages = grouped.get(pageKind.page_kind) ?? [];
-          const Chevron = open ? ChevronDown : ChevronRight;
-          return (
-            <Fragment key={pageKind.page_kind}>
-              <TableRow className="desktop:table-row desktop:h-[var(--table-row-height)] desktop:py-0 grid h-auto grid-cols-1 py-2">
-                <TableCell className="desktop:table-cell desktop:border-b desktop:px-[var(--table-cell-padding-x)] desktop:py-[var(--table-cell-padding-y)] block border-b-0 px-4 py-1">
-                  <Pressable
-                    type="button"
-                    aria-expanded={open}
-                    onClick={() => setOpenKind(open ? null : pageKind.page_kind)}
-                    className="desktop:min-h-9 inline-flex min-h-11 w-auto items-center gap-2 text-left"
-                  >
-                    <Chevron className="text-muted size-4 shrink-0" aria-hidden />
+    <DataTable label="Page kinds" columns={PAGE_KIND_COLUMNS} minWidth="md">
+      {pageKinds.map((pageKind) => {
+        const open = openKind === pageKind.page_kind;
+        const pages = grouped.get(pageKind.page_kind) ?? [];
+        return (
+          <Fragment key={pageKind.page_kind}>
+            <TableRow>
+              <TableCell>
+                <Pressable
+                  type="button"
+                  aria-expanded={open}
+                  onClick={() => setOpenKind(open ? null : pageKind.page_kind)}
+                  className="w-auto"
+                >
+                  <Inline as="span">
+                    <Icon icon={open ? ChevronDown : ChevronRight} className="text-muted" />
                     <PageKindBadge pageKind={pageKind.page_kind} />
-                  </Pressable>
-                </TableCell>
-                <TableRecordMetricCell label="Pages">{pageKind.page_count}</TableRecordMetricCell>
-                <TableRecordMetricCell label="Median depth">
-                  {pageKind.median_depth ?? <UnavailableValue state="not_measured" />}
-                </TableRecordMetricCell>
-                <TableRecordMetricCell label="Indexable">
-                  {pageKind.indexable_count} / {pageKind.page_count}
-                </TableRecordMetricCell>
-                <TableRecordMetricCell label="Duplicate metadata">
-                  {pageKind.duplicate_metadata_count}
-                </TableRecordMetricCell>
-                <TableRecordMetricCell label="Orphaned">
-                  {pageKind.orphan_count ?? <UnavailableValue state="not_measured" />}
-                </TableRecordMetricCell>
-              </TableRow>
-              {open ? <PageKindPages pages={pages} crawlId={crawlId} /> : null}
-            </Fragment>
-          );
-        })}
-      </TableBody>
-    </Table>
+                  </Inline>
+                </Pressable>
+              </TableCell>
+              <TableCell numeric>{pageKind.page_count}</TableCell>
+              <TableCell numeric>
+                {pageKind.median_depth ?? <UnavailableValue state="not_measured" />}
+              </TableCell>
+              <TableCell numeric>
+                {pageKind.indexable_count} / {pageKind.page_count}
+              </TableCell>
+              <TableCell numeric>{pageKind.duplicate_metadata_count}</TableCell>
+              <TableCell numeric>
+                {pageKind.orphan_count ?? <UnavailableValue state="not_measured" />}
+              </TableCell>
+            </TableRow>
+            {open ? <PageKindPages pages={pages} crawlId={crawlId} /> : null}
+          </Fragment>
+        );
+      })}
+    </DataTable>
   );
 }
+
+const PAGE_KIND_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'kind', label: 'Page kind' },
+  { key: 'pages', label: 'Pages', width: 'figure', numeric: true },
+  { key: 'depth', label: 'Median depth', width: 'figure', numeric: true },
+  { key: 'indexable', label: 'Indexable', width: 'figure', numeric: true },
+  { key: 'duplicates', label: 'Duplicate metadata', width: 'figure', numeric: true },
+  { key: 'orphaned', label: 'Orphaned', width: 'figure', numeric: true },
+];
 
 function PageKindPages({
   pages,
   crawlId,
 }: Readonly<{ pages: ArchitectureNode[]; crawlId: string | null }>) {
   return (
-    <TableRow className="bg-background-alt hover:bg-background-alt desktop:table-row desktop:h-[var(--table-row-height)] block h-auto">
-      <TableCell colSpan={6} className="desktop:table-cell block py-3">
+    <TableRow className="bg-background-alt hover:bg-background-alt">
+      <TableCell colSpan={6}>
         {pages.length === 0 ? (
           <QueryState
             kind="empty"
@@ -303,7 +294,11 @@ function PageKindPages({
             message="No projected URLs are available for this kind."
           />
         ) : (
-          <ul className="content-scroll grid max-h-64 gap-2 overflow-y-auto overscroll-contain pr-2 pl-6">
+          <Stack
+            as="ul"
+            gap="item"
+            className="content-scroll max-h-64 overflow-y-auto overscroll-contain"
+          >
             {pages.map((page) => (
               <li key={page.site_url_id} className="min-w-0">
                 {crawlId ? (
@@ -321,7 +316,7 @@ function PageKindPages({
                 )}
               </li>
             ))}
-          </ul>
+          </Stack>
         )}
       </TableCell>
     </TableRow>
@@ -337,12 +332,14 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
       <div className={splitPaneClasses('peers')}>
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Link2 className="text-muted size-4" aria-hidden />
-              Internal linking
+            <CardTitle>
+              <Inline as="span">
+                <Icon icon={Link2} className="text-muted" />
+                Internal linking
+              </Inline>
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-4">
+          <CardContent>
             <StatRow
               segments={[
                 {
@@ -375,30 +372,31 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <ListTree className="text-muted size-4" aria-hidden />
-              Structure depth
+            <CardTitle>
+              <Inline as="span">
+                <Icon icon={ListTree} className="text-muted" />
+                Structure depth
+              </Inline>
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3">
-            {data.structure_depth.buckets.map((bucket) => (
-              <div key={bucket.key} className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-3">
-                <span className="type-caption">{DEPTH_LABELS[bucket.key]}</span>
-                <Meter
+          <CardContent>
+            <Stack>
+              {data.structure_depth.buckets.map((bucket) => (
+                <MeterRow
+                  key={bucket.key}
+                  name={DEPTH_LABELS[bucket.key]}
+                  figure={`${bucket.page_count} (${formatPercentage(bucket.percentage)})`}
                   value={bucket.percentage === null ? null : Math.round(bucket.percentage * 100)}
                   label={`${DEPTH_LABELS[bucket.key]} share of pages`}
                   tone={{ series: 1 }}
                 />
-                <span className={textRole('label', 'min-w-16 text-right tabular-nums')}>
-                  {bucket.page_count} ({formatPercentage(bucket.percentage)})
-                </span>
-              </div>
-            ))}
-            {data.structure_depth.unmeasured_page_count > 0 ? (
-              <p className="type-caption">
-                {data.structure_depth.unmeasured_page_count} pages have no measured depth.
-              </p>
-            ) : null}
+              ))}
+              {data.structure_depth.unmeasured_page_count > 0 ? (
+                <p className="type-caption">
+                  {data.structure_depth.unmeasured_page_count} pages have no measured depth.
+                </p>
+              ) : null}
+            </Stack>
           </CardContent>
         </Card>
       </div>

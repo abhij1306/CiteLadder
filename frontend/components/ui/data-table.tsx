@@ -8,6 +8,7 @@ import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Pager } from '@/components/ui/pager';
 import { QueryState, type QueryStateProps } from '@/components/ui/query-state';
 import {
+  HintedTableHead,
   SortableTableHead,
   Table,
   TableBody,
@@ -29,6 +30,14 @@ import { cn } from '@/lib/utils';
  */
 const COLUMN_WIDTH = {
   flex: '',
+  /**
+   * The record's identity (a source, a page) in a table whose other columns
+   * are flexible figures: a quarter of the table, so the figures share the
+   * rest evenly whatever the viewport.
+   */
+  lead: 'w-1/4',
+  /** A row's ordinal on the page (#). */
+  index: 'w-12',
   /** A count, a rate or a short figure. */
   figure: 'w-28',
   /** A status badge or a short label. */
@@ -54,14 +63,19 @@ export type DataTableColumn = Readonly<{
   sort?: Readonly<{ active: boolean; descending: boolean; onSort: () => void }>;
   /** A qualifier under a sortable label, e.g. the comparison window. */
   sublabel?: string;
-  /** The column's shared caveat, behind a tooltip on a sortable header. */
+  /** The column's shared caveat, behind a tooltip on the header. */
   hint?: string;
+  /**
+   * The narrow layout drops this column; the page's cells for it pass
+   * `desktopOnly` to `TableCell` too.
+   */
+  desktopOnly?: boolean;
 }>;
 
 /** A table read's state when it has no rows to show: loading, error or empty. */
 export type DataTableState = Exclude<QueryStateProps, { inline: true }>;
 
-type DataTablePager = Omit<ComponentProps<typeof Pager>, 'frame' | 'className'>;
+export type DataTablePager = Omit<ComponentProps<typeof Pager>, 'frame' | 'className'>;
 
 /**
  * DataTable — the record table organism: a header, the rows, the pager and
@@ -131,7 +145,13 @@ export function DataTable({
       <Table fixed minWidth={minWidth}>
         <colgroup>
           {columns.map((column) => (
-            <col key={column.key} className={COLUMN_WIDTH[column.width ?? 'flex']} />
+            <col
+              key={column.key}
+              className={cn(
+                COLUMN_WIDTH[column.width ?? 'flex'],
+                column.desktopOnly && 'hidden desktop:table-column',
+              )}
+            />
           ))}
         </colgroup>
         <TableHeader>
@@ -151,7 +171,11 @@ export function DataTable({
         </DataTableBody>
       </Table>
       {pager ? <Pager frame="table" {...pager} /> : null}
-      {footer}
+      {footer ? (
+        <div className="type-caption border-border-subtle grid gap-1 border-t px-[var(--table-cell-padding-x)] py-2">
+          {footer}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -230,12 +254,23 @@ function ColumnHead({ column }: Readonly<{ column: DataTableColumn }>) {
         numeric={column.numeric}
         sublabel={column.sublabel}
         hint={column.hint}
+        desktopOnly={column.desktopOnly}
         {...column.sort}
       />
     );
   }
+  if (column.hint) {
+    return (
+      <HintedTableHead
+        label={column.label}
+        hint={column.hint}
+        numeric={column.numeric}
+        desktopOnly={column.desktopOnly}
+      />
+    );
+  }
   return (
-    <TableHead numeric={column.numeric}>
+    <TableHead numeric={column.numeric} desktopOnly={column.desktopOnly}>
       {column.hideLabel ? <span className="sr-only">{column.label}</span> : column.label}
     </TableHead>
   );

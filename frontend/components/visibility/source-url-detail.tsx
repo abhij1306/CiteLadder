@@ -3,6 +3,7 @@
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ReadError } from '@/components/ui/read-error';
 import { StatRow } from '@/components/ui/stat-row';
@@ -59,7 +60,7 @@ export function SourceUrlDetail({
   const title = data?.title?.trim() || pathOf(url);
 
   return (
-    <div className="grid gap-[var(--workspace-gap)]">
+    <Stack gap="workspace">
       <SourceBreadcrumb
         // Two crumbs, two destinations. Both calling `onBack` meant clicking
         // "Sources" from a URL opened inside a domain landed on that domain.
@@ -82,7 +83,7 @@ export function SourceUrlDetail({
               pending={query.isFetching}
             />
           ) : null}
-          {query.isLoading ? <Skeleton className="h-20 w-full" /> : null}
+          {query.isLoading ? <Skeleton shape="block" /> : null}
           {data ? <Overview data={data} /> : null}
         </CardContent>
       </Card>
@@ -105,7 +106,7 @@ export function SourceUrlDetail({
       </div>
 
       <SourcePrompts filters={filters} queries={queries} url={url} />
-    </div>
+    </Stack>
   );
 }
 
@@ -114,20 +115,20 @@ function PageIdentity({ title, url }: Readonly<{ title: string; url: string }>) 
   const host = hostOf(url);
   return (
     <CardHeader>
-      <div className="flex min-w-0 items-start gap-3">
+      <Inline gap="compact" className="items-start">
         <BrandLogo
           name={host ?? url}
           websiteUrl={host ? `https://${host}` : null}
           placement="identity"
         />
-        <div className="grid min-w-0 gap-1">
+        <Stack gap="tight" className="min-w-0">
           <CardTitle className="truncate">{title}</CardTitle>
           {/* An unsafe cited URL renders as plain text rather than a link. */}
           <TextLink variant="external" text="caption" href={url} className="min-w-0">
             <span className="truncate">{url}</span>
           </TextLink>
-        </div>
-      </div>
+        </Stack>
+      </Inline>
     </CardHeader>
   );
 }

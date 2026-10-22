@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 
 import { Button, type ButtonProps } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useActiveProject } from '@/lib/project/project-context';
 
@@ -28,7 +29,7 @@ export function LaunchAuditButton({
         disabled={!project || buttonProps.disabled}
         onClick={() => setOpen(true)}
       >
-        {showIcon ? <Rocket className="size-4" aria-hidden /> : null}
+        {showIcon ? <Icon icon={Rocket} /> : null}
         {children}
       </Button>
       {project ? (

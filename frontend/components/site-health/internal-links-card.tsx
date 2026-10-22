@@ -4,7 +4,8 @@ import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { Label, textRole } from '@/components/ui/typography';
 import type { PageDetail } from '@/lib/api/types';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Inline, Stack } from '@/components/ui/layout';
+import { ledgerClasses, ledgerItemClasses, splitPaneClasses } from '@/components/ui/workspace';
 
 /**
  * Internal links — the crawl's persisted link-graph projection for this page.
@@ -56,12 +57,12 @@ export function InternalLinksCard({
     },
   ];
   return (
-    <div className="grid min-w-0 gap-4">
+    <Stack gap="workspace" className="min-w-0">
       <p className={textRole('caption')}>
         {`Modelled over ${links.source_page_count} observed crawl page${links.source_page_count === 1 ? '' : 's'}${links.observed_crawl_incomplete ? '; this crawl is incomplete or sampled' : ''}`}
       </p>
       <StatRow segments={metrics.map((metric) => ({ key: metric.label, ...metric }))} />
-      <div className="desktop:grid-cols-2 grid min-w-0 gap-4">
+      <div className={splitPaneClasses('peers')}>
         <NeighbourList
           heading="Top linking pages"
           neighbours={links.top_inbound}
@@ -75,7 +76,7 @@ export function InternalLinksCard({
           emptyMessage="This page links to no other crawled page."
         />
       </div>
-    </div>
+    </Stack>
   );
 }
 
@@ -91,16 +92,18 @@ function NeighbourList({
   emptyMessage: string;
 }>) {
   return (
-    <section className="grid min-w-0 content-start gap-2 overflow-hidden">
+    <Stack as="section" gap="item" className="min-w-0 content-start overflow-hidden">
       <Label>{heading}</Label>
       {neighbours.length === 0 ? (
         <QueryState kind="empty" inline message={emptyMessage} />
       ) : (
         <ul className={ledgerClasses()}>
           {neighbours.map((neighbour) => (
-            <li
+            <Inline
+              as="li"
+              gap="compact"
               key={`${neighbour.site_url_id ?? neighbour.url}`}
-              className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 py-2 first:pt-0"
+              className={ledgerItemClasses('items-start justify-between')}
             >
               {/* An off-crawl target is counted but was never a node, so it has
                   no detail route to link to. */}
@@ -121,15 +124,15 @@ function NeighbourList({
                   {neighbour.url}
                 </span>
               )}
-              <span className="flex shrink-0 items-center gap-2">
+              <Inline as="span" className="shrink-0">
                 {neighbour.main_content ? <Badge>Main</Badge> : null}
                 {neighbour.nofollow ? <Badge className="text-muted">nofollow</Badge> : null}
                 <span className="type-caption tabular-nums">×{neighbour.anchor_count}</span>
-              </span>
-            </li>
+              </Inline>
+            </Inline>
           ))}
         </ul>
       )}
-    </section>
+    </Stack>
   );
 }

@@ -7,11 +7,11 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { httpErrorStatus } from '@/lib/api/errors';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LegendSwatch } from '@/components/ui/chart';
 import type { DataTone } from '@/components/ui/data-tone';
 import { Delta } from '@/components/ui/delta';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { InfoHint } from '@/components/ui/info-hint';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
@@ -116,22 +116,11 @@ export function VisibilityTrends({
           onClearFocus={() => setFocused(null)}
           brandName={selected.rankings.find((row) => row.is_brand)?.name ?? null}
         />
-        <Card>
-          <CardHeader>
-            <CardTitle>Brand and competitors</CardTitle>
-            <CardDescription>
-              How often each brand is named, across the same answers. Select a row to plot it on its
-              own.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RankingRowsTable
-              rows={selected.rankings}
-              onSelect={setFocused}
-              selectedName={focusedBrand}
-            />
-          </CardContent>
-        </Card>
+        <RankingRowsTable
+          rows={selected.rankings}
+          onSelect={setFocused}
+          selectedName={focusedBrand}
+        />
       </div>
       <EngineComparison
         visibility={selected}
@@ -289,11 +278,7 @@ function MeasurementHistory({
       />
     );
   } else if (query.isPending) {
-    body = (
-      <output className="bg-surface-2 grid min-h-48 place-items-center rounded-[var(--radius-control)]">
-        <span className={textRole('body', 'text-secondary')}>Loading measurement history…</span>
-      </output>
-    );
+    body = <QueryState kind="loading" label="Loading measurement history…" />;
   } else if (!points.length) {
     body = <QueryState kind="empty" inline message="No measurements in this period yet." />;
   } else {
@@ -310,7 +295,7 @@ function MeasurementHistory({
           formatTick={(value) => `${Math.round(value)}%`}
           className="h-auto w-full"
         />
-        <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <Inline as="ul" gap="meta">
           <SeriesKey label={primaryLabel} tone={{ series: 1 }} />
           {competitors.map((entry) => (
             <SeriesKey key={entry.label} label={entry.label} tone={{ series: entry.series }} />
@@ -322,7 +307,7 @@ function MeasurementHistory({
               </Button>
             </li>
           ) : null}
-        </ul>
+        </Inline>
       </Stack>
     );
   }
@@ -348,9 +333,9 @@ function MeasurementHistory({
 /** One entry in the chart key: the brand, then each comparison line. */
 function SeriesKey({ label, tone }: Readonly<{ label: string; tone: DataTone }>) {
   return (
-    <li className="flex items-center gap-2">
+    <Inline as="li">
       <LegendSwatch tone={tone} />
       <span className={textRole('caption')}>{label}</span>
-    </li>
+    </Inline>
   );
 }

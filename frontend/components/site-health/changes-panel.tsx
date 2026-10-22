@@ -1,23 +1,18 @@
 'use client';
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import { GitCompare } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Pager } from '@/components/ui/pager';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { StatRow } from '@/components/ui/stat-row';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
+import { treeBranchClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import type { ChangeObservation, ChangesPage, ChangeSummary } from '@/lib/api/types';
 import { cursorControls, pageRange, useCursorTable } from '@/lib/table/use-cursor-table';
@@ -61,7 +56,7 @@ function ChangeValue({ value, depth = 0 }: Readonly<{ value: unknown; depth?: nu
         </>
       );
     return (
-      <ul className="grid gap-1 pl-3">
+      <ul className={treeBranchClasses()}>
         {value.slice(0, CHANGE_EVIDENCE_LIMIT).map((item, index) => (
           <li
             key={index} // NOSONAR -- an immutable evidence array that never reorders and may repeat values; position is the identity
@@ -137,7 +132,7 @@ function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number 
   };
   fields.sort(([left], [right]) => rank(left) - rank(right));
   return (
-    <dl className="grid gap-1 pl-3">
+    <dl className={treeBranchClasses()}>
       {fields.slice(0, CHANGE_EVIDENCE_LIMIT).map(([key, item]) => (
         <div key={key}>
           <dt className="text-muted inline">{boundedText(key.replaceAll('_', ' '))}: </dt>
@@ -164,11 +159,11 @@ function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number 
 
 function Evidence({ row }: Readonly<{ row: ChangeObservation }>) {
   return (
-    <details className="grid gap-2">
+    <Stack as="details" gap="item">
       <summary className={textRole('label', 'text-accent-text cursor-pointer')}>
         View evidence
       </summary>
-      <dl className="type-caption grid gap-1">
+      <Stack as="dl" gap="tight" className="type-caption">
         <div>
           <dt className="text-muted inline">Before: </dt>
           <dd className="inline">
@@ -193,8 +188,8 @@ function Evidence({ row }: Readonly<{ row: ChangeObservation }>) {
             <dd className="inline break-all">{row.implementation_event_id}</dd>
           </div>
         ) : null}
-      </dl>
-    </details>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -311,7 +306,7 @@ function ChangesTable({
   const rows = changes.items;
   const counts = summary.summary.counts_by_class as Record<string, number> | undefined;
   return (
-    <div className="grid min-w-0 gap-[var(--workspace-gap)]" data-testid="website-changes">
+    <Stack gap="workspace" className="min-w-0" data-testid="website-changes">
       <Card>
         <CardHeader>
           <CardTitle>Website Changes</CardTitle>
@@ -320,7 +315,7 @@ function ChangesTable({
             exact implementation-event matches.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4">
+        <CardContent>
           <StatRow
             segments={Object.entries(CLASS_LABELS).map(([key, label]) => ({
               key,
@@ -328,58 +323,62 @@ function ChangesTable({
               value: counts?.[key] ?? 0,
             }))}
           />
-          {rows.length ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Page</TableHead>
-                  <TableHead>Field</TableHead>
-                  <TableHead>Class</TableHead>
-                  <TableHead>Evidence</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      <TextLink
-                        text="emphasis"
-                        href={`/site/crawls/${summary.crawl_b_id}/pages/${row.site_url_id}`}
-                      >
-                        <ClampText>{displayPath(row.normalized_url)}</ClampText>
-                      </TextLink>
-                    </TableCell>
-                    <TableCell>{row.field.replaceAll('_', ' ')}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <Badge>{CLASS_LABELS[row.change_class]}</Badge>
-                      {row.expected ? <span className="type-caption ml-2">Expected</span> : null}
-                    </TableCell>
-                    <TableCell>
-                      <Evidence row={row} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <QueryState
-              kind="empty"
-              inline
-              message="No changes were observed in this comparable pair."
-            />
-          )}
-          <Pager
-            frame="table"
-            range={{ ...pageRange(pager.page, pager.pageSize, rows.length), noun: 'changes' }}
-            // No exact total: a change set is scoped to one compared crawl
-            // pair and no persisted count describes it, so the range stands
-            // alone rather than paying for a COUNT(*) per navigation.
-            pageSize={{ value: pager.pageSize, onChange: pager.setPageSize }}
-            {...cursorControls(pager, changes.next_cursor)}
-            busy={isFetching}
-          />
         </CardContent>
       </Card>
-    </div>
+      <DataTable
+        label="Website changes"
+        columns={CHANGE_COLUMNS}
+        minWidth="md"
+        state={
+          rows.length
+            ? undefined
+            : {
+                kind: 'empty',
+                icon: GitCompare,
+                headingLevel: 3,
+                heading: 'No changes were observed in this comparable pair.',
+              }
+        }
+        pager={{
+          range: { ...pageRange(pager.page, pager.pageSize, rows.length), noun: 'changes' },
+          // No exact total: a change set is scoped to one compared crawl
+          // pair and no persisted count describes it, so the range stands
+          // alone rather than paying for a COUNT(*) per navigation.
+          pageSize: { value: pager.pageSize, onChange: pager.setPageSize },
+          ...cursorControls(pager, changes.next_cursor),
+          busy: isFetching,
+        }}
+      >
+        {rows.map((row) => (
+          <TableRow key={row.id}>
+            <TableCell>
+              <TextLink
+                text="emphasis"
+                href={`/site/crawls/${summary.crawl_b_id}/pages/${row.site_url_id}`}
+              >
+                <ClampText>{displayPath(row.normalized_url)}</ClampText>
+              </TextLink>
+            </TableCell>
+            <TableCell>{row.field.replaceAll('_', ' ')}</TableCell>
+            <TableCell>
+              <Inline className="whitespace-nowrap">
+                <Badge>{CLASS_LABELS[row.change_class]}</Badge>
+                {row.expected ? <span className="type-caption">Expected</span> : null}
+              </Inline>
+            </TableCell>
+            <TableCell>
+              <Evidence row={row} />
+            </TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
+    </Stack>
   );
 }
+
+const CHANGE_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'page', label: 'Page' },
+  { key: 'field', label: 'Field', width: 'name' },
+  { key: 'class', label: 'Class', width: 'name' },
+  { key: 'evidence', label: 'Evidence' },
+];

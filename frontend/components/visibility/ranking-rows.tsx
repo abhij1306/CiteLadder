@@ -1,14 +1,10 @@
 'use client';
 
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Users } from 'lucide-react';
+
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Inline } from '@/components/ui/layout';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Pressable } from '@/components/ui/pressable';
 import { MissingValue } from '@/components/ui/unavailable-value';
@@ -20,8 +16,7 @@ import {
   measured,
 } from '@/lib/visibility/dashboard';
 import { Delta } from '@/components/ui/delta';
-import { QueryState } from '@/components/ui/query-state';
-import { Pager, pageNumberControls, useTablePage } from '@/components/ui/pager';
+import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { textRole } from '@/components/ui/typography';
 import { tagClasses } from '@/components/ui/tag-variants';
 
@@ -191,8 +186,6 @@ export function RankingRowsTable({
     (a, b) => (b.mention_rate ?? -1) - (a.mention_rate ?? -1) || a.name.localeCompare(b.name),
   );
   const { page, setPage, pageCount, from, to } = useTablePage(ordered.length, PAGE_SIZE);
-  if (!ordered.length)
-    return <QueryState kind="empty" inline message="No measured responses in this selection." />;
   const paged = ordered.slice(from - 1, to);
   // With no prior run there is no change for ANY brand, and a column of
   // "No comparable change" told the reader nothing seven times over. The reason
@@ -206,94 +199,102 @@ export function RankingRowsTable({
   // than filled with a placeholder in every row.
   const anyPosition = rankedCount > 0;
   return (
-    <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Brand</TableHead>
-            <TableHead numeric>Visibility</TableHead>
-            {/* "Rank", not "Position": the headline Average position is the
-                mean order an answer names you in, a different measure that can
-                read #1 while this column reads #3. */}
-            {anyPosition ? <TableHead numeric>Rank</TableHead> : null}
-            {anyChange ? <TableHead numeric>Change</TableHead> : null}
-            <TableHead numeric className="desktop:table-cell hidden">
-              Share of voice
-            </TableHead>
-            <TableHead numeric className="desktop:table-cell hidden">
-              Citations
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {paged.map((row) => {
-            // A matched-subset delta is the same measurement taken over the cells
-            // both runs share. Which one it is belongs to the note above the
-            // table, not to a disclosure inside every cell.
-            const change = row.matched_visibility_delta ?? row.visibility_delta;
-            const selected = selectedName === row.name;
-            return (
-              <TableRow
-                key={`${row.is_brand}-${row.name}`}
-                highlight={row.is_brand || selected}
-                {...selectionProps(row, selected, onSelect)}
-              >
-                <TableCell>
-                  <span className="flex items-center gap-2">
-                    <BrandLogo
-                      name={row.name}
-                      logoUrl={row.logo_url}
-                      websiteUrl={row.website_url}
-                    />
-                    <BrandName row={row} selected={selected} onSelect={onSelect} />
-                    {row.is_brand ? (
-                      <span className={textRole('label', tagClasses('well', 'shrink-0'))}>You</span>
-                    ) : null}
-                  </span>
-                  <ClampText
-                    lines={1}
-                    className={textRole('caption', 'text-secondary desktop:hidden')}
-                  >
-                    {formatRate(row.share_of_voice)} share of voice ·{' '}
-                    {formatRate(row.citation_rate)} citations
-                  </ClampText>
-                </TableCell>
-                {/* The rate is the column. Printing its fraction under every
+    <DataTable
+      title="Brand and competitors"
+      columns={rankingColumns({ anyPosition, anyChange })}
+      pageSize={PAGE_SIZE}
+      rowCount={paged.length}
+      state={
+        ordered.length
+          ? undefined
+          : {
+              kind: 'empty',
+              headingLevel: 3,
+              icon: Users,
+              heading: 'No measured responses in this selection.',
+            }
+      }
+      pager={{
+        range: { from, to, total: ordered.length, noun: 'brands' },
+        ...pageNumberControls(page, pageCount, setPage),
+      }}
+      footer="How often each brand is named, across the same answers. Select a row to plot it on its own."
+    >
+      {paged.map((row) => {
+        // A matched-subset delta is the same measurement taken over the cells
+        // both runs share. Which one it is belongs to the note above the
+        // table, not to a disclosure inside every cell.
+        const change = row.matched_visibility_delta ?? row.visibility_delta;
+        const selected = selectedName === row.name;
+        return (
+          <TableRow
+            key={`${row.is_brand}-${row.name}`}
+            highlight={row.is_brand || selected}
+            {...selectionProps(row, selected, onSelect)}
+          >
+            <TableCell>
+              <Inline as="span">
+                <BrandLogo name={row.name} logoUrl={row.logo_url} websiteUrl={row.website_url} />
+                <BrandName row={row} selected={selected} onSelect={onSelect} />
+                {row.is_brand ? (
+                  <span className={textRole('label', tagClasses('well', 'shrink-0'))}>You</span>
+                ) : null}
+              </Inline>
+              <ClampText lines={1} className={textRole('caption', 'text-secondary desktop:hidden')}>
+                {formatRate(row.share_of_voice)} share of voice · {formatRate(row.citation_rate)}{' '}
+                citations
+              </ClampText>
+            </TableCell>
+            {/* The rate is the column. Printing its fraction under every
                   row turned a scannable column of percentages into two
                   stacked numbers per cell. */}
-                <TableCell numeric>
-                  {measured(formatRate(row.mention_rate)) ?? <MissingValue />}
-                </TableCell>
-                {anyPosition ? (
-                  <TableCell numeric>
-                    <PositionValue
-                      row={row}
-                      rank={ranks.get(rowKey(row)) ?? null}
-                      rankedCount={rankedCount}
-                    />
-                  </TableCell>
-                ) : null}
-                {anyChange ? (
-                  <TableCell numeric>
-                    <Delta value={change} unit=" pp" />
-                  </TableCell>
-                ) : null}
-                <TableCell numeric className="desktop:table-cell hidden">
-                  {measured(formatRate(row.share_of_voice)) ?? <MissingValue />}
-                </TableCell>
-                <TableCell numeric className="desktop:table-cell hidden">
-                  {measured(formatRate(row.citation_rate)) ?? <MissingValue />}
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-      <Pager
-        frame="table"
-        range={{ from, to, total: ordered.length, noun: 'brands' }}
-        {...pageNumberControls(page, pageCount, setPage)}
-      />
-    </>
+            <TableCell numeric>
+              {measured(formatRate(row.mention_rate)) ?? <MissingValue />}
+            </TableCell>
+            {anyPosition ? (
+              <TableCell numeric>
+                <PositionValue
+                  row={row}
+                  rank={ranks.get(rowKey(row)) ?? null}
+                  rankedCount={rankedCount}
+                />
+              </TableCell>
+            ) : null}
+            {anyChange ? (
+              <TableCell numeric>
+                <Delta value={change} unit=" pp" />
+              </TableCell>
+            ) : null}
+            <TableCell numeric desktopOnly>
+              {measured(formatRate(row.share_of_voice)) ?? <MissingValue />}
+            </TableCell>
+            <TableCell numeric desktopOnly>
+              {measured(formatRate(row.citation_rate)) ?? <MissingValue />}
+            </TableCell>
+          </TableRow>
+        );
+      })}
+    </DataTable>
   );
+}
+
+function rankingColumns({
+  anyPosition,
+  anyChange,
+}: Readonly<{ anyPosition: boolean; anyChange: boolean }>): DataTableColumn[] {
+  return [
+    { key: 'brand', label: 'Brand' },
+    { key: 'visibility', label: 'Visibility', width: 'figure', numeric: true },
+    // "Rank", not "Position": the headline Average position is the mean order
+    // an answer names you in, a different measure that can read #1 while this
+    // column reads #3.
+    ...(anyPosition
+      ? [{ key: 'rank', label: 'Rank', width: 'figure', numeric: true } as const]
+      : []),
+    ...(anyChange
+      ? [{ key: 'change', label: 'Change', width: 'figure', numeric: true } as const]
+      : []),
+    { key: 'sov', label: 'Share of voice', width: 'figure', numeric: true, desktopOnly: true },
+    { key: 'citations', label: 'Citations', width: 'figure', numeric: true, desktopOnly: true },
+  ];
 }

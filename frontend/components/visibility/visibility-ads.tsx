@@ -10,18 +10,11 @@ import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatRow } from '@/components/ui/stat-row';
-import {
-  ClampText,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayShortDate, formatPercent, measured, pluralCount } from '@/lib/format';
 import {
@@ -75,8 +68,8 @@ export function VisibilityAds({
 function AdsLoading() {
   return (
     <Stack gap="workspace" aria-busy>
-      <Skeleton className="h-28" />
-      <Skeleton className="h-64" />
+      <Skeleton shape="block" />
+      <Skeleton shape="chart" />
     </Stack>
   );
 }
@@ -112,15 +105,17 @@ function AdsState({
   const copy = adsStateCopy(state);
   return (
     <Card>
-      <CardContent className="grid gap-2">
-        <QueryState
-          kind="empty"
-          headingLevel={3}
-          icon={Megaphone}
-          heading={copy.heading}
-          description={copy.description}
-        />
-        <EngineApplicability engines={engines} />
+      <CardContent>
+        <Stack gap="item">
+          <QueryState
+            kind="empty"
+            headingLevel={3}
+            icon={Megaphone}
+            heading={copy.heading}
+            description={copy.description}
+          />
+          <EngineApplicability engines={engines} />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -129,50 +124,52 @@ function AdsState({
 function EngineApplicability({ engines }: Readonly<{ engines: VisibilityAdsResponse['engines'] }>) {
   if (!engines.length) return null;
   return (
-    <ul className={textRole('caption', 'text-muted flex flex-wrap gap-x-4 gap-y-1')}>
+    <Inline as="ul" gap="meta" className={textRole('caption', 'text-muted')}>
       {engines.map((engine) => (
         <li key={engine.engine}>
           {engineLabel(engine.engine)}: {AD_APPLICABILITY[engine.applicability]}
         </li>
       ))}
-    </ul>
+    </Inline>
   );
 }
 
 function Headline({ data }: Readonly<{ data: VisibilityAdsResponse }>) {
   return (
     <Card>
-      <CardContent className="grid gap-2">
-        <StatRow
-          label="Ads in ChatGPT answers"
-          segments={[
-            {
-              key: 'presence',
-              label: 'Ad presence',
-              value: measured(formatPercent(data.presence.rate)),
-              missingLabel: 'Unavailable',
-              sub: presenceLine(data.presence),
-            },
-            {
-              key: 'brand',
-              label: 'Your ad share',
-              value: measured(formatPercent(data.brand.share)),
-              missingLabel: 'Not advertising',
-              sub:
-                data.brand.best_rank === null
-                  ? 'No ads of yours were seen.'
-                  : `${data.brand.appearances} of your ads; best position ${data.brand.best_rank}`,
-            },
-            {
-              key: 'advertisers',
-              label: 'Advertisers seen',
-              value: data.advertisers_seen,
-              sub: 'Distinct advertiser domains in these answers.',
-            },
-          ]}
-        />
-        <EngineApplicability engines={data.engines} />
-        <CoverageNote />
+      <CardContent>
+        <Stack gap="item">
+          <StatRow
+            label="Ads in ChatGPT answers"
+            segments={[
+              {
+                key: 'presence',
+                label: 'Ad presence',
+                value: measured(formatPercent(data.presence.rate)),
+                missingLabel: 'Unavailable',
+                sub: presenceLine(data.presence),
+              },
+              {
+                key: 'brand',
+                label: 'Your ad share',
+                value: measured(formatPercent(data.brand.share)),
+                missingLabel: 'Not advertising',
+                sub:
+                  data.brand.best_rank === null
+                    ? 'No ads of yours were seen.'
+                    : `${data.brand.appearances} of your ads; best position ${data.brand.best_rank}`,
+              },
+              {
+                key: 'advertisers',
+                label: 'Advertisers seen',
+                value: data.advertisers_seen,
+                sub: 'Distinct advertiser domains in these answers.',
+              },
+            ]}
+          />
+          <EngineApplicability engines={data.engines} />
+          <CoverageNote />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -184,105 +181,86 @@ function AdvertiserTable({
 }: Readonly<{ advertisers: VisibilityAdsResponse['advertisers']; total: number }>) {
   const timeZone = useDisplayTimeZone();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Advertisers</CardTitle>
-        <CardDescription>
-          {advertisers.length < total
-            ? `The ${advertisers.length} most frequent of ${total} advertisers.`
-            : 'Who paid to appear in these answers.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!advertisers.length ? (
-          <QueryState kind="empty" inline message="No ads in these answers." />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Advertiser</TableHead>
-                <TableHead numeric>Appearances</TableHead>
-                <TableHead numeric>Prompts</TableHead>
-                <TableHead numeric>Share</TableHead>
-                <TableHead numeric>Seen</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {advertisers.map((advertiser) => (
-                <TableRow key={advertiser.domain}>
-                  <TableCell>
-                    <span className="grid min-w-0">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <ClampText lines={1}>{advertiser.name}</ClampText>
-                        <AdOwnershipChip ownership={advertiser.ownership} />
-                      </span>
-                      <ClampText lines={1} className={textRole('caption', 'text-muted')}>
-                        {advertiser.domain}
-                      </ClampText>
-                    </span>
-                  </TableCell>
-                  <TableCell numeric>{advertiser.appearances}</TableCell>
-                  <TableCell numeric>{advertiser.prompts}</TableCell>
-                  <TableCell numeric>{formatPercent(advertiser.share)}</TableCell>
-                  <TableCell numeric>
-                    {formatDisplayShortDate(advertiser.first_seen_at, timeZone)} –{' '}
-                    {formatDisplayShortDate(advertiser.last_seen_at, timeZone)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <DataTable
+      title="Advertisers"
+      columns={ADVERTISER_COLUMNS}
+      footer={
+        advertisers.length < total
+          ? `The ${advertisers.length} most frequent of ${total} advertisers.`
+          : 'Who paid to appear in these answers.'
+      }
+      state={advertisers.length ? undefined : noAds('No ads in these answers.')}
+    >
+      {advertisers.map((advertiser) => (
+        <TableRow key={advertiser.domain}>
+          <TableCell>
+            <span className="grid min-w-0">
+              <Inline as="span">
+                <ClampText lines={1}>{advertiser.name}</ClampText>
+                <AdOwnershipChip ownership={advertiser.ownership} />
+              </Inline>
+              <ClampText lines={1} className={textRole('caption', 'text-muted')}>
+                {advertiser.domain}
+              </ClampText>
+            </span>
+          </TableCell>
+          <TableCell numeric>{advertiser.appearances}</TableCell>
+          <TableCell numeric>{advertiser.prompts}</TableCell>
+          <TableCell numeric>{formatPercent(advertiser.share)}</TableCell>
+          <TableCell numeric>
+            {formatDisplayShortDate(advertiser.first_seen_at, timeZone)} –{' '}
+            {formatDisplayShortDate(advertiser.last_seen_at, timeZone)}
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
+}
+
+const ADVERTISER_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'advertiser', label: 'Advertiser' },
+  { key: 'appearances', label: 'Appearances', width: 'figure', numeric: true },
+  { key: 'prompts', label: 'Prompts', width: 'figure', numeric: true },
+  { key: 'share', label: 'Share', width: 'figure', numeric: true },
+  { key: 'seen', label: 'Seen', width: 'date', numeric: true },
+];
+
+const PROMPT_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'prompt', label: 'Prompt' },
+  { key: 'ads', label: 'Ads seen', width: 'figure', numeric: true },
+  { key: 'top', label: 'Top advertiser', width: 'status' },
+  { key: 'beside', label: 'You mentioned beside a competitor ad', width: 'name' },
+];
+
+function noAds(heading: string): DataTableState {
+  return { kind: 'empty', headingLevel: 3, icon: Megaphone, heading };
 }
 
 function PromptTable({ prompts }: Readonly<{ prompts: VisibilityAdsResponse['prompts'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Prompts that surface ads</CardTitle>
-        <CardDescription>
-          Where a competitor advertised, whether the answer also mentioned you organically. Counts
-          only, not a cause.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!prompts.length ? (
-          <QueryState kind="empty" inline message="No prompt surfaced an ad." />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Prompt</TableHead>
-                <TableHead numeric>Ads seen</TableHead>
-                <TableHead>Top advertiser</TableHead>
-                <TableHead>You mentioned beside a competitor ad</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {prompts.map((row) => {
-                const beside = row.competitor_ad_answers;
-                const withCompetitorAd = beside.brand_mentioned + beside.brand_not_mentioned;
-                return (
-                  <TableRow key={row.prompt}>
-                    <TableCell>{row.prompt}</TableCell>
-                    <TableCell numeric>{row.ads_seen}</TableCell>
-                    <TableCell>{row.top_advertiser?.name ?? <MissingValue />}</TableCell>
-                    <TableCell>
-                      {withCompetitorAd
-                        ? `${beside.brand_mentioned} of ${withCompetitorAd} answers`
-                        : 'No competitor ads'}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <DataTable
+      title="Prompts that surface ads"
+      columns={PROMPT_COLUMNS}
+      footer="Where a competitor advertised, whether the answer also mentioned you organically. Counts only, not a cause."
+      state={prompts.length ? undefined : noAds('No prompt surfaced an ad.')}
+    >
+      {prompts.map((row) => {
+        const beside = row.competitor_ad_answers;
+        const withCompetitorAd = beside.brand_mentioned + beside.brand_not_mentioned;
+        return (
+          <TableRow key={row.prompt}>
+            <TableCell>{row.prompt}</TableCell>
+            <TableCell numeric>{row.ads_seen}</TableCell>
+            <TableCell>{row.top_advertiser?.name ?? <MissingValue />}</TableCell>
+            <TableCell>
+              {withCompetitorAd
+                ? `${beside.brand_mentioned} of ${withCompetitorAd} answers`
+                : 'No competitor ads'}
+            </TableCell>
+          </TableRow>
+        );
+      })}
+    </DataTable>
   );
 }
 
@@ -305,41 +283,44 @@ function CreativeList({
             : 'The ads as text, with where they lead.'}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        {!creatives.items.length ? (
-          <QueryState kind="empty" inline message="No ads in these answers." />
-        ) : (
-          <ul className="grid gap-3">
-            {creatives.items.map((creative) => (
-              <li
-                key={`${creative.advertiser_domain}:${creative.title}:${creative.snippet}:${creative.landing_url}`}
-                className="grid gap-1"
-              >
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className={textRole('emphasis')}>{creative.title || 'Untitled ad'}</span>
-                  <AdOwnershipChip ownership={creative.ownership} />
-                </span>
-                {creative.snippet ? (
-                  <span className={textRole('body', 'text-secondary')}>{creative.snippet}</span>
-                ) : null}
-                <span className={textRole('caption', 'text-muted')}>
-                  {creative.advertiser_name} · {landingLabel(creative.landing_url)} ·{' '}
-                  {pluralCount(creative.appearances, 'appearance')}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {onShowMore ? (
-          <Button
-            variant="secondary"
-            className="justify-self-start"
-            disabled={loadingMore}
-            onClick={onShowMore}
-          >
-            Show more creatives
-          </Button>
-        ) : null}
+      <CardContent>
+        <Stack>
+          {!creatives.items.length ? (
+            <QueryState kind="empty" inline message="No ads in these answers." />
+          ) : (
+            <Stack as="ul">
+              {creatives.items.map((creative) => (
+                <Stack
+                  as="li"
+                  gap="tight"
+                  key={`${creative.advertiser_domain}:${creative.title}:${creative.snippet}:${creative.landing_url}`}
+                >
+                  <Inline as="span" className="flex-wrap">
+                    <span className={textRole('emphasis')}>{creative.title || 'Untitled ad'}</span>
+                    <AdOwnershipChip ownership={creative.ownership} />
+                  </Inline>
+                  {creative.snippet ? (
+                    <span className={textRole('body', 'text-secondary')}>{creative.snippet}</span>
+                  ) : null}
+                  <span className={textRole('caption', 'text-muted')}>
+                    {creative.advertiser_name} · {landingLabel(creative.landing_url)} ·{' '}
+                    {pluralCount(creative.appearances, 'appearance')}
+                  </span>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+          {onShowMore ? (
+            <Button
+              variant="secondary"
+              className="justify-self-start"
+              disabled={loadingMore}
+              onClick={onShowMore}
+            >
+              Show more creatives
+            </Button>
+          ) : null}
+        </Stack>
       </CardContent>
     </Card>
   );

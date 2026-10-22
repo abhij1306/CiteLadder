@@ -12,7 +12,6 @@ import { Label, textRole } from '@/components/ui/typography';
 import { engineLabel, productModelLabel, productTransportLabel } from '@/lib/providers/catalog';
 import type { ExecutionEvidence } from '@/lib/api/types';
 import { classificationBadgeValue, classificationLabel } from '@/lib/runs/status';
-import { cn } from '@/lib/utils';
 
 import { ContentMarkdown } from '@/lib/markdown/markdown';
 import type { Highlight } from '@/lib/markdown/highlight';
@@ -20,7 +19,14 @@ import { claimHighlights, EvidenceClaims } from '@/components/runs/evidence-clai
 import { EvidencePerception, perceptionHighlights } from '@/components/runs/evidence-perception';
 import { EvidenceAds } from '@/components/runs/evidence-ads';
 import { panelClasses } from '@/components/ui/panel';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Icon } from '@/components/ui/icon';
+import { Inline, Stack } from '@/components/ui/layout';
+import {
+  ledgerClasses,
+  ledgerItemClasses,
+  MetaFooter,
+  SubsectionHeader,
+} from '@/components/ui/workspace';
 
 function safeCitationUrl(value: string): string | null {
   try {
@@ -36,18 +42,17 @@ function Outcome({
   detail,
   passed,
 }: Readonly<{ label: string; detail: string; passed: boolean }>) {
-  const Icon = passed ? CheckCircle2 : XCircle;
   return (
-    <div className={panelClasses({ tone: 'well' }, 'flex min-w-0 items-start gap-2')}>
+    <Inline className={panelClasses({ tone: 'well' }, 'items-start')}>
       <Icon
-        className={cn('mt-0.5 size-4 shrink-0', passed ? 'text-success' : 'text-muted')}
-        aria-hidden
+        icon={passed ? CheckCircle2 : XCircle}
+        className={passed ? 'text-success' : 'text-muted'}
       />
       <div className="min-w-0">
         <p className={textRole('itemTitle')}>{label}</p>
         <p className="type-caption">{detail}</p>
       </div>
-    </div>
+    </Inline>
   );
 }
 
@@ -71,10 +76,10 @@ function EvidencePromptHeader({
   const transport = productTransportLabel(evidence.transport_provider);
 
   return (
-    <section className="border-border-subtle grid min-w-0 gap-2 border-b pb-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <Stack as="section" gap="item" className="min-w-0">
+      <Inline className="flex-wrap justify-between">
         <Badge variant="neutral">Prompt #{promptBadgeNumber}</Badge>
-        <div className="flex flex-wrap items-center gap-2">
+        <Inline className="flex-wrap">
           <Badge variant="neutral">
             {engineLabel(evidence.logical_engine)}
             {transport ? ` · ${transport}` : ''}
@@ -83,10 +88,10 @@ function EvidencePromptHeader({
             retrieval={evidence.retrieval_enabled}
             model={productModelLabel(evidence.logical_engine, evidence.transport_model)}
           />
-        </div>
-      </div>
+        </Inline>
+      </Inline>
       <p className={textRole('body')}>{displayPrompt}</p>
-    </section>
+    </Stack>
   );
 }
 
@@ -202,7 +207,7 @@ function EvidenceAnswer({
   // showing nothing — our own gap presented as the brand's absence.
   const measuredAbsence = Boolean(isSearchSurface) && outcome === 'no_ai_overview';
   return (
-    <section className="grid gap-2">
+    <Stack as="section" gap="item">
       <Label>{isSearchSurface ? 'AI Overview' : 'Engine response'}</Label>
       <div className={panelClasses({ tone: 'well' }, 'min-w-0 overflow-hidden')}>
         <EvidenceAnswerBody
@@ -211,7 +216,7 @@ function EvidenceAnswer({
           highlights={highlights}
         />
       </div>
-    </section>
+    </Stack>
   );
 }
 
@@ -268,14 +273,12 @@ function EvidenceOutcomes({ evidence }: Readonly<{ evidence: ExecutionEvidence }
       : 'No configured competitors appeared';
 
   return (
-    <section className="grid gap-3">
-      <div className="grid gap-0.5">
-        <Label>Why it scored this way</Label>
-        <p className="type-caption">
-          Deterministic checks against the persisted answer and source evidence.
-        </p>
-      </div>
-      <div className="desktop:grid-cols-2 grid gap-3">
+    <Stack as="section">
+      <SubsectionHeader
+        title="Why it scored this way"
+        description="Deterministic checks against the persisted answer and source evidence."
+      />
+      <Stack className="desktop:grid-cols-2">
         <Outcome label="Brand detected" detail={brandDetail} passed={evidence.brand_mentioned} />
         <Outcome
           label="Owned source cited"
@@ -288,8 +291,8 @@ function EvidenceOutcomes({ evidence }: Readonly<{ evidence: ExecutionEvidence }
           detail={competitorDetail}
           passed={evidence.competitors_mentioned.length === 0}
         />
-      </div>
-    </section>
+      </Stack>
+    </Stack>
   );
 }
 
@@ -301,11 +304,11 @@ function CitationItem({
   const title = citation.title || citation.domain || citation.url;
 
   return (
-    <li className="flex gap-3 p-4">
-      <span className={textRole('label', 'tabular-nums mt-0.5 w-5 shrink-0')}>{ordinal}</span>
+    <Inline as="li" gap="compact" className={ledgerItemClasses('items-start')}>
+      <span className={textRole('label', 'shrink-0 tabular-nums')}>{ordinal}</span>
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <div className="grid min-w-0 gap-0.5">
+        <Inline gap="compact" className="items-start justify-between">
+          <Stack gap="tight" className="min-w-0">
             {href ? (
               <TextLink variant="external" text="itemTitle" href={href} className="max-w-full">
                 <span className="truncate">{title}</span>
@@ -314,7 +317,7 @@ function CitationItem({
               <p className={textRole('itemTitle', 'truncate')}>{title || 'Untitled source'}</p>
             )}
             <p className="type-caption truncate">{citation.domain}</p>
-          </div>
+          </Stack>
           <Badge
             className="shrink-0"
             variant="classification"
@@ -322,9 +325,9 @@ function CitationItem({
           >
             {classificationLabel(citation.classification)}
           </Badge>
-        </div>
+        </Inline>
       </div>
-    </li>
+    </Inline>
   );
 }
 
@@ -332,13 +335,15 @@ function EvidenceCitationsList({
   citations,
 }: Readonly<{ citations: ExecutionEvidence['citations'] }>) {
   return (
-    <section className="grid gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label>Citations</Label>
-        <span className="type-caption">
-          {citations.length} {citations.length === 1 ? 'source' : 'sources'}
-        </span>
-      </div>
+    <Stack as="section">
+      <SubsectionHeader
+        title="Citations"
+        trailing={
+          <span className="type-caption">
+            {citations.length} {citations.length === 1 ? 'source' : 'sources'}
+          </span>
+        }
+      />
       {citations.length === 0 ? (
         <QueryState
           kind="empty"
@@ -353,20 +358,20 @@ function EvidenceCitationsList({
           ))}
         </ol>
       )}
-    </section>
+    </Stack>
   );
 }
 
 function EvidenceFooter({ evidence }: Readonly<{ evidence: ExecutionEvidence }>) {
   return (
-    <footer className="type-caption border-border-subtle flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3">
-      <span className="inline-flex items-center gap-1">
-        <Search className="size-3" aria-hidden />
+    <MetaFooter>
+      <Inline as="span" gap="tight">
+        <Icon icon={Search} />
         {evidence.prompt_class.replaceAll('_', ' ')} prompt
-      </span>
+      </Inline>
       <span>Analyzer {evidence.analyzer_version}</span>
       <span>Rules {evidence.scoring_rule_version}</span>
-    </footer>
+    </MetaFooter>
   );
 }
 
@@ -387,7 +392,7 @@ export function EvidenceCard({
   outcome?: string;
 }>) {
   return (
-    <div className="grid min-w-0 gap-[var(--workspace-gap)]">
+    <Stack gap="workspace" className="min-w-0">
       <EvidencePromptHeader evidence={evidence} promptText={promptText} promptIndex={promptIndex} />
       <EvidenceMetrics evidence={evidence} />
       <EvidenceAnswer
@@ -408,6 +413,6 @@ export function EvidenceCard({
       <EvidenceOutcomes evidence={evidence} />
       <EvidenceCitationsList citations={evidence.citations} />
       <EvidenceFooter evidence={evidence} />
-    </div>
+    </Stack>
   );
 }

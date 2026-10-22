@@ -6,6 +6,8 @@ import { Search } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { FilterChoice } from '@/components/ui/filter-bar';
+import { Icon } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { SearchField } from '@/components/ui/search-field';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
@@ -334,13 +336,11 @@ function SearchGroupRows({ group }: Readonly<{ group: SearchGroup }>) {
       ) : null}
       {group.rows.map((row) => (
         <TableRow key={`${group.key}-${row.query}`}>
-          <TableCell>
-            <span
-              className={group.label ? 'flex items-start gap-2 ps-4' : 'flex items-start gap-2'}
-            >
-              <Search className="text-muted mt-0.5 size-3 shrink-0" aria-hidden />
+          <TableCell nested={Boolean(group.label)}>
+            <Inline as="span" className="items-start">
+              <Icon icon={Search} className="text-muted" />
               <ClampText>{row.query}</ClampText>
-            </span>
+            </Inline>
           </TableCell>
           <TableCell>{row.engines.map(engineLabel).join(', ')}</TableCell>
           <TableCell numeric>{row.occurrences}</TableCell>

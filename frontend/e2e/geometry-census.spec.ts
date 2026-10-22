@@ -69,6 +69,8 @@ const DATA_TABLE_HEADER_HEIGHT = 49;
 /** A StatRow segment is padded 12 above and below; a row's segments share one height. */
 const STAT_SEGMENT_PADDING_Y = 12;
 const STAT_ROW_HEIGHT_SPREAD = 0;
+/** The Icon atom's one glyph size. */
+const ICON_SIZE = 16;
 
 type Box = Readonly<{ route: string; role: string; label: string; value: number }>;
 
@@ -250,6 +252,12 @@ function measure(route: string) {
     if (heights.length > 1)
       add('stat-row.height-spread', row, Math.max(...heights) - Math.min(...heights));
   }
+  // The Icon atom: one glyph size beside any text, in both axes.
+  for (const element of all('svg[data-icon]')) {
+    const rect = element.getBoundingClientRect();
+    add('icon.size', element, rect.width);
+    add('icon.size', element, rect.height);
+  }
   // Rows only: a DataTable's state row holds a QueryState, measured above.
   for (const row of all('tbody tr:not([data-table-state])')) {
     add('table-row.height', row, row.getBoundingClientRect().height);
@@ -408,6 +416,7 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'data-table-header.height', DATA_TABLE_HEADER_HEIGHT);
   expectOneValue(records, 'stat-segment.padding-y', STAT_SEGMENT_PADDING_Y);
   expectOneValue(records, 'stat-row.height-spread', STAT_ROW_HEIGHT_SPREAD);
+  expectOneValue(records, 'icon.size', ICON_SIZE);
 
   // The account menu is a 32px control like every other one in its row.
   await expect(page.getByRole('button', { name: /^Account menu/ })).toHaveCSS('height', '32px');

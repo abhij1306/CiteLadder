@@ -1,18 +1,12 @@
 'use client';
 
+import type { ComponentProps } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
-import {
-  ClampText,
-  SortableTableHead,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
+import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { scoreTextClass } from '@/components/ui/score-band';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { TextLink } from '@/components/ui/text-link';
@@ -80,17 +74,70 @@ const LINK_COLUMNS: ReadonlyArray<{
   },
 ];
 
+function pagesColumns(
+  sort: PagesSort,
+  onSortChange: ((sort: PagesSort) => void) | undefined,
+): DataTableColumn[] {
+  const sortBy = (next: PagesSort, active: boolean, descending: boolean) =>
+    onSortChange ? { active, descending, onSort: () => onSortChange(next) } : undefined;
+  return [
+    { key: 'index', label: '#', width: 'index', numeric: true },
+    {
+      key: 'url',
+      label: 'Page URL',
+      width: 'name',
+      sort: sortBy(sort === 'url' ? 'status' : 'url', sort === 'url', false),
+    },
+    { key: 'type', label: 'Type', width: 'status' },
+    {
+      key: 'status',
+      label: 'Status',
+      width: 'status',
+      sort: sortBy('status', sort === 'status', false),
+    },
+    { key: 'issues', label: 'Issues', width: 'figure', numeric: true },
+    { key: 'web', label: 'Web Fundamentals', width: 'date', numeric: true },
+    { key: 'aeo', label: 'AEO Readiness', width: 'status', numeric: true },
+    { key: 'coverage', label: 'AEO Coverage', width: 'status', numeric: true },
+    ...LINK_COLUMNS.map((column) => ({
+      key: column.sort,
+      label: column.label,
+      width: 'figure' as const,
+      numeric: true,
+      sort: sortBy(
+        sort === column.sort ? 'status' : column.sort,
+        sort === column.sort,
+        column.descending,
+      ),
+    })),
+    { key: 'indexable', label: 'Main-content indexable', width: 'name' },
+    { key: 'audited', label: 'Last Audit', width: 'date' },
+    { key: 'view', label: 'Actions', width: 'action', hideLabel: true },
+  ];
+}
+
 export function PagesTable({
   pages,
   crawlId,
   sort = 'status',
   onSortChange,
+  state,
+  toolbar,
+  pager,
+  pageSize,
+  busy,
 }: Readonly<{
   pages: PageSummary[];
   crawlId: string;
   sort?: PagesSort;
   /** Omitted where the table is read-only; the link headers then render plain. */
   onSortChange?: (sort: PagesSort) => void;
+  /** What the table shows instead of rows (loading, error, empty). */
+  state?: DataTableState;
+  toolbar?: FilterBarProps;
+  pager?: ComponentProps<typeof DataTable>['pager'];
+  pageSize?: number;
+  busy?: ComponentProps<typeof DataTable>['busy'];
 }>) {
   const router = useNavigate();
   const timeZone = useDisplayTimeZone();
@@ -100,167 +147,118 @@ export function PagesTable({
     router(projectHref(`/site/crawls/${page?.crawl_id ?? crawlId}/pages/${siteUrlId}`));
   };
   return (
-    <Table minWidth="xl">
-      <TableHeader>
-        <TableRow>
-          <TableHead numeric className="w-10">
-            #
-          </TableHead>
-          {onSortChange ? (
-            <SortableTableHead
-              label="Page URL"
-              active={sort === 'url'}
-              descending={false}
-              onSort={() => onSortChange(sort === 'url' ? 'status' : 'url')}
-            />
-          ) : (
-            <TableHead>Page URL</TableHead>
-          )}
-          <TableHead>Type</TableHead>
-          {onSortChange ? (
-            <SortableTableHead
-              label="Status"
-              active={sort === 'status'}
-              descending={false}
-              onSort={() => onSortChange('status')}
-            />
-          ) : (
-            <TableHead>Status</TableHead>
-          )}
-          <TableHead numeric>Issues</TableHead>
-          <TableHead numeric>Web Fundamentals</TableHead>
-          <TableHead numeric>AEO Readiness</TableHead>
-          <TableHead numeric>AEO Coverage</TableHead>
-          {LINK_COLUMNS.map((column) =>
-            onSortChange ? (
-              <SortableTableHead
-                key={column.sort}
-                label={column.label}
-                active={sort === column.sort}
-                descending={column.descending}
-                numeric
-                onSort={() => onSortChange(sort === column.sort ? 'status' : column.sort)}
-              />
-            ) : (
-              <TableHead key={column.sort} numeric>
-                {column.label}
-              </TableHead>
-            ),
-          )}
-          <TableHead>Main-content indexable</TableHead>
-          <TableHead>Last Audit</TableHead>
-          <TableHead className="w-16" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {pages.map((page, index) => (
-          <TableRow
-            key={page.site_url_id}
-            // Preserve native row/cell semantics; View is the announced link.
-            tabIndex={0}
-            onClick={() => openPage(page.site_url_id)}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter' && event.key !== ' ') return;
-              if (event.target !== event.currentTarget) return;
-              event.preventDefault();
-              openPage(page.site_url_id);
-            }}
-            className="focus-ring cursor-pointer"
+    <DataTable
+      label="Pages"
+      columns={pagesColumns(sort, onSortChange)}
+      minWidth="xl"
+      toolbar={toolbar}
+      state={state}
+      pager={pager}
+      pageSize={pageSize}
+      rowCount={pages.length}
+      busy={busy}
+    >
+      {pages.map((page, index) => (
+        <TableRow
+          key={page.site_url_id}
+          // Preserve native row/cell semantics; View is the announced link.
+          tabIndex={0}
+          onClick={() => openPage(page.site_url_id)}
+          onKeyDown={(event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            if (event.target !== event.currentTarget) return;
+            event.preventDefault();
+            openPage(page.site_url_id);
+          }}
+          className="focus-ring cursor-pointer"
+        >
+          <TableCell numeric className="type-caption tabular-nums">
+            {index + 1}
+          </TableCell>
+          {/* A URL is one unbreakable token: both lines are clamped to the
+                fixed column and carry the full value in a tooltip when cut. */}
+          <TableCell>
+            <span className="flex min-w-0 flex-col">
+              <ClampText lines={1} className={textRole('emphasis', 'text-foreground')}>
+                {pageDisplayTitle(page.title, page.display_url)}
+              </ClampText>
+              <ClampText lines={1} className="type-caption tabular-nums">
+                {page.display_url}
+              </ClampText>
+              <LinkedFromLine page={page} />
+            </span>
+          </TableCell>
+          <TableCell className="whitespace-nowrap">
+            <PageKindBadge pageKind={page.page_kind} />
+          </TableCell>
+          <TableCell className="whitespace-nowrap">
+            <Badge variant="status" value={pageStatusBadgeValue(page.analysis_status)}>
+              {statusLabel(page.analysis_status)}
+            </Badge>
+          </TableCell>
+          <TableCell
+            numeric
+            className={cn(
+              'tabular-nums',
+              page.issue_count !== null && page.issue_count > 0 && 'text-danger-text',
+            )}
           >
-            <TableCell numeric className="type-caption tabular-nums">
-              {index + 1}
-            </TableCell>
-            {/* A URL is one unbreakable token, so an untruncated cell takes its
-                full max-content width and shoves every following column off
-                screen — one tracking-parameter URL was enough to make the
-                table unreadable. Both lines are clamped to a fixed column and
-                carry the full value in a tooltip when cut. */}
-            {/* The clamp lives on the inner box, not the `<td>`: under the
-                default `table-layout: auto` browsers treat `max-width` on a
-                cell as advisory and size the column to content anyway. */}
-            <TableCell>
-              <span className="flex w-72 min-w-0 flex-col">
-                <ClampText lines={1} className={textRole('emphasis', 'text-foreground')}>
-                  {pageDisplayTitle(page.title, page.display_url)}
-                </ClampText>
-                <ClampText lines={1} className="type-caption tabular-nums">
-                  {page.display_url}
-                </ClampText>
-                <LinkedFromLine page={page} />
-              </span>
-            </TableCell>
-            <TableCell className="whitespace-nowrap">
-              <PageKindBadge pageKind={page.page_kind} />
-            </TableCell>
-            <TableCell className="whitespace-nowrap">
-              <Badge variant="status" value={pageStatusBadgeValue(page.analysis_status)}>
-                {statusLabel(page.analysis_status)}
-              </Badge>
-            </TableCell>
-            <TableCell
-              numeric
-              className={cn(
-                'tabular-nums',
-                page.issue_count !== null && page.issue_count > 0 && 'text-danger-text',
-              )}
-            >
-              <Measured value={formatIssueCount(page.issue_count)} />
-            </TableCell>
-            <TableCell numeric className={scoreTextClass(page.web_fundamentals_score)}>
-              <MeasurementValue
-                score={page.web_fundamentals_score}
-                coverage={page.web_fundamentals_coverage}
-                state={page.web_fundamentals_state}
-              />
-            </TableCell>
-            <TableCell numeric className={scoreTextClass(page.aeo_readiness_score)}>
-              <MeasurementValue
-                score={page.aeo_readiness_score}
-                coverage={page.aeo_measurement_coverage}
-                state={page.aeo_measurement_state}
-              />
-            </TableCell>
-            <TableCell numeric>
-              {page.aeo_measurement_coverage === null
-                ? measurementStateValue(page.aeo_measurement_state)
-                : `${Math.round(page.aeo_measurement_coverage * 100)}%`}
-            </TableCell>
-            {LINK_COLUMNS.map((column) => {
-              const value = column.value(page);
-              return (
-                <TableCell
-                  key={column.sort}
-                  numeric
-                  className={cn('tabular-nums', value === null ? 'type-caption' : 'text-secondary')}
-                >
-                  {value ?? <UnavailableValue state="not_measured" />}
-                </TableCell>
-              );
-            })}
-            <TableCell className="type-caption whitespace-nowrap">
-              {page.main_content_indexable === null ? (
-                <UnavailableValue state="not_measured" />
-              ) : (
-                formatIndexability(page.main_content_indexable)
-              )}
-            </TableCell>
-            <TableCell className="type-caption whitespace-nowrap">
-              <Measured value={formatAudited(page.last_audited, timeZone)} />
-            </TableCell>
-            <TableCell>
-              <TextLink
-                text="label"
-                href={`/site/crawls/${page.crawl_id}/pages/${page.site_url_id}`}
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`View ${pageDisplayTitle(page.title, page.display_url)} — ${page.display_url}`}
+            <Measured value={formatIssueCount(page.issue_count)} />
+          </TableCell>
+          <TableCell numeric className={scoreTextClass(page.web_fundamentals_score)}>
+            <MeasurementValue
+              score={page.web_fundamentals_score}
+              coverage={page.web_fundamentals_coverage}
+              state={page.web_fundamentals_state}
+            />
+          </TableCell>
+          <TableCell numeric className={scoreTextClass(page.aeo_readiness_score)}>
+            <MeasurementValue
+              score={page.aeo_readiness_score}
+              coverage={page.aeo_measurement_coverage}
+              state={page.aeo_measurement_state}
+            />
+          </TableCell>
+          <TableCell numeric>
+            {page.aeo_measurement_coverage === null
+              ? measurementStateValue(page.aeo_measurement_state)
+              : `${Math.round(page.aeo_measurement_coverage * 100)}%`}
+          </TableCell>
+          {LINK_COLUMNS.map((column) => {
+            const value = column.value(page);
+            return (
+              <TableCell
+                key={column.sort}
+                numeric
+                className={cn('tabular-nums', value === null ? 'type-caption' : 'text-secondary')}
               >
-                View
-              </TextLink>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                {value ?? <UnavailableValue state="not_measured" />}
+              </TableCell>
+            );
+          })}
+          <TableCell className="type-caption whitespace-nowrap">
+            {page.main_content_indexable === null ? (
+              <UnavailableValue state="not_measured" />
+            ) : (
+              formatIndexability(page.main_content_indexable)
+            )}
+          </TableCell>
+          <TableCell className="type-caption whitespace-nowrap">
+            <Measured value={formatAudited(page.last_audited, timeZone)} />
+          </TableCell>
+          <TableCell>
+            <TextLink
+              text="label"
+              href={`/site/crawls/${page.crawl_id}/pages/${page.site_url_id}`}
+              onClick={(event) => event.stopPropagation()}
+              aria-label={`View ${pageDisplayTitle(page.title, page.display_url)} — ${page.display_url}`}
+            >
+              View
+            </TextLink>
+          </TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 

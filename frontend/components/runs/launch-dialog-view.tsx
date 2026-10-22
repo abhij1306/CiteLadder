@@ -1,10 +1,12 @@
 import { Plus, X } from 'lucide-react';
 
 import { ProviderList } from '@/components/providers/provider-list';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
+import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Select } from '@/components/ui/select';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
@@ -141,21 +143,21 @@ function InlineProviderSetup({
 }: Readonly<{ connecting: LogicalEngine | 'any'; onClose: () => void }>) {
   const engine = connecting === 'any' ? null : connecting;
   return (
-    <section
+    <Stack
+      as="section"
+      gap="item"
       aria-label="Connect a provider"
-      className={panelClasses({ tone: 'well' }, 'grid gap-2')}
+      className={panelClasses({ tone: 'well' })}
     >
-      <div className="flex items-center justify-between gap-2">
+      <Inline className="justify-between">
         <p className={textRole('label')}>Connect a provider</p>
-        <Button variant="ghost" size="icon" aria-label="Close provider setup" onClick={onClose}>
-          <X className="size-4" aria-hidden />
-        </Button>
-      </div>
+        <IconButton icon={X} label="Close provider setup" onClick={onClose} />
+      </Inline>
       <div className="max-h-80 overflow-y-auto overscroll-contain">
         {/* Keyed by engine so clicking another engine opens its provider. */}
         <ProviderList key={engine ?? 'any'} expandEngine={engine} />
       </div>
-    </section>
+    </Stack>
   );
 }
 
@@ -174,14 +176,14 @@ function MarketsField({
 }>) {
   if (markets.length < 2) return null;
   return (
-    <fieldset className="grid gap-2">
+    <Stack as="fieldset" gap="item">
       <legend className={textRole('label')}>
         Markets <span className="text-muted">*</span>
       </legend>
       <p className="type-caption text-muted">
         Each market runs separately. An engine that cannot measure a market is skipped there.
       </p>
-      <div className="flex flex-wrap gap-2">
+      <Inline className="flex-wrap">
         {markets.map((market) => (
           <Button
             key={market.id ?? 'default'}
@@ -192,8 +194,8 @@ function MarketsField({
             {market.label}
           </Button>
         ))}
-      </div>
-    </fieldset>
+      </Inline>
+    </Stack>
   );
 }
 
@@ -267,7 +269,7 @@ export function LaunchDialogView({
       open={open}
       onOpenChange={onOpenChange}
       title="Launch an audit"
-      className="w-180"
+      width="wide"
       footer={
         <>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -279,7 +281,7 @@ export function LaunchDialogView({
         </>
       }
     >
-      <div className="grid gap-[var(--workspace-gap)]">
+      <Stack gap="workspace">
         {launchNotice ? <MutationNotice notice={launchNotice} onRetry={onLaunch} /> : null}
         <PromptSetField
           promptSets={promptSets}
@@ -290,12 +292,12 @@ export function LaunchDialogView({
           promptSelectionLabel={promptSelectionLabel}
         />
         <BatchField batches={batches} batchIndex={batchIndex} setBatchIndex={setBatchIndex} />
-        <fieldset className="grid gap-2">
+        <Stack as="fieldset" gap="item">
           <legend className={textRole('label')}>
             Engines <span className="text-muted">*</span>
           </legend>
           {noEngines ? (
-            <div className="grid gap-2">
+            <Stack gap="item">
               <p className="type-body">
                 {unverifiedEngines.length
                   ? `A key is stored for ${unverifiedEngines.map((engine) => ENGINE_LABELS[engine]).join(', ')}, but it has not passed a connection test yet. Test it to launch an audit with it.`
@@ -309,12 +311,12 @@ export function LaunchDialogView({
                   {unverifiedEngines.length ? 'Test connection' : 'Connect a provider'}
                 </Button>
               </div>
-            </div>
+            </Stack>
           ) : null}
           {[true, false].map((consumer) => (
-            <div key={String(consumer)} className="grid gap-2">
+            <Stack key={String(consumer)} gap="item">
               <p className={textRole('label')}>{consumer ? 'Consumer experiences' : 'APIs'}</p>
-              <div className="flex flex-wrap gap-2">
+              <Inline className="flex-wrap">
                 {ENGINE_ORDER.filter((engine) => isConsumerEngine(engine) === consumer).map(
                   (engine) => (
                     <Button
@@ -327,9 +329,7 @@ export function LaunchDialogView({
                           : setConnecting(engine)
                       }
                     >
-                      {configuredEngines.includes(engine) ? null : (
-                        <Plus className="size-3.5" aria-hidden />
-                      )}
+                      {configuredEngines.includes(engine) ? null : <Icon icon={Plus} />}
                       {ENGINE_LABELS[engine]}
                       {configuredEngines.includes(engine) ? null : (
                         <span className="sr-only">, not connected</span>
@@ -337,13 +337,13 @@ export function LaunchDialogView({
                     </Button>
                   ),
                 )}
-              </div>
-            </div>
+              </Inline>
+            </Stack>
           ))}
           {connecting ? (
             <InlineProviderSetup connecting={connecting} onClose={() => setConnecting(null)} />
           ) : null}
-        </fieldset>
+        </Stack>
         <MarketsField markets={markets} marketIds={marketIds} setMarketIds={setMarketIds} />
         <Field
           label="Repetitions"
@@ -358,12 +358,11 @@ export function LaunchDialogView({
               value={repetitions}
               onChange={(event) => setRepetitions(Number(event.target.value))}
               onBlur={() => setRepetitions((current) => clampRepetitions(current))}
-              className="w-28"
             />
           )}
         </Field>
         {estimate ? (
-          <div className={panelClasses({ tone: 'well' }, 'type-caption grid gap-1')}>
+          <Stack gap="tight" className={panelClasses({ tone: 'well' }, 'type-caption')}>
             <span className={textRole('emphasis', 'text-foreground')}>
               {estimate.execution_count} {estimate.execution_count === 1 ? 'response' : 'responses'}{' '}
               planned
@@ -375,13 +374,13 @@ export function LaunchDialogView({
                 ? ` · ~$${(estimate.estimated_total_cost_microusd / 1_000_000).toFixed(4)}`
                 : ' · unavailable'}
             </span>
-          </div>
+          </Stack>
         ) : null}
         <p className="type-caption text-muted">
           Answers that mention you or a competitor are also classified for sentiment, using your
           connected providers.
         </p>
-      </div>
+      </Stack>
     </Dialog>
   );
 }

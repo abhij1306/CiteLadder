@@ -5,8 +5,9 @@ import { Info, Inbox, RefreshCw, SearchX } from 'lucide-react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardEyebrow, CardHeader, CardTitle } from '@/components/ui/card';
+import { Icon } from '@/components/ui/icon';
 import { QueryState } from '@/components/ui/query-state';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ICONS } from '@/lib/icons';
 
@@ -34,14 +35,13 @@ export function EvidenceSkeleton({ title }: Readonly<{ title: string }>) {
       <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3">
-        <Skeleton className="h-24 w-full" />
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="flex items-center gap-3">
-            <Skeleton className="h-4 flex-1" />
-            <Skeleton className="h-4 w-12" />
-          </div>
-        ))}
+      <CardContent>
+        <Stack>
+          <Skeleton shape="block" />
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} shape="line" />
+          ))}
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -64,7 +64,7 @@ export function EvidenceError({
             description="The request failed or timed out. Your filters are unchanged."
             action={
               <Button variant="primary" onClick={onRetry}>
-                <RefreshCw className="size-3.5" aria-hidden />
+                <Icon icon={RefreshCw} />
                 Retry
               </Button>
             }
@@ -135,9 +135,9 @@ export function EvidenceFilteredEmpty({
 
 export function TruncationNotice({ limit }: Readonly<{ limit: number }>) {
   return (
-    <div className="type-caption border-border-subtle flex items-center gap-2 border-t px-4 py-2">
-      <Info className="size-4 shrink-0" aria-hidden />
+    <Inline>
+      <Icon icon={Info} />
       <span>Showing newest {limit} executions; refine filters to narrow results.</span>
-    </div>
+    </Inline>
   );
 }

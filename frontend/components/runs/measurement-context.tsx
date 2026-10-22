@@ -1,4 +1,5 @@
 import { Badge } from '@/components/ui/badge';
+import { Inline } from '@/components/ui/layout';
 import type { ModelProvenance } from '@/lib/api/types';
 
 /**
@@ -34,7 +35,7 @@ export function MeasurementContext({
 
   return (
     <div className={className} data-measurement-context>
-      <span className="flex flex-wrap items-center gap-2">
+      <Inline as="span" className="flex-wrap">
         {aggregate ? (
           <Badge variant="neutral" title={models.join(', ')}>
             Multiple models ({models.length})
@@ -46,7 +47,7 @@ export function MeasurementContext({
         {retrieval === null || retrieval === undefined ? null : (
           <Badge variant="neutral">{retrieval ? 'Retrieval on' : 'Retrieval off'}</Badge>
         )}
-      </span>
+      </Inline>
     </div>
   );
 }

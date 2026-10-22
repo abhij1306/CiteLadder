@@ -1,7 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 
 import { ListScreen } from '@/components/layout/page-shell';
-import { Stack } from '@/components/ui/layout';
+import { Inline, Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { InternalLinksCard } from '@/components/site-health/internal-links-card';
 import { IssueEvidence } from '@/components/site-health/issue-evidence';
@@ -15,7 +15,7 @@ import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import type { DeliveryFacts, IssueOccurrence, PageDetail } from '@/lib/api/types';
 import {
   dimensionLabel,
@@ -144,11 +144,12 @@ function PageMeasurements({ detail }: Readonly<{ detail: PageDetail }>) {
             { value: 'links', label: 'Internal Links' },
           ]}
           ariaLabel="Page measurements"
+          spaced
         >
-          <TabPanel value="delivery" forceMount className="pt-4">
+          <TabPanel value="delivery" forceMount>
             <DeliveryMetrics delivery={detail.delivery} />
           </TabPanel>
-          <TabPanel value="links" forceMount className="pt-4">
+          <TabPanel value="links" forceMount>
             {detail.internal_links ? (
               <InternalLinksCard links={detail.internal_links} crawlId={detail.crawl_id} />
             ) : (
@@ -173,7 +174,7 @@ function LinkedFrom({ detail }: Readonly<{ detail: PageDetail }>) {
       <CardContent>
         <ul className={ledgerClasses()}>
           {detail.linked_from.map((referrer) => (
-            <li key={referrer.site_url_id} className="py-2">
+            <li key={referrer.site_url_id} className={ledgerItemClasses()}>
               <TextLink
                 variant="external"
                 href={referrer.url}
@@ -285,21 +286,23 @@ function IssuesList({ issues }: Readonly<{ issues: IssueOccurrence[] }>) {
         ) : (
           <ol className={ledgerClasses()}>
             {ordered.map((issue) => (
-              <li
+              <Inline
+                as="li"
+                gap="compact"
                 key={issue.occurrence_id}
-                className="desktop:flex-row desktop:items-start desktop:justify-between flex flex-col gap-3 py-3"
+                className={ledgerItemClasses('flex-wrap items-start justify-between')}
               >
-                <div className="grid min-w-0 gap-2">
+                <Stack gap="item" className="min-w-0">
                   <span className={textRole('itemTitle')}>{issue.issue_title}</span>
                   <IssueEvidence occurrence={issue} />
-                </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                </Stack>
+                <Inline className="shrink-0 flex-wrap">
                   <Badge>{dimensionLabel(issue.dimension)}</Badge>
                   <Badge variant="status" value={severityBadgeValue(issue.severity)}>
                     {severityLabel(issue.severity)}
                   </Badge>
-                </div>
-              </li>
+                </Inline>
+              </Inline>
             ))}
           </ol>
         )}

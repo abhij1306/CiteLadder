@@ -71,9 +71,9 @@ export function OrphanPageDrawer({
       closeLabel="Close orphaned pages"
     >
       <Stack gap="section">
-        <ul className="grid gap-3">
+        <Stack as="ul">
           {pages.map((page) => (
-            <li key={page.site_url_id} className="grid min-w-0 gap-0.5">
+            <Stack as="li" gap="tight" key={page.site_url_id} className="min-w-0">
               {/* Openable, like every other page reference in this tab. A count
                 nobody can act on is the failure this whole change is undoing. */}
               {crawlId ? (
@@ -88,9 +88,9 @@ export function OrphanPageDrawer({
                 <span className="type-body truncate">{page.title || page.url}</span>
               )}
               <span className="type-caption truncate">{page.url}</span>
-            </li>
+            </Stack>
           ))}
-        </ul>
+        </Stack>
         {undisclosed > 0 ? <p className="type-caption">and {undisclosed} more</p> : null}
       </Stack>
     </Drawer>

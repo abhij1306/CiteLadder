@@ -3,6 +3,8 @@
 import type { ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 
+import { Icon } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
 import { Pressable } from '@/components/ui/pressable';
 import { textRole } from '@/components/ui/typography';
 
@@ -26,11 +28,11 @@ export function SourceBreadcrumb({
   actions?: ReactNode;
 }>) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <Inline gap="compact" className="flex-wrap">
       <nav aria-label="Sources breadcrumb" className="min-w-0 flex-1">
-        <ol className="flex min-w-0 flex-wrap items-center gap-1">
+        <Inline as="ol" gap="tight" className="flex-wrap">
           {trail.map((crumb) => (
-            <li key={crumb.label} className="flex items-center gap-1">
+            <Inline as="li" gap="tight" key={crumb.label}>
               <Pressable
                 onClick={crumb.onClick}
                 className={textRole(
@@ -40,17 +42,17 @@ export function SourceBreadcrumb({
               >
                 {crumb.label}
               </Pressable>
-              <ChevronRight className="text-muted size-3 shrink-0" aria-hidden />
-            </li>
+              <Icon icon={ChevronRight} className="text-muted" />
+            </Inline>
           ))}
           <li className="min-w-0">
             <span aria-current="page" className={textRole('sectionTitle', 'block truncate')}>
               {current}
             </span>
           </li>
-        </ol>
+        </Inline>
       </nav>
       {actions}
-    </div>
+    </Inline>
   );
 }

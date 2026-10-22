@@ -31,6 +31,8 @@ export type TabsProps<T extends string> = TabStripProps<T> & {
   onValueChange: (value: T) => void;
   children?: ReactNode;
   rootClassName?: string;
+  /** Section tabs over their panel: one workspace gap between strip and panel. */
+  spaced?: boolean;
 };
 
 /**
@@ -164,10 +166,17 @@ export function Tabs<T extends string>({
   onValueChange,
   children,
   rootClassName,
+  spaced = false,
   ...bar
 }: Readonly<TabsProps<T>>) {
   return (
-    <TabsRoot value={value} onValueChange={onValueChange} className={rootClassName}>
+    <TabsRoot
+      value={value}
+      onValueChange={onValueChange}
+      // `spaced`: the strip and its panel sit one workspace gap apart, as
+      // peers in a section do, so a caller never sets that gap itself.
+      className={cn(spaced && 'grid min-w-0 gap-[var(--workspace-gap)]', rootClassName)}
+    >
       {/* Section tabs draw their own rule, because nothing around them does. */}
       <TabStrip {...bar} ruled />
       {children}

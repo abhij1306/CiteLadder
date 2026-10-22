@@ -12,7 +12,18 @@ import { Button } from './button';
  * shadow-modal, and the shared overlay radius. Header, body, and footer use
  * the modal-padding rhythm and include a built-in close button. Focus opens on
  * the first tabbable element (the close button) unless `initialFocusRef` is set.
+ *
+ * Width is a role, never a number a caller picks: `form` (30rem) for a short
+ * form or a confirmation, `wide` (45rem) for a dialog that lays out a
+ * selection grid or a preview beside its form.
  */
+const DIALOG_WIDTH = {
+  form: 'w-[30rem]',
+  wide: 'w-180',
+} as const;
+
+export type DialogWidth = keyof typeof DIALOG_WIDTH;
+
 export function Dialog({
   open,
   onOpenChange,
@@ -21,6 +32,7 @@ export function Dialog({
   children,
   footer,
   className,
+  width = 'form',
   initialFocusRef,
 }: Readonly<{
   open: boolean;
@@ -30,6 +42,7 @@ export function Dialog({
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  width?: DialogWidth;
   initialFocusRef?: RefObject<HTMLElement | null>;
 }>) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -70,7 +83,8 @@ export function Dialog({
             returnFocusRef.current = null;
           }}
           className={cn(
-            'dialog-panel border-transparent bg-elevated shadow-modal z-modal fixed top-1/2 left-1/2 flex max-h-[calc(100dvh-2.5rem)] w-[30rem] max-w-[calc(100vw-2.5rem)] min-w-0 -translate-x-1/2 -translate-y-1/2 flex-col box-border rounded-[var(--radius-card)] border focus-ring',
+            'dialog-panel border-transparent bg-elevated shadow-modal z-modal fixed top-1/2 left-1/2 flex max-h-[calc(100dvh-2.5rem)] max-w-[calc(100vw-2.5rem)] min-w-0 -translate-x-1/2 -translate-y-1/2 flex-col box-border rounded-[var(--radius-card)] border focus-ring',
+            DIALOG_WIDTH[width],
             className,
           )}
         >

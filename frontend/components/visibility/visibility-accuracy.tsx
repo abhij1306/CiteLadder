@@ -6,24 +6,18 @@ import {
   type AccuracyCoverage,
   type AccuracyResponse,
 } from '@citeladder/contracts/fact-checking';
-import { ShieldCheck } from 'lucide-react';
+import { Globe, ShieldCheck } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Stack } from '@/components/ui/layout';
+import { DataTable } from '@/components/ui/data-table';
+import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatRow } from '@/components/ui/stat-row';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
@@ -76,8 +70,8 @@ export function VisibilityAccuracy({
   if (!query.data)
     return (
       <Stack gap="workspace" aria-busy>
-        <Skeleton className="h-28" />
-        <Skeleton className="h-64" />
+        <Skeleton shape="block" />
+        <Skeleton shape="chart" />
       </Stack>
     );
   return (
@@ -119,15 +113,17 @@ function AccuracyState({
   const copy = accuracyStateCopy(state, reason);
   return (
     <Card>
-      <CardContent className="grid gap-2">
-        <QueryState
-          kind="empty"
-          headingLevel={3}
-          icon={ShieldCheck}
-          heading={copy.heading}
-          description={copy.description}
-        />
-        {coverage?.claims ? <CoverageNote coverage={coverage} /> : null}
+      <CardContent>
+        <Stack gap="item">
+          <QueryState
+            kind="empty"
+            headingLevel={3}
+            icon={ShieldCheck}
+            heading={copy.heading}
+            description={copy.description}
+          />
+          {coverage?.claims ? <CoverageNote coverage={coverage} /> : null}
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -141,40 +137,42 @@ function Headline({ data }: Readonly<{ data: AccuracyResponse }>) {
   const { coverage } = data.score;
   return (
     <Card>
-      <CardContent className="grid gap-2">
-        <StatRow
-          label="Fact checks"
-          segments={[
-            {
-              key: 'accuracy',
-              label: 'Accuracy',
-              value: formatShare(data.score.accuracy),
-              missingLabel: 'Unavailable',
-              sub: 'Supported, of claims that were supported or contradicted.',
-            },
-            {
-              key: 'supported',
-              label: 'Supported',
-              value: String(coverage.supported),
-              tone: 'success',
-              sub: 'A confirmed fact states the same thing.',
-            },
-            {
-              key: 'contradicted',
-              label: 'Contradicted',
-              value: String(coverage.contradicted),
-              tone: 'danger',
-              sub: 'A confirmed fact states something incompatible.',
-            },
-            {
-              key: 'not_covered',
-              label: 'Not covered',
-              value: String(coverage.not_covered + coverage.inconclusive),
-              sub: `${coverage.not_covered} with no fact on the point, ${coverage.inconclusive} inconclusive.`,
-            },
-          ]}
-        />
-        <CoverageNote coverage={coverage} />
+      <CardContent>
+        <Stack gap="item">
+          <StatRow
+            label="Fact checks"
+            segments={[
+              {
+                key: 'accuracy',
+                label: 'Accuracy',
+                value: formatShare(data.score.accuracy),
+                missingLabel: 'Unavailable',
+                sub: 'Supported, of claims that were supported or contradicted.',
+              },
+              {
+                key: 'supported',
+                label: 'Supported',
+                value: String(coverage.supported),
+                tone: 'success',
+                sub: 'A confirmed fact states the same thing.',
+              },
+              {
+                key: 'contradicted',
+                label: 'Contradicted',
+                value: String(coverage.contradicted),
+                tone: 'danger',
+                sub: 'A confirmed fact states something incompatible.',
+              },
+              {
+                key: 'not_covered',
+                label: 'Not covered',
+                value: String(coverage.not_covered + coverage.inconclusive),
+                sub: `${coverage.not_covered} with no fact on the point, ${coverage.inconclusive} inconclusive.`,
+              },
+            ]}
+          />
+          <CoverageNote coverage={coverage} />
+        </Stack>
       </CardContent>
     </Card>
   );
@@ -201,26 +199,24 @@ function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
         {!claims.length ? (
           <QueryState kind="empty" inline message="No contradicted claims in these answers." />
         ) : (
-          <ul className="grid gap-3">
+          <Stack as="ul">
             {claims.map((claim) => (
-              <li key={`${claim.execution_id}:${claim.quote}`} className="grid gap-1">
+              <Stack as="li" gap="tight" key={`${claim.execution_id}:${claim.quote}`}>
                 <ClaimLink claim={claim} />
                 {claim.facts.map((fact) => (
                   <span key={fact.statement} className="type-caption text-secondary">
                     Your fact: {fact.statement}
                   </span>
                 ))}
-                <span
-                  className={textRole('caption', 'text-muted flex flex-wrap items-center gap-2')}
-                >
+                <Inline as="span" className={textRole('caption', 'text-muted flex-wrap')}>
                   <Badge variant="sentiment" value="negative">
                     {TOPIC_LABELS[claim.topic]}
                   </Badge>
                   {engineLabel(claim.logical_engine)} · {claim.prompt}
-                </span>
-              </li>
+                </Inline>
+              </Stack>
             ))}
-          </ul>
+          </Stack>
         )}
       </CardContent>
     </Card>
@@ -240,70 +236,55 @@ function BreakdownTable({
 }>) {
   if (!rows.length) return null;
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{column}</TableHead>
-              <TableHead numeric>Claims</TableHead>
-              <TableHead numeric>{VERDICT_LABELS.supported}</TableHead>
-              <TableHead numeric>{VERDICT_LABELS.contradicted}</TableHead>
-              <TableHead numeric>Accuracy</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.key}>
-                <TableCell>{label(row.key)}</TableCell>
-                <TableCell numeric>{row.score.coverage.claims}</TableCell>
-                <TableCell numeric>{row.score.coverage.supported}</TableCell>
-                <TableCell numeric>{row.score.coverage.contradicted}</TableCell>
-                <TableCell numeric>{formatShare(row.score.accuracy) ?? <MissingValue />}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <DataTable
+      title={title}
+      columns={[
+        { key: 'key', label: column },
+        { key: 'claims', label: 'Claims', width: 'figure', numeric: true },
+        { key: 'supported', label: VERDICT_LABELS.supported, width: 'figure', numeric: true },
+        { key: 'contradicted', label: VERDICT_LABELS.contradicted, width: 'figure', numeric: true },
+        { key: 'accuracy', label: 'Accuracy', width: 'figure', numeric: true },
+      ]}
+    >
+      {rows.map((row) => (
+        <TableRow key={row.key}>
+          <TableCell>{label(row.key)}</TableCell>
+          <TableCell numeric>{row.score.coverage.claims}</TableCell>
+          <TableCell numeric>{row.score.coverage.supported}</TableCell>
+          <TableCell numeric>{row.score.coverage.contradicted}</TableCell>
+          <TableCell numeric>{formatShare(row.score.accuracy) ?? <MissingValue />}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }
 
 function CitedTable({ cited }: Readonly<{ cited: AccuracyResponse['cited_alongside'] }>) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Sources cited alongside contradictions</CardTitle>
-        <CardDescription>
-          Domains cited in answers with a contradicted claim. Cited alongside, not shown to be the
-          source.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {!cited.length ? (
-          <QueryState kind="empty" inline message="No sources cited alongside contradictions." />
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Domain</TableHead>
-                <TableHead numeric>Answers</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {cited.map((row) => (
-                <TableRow key={row.domain}>
-                  <TableCell>{row.domain}</TableCell>
-                  <TableCell numeric>{row.answers}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+    <DataTable
+      title="Sources cited alongside contradictions"
+      columns={[
+        { key: 'domain', label: 'Domain' },
+        { key: 'answers', label: 'Answers', width: 'figure', numeric: true },
+      ]}
+      footer="Domains cited in answers with a contradicted claim. Cited alongside, not shown to be the source."
+      state={
+        cited.length
+          ? undefined
+          : {
+              kind: 'empty',
+              headingLevel: 3,
+              icon: Globe,
+              heading: 'No sources cited alongside contradictions.',
+            }
+      }
+    >
+      {cited.map((row) => (
+        <TableRow key={row.domain}>
+          <TableCell>{row.domain}</TableCell>
+          <TableCell numeric>{row.answers}</TableCell>
+        </TableRow>
+      ))}
+    </DataTable>
   );
 }

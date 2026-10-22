@@ -2,19 +2,14 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { robotsHistoryPageSchema } from '@citeladder/contracts/site-health';
 import type { z } from 'zod';
-import { Pager } from '@/components/ui/pager';
+import { FileText } from 'lucide-react';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { DisplayTime } from '@/components/ui/display-time';
+import { Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { diffLines } from '@/lib/agent/diff';
 import { siteHealthQueries } from '@/lib/api/site-health';
@@ -48,44 +43,50 @@ export function RobotsHistory({
     );
   const page = query.data;
   return (
-    <>
-      {page.items.length === 0 ? (
-        <QueryState kind="empty" inline message="No robots.txt observations are available." />
-      ) : (
-        <Table>
-          <caption className="sr-only">robots.txt observation sequence</caption>
-          <TableHeader>
-            <TableRow>
-              <TableHead numeric>Observed</TableHead>
-              <TableHead>Fetch status</TableHead>
-              <TableHead>Policy</TableHead>
-              <TableHead>Snapshot</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {page.items.map((item) => (
-              <TableRow key={item.crawl_id}>
-                <TableCell numeric>
-                  <DisplayTime value={item.robots.observed_at} />
-                </TableCell>
-                <TableCell>{robotsStatusLabels[item.robots.status]}</TableCell>
-                <TableCell>
-                  {item.robots.bots
-                    .map((bot) => `${bot.label}: ${crawlerPolicyLabels[bot.policy]}`)
-                    .join('; ')}
-                </TableCell>
-                <TableCell>{item.robots.robots_snapshot_id ?? 'No body observed'}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-      <Pager {...cursorControls(pager, page.next_cursor)} />
+    <Stack>
+      <DataTable
+        label="robots.txt observation sequence"
+        columns={COLUMNS}
+        minWidth="md"
+        state={
+          page.items.length === 0
+            ? {
+                kind: 'empty',
+                icon: FileText,
+                headingLevel: 3,
+                heading: 'No robots.txt observations are available.',
+              }
+            : undefined
+        }
+        pager={cursorControls(pager, page.next_cursor)}
+      >
+        {page.items.map((item) => (
+          <TableRow key={item.crawl_id}>
+            <TableCell numeric>
+              <DisplayTime value={item.robots.observed_at} />
+            </TableCell>
+            <TableCell>{robotsStatusLabels[item.robots.status]}</TableCell>
+            <TableCell>
+              {item.robots.bots
+                .map((bot) => `${bot.label}: ${crawlerPolicyLabels[bot.policy]}`)
+                .join('; ')}
+            </TableCell>
+            <TableCell>{item.robots.robots_snapshot_id ?? 'No body observed'}</TableCell>
+          </TableRow>
+        ))}
+      </DataTable>
       {/* A new page offers different observations, so the comparison starts over. */}
       <RobotsCompare key={pager.cursor ?? 'first'} page={page} />
-    </>
+    </Stack>
   );
 }
+
+const COLUMNS: readonly DataTableColumn[] = [
+  { key: 'observed', label: 'Observed', width: 'date', numeric: true },
+  { key: 'status', label: 'Fetch status', width: 'status' },
+  { key: 'policy', label: 'Policy' },
+  { key: 'snapshot', label: 'Snapshot', width: 'name' },
+];
 
 function RobotsCompare({ page }: Readonly<{ page: RobotsHistoryPage }>) {
   const timeZone = useDisplayTimeZone();

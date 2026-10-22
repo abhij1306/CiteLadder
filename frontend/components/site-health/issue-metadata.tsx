@@ -1,3 +1,4 @@
+import { Inline } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import type { SiteIssue } from '@/lib/api/types';
 import { dimensionLabel, severityLabel } from '@/lib/site-health/issues';
@@ -10,7 +11,7 @@ import { dimensionLabel, severityLabel } from '@/lib/site-health/issues';
 export function IssueMetadata({ issue }: Readonly<{ issue: SiteIssue }>) {
   const tone = issueSeverityTone(issue.severity);
   return (
-    <span className={textRole('label', 'flex flex-wrap items-center gap-2 uppercase')}>
+    <Inline as="span" className={textRole('label', 'flex-wrap uppercase')}>
       <span className={issue.finding_class === 'defect' ? tone : 'text-secondary'}>
         {issue.finding_class === 'defect' ? severityLabel(issue.severity) : 'Advisory'}
       </span>
@@ -18,7 +19,7 @@ export function IssueMetadata({ issue }: Readonly<{ issue: SiteIssue }>) {
         ·
       </span>
       <span className="text-secondary">{dimensionLabel(issue.dimension)}</span>
-    </span>
+    </Inline>
   );
 }
 

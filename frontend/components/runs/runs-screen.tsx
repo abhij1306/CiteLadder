@@ -11,6 +11,8 @@ import { RunsTable } from '@/components/runs/runs-table';
 import { ListScreen } from '@/components/layout/page-shell';
 import { Button } from '@/components/ui/button';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
+import { Dot } from '@/components/ui/icon';
+import { Inline } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -194,13 +196,10 @@ function RunsContent({
       emptyHeading={`No ${filterLabel} runs.`}
       status={
         anyActive ? (
-          <span className="type-caption inline-flex items-center gap-2 tabular-nums">
-            <span
-              className="bg-info inline-block size-1.5 animate-pulse rounded-full"
-              aria-hidden
-            />
+          <Inline as="span" className="type-caption inline-flex tabular-nums">
+            <Dot className="bg-info animate-pulse" />
             {'polling every 3s while a run is active'}
-          </span>
+          </Inline>
         ) : null
       }
     />

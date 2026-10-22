@@ -7,9 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ReadError } from '@/components/ui/read-error';
 import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { MissingValue } from '@/components/ui/unavailable-value';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Label, textRole } from '@/components/ui/typography';
-import { ledgerClasses } from '@/components/ui/workspace';
+import { Inline, Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
+import { textRole } from '@/components/ui/typography';
+import { ledgerClasses, ledgerItemClasses, SubsectionHeader } from '@/components/ui/workspace';
 import type { AioRate, SurfaceRates } from '@/lib/api/types';
 
 /**
@@ -74,18 +75,21 @@ function rateStat({
 function CompetitorRates({ rates }: Readonly<{ rates: SurfaceRates['competitor_mention_rates'] }>) {
   if (rates.length === 0) return null;
   return (
-    <section className="grid gap-2 p-4">
-      <div className="grid gap-0.5">
-        <Label>Competitors, when an overview appeared</Label>
-        <p className="type-caption">
-          Over the same denominator as your own conditional mention rate, so the two are comparable.
-        </p>
-      </div>
+    <Stack as="section" gap="item">
+      <SubsectionHeader
+        title="Competitors, when an overview appeared"
+        description="Over the same denominator as your own conditional mention rate, so the two are comparable."
+      />
       <ul className={ledgerClasses('open')}>
         {rates.map((entry) => (
-          <li key={entry.name} className="flex items-center justify-between gap-3 py-2">
+          <Inline
+            as="li"
+            gap="compact"
+            key={entry.name}
+            className={ledgerItemClasses('justify-between')}
+          >
             <span className={textRole('body', 'min-w-0 truncate')}>{entry.name}</span>
-            <span className="shrink-0 text-right">
+            <Inline as="span" className="shrink-0">
               {entry.rate.value === null ? (
                 <MissingValue state="unavailable" className="type-body" />
               ) : (
@@ -94,16 +98,16 @@ function CompetitorRates({ rates }: Readonly<{ rates: SurfaceRates['competitor_m
                   {/* The denominator is stated once for the list above; the
                       numerator is not, and it is what separates one competitor
                       named in a single overview from one named in fifty. */}
-                  <span className="type-caption ml-2 tabular-nums">
+                  <span className="type-caption tabular-nums">
                     {`${entry.rate.numerator} of ${entry.rate.denominator}`}
                   </span>
                 </>
               )}
-            </span>
-          </li>
+            </Inline>
+          </Inline>
         ))}
       </ul>
-    </section>
+    </Stack>
   );
 }
 
@@ -120,7 +124,7 @@ export function SurfaceRatesPanel({
         pending={query.isFetching}
       />
     );
-  if (!data) return <Skeleton className="min-h-48 rounded-[var(--radius-card)]" />;
+  if (!data) return <QueryState kind="loading" label="Loading AI Overview rates…" />;
   // These rates are RETAINED across a surface or run change, the same way
   // the sources and evidence panels retain theirs, so the reader is not
   // handed a skeleton for every round trip. Retained numbers carry no
@@ -136,42 +140,44 @@ export function SurfaceRatesPanel({
           {`${data.successful} successfully observed ${data.successful === 1 ? 'search' : 'searches'}, ${data.with_overview} of which showed an overview. Each rate below states what it divided by.`}
         </CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-[var(--workspace-gap)]">
-        <div className="border-border-subtle border-b">
-          <StatRow
-            segments={[
-              rateStat({
-                key: 'trigger',
-                label: 'Overview shown',
-                caption:
-                  'A property of the QUERIES, not of your brand. It moves when Google changes what it answers with.',
-                rate: data.trigger_rate,
-              }),
-              rateStat({
-                key: 'named',
-                label: 'Named, when shown',
-                caption:
-                  'Conditional. It can rise while overall visibility falls, if Google shows fewer overviews but names you in more of them.',
-                rate: data.brand_mention_rate_when_present,
-              }),
-              rateStat({
-                key: 'overall',
-                label: 'Overall visibility',
-                caption:
-                  "Unconditional, and the closest to 'how visible are we here'. A search with no overview counts against it.",
-                rate: data.overall_brand_visibility,
-              }),
-              rateStat({
-                key: 'cited',
-                label: 'Your site cited',
-                caption:
-                  'Independent of being named: an overview can name you without citing you, and cite you without naming you.',
-                rate: data.owned_citation_rate_when_present,
-              }),
-            ]}
-          />
-        </div>
-        <CompetitorRates rates={data.competitor_mention_rates} />
+      <CardContent>
+        <Stack gap="workspace">
+          <div className="border-border-subtle border-b">
+            <StatRow
+              segments={[
+                rateStat({
+                  key: 'trigger',
+                  label: 'Overview shown',
+                  caption:
+                    'A property of the QUERIES, not of your brand. It moves when Google changes what it answers with.',
+                  rate: data.trigger_rate,
+                }),
+                rateStat({
+                  key: 'named',
+                  label: 'Named, when shown',
+                  caption:
+                    'Conditional. It can rise while overall visibility falls, if Google shows fewer overviews but names you in more of them.',
+                  rate: data.brand_mention_rate_when_present,
+                }),
+                rateStat({
+                  key: 'overall',
+                  label: 'Overall visibility',
+                  caption:
+                    "Unconditional, and the closest to 'how visible are we here'. A search with no overview counts against it.",
+                  rate: data.overall_brand_visibility,
+                }),
+                rateStat({
+                  key: 'cited',
+                  label: 'Your site cited',
+                  caption:
+                    'Independent of being named: an overview can name you without citing you, and cite you without naming you.',
+                  rate: data.owned_citation_rate_when_present,
+                }),
+              ]}
+            />
+          </div>
+          <CompetitorRates rates={data.competitor_mention_rates} />
+        </Stack>
       </CardContent>
     </Card>
   );
