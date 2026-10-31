@@ -153,7 +153,7 @@
     "chatgpt": {
       "logical_engine": "chatgpt",
       "transport_provider": "openai",
-      "transport_model": "gpt-6.1-sol",
+      "transport_model": "gpt-6.1-terra",
       "retrieval_enabled": true,
       "reasoning_effort": "low",
       "reasoning_pinnable": true,
