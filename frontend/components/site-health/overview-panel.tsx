@@ -3,7 +3,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-import { CoverageByKind } from './coverage-by-kind';
 import { OverviewDetails } from './overview-details';
 import { OverviewMetricCards } from './overview-metrics';
 import { Alert } from '@/components/ui/alert';
@@ -70,7 +69,6 @@ export function OverviewPanel({
         </Alert>
       ) : null}
       <OverviewMetricCards overview={data} dashboard={dashboard} crawl={crawl} />
-      {data ? <CoverageByKind coverage={data.crawl_coverage} /> : null}
       {overviewBody}
     </Stack>
   );

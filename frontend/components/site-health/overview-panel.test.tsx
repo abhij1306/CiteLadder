@@ -280,41 +280,6 @@ describe('OverviewPanel', () => {
     expect(screen.queryByRole('img', { name: /Crawl Coverage score/ })).not.toBeInTheDocument();
   });
 
-  it('separates page types found but not analyzed from those never found', async () => {
-    mswServer.use(
-      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
-        HttpResponse.json(
-          terminalOverview({
-            crawl_coverage: {
-              state: 'partial',
-              evidence: {
-                reasons: ['requested_page_limit_reached'],
-                value_kinds: [
-                  { kind: 'root', found: 1, analyzed: 1 },
-                  { kind: 'product', found: 16, analyzed: 4 },
-                  { kind: 'pricing', found: 0, analyzed: 0 },
-                ],
-              },
-              denominator_kind: 'selected_intended_public_urls',
-            },
-          }),
-        ),
-      ),
-    );
-    renderWithProviders(
-      <OverviewPanel
-        projectId={PROJECT}
-        crawlId={CRAWL}
-        crawl={{ status: 'completed' } as never}
-        dashboard={undefined}
-      />,
-    );
-
-    expect(await screen.findByTestId('coverage-by-kind')).toHaveTextContent(
-      'Pages analyzed by type: Product 4 of 16. Not found in this crawl: Pricing.',
-    );
-  });
-
   it('opens persisted HTTP Web Fundamentals evidence without browser-only checks', async () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>

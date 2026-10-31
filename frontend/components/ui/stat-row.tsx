@@ -175,7 +175,6 @@ function textRows(segment: StatSegment) {
 
 function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
   const pressable = Boolean(segment.onSelect);
-  const Icon = segment.icon;
   // A score ring sits at the segment's top right; the rest stacks in the first column.
   const main = segment.score ? 'col-start-1' : '';
   return (
@@ -192,34 +191,9 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
           <ScoreRing value={segment.score.value} label={segment.score.label} />
         </dd>
       ) : null}
-      {/* A label wraps to a second line rather than cutting a metric's name. */}
-      <dt
-        className={textRole('label', cn('flex min-w-0 items-center justify-between gap-2', main))}
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {Icon ? <Icon className="text-muted size-4 shrink-0" aria-hidden /> : null}
-          <span className="line-clamp-2 min-w-0">{segment.label}</span>
-        </span>
-        {segment.marker ? (
-          <span className={cn('flex shrink-0 items-center gap-2', pressable && 'relative z-10')}>
-            {segment.marker}
-          </span>
-        ) : null}
-      </dt>
-      {segment.score && !segment.caption ? null : (
-        <dd className={cn('grid min-w-0 gap-1', main)}>
-          {segment.caption ? <span className={textRole('caption')}>{segment.caption}</span> : null}
-          {segment.score ? null : <SegmentValue segment={segment} />}
-        </dd>
-      )}
-      {segment.delta ? <dd className={cn('min-w-0', main)}>{segment.delta}</dd> : null}
-      {segment.sub ? (
-        <dd className={textRole('caption', cn('min-w-0', main))}>{segment.sub}</dd>
-      ) : null}
-      <SegmentComparison segment={segment} className={main} />
-      {segment.action ? (
-        <dd className={cn('min-w-0', main, pressable && 'relative z-10')}>{segment.action}</dd>
-      ) : null}
+      <SegmentLabel segment={segment} className={main} />
+      <SegmentBody segment={segment} className={main} />
+      <SegmentFoot segment={segment} className={main} />
       {pressable ? (
         <button
           type="button"
@@ -230,6 +204,62 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
         />
       ) : null}
     </div>
+  );
+}
+
+type SegmentPart = Readonly<{ segment: StatSegment; className: string }>;
+
+/** The label row: a label wraps to a second line rather than cutting a metric's name. */
+function SegmentLabel({ segment, className }: SegmentPart) {
+  const Icon = segment.icon;
+  return (
+    <dt
+      className={textRole(
+        'label',
+        cn('flex min-w-0 items-center justify-between gap-2', className),
+      )}
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {Icon ? <Icon className="text-muted size-4 shrink-0" aria-hidden /> : null}
+        <span className="line-clamp-2 min-w-0">{segment.label}</span>
+      </span>
+      {segment.marker ? (
+        <span
+          className={cn('flex shrink-0 items-center gap-2', segment.onSelect && 'relative z-10')}
+        >
+          {segment.marker}
+        </span>
+      ) : null}
+    </dt>
+  );
+}
+
+/** The caption and value; a ring segment's value is the ring itself. */
+function SegmentBody({ segment, className }: SegmentPart) {
+  if (segment.score && !segment.caption) return null;
+  return (
+    <dd className={cn('grid min-w-0 gap-1', className)}>
+      {segment.caption ? <span className={textRole('caption')}>{segment.caption}</span> : null}
+      {segment.score ? null : <SegmentValue segment={segment} />}
+    </dd>
+  );
+}
+
+/** Delta, sub-line, comparison and the one action, in that order. */
+function SegmentFoot({ segment, className }: SegmentPart) {
+  return (
+    <>
+      {segment.delta ? <dd className={cn('min-w-0', className)}>{segment.delta}</dd> : null}
+      {segment.sub ? (
+        <dd className={textRole('caption', cn('min-w-0', className))}>{segment.sub}</dd>
+      ) : null}
+      <SegmentComparison segment={segment} className={className} />
+      {segment.action ? (
+        <dd className={cn('min-w-0', className, segment.onSelect && 'relative z-10')}>
+          {segment.action}
+        </dd>
+      ) : null}
+    </>
   );
 }
 
