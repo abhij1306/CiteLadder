@@ -146,7 +146,7 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
       minWidth="md"
       state={
         issues.length === 0
-          ? { kind: 'empty', icon: ICONS.issues, headingLevel: 3, heading: 'No persisted issues.' }
+          ? { kind: 'empty', icon: ICONS.issues, headingLevel: 3, heading: 'No persisted issues' }
           : undefined
       }
     >

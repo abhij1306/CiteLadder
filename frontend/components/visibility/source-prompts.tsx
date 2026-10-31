@@ -23,7 +23,7 @@ import { visibilityApi } from '@/lib/api/visibility';
 import { engineLabel, productModelLabel } from '@/lib/providers/catalog';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import { count, hostOf, sinceLabel } from '@/lib/visibility/sources';
-import type { SourceQueries } from '@/lib/visibility/use-source-analysis';
+import { selectionHasNoRun, type SourceQueries } from '@/lib/visibility/use-source-analysis';
 import { EVIDENCE_LIMIT } from '@/lib/visibility/use-visibility-dashboard';
 
 /** A counted nought in a column of chips, kept apart from an absent one. */
@@ -87,7 +87,7 @@ export function SourcePrompts({
       <DataTable
         title="Prompts"
         columns={COLUMNS}
-        state={promptsState(query)}
+        state={promptsState(query, selectionHasNoRun(queries))}
         busy={{ active: query.isFetching, label: 'Updating prompts' }}
         // The endpoint returns a bounded newest-first window. Without this a
         // source cited by more answers than fit simply looked like it had fewer.
@@ -119,6 +119,7 @@ const COLUMNS: readonly DataTableColumn[] = [
 
 function promptsState(
   query: UseQueryResult<VisibilityEvidenceResponse, unknown>,
+  noRun: boolean,
 ): DataTableState | undefined {
   if (query.isError) {
     return {
@@ -129,13 +130,18 @@ function promptsState(
       pending: query.isFetching,
     };
   }
-  if (query.isLoading) return { kind: 'loading', label: 'Loading prompts…' };
-  if (query.data?.items.length) return undefined;
+  // No data yet is a read waiting on its run, never an empty finding.
+  if (!query.data) {
+    return noRun
+      ? { kind: 'empty', headingLevel: 3, icon: MessageSquare, heading: 'No run selected' }
+      : { kind: 'loading', label: 'Loading prompts…' };
+  }
+  if (query.data.items.length) return undefined;
   return {
     kind: 'empty',
     headingLevel: 3,
     icon: MessageSquare,
-    heading: 'No tracked answers in this selection used this source.',
+    heading: 'No tracked answers in this selection used this source',
   };
 }
 

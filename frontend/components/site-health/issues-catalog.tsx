@@ -207,7 +207,7 @@ export function IssuesCatalog({
     );
   } else if (rows.length === 0) {
     issuesBody = (
-      <QueryState kind="empty" icon={ICONS.issues} heading="No issues match this view." />
+      <QueryState kind="empty" icon={ICONS.issues} heading="No issues match this view" />
     );
   }
 

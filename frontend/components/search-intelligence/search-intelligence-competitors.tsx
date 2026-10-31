@@ -44,7 +44,7 @@ export function SearchIntelligenceCompetitors({
           : {
               kind: 'empty',
               icon: Users,
-              heading: 'No competitors saved for this project.',
+              heading: 'No competitors saved for this project',
               headingLevel: 3,
             }
       }

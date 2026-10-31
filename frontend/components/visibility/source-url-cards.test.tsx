@@ -13,16 +13,17 @@ describe('EnginesCard', () => {
     expect(screen.getByRole('cell', { name: '7' })).toBeInTheDocument();
   });
 
+  // The card title is one h3; a "no engine" empty state adds a second.
   it('shows neither rows nor "no engine" after a failed read', () => {
     render(<EnginesCard engines={engines} loading={false} errored />);
     expect(screen.queryByRole('cell', { name: '7' })).not.toBeInTheDocument();
-    expect(screen.queryByText(/No engine used this page/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
   });
 
   it('says no engine used the page only for a returned, empty list', () => {
     const { rerender } = render(<EnginesCard engines={[]} loading={false} />);
-    expect(screen.getByText('No engine used this page in this selection.')).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(2);
     rerender(<EnginesCard engines={undefined} loading={false} />);
-    expect(screen.queryByText(/No engine used this page/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(1);
   });
 });

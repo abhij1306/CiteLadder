@@ -348,7 +348,7 @@ export function CatalogList({
             kind="empty"
             icon={needle ? SearchX : PackageOpen}
             headingLevel={3}
-            heading={needle ? `Nothing matches “${search.trim()}”.` : 'Nothing projected yet.'}
+            heading={needle ? `Nothing matches “${search.trim()}”` : 'Nothing projected yet'}
             description={needle ? undefined : emptyCatalogHint(query.data?.projection.applies)}
           />
         ) : (

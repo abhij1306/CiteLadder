@@ -9,5 +9,5 @@
    installed copy or the system stack, never to an undefined var(). */
 :root {
   --font-text: 'Geist Variable', 'Geist', ui-sans-serif, system-ui;
-  --font-heading: 'Sora Variable', 'Sora', ui-sans-serif, system-ui;
+  --font-heading: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui;
 }

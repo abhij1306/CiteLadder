@@ -206,7 +206,7 @@ export function RankingRowsTable({
               kind: 'empty',
               headingLevel: 3,
               icon: Users,
-              heading: 'No measured responses in this selection.',
+              heading: 'No measured responses in this selection',
             }
       }
       footer="How often each brand is named, across the same answers. Select a row to plot it on its own."

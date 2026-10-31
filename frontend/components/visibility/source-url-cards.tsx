@@ -105,7 +105,7 @@ export function EnginesCard({
       kind: 'empty',
       headingLevel: 3,
       icon: Bot,
-      heading: 'No engine used this page in this selection.',
+      heading: 'No engine used this page in this selection',
     };
   }
   return (

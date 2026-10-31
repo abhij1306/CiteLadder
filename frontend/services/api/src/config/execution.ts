@@ -11,7 +11,6 @@ export const interactiveExecution = {
 const defaults = {
   budgetSeconds: 300,
   poolSize: 4,
-  laneConcurrency: 1,
   drainLockWaitMs: 15_000,
   drainLockPollMs: 250,
 };
@@ -36,7 +35,6 @@ function integer(
 
 export function executionSettings(env: Record<string, string | undefined>) {
   return {
-    laneConcurrency: defaults.laneConcurrency,
     // How long a later execution waits for an active drain before leaving it the work.
     drainLockWaitMs: defaults.drainLockWaitMs,
     drainLockPollMs: defaults.drainLockPollMs,

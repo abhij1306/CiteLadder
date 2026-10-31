@@ -333,7 +333,7 @@ function SearchConsoleSetup() {
         <QueryState
           kind="empty"
           icon={Search}
-          heading="Search Demand appears after the next Search Console import."
+          heading="Search Demand appears after the next Search Console import"
         />
       }
     />

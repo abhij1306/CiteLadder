@@ -217,7 +217,7 @@ export function DimensionTable({
   // has not measured anything yet.
   else if (!query.isSuccess) state = { kind: 'loading', label: `Loading ${tab.noun}…` };
   else if (rows.length === 0)
-    state = { kind: 'empty', icon: SearchX, heading: `No ${tab.noun} measured for this range.` };
+    state = { kind: 'empty', icon: SearchX, heading: `No ${tab.noun} measured for this range` };
 
   return (
     <DataTable

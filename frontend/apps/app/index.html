@@ -12,7 +12,7 @@
     <link rel="icon" href="/citeladder-favicon.ico" sizes="any" />
     <title>CiteLadder</title>
     <style>
-      /* Geist and Sora are used when the reader has them installed;
+      /* Geist and Outfit are used when the reader has them installed;
          otherwise these metric-matched Arial faces stand in, so the layout is
          the same either way. */
       /* Match Arial's x-height to Geist's (0.530em vs 0.519em). Vertical
@@ -28,25 +28,25 @@
         line-gap-override: 0%;
       }
 
-      /* Match Arial's x-height to Sora's (0.534em vs 0.519em). Vertical
-         overrides use Sora's 970/-290/0 hhea metrics (1000 UPM), divided by
-         size-adjust. */
+      /* Match Arial's x-height to Outfit's (0.460em vs 0.519em). Vertical
+         overrides use Outfit's 1000/-260/0 hhea metrics (1000 UPM), divided
+         by size-adjust. */
       @font-face {
-        font-family: 'Sora Fallback';
+        font-family: 'Outfit Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 102.89%;
-        ascent-override: 94.28%;
-        descent-override: 28.19%;
+        size-adjust: 88.63%;
+        ascent-override: 112.83%;
+        descent-override: 29.33%;
         line-gap-override: 0%;
       }
 
       :root {
         font-synthesis-weight: none;
         /* Geist carries body, UI and data (its tabular figures line up
-           columns); Sora carries display headings. */
+           columns); Outfit carries display headings. */
         --font-text: 'Geist Variable', 'Geist Fallback', Arial;
-        --font-heading: 'Sora Variable', 'Sora Fallback', Arial;
+        --font-heading: 'Outfit Variable', 'Outfit Fallback', Arial;
       }
     </style>
   </head>

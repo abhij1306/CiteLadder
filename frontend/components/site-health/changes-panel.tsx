@@ -336,7 +336,7 @@ function ChangesTable({
                 kind: 'empty',
                 icon: GitCompare,
                 headingLevel: 3,
-                heading: 'No changes were observed in this comparable pair.',
+                heading: 'No changes were observed in this comparable pair',
               }
         }
         pager={{

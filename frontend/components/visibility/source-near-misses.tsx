@@ -56,7 +56,10 @@ function nearMissColumns(data: NearMisses | undefined): DataTableColumn[] {
   ];
 }
 
-function nearMissState(query: ReturnType<typeof useSourceNearMisses>): DataTableState | undefined {
+function nearMissState(
+  query: ReturnType<typeof useSourceNearMisses>,
+  noRun: boolean,
+): DataTableState | undefined {
   if (query.isError) {
     return {
       kind: 'error',
@@ -66,21 +69,31 @@ function nearMissState(query: ReturnType<typeof useSourceNearMisses>): DataTable
       pending: query.isFetching,
     };
   }
-  if (query.isLoading) return { kind: 'loading', label: 'Loading your pages read but not cited…' };
   const data = query.data;
-  if (data?.items.length) return undefined;
-  if (data && data.responses === 0)
+  // No data yet is a read waiting on its run, never "every page was cited".
+  if (!data) {
+    return noRun
+      ? { kind: 'empty', headingLevel: 3, icon: Link2Off, heading: 'No run selected' }
+      : { kind: 'loading', label: 'Loading your pages read but not cited…' };
+  }
+  if (data.items.length) return undefined;
+  if (data.responses === 0)
     return {
       kind: 'empty',
       headingLevel: 3,
       icon: Link2Off,
-      heading: 'No engine in this selection exposes the pages it read.',
+      heading: 'No engine in this selection exposes the pages it read',
     };
+  // The verdict covers only engines that expose what they read; the rest are unknown.
+  const unavailable = data.unavailable_engines;
   return {
     kind: 'empty',
     headingLevel: 3,
     icon: Link2Off,
-    heading: 'Every page of yours that an engine read, it also cited.',
+    heading: 'Every page of yours that an engine read, it also cited',
+    description: unavailable.length
+      ? `Not known for ${unavailable.map(engineLabel).join(', ')}, which do not expose what they read.`
+      : undefined,
   };
 }
 
@@ -93,12 +106,15 @@ function nearMissState(query: ReturnType<typeof useSourceNearMisses>): DataTable
  */
 export function NearMissTable({
   query,
+  noRun,
   pageSize,
   toolbar,
   onOpenUrl,
   onPageSizeChange,
 }: Readonly<{
   query: ReturnType<typeof useSourceNearMisses>;
+  /** The selection settled on no run (see `selectionHasNoRun`). */
+  noRun: boolean;
   pageSize: number;
   toolbar: FilterBarProps;
   onOpenUrl: (url: string) => void;
@@ -111,7 +127,7 @@ export function NearMissTable({
       label="Your pages read but not cited"
       toolbar={toolbar}
       columns={nearMissColumns(query.data)}
-      state={nearMissState(query)}
+      state={nearMissState(query, noRun)}
       pageSize={pageSize}
       rowCount={shown}
       busy={{ active: query.isFetching, label: 'Updating your pages read but not cited' }}

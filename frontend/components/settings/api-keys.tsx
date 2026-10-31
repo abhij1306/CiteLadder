@@ -315,7 +315,7 @@ export function ApiKeys() {
                 kind: 'empty',
                 icon: KeyRound,
                 headingLevel: 3,
-                heading: 'No API keys yet.',
+                heading: 'No API keys yet',
               }
             : undefined
         }

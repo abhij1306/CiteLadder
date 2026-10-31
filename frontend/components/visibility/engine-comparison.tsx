@@ -41,7 +41,7 @@ export function EngineComparison({
       state={
         engines.length
           ? undefined
-          : { kind: 'empty', headingLevel: 3, icon: Bot, heading: 'No model observations.' }
+          : { kind: 'empty', headingLevel: 3, icon: Bot, heading: 'No model observations' }
       }
     >
       {engines.map((engine) => (

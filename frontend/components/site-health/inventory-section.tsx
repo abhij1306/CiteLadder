@@ -51,7 +51,7 @@ export function InventorySection({
       <QueryState
         kind="empty"
         icon={FileText}
-        heading="Pages appear here as discovery finds them."
+        heading="Pages appear here as discovery finds them"
         headingLevel={3}
       />
     );
@@ -103,7 +103,7 @@ function DiscoveringInventory({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
       kind: 'empty',
       icon: FileText,
       headingLevel: 3,
-      heading: 'Discovering pages — sitemaps and internal links are being scanned.',
+      heading: 'Discovering pages — sitemaps and internal links are being scanned',
     };
   }
 
@@ -195,7 +195,7 @@ function scoredInventoryState({
     return {
       kind: 'empty',
       icon: FileText,
-      heading: active ? 'Pages appear here as the audit reaches them.' : 'No pages in this view.',
+      heading: active ? 'Pages appear here as the audit reaches them' : 'No pages in this view',
       headingLevel: 3,
     };
   return undefined;

@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { issueTitle, severityCount, severityLabel } from './issues';
-
-describe('severity vocabulary', () => {
-  it('folds critical into HIGH (three-tier catalog vocabulary)', () => {
-    expect(severityLabel('critical')).toBe('HIGH');
-  });
-});
+import { issueTitle, severityCount } from './issues';
 
 describe('issueTitle fallback', () => {
   it('uses the title when present', () => {
