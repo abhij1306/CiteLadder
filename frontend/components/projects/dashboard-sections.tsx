@@ -308,22 +308,23 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
           }
           label={availabilityLabel(data.track.observed_at ? 'unavailable' : 'not_run')}
         />
-        {/* No comparable run means no change; the Movement card says so once. */}
-        {data.track.observed_at && data.track.citation_share.delta !== null ? (
-          <div>
-            <Delta value={data.track.citation_share.delta} {...VS_PREVIOUS_RUN} />
-          </div>
-        ) : (
-          <p className={textRole('caption')}>{data.track.limitations[0]}</p>
-        )}
+        {/* The link shares the last line, so it adds no row of its own. */}
+        <Inline className="justify-between">
+          {/* No comparable run means no change; the Movement card says so once. */}
+          {data.track.observed_at && data.track.citation_share.delta !== null ? (
+            <div>
+              <Delta value={data.track.citation_share.delta} {...VS_PREVIOUS_RUN} />
+            </div>
+          ) : (
+            <p className={textRole('caption')}>{data.track.limitations[0]}</p>
+          )}
+          <Button asChild variant="ghost">
+            <ProjectLink href="/visibility?tab=trends">
+              Open Trends <Icon icon={ArrowRight} />
+            </ProjectLink>
+          </Button>
+        </Inline>
       </Stack>
-      <CardContent className="flex justify-end">
-        <Button asChild variant="ghost">
-          <ProjectLink href="/visibility?tab=trends">
-            Open Trends <Icon icon={ArrowRight} />
-          </ProjectLink>
-        </Button>
-      </CardContent>
     </Card>
   );
 }

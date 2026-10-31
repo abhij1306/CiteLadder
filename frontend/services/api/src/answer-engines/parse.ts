@@ -96,10 +96,9 @@ function events(calls: ObjectValue[], transport: string): SearchEvent[] {
     .flatMap((call, callIndex) => {
       const args = object(callArguments(call, transport));
       const query = transport === 'google' ? '' : text(args.query);
-      const queries = [
-        ...(query ? [query] : []),
-        ...(Array.isArray(args.queries) ? args.queries.map(text).filter(Boolean) : []),
-      ];
+      const listed = Array.isArray(args.queries) ? args.queries.map(text).filter(Boolean) : [];
+      // OpenAI repeats the first listed query as `query`; record each query once.
+      const queries = [...(query && !listed.includes(query) ? [query] : []), ...listed];
       // OpenAI and Anthropic preserve a count-only search when query text is absent.
       const countOnly = transport === 'google' ? [] : [''];
       const values = queries.length ? queries : countOnly;

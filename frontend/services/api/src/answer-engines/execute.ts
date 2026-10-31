@@ -34,6 +34,10 @@ function openaiPayload(request: AnswerRequest): Record<string, unknown> {
     ...(request.retrieval_enabled
       ? {
           tools: [{ type: 'web_search', ...approximateLocation(request) }],
+          // One search round per answer, as a consumer chat answer runs; zero leaves it uncapped.
+          ...(request.openai_max_tool_calls > 0
+            ? { max_tool_calls: request.openai_max_tool_calls }
+            : {}),
           // The sources each search consulted, cited or not.
           include: ['web_search_call.action.sources'],
         }

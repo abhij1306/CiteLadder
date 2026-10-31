@@ -51,6 +51,7 @@
       "ssrf_blocked"
     ],
     "corpus_exclusion_error_codes": ["robots_denied", "url_admission_rejected"],
+    "corpus_exclusion_status_codes": [404, 410],
     "non_error_terminal_codes": [
       "access_blocked",
       "bot_blocked",

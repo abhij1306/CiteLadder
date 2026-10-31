@@ -13,6 +13,7 @@ export const answerRequestSchema = z.object({
   reasoning_effort: z.string(),
   country_code: z.string(),
   anthropic_max_uses: z.number().int().nonnegative(),
+  openai_max_tool_calls: z.number().int().nonnegative(),
 });
 export type AnswerRequest = z.infer<typeof answerRequestSchema>;
 export type FinishReason =

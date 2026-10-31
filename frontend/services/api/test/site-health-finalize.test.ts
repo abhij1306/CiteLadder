@@ -429,6 +429,15 @@ describe('search eligibility', () => {
     expect(
       eligibilityState({ 'acquisition.public_representation': 'missing' }, failed('robots_denied')),
     ).toEqual({ state: 'excluded', status: 'excluded' });
+    // A removed page and the page's own noindex are the site's state, not blockers.
+    expect(eligibilityState({}, { ...failed('http_4xx'), status_code: 404 })).toEqual({
+      state: 'excluded',
+      status: 'error',
+    });
+    expect(eligibilityState({}, { ...failed('http_4xx'), status_code: 403 }).state).toBe('unknown');
+    expect(
+      eligibilityState({ ...satisfied, 'search.indexability': 'not_applicable' }, undefined),
+    ).toEqual({ state: 'excluded', status: 'audited' });
     expect(eligibilityState({}, failed('task_failed'))).toEqual({
       state: 'unknown',
       status: 'error',

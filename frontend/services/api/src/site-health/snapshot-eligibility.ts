@@ -8,7 +8,10 @@ import { compareText } from '../text-order.ts';
 
 const CRITICAL = policy.site_health.reads.eligibility_critical_checkpoints;
 const EXCLUSIONS = policy.site_health.reads.corpus_exclusion_error_codes;
-type EligibilityTask = { status: string; error_code: string } | undefined;
+const GONE = policy.site_health.reads.corpus_exclusion_status_codes;
+type EligibilityTask =
+  | { status: string; error_code: string; status_code?: number | null }
+  | undefined;
 
 /**
  * One selected page's search-eligibility state and status bucket. Only the
@@ -19,6 +22,12 @@ export function eligibilityState(outcomes: Record<string, string>, task: Eligibi
   // The site's own robots.txt exclusion is its choice, not a blocker to fix.
   if (task?.status === 'failed' && EXCLUSIONS.includes(task.error_code))
     return { state: 'excluded', status: 'excluded' } as const;
+  // A removed page cannot be indexed; the broken-link check reports whoever links to it.
+  if (task?.status === 'failed' && GONE.includes(task.status_code ?? 0))
+    return { state: 'excluded', status: 'error' } as const;
+  // So is the page's own noindex, unless the owner said the page should be indexed.
+  if (outcomes['search.indexability'] === 'not_applicable')
+    return { state: 'excluded', status: 'audited' } as const;
   const critical = CRITICAL.map((key) => outcomes[key] ?? 'unknown');
   if (critical.includes('missing')) return { state: 'blocked', status: 'blocked' } as const;
   if (critical.every((value) => value === 'satisfied'))
@@ -112,7 +121,7 @@ export async function snapshotEligibility(
         'search.crawler_access': crawler?.outcome ?? 'unknown',
         'search.snippet_access': snippet?.outcome ?? 'unknown',
       },
-      task,
+      task && { ...task, status_code: attempts.get(task.id)?.status_code },
     );
     totals[state]++;
     statuses[status]++;

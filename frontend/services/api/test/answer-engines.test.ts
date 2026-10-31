@@ -19,6 +19,7 @@ function request(engine: 'chatgpt' | 'gemini' | 'claude', retrieval = true): Ans
     reasoning_effort: route.reasoning_effort,
     country_code: 'AU',
     anthropic_max_uses: 0,
+    openai_max_tool_calls: 0,
   });
 }
 describe('frozen answer-engine execution', () => {
@@ -80,6 +81,34 @@ describe('frozen answer-engine execution', () => {
   ])('sends OpenAI reasoning effort %s as the model accepts it', (effort, reasoning) => {
     const body = answerPayload({ ...request('chatgpt'), reasoning_effort: effort });
     expect(body.reasoning).toEqual(reasoning);
+  });
+  it.each([
+    [1, 1],
+    [0, undefined],
+  ])('caps OpenAI search rounds at %s', (cap, sent) => {
+    const body = answerPayload({ ...request('chatgpt'), openai_max_tool_calls: cap });
+    expect(body.max_tool_calls).toBe(sent);
+  });
+  it('records an OpenAI query repeated as both query and queries once', () => {
+    const result = parseAnswer(
+      {
+        status: 'completed',
+        output: [
+          {
+            type: 'web_search_call',
+            id: 's1',
+            action: { query: 'golf nets', queries: ['golf nets', 'net reviews'] },
+          },
+          { type: 'web_search_call', id: 's2', action: { query: 'only query' } },
+        ],
+      },
+      request('chatgpt'),
+    );
+    expect(result.search_events.map((event) => [event.query, event.query_sequence])).toEqual([
+      ['golf nets', 0],
+      ['net reviews', 1],
+      ['only query', 0],
+    ]);
   });
   it.each(['chatgpt', 'gemini', 'claude'] as const)(
     'runs %s with fresh policy and no tools when retrieval is off',

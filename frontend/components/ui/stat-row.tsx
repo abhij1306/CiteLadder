@@ -30,8 +30,8 @@ import { cn } from '@/lib/utils';
  *
  * A segment's anatomy, in order: label (with an optional leading icon and a
  * trailing marker), an optional caption naming the value's period, the value
- * (the `figure` role, or a score ring), a delta, a sub-line, a comparison
- * window's value, and one action.
+ * (the `figure` role), a delta, a sub-line, a comparison window's value, and
+ * one action. A score ring takes the segment's top right instead of the value's place.
  *
  * `value: null` is the missing state — the muted dash with `missingLabel`
  * (default "Not measured") as its accessible name. A string or number is the
@@ -152,19 +152,50 @@ export function StatRow({
   );
 }
 
+/** The ring spans exactly the rows beside it, so no empty row pads the segment's foot. */
+const ROW_SPAN = {
+  1: 'row-span-1',
+  2: 'row-span-2',
+  3: 'row-span-3',
+  4: 'row-span-4',
+  5: 'row-span-5',
+  6: 'row-span-6',
+} as const;
+
+function textRows(segment: StatSegment) {
+  const optional = [
+    segment.caption,
+    segment.delta,
+    segment.sub,
+    segment.comparison,
+    segment.action,
+  ];
+  return (1 + optional.filter(Boolean).length) as keyof typeof ROW_SPAN;
+}
+
 function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
   const pressable = Boolean(segment.onSelect);
   const Icon = segment.icon;
+  // A score ring sits at the segment's top right; the rest stacks in the first column.
+  const main = segment.score ? 'col-start-1' : '';
   return (
     <div
       data-stat-segment=""
       className={cn(
         'grid min-w-0 content-start gap-1 py-3 desktop:px-4 desktop:first:ps-0 desktop:last:pe-0',
+        segment.score && 'grid-cols-[minmax(0,1fr)_auto] gap-x-4',
         pressable && cn('relative', listRowClasses({ selected: segment.selected ?? false })),
       )}
     >
+      {segment.score ? (
+        <dd className={cn('col-start-2 row-start-1', ROW_SPAN[textRows(segment)])}>
+          <ScoreRing value={segment.score.value} label={segment.score.label} />
+        </dd>
+      ) : null}
       {/* A label wraps to a second line rather than cutting a metric's name. */}
-      <dt className={textRole('label', 'flex min-w-0 items-center justify-between gap-2')}>
+      <dt
+        className={textRole('label', cn('flex min-w-0 items-center justify-between gap-2', main))}
+      >
         <span className="flex min-w-0 items-center gap-2">
           {Icon ? <Icon className="text-muted size-4 shrink-0" aria-hidden /> : null}
           <span className="line-clamp-2 min-w-0">{segment.label}</span>
@@ -175,15 +206,19 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
           </span>
         ) : null}
       </dt>
-      <dd className="grid min-w-0 gap-1">
-        {segment.caption ? <span className={textRole('caption')}>{segment.caption}</span> : null}
-        <SegmentValue segment={segment} />
-      </dd>
-      {segment.delta ? <dd className="min-w-0">{segment.delta}</dd> : null}
-      {segment.sub ? <dd className={textRole('caption', 'min-w-0')}>{segment.sub}</dd> : null}
-      <SegmentComparison segment={segment} />
+      {segment.score && !segment.caption ? null : (
+        <dd className={cn('grid min-w-0 gap-1', main)}>
+          {segment.caption ? <span className={textRole('caption')}>{segment.caption}</span> : null}
+          {segment.score ? null : <SegmentValue segment={segment} />}
+        </dd>
+      )}
+      {segment.delta ? <dd className={cn('min-w-0', main)}>{segment.delta}</dd> : null}
+      {segment.sub ? (
+        <dd className={textRole('caption', cn('min-w-0', main))}>{segment.sub}</dd>
+      ) : null}
+      <SegmentComparison segment={segment} className={main} />
       {segment.action ? (
-        <dd className={cn('min-w-0', pressable && 'relative z-10')}>{segment.action}</dd>
+        <dd className={cn('min-w-0', main, pressable && 'relative z-10')}>{segment.action}</dd>
       ) : null}
       {pressable ? (
         <button
@@ -199,12 +234,18 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
 }
 
 /** A second window's value under the first, or nothing without one. */
-function SegmentComparison({ segment }: Readonly<{ segment: StatSegment }>) {
+function SegmentComparison({
+  segment,
+  className,
+}: Readonly<{ segment: StatSegment; className: string }>) {
   if (!segment.comparison) return null;
   return (
     <dd
       data-stat-comparison=""
-      className={textRole('caption', 'border-border-subtle grid min-w-0 border-t pt-1')}
+      className={textRole(
+        'caption',
+        cn('border-border-subtle grid min-w-0 border-t pt-1', className),
+      )}
     >
       <span>{segment.comparison.label}</span>
       <ComparisonValue
@@ -217,9 +258,6 @@ function SegmentComparison({ segment }: Readonly<{ segment: StatSegment }>) {
 }
 
 function SegmentValue({ segment }: Readonly<{ segment: StatSegment }>) {
-  if (segment.score) {
-    return <ScoreRing value={segment.score.value} label={segment.score.label} />;
-  }
   const { value } = segment;
   const tone = TONE[segment.tone ?? 'default'];
   if (segment.loading || value == null || typeof value === 'string' || typeof value === 'number') {

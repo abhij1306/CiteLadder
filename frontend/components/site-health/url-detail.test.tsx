@@ -396,8 +396,7 @@ describe('UrlDetail', () => {
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     expect(screen.getByRole('img', { name: 'Web Fundamentals score: 46' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'AEO Readiness score: 64' })).toBeInTheDocument();
-    expect(screen.getByText('Partial audit · 50% coverage')).toBeInTheDocument();
-    expect(screen.getAllByText('Partial audit · 75% coverage')).toHaveLength(2);
+    expect(screen.getByRole('img', { name: 'AEO Checklist Completion: 75%' })).toBeInTheDocument();
   });
 
   it('preserves the AEO state when measurement coverage is unavailable', async () => {

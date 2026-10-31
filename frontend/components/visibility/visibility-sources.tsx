@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Globe } from 'lucide-react';
 
 import type { DataTableState } from '@/components/ui/data-table';
@@ -107,6 +107,38 @@ export function VisibilitySources({
   );
 }
 
+/**
+ * A different dimension is a different result set, so the offset cursor and
+ * the type filter cannot carry over: page three of domains is not page three
+ * of URLs, and `editorial` is not a page format.
+ */
+function useSourceDimension() {
+  const [rawDimension, setDimension] = useUrlState('source_dim', optionalStringUrlCodec, {
+    clearKeys: ['source_cursor', 'source_offset', 'source_as_of', 'source_type', 'source_standing'],
+  });
+  const dimension: 'domain' | 'url' = rawDimension === 'url' ? 'url' : 'domain';
+  return [dimension, (value: string) => setDimension(value === 'url' ? value : null)] as const;
+}
+
+/**
+ * The Domains / URLs switch for the page's control band. Only the inventory
+ * has the two halves; a domain's or URL's own page shows nothing here.
+ */
+export function useSourceDimensionSwitch(): ReactNode {
+  const [dimension, setDimension] = useSourceDimension();
+  const [domain] = useUrlState('source_domain', optionalStringUrlCodec);
+  const [url] = useUrlState('source_url', optionalStringUrlCodec);
+  if (domain || url) return null;
+  return (
+    <SegmentedControl
+      value={dimension}
+      onChange={setDimension}
+      options={DIMENSIONS.map((entry) => ({ value: entry.value, label: entry.label }))}
+      ariaLabel="Source dimension"
+    />
+  );
+}
+
 /** The Domains / URLs inventory: the table, then the usage chart and type ring. */
 function SourcesInventory({
   filters,
@@ -119,13 +151,7 @@ function SourcesInventory({
   onOpenUrl: (url: string) => void;
   onOpenDomain: (domain: string) => void;
 }>) {
-  // A different dimension is a different result set, so the offset cursor and
-  // the type filter cannot carry over: page three of domains is not page three
-  // of URLs, and `editorial` is not a page format.
-  const [rawDimension, setDimension] = useUrlState('source_dim', optionalStringUrlCodec, {
-    clearKeys: ['source_cursor', 'source_offset', 'source_as_of', 'source_type', 'source_standing'],
-  });
-  const dimension = rawDimension === 'url' ? 'url' : 'domain';
+  const [dimension] = useSourceDimension();
   return (
     // Deliberately NOT keyed on `dimension`. Remounting threw away the React
     // Query observer along with the panel, so `retainPreviousDataForScope` had
@@ -133,7 +159,6 @@ function SourcesInventory({
     // switch. The panel resets its own local state instead -- see `SourcesPanel`.
     <SourcesPanel
       dimension={dimension}
-      onChangeDimension={(value) => setDimension(value === 'domain' ? null : value)}
       filters={filters}
       queries={queries}
       onOpenUrl={onOpenUrl}
@@ -177,7 +202,6 @@ function useTypeOptions({
 
 export function SourcesPanel({
   dimension,
-  onChangeDimension,
   filters,
   queries,
   domain = null,
@@ -185,7 +209,6 @@ export function SourcesPanel({
   onOpenDomain,
 }: Readonly<{
   dimension: 'domain' | 'url';
-  onChangeDimension?: (value: string) => void;
   filters: SourceFilters;
   queries: SourceQueries;
   /** Set on a domain's own page, where the table lists only its pages. */
@@ -298,15 +321,6 @@ export function SourcesPanel({
 
   return (
     <Stack gap="workspace">
-      {onChangeDimension ? (
-        <SegmentedControl
-          value={dimension}
-          onChange={onChangeDimension}
-          options={DIMENSIONS.map((entry) => ({ value: entry.value, label: entry.label }))}
-          ariaLabel="Source dimension"
-        />
-      ) : null}
-
       {nearMiss ? (
         <NearMissTable
           query={nearMissQuery}

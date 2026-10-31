@@ -68,13 +68,27 @@ function recordCanonical(facts: Facts, evidence: Record<string, unknown>) {
   evidence.canonical_matches_final_url = comparableUrl(canonical) === comparableUrl(finalUrl);
 }
 
+/**
+ * Only the owner's explicit policy overrides a page's own noindex. A sitemap
+ * does not: Shopify and WordPress list every collection and archive in theirs,
+ * including the ones they noindex on purpose. That conflict is
+ * `technical.sitemap_noindex`'s finding.
+ */
 function resolveIntent(facts: Facts, evidence: Record<string, unknown>) {
   const explicit = text(facts.indexing_policy).trim().toLowerCase();
   if (explicit === 'index') return ['intended_index', 'explicit_user_policy'] as const;
   if (explicit === 'exclude') return ['intended_exclude', 'explicit_user_policy'] as const;
   recordCanonical(facts, evidence);
-  if (facts.sitemap_member === true) return ['intended_index', 'sitemap_membership'] as const;
-  return ['unknown', 'insufficient_evidence'] as const;
+  return ['intended_exclude', 'page_directive'] as const;
+}
+
+/** A sitemap should list only pages meant to be indexed. */
+export function checkSitemapNoindex(facts: Facts): CheckResult {
+  if (facts.sitemap_member !== true) return ['not_applicable', { reason: 'not_in_sitemap' }];
+  const noindex = Boolean(record(facts.robots).noindex);
+  return noindex
+    ? ['missing', { noindex, reason: 'sitemap_lists_noindex' }]
+    : ['satisfied', { noindex }];
 }
 
 /**

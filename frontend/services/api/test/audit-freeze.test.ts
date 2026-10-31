@@ -66,6 +66,7 @@ describe('audit admission freeze', () => {
       engines: ['chatgpt'],
       measurement_policy: { retrieval_enabled: true },
       anthropic_max_uses: providers.anthropicMaxUses,
+      openai_max_tool_calls: 1,
     });
     expect(plan.systemInstruction).not.toContain('Acme');
     await db

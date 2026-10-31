@@ -5,7 +5,10 @@ import type { ReactNode } from 'react';
 import { ActiveRunBanner } from '@/components/visibility/active-run-banner';
 import { VisibilityEmptyState } from '@/components/visibility/empty-state';
 import { FanoutEvidence } from '@/components/visibility/fanout-evidence';
-import { VisibilitySources } from '@/components/visibility/visibility-sources';
+import {
+  VisibilitySources,
+  useSourceDimensionSwitch,
+} from '@/components/visibility/visibility-sources';
 import { VisibilityPerception } from '@/components/visibility/visibility-perception';
 import { VisibilityAccuracy } from '@/components/visibility/visibility-accuracy';
 import { VisibilityAds } from '@/components/visibility/visibility-ads';
@@ -91,6 +94,7 @@ function VisibilityWorkspace({
   // The Accuracy tab exists only inside the fact-checking pilot.
   const factChecking =
     useBrandFacts(queries.projectId ?? null, queries.workspaceId ?? null).data?.enabled ?? false;
+  const sourceDimension = useSourceDimensionSwitch();
   if (state === 'empty') {
     return (
       <ListScreen actions={<VisibilityActions />}>
@@ -114,6 +118,7 @@ function VisibilityWorkspace({
           onIntent: queries.prefetchTab,
         }}
         controls={{
+          view: filters.activeTab === 'sources' && !state ? sourceDimension : null,
           filters: (
             <VisibilityToolbar
               activeTab={filters.activeTab}
