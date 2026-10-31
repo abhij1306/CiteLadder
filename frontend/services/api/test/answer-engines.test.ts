@@ -89,6 +89,10 @@ describe('frozen answer-engine execution', () => {
     const body = answerPayload({ ...request('chatgpt'), openai_max_tool_calls: cap });
     expect(body.max_tool_calls).toBe(sent);
   });
+  it('rejects a negative OpenAI search-round cap at configuration', () => {
+    expect(() => providerSettings({ PROVIDER_OPENAI_MAX_TOOL_CALLS: '-1' })).toThrow(/>= 0/);
+    expect(providerSettings({ PROVIDER_OPENAI_MAX_TOOL_CALLS: '0' }).openaiMaxToolCalls).toBe(0);
+  });
   it('records an OpenAI query repeated as both query and queries once', () => {
     const result = parseAnswer(
       {

@@ -121,7 +121,8 @@
     "openai_max_tool_calls": {
       "env": ["PROVIDER_OPENAI_MAX_TOOL_CALLS"],
       "type": "int",
-      "default": 1
+      "default": 1,
+      "minimum": 0
     },
     "byok_key_grace_days": {
       "env": ["PROVIDER_BYOK_KEY_GRACE_DAYS"],
