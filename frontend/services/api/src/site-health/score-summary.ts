@@ -68,15 +68,17 @@ export async function loadMeasurementProjection(db: Database, crawl: Crawl) {
       return evaluation ? [persistedEvaluation(evaluation)] : [];
     }),
   }));
+  // A page whose fetch failed never gets an analyze task; its discover task carries the outcome.
   const tasks = await db
     .selectFrom('site_crawl_tasks')
     .selectAll()
     .distinctOn('site_url_id')
     .where('workspace_id', '=', crawl.workspace_id)
     .where('crawl_id', '=', crawl.id)
-    .where('task_kind', '=', 'analyze')
+    .where('task_kind', 'in', ['analyze', 'discover'])
     .where('site_url_id', '=', sql<string>`any(${selectedIds}::uuid[])`)
     .orderBy('site_url_id')
+    .orderBy(sql`task_kind = 'analyze'`, 'desc')
     .orderBy('generation', 'desc')
     .orderBy('id', 'desc')
     .execute();

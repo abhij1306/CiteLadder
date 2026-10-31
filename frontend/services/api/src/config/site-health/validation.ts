@@ -7,6 +7,8 @@ export function validateSiteHealthSettings(values: Record<string, unknown>) {
   };
   for (const [smaller, larger] of [
     ['automatic_page_limit', 'max_requested_page_limit'],
+    // Advanced controls (always on for the development account) bound the default crawl too.
+    ['automatic_page_limit', 'max_advanced_requested_page_limit'],
     ['max_requested_page_limit', 'max_discovery_urls'],
     ['max_advanced_requested_page_limit', 'max_discovery_urls'],
     ['sample_url_limit', 'sample_discovery_url_cap'],

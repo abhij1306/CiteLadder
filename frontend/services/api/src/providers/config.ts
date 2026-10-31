@@ -17,6 +17,7 @@ export function providerSettings(env: Record<string, string | undefined> = proce
     outputTokens: Number(resolveSettingSpec(spec.test_max_output_tokens, env)),
     anthropicVersion: String(resolveSettingSpec(spec.anthropic_version, env)),
     anthropicMaxUses: Number(resolveSettingSpec(spec.anthropic_max_uses, env)),
+    openaiMaxToolCalls: Number(resolveSettingSpec(spec.openai_max_tool_calls, env)),
     keyGraceDays: Number(resolveSettingSpec(spec.byok_key_grace_days, env)),
     maxResponseBytes: Number(resolveSettingSpec(spec.max_response_bytes, env)),
     dataforseoTimeout: Number(

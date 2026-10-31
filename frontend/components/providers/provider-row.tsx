@@ -56,7 +56,7 @@ function StatusBadge({
   );
 }
 
-/** "ChatGPT API · gpt-6.1-sol" for an API; the bare surface name for a consumer app. */
+/** "ChatGPT API · gpt-6.1-terra" for an API; the bare surface name for a consumer app. */
 function engineSummary(engine: EngineCardModel): string {
   const model = productModelLabel(engine.logical_engine, engine.route?.model);
   return model ? `${engine.label} · ${model}` : engine.label;

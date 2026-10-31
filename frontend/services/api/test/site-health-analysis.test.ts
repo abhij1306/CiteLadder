@@ -961,6 +961,32 @@ describe('unscored visibility checks', () => {
     expect([createsIssue(conflict), conflict.score_applicability]).toEqual([true, false]);
   });
 
+  it("blocks a noindex page only when the owner's policy says index it", () => {
+    const facts = (member: boolean, policy = '') => ({
+      robots: { noindex: true },
+      canonical_url: '/guides/setup',
+      sitemap_member: member,
+      indexing_policy: policy,
+    });
+    // Shopify lists every collection in its sitemap, including the ones it noindexes on purpose.
+    expect(outcome(rule('technical.indexable', facts(true)))).toEqual([
+      'not_applicable',
+      'intentional_non_indexing',
+    ]);
+    expect(outcome(rule('technical.indexable', facts(false, 'index')))).toEqual([
+      'missing',
+      undefined,
+    ]);
+    // The sitemap conflict stays visible as its own unscored issue.
+    const listed = rule('technical.sitemap_noindex', facts(true));
+    expect(outcome(listed)).toEqual(['missing', 'sitemap_lists_noindex']);
+    expect([createsIssue(listed), listed.score_applicability]).toEqual([true, false]);
+    expect(outcome(rule('technical.sitemap_noindex', facts(false)))).toEqual([
+      'not_applicable',
+      'not_in_sitemap',
+    ]);
+  });
+
   it('flags a sitemap URL that redirects, but not a reordered query string', () => {
     const listed = (url?: string, member = true) =>
       outcome(rule('technical.sitemap_redirect', { sitemap_member: member, sitemap_url: url }));

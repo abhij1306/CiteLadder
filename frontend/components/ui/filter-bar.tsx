@@ -20,6 +20,11 @@ import { cn } from '@/lib/utils';
  * `FilterBar` itself, so no feature draws a toolbar of its own.
  */
 export type FilterBarProps = Readonly<{
+  /**
+   * A `SegmentedControl` choosing which view the content shows (Domains |
+   * URLs). It leads the row and pushes the filters after it to the end.
+   */
+  view?: ReactNode;
   /** A `SearchField`. */
   search?: ReactNode;
   /**
@@ -40,8 +45,9 @@ export type FilterBarProps = Readonly<{
 
 /**
  * FilterBar — the control band's one composition, in one row with one gap:
- * search, then filters, then a status line, then trailing actions pushed to
- * the end.
+ * an optional view switch, search, then filters, then a status line, then
+ * trailing actions pushed to the end. With a view switch, everything after it
+ * sits at the end.
  *
  * It owns every number in the band: the 8px gap between items, the 8px above
  * and below the row, the 32px row height, the one search width and the one
@@ -49,13 +55,14 @@ export type FilterBarProps = Readonly<{
  * nothing here resizes them. Below the phone breakpoint the search and every
  * filter take the full row.
  */
-export function FilterBar({ search, filters, status, actions }: FilterBarProps) {
+export function FilterBar({ view, search, filters, status, actions }: FilterBarProps) {
   return (
     <div
       data-filter-bar=""
       className="flex min-h-[var(--control-height-md)] w-full min-w-0 flex-wrap items-center gap-2 py-2"
     >
-      {search ? <div className="desktop:w-72 w-full min-w-0">{search}</div> : null}
+      {view ? <div className="me-auto flex min-w-0">{view}</div> : null}
+      {search ? <div className="desktop:w-56 w-full min-w-0">{search}</div> : null}
       {filters ? (
         // `contents` keeps the filters as the row's own flex items; it only
         // scopes the narrow-screen width to them (not the status or actions).

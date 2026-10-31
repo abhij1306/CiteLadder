@@ -25,16 +25,16 @@
         "identity": {
           "logical_engine": "chatgpt",
           "transport_provider": "openai",
-          "transport_model": "gpt-6.1-sol"
+          "transport_model": "gpt-6.1-terra"
         },
         "pricing": {
-          "uncached_input_microusd_per_million": 2000000,
-          "cached_input_microusd_per_million": 100000,
-          "output_microusd_per_million": 10000000,
+          "uncached_input_microusd_per_million": 1000000,
+          "cached_input_microusd_per_million": 50000,
+          "output_microusd_per_million": 5000000,
           "reasoning_microusd_per_million": null,
           "search_fee_microusd": null,
           "currency": "USD",
-          "effective_date": "2026-10-08",
+          "effective_date": "2026-10-31",
           "pricing_version": "official-2026-10-08-v1"
         }
       },

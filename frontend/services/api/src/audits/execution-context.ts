@@ -132,6 +132,7 @@ export function directRequest(context: ExecutionContext) {
     reasoning_effort: record(context.route).reasoning_effort,
     country_code: config.country_code ?? '',
     anthropic_max_uses: config.anthropic_max_uses ?? 0,
+    openai_max_tool_calls: config.openai_max_tool_calls ?? 0,
   });
   if (!parsed.success) throw new ProviderError('parse_error');
   return parsed.data;

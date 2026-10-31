@@ -282,8 +282,9 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
   );
   const w = crawlWindow(options),
     limit = pageLimit(options);
-  const { cursor, ...rest } = options,
-    filters = { ...rest, ...w, limit, sort: options.sort ?? 'requests_desc' },
+  // A keyset cursor marks a position, so a continuation may ask for a different page size.
+  const { cursor, limit: _limit, ...rest } = options,
+    filters = { ...rest, ...w, sort: options.sort ?? 'requests_desc' },
     endpoint = [scope.workspaceId, scope.projectId, 'pages'].join(':');
   let after: string[] = [];
   try {

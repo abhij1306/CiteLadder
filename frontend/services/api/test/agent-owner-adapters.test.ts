@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import * as sharedTools from '../src/mcp/tools.ts';
 import { AgentFixtures, reply, save, scripted, toolUse, type Response } from './agent-support.ts';
 import { testDatabase } from './support.ts';
-import { agentTools } from '../src/agent/tool-adapters.ts';
+import { agentTools, smallerLimit } from '../src/agent/tool-adapters.ts';
 import { attachAgentTarget } from '../src/agent/target-adapter.ts';
 import { attachOrCreateAction } from '../src/opportunities/actions.ts';
 import { readChat } from '../src/agent/reads.ts';
@@ -23,6 +23,19 @@ describe('Agent bindings to the evidence and Action owners', () => {
     await db.destroy();
   });
   const signal = () => AbortSignal.timeout(5000);
+  it('shrinks a page only to a size the tool accepts', () => {
+    const shape = (name: string) =>
+      sharedTools.definitions[name as keyof typeof sharedTools.definitions].schema.shape as Record<
+        string,
+        Parameters<typeof smallerLimit>[0]
+      >;
+    // read_performance takes fixed page sizes: 25 steps down to 10, and 10 has no smaller one.
+    // A short page (18 of 25 rows) still reaches 10, though 10 is more than half of 18.
+    const performance = shape('read_performance').limit!;
+    expect([25, 18, 10].map((rows) => smallerLimit(performance, rows))).toEqual([10, 10, null]);
+    const portfolio = shape('read_prompt_portfolio').limit!;
+    expect([smallerLimit(portfolio, 25), smallerLimit(portfolio, 1)]).toEqual([12, null]);
+  });
   it('sizes page reads to the turn budget while retaining owner cursors and every row', async () => {
     const site = new SiteFixtures(db);
     try {

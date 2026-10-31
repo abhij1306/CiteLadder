@@ -931,6 +931,25 @@
     "composite_contract": null
   },
   {
+    "applicability_key": "has_html",
+    "category": "indexability",
+    "description": "Sitemap-listed pages allow indexing.",
+    "dimension": "technical",
+    "display_label": "Sitemap lists noindex pages",
+    "display_label_variants": {},
+    "finding_class": "defect",
+    "kind_evidence": "expectation",
+    "remediation": "Remove the noindex if the page should rank, or keep it out of the sitemap.",
+    "rule_id": "technical.sitemap_noindex",
+    "scope": "page",
+    "score_roles": [],
+    "severity": "medium",
+    "triggered_by": "",
+    "web_fundamentals_area": "",
+    "weight": 1.0,
+    "composite_contract": null
+  },
+  {
     "applicability_key": "crawl_finalize",
     "category": "indexability",
     "description": "Hreflang alternates carry reciprocal return tags.",

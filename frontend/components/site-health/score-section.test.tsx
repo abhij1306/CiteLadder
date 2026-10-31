@@ -58,10 +58,6 @@ describe('ScoreSection', () => {
 
     expect(screen.getByRole('img', { name: 'Web Fundamentals score: 73' })).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'AEO Readiness score: 61' })).toBeInTheDocument();
-    expect(screen.getByText('Partial audit · 60% coverage')).toBeInTheDocument();
-    expect(screen.getByText('Partial audit · 70% coverage')).toBeInTheDocument();
-    // The coverage card's value IS the coverage, so its caveat never repeats it.
-    expect(screen.getByText('Partial audit')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'AEO Checklist Completion: 70%' })).toBeInTheDocument();
   });
 });

@@ -1071,6 +1071,9 @@ describe('persisted analytics and coverage decisions', () => {
     expect(page.next_cursor).not.toBeNull();
     const next = await activityPage(db, scope(tenant), { limit: 1, cursor: page.next_cursor });
     expect(next.items[0]!.id).not.toBe(page.items[0]!.id);
+    // The Agent shrinks or widens a page; the cursor still resumes after the same row.
+    const wider = await activityPage(db, scope(tenant), { limit: 5, cursor: page.next_cursor });
+    expect(wider.items[0]!.id).toBe(next.items[0]!.id);
     await expect(
       activityPage(db, scope(tenant), { limit: 1, cursor: page.next_cursor, status: 403 }),
     ).rejects.toThrow(/filters/);

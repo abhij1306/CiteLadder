@@ -6,7 +6,7 @@ import { dispatchTool } from '../src/mcp/tools.ts';
 import { fetchRecord } from '../src/mcp/retrieval.ts';
 import { agentTools } from '../src/agent/tool-adapters.ts';
 import type { McpPrincipal } from '../src/mcp/types.ts';
-import { prompt, promptSet } from './prompt-fixtures.ts';
+import { prompt, promptSet, topic } from './prompt-fixtures.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 import { actionFixture, type ActionSeed } from './action-support.ts';
@@ -252,9 +252,12 @@ it('keeps crawlability unavailable without a crawl, including business context',
 
 it('pages prompts stably while context includes only active prompts and foreign IDs cannot fetch', async () => {
   const set = await promptSet(db, tenant.projectId);
+  const nets = await topic(db, tenant.projectId, 'Golf nets', 'Home practice');
+  // No prompt yet, yet a proposal may still file new questions under it.
+  const kicking = await topic(db, tenant.projectId, 'Kicking nets');
   // Distinct instants: same-millisecond fixtures would page in random-UUID order.
   const at = (offset: number) => new Date(Date.UTC(2026, 0, 1) + offset);
-  const first = await prompt(db, set, 'Acme first', { createdAt: at(0) });
+  const first = await prompt(db, set, 'Acme first', { createdAt: at(0), topicId: nets });
   const second = await prompt(db, set, 'Acme second', { createdAt: at(1) });
   const retired = await prompt(db, set, 'Acme retired', { status: 'retired', createdAt: at(2) });
   // Accepted from a grounded candidate: the portfolio says so without the query identity.
@@ -271,7 +274,17 @@ it('pages prompts stably while context includes only active prompts and foreign 
     .where('id', '=', second)
     .execute();
   const page = await read('read_prompt_portfolio', { limit: 1 });
-  expect(page.items).toEqual([expect.objectContaining({ id: first, grounded: false })]);
+  expect(page.items).toEqual([
+    expect.objectContaining({ id: first, grounded: false, topic_id: nets, topic: 'Golf nets' }),
+  ]);
+  // One prompt per page still lists every topic.
+  expect([page.topics, page.topics_truncated]).toEqual([
+    [
+      { id: nets, name: 'Golf nets', description: 'Home practice' },
+      { id: kicking, name: 'Kicking nets', description: '' },
+    ],
+    false,
+  ]);
   const next = await read('read_prompt_portfolio', {
     limit: 1,
     cursor: (page.pagination as { next_cursor: string }).next_cursor,

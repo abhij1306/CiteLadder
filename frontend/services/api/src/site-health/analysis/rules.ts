@@ -11,6 +11,7 @@ import {
   checkClientSideRedirect,
   checkIndexable,
   checkSitemapCanonical,
+  checkSitemapNoindex,
   checkSitemapLastmod,
   checkSitemapRedirect,
   type CheckResult,
@@ -92,6 +93,7 @@ function composite(ruleId: string): CompositeContract {
 const CHECKS: Record<string, (facts: Facts) => CheckResult> = {
   'technical.indexable': checkIndexable,
   'technical.sitemap_canonical': checkSitemapCanonical,
+  'technical.sitemap_noindex': checkSitemapNoindex,
   'technical.sitemap_redirect': checkSitemapRedirect,
   'technical.sitemap_lastmod': checkSitemapLastmod,
   'technical.client_side_redirect': checkClientSideRedirect,
@@ -197,14 +199,6 @@ function normalized(
   outcome: string,
   evidence: Record<string, unknown>,
 ): [string, string] {
-  if (
-    rule.rule_id === 'technical.indexable' &&
-    outcome === 'missing' &&
-    evidence.indexing_intent === 'unknown'
-  ) {
-    evidence.reason = 'insufficient_evidence';
-    return ['unknown', 'insufficient_evidence'];
-  }
   const reason = text(evidence.reason);
   if (outcome !== 'not_applicable') return [outcome, reason];
   if (UNKNOWN_REASONS.has(reason)) return ['unknown', reason];

@@ -79,7 +79,7 @@ const attempts = (taskId: string) =>
     .execute();
 
 describe('analyze acquisition', () => {
-  it('retains the sitemap observation that establishes indexing intent', async () => {
+  it('retains the sitemap observation behind a sitemap-listed noindex finding', async () => {
     const seed = await running();
     const page = await fixtures.analyzable(seed, '/sitemap-page');
     const observationId = crypto.randomUUID();
@@ -113,18 +113,23 @@ describe('analyze acquisition', () => {
       page.taskId,
     );
     const [analysis] = await analyses(seed, page.siteUrlId);
-    const evaluation = await db
+    const evaluations = await db
       .selectFrom('site_rule_evaluations')
-      .select(['evidence', 'outcome', 'extractor_version'])
+      .select(['rule_id', 'evidence', 'outcome', 'extractor_version'])
       .where('analysis_id', '=', analysis!.id)
-      .where('rule_id', '=', 'technical.indexable')
-      .executeTakeFirstOrThrow();
-    expect(evaluation).toMatchObject({
-      outcome: 'missing',
+      .where('rule_id', 'in', ['technical.indexable', 'technical.sitemap_noindex'])
+      .orderBy('rule_id')
+      .execute();
+    // The page's own noindex is its choice; listing it in the sitemap is the finding.
+    expect(evaluations.map((row) => [row.rule_id, row.outcome])).toEqual([
+      ['technical.indexable', 'not_applicable'],
+      ['technical.sitemap_noindex', 'missing'],
+    ]);
+    expect(evaluations[1]).toMatchObject({
       extractor_version: policy.site_health.versions.extractor,
     });
-    expect(record(evaluation.evidence)).toMatchObject({
-      intent_source: 'sitemap_membership',
+    expect(record(evaluations[1]!.evidence)).toMatchObject({
+      reason: 'sitemap_lists_noindex',
       context_sources: { sitemap_crawl_id: seed.crawlId, sitemap_observation_id: observationId },
     });
   });
@@ -644,6 +649,10 @@ describe('page fetch policy', () => {
       false,
     );
     expect(isBotBlock(page(200, '<html><main><h1>Widgets</h1></main></html>'))).toBe(false);
+    // Cloudflare's rate-limit page loads the challenge platform; it is still a retryable 429.
+    const limited = '<html><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>';
+    expect(isBotBlock(page(429, limited))).toBe(false);
+    expect(isBotBlock(page(403, limited))).toBe(true);
   });
   it('excludes non-content endpoints and tracking variants but not ordinary pages', () => {
     expect(hardExcluded(new URL('https://example.test/cart'))).toBe(true);

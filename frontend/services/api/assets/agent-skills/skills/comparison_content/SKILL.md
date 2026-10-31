@@ -22,7 +22,7 @@ Write a comparison that helps a real buyer decide. The sponsoring brand may be t
 
 ## Inputs
 
-You need the actual options being compared, the buyer and market, and facts about each option. Get company facts from `get_project_business_context`. Useful extras: buyer questions from tracked prompts and AI answers (`read_visibility_results`), search demand (`read_performance` with a `dimension`, `read_search_dataset`), and existing owned pages. You cannot check the live web, so use only facts already saved or supplied by the user.
+You need the actual options being compared, the buyer and market, and facts about each option. Get company facts from `get_project_business_context`. Useful extras: buyer questions from tracked prompts and AI answers (`read_visibility_results` with an `audit_id` from `read_visibility_overview`), search demand (`read_performance` with a `dimension`, `read_search_dataset`), and existing owned pages. You cannot check the live web, so use only facts already saved or supplied by the user.
 
 ## Method
 

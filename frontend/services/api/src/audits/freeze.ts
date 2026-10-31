@@ -442,6 +442,7 @@ export async function prepareAudit(
     max_run_seconds: settings.max_run_seconds,
     request_timeout_seconds: settings.audit_timeout_seconds,
     anthropic_max_uses: providerSettings.anthropicMaxUses,
+    openai_max_tool_calls: providerSettings.openaiMaxToolCalls,
     slot_order_version: 'mt19937-v1',
     // Perception results carry the versions in force at admission (brand audits only).
     perception: admittedPerceptionVersions(input.audit_scope, factCheck),

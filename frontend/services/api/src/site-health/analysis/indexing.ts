@@ -51,32 +51,44 @@ export function comparableUrl(value: string) {
   return `${url.protocol}//${url.host.toLowerCase()}${path}${search}`;
 }
 
-function canonicalIntent(facts: Facts, evidence: Record<string, unknown>) {
+/**
+ * The canonical beside a noindex, recorded as context only: CMS templates emit a
+ * self-canonical on every page, including the tag archives they noindex on purpose.
+ */
+function recordCanonical(facts: Facts, evidence: Record<string, unknown>) {
   const declared = text(facts.canonical_url).trim();
-  if (!declared) return null;
+  if (!declared) return;
   const finalUrl = text(record(facts.delivery).final_url);
   const canonical = resolveCanonical(declared, finalUrl);
   evidence.canonical_url = canonical.slice(0, 2048);
   if (!canonicalOrigin(canonical)) {
-    // An unparseable canonical is no evidence of intent in either direction.
     evidence.canonical_unparseable = true;
-    return null;
+    return;
   }
-  const same = comparableUrl(canonical) === comparableUrl(finalUrl);
-  evidence.canonical_matches_final_url = same;
-  if (same) return ['intended_index', 'self_canonical'] as const;
-  evidence.canonical_intent_ambiguous = true;
-  return null;
+  evidence.canonical_matches_final_url = comparableUrl(canonical) === comparableUrl(finalUrl);
 }
 
+/**
+ * Only the owner's explicit policy overrides a page's own noindex. A sitemap
+ * does not: Shopify and WordPress list every collection and archive in theirs,
+ * including the ones they noindex on purpose. That conflict is
+ * `technical.sitemap_noindex`'s finding.
+ */
 function resolveIntent(facts: Facts, evidence: Record<string, unknown>) {
   const explicit = text(facts.indexing_policy).trim().toLowerCase();
   if (explicit === 'index') return ['intended_index', 'explicit_user_policy'] as const;
   if (explicit === 'exclude') return ['intended_exclude', 'explicit_user_policy'] as const;
-  const canonical = canonicalIntent(facts, evidence);
-  if (canonical) return canonical;
-  if (facts.sitemap_member === true) return ['intended_index', 'sitemap_membership'] as const;
-  return ['unknown', 'insufficient_evidence'] as const;
+  recordCanonical(facts, evidence);
+  return ['intended_exclude', 'page_directive'] as const;
+}
+
+/** A sitemap should list only pages meant to be indexed. */
+export function checkSitemapNoindex(facts: Facts): CheckResult {
+  if (facts.sitemap_member !== true) return ['not_applicable', { reason: 'not_in_sitemap' }];
+  const noindex = Boolean(record(facts.robots).noindex);
+  return noindex
+    ? ['missing', { noindex, reason: 'sitemap_lists_noindex' }]
+    : ['satisfied', { noindex }];
 }
 
 /**

@@ -1,5 +1,4 @@
 import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
-import { measurementCaveat } from '@/lib/site-health/status';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ICONS } from '@/lib/icons';
 import { AuditScores } from './overview-metrics';
@@ -18,10 +17,6 @@ export function ScoreSection({
           title: 'Web Fundamentals',
           value: summary?.web_fundamentals_score ?? null,
           unavailable: unavailable(summary?.web_fundamentals_state),
-          caveat: measurementCaveat(
-            summary?.web_fundamentals_state,
-            summary?.web_fundamentals_coverage,
-          ),
           icon: ICONS.siteHealth,
           href: '/issues?dimension=technical',
         },
@@ -29,7 +24,6 @@ export function ScoreSection({
           title: 'AEO Readiness',
           value: summary?.aeo_readiness_score ?? null,
           unavailable: unavailable(summary?.aeo_measurement_state),
-          caveat: measurementCaveat(summary?.aeo_measurement_state, coverage),
           icon: ICONS.visibility,
           href: '/issues?dimension=aeo',
         },
@@ -38,7 +32,6 @@ export function ScoreSection({
           value: coverage == null ? null : coverage * 100,
           valueUnit: 'percent',
           unavailable: unavailable(summary?.aeo_measurement_state),
-          caveat: measurementCaveat(summary?.aeo_measurement_state),
           icon: ICONS.reports,
           href: '/site?tab=aeo-readiness',
         },

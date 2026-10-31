@@ -118,6 +118,12 @@
       "type": "int",
       "default": 5
     },
+    "openai_max_tool_calls": {
+      "env": ["PROVIDER_OPENAI_MAX_TOOL_CALLS"],
+      "type": "int",
+      "default": 1,
+      "minimum": 0
+    },
     "byok_key_grace_days": {
       "env": ["PROVIDER_BYOK_KEY_GRACE_DAYS"],
       "type": "int",
@@ -153,7 +159,7 @@
     "chatgpt": {
       "logical_engine": "chatgpt",
       "transport_provider": "openai",
-      "transport_model": "gpt-6.1-sol",
+      "transport_model": "gpt-6.1-terra",
       "retrieval_enabled": true,
       "reasoning_effort": "low",
       "reasoning_pinnable": true,

@@ -30,7 +30,8 @@ This is a read the user asked for, not a schedule.
 7. For what changed on the site, call `read_actions` (with `action_id` for one
    Action's go-live date and measured outcome). For search traffic in the same
    window, call `read_performance` with a comparison, or `read_query_evidence`
-   for queries by page.
+   for queries by page. It reads only `read_demand`'s saved window; when that
+   differs from the period you compare, say so rather than treat them as one.
 
 ## Compare honestly
 

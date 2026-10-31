@@ -125,7 +125,8 @@ function rollups(db: Database, scope: CrawlScope, options: CrawlReadOptions) {
 }
 function cursorParts(scope: CrawlScope, view: string, options: CrawlReadOptions) {
   const endpoint = [scope.workspaceId, scope.projectId, view].join(':');
-  const { cursor, ...filters } = options;
+  // A keyset cursor marks a position, so a continuation may ask for a different page size.
+  const { cursor, limit: _limit, ...filters } = options;
   try {
     return { endpoint, filters, keys: cursor ? decodeKeysetCursor(cursor, endpoint, filters) : [] };
   } catch (error) {

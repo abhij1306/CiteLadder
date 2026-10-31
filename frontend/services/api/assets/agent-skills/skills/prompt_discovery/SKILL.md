@@ -20,7 +20,7 @@ Propose realistic, non-leading buyer questions worth tracking in the project's A
 
 - `get_project_business_context` for offers, buyers, language and served markets. Add geography only when the user targets a market or the business is local or regional.
 - `read_prompt_portfolio` for existing prompts and the topic list. Page through it before claiming a duplicate or a gap; active prompts are capped at 50.
-- Optional demand evidence: Search Console queries (`read_performance` with `dimension: query`), keyword data (`read_search_intelligence`, `read_search_dataset`), current AI answers (`read_visibility_results`).
+- Optional demand evidence: Search Console queries (`read_performance` with `dimension: query`), keyword data (`read_search_intelligence`, `read_search_dataset`), current AI answers (`read_visibility_results` with an `audit_id` from `read_visibility_overview`).
 
 With no demand evidence, the portfolio is a hypothesis; say so. Never attach keyword search volume to a prompt as "AI prompt volume". Private customer wording may inspire a question but is not quoted without approval.
 

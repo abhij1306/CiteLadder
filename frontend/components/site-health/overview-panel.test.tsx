@@ -243,11 +243,8 @@ describe('OverviewPanel', () => {
 
     // 20 analyzed of 100 found is 20% coverage, not 100% of the 20 selected.
     expect(
-      await screen.findByText(
-        '20 of 100 found pages analyzed · limit 20 per crawl · 2 failed to load',
-      ),
+      await screen.findByRole('img', { name: 'Crawl Coverage score: 20' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Crawl Coverage score: 20' })).toBeInTheDocument();
   });
 
   it('keeps an unknown crawl that found nothing from reading as a percentage', async () => {
@@ -279,45 +276,8 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    expect(
-      await screen.findByText('Coverage unknown · No pages found · discovery failed'),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: /Web Fundamentals score/ })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /Crawl Coverage score/ })).not.toBeInTheDocument();
-  });
-
-  it('separates page types found but not analyzed from those never found', async () => {
-    mswServer.use(
-      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
-        HttpResponse.json(
-          terminalOverview({
-            crawl_coverage: {
-              state: 'partial',
-              evidence: {
-                reasons: ['requested_page_limit_reached'],
-                value_kinds: [
-                  { kind: 'root', found: 1, analyzed: 1 },
-                  { kind: 'product', found: 16, analyzed: 4 },
-                  { kind: 'pricing', found: 0, analyzed: 0 },
-                ],
-              },
-              denominator_kind: 'selected_intended_public_urls',
-            },
-          }),
-        ),
-      ),
-    );
-    renderWithProviders(
-      <OverviewPanel
-        projectId={PROJECT}
-        crawlId={CRAWL}
-        crawl={{ status: 'completed' } as never}
-        dashboard={undefined}
-      />,
-    );
-
-    expect(await screen.findByTestId('coverage-by-kind')).toHaveTextContent(
-      'Pages analyzed by type: Product 4 of 16. Not found in this crawl: Pricing.',
-    );
   });
 
   it('opens persisted HTTP Web Fundamentals evidence without browser-only checks', async () => {
@@ -336,13 +296,7 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    // A caveat only where the measurement is qualified: the partial audit and
-    // the partial crawl say so, and nothing prints a "complete" reassurance.
-    expect(await screen.findAllByText('Partial audit · 60% coverage')).toHaveLength(2);
-    expect(screen.getByText(/Partial coverage/)).toBeInTheDocument();
-    expect(screen.queryByText(/Complete checklist|Complete coverage/)).not.toBeInTheDocument();
-    expect(screen.getByText(/requested page limit reached/)).toBeInTheDocument();
-    const issueLink = screen.getByRole('link', { name: 'Author attribution is missing' });
+    const issueLink = await screen.findByRole('link', { name: 'Author attribution is missing' });
     expect(issueLink).toHaveAttribute(
       'href',
       '/issues?rule=aeo.visible_attribution&finding_class=advisory',
@@ -385,8 +339,6 @@ describe('OverviewPanel', () => {
 
     expect(await screen.findByTestId('site-health-overview')).toBeInTheDocument();
     expect(screen.queryByText(ALERT)).not.toBeInTheDocument();
-    expect(screen.getByText('Coverage unavailable')).toBeInTheDocument();
-    expect(screen.queryByText('In progress')).not.toBeInTheDocument();
   });
 
   it('still reports a snapshot read that genuinely failed', async () => {
