@@ -318,14 +318,14 @@ function ScoredInventoryState({
           const item = TABS.find((candidate) => candidate.key === value);
           if (item) prefetchTab(item);
         }}
+        // The label names what the tab shows, never which tab is selected: the
+        // monitored tab lists audited pages for the whole active run.
         items={TABS.map((item) => ({
           value: item.key,
-          label:
-            active && tab === 'monitored' && item.key === 'monitored'
-              ? 'Audited so far'
-              : item.label,
+          label: active && item.key === 'monitored' ? 'Audited so far' : item.label,
         }))}
         ariaLabel="Page inventory views"
+        controls={<PageKindSelect value={pageKind} onChange={selectPageKind} />}
       />
       <RootErrorsBlock errors={rootErrors} />
       <PagesTable
@@ -333,7 +333,6 @@ function ScoredInventoryState({
         crawlId={crawl.id}
         sort={sort}
         onSortChange={selectSort}
-        toolbar={{ filters: <PageKindSelect value={pageKind} onChange={selectPageKind} /> }}
         state={scoredInventoryState({ query: pagesQuery, rows, active })}
         pageSize={pager.pageSize}
         pager={{

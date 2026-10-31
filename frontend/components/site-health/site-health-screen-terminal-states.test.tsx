@@ -198,7 +198,8 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
 
     await user.click(screen.getByRole('tab', { name: 'All Discovered' }));
     await waitFor(() => expect(requestedStatuses).toContain(null));
-    expect(screen.getByRole('tab', { name: 'Monitored' })).toHaveAttribute(
+    // Selecting another tab never renames this one (or shifts the strip).
+    expect(screen.getByRole('tab', { name: 'Audited so far' })).toHaveAttribute(
       'aria-selected',
       'false',
     );

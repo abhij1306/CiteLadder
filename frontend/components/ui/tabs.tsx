@@ -33,6 +33,11 @@ export type TabsProps<T extends string> = TabStripProps<T> & {
   rootClassName?: string;
   /** Section tabs over their panel: one workspace gap between strip and panel. */
   spaced?: boolean;
+  /**
+   * Filters that apply to every tab, at the strip's right end on the same rule,
+   * so the panel below spends no row on them. Controls share the tabs' height.
+   */
+  controls?: ReactNode;
 };
 
 /**
@@ -92,23 +97,36 @@ function TabStrip<T extends string>({
   onIntent,
   ruled,
   fill = false,
-}: Readonly<TabStripProps<T> & { ruled: boolean }>) {
+  controls,
+}: Readonly<TabStripProps<T> & { ruled: boolean; controls?: ReactNode }>) {
   const value = useContext(ActiveTabContext);
   return (
     // The rule sits on the wrapper; the strip overhangs it by the tab padding,
     // so a padded tab's label still starts on the content edge.
-    <div className={cn('min-w-0', ruled && 'border-border border-b')}>
+    <div
+      className={cn(
+        'min-w-0',
+        ruled && 'border-border border-b',
+        controls != null && 'flex items-center gap-x-4',
+      )}
+    >
       <TabsPrimitive.List
         aria-label={ariaLabel}
         className={cn(
-          'relative flex flex-nowrap gap-[var(--tab-gap)] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          'relative flex min-w-0 flex-nowrap gap-[var(--tab-gap)] overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
           // Labels retain intrinsic width; narrow strips scroll as one row.
           fill ? 'gap-0' : '-mx-[var(--tab-pad-x)]',
+          controls != null && 'flex-1',
           className,
         )}
       >
         <TabTriggers items={items} value={value} fill={fill} onIntent={onIntent} />
       </TabsPrimitive.List>
+      {controls == null ? null : (
+        <div data-tab-controls="" className="flex shrink-0 items-center">
+          {controls}
+        </div>
+      )}
     </div>
   );
 }
