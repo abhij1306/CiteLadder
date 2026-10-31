@@ -425,6 +425,10 @@ describe('search eligibility', () => {
       state: 'excluded',
       status: 'excluded',
     });
+    // A robots.txt denial is the site's choice even though acquisition observed the miss.
+    expect(
+      eligibilityState({ 'acquisition.public_representation': 'missing' }, failed('robots_denied')),
+    ).toEqual({ state: 'excluded', status: 'excluded' });
     expect(eligibilityState({}, failed('task_failed'))).toEqual({
       state: 'unknown',
       status: 'error',

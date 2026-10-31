@@ -49,6 +49,8 @@ export function siteFetchSettings(env: Record<string, string | undefined> = proc
 
 /** A challenge interstitial rather than the page: terminal, since retrying cannot pass it. */
 export function isBotBlock(page: FetchedPage) {
+  // A 429 asks the crawler to slow down; CDN rate-limit pages carry challenge scripts too.
+  if (page.status === 429) return false;
   const prefix = page.body
     .subarray(0, a.bot_block_marker_scan_bytes)
     .toString('latin1')

@@ -140,6 +140,7 @@ export async function promptPortfolio(
       'p.id',
       'p.prompt_set_id',
       's.name as prompt_set_name',
+      'p.topic_id',
       't.name as topic',
       'p.text',
       'p.intent',
@@ -184,8 +185,20 @@ export async function promptPortfolio(
     active: enabled && row.status === 'active',
     record_uri: `citeladder://prompt/${row.id}`,
   }));
+  // Every topic, including empty ones: a prompt proposal may only name these IDs.
+  const topics = await new WorkspaceScope(scope.workspaceId)
+    .selectFrom(db, 'projects')
+    .innerJoin('topics as t', 't.project_id', 'projects.id')
+    .select(['t.id', 't.name', 't.description'])
+    .where('projects.id', '=', scope.projectId)
+    .orderBy('t.name')
+    .orderBy('t.id')
+    .limit(mcpPolicy.max_list_limit + 1)
+    .execute();
   return {
     state: 'available',
+    topics: topics.slice(0, mcpPolicy.max_list_limit),
+    topics_truncated: topics.length > mcpPolicy.max_list_limit,
     items,
     pagination: pagination(
       items,

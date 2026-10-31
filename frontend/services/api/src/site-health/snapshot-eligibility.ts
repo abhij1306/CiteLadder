@@ -16,12 +16,13 @@ type EligibilityTask = { status: string; error_code: string } | undefined;
  * excluded, and an unresolved failure is an error, not a blocker.
  */
 export function eligibilityState(outcomes: Record<string, string>, task: EligibilityTask) {
+  // The site's own robots.txt exclusion is its choice, not a blocker to fix.
+  if (task?.status === 'failed' && EXCLUSIONS.includes(task.error_code))
+    return { state: 'excluded', status: 'excluded' } as const;
   const critical = CRITICAL.map((key) => outcomes[key] ?? 'unknown');
   if (critical.includes('missing')) return { state: 'blocked', status: 'blocked' } as const;
   if (critical.every((value) => value === 'satisfied'))
     return { state: 'eligible', status: 'audited' } as const;
-  if (task?.status === 'failed' && EXCLUSIONS.includes(task.error_code))
-    return { state: 'excluded', status: 'excluded' } as const;
   return { state: 'unknown', status: task?.status === 'failed' ? 'error' : 'pending' } as const;
 }
 

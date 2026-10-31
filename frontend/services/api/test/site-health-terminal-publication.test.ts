@@ -436,6 +436,32 @@ describe('crawl lifecycle', () => {
     });
   });
 
+  it('counts a page whose fetch failed as an error or exclusion, never as pending', async () => {
+    const seed = await running();
+    await monitoredPage(seed, '/');
+    // The fetch fails at discovery, so no analyze task is ever planned for these pages.
+    const failedFetch = async (path: string, error_code: string) => {
+      const page = await fixtures.analyzable(seed, path);
+      await db
+        .updateTable('site_crawl_tasks')
+        .set({ task_kind: 'discover', status: 'failed', error_code })
+        .where('id', '=', page.taskId)
+        .execute();
+    };
+    await failedFetch('/rate-limited', 'http_4xx');
+    await failedFetch('/policies/privacy-policy', 'robots_denied');
+    await reconcileCrawl(db, seed.workspaceId, seed.crawlId);
+    const snapshot = await db
+      .selectFrom('site_health_snapshots')
+      .select(['status_counts', 'eligibility_totals'])
+      .where('crawl_id', '=', seed.crawlId)
+      .executeTakeFirstOrThrow();
+    expect(snapshot).toEqual({
+      status_counts: { audited: 1, blocked: 0, excluded: 1, error: 1, pending: 0 },
+      eligibility_totals: { eligible: 1, blocked: 0, unknown: 1, excluded: 1 },
+    });
+  });
+
   it('hands analytics the crawl identity when no page was analyzed', async () => {
     const seed = await running({ analysis_status: 'pending' });
     await reconcileCrawl(db, seed.workspaceId, seed.crawlId);

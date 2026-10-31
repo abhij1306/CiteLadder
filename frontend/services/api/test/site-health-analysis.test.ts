@@ -961,6 +961,20 @@ describe('unscored visibility checks', () => {
     expect([createsIssue(conflict), conflict.score_applicability]).toEqual([true, false]);
   });
 
+  it('blocks a noindex page the sitemap lists, not one only its CMS self-canonical names', () => {
+    const noindex = (member: boolean) =>
+      outcome(
+        rule('technical.indexable', {
+          robots: { noindex: true },
+          canonical_url: '/guides/setup',
+          sitemap_member: member,
+        }),
+      );
+    // Shopify and WordPress tag archives self-canonicalize while deliberately noindexed.
+    expect(noindex(false)).toEqual(['unknown', 'insufficient_evidence']);
+    expect(noindex(true)).toEqual(['missing', undefined]);
+  });
+
   it('flags a sitemap URL that redirects, but not a reordered query string', () => {
     const listed = (url?: string, member = true) =>
       outcome(rule('technical.sitemap_redirect', { sitemap_member: member, sitemap_url: url }));

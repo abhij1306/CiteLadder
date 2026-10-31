@@ -644,6 +644,10 @@ describe('page fetch policy', () => {
       false,
     );
     expect(isBotBlock(page(200, '<html><main><h1>Widgets</h1></main></html>'))).toBe(false);
+    // Cloudflare's rate-limit page loads the challenge platform; it is still a retryable 429.
+    const limited = '<html><script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>';
+    expect(isBotBlock(page(429, limited))).toBe(false);
+    expect(isBotBlock(page(403, limited))).toBe(true);
   });
   it('excludes non-content endpoints and tracking variants but not ordinary pages', () => {
     expect(hardExcluded(new URL('https://example.test/cart'))).toBe(true);
