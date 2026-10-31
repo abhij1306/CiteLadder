@@ -106,7 +106,7 @@ function tablePage(dimension: string) {
   return { dimension, items: [], next_cursor: null, total_count: 0, page_size: 25 };
 }
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 const readiness = {
   project_id: PROJECT,
   stage: 'not_connected',

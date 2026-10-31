@@ -58,7 +58,7 @@ const sourceBody = (availability: string, items: Record<string, unknown>[] = [])
   },
   items: items.map((item) => ({ pull: null, ...item })),
 });
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   mswServer.resetHandlers();
   window.history.replaceState(null, '', '/ai-traffic');

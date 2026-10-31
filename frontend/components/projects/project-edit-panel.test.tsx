@@ -18,7 +18,7 @@ import { renderWithProviders } from '@/test/render';
 
 import { ProjectEditPanel } from './project-edit-panel';
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   mswServer.use(
     http.get('/api/v1/brand-discovery-catalog', () =>

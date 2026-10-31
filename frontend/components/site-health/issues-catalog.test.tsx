@@ -123,7 +123,7 @@ const summary = {
   monitored_affected_url_count: 38,
 };
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   window.history.replaceState(null, '', '/issues');
 

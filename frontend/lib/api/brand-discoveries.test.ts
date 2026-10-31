@@ -37,7 +37,7 @@ const completion: BrandDiscoveryCompletion = {
   competitors: [{ name: 'Globex', aliases: [], domains: ['globex.example'] }],
 };
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 

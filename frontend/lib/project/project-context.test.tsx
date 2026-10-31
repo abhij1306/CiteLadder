@@ -95,7 +95,7 @@ function renderProvider(destination = `/projects${search.size ? `?${search}` : '
   );
 }
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   search = new URLSearchParams();
   window.localStorage.clear();
