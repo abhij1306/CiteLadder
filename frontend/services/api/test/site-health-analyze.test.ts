@@ -79,7 +79,7 @@ const attempts = (taskId: string) =>
     .execute();
 
 describe('analyze acquisition', () => {
-  it('retains the sitemap observation that establishes indexing intent', async () => {
+  it('retains the sitemap observation behind a sitemap-listed noindex finding', async () => {
     const seed = await running();
     const page = await fixtures.analyzable(seed, '/sitemap-page');
     const observationId = crypto.randomUUID();
@@ -113,18 +113,23 @@ describe('analyze acquisition', () => {
       page.taskId,
     );
     const [analysis] = await analyses(seed, page.siteUrlId);
-    const evaluation = await db
+    const evaluations = await db
       .selectFrom('site_rule_evaluations')
-      .select(['evidence', 'outcome', 'extractor_version'])
+      .select(['rule_id', 'evidence', 'outcome', 'extractor_version'])
       .where('analysis_id', '=', analysis!.id)
-      .where('rule_id', '=', 'technical.indexable')
-      .executeTakeFirstOrThrow();
-    expect(evaluation).toMatchObject({
-      outcome: 'missing',
+      .where('rule_id', 'in', ['technical.indexable', 'technical.sitemap_noindex'])
+      .orderBy('rule_id')
+      .execute();
+    // The page's own noindex is its choice; listing it in the sitemap is the finding.
+    expect(evaluations.map((row) => [row.rule_id, row.outcome])).toEqual([
+      ['technical.indexable', 'not_applicable'],
+      ['technical.sitemap_noindex', 'missing'],
+    ]);
+    expect(evaluations[1]).toMatchObject({
       extractor_version: policy.site_health.versions.extractor,
     });
-    expect(record(evaluation.evidence)).toMatchObject({
-      intent_source: 'sitemap_membership',
+    expect(record(evaluations[1]!.evidence)).toMatchObject({
+      reason: 'sitemap_lists_noindex',
       context_sources: { sitemap_crawl_id: seed.crawlId, sitemap_observation_id: observationId },
     });
   });
