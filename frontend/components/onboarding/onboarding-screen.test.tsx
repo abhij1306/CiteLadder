@@ -182,7 +182,7 @@ async function enterBrand() {
   return user;
 }
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   mswServer.resetHandlers();
   vi.clearAllMocks();

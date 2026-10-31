@@ -88,7 +88,7 @@ function renderSetup(path = `/performance?project=${PROJECT}`, whenReady?: strin
   );
 }
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => vi.mocked(hardNavigate).mockClear());
 afterEach(() => {
   mswServer.resetHandlers();

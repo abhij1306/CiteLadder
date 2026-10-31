@@ -74,7 +74,7 @@ async function run(pathname: string): Promise<string | null> {
   }
 }
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'bypass' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'bypass' }));
 afterAll(() => mswServer.close());
 beforeEach(() => {
   setAppQueryClient(createAppQueryClient());

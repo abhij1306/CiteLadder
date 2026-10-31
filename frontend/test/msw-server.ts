@@ -11,7 +11,7 @@ const TEST_WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
  * any one screen: `ProjectProvider` resolves which workspace it is in before
  * it can scope a single request. Answering it by default means a screen test
  * exercises the screen rather than re-declaring the account it runs in, and
- * `onUnhandledRequest: 'error'` keeps its bite for everything else. A test
+ * `onUnhandledFrame: 'error'` keeps its bite for everything else. A test
  * about workspaces overrides this with `server.use(...)`.
  */
 const defaultHandlers = [

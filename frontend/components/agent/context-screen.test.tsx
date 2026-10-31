@@ -14,7 +14,7 @@ const project = makeProject();
 const endpoint = `/api/v1/projects/${project.id}/agent/instructions`;
 const saved = (text: string) => ({ text, revision: 1, created_at: '2026-09-26T10:00:00Z' });
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 

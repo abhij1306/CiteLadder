@@ -17,7 +17,7 @@ import {
 
 import { ProviderSettings } from './provider-settings';
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => {
   window.localStorage.clear();
   mswServer.use(

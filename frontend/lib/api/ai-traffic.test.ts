@@ -17,7 +17,7 @@ const dashboard = {
   formula_version: 'ai-referral-sessions-v2',
 };
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 

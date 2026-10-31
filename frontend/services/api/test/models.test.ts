@@ -259,7 +259,7 @@ describe('configured model gateway', () => {
       expect(seen.at(-1)).toBe('{"answer":42}');
       const [url, init] = io.fetch.mock.calls[0]!;
       expect(String(url)).toBe('https://api.anthropic.com/v1/messages');
-      expect(new Headers(init!.headers).get('x-api-key')).toBe('test-only');
+      expect(new Headers(init!.headers).get('authorization')).toBe('Bearer test-only');
       expect(JSON.parse(String(init!.body))).toMatchObject({
         model: 'test',
         system: 'system',

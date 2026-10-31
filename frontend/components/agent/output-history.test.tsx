@@ -9,7 +9,7 @@ import { CHAT, REV1, REV2, revision } from '@/test/agent-chat-fixture';
 
 import { OutputHistory } from './output-history';
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 

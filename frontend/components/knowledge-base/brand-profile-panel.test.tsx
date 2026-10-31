@@ -37,7 +37,7 @@ const profile: BrandProfile = {
   updated_at: '2026-07-21T00:00:00Z',
 };
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 

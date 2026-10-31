@@ -58,7 +58,7 @@ function row(id: string, keyword: string) {
   };
 }
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => {
   mswServer.resetHandlers();
   vi.restoreAllMocks();

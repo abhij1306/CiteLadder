@@ -8,7 +8,7 @@
     "type": "git",
     "url": "git+https://github.com/abhij1306/CiteLadder.git"
   },
-  "packageManager": "pnpm@12.10.1",
+  "packageManager": "pnpm@12.16.1",
   "engines": {
     "node": ">=26"
   },

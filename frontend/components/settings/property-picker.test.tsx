@@ -101,7 +101,7 @@ function mockMappings(rows: unknown[] = []) {
   mswServer.use(http.get(`/api/v1/integrations/${CONN}/mappings`, () => HttpResponse.json(rows)));
 }
 
-beforeAll(() => mswServer.listen({ onUnhandledRequest: 'error' }));
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() => mockMappings());
 afterEach(() => {
   mswServer.resetHandlers();
