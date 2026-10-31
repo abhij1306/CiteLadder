@@ -236,7 +236,7 @@ const writeDefinitions = {
       'Rename one topic, after the user agrees. Its prompts and past results stay under it, so prefer this to delete_topic and create_topic when only the name is wrong. Runs at once and returns the new name; refused if another topic in the project already has the name, or if topic_id is not in this project.',
     schema: z.strictObject({
       ...project,
-      topic_id: uuid.describe('The topic id create_topic returned.'),
+      topic_id: uuid.describe('A topic id from read_prompt_portfolio topics or create_topic.'),
       name: topicCreate.shape.name.describe('The new name, unique in the project.'),
     }),
     annotations: hints(false, true),
@@ -364,7 +364,11 @@ const writeDefinitions = {
             text: promptInput.shape.text.describe(
               'A short question a buyer would ask an AI assistant, answerable by naming a business.',
             ),
-            topic_id: uuid.describe('A topic id create_topic returned; omit for none.').nullish(),
+            topic_id: uuid
+              .describe(
+                'A topic id from read_prompt_portfolio topics or create_topic; omit for none.',
+              )
+              .nullish(),
             intent: z
               .string()
               .max(policy.prompts.intent_max_chars)

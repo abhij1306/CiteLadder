@@ -18,7 +18,7 @@ Pick a short list of attainable, relevant third-party opportunities and write us
 
 You need verified business facts (`get_project_business_context`) and at least one of:
 
-- Sources cited in AI answers: `read_visibility_sources`, `read_visibility_results`, and `read_source_url` for one page's prompts and the brands it lists.
+- Sources cited in AI answers: `read_visibility_sources`, `read_visibility_results` (with an `audit_id` from `read_visibility_overview`), and `read_source_url` for one page's prompts and the brands it lists.
 - Backlink datasets: `read_search_intelligence`, then `read_search_dataset`. These are referring-domain and destination-page totals, not individual links; never describe a specific linking page or anchor from them.
 - A prospect list the user supplies.
 

@@ -39,6 +39,12 @@ function outcome(value: unknown) {
     omissions: [...z.array(z.json()).parse(data.omissions ?? []), ...reason],
   };
 }
+/** About half the page, never a size the tool refuses (some accept only fixed sizes). */
+export function smallerLimit(schema: z.ZodType, from: number) {
+  for (let limit = Math.floor(from / 2); limit >= 1; limit--)
+    if (schema.safeParse(limit).success) return limit;
+  return null;
+}
 // The chat's project is fixed, and MCP App views render nothing in a chat.
 const NOT_FOR_AGENT = new Set(['list_projects', ...presentationTools]);
 function sharedTools(db: Database): ReadTool[] {
@@ -75,10 +81,12 @@ function sharedTools(db: Database): ReadTool[] {
           let data = await dispatch();
           // Let the existing owner construct a smaller page and its exact
           // continuation cursor. Never discard rows behind a later cursor.
-          if (Object.hasOwn(fields, 'limit') && Array.isArray(data.items)) {
-            let limit = data.items.length;
-            while (JSON.stringify(outcome(data).data).length > maxChars && limit > 1) {
-              limit = Math.max(1, Math.floor(limit / 2));
+          const limitSchema = fields.limit;
+          if (limitSchema && Array.isArray(data.items)) {
+            let limit: number | null = data.items.length;
+            while (JSON.stringify(outcome(data).data).length > maxChars) {
+              limit = smallerLimit(limitSchema, limit);
+              if (limit === null) break;
               input.limit = limit;
               data = await dispatch();
             }

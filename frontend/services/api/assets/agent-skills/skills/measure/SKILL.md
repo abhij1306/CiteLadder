@@ -19,7 +19,7 @@ Say whether an implemented change was followed by a meaningful measured change, 
 - What changed and when: `read_actions` (with `action_id` for the implementation declaration and verification), earlier results in this chat, or the user's description.
 - AI visibility over time: `read_visibility_trends` with an explicit `from_at`/`to_at` window; `read_visibility_overview` with `audit_id` and `baseline_id` for a direct comparison of two audits.
 - Answer tone: `read_perception` for each compared `audit_id`; always state its coverage ("N of M mentions classified"); a pending or unavailable read has no value, never zero. Sources it lists were cited alongside criticism, never shown to cause it. Compare runs only when their perception versions match.
-- Search: `read_performance` with a comparison period; `read_query_evidence` for a page's queries.
+- Search: `read_performance` with a comparison period; `read_query_evidence` for a page's queries (saved window from `read_demand`, `site_url_id` from `read_site_pages`).
 - Data gaps: `read_integration_status`.
 
 Confirm it is the same page or asset, the change date, and the same prompts, engines and settings before comparing.
