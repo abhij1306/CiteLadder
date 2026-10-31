@@ -275,7 +275,7 @@ function CitedTable({ cited }: Readonly<{ cited: AccuracyResponse['cited_alongsi
               kind: 'empty',
               headingLevel: 3,
               icon: Globe,
-              heading: 'No sources cited alongside contradictions.',
+              heading: 'No sources cited alongside contradictions',
             }
       }
     >

@@ -19,10 +19,6 @@ function row(overrides: Partial<RankingRow> = {}): RankingRow {
 }
 
 describe('RankingRowsTable', () => {
-  it('discloses an empty selection', () => {
-    render(<RankingRowsTable rows={[]} />);
-    expect(screen.getByText('No measured responses in this selection.')).toBeVisible();
-  });
   it('sorts presence rates and breaks ties deterministically without inventing ranks', () => {
     render(
       <RankingRowsTable

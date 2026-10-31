@@ -130,7 +130,7 @@ export function SearchIntelligenceDatasetView({
     state = {
       kind: 'empty',
       icon: SearchX,
-      heading: 'No saved rows match this view.',
+      heading: 'No saved rows match this view',
       headingLevel: 3,
     };
   return (

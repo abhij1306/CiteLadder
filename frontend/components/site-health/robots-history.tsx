@@ -54,7 +54,7 @@ export function RobotsHistory({
                 kind: 'empty',
                 icon: FileText,
                 headingLevel: 3,
-                heading: 'No robots.txt observations are available.',
+                heading: 'No robots.txt observations are available',
               }
             : undefined
         }

@@ -61,6 +61,17 @@ export function selectionEnabled(queries: SourceQueries): boolean {
 }
 
 /**
+ * Whether the selection has settled on no run at all. A source read waits on
+ * the selection's run, so until one resolves its query is disabled with no
+ * data: that is "no run" once the selection has settled, and still loading
+ * before then, never an empty finding.
+ */
+export function selectionHasNoRun(queries: SourceQueries): boolean {
+  if (queries.selectedRunIds?.length === 0) return true;
+  return !queries.visibilityQuery.isPending && !queries.activeRunId;
+}
+
+/**
  * The paged, filterable source table.
  *
  * `dimension` decides what a row IS. A domain row groups a publisher; a URL row

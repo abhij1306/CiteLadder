@@ -349,7 +349,7 @@ function EvidenceCitationsList({
           kind="empty"
           headingLevel={3}
           icon={Quote}
-          heading="No citations were captured from this response."
+          heading="No citations were captured from this response"
         />
       ) : (
         <ol className={ledgerClasses('boxed')}>

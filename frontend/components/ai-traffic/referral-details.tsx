@@ -69,7 +69,7 @@ export function ReferralLandingPages({ data }: Readonly<{ data: AiReferrals }>) 
               kind: 'empty',
               icon: SearchX,
               heading:
-                'No identifiable AI referrals to joinable landing paths were observed in the saved report.',
+                'No identifiable AI referrals to joinable landing paths were observed in the saved report',
             }
       }
     >

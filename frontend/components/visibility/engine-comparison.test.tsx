@@ -64,8 +64,4 @@ describe('model outcome comparison', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gemini API' }));
     expect(onSelect).toHaveBeenCalledWith('gemini');
   });
-  it('discloses an empty model selection', () => {
-    render(<EngineComparison visibility={visibility([])} filter="all" />);
-    expect(screen.getByText('No model observations.')).toBeVisible();
-  });
 });

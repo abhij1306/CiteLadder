@@ -32,13 +32,21 @@ export function severityBadgeValue(severity: IssueSeverity): StatusValue {
   }
 }
 
-/** Short uppercase severity label for a badge (HIGH / MEDIUM / LOW / …).
+const SEVERITY_LABEL: Record<IssueSeverity, string> = {
+  critical: 'High',
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+  info: 'Info',
+};
+
+/** Short sentence-case severity label for a badge (High / Medium / Low / …).
  *
- * The catalog exposes a three-tier vocabulary: `critical` folds into HIGH so
- * badges, chips, and filters all agree (no separate "CRITICAL" tier in the UI).
+ * The catalog exposes a three-tier vocabulary: `critical` folds into High so
+ * badges, chips, and filters all agree (no separate "Critical" tier in the UI).
  */
 export function severityLabel(severity: IssueSeverity): string {
-  return severity === 'critical' ? 'HIGH' : severity.toUpperCase();
+  return SEVERITY_LABEL[severity];
 }
 
 /** Severity ordering rank (lower = more severe) for client-side sorting. */
@@ -55,9 +63,9 @@ export function severityRank(severity: IssueSeverity): number {
   return SEVERITY_RANK[severity] ?? 99;
 }
 
-/** Short uppercase dimension label for a badge (WEB FUNDAMENTALS / AEO). */
+/** Short dimension label for a badge (Web fundamentals / AEO). */
 export function dimensionLabel(dimension: IssueDimension): string {
-  return dimension === 'aeo' ? 'AEO' : 'WEB FUNDAMENTALS';
+  return dimension === 'aeo' ? 'AEO' : 'Web fundamentals';
 }
 
 /**

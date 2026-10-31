@@ -193,7 +193,7 @@ function RunsContent({
   return (
     <RunsTable
       audits={filteredAudits}
-      emptyHeading={`No ${filterLabel} runs.`}
+      emptyHeading={`No ${filterLabel} runs`}
       status={
         anyActive ? (
           <Inline as="span" className="type-caption inline-flex tabular-nums">

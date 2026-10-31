@@ -7,9 +7,9 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          'control-raised bg-accent text-accent-fg not-disabled:hover:bg-accent-hover active:bg-accent-active',
+          'control-raised bg-accent-fill text-accent-fg not-disabled:hover:bg-accent-fill-hover active:bg-accent-fill-active',
         accent:
-          'control-raised bg-accent-soft text-accent-text not-disabled:hover:bg-accent not-disabled:hover:text-accent-fg active:bg-accent-hover',
+          'control-raised bg-accent-soft text-accent-text not-disabled:hover:bg-accent-fill not-disabled:hover:text-accent-fg active:bg-accent-fill-hover active:text-accent-fg',
         secondary:
           'control-raised bg-input text-foreground not-disabled:hover:bg-hover active:bg-active',
         tonal:

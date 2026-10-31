@@ -97,7 +97,7 @@ export function PromptTable({
               kind: 'empty',
               icon: ICONS.prompts,
               headingLevel: 3,
-              heading: 'No prompts match your search or filters.',
+              heading: 'No prompts match your search or filters',
             }
           : undefined
       }

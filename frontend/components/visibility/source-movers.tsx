@@ -130,7 +130,7 @@ function MoverTable({
               kind: 'empty',
               headingLevel: 3,
               icon: TrendingUp,
-              heading: 'No source moved this way.',
+              heading: 'No source moved this way',
             })
       }
     >

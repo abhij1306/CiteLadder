@@ -50,7 +50,9 @@ const CONTRAST_PAIRS = [
     scopes: ALL_SCOPES,
   })),
   ...[
-    ['accent-fg', 'accent'],
+    ['accent-fg', 'accent-fill'],
+    ['accent-fg', 'accent-fill-hover'],
+    ['accent-fg', 'accent-fill-active'],
     ['danger-fg', 'danger-solid'],
     ['on-inverse', 'surface-inverse'],
     ['selection-fg', 'selection'],

@@ -45,7 +45,7 @@ function audit(index: number, overrides: Partial<Audit> = {}): Audit {
 const bodyRows = () => screen.getAllByRole('row').slice(1);
 
 function renderTable(audits: Audit[]) {
-  return render(<RunsTable audits={audits} status={null} emptyHeading="No failed runs." />);
+  return render(<RunsTable audits={audits} status={null} emptyHeading="No failed runs" />);
 }
 
 describe('RunsTable', () => {
@@ -73,7 +73,7 @@ describe('RunsTable', () => {
     renderTable([]);
 
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'No failed runs.' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 3, name: 'No failed runs' })).toBeVisible();
     expect(screen.queryByRole('link', { name: 'View' })).toBeNull();
   });
 

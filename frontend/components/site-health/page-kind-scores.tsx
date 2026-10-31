@@ -50,7 +50,7 @@ export function PageKindScores({
                 kind: 'empty',
                 icon: ICONS.siteHealth,
                 headingLevel: 3,
-                heading: 'Per-page-kind scores appear once the analysis classifies your pages.',
+                heading: 'Per-page-kind scores appear once the analysis classifies your pages',
               }
             : undefined
         }

@@ -149,11 +149,11 @@ describe('DataTable', () => {
         title="Runs"
         columns={columns}
         pageSize={5}
-        state={{ kind: 'empty', icon: Inbox, heading: 'No failed runs.', headingLevel: 3 }}
+        state={{ kind: 'empty', icon: Inbox, heading: 'No failed runs', headingLevel: 3 }}
       />,
     );
     expect(screen.getByRole('columnheader', { name: 'Count' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'No failed runs.' })).toBeVisible();
+    expect(screen.getByRole('heading', { level: 3, name: 'No failed runs' })).toBeVisible();
     expect(container.querySelectorAll('tbody tr')).toHaveLength(1);
   });
 

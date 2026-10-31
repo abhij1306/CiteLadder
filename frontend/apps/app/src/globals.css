@@ -77,14 +77,18 @@
   --color-brand-ink: #0b0f0d;
 
   /* Signal green is the one action and brand colour (owner decision,
-     2026-10-21): filled controls, selection markers and the bars of the mark.
-     It is bright, so a filled control carries near-black ink (5.8:1) and the
-     fill still holds 3:1 on white; links and focus take the deeper
-     `accent-text` (5.7:1). It never means success. */
+     2026-10-21): selection markers, tracks and the bars of the mark, holding
+     3:1 on white; links and focus take the deeper `accent-text` (5.7:1). It
+     never means success. Anything that carries ink on green (buttons, the
+     selected day, a checked mark) fills with the deeper `accent-fill` and
+     white ink (4.6:1, owner decision 2026-10-30). */
   --color-accent: #00a650;
   --color-accent-hover: #00b85a;
   --color-accent-active: #009447;
-  --color-accent-fg: #04170c;
+  --color-accent-fill: #00873f;
+  --color-accent-fill-hover: #007a39;
+  --color-accent-fill-active: #006d33;
+  --color-accent-fg: #ffffff;
   --color-accent-subtle: #d3f6df;
   --color-accent-soft: #edfbf2;
   --color-accent-border: #7fdca7;
@@ -347,7 +351,7 @@
 :root {
   --elevation-control:
     0 0 0 1px var(--color-border), 0 1px 1px var(--surface-drop);
-  --elevation-primary: 0 0 0 1px var(--color-accent);
+  --elevation-primary: 0 0 0 1px var(--color-accent-fill);
   --elevation-card: 0 0 0 1px var(--color-border);
   /* The workspace sheet and focused task sheets. */
   --elevation-flow:
@@ -511,7 +515,7 @@ body {
     font-size: 0.875rem;
     line-height: 1.25rem;
     font-weight: 500;
-    letter-spacing: -0.006em;
+    letter-spacing: 0;
     color: var(--color-foreground);
   }
   .type-body {
@@ -1090,6 +1094,10 @@ input:-webkit-autofill:focus {
   --color-accent: #76df9c;
   --color-accent-hover: #94ebb0;
   --color-accent-active: #b2f4c6;
+  /* Dark keeps the bright fill with its dark ink; white on it would fail. */
+  --color-accent-fill: var(--color-accent);
+  --color-accent-fill-hover: var(--color-accent-hover);
+  --color-accent-fill-active: var(--color-accent-active);
   --color-accent-fg: #0d2618;
   --color-accent-text: #86e5a6;
   --color-accent-subtle: rgb(118 223 156 / 18%);

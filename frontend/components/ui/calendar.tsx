@@ -169,7 +169,7 @@ export function Calendar({
                       className={cn(
                         'type-body text-foreground inline-flex size-[var(--control-height-md)] items-center justify-center rounded-[var(--radius-control)] tabular-nums transition-colors',
                         isSelected
-                          ? 'bg-accent text-accent-fg enabled:hover:bg-accent-hover enabled:active:bg-accent-active'
+                          ? 'bg-accent-fill text-accent-fg enabled:hover:bg-accent-fill-hover enabled:active:bg-accent-fill-active'
                           : 'enabled:hover:bg-hover enabled:active:bg-active',
                         // Days spilling in from the neighbouring months stay
                         // legible but recede, so the current month reads as

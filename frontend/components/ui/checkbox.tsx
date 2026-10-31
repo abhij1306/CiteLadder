@@ -30,7 +30,7 @@ function checkboxStateClass(checked: boolean | 'indeterminate', disabled: boolea
   return cn(
     'text-accent-fg',
     checked
-      ? 'border-accent bg-accent'
+      ? 'border-accent-fill bg-accent-fill'
       : 'border-border-bold bg-input group-hover:border-border-strong',
   );
 }
