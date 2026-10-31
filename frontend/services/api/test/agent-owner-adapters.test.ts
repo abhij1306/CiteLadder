@@ -30,8 +30,9 @@ describe('Agent bindings to the evidence and Action owners', () => {
         Parameters<typeof smallerLimit>[0]
       >;
     // read_performance takes fixed page sizes: 25 steps down to 10, and 10 has no smaller one.
+    // A short page (18 of 25 rows) still reaches 10, though 10 is more than half of 18.
     const performance = shape('read_performance').limit!;
-    expect([smallerLimit(performance, 25), smallerLimit(performance, 10)]).toEqual([10, null]);
+    expect([25, 18, 10].map((rows) => smallerLimit(performance, rows))).toEqual([10, 10, null]);
     const portfolio = shape('read_prompt_portfolio').limit!;
     expect([smallerLimit(portfolio, 25), smallerLimit(portfolio, 1)]).toEqual([12, null]);
   });

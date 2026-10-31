@@ -39,11 +39,18 @@ function outcome(value: unknown) {
     omissions: [...z.array(z.json()).parse(data.omissions ?? []), ...reason],
   };
 }
-/** About half the page, never a size the tool refuses (some accept only fixed sizes). */
+/**
+ * About half the page, never a size the tool refuses (some accept only fixed
+ * sizes); otherwise the largest accepted size that is still smaller.
+ */
 export function smallerLimit(schema: z.ZodType, from: number) {
-  for (let limit = Math.floor(from / 2); limit >= 1; limit--)
-    if (schema.safeParse(limit).success) return limit;
-  return null;
+  let fallback: number | null = null;
+  for (let limit = from - 1; limit >= 1; limit--) {
+    if (!schema.safeParse(limit).success) continue;
+    if (limit <= from / 2) return limit;
+    fallback ??= limit;
+  }
+  return fallback;
 }
 // The chat's project is fixed, and MCP App views render nothing in a chat.
 const NOT_FOR_AGENT = new Set(['list_projects', ...presentationTools]);
