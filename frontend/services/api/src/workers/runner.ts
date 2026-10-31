@@ -232,8 +232,12 @@ async function untilAdmissionEnds<T>(
 export async function runnerOwners(db: Database, config: ServiceConfig) {
   const env = configEnvironment(config);
   const runtime = auditRuntime(env);
-  // Audit admission stays serial; Site Health below uses a pool-bounded batch.
-  runtime.audits.worker_concurrency = config.execution.laneConcurrency;
+  // Provider calls hold no connection, so audits admit a pool-bounded batch like
+  // Site Health below; per-transport capacity still caps each provider.
+  runtime.audits.worker_concurrency = Math.min(
+    runtime.audits.worker_concurrency,
+    config.execution.poolSize,
+  );
   const projections = auditProjections(db);
   const analytics = new AnalyticsWorker(db, loadWorkerSettings(env));
   const discovery = new DiscoveryWorker(db, { env });

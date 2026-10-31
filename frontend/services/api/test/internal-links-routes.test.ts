@@ -192,6 +192,8 @@ describe('internal link analysis admission', () => {
       })
       .execute();
     const key = randomUUID();
+    // Declarations must fall inside the verification window, so stay relative to now.
+    const declaredAt = new Date(Date.now() - 86_400_000).toISOString();
     const declare = (ids: string[]) =>
       app.request(`/api/v1/actions/${link.action_id}/declaration`, {
         method: 'POST',
@@ -202,7 +204,7 @@ describe('internal link analysis admission', () => {
           'Idempotency-Key': key,
         },
         body: JSON.stringify({
-          declared_implemented_at: '2026-09-28T10:00:00Z',
+          declared_implemented_at: declaredAt,
           recommendation_ids: ids,
         }),
       });
