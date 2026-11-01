@@ -227,9 +227,12 @@ export function IssuesCatalog({
     <ListScreen controls={controls}>
       <Stack gap="section" className="min-w-0">
         {notice}
-        {summary ? <IssueSummary summary={summary} findingView={findingView} /> : null}
-
-        {issuesBody}
+        {/* The summary line belongs to the list it counts: it sits the
+            Overview crawl line's compact gap above it, not a section apart. */}
+        <Stack className="min-w-0">
+          {summary ? <IssueSummary summary={summary} findingView={findingView} /> : null}
+          {issuesBody}
+        </Stack>
 
         {rows.length > 0 ? (
           <CatalogPager cursor={cursor} page={issuesQuery.data} onGo={catalog.goToPage} />
