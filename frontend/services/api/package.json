@@ -29,7 +29,7 @@
     "db:types:check": "kysely-codegen --dialect postgres --url \"env(TYPES_DATABASE_URL)\" --exclude-pattern schema_migrations --out-file src/generated/db-schema.ts --verify"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "1.1.0",
+    "@anthropic-ai/sdk": "1.3.0",
     "@citeladder/contracts": "workspace:*",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/lexend-deca": "^5.3.0",
@@ -40,7 +40,7 @@
     "csv-parse": "^7.0.3",
     "fast-xml-parser": "^5.11.2",
     "fontkit": "^2.0.4",
-    "hono": "^4.13.13",
+    "hono": "^4.13.14",
     "ipaddr.js": "^2.5.0",
     "jose": "^6.2.13",
     "kysely": "^0.29.7",
@@ -53,8 +53,8 @@
   },
   "devDependencies": {
     "@types/fontkit": "^2.0.9",
-    "@types/node": "^26.6.5",
-    "@types/pdfkit": "^0.17.6",
+    "@types/node": "^26.6.6",
+    "@types/pdfkit": "^0.17.7",
     "@types/pg": "^8.23.1",
     "kysely-codegen": "^0.20.0",
     "pdfjs-dist": "^6.4.299",
