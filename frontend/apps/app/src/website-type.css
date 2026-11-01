@@ -3,7 +3,7 @@
    (globals.css); this scope changes type scale only. Every size is a rung of
    the one globals.css scale. */
 :where([data-flow-surface]) {
-  /* Geist carries body, UI and data, Outfit the display headings, as in
+  /* Lexend Deca carries body, UI and data, Outfit the display headings, as in
      the product. The scale is the product's (globals.css @theme), unchanged;
      being "roomier" is a job for measure and rhythm, not for resizing rungs. */
   --tracking-tight: -0.02em;

@@ -367,7 +367,7 @@ importers:
       '@citeladder/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@fontsource/geist':
+      '@fontsource/lexend-deca':
         specifier: ^5.3.0
         version: 5.3.0
       '@fontsource/noto-sans':
@@ -734,8 +734,8 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
-  '@fontsource/geist@5.3.0':
-    resolution: {integrity: sha512-u03ftlfVwb05uijq2jGDJ03/HKGqMKaNFk7KOhkpBUex8+BhrAOfMs/XciJ2UUNUX9fEsZbZQld/RWMA2oFU7g==}
+  '@fontsource/lexend-deca@5.3.0':
+    resolution: {integrity: sha512-qDIfyvRgiF5R/Op3vpFhEzONXliT1zFuun74K22FRMkGAxvPQr8F1VAEw3hQn9BtOZVcNu1qfGEZiJrwa1oUfg==}
 
   '@fontsource/noto-sans@5.3.0':
     resolution: {integrity: sha512-fBCog2PY7DiVVTEEqtI/Qdinx/knobHYfoGpjFXdfBX5RoJaBp1Prw2G75p0OIsdlMZg3cLo0c+YbIUYOxnQJw==}
@@ -4577,7 +4577,7 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@fontsource/geist@5.3.0': {}
+  '@fontsource/lexend-deca@5.3.0': {}
 
   '@fontsource/noto-sans@5.3.0': {}
 

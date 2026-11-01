@@ -12,19 +12,19 @@
     <link rel="icon" href="/citeladder-favicon.ico" sizes="any" />
     <title>CiteLadder</title>
     <style>
-      /* Geist and Outfit are used when the reader has them installed;
+      /* Lexend Deca and Outfit are used when the reader has them installed;
          otherwise these metric-matched Arial faces stand in, so the layout is
          the same either way. */
-      /* Match Arial's x-height to Geist's (0.530em vs 0.519em). Vertical
-         overrides use Geist's 1005/-295/0 hhea metrics (1000 UPM), divided by
-         size-adjust. */
+      /* Match Arial's x-height to Lexend Deca's (0.525em vs 0.519em). Vertical
+         overrides use Lexend Deca's 1000/-250/0 hhea metrics (1000 UPM),
+         divided by size-adjust. */
       @font-face {
-        font-family: 'Geist Fallback';
+        font-family: 'Lexend Deca Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 102.12%;
-        ascent-override: 98.41%;
-        descent-override: 28.89%;
+        size-adjust: 101.16%;
+        ascent-override: 98.86%;
+        descent-override: 24.71%;
         line-gap-override: 0%;
       }
 
@@ -43,9 +43,10 @@
 
       :root {
         font-synthesis-weight: none;
-        /* Geist carries body, UI and data (its tabular figures line up
-           columns); Outfit carries display headings. */
-        --font-text: 'Geist Variable', 'Geist Fallback', Arial;
+        /* Lexend Deca carries body, UI and data; Outfit carries display
+           headings. Lexend Deca has no tabular figures (no `tnum`), so
+           `tabular-nums` does not align its digits. */
+        --font-text: 'Lexend Deca Variable', 'Lexend Deca Fallback', Arial;
         --font-heading: 'Outfit Variable', 'Outfit Fallback', Arial;
       }
     </style>

@@ -8,6 +8,6 @@
    shells define these families with hosted faces; here they resolve to an
    installed copy or the system stack, never to an undefined var(). */
 :root {
-  --font-text: 'Geist Variable', 'Geist', ui-sans-serif, system-ui;
+  --font-text: 'Lexend Deca Variable', 'Lexend Deca', ui-sans-serif, system-ui;
   --font-heading: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui;
 }

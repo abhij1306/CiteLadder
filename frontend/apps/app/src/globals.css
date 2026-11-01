@@ -761,7 +761,7 @@ body {
      rendered size: a flat 2 paints a 1px stem at 12px and a 2px stem at
      24px, which is why large icons currently read heavier than small ones.
      These rungs compensate so every glyph lands near a 1.3px stem, in step
-     with Geist at body sizes. Compensation is partial on purpose: an
+     with the text face (Lexend Deca) at body sizes. Compensation is partial on purpose: an
      identical absolute stem at 12px closes up the counters and muddies the
      glyph.
 
