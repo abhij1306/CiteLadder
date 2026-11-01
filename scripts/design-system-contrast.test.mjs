@@ -2,68 +2,33 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  contrastRoles,
   paletteDeclarations,
   paletteViolations,
 } from '../frontend/scripts/design-system-contrast.mjs';
 
-const STATUSES = ['success', 'warning', 'danger', 'info'];
-const TAGS = [
-  'blue',
-  'purple',
-  'green',
-  'moss',
-  'red',
-  'orange',
-  'amber',
-  'teal',
-  'yellow',
-  'neutral',
-];
-
-/** A complete palette that passes every pair: ink on paper, paper on ink. */
+/**
+ * A complete palette that passes every pair. Every ink the matrix reads is
+ * `ink` and every surface `paper`, so a new matrix row needs no fixture edit;
+ * the marks, chart series and state tints the other checks measure are set
+ * explicitly.
+ */
 function palette(ink, paper, marks, charts) {
+  const { inks, surfaces } = contrastRoles();
   return {
-    ...Object.fromEntries(
-      ['panel', 'background', 'background-alt', 'well', 'sheet', 'panel-tonal'].map((role) => [
-        `--color-${role}`,
-        paper,
-      ]),
-    ),
-    ...Object.fromEntries(
-      ['foreground', 'secondary', 'muted', 'brand-ink', 'border-bold', 'state-ink'].map((role) => [
-        `--color-${role}`,
-        ink,
-      ]),
-    ),
+    ...Object.fromEntries(surfaces.map((token) => [token, paper])),
+    ...Object.fromEntries(inks.map((token) => [token, ink])),
+    '--color-state-ink': ink,
     '--color-hover': 'color-mix(in srgb, var(--color-panel), var(--color-state-ink) 4%)',
     '--color-selected': 'color-mix(in srgb, var(--color-panel), var(--color-state-ink) 8%)',
     '--color-active': 'color-mix(in srgb, var(--color-panel), var(--color-state-ink) 12%)',
     ...Object.fromEntries(
-      STATUSES.flatMap((status) => [
-        [`--color-${status}-text`, ink],
-        [`--color-${status}-bg`, paper],
+      ['success', 'warning', 'danger', 'info', 'neutral'].map((status, index) => [
+        `--color-${status}`,
+        marks[index],
       ]),
-    ),
-    ...Object.fromEntries(
-      [...STATUSES, 'neutral'].map((status, index) => [`--color-${status}`, marks[index]]),
     ),
     ...Object.fromEntries(charts.map((value, index) => [`--color-chart-${index + 1}`, value])),
-    ...Object.fromEntries(
-      TAGS.flatMap((tag) => [
-        [`--tag-${tag}-text`, ink],
-        [`--tag-${tag}-bg`, paper],
-      ]),
-    ),
-    '--color-accent-fill': ink,
-    '--color-accent-fill-hover': ink,
-    '--color-accent-fill-active': ink,
-    '--color-accent-fg': paper,
-    '--color-danger-solid': ink,
-    '--color-danger-fg': paper,
-    '--color-surface-inverse': ink,
-    '--color-on-inverse': paper,
-    '--color-selection': paper,
-    '--color-selection-fg': ink,
   };
 }
 
