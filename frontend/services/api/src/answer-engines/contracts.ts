@@ -11,6 +11,8 @@ export const answerRequestSchema = z.object({
   max_output_tokens: z.number().int().positive(),
   retrieval_enabled: z.boolean(),
   reasoning_effort: z.string(),
+  /** Anthropic thinking mode frozen with the route; `null` leaves the model default. */
+  anthropic_thinking: z.enum(['adaptive', 'between_tools', 'disabled']).nullable(),
   country_code: z.string(),
   anthropic_max_uses: z.number().int().nonnegative(),
   openai_max_tool_calls: z.number().int().nonnegative(),

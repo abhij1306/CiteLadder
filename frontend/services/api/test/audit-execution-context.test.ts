@@ -109,6 +109,50 @@ describe('frozen audit execution identity', () => {
       .executeTakeFirstOrThrow();
     expect(JSON.stringify(stored)).not.toContain('test-key');
   });
+  it('carries the Claude thinking mode from the frozen task route into the request', async () => {
+    const t = await auditTenant(db, fixtures);
+    const connection = await createConnection(
+      db,
+      t.workspaceId,
+      t.userId,
+      createConnectionInput.parse({
+        transport_provider: 'anthropic',
+        api_key: 'test-key',
+        routes: [{ logical_engine: 'claude' }],
+      }),
+      auditTestKey,
+      runtime.providers,
+    );
+    await probeConnection(
+      db,
+      t.workspaceId,
+      connection.id,
+      auditTestKey,
+      runtime.providers,
+      async () => ({ status: 200, body: { content: [{ type: 'text', text: 'ok' }] } }),
+    );
+    const [id] = await createAudits(
+      db,
+      t.workspaceId,
+      auditInput.parse({ project_id: t.projectId, prompt_set_id: t.setId, engines: ['claude'] }),
+      {},
+      runtime,
+    );
+    const [task] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId: id });
+    const context = await loadExecutionContext(
+      db,
+      task!,
+      'worker',
+      runtime,
+      auditTestKey,
+      new Date(),
+    );
+    expect(directRequest(context!)).toMatchObject({
+      logical_engine: 'claude',
+      reasoning_effort: 'low',
+      anthropic_thinking: 'between_tools',
+    });
+  });
   it('rejects a frozen connection from another workspace and never reselects a replacement', async () => {
     const t = await seed(),
       other = await auditTenant(db, fixtures);

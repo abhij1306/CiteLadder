@@ -142,6 +142,9 @@ const FAILURE_REASONS: Record<string, string> = {
   connection: 'The provider could not be reached. Try again later.',
   server_error: 'The provider had an error. Try again later.',
   content_filter: "The engine's safety filter declined to answer this prompt.",
+  truncated_before_answer:
+    'The engine used its output allowance before writing an answer. Run it again.',
+  empty_answer: 'The engine returned no answer text. Run it again.',
   run_deadline_exceeded: 'The run reached its time limit before this answer finished.',
   poll_ceiling_exceeded: 'Google did not return a result within the polling limit.',
   submission_unreconciled: 'The provider result could not be matched to this answer.',

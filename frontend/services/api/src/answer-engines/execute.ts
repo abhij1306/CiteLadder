@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { providerErrorCode, transientStatus } from '../models/http.ts';
 import { approvedEndpoint } from '../providers/connections.ts';
 import { openaiReasoning, providerPolicy, type ProviderSettings } from '../providers/config.ts';
-import { answerRequestSchema, ProviderError, type AnswerRequest } from './contracts.ts';
+import {
+  answerRequestSchema,
+  ProviderError,
+  type Answer,
+  type AnswerRequest,
+} from './contracts.ts';
 import { parseAnswer } from './parse.ts';
 import { boundedJson } from '../providers/response.ts';
 
@@ -57,9 +62,17 @@ function googlePayload(request: AnswerRequest): Record<string, unknown> {
     ...(request.retrieval_enabled ? { tools: [{ type: 'google_search' }] } : {}),
   };
 }
-function anthropicReasoning(effort: AnswerRequest['reasoning_effort']) {
-  if (effort === 'off') return { thinking: { type: 'disabled' } };
-  return effort === 'low' ? { output_config: { effort: 'low' } } : {};
+/**
+ * The route's frozen thinking mode and effort. Thinking tokens count against
+ * `max_tokens`, so an answer-capture route turns thinking off in config rather
+ * than raising the output budget.
+ */
+function anthropicReasoning(request: AnswerRequest) {
+  const effort = request.reasoning_effort;
+  return {
+    ...(request.anthropic_thinking ? { thinking: { type: request.anthropic_thinking } } : {}),
+    ...(['low', 'medium', 'high'].includes(effort) ? { output_config: { effort } } : {}),
+  };
 }
 function anthropicPayload(request: AnswerRequest): Record<string, unknown> {
   return {
@@ -67,7 +80,7 @@ function anthropicPayload(request: AnswerRequest): Record<string, unknown> {
     max_tokens: request.max_output_tokens,
     messages: [{ role: 'user', content: request.prompt }],
     ...(request.system_instruction ? { system: request.system_instruction } : {}),
-    ...anthropicReasoning(request.reasoning_effort),
+    ...anthropicReasoning(request),
     ...(request.retrieval_enabled
       ? {
           tools: [
@@ -161,9 +174,25 @@ export async function executeAnswer(
     throw new ProviderError(signal.aborted ? 'timeout' : 'parse_error', signal.aborted);
   }
   if (request.transport_provider === 'anthropic') assertNoAnthropicSearchError(payload);
+  let answer: Answer;
   try {
-    return parseAnswer(payload, request, Math.round(performance.now() - started));
+    answer = parseAnswer(payload, request, Math.round(performance.now() - started));
   } catch {
     throw new ProviderError('parse_error');
   }
+  return answered(answer);
+}
+
+/**
+ * An exchange without answer text is not an observation: scoring it would turn
+ * an engine failure into "brand not mentioned". It fails the attempt instead.
+ * A budget exhausted before any text and an unexplained empty answer can
+ * succeed on a fresh call; a safety decline will not. Non-empty text cut off
+ * by the budget remains an observation, its `length` finish reason retained.
+ */
+function answered(answer: Answer): Answer {
+  if (answer.answer_text) return answer;
+  if (answer.finish_reason === 'length') throw new ProviderError('truncated_before_answer', true);
+  if (answer.finish_reason === 'content_filter') throw new ProviderError('content_filter');
+  throw new ProviderError('empty_answer', true);
 }

@@ -203,6 +203,66 @@ describe('leased audit worker phases', () => {
     ]);
     expect(calls).toBe(2);
   });
+  it('retries an answer truncated before any text, then fails it without a scored observation', async () => {
+    const t = await seed();
+    let calls = 0;
+    const w = worker(t, async () => {
+      calls++;
+      return Response.json({
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [{ type: 'reasoning', summary: [] }],
+        usage: { input_tokens: 40, output_tokens: 800, total_tokens: 840 },
+      });
+    });
+    const states = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await ready(t.task.id);
+      await w.runOnce();
+      const task = await stored(t.task.id);
+      states.push([task.status, task.attempt_count, task.error_code]);
+    }
+    expect(states).toEqual([
+      ['retry_wait', 1, 'truncated_before_answer'],
+      ['retry_wait', 2, 'truncated_before_answer'],
+      ['failed', 3, 'truncated_before_answer'],
+    ]);
+    expect(calls).toBe(3);
+    const attempts = await db
+      .selectFrom('provider_attempts')
+      .select(['status', 'error_code', 'artifact_id'])
+      .where('task_id', '=', t.task.id)
+      .orderBy('attempt_number')
+      .execute();
+    expect(attempts).toEqual(
+      Array.from({ length: 3 }, () => ({
+        status: 'failed',
+        error_code: 'truncated_before_answer',
+        artifact_id: null,
+      })),
+    );
+    const observations = await Promise.all(
+      (['raw_response_artifacts', 'response_analyses', 'brand_mentions'] as const).map((table) =>
+        db
+          .selectFrom(table)
+          .select('id')
+          .where('audit_id', '=', t.auditId)
+          .execute()
+          .then((rows) => [table, rows.length]),
+      ),
+    );
+    expect(observations).toEqual([
+      ['raw_response_artifacts', 0],
+      ['response_analyses', 0],
+      ['brand_mentions', 0],
+    ]);
+    const audit = await db
+      .selectFrom('audits')
+      .select(['completed_count', 'failed_count'])
+      .where('id', '=', t.auditId)
+      .executeTakeFirstOrThrow();
+    expect(audit).toEqual({ completed_count: 0, failed_count: 1 });
+  });
   it('recovers an uncertain paid submission by exact tag and then GET, never repeating task_post', async () => {
     const t = await seed(true),
       methods: string[] = [];

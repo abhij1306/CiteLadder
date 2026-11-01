@@ -23,6 +23,7 @@ export const audits = {
         {
           ...execution,
           reasoning_effort: route.reasoning_effort,
+          anthropic_thinking: route.anthropic_thinking,
           reasoning_pinnable: route.reasoning_pinnable,
           representative_status: route.representative_status,
         },
