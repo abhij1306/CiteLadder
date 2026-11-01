@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 
 import { Alert } from '@/components/ui/alert';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
@@ -47,13 +48,38 @@ export function CompetitorSuggestions({
   });
 
   return (
-    <Stack>
-      <Stack gap="tight">
-        <h3 className={textRole('sectionTitle')}>Competitor suggestions</h3>
-        <p className="type-caption">
+    <Card aria-labelledby="competitor-suggestions">
+      <CardHeader>
+        <CardTitle id="competitor-suggestions">Competitor suggestions</CardTitle>
+        <CardDescription>
           Observed repeatedly in third-party citations. Verify relevance before adding.
-        </p>
+        </CardDescription>
+      </CardHeader>
+      <Stack>
+        <SuggestionRows
+          suggestionsQuery={suggestionsQuery}
+          adding={acceptMutation.isPending}
+          onAdd={(candidateId) => acceptMutation.mutate(candidateId)}
+        />
+        {acceptMutation.isError ? (
+          <Alert tone="danger">Could not add that competitor. Try again.</Alert>
+        ) : null}
       </Stack>
+    </Card>
+  );
+}
+
+function SuggestionRows({
+  suggestionsQuery,
+  adding,
+  onAdd,
+}: Readonly<{
+  suggestionsQuery: UseQueryResult<ObservedCompetitor[], unknown>;
+  adding: boolean;
+  onAdd: (candidateId: string) => void;
+}>) {
+  return (
+    <>
       {suggestionsQuery.isError ? (
         <ReadError
           error={suggestionsQuery.error}
@@ -63,7 +89,7 @@ export function CompetitorSuggestions({
         />
       ) : null}
       {suggestionsQuery.data?.length ? (
-        <ul className={ledgerClasses('boxed')}>
+        <ul className={ledgerClasses('open')}>
           {suggestionsQuery.data.map((candidate) => (
             <Inline
               as="li"
@@ -77,11 +103,7 @@ export function CompetitorSuggestions({
                   engines
                 </p>
               </Stack>
-              <Button
-                variant="secondary"
-                onClick={() => acceptMutation.mutate(candidate.id)}
-                disabled={acceptMutation.isPending}
-              >
+              <Button variant="secondary" onClick={() => onAdd(candidate.id)} disabled={adding}>
                 Add competitor
               </Button>
             </Inline>
@@ -91,9 +113,6 @@ export function CompetitorSuggestions({
       {!suggestionsQuery.data?.length && !suggestionsQuery.isLoading ? (
         <QueryState kind="empty" inline message="No repeated citation candidates yet." />
       ) : null}
-      {acceptMutation.isError ? (
-        <Alert tone="danger">Could not add that competitor. Try again.</Alert>
-      ) : null}
-    </Stack>
+    </>
   );
 }
