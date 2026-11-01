@@ -255,6 +255,9 @@ const overviewDimensionSchema = responseObject({
 });
 const overviewIssueSchema = responseObject({
   rule_id: z.string(),
+  // The rule's current catalog label (its failing title); `description`
+  // states the passing expectation and is never shown under it.
+  title: z.string(),
   finding_class: z.string(),
   severity: z.string(),
   category: z.string(),

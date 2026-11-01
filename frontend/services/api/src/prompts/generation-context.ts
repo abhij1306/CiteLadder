@@ -8,6 +8,7 @@ import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
 import { entityKey, projectEntityMatching } from '../analysis/entity-matching.ts';
 import { currentDemandSnapshot } from '../opportunities/sources.ts';
+import type { ModelGateway } from '../models/gateway.ts';
 import { loadVocabulary } from './binding.ts';
 import {
   generationInvalid,
@@ -15,9 +16,11 @@ import {
   wantedTopics,
   type GenerationInput,
 } from './generation-input.ts';
+import { topicLinks } from './generation-plan.ts';
 import { acquireProjectLock } from './locks.ts';
 import { loadObservedQueries } from './observed-queries.ts';
 import { scopedPromptSet } from './prompt-sets.ts';
+import { proposeTopics } from './topic-proposals.ts';
 
 export type OfferingMap = z.infer<typeof offeringMapSchema>;
 const businessMap = z.object({ offerings: z.array(offeringMapSchema).default([]) });
@@ -28,39 +31,150 @@ export const offeringMaps = (business: Record<string, unknown>): OfferingMap[] =
 /** Columns generation reads; widening one is a reviewed change, not a `selectAll`. */
 const topicColumns = ['id', 'name', 'description', 'parent_id'] as const;
 const promptColumns = ['id', 'topic_id', 'text', 'normalized_text_hash'] as const;
-const candidateColumns = ['normalized_text_hash', 'disposition', 'jev_decision'] as const;
+const candidateColumns = ['text', 'normalized_text_hash', 'disposition', 'jev_decision'] as const;
 
-/** A project without topics gets one generated topic per confirmed offering. */
-function recoverTopics(trx: Database, projectId: string, offerings: string[]) {
-  const names = new Map<string, string>();
-  for (const offering of offerings) {
-    const name = offering
-      .trim()
-      .replaceAll(/\s+/gu, ' ')
-      .slice(0, policy.prompts.topic_name_max_chars)
-      .trim();
-    if (name) names.set(name.toLowerCase(), name);
-  }
-  if (!names.size)
-    throw generationInvalid('Add at least one confirmed offering before generating prompts');
-  const now = new Date();
-  return trx
-    .insertInto('topics')
-    .values(
-      [...names.values()].slice(0, policy.prompts.generation.topic_max).map((name) => ({
-        id: randomUUID(),
-        project_id: projectId,
-        parent_id: null,
-        name,
-        description: '',
-        origin: 'generated',
-        created_at: now,
-        updated_at: now,
-      })),
-    )
-    .returning(topicColumns)
+/** What a topic proposal reads, authorized; null when the project already has topics. */
+function recoveryInput(db: Database, workspaceId: string, setId: string) {
+  return db.transaction().execute(async (trx) => {
+    const set = await scopedPromptSet(trx, workspaceId, setId);
+    const topic = await trx
+      .selectFrom('topics')
+      .select('id')
+      .where('project_id', '=', set.project_id)
+      .executeTakeFirst();
+    if (topic) return null;
+    const project = await trx
+      .selectFrom('projects')
+      .select(['brand_name'])
+      .where('id', '=', set.project_id)
+      .where('workspace_id', '=', workspaceId)
+      .executeTakeFirstOrThrow();
+    const profile = await trx
+      .selectFrom('brand_profiles')
+      .select(['products_services', 'business_context'])
+      .where('project_id', '=', set.project_id)
+      .where('workspace_id', '=', workspaceId)
+      .executeTakeFirst();
+    const brand = await trx
+      .selectFrom('brands')
+      .select(['id', 'name'])
+      .where('project_id', '=', set.project_id)
+      .executeTakeFirst();
+    const aliases = brand
+      ? await trx
+          .selectFrom('brand_aliases')
+          .select('alias')
+          .where('brand_id', '=', brand.id)
+          .execute()
+      : [];
+    const business = record(profile?.business_context);
+    return {
+      // The saved offerings, whatever their review state: onboarding saves the
+      // ones its reader just reviewed as unreviewed, and the proposal filter
+      // keeps only buyer-facing names grounded in them.
+      offerings: strings(profile?.products_services),
+      brandNames: [brand?.name ?? project.brand_name, ...aliases.map((row) => row.alias)],
+      categoryTerms: [...strings(business.category_terms), ...strings(business.category_aliases)],
+      existing: [],
+      limit: policy.prompts.generation.topic_max,
+    };
+  });
+}
+
+/** Records which saved offerings each recovered topic covers (`topicOfferings`). */
+async function linkTopicOfferings(
+  trx: Database,
+  workspaceId: string,
+  projectId: string,
+  topics: readonly { id: string; offerings: string[] }[],
+  now: Date,
+) {
+  const profile = await trx
+    .selectFrom('brand_profiles')
+    .select(['id', 'business_context'])
+    .where('project_id', '=', projectId)
+    .where('workspace_id', '=', workspaceId)
+    .executeTakeFirst();
+  if (!profile) return;
+  const business = record(profile.business_context);
+  const links = {
+    ...topicLinks.parse(business.topic_offerings ?? {}),
+    ...Object.fromEntries(topics.map((topic) => [topic.id, topic.offerings])),
+  };
+  await trx
+    .updateTable('brand_profiles')
+    .set({
+      business_context: JSON.stringify({ ...business, topic_offerings: links }),
+      updated_at: now,
+    })
+    .where('id', '=', profile.id)
     .execute();
 }
+
+/**
+ * A project without topics gets buyer-facing topics proposed from its
+ * saved offerings before generation (`proposeTopics`). The proposal's
+ * model call runs outside any transaction after `reserve` admits it; the
+ * topics are written under the project lock only if the project still has
+ * none. Returns what was created, what the cap left out and what was dropped,
+ * for run provenance; null when the project already had topics.
+ */
+export async function recoverTopics(
+  db: Database,
+  scope: { workspaceId: string; setId: string },
+  model: {
+    /** Configures the model only once the set is authorized and needs topics. */
+    gateway: () => ModelGateway | null;
+    deadline: AbortSignal;
+    reserve: () => Promise<void>;
+  },
+) {
+  const input = await recoveryInput(db, scope.workspaceId, scope.setId);
+  if (!input) return null;
+  if (!input.offerings.length)
+    throw generationInvalid('Add at least one offering before generating prompts');
+  const gateway = model.gateway();
+  if (gateway) await model.reserve();
+  const proposal = await proposeTopics(input, gateway, model.deadline);
+  return db.transaction().execute(async (trx) => {
+    const set = await scopedPromptSet(trx, scope.workspaceId, scope.setId);
+    await acquireProjectLock(trx, set.project_id);
+    const raced = await trx
+      .selectFrom('topics')
+      .select('id')
+      .where('project_id', '=', set.project_id)
+      .executeTakeFirst();
+    if (raced) return null;
+    if (!proposal.topics.length)
+      throw generationInvalid('No buyer-facing topic could be proposed from the offerings');
+    const now = new Date();
+    const created = proposal.topics.map((topic) => ({ ...topic, id: randomUUID() }));
+    await trx
+      .insertInto('topics')
+      .values(
+        created.map((topic) => ({
+          id: topic.id,
+          project_id: set.project_id,
+          parent_id: null,
+          name: topic.name,
+          description: '',
+          origin: 'generated',
+          created_at: now,
+          updated_at: now,
+        })),
+      )
+      .execute();
+    await linkTopicOfferings(trx, scope.workspaceId, set.project_id, created, now);
+    return {
+      source: proposal.source,
+      model: proposal.model,
+      created: proposal.topics,
+      overflow: proposal.overflow,
+      dropped: proposal.dropped,
+    };
+  });
+}
+export type TopicRecovery = Awaited<ReturnType<typeof recoverTopics>>;
 
 /** Persisted field sources, overridden by each profile field's review state. */
 function fieldSources(business: Record<string, unknown>, sources: Record<string, unknown>) {
@@ -104,7 +218,7 @@ export function generationContext(
       .where('project_id', '=', project.id)
       .where('workspace_id', '=', workspaceId)
       .executeTakeFirst();
-    let topics = await trx
+    const topics = await trx
       .selectFrom('topics')
       .select(topicColumns)
       .where('project_id', '=', project.id)
@@ -112,8 +226,8 @@ export function generationContext(
       .orderBy('id')
       .execute();
     validateSelection(input, topics);
+    if (!topics.length) throw generationInvalid('Add a topic before generating prompts');
     const offerings = strings(profile?.products_services);
-    if (!topics.length) topics = await recoverTopics(trx, project.id, offerings);
     const wanted = wantedTopics(input);
     const selected = wanted.length
       ? wanted.map((id) => topics.find((topic) => topic.id === id)!)

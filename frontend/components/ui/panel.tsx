@@ -20,8 +20,8 @@ const PANEL_TONE = {
   panel: 'bg-panel border-border',
   /** Recessed — evidence, payloads, quoted source. */
   well: 'bg-well border-transparent',
-  /** Quietly separated, for a row that is chrome rather than content. */
-  tonal: 'bg-background-alt border-transparent',
+  /** The nested step inside a card, for a row that is chrome rather than content. */
+  tonal: 'bg-panel-tonal border-transparent',
   /** Advice: a suggested next step or a quoted prompt. */
   accent: 'bg-accent-soft border-transparent',
   /** The caller supplies the fill because it carries a status meaning. */

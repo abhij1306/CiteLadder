@@ -60,16 +60,22 @@ export function SidebarNav({
 }: Readonly<{ className?: string; onNavigate?: () => void }>) {
   const pathname = useLocation().pathname ?? '';
   const agentMode = navigationMode(pathname) === 'agent';
+  // The mode switch stays put while the destinations scroll under it.
   return (
     <div className={cn('flex flex-col gap-3', className)}>
       <ModeSwitch onNavigate={onNavigate} />
-      {agentMode ? (
-        <Suspense fallback={null}>
-          <AgentNav onNavigate={onNavigate} />
-        </Suspense>
-      ) : (
-        <DashboardNav onNavigate={onNavigate} />
-      )}
+      {/* A scroller clips everything outside its padding box, so this gutter
+          keeps the 1px control edges and 3px focus rings of full-width rows
+          visible; the negative margin keeps alignment. */}
+      <div className="-m-1 min-h-0 flex-1 overflow-y-auto p-1">
+        {agentMode ? (
+          <Suspense fallback={null}>
+            <AgentNav onNavigate={onNavigate} />
+          </Suspense>
+        ) : (
+          <DashboardNav onNavigate={onNavigate} />
+        )}
+      </div>
     </div>
   );
 }

@@ -21,12 +21,24 @@
 
   /* One palette for every surface (owner decision, 2026-10-07): a quiet
      green-tinted neutral ground with white paper, near-black green ink and
-     hairlines, so onboarding and the product read as one system. Every neutral below keeps that tint: green carries slightly more
-     than red and blue in each rung. */
-  --color-background: #f4f5f4;
+     hairlines, so onboarding and the product read as one system. Every
+     neutral below keeps that tint: green carries slightly more than red and
+     blue in each rung.
+
+     The product's surface ladder is four fills, each a visible step from the
+     one it sits on, so the hierarchy reads without its hairlines:
+       background  — the ground behind the rail and around the sheet;
+       sheet       — the workspace sheet and its page bands;
+       panel       — a card, table or panel raised on the sheet;
+       panel-tonal — a nested surface inside a card: table header rows,
+                     tonal panels, the step a selected row sits on.
+     Light tints the sheet and nested steps against white cards; dark lifts
+     each step lighter than the one below it. */
+  --color-background: #eaedeb;
   --color-background-alt: #f6f7f6;
+  --color-sheet: #f2f4f3;
   --color-panel: #ffffff;
-  --color-panel-tonal: #f8f9f8;
+  --color-panel-tonal: #edf0ee;
   --color-elevated: #ffffff;
   --color-well: #eff1f0;
   /* Interaction tints mix a green-tinted ink into the surface that receives
@@ -38,7 +50,7 @@
   --color-active: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 12%);
   --color-disabled: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 3%);
   /* Recessed selection track; state tints follow their enclosing surface. */
-  --color-track: #eceeed;
+  --color-track: #e6e9e7;
   --color-input: #ffffff;
   --color-surface-inverse: var(--color-brand-ink);
 
@@ -50,8 +62,8 @@
                  peers in a band, a menu separator, a chart gridline. Reads as
                  a fold in one sheet, not as an edge.
        border  — the EDGE of a bounded control, inset panel, ledger or page
-                 band, and the header rule inside a table. Default cards and
-                 table wrappers separate by fill instead.
+                 band. Cards, table wrappers and table header rows separate
+                 by fill and keep only a `subtle` edge.
        strong  — a deliberate emphasis: a selected edge, a section the reader
                  is being pointed at.
        bold    — field boundaries and anything that must survive on a tinted
@@ -253,9 +265,8 @@
   --workspace-gap: 16px;
   --compact-gap: 12px;
   --card-padding: 16px;
-  /* The workspace pane is continuous with shell ground; cards and tables on
-     it carry the elevated paper fill. The focused flow pane stays paper. */
-  /* No seam: the tonal steps between rail, ground, and paper are the separation. */
+  /* The workspace sheet carries the `sheet` fill; cards and tables on it carry
+     the `panel` fill one step up. The focused flow pane stays paper. */
   --modal-padding: 24px;
   /* The product has one control height, 32. The 36 and 44 rungs are the
      public website's and the auth/onboarding flow's only. */
@@ -371,14 +382,16 @@
 }
 
 /* State tints are derived from the surface receiving the interaction. */
-:where(.bg-background, .bg-panel, .bg-panel-tonal, .bg-background-alt, .bg-well,
-  .bg-input, .bg-elevated, .bg-track) {
+:where(.bg-background, .bg-sheet, .app-pane-workspace, .bg-panel, .bg-panel-tonal,
+  .bg-background-alt, .bg-well, .bg-input, .bg-elevated, .bg-track) {
   --color-hover: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 4%);
   --color-selected: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 8%);
   --color-active: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 12%);
   --color-disabled: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 3%);
 }
 .bg-background { --state-surface: var(--color-background); }
+.bg-sheet,
+.app-pane-workspace { --state-surface: var(--color-sheet); }
 .bg-panel { --state-surface: var(--color-panel); }
 .bg-panel-tonal { --state-surface: var(--color-panel-tonal); }
 .bg-background-alt { --state-surface: var(--color-background-alt); }
@@ -386,6 +399,11 @@
 .bg-input { --state-surface: var(--color-input); }
 .bg-elevated { --state-surface: var(--color-elevated); }
 .bg-track { --state-surface: var(--color-track); }
+
+/* A sticky layer (a docked composer) paints the fill of the surface it sits
+   on — the sheet on a route, the overlay in a drawer — so it never shows a
+   second tone over its own container. */
+.surface-fill { background-color: var(--state-surface); }
 
 @media (min-width: 981px) and (max-width: 1200px) {
   :root {
@@ -868,10 +886,11 @@ a.focus-ring:active .type-caption {
   border-color: var(--color-accent-subtle);
 }
 
-/* A bare table's boundary on the white sheet: a hairline ring, no lift. A
-   table inside a card or a sheet shares that container's edge instead. */
+/* A bare table's boundary on the sheet: its paper fill plus a subtle hairline
+   ring, no lift. A table inside a card or a sheet shares that container's
+   edge instead. */
 .table-frame {
-  box-shadow: 0 0 0 1px var(--color-border);
+  box-shadow: 0 0 0 1px var(--color-border-subtle);
 }
 
 :where(.surface-card, [role='dialog']) .table-frame {
@@ -1068,26 +1087,31 @@ input:-webkit-autofill:focus {
   --tag-neutral-border: #313733;
   --tag-neutral-text: #cdd3cf;
   /* The dark ramp keeps the light system's order in near-black neutrals with
-     the same slight green tint: ground and rail #0b0d0c → sheet #131614 →
-     overlay #1b1f1d. Wells sink below the sheet, and the border rungs keep
-     their deltas against it. */
+     the same slight green tint, each surface about five L* lighter than the
+     one it sits on so the hierarchy reads without borders: ground and rail
+     #0b0d0c → sheet #101311 → card #1a1e1c → nested #252a27, with overlays
+     at #202522. Wells and fields sink below the sheet. */
   --color-background: #0b0d0c;
-  --color-background-alt: #181b19;
-  --color-panel: #131614;
-  --color-panel-tonal: #171a18;
-  --color-elevated: #1b1f1d;
+  --color-background-alt: #1f2421;
+  --color-sheet: #101311;
+  --color-panel: #1a1e1c;
+  --color-panel-tonal: #252a27;
+  --color-elevated: #202522;
   --color-well: #0e100f;
   --color-input: #0f1210;
   /* The same three inks in white: a softened ~80% white so long reading on
      the dark ground does not glare, a light grey for sentences and labels,
-     and a dim grey for captions and metadata. */
+     and a dim grey for captions and metadata, light enough to hold 4.5:1 on
+     the pressed tint of a card. */
   --color-foreground: #d3d8d5;
   --color-secondary: #a9b0ac;
-  --color-muted: #939a96;
+  --color-muted: #969d99;
   --color-ink-faint: #6d746f;
   --color-brand-ink: #e1e5e2;
-  --color-track: #0f1210;
-  --color-border-subtle: #212522;
+  /* The segmented track is the nested step in dark: a lighter inset that the
+     selected segment's card fill and ring sit in. */
+  --color-track: var(--color-panel-tonal);
+  --color-border-subtle: #222724;
   --color-border: #2b302d;
   --color-border-strong: #3d433f;
   --color-border-bold: #737b76;
@@ -1124,7 +1148,7 @@ input:-webkit-autofill:focus {
   --color-info-bg: rgb(122 167 245 / 13%);
   --color-info-text: #a9c6f8;
   --color-neutral: #5f6762;
-  --color-neutral-bg: #212523;
+  --color-neutral-bg: #2a2f2c;
   --color-chart-1: #4ade80;
   --color-chart-2: #60a5fa;
   --color-chart-3: #fbbf24;
@@ -1134,7 +1158,7 @@ input:-webkit-autofill:focus {
   --color-chart-7: #fb923c;
   --color-chart-8: #9aa29d;
   --color-overlay-scrim: rgb(0 0 0 / 72%);
-  --skeleton-base: #1a1e1b;
+  --skeleton-base: var(--color-panel-tonal);
   /* On near-black a drop shadow carries no edge, so dark material leads with
      a light hairline ring and keeps a deep shadow only for detached layers. */
   --shadow-overlay: 0 0 0 1px rgb(255 255 255 / 8%), 0 16px 40px -8px rgb(0 0 0 / 60%);
@@ -1192,12 +1216,14 @@ input:-webkit-autofill:focus {
   box-shadow: var(--elevation-flow);
 }
 
-/* The floating sheet (owner decision, 2026-10-07): the work lives on one white
-   sheet inset from the viewport and the rail on every side, so all four
-   corners have ground behind them. The document still scrolls; the sheet
-   grows with its content and fills the viewport when the content is short. */
+/* The floating sheet (owner decision, 2026-10-07): the work lives on one sheet
+   inset from the viewport and the rail on every side, so all four corners
+   have ground behind them. Its `sheet` fill sits one step below the cards on
+   it, so cards read as raised without leaning on their edges. The document
+   still scrolls; the sheet grows with its content and fills the viewport when
+   the content is short. */
 .app-pane-workspace {
-  background: var(--color-panel);
+  background: var(--color-sheet);
   border-radius: var(--radius-lg);
   box-shadow: var(--elevation-sheet);
   margin: var(--workspace-inset) var(--workspace-inset) var(--workspace-inset) 0;

@@ -24,7 +24,7 @@ const TAGS = [
 function palette(ink, paper, marks, charts) {
   return {
     ...Object.fromEntries(
-      ['panel', 'background', 'background-alt', 'well', 'panel-tonal'].map((role) => [
+      ['panel', 'background', 'background-alt', 'well', 'sheet', 'panel-tonal'].map((role) => [
         `--color-${role}`,
         paper,
       ]),

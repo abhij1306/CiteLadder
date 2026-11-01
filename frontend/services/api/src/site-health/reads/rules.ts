@@ -29,6 +29,15 @@ export const severityOrder = (column: string) => sql<number>`case ${sql.ref(colu
 /** The current catalog label; a retired or unknown rule shows its id. */
 export const ruleTitle = (ruleId: string) => RULES.get(ruleId)?.display_label ?? ruleId;
 
+/** The catalog rules whose label contains the text, ignoring case. */
+export function rulesTitled(query: string): string[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  return [...RULES.values()]
+    .filter((rule) => rule.display_label.toLowerCase().includes(needle))
+    .map((rule) => rule.rule_id);
+}
+
 /** Who can resolve the rule; an unknown rule needs a developer. */
 export const remediationRoute = (ruleId: string) =>
   RULES.get(ruleId)?.remediation_route ?? reads.unknown_rule_remediation_route;
@@ -61,6 +70,45 @@ export function issueImpact(ruleId: string, findingClass: string, severity: stri
 export function issueGroupId(crawlId: string, ruleId: string, findingClass: string) {
   const suffix = findingClass === 'defect' ? '' : `:${findingClass}`;
   return uuidV5(crawlId, `site-issue-group:${ruleId}${suffix}`);
+}
+
+/**
+ * A site-level architecture finding is persisted once, against the homepage,
+ * and names the pages (or page kinds) it found in its evidence. Its group
+ * counts and page kinds come from that evidence, not from the one row, so
+ * "Pages buried too deeply" reads 11 pages rather than the homepage. `null`
+ * for every per-page rule.
+ */
+export function siteLevelScope(
+  ruleId: string,
+  evidence: unknown,
+): { affected: number; pageKinds: string[] } | null {
+  if (!ruleId.startsWith('architecture.')) return null;
+  const facts = record(evidence);
+  const rows = (value: unknown) =>
+    Array.isArray(value) ? value.map(record).filter((row) => Object.keys(row).length > 0) : [];
+  const kindsOf = (items: Record<string, unknown>[]) =>
+    [
+      ...new Set(items.map((row) => row.page_kind).filter((kind): kind is string => Boolean(kind))),
+    ].sort(compareText);
+  if (Array.isArray(facts.pages)) {
+    const pages = rows(facts.pages);
+    const count = typeof facts.count === 'number' ? facts.count : pages.length;
+    return { affected: count, pageKinds: kindsOf(pages) };
+  }
+  if (Array.isArray(facts.page_kinds)) {
+    const kinds = rows(facts.page_kinds);
+    const key =
+      ruleId === 'architecture.duplicate_metadata_in_page_kind'
+        ? 'duplicate_metadata_count'
+        : 'page_count';
+    const affected = kinds.reduce((sum, row) => {
+      const value = row[key];
+      return sum + (typeof value === 'number' ? value : 0);
+    }, 0);
+    return { affected, pageKinds: kindsOf(kinds) };
+  }
+  return null;
 }
 
 export type IssueRow = {

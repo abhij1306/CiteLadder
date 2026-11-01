@@ -37,7 +37,9 @@ description: Triage an authorized CiteLadder project's persisted Site Health sco
   (non-blocking), **needs verification** (unresolved). Missing `llms.txt` or an
   "agent readiness" level is not a proven defect.
 - Group issues under one root cause only when the evidence shows a shared
-  template; otherwise call it a hypothesis.
+  template; otherwise call it a hypothesis. Read each page's `rule_evidence`
+  before proposing a site-wide fix: pages failing one check often fail it for
+  different reasons (different links, different targets).
 
 ## Answer
 

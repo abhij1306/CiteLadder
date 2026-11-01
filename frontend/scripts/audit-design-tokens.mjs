@@ -65,11 +65,6 @@ const SAME_AS = [
     tokens: ['--color-background', '--color-on-inverse'],
     reason: 'a label on the dark inverse surface is cut out in the ground colour',
   },
-  {
-    theme: 'dark',
-    tokens: ['--color-input', '--color-track'],
-    reason: 'fields and selection tracks share one recessed fill in dark',
-  },
 ];
 
 /** Status and action values a chart series must never wear. */

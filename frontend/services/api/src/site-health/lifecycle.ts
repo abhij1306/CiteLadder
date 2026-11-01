@@ -14,6 +14,7 @@ import { policy, resolveSettingSpec } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
 import { reconcileDuplicateAliases } from './canonical-alias.ts';
+import { expectedTaskFailure } from './coverage.ts';
 import { finalizeCrawlAnalyses } from './lifecycle-finalize.ts';
 import { rootFailure } from './reads/crawl.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
@@ -38,8 +39,17 @@ type Counts = {
   cancelled: number;
   failed: number;
   excluded: number;
+  expected: number;
 };
-const NONE: Counts = { total: 0, open: 0, succeeded: 0, cancelled: 0, failed: 0, excluded: 0 };
+const NONE: Counts = {
+  total: 0,
+  open: 0,
+  succeeded: 0,
+  cancelled: 0,
+  failed: 0,
+  excluded: 0,
+  expected: 0,
+};
 
 /** Task outcomes that drive one locked reconcile, from one grouped scan. */
 type Summary = {
@@ -65,6 +75,10 @@ async function taskSummary(db: Database, crawl: Crawl): Promise<Summary> {
       sql<number>`count(*) filter (where status = 'failed' and error_code = any(${EXCLUSIONS}::text[]))::int`.as(
         'excluded',
       ),
+      // Discovery that met only robots/admission exclusions and 404/410s is complete.
+      sql<number>`count(*) filter (where status = 'failed' and ${expectedTaskFailure})::int`.as(
+        'expected',
+      ),
     ])
     .where('workspace_id', '=', crawl.workspace_id)
     .where('crawl_id', '=', crawl.id)
@@ -75,7 +89,7 @@ async function taskSummary(db: Database, crawl: Crawl): Promise<Summary> {
   const [discover, setup, analyze] = [kind('discover'), kind('site_setup'), kind('analyze')];
   return {
     discoverOpen: discover.open + setup.open,
-    discoverFailed: Math.max(discover.failed - discover.excluded, 0) + setup.failed,
+    discoverFailed: Math.max(discover.failed - discover.expected, 0) + setup.failed,
     analyzeOpen: analyze.open,
     analyzeTotal: analyze.total,
     analyzeSucceeded: analyze.succeeded,

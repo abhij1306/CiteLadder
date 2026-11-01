@@ -654,9 +654,10 @@ describe('page fetch policy', () => {
     expect(isBotBlock(page(429, limited))).toBe(false);
     expect(isBotBlock(page(403, limited))).toBe(true);
   });
-  it('excludes non-content endpoints and tracking variants but not ordinary pages', () => {
+  it('excludes non-content endpoints but not ordinary pages or their tracking variants', () => {
     expect(hardExcluded(new URL('https://example.test/cart'))).toBe(true);
-    expect(hardExcluded(new URL('https://example.test/products/widget?utm_source=x'))).toBe(true);
+    // A tagged link admits its clean target, so the tracking variant is not excluded.
+    expect(hardExcluded(new URL('https://example.test/products/widget?utm_source=x'))).toBe(false);
     expect(hardExcluded(new URL('https://example.test/assets/site.css'))).toBe(true);
     expect(hardExcluded(new URL('https://example.test/products/widget'))).toBe(false);
   });

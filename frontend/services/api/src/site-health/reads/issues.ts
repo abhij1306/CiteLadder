@@ -32,8 +32,10 @@ import {
   issueGroupId,
   issueOccurrence,
   remediationRoute,
+  rulesTitled,
   ruleTitle,
   severityRank,
+  siteLevelScope,
   type IssueRow,
 } from './rules.ts';
 
@@ -94,7 +96,11 @@ function issueWhere(
     clauses.push(sql`i.evaluation_id in ${currentEvaluations(crawl, filters.pageKind)}`);
   if (filters.findingClass) clauses.push(sql`i.finding_class = ${filters.findingClass}`);
   if (filters.query) {
-    clauses.push(sql`i.rule_id ilike ${containsPattern(filters.query.trim())}`);
+    // The reader searches the titles they see ("broken internal links"), not rule ids.
+    const query = filters.query.trim();
+    clauses.push(
+      sql`(i.rule_id ilike ${containsPattern(query)} or i.rule_id = any(${rulesTitled(query)}::text[]))`,
+    );
   }
   return sql.join(clauses, sql` and `);
 }
@@ -115,16 +121,20 @@ async function issueGroups(db: Database, crawl: Crawl, filters: IssueFilters): P
   return rows
     .map((row) => ({
       ...row,
+      affected_url_count:
+        siteLevelScope(row.rule_id, row.evidence)?.affected ?? row.affected_url_count,
       group_id: issueGroupId(crawl.id, row.rule_id, filters.findingClass),
     }))
     .sort(compareGroups);
 }
 
-const groupKey = (group: { severity: string; rule_id: string; group_id: string }) =>
-  [severityRank(group.severity), group.rule_id, group.group_id] as const;
+/** Worst first; within a severity, the issue on the most pages first. */
+type GroupKey = readonly [rank: number, affected: number, rule: string, group: string];
+const groupKey = (group: Group): GroupKey =>
+  [severityRank(group.severity), group.affected_url_count, group.rule_id, group.group_id] as const;
 
-function compareKeys(a: readonly [number, string, string], b: readonly [number, string, string]) {
-  return a[0] - b[0] || compareText(a[1], b[1]) || compareText(a[2], b[2]);
+function compareKeys(a: GroupKey, b: GroupKey) {
+  return a[0] - b[0] || b[1] - a[1] || compareText(a[2], b[2]) || compareText(a[3], b[3]);
 }
 const compareGroups = (a: Group, b: Group) => compareKeys(groupKey(a), groupKey(b));
 
@@ -205,11 +215,18 @@ export async function pageKindsByRule(
 
 function groupCursor(cursor: string | null, fingerprint: Record<string, unknown>) {
   if (!cursor) return null;
-  const [rank, rule, id, ...rest] = decodeKeysetCursor(cursor, 'issues', fingerprint);
-  if (rank === undefined || rule === undefined || id === undefined || rest.length > 0)
+  const [rank, affected, rule, id, ...rest] = decodeKeysetCursor(cursor, 'issues', fingerprint);
+  if (
+    rank === undefined ||
+    affected === undefined ||
+    rule === undefined ||
+    id === undefined ||
+    rest.length > 0
+  )
     throw new InvalidCursorError('invalid cursor');
-  if (!/^\d{1,3}$/u.test(rank)) throw new InvalidCursorError('invalid cursor');
-  return [Number(rank), rule, id] as const;
+  if (!/^\d{1,3}$/u.test(rank) || !/^\d{1,9}$/u.test(affected))
+    throw new InvalidCursorError('invalid cursor');
+  return [Number(rank), Number(affected), rule, id] as const;
 }
 
 export async function issues(
@@ -251,7 +268,8 @@ export async function issues(
       group_id: group.group_id,
       crawl_id: crawl.id,
       rule_id: group.rule_id,
-      page_kinds: kinds.get(group.rule_id) ?? [],
+      page_kinds:
+        siteLevelScope(group.rule_id, group.evidence)?.pageKinds ?? kinds.get(group.rule_id) ?? [],
       dimension: group.dimension,
       category: group.category,
       severity: group.severity,
@@ -280,6 +298,8 @@ export async function issueDetail(
   groupId: string,
   paging: Paging,
   siteUrlId?: string,
+  /** The catalog's page-kind filter: the rail lists the pages the list row counted. */
+  pageKind: string | null = null,
 ) {
   const crawl = await loadCrawl(db, workspaceId, crawlId);
   const candidates = await sql<{ rule_id: string; finding_class: string }>`
@@ -289,9 +309,17 @@ export async function issueDetail(
     (row) => issueGroupId(crawl.id, row.rule_id, row.finding_class) === groupId,
   );
   if (group === undefined) throw notFound('Issue');
+  const kindFilter = pageKind
+    ? sql`and i.evaluation_id in ${currentEvaluations(crawl, pageKind)}`
+    : sql``;
   const inGroup = sql`${currentIssues(crawl)} and i.rule_id = ${group.rule_id}
-    and i.finding_class = ${group.finding_class}`;
-  const fingerprint = { crawl_id: crawl.id, group_id: groupId, site_url_id: siteUrlId ?? null };
+    and i.finding_class = ${group.finding_class} ${kindFilter}`;
+  const fingerprint = {
+    crawl_id: crawl.id,
+    group_id: groupId,
+    site_url_id: siteUrlId ?? null,
+    page_kind: pageKind,
+  };
   let after = sql``;
   if (paging.cursor) {
     const [url, raw, ...rest] = decodeKeysetCursor(paging.cursor, 'issue_detail', fingerprint);
@@ -344,7 +372,8 @@ export async function issueDetail(
     remediation_route: remediationRoute(representative.rule_id),
     occurrences: page.map((row) => issueOccurrence(row, row)),
     occurrence_count: total.occurrences,
-    affected_url_count: total.affected,
+    affected_url_count:
+      siteLevelScope(representative.rule_id, representative.evidence)?.affected ?? total.affected,
     analyzer_version: representative.analyzer_version,
     rule_version: representative.rule_version,
     created_at: representative.created_at.toISOString(),

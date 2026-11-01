@@ -108,6 +108,16 @@ it('retains the selected Site Health snapshot and partial/unknown coverage when 
     },
   });
   await expect(render(randomUUID())).rejects.toThrow('unavailable');
+  // An issue's context carries only its crawl id; that selects the crawl's snapshot.
+  expect(
+    await dispatchTool(
+      db,
+      member,
+      'read_site_health',
+      { project_id: seed.projectId, snapshot_id: seed.crawlId },
+      origin,
+    ),
+  ).toMatchObject({ state: 'available', snapshot_id: first, crawl_id: seed.crawlId });
 });
 
 it('pins the Visibility review to canonical measures and source-to-answer evidence even after a newer audit exists', async () => {
@@ -784,6 +794,7 @@ async function siteIssue(
   seed: SiteSeed,
   page: Awaited<ReturnType<typeof sitePage>>,
   ruleId: string,
+  evidence?: Record<string, unknown>,
 ) {
   const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === ruleId)!;
   const { source_evaluation_ids } = await db
@@ -818,6 +829,7 @@ async function siteIssue(
       remediation: rule.remediation,
       analyzer_version: policy.site_health.versions.analyzer,
       created_at: new Date(),
+      ...(evidence ? { evidence: JSON.stringify(evidence) } : {}),
     })
     .execute();
 }
@@ -835,7 +847,7 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
   await sitePage(seed, '/clean');
   await siteIssue(seed, titled, 'technical.title_present');
   await siteIssue(seed, titled, 'technical.meta_description_present');
-  await siteIssue(seed, described, 'technical.meta_description_present');
+  await siteIssue(seed, described, 'technical.meta_description_present', { present: false });
   const pages = (args: Record<string, unknown>) =>
     dispatchTool(
       db,
@@ -858,6 +870,7 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
       aeo_measurement_state: 'limited_evidence',
       issue_count: 1,
       issue_rules: { advisory: ['technical.meta_description_present'] },
+      rule_evidence: { present: false },
       inbound_count: null,
       depth_from_home: null,
       record_uri: `citeladder://site_page/${described.analysisId}`,
@@ -888,6 +901,27 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
     "Unknown rule_id 'technical.no_such_rule'",
   );
   await expect(pages({ page_kind: 'categories' })).rejects.toThrow('page_kind');
+
+  // Each page names its own failing links: query-string variants fold into one line.
+  await siteIssue(seed, described, 'technical.internal_link_redirect', {
+    failing_targets: [
+      { url: 'https://example.test/old', final_url: 'https://example.test/docs', hops: 1 },
+      { url: 'https://example.test/old?qv=1', final_url: 'https://example.test/docs?qv=1' },
+      { url: 'https://example.test/loop', reason: 'redirect_limit' },
+    ],
+  });
+  const redirects = await pages({ rule_id: 'technical.internal_link_redirect' });
+  expect(
+    (redirects.items as { rule_evidence: unknown }[]).map((item) => item.rule_evidence),
+  ).toEqual([
+    {
+      failing_targets: [
+        'https://example.test/old → https://example.test/docs',
+        'https://example.test/loop → redirect loop',
+      ],
+      distinct_failing_target_count: 2,
+    },
+  ]);
 });
 
 it('reads the internal links of several pages in one call, by page URL rather than internal neighbor ids', async () => {
@@ -960,6 +994,17 @@ it('reads the internal links of several pages in one call, by page URL rather th
     ],
   ]);
   expect(links.missing_site_url_ids).toEqual([missing]);
+  // Named pages carry diagnostics as counts, and a paged read still names the missing page.
+  expect((items[0] as Record<string, unknown>).anchor_diagnostic_counts).toEqual({});
+  const firstOfTwo = await dispatchTool(
+    db,
+    siteMember(seed),
+    'read_site_links',
+    { project_id: seed.projectId, site_url_ids: [blog.id, docs.id, missing], limit: 1 },
+    origin,
+  );
+  expect(firstOfTwo.items as unknown[]).toHaveLength(1);
+  expect(firstOfTwo.missing_site_url_ids).toEqual([missing]);
   expect(links.versions).toEqual({
     extractor: policy.site_health.versions.extractor,
     formula: policy.site_health.link_metrics.formula_version,

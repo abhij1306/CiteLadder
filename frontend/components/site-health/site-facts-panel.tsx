@@ -171,7 +171,7 @@ function CrawlerTable({
         .map((group) => (
           <Fragment key={group}>
             <TableRow>
-              <TableHead scope="colgroup" colSpan={5} className="bg-panel-tonal static">
+              <TableHead scope="colgroup" colSpan={5} className="static">
                 {crawlerPurposeLabels[group]}
               </TableHead>
             </TableRow>

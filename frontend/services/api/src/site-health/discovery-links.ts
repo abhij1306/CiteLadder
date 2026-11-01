@@ -1,10 +1,10 @@
 /** A page's in-scope links in document order: pure, so it runs on the interpretation pool. */
 import { policy } from '../config.ts';
 import {
+  anchorElements,
   attribute,
   elements,
   textContent,
-  type HtmlElement,
   type HtmlNode,
 } from '../web-evidence/html.ts';
 import { classifyUrlAdmission, type Admission, type Scope } from './url-admission.ts';
@@ -34,22 +34,14 @@ function rewriteHref(href: string) {
   return `${href.slice(0, match.index)}?${query}`;
 }
 
-/** Every anchor in document order, template content included: discovery reads the unpruned page. */
-function* anchors(root: HtmlNode): Generator<HtmlElement> {
-  for (const element of elements(root)) {
-    if (element.tagName === 'a') yield element;
-    if (element.tagName === 'template' && 'content' in element)
-      yield* anchors((element as HtmlElement & { content: HtmlNode }).content);
-  }
-}
-
 /** The page title and its bounded, canonical, in-scope links in document order. */
 export function discoveryLinks(root: HtmlNode, baseUrl: string, scope: Scope, maxLinks: number) {
   const titleNode = elements(root, 'title').next().value;
   const title = titleNode ? textContent(titleNode).slice(0, 1024) : '';
   const links: DiscoveredLink[] = [];
   const seen = new Set<string>();
-  for (const anchor of anchors(root)) {
+  // Every anchor, hidden and template content included: discovery reads the unpruned page.
+  for (const { anchor } of anchorElements(root)) {
     if (links.length >= maxLinks) break;
     const link = admitHref(attribute(anchor, 'href').trim(), baseUrl, scope);
     if (!link || seen.has(link.admission.hash)) continue;

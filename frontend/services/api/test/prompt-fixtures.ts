@@ -136,10 +136,11 @@ export async function candidate(
   return id;
 }
 
-/** One draft request as the model received it: the system prompt and the batch's slots. */
+/** One draft request as the model received it: the system prompt, brief and the batch's slots. */
 export type DraftRequest = {
   system: string;
   slots: (Record<string, unknown> & { slot_id: string })[];
+  reference: Record<string, unknown>;
 };
 
 /**
@@ -151,10 +152,13 @@ export function echoDependencies({
   fail = [],
   onCall,
   onRequest,
+  topics = [],
 }: {
   fail?: number[];
   onCall?: (call: number) => void;
   onRequest?: (request: DraftRequest) => void;
+  /** The answer to a topic proposal request, which carries offerings instead of slots. */
+  topics?: { name: string; offerings: string[] }[];
 } = {}) {
   let calls = 0;
   const answer = (init?: RequestInit): Response => {
@@ -163,12 +167,23 @@ export function echoDependencies({
     if (fail.includes(call)) return new Response('bad request', { status: 400 });
     const body = JSON.parse(String(init?.body)) as { messages: { content: string }[] };
     const user = JSON.parse(body.messages[1]!.content.split('\n\nReturn only JSON')[0]!) as {
-      slots: DraftRequest['slots'];
+      slots?: DraftRequest['slots'];
+      reference_evidence: DraftRequest['reference'];
     };
-    onRequest?.({ system: body.messages[0]!.content, slots: user.slots });
+    if (!user.slots)
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ topics }) } }] });
+    onRequest?.({
+      system: body.messages[0]!.content,
+      slots: user.slots,
+      reference: user.reference_evidence,
+    });
+    // Two words unique to the slot, so no two answers are near duplicates; a
+    // branded batch names the brand it was given.
+    const brand = user.reference_evidence.brand_name;
+    const named = typeof brand === 'string' && brand ? brand + ' ' : '';
     const prompts = user.slots.map((slot) => ({
       slot_id: slot.slot_id,
-      text: `Which running shoes suit runner ${slot.slot_id} best?`,
+      text: `Which ${named}running shoes suit ${slot.slot_id}style runners on ${slot.slot_id}grade trails?`,
       buyer_stage: 'consideration',
       prompt_intent: 'recommend',
     }));

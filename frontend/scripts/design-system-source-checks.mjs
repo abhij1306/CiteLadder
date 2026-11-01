@@ -1183,6 +1183,7 @@ export function productContractViolations(root) {
     '--radius-lg',
     '--color-background',
     '--color-background-alt',
+    '--color-sheet',
     '--color-panel-tonal',
     '--color-well',
     '--color-active',

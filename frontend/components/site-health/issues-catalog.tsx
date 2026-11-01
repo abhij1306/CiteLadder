@@ -2,12 +2,15 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 
 import { ListScreen } from '@/components/layout/page-shell';
 import { Inline, Stack } from '@/components/ui/layout';
 import { IssueDetailRail } from '@/components/site-health/issue-detail-rail';
 import { IssueMetadata } from '@/components/site-health/issue-metadata';
 import { PageKindSelect } from '@/components/site-health/page-kind-select';
+import { Button } from '@/components/ui/button';
+import { Icon } from '@/components/ui/icon';
 import { ListDetailCard, ListDetailRow } from '@/components/ui/list-detail';
 import { Pager } from '@/components/ui/pager';
 import { QueryState } from '@/components/ui/query-state';
@@ -40,7 +43,7 @@ const FILTER_GROUP_KEYS: Record<'All issues' | 'Severity' | 'Category', readonly
 /** The toggle's label, with the count only once a summary has landed. */
 function findingViewLabel(view: FindingClass, summary: IssuesSummary | null): string {
   const defects = view === 'defect';
-  const label = defects ? 'Defects' : 'Advisories';
+  const label = defects ? 'Issues' : 'Advisories';
   if (!summary) return label;
   const count = defects ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
   return `${label} (${count})`;
@@ -69,9 +72,11 @@ function useIssuesCatalogQueries(
   const rows = issuesQuery.data?.items ?? [];
   const selected = rows.find((issue) => issue.group_id === selectedGroupId) ?? rows[0] ?? null;
   const detailQuery = useQuery({
+    // The rail lists the pages its row counted, so it takes the row's page-kind filter.
     ...siteHealthQueries.issue(workspaceId, crawlId, selected?.group_id ?? '', {
       cursor: occurrenceCursor,
       limit: ISSUE_OCCURRENCE_LIMIT,
+      page_kind: filters.page_kind || undefined,
     }),
     enabled: selected !== null,
   });
@@ -143,6 +148,13 @@ export function IssuesCatalog({
             />
           ) : null;
         })}
+        {/* Last in the strip, so clearing it moves no other control. */}
+        {filters.rule_id ? (
+          <RuleFilterChip
+            title={ruleFilterTitle(rows, filters.rule_id)}
+            onClear={() => updateFilters({ rule_id: '' })}
+          />
+        ) : null}
       </>
     ),
   };
@@ -227,6 +239,23 @@ export function IssuesCatalog({
   );
 }
 
+/** The deep-linked issue's title, from the rows it filtered to; never its rule id. */
+function ruleFilterTitle(rows: SiteIssue[], ruleId: string): string {
+  const row = rows.find((issue) => issue.rule_id === ruleId);
+  return row ? issueTitle(row) : 'one issue';
+}
+
+/** A deep link's one-issue filter, visible and removable rather than silent. */
+function RuleFilterChip({ title, onClear }: Readonly<{ title: string; onClear: () => void }>) {
+  return (
+    <Button variant="secondary" onClick={onClear}>
+      Showing: {title}
+      <Icon icon={X} />
+      <span className="sr-only">(show all issues)</span>
+    </Button>
+  );
+}
+
 function IssueSearch({
   query,
   onApply,
@@ -300,23 +329,33 @@ function IssueSummary({
   summary,
   findingView,
 }: Readonly<{ summary: IssuesSummary; findingView: FindingClass }>) {
-  const typeCount =
-    findingView === 'defect' ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
+  const defects = findingView === 'defect';
+  const typeCount = defects ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
   return (
-    <Inline gap="meta">
-      <SummaryMeasure value={typeCount} label={`${findingView} issue types`} />
-      <SummaryMeasure value={summary.occurrence_count} label={`${findingView} occurrences`} />
-      <SummaryMeasure value={summary.affected_url_count} label="affected URLs" />
-    </Inline>
+    <p className="type-body">
+      <SummaryCount
+        value={typeCount}
+        singular={defects ? 'issue' : 'advisory'}
+        plural={defects ? 'issues' : 'advisories'}
+      />
+      <span aria-hidden> · </span>
+      <SummaryCount value={summary.occurrence_count} singular="occurrence" plural="occurrences" />
+      <span aria-hidden> · </span>
+      <SummaryCount value={summary.affected_url_count} singular="page" plural="pages" />
+    </p>
   );
 }
 
-function SummaryMeasure({ value, label }: Readonly<{ value: number; label: string }>) {
+function SummaryCount({
+  value,
+  singular,
+  plural,
+}: Readonly<{ value: number; singular: string; plural: string }>) {
   return (
-    <Inline as="span" className="items-baseline">
-      <span className={textRole('sectionTitle', 'tabular-nums')}>{value}</span>{' '}
-      <span className="type-caption">{label}</span>
-    </Inline>
+    <span>
+      <span className={textRole('emphasis', 'tabular-nums')}>{value}</span>{' '}
+      {value === 1 ? singular : plural}
+    </span>
   );
 }
 
@@ -364,7 +403,6 @@ function IssueGroupList({
           {issue.affected_url_count} {issue.affected_url_count === 1 ? 'page' : 'pages'}
         </span>
       </Inline>
-      <span className="type-caption line-clamp-2">{issue.description}</span>
     </ListDetailRow>
   ));
 }

@@ -17,6 +17,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { SiteHealthOverview } from '@/lib/api/types';
+import { issueTitle } from '@/lib/site-health/issues';
 import { formatScore, PLACEHOLDER, statusLabel } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import { panelClasses } from '@/components/ui/panel';
@@ -123,10 +124,12 @@ const PILLAR_COLUMNS: readonly DataTableColumn[] = [
   { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
 ];
 
+// Issues and advisories share the table, so a class column would print the
+// same word on most rows; an advisory carries its own badge beside its title
+// instead, as it does on a page's issue list.
 const TOP_ISSUE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'impact', label: 'Impact', width: 'figure' },
   { key: 'issue', label: 'Issue' },
-  { key: 'type', label: 'Type', width: 'figure' },
   { key: 'pages', label: 'Pages', width: 'figure', numeric: true },
   { key: 'effect', label: 'Effect', width: 'figure' },
 ];
@@ -158,11 +161,17 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
             </Badge>
           </TableCell>
           <TableCell>
-            <TextLink text="inherit" href={issueHref(issue.rule_id, issue.finding_class)}>
-              <ClampText>{issue.description || issue.rule_id}</ClampText>
-            </TextLink>
+            <Inline>
+              <TextLink
+                text="inherit"
+                href={issueHref(issue.rule_id, issue.finding_class)}
+                className="min-w-0"
+              >
+                <ClampText>{issueTitle(issue)}</ClampText>
+              </TextLink>
+              {issue.finding_class === 'advisory' ? <Badge>Advisory</Badge> : null}
+            </Inline>
           </TableCell>
-          <TableCell className="whitespace-nowrap">{statusLabel(issue.finding_class)}</TableCell>
           <TableCell numeric>{issue.affected_pages}</TableCell>
           <TableCell className="whitespace-nowrap">
             <ScoreEffect roles={issue.score_roles} />

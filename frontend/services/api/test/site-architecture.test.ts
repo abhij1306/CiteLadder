@@ -5,6 +5,7 @@ import { architectureRules } from '../src/site-health/architecture-rules.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
+import { issueDetail, issues as readIssues } from '../src/site-health/reads/issues.ts';
 import { testDatabase } from './support.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 
@@ -108,7 +109,7 @@ it('counts in-content links apart from the links that menus repeat on every page
   const { internal_linking } = buildArchitecture(pages, 'complete', context);
   expect(internal_linking).toMatchObject({ internal_link_count: 22, content_link_count: 5 });
 });
-it('keeps observed orphan and duplicate counts under partial coverage but gates absence findings', () => {
+it('keeps observed orphan and duplicate counts under partial coverage but gates absence and depth findings', () => {
   const pages = [
     page('home', '/', 'homepage', { depth: 0, inbound: 1 }),
     ...['a', 'b', 'c'].map((id) =>
@@ -125,13 +126,15 @@ it('keeps observed orphan and duplicate counts under partial coverage but gates 
     model.page_kinds.find((row) => row.page_kind === 'product')!.duplicate_metadata_count,
   ).toBe(3);
   const partial = architectureRules(model, pages, 'partial');
-  expect(partial.find((row) => row.rule.rule_id.endsWith('excessive_depth'))!.outcome).toBe(
-    'missing',
-  );
+  // Depth over a partly observed graph is an upper bound, not a finding.
+  expect(partial.find((row) => row.rule.rule_id.endsWith('excessive_depth'))).toMatchObject({
+    outcome: 'unknown',
+    reason: 'coverage_not_complete',
+  });
   expect(
     partial.find((row) => row.rule.rule_id.endsWith('duplicate_metadata_in_page_kind'))!.outcome,
   ).toBe('missing');
-  expect(partial.filter((row) => row.reason === 'coverage_not_complete')).toHaveLength(3);
+  expect(partial.filter((row) => row.reason === 'coverage_not_complete')).toHaveLength(4);
   const complete = architectureRules(
     buildArchitecture(pages, 'complete', context),
     pages,
@@ -225,8 +228,9 @@ it('downgrades complete coverage when architecture evidence reaches its source c
       .select(['outcome', 'reason_code'])
       .where('source_architecture_id', '=', architecture.id)
       .execute();
+    // Orphans, parentless details, unhubbed kinds and depth all need complete coverage.
     expect(evaluations.filter((row) => row.reason_code === 'coverage_not_complete')).toHaveLength(
-      3,
+      4,
     );
   } finally {
     policy.site_health.architecture.max_pages = previous;
@@ -283,7 +287,7 @@ it('persists exact source IDs, six root evaluations and replay-safe architecture
     .execute();
   expect(evaluations).toHaveLength(6);
   expect(evaluations.every((row) => row.analysis_id === home.analysisId)).toBe(true);
-  expect(evaluations.filter((row) => row.outcome === 'unknown')).toHaveLength(3);
+  expect(evaluations.filter((row) => row.outcome === 'unknown')).toHaveLength(4);
   expect(record(architecture.archetype).archetype).toBe('commerce');
   await fixtures.task(seed, 'architecture');
   expect(await fixtures.worker(seed, { settings }).runOnce()).toBe(1);
@@ -309,6 +313,7 @@ it('complete coverage creates actionable root findings without borrowing foreign
   await fixtures.snapshot(other, 'complete');
   const home = await fixtures.page(seed, '/', {});
   await fixtures.page(seed, '/orphan/product', {});
+  await fixtures.page(seed, '/orphan/other', {});
   await fixtures.page(other, '/', {});
   await derive(seed);
   const issues = await db
@@ -318,6 +323,40 @@ it('complete coverage creates actionable root findings without borrowing foreign
     .execute();
   expect(issues.some((row) => row.rule_id === 'architecture.orphan_pages')).toBe(true);
   expect(issues.every((row) => row.site_url_id === home.id)).toBe(true);
+  // Filed once against the homepage, the finding still counts the pages it names.
+  const catalog = await readIssues(
+    db,
+    seed.workspaceId,
+    seed.crawlId,
+    {
+      query: null,
+      severity: null,
+      category: null,
+      dimension: null,
+      rule: null,
+      siteUrlId: null,
+      pageKind: null,
+      findingClass: 'defect',
+    },
+    { limit: 50, cursor: null },
+  );
+  const orphans = catalog.items.find((item) => item.rule_id === 'architecture.orphan_pages')!;
+  expect(orphans.affected_url_count).toBe(2);
+  expect(orphans.page_kinds).not.toContain('homepage');
+  const detail = await issueDetail(db, seed.workspaceId, seed.crawlId, orphans.group_id, {
+    limit: 10,
+    cursor: null,
+  });
+  expect(detail.affected_url_count).toBe(2);
+  const snapshot = await db
+    .selectFrom('site_health_snapshots')
+    .select('top_issues')
+    .where('crawl_id', '=', seed.crawlId)
+    .executeTakeFirstOrThrow();
+  const top = (snapshot.top_issues as { rule_id: string; affected_pages: number }[]).find(
+    (item) => item.rule_id === 'architecture.orphan_pages',
+  );
+  expect(top?.affected_pages).toBe(2);
   expect(
     await db
       .selectFrom('site_observed_architectures')

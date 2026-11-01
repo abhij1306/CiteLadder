@@ -15,8 +15,10 @@ import { createJevClient, type JevClient } from '../models/jev.ts';
 import {
   generationContext,
   offeringMaps,
+  recoverTopics,
   type GenerationContext,
   type OfferingMap,
+  type TopicRecovery,
 } from './generation-context.ts';
 import {
   countDrop,
@@ -26,22 +28,25 @@ import {
   type Drops,
 } from './generation-drafts.ts';
 import {
+  cohortShares,
   generationInput,
+  generationInvalid,
   generationSetting,
+  requestKey,
+  validateRequest,
   validateSelection,
   wantedTopics,
   type GenerationInput,
 } from './generation-input.ts';
 import { frozenEntityMatching } from '../analysis/entity-matching.ts';
-import { distribution } from './generation-metrics.ts';
+import { distribution, nearDuplicate, promptTokens } from './generation-metrics.ts';
 import { dimensions, geoTerms } from './generation-plan.ts';
-import { gatedOut, judgeDrafts, selectDrafts } from './generation-quality.ts';
+import { cohortQuotas, gatedOut, judgeDrafts, selectRun } from './generation-quality.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { observedRef } from './observed-queries.ts';
 import { scopedPromptSet } from './prompt-sets.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
 import { listTopics } from './topics.ts';
-import { compareText } from '../text-order.ts';
 import { candidateView, type CandidateRow } from './views.ts';
 
 type Dependencies = {
@@ -59,12 +64,11 @@ type Staging = {
   workspaceId: string;
   setId: string;
   runId: string;
-  cohort: GenerationInput['cohort'];
   now: Date;
 };
 
 /** Gate-rejected drafts keep a text-free outcome row for calibration. */
-function candidateRow(draft: Draft, { workspaceId, setId, runId, cohort, now }: Staging) {
+function candidateRow(draft: Draft, { workspaceId, setId, runId, now }: Staging) {
   const gated = gatedOut(draft);
   const retentionHours = gated
     ? generationSetting('rejected_outcome_retention_days') * 24
@@ -80,7 +84,7 @@ function candidateRow(draft: Draft, { workspaceId, setId, runId, cohort, now }: 
     intent: draft.intent,
     buyer_stage: draft.buyer_stage,
     prompt_intent: draft.prompt_intent,
-    cohort,
+    cohort: draft.slot.cohort,
     slot_id: draft.slot.slot_id,
     evidence_refs: JSON.stringify([
       draft.slot.evidence_ref,
@@ -143,14 +147,19 @@ async function mergeMapSuggestions(
     .execute();
 }
 
+type StageInput = {
+  workspaceId: string;
+  context: GenerationContext;
+  input: GenerationInput;
+  idempotencyKey: string | null;
+  output: Awaited<ReturnType<typeof generateDrafts>>;
+  gate: Awaited<ReturnType<typeof judgeDrafts>>;
+  recovery: TopicRecovery;
+};
+
 function stage(
   db: Database,
-  workspaceId: string,
-  context: GenerationContext,
-  input: GenerationInput,
-  idempotencyKey: string | null,
-  output: Awaited<ReturnType<typeof generateDrafts>>,
-  gate: Awaited<ReturnType<typeof judgeDrafts>>,
+  { workspaceId, context, input, idempotencyKey, output, gate, recovery }: StageInput,
 ) {
   return db.transaction().execute(async (trx) => {
     await acquireProjectLock(trx, context.project.id);
@@ -181,23 +190,33 @@ function stage(
       .execute();
     const tracked = await trx
       .selectFrom('prompts')
-      .select('normalized_text_hash')
+      .select(['text', 'normalized_text_hash'])
       .where('prompt_set_id', '=', set.id)
       .execute();
     const pending = await trx
       .selectFrom('prompt_candidates')
-      .select('normalized_text_hash')
+      .select(['text', 'normalized_text_hash'])
       .where('workspace_id', '=', workspaceId)
       .where('prompt_set_id', '=', set.id)
       .where('disposition', '=', 'pending')
       .execute();
     const known = new Set([...tracked, ...pending].map((row) => row.normalized_text_hash));
+    // Live texts drafted since the context read: admission saw the rest.
+    const read = new Set([
+      ...context.prompts.map((row) => row.normalized_text_hash),
+      ...context.candidates.map((row) => row.normalized_text_hash),
+    ]);
+    const live = [...tracked, ...pending]
+      .filter((row) => !read.has(row.normalized_text_hash))
+      .map((row) => promptTokens(row.text));
     const drops: Drops = { ...output.drops };
     const dropRecords = [...output.dropRecords];
     const eligible = output.drafts.filter((row, row_index) => {
-      let reason: 'duplicate' | 'unknown_topic' | null = null;
+      let reason: 'duplicate' | 'unknown_topic' | 'near_duplicate' | null = null;
+      const tokens = promptTokens(row.text);
       if (known.has(row.hash)) reason = 'duplicate';
       else if (!topics.some((topic) => topic.id === row.slot.topic_id)) reason = 'unknown_topic';
+      else if (live.some((other) => nearDuplicate(tokens, other))) reason = 'near_duplicate';
       if (!reason) return true;
       countDrop(drops, reason);
       dropRecords.push({
@@ -210,7 +229,7 @@ function stage(
       });
       return false;
     });
-    const selected = selectDrafts(eligible, input.count),
+    const selected = selectRun(eligible, input),
       rejected = eligible.filter(gatedOut),
       geo = geoTerms(context);
     const revision = context.revision;
@@ -221,6 +240,13 @@ function stage(
       requested_count: input.count,
       requested_topic_ids: wantedTopics(input),
       cohort: input.cohort,
+      // The run's own steering, frozen as requested, and the quotas it set.
+      run_context: input.run_context || null,
+      requested_distribution: input.distribution ?? null,
+      cohort_quotas: cohortQuotas(input),
+      seed_source: input.seed_source ?? null,
+      seed_query_ids: input.seed_query_ids,
+      topic_recovery: recovery,
       business_map_suggested_offerings: output.maps.map((map) => map.offering),
       model_results: output.models,
       quality_gate: gate,
@@ -268,7 +294,7 @@ function stage(
         created_at: now,
       })
       .execute();
-    const staging = { workspaceId, setId: set.id, runId, cohort: input.cohort, now };
+    const staging = { workspaceId, setId: set.id, runId, now };
     const rows = [...selected, ...rejected].map((draft) => candidateRow(draft, staging));
     const inserted = rows.length
       ? await trx.insertInto('prompt_candidates').values(rows).returningAll().execute()
@@ -318,11 +344,8 @@ async function runResponse(
 
 /** Persisted run fields read back with the response contract's own schemas. */
 const recorded = promptGenerateResponseSchema.shape;
-const sameRequest = (a: GenerationInput, b: GenerationInput) =>
-  a.count === b.count &&
-  a.cohort === b.cohort &&
-  (a.agent_revision_id ?? null) === (b.agent_revision_id ?? null) &&
-  wantedTopics(a).toSorted(compareText).join() === wantedTopics(b).toSorted(compareText).join();
+/** Every input that changes a run, including its distribution, note and seeds. */
+const sameRequest = (a: GenerationInput, b: GenerationInput) => requestKey(a) === requestKey(b);
 
 /**
  * The response of an earlier run with this key, from persisted rows only: its
@@ -370,6 +393,16 @@ async function replay(
   });
 }
 
+async function requireCompetitor(db: Database, workspaceId: string, setId: string) {
+  const set = await scopedPromptSet(db, workspaceId, setId);
+  const competitor = await db
+    .selectFrom('competitors')
+    .select('id')
+    .where('project_id', '=', set.project_id)
+    .executeTakeFirst();
+  if (!competitor) throw generationInvalid('Add a competitor before generating comparison prompts');
+}
+
 export async function generatePrompts(
   db: Database,
   workspaceId: string,
@@ -384,18 +417,52 @@ export async function generatePrompts(
     const prior = await replay(db, workspaceId, setId, input, idempotencyKey);
     if (prior) return prior;
   }
-  const context = await generationContext(db, workspaceId, setId, input);
+  // Request-shape checks need no topics; ownership of named topics is checked
+  // with the project's topics in the context read, before any model call.
+  validateRequest(input);
+  // A comparison share needs a competitor; refuse before topic recovery can
+  // spend a model call or write topics for a request that would fail anyway.
+  if (cohortShares(input).comparison > 0) await requireCompetitor(db, workspaceId, setId);
+  const meter = (dependencies.meter ?? meterFor)(db, workspaceId);
+  // Configured only once the set is authorized: an Agent portfolio drafts nothing.
+  let metered: ModelGateway | undefined;
+  const gatewayFor = () => {
+    if (input.agent_revision_id) return null;
+    metered ??= meter.gateway(dependencies.gateway(), 'prompt_generation');
+    return metered;
+  };
+  const deadline = (dependencies.deadline ?? draftDeadline)();
   try {
-    const meter = (dependencies.meter ?? meterFor)(db, workspaceId);
-    const raw = context.revision ? null : dependencies.gateway();
-    const gateway = raw ? meter.gateway(raw, 'prompt_generation') : null;
+    // Only a quick run over every topic proposes topics for a project that
+    // has none: an Agent portfolio files rows under existing topics, and a
+    // request naming topics needs them to exist already.
+    const recovery =
+      input.agent_revision_id || wantedTopics(input).length
+        ? null
+        : await recoverTopics(
+            db,
+            { workspaceId, setId },
+            {
+              gateway: gatewayFor,
+              deadline,
+              reserve: () =>
+                enforceWorkspaceRequest(
+                  db,
+                  workspaceId,
+                  agentCallLimit(policy.prompts.generation.topic_calls),
+                ),
+            },
+          );
+    const context = await generationContext(db, workspaceId, setId, input);
+    if (cohortShares(input).comparison > 0 && !context.context.competitors.length)
+      throw generationInvalid('Add a competitor before generating comparison prompts');
+    const gateway = gatewayFor();
     if (gateway)
       await enforceWorkspaceRequest(
         db,
         workspaceId,
-        agentCallLimit(draftCallLimit(input.count) + policy.prompts.generation.map_calls),
+        agentCallLimit(draftCallLimit(input) + policy.prompts.generation.map_calls),
       );
-    const deadline = (dependencies.deadline ?? draftDeadline)();
     const output = await generateDrafts(context, input, gateway, deadline);
     const judge = dependencies.judge();
     // Judge calls are platform-paid on both the drafting and the revision
@@ -418,7 +485,15 @@ export async function generatePrompts(
       output.drafts,
       judge ? meter.jev(judge, 'prompt_quality_judge') : null,
     );
-    return await stage(db, workspaceId, context, input, idempotencyKey, output, gate);
+    return await stage(db, {
+      workspaceId,
+      context,
+      input,
+      idempotencyKey,
+      output,
+      gate,
+      recovery,
+    });
   } catch (error) {
     throw error instanceof ModelError ? generationFailure(error) : error;
   }

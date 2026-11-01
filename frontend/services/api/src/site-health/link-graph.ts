@@ -60,10 +60,15 @@ function relTokens(raw: unknown) {
       .filter(Boolean),
   );
 }
-function update(edge: LinkEdge, anchor: Record<string, unknown>, pageNofollow: boolean) {
+/** One anchor on an edge. Unrendered anchors count for reachability, never for text or main content. */
+function update(
+  edge: LinkEdge,
+  { anchor, rendered }: { anchor: Record<string, unknown>; rendered: boolean },
+  pageNofollow: boolean,
+) {
   const rel = relTokens(anchor.rel);
   const nofollow = pageNofollow || rel.has('nofollow');
-  const main = anchor.region === 'main';
+  const main = rendered && anchor.region === 'main';
   edge.count += 1;
   edge.main ||= main;
   edge.nofollow ||= nofollow;
@@ -73,17 +78,24 @@ function update(edge: LinkEdge, anchor: Record<string, unknown>, pageNofollow: b
   edge.weights.push(
     p.edge_weights.find((row) => row.main === main && row.follow === !nofollow)!.weight,
   );
+  if (!rendered) return;
   edge.anchors.push({
     text: typeof anchor.anchor_text === 'string' ? anchor.anchor_text : '',
     region: typeof anchor.region === 'string' ? anchor.region : 'unknown',
   });
 }
+/** Rendered anchors, then those in hidden or template markup that crawlers also follow. */
+export function pageAnchors(facts: Record<string, unknown>) {
+  const links = record(facts.links);
+  const list = (raw: unknown, rendered: boolean) =>
+    (Array.isArray(raw) ? raw : []).map((value) => ({ anchor: record(value), rendered }));
+  return [...list(links.anchors, true), ...list(links.unrendered_anchors, false)];
+}
 function pageEdges(page: LinkPage, aliases: Map<string, string>, nodes: Map<string, string>) {
   const merged = new Map<string, LinkEdge>();
-  const raw = record(page.facts.links).anchors;
   const pageNofollow = record(page.facts.robots).nofollow === true;
-  for (const value of Array.isArray(raw) ? raw : []) {
-    const anchor = record(value);
+  for (const link of pageAnchors(page.facts)) {
+    const { anchor } = link;
     if (anchor.is_internal !== true || typeof anchor.url !== 'string') continue;
     const url = canonical(anchor.url, page.finalUrl);
     if (!url) continue;
@@ -102,7 +114,7 @@ function pageEdges(page: LinkPage, aliases: Map<string, string>, nodes: Map<stri
       weights: [],
       anchors: [],
     };
-    update(edge, anchor, pageNofollow);
+    update(edge, link, pageNofollow);
     merged.set(key, edge);
   }
   return [...merged.values()].sort((a, b) => compareText(a.targetUrl, b.targetUrl));

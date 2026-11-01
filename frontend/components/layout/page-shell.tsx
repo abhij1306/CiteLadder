@@ -151,8 +151,11 @@ function PageShell<T extends string>({
   return (
     <>
       <IdentityBand title={title} back={back} actions={actions} />
+      {/* The tab band opens with the control band's 8px, so the first row
+          under the title (tabs or filters) starts on the sidebar search's line;
+          the tabs sit on the band's rule. */}
       {tabs ? (
-        <PageBand kind="navigation">
+        <PageBand kind="navigation" className="pt-2">
           <TabRow {...tabs} />
         </PageBand>
       ) : null}
@@ -208,10 +211,9 @@ function PageBand({
   return (
     <div
       data-page-band={kind}
-      className={cn(
-        'border-border-subtle border-b',
-        kind === 'control' ? 'bg-panel-tonal' : 'bg-panel',
-      )}
+      // Every band is the sheet itself, closed by its rule; cards on the
+      // sheet are the raised step, so a band never wears a card's fill.
+      className="bg-sheet border-border-subtle border-b"
     >
       <div className={cn(pageGutterClasses, 'flex', className)}>{children}</div>
     </div>
@@ -239,7 +241,7 @@ function IdentityBand({
     <div
       data-page-band="identity"
       className={cn(
-        'bg-panel border-border-subtle border-b',
+        'bg-sheet border-border-subtle border-b',
         // Below the desktop breakpoint the compact topbar already names the
         // page, so a band holding only a screen-reader title would be an
         // empty ruled row. A back link is visible content, so it keeps the band.
@@ -251,8 +253,8 @@ function IdentityBand({
           pageGutterClasses,
           'flex min-w-0 flex-col gap-[var(--page-header-gap)] pt-[var(--page-header-padding-top)] pb-[var(--page-header-padding-bottom)]',
           // Desktop: one row on the sidebar's switcher line. The title centres
-          // on it, and the band below starts where the sidebar's second row
-          // starts.
+          // on it, and the first row of the band below lines up with the
+          // sidebar's search.
           'desktop:flex-row desktop:items-center desktop:justify-between',
           'desktop:min-h-[var(--page-band-identity)] desktop:py-0',
         )}

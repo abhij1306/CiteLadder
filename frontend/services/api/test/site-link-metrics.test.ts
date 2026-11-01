@@ -112,6 +112,35 @@ it('groups generic and reused labels while retaining destination-specific lexica
     row.anchor_diagnostics.filter((entry) => entry.kind === 'low_lexical_alignment'),
   ).toHaveLength(3);
 });
+it('counts links in a hidden menu for reachability but never as main content', () => {
+  const menu = (url: string) => ({ url, rel: '', is_internal: true });
+  const rows = graph([
+    page('home', '/', [], {
+      facts: {
+        links: {
+          anchors: [anchor('/featured', 'main', '', 'Featured')],
+          unrendered_anchors: [menu('/collections/launch-monitors'), menu('/featured')],
+        },
+      },
+    }),
+    page('featured', '/featured'),
+    page('monitors', '/collections/launch-monitors', [anchor('/collections/launch-monitors/gc3')]),
+    page('gc3', '/collections/launch-monitors/gc3'),
+  ]);
+  const monitors = rows.get('monitors')!;
+  expect(monitors.inbound_count).toBe(1);
+  expect(monitors.main_content_inbound_count).toBe(0);
+  expect(monitors.depth_from_home).toBe(1);
+  expect(rows.get('gc3')!.depth_from_home).toBe(2);
+  expect(rows.get('featured')!.top_inbound[0]).toEqual({
+    site_url_id: 'home',
+    url: 'https://example.test/',
+    anchor_count: 2,
+    main_content: true,
+    nofollow: false,
+    rel: [],
+  });
+});
 
 const db = testDatabase();
 const fixtures = new SiteFixtures(db);

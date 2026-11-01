@@ -141,12 +141,29 @@ export async function valueKindCoverage(db: Database, crawl: Crawl): Promise<Val
   );
 }
 
+const EXCLUDED_ERRORS = policy.site_health.reads.corpus_exclusion_error_codes;
+const GONE_STATUSES = policy.site_health.reads.corpus_exclusion_status_codes;
+
+/**
+ * A failed `site_crawl_tasks` row whose failure is expected, as the snapshot's
+ * eligibility reads it: the site's robots.txt or admission policy excluded the
+ * URL, or the URL answered 404/410. A crawl that met only these still
+ * explored everything it could, so they never make it partial or its
+ * coverage unknown.
+ */
+export const expectedTaskFailure = sql<boolean>`(site_crawl_tasks.error_code = any(${EXCLUDED_ERRORS}::text[])
+  or exists (select 1 from site_fetch_attempts a
+    where a.task_id = site_crawl_tasks.id and a.workspace_id = site_crawl_tasks.workspace_id
+      and a.status_code = any(${GONE_STATUSES}::int[])))`;
+
 export async function crawlCoverage(db: Database, crawl: Crawl) {
   const discovery = await db
     .selectFrom('site_crawl_tasks')
     .select([
       sql<number>`count(*)::int`.as('total'),
-      sql<number>`count(*) filter (where status = 'failed')::int`.as('failed'),
+      sql<number>`count(*) filter (where status = 'failed' and not ${expectedTaskFailure})::int`.as(
+        'failed',
+      ),
     ])
     .where('workspace_id', '=', crawl.workspace_id)
     .where('crawl_id', '=', crawl.id)

@@ -93,20 +93,13 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
                 <ProjectSwitcher />
               </div>
 
-              {/* No offset below the switcher. The pane's second row is the band
-                  that closes the identity band, which starts the moment the
-                  56px switcher row ends — so anything added here would push the
-                  search below the row it is meant to line up with. */}
-              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 px-[var(--sidebar-pad-x)] pb-[var(--sidebar-pad-y)]">
-                {/* Band-height rows, so the sidebar's second row and the pane's
-                    second row are the same band at the same offset. */}
+              {/* The pane's second band (tabs or filters) opens 8px under the
+                  identity band's rule, so the search opens 8px under the
+                  switcher row: the search and that band's first row share a
+                  line on every page. */}
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 px-[var(--sidebar-pad-x)] pt-2 pb-[var(--sidebar-pad-y)]">
                 <CommandPaletteTrigger className="h-[var(--tab-height)] w-full" />
-                {/* A scroller clips everything outside its padding box, so this
-                    gutter keeps the 1px control edges and 3px focus rings of
-                    full-width rows visible; the negative margin keeps alignment. */}
-                <div className="-m-1 min-h-0 flex-1 overflow-y-auto p-1">
-                  <SidebarNav />
-                </div>
+                <SidebarNav className="min-h-0 flex-1" />
               </div>
 
               <div className="flex shrink-0 items-center justify-between gap-2 p-[var(--sidebar-pad-x)]">
@@ -124,7 +117,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
               {/* Compact only, exactly as before. On desktop the account
                   trigger rides the route's own header row instead, so the shell
                   adds no second bar above the work. */}
-              <header className="bg-panel border-border-subtle z-sticky desktop:hidden sticky top-0 grid h-[var(--compact-topbar-height)] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-[var(--content-gutter)]">
+              <header className="bg-sheet border-border-subtle z-sticky desktop:hidden sticky top-0 grid h-[var(--compact-topbar-height)] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-[var(--content-gutter)]">
                 <div className="flex items-center">
                   <Button
                     variant="ghost"

@@ -8,6 +8,7 @@ const DROP_REASON_COPY: Record<PromptAdmissionDropReason, string> = {
   stage: 'with an unknown buying stage',
   duplicate: 'already tracked or suggested',
   length: 'too short or too long',
+  too_many_words: 'longer than 16 words',
   placeholder: 'with an unfilled placeholder',
   observed_copy: 'copying an observed search query',
   off_topic: "unrelated to this project's brand, topics or profile",
@@ -15,6 +16,7 @@ const DROP_REASON_COPY: Record<PromptAdmissionDropReason, string> = {
   branded_core: 'naming your brand or a competitor',
   brand_missing: 'not naming your brand',
   competitor_missing: 'not comparing with a competitor',
+  near_duplicate: 'asking what another question already asks',
 };
 
 /**

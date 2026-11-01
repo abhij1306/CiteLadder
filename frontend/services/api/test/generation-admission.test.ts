@@ -52,7 +52,6 @@ it('admits category language but rejects tracked identities, placeholders and co
     })),
     slots,
     context,
-    input,
     [],
   );
   expect(result.admitted.map((row) => row.text)).toEqual([texts[0]]);
@@ -87,7 +86,6 @@ it('drops an exact copy of any observed search the run read, not only demand sig
     })),
     slots,
     grounded,
-    input,
     [],
   );
   expect(result.admitted.map((row) => row.text)).toEqual([texts[1]]);
@@ -107,7 +105,6 @@ it('requires the brand in diagnostics and a competitor comparison in the compari
       })),
       slots,
       context,
-      input,
       [],
     );
   };
@@ -153,41 +150,121 @@ it('refuses agent portfolios outside the core cohort', () => {
   ).toThrow(expect.objectContaining({ status: 422 }));
 });
 
-it('never combines excluded map facets and retains hypothesis provenance', () => {
-  const entry = (value: string) => ({
-    value,
-    origin: 'manual' as const,
-    review_state: 'confirmed' as const,
-    reviewed_by: null,
-    reviewed_at: null,
-    source: {},
-  });
-  const slots = planSlots(context, generationInput.parse({ count: 8 }), [
-    {
-      offering: 'Dresses',
-      attributes: [entry('silk')],
-      situations: [entry('machine wash')],
-      audiences: [],
-      exclusions: [{ first: 'silk', second: 'machine wash' }],
-    },
+it('caps drafts at 16 words and drops near duplicates across topics, pending and tracked texts', () => {
+  const second = { id: 'topic-2', name: 'Maxi dresses', description: '', parent_id: null };
+  const seeded = {
+    ...context,
+    selected: [...context.selected, second],
+    topics: [...context.topics, second],
+    prompts: [
+      {
+        id: 'p',
+        topic_id: 'topic',
+        text: 'Best dresses for a summer beach wedding',
+        normalized_text_hash: 'tracked',
+      },
+    ],
+    candidates: [
+      {
+        text: 'Where can I buy linen dresses for hot weather?',
+        normalized_text_hash: 'pending',
+        disposition: 'pending',
+        jev_decision: null,
+      },
+    ],
+  } as unknown as GenerationContext;
+  const slots = planSlots(seeded, generationInput.parse({ count: 3 }), []);
+  const texts = [
+    'Looking for dresses that work for a long office day with a commute and evening drinks after',
+    'Best dresses for a beach wedding in summer',
+    'Where can I buy linen dresses for very hot weather?',
+    'Which dresses suit petite women at work?',
+    'Which maxi dresses suit petite women at work?',
+    'Looking for affordable dresses for a garden party',
+  ];
+  const result = admitDrafts(
+    texts.map((text, index) => ({
+      text,
+      slot_id: slots[index]!.slot_id,
+      buyer_stage: 'decision',
+      prompt_intent: 'recommend',
+    })),
+    slots,
+    seeded,
+    [],
+  );
+  expect(result.admitted.map((row) => row.text)).toEqual([texts[3], texts[5]]);
+  expect(result.drops).toEqual({ too_many_words: 1, near_duplicate: 3 });
+  expect(result.dropRecords.map((row) => [row.reason, row.slot_id])).toEqual([
+    ['too_many_words', slots[0]!.slot_id],
+    ['near_duplicate', slots[1]!.slot_id],
+    ['near_duplicate', slots[2]!.slot_id],
+    ['near_duplicate', slots[4]!.slot_id],
   ]);
-  expect(
-    slots.every(
-      (slot) =>
-        !(
-          slot.buyer_need.attribute === 'silk' &&
-          slot.buyer_need.situation_or_constraint === 'machine wash'
-        ),
-    ),
-  ).toBe(true);
-  expect(slots.some((slot) => slot.buyer_need.attribute === 'silk')).toBe(true);
-  expect(slots[0]!.evidence_ref.evidence_type).toBe('hypothesis');
+});
+
+it('admits only planned stages for quick core rows, never after-purchase questions', () => {
+  const slots = planSlots(context, generationInput.parse({ count: 1 }), []);
+  const result = admitDrafts(
+    [
+      {
+        text: 'Which maxi dresses are easy to alter at home?',
+        slot_id: slots[0]!.slot_id,
+        buyer_stage: 'implementation',
+        prompt_intent: 'recommend',
+      },
+      {
+        text: 'Best maxi dresses for a beach holiday',
+        slot_id: slots[1]!.slot_id,
+        buyer_stage: 'decision',
+        prompt_intent: 'recommend',
+      },
+    ],
+    slots,
+    context,
+    [],
+  );
+  expect(result.admitted.map((row) => row.text)).toEqual(['Best maxi dresses for a beach holiday']);
+  expect(result.drops).toEqual({ stage: 1 });
+  // Branded and comparison rows keep to the planned stages too.
+  const branded = planSlots(
+    context,
+    generationInput.parse({ count: 1, cohort: 'brand_diagnostic' }),
+    [],
+  );
+  const diagnostic = admitDrafts(
+    [
+      {
+        text: 'How do I care for my Red Dress maxi dress after washing?',
+        slot_id: branded[0]!.slot_id,
+        buyer_stage: 'implementation',
+        prompt_intent: 'validate',
+      },
+      {
+        text: 'Does Red Dress sell maxi dresses for beach holidays?',
+        slot_id: branded[1]!.slot_id,
+        buyer_stage: 'consideration',
+        prompt_intent: 'validate',
+      },
+    ],
+    branded,
+    context,
+    [],
+  );
+  expect(diagnostic.admitted.map((row) => row.text)).toEqual([
+    'Does Red Dress sell maxi dresses for beach holidays?',
+  ]);
+  expect(diagnostic.drops).toEqual({ stage: 1 });
+});
+
+/** Every yes/no question a core draft is asked, shared and core-only. */
+const coreQuestions = Object.keys({
+  ...policy.models.quality.noul_questions,
+  ...policy.models.quality.core_noul_questions,
 });
 
 describe('JEV judgments', () => {
-  const answers = Object.fromEntries(
-    Object.keys(policy.models.quality.noul_questions).map((key) => [key, { noul: 0.9 }]),
-  );
+  const answers = Object.fromEntries(coreQuestions.map((key) => [key, { noul: 0.9 }]));
   const draft = (): Draft => ({
     slot: planSlots(context, generationInput.parse({ count: 1 }), [])[0]!,
     text: 'Which maxi dresses suit warm weather?',
@@ -258,13 +335,40 @@ describe('JEV judgments', () => {
     expect(drafts[0]!.decision).toMatchObject({ verdict: 'fail', mode: 'shadow' });
     expect(selectDrafts(drafts, 1)).toHaveLength(1);
   });
+
+  it('asks core drafts whether naming a business answers them, under its own thresholds', async () => {
+    const asked: string[][] = [];
+    const advice = judge(async (_state, questions) => {
+      asked.push(Object.keys(questions));
+      return { model: 'jev-test', answers: { ...answers, names_a_business: { noul: 0.1 } } };
+    });
+    const core = [draft()];
+    await judgeDrafts(context, core, advice);
+    expect(core[0]!.decision).toMatchObject({ verdict: 'fail', flags: ['names_a_business'] });
+    const branded = [
+      {
+        ...draft(),
+        slot: { ...draft().slot, cohort: 'brand_diagnostic' as const },
+        text: 'Does Red Dress sell maxi dresses?',
+      },
+    ];
+    await judgeDrafts(context, branded, advice);
+    expect(branded[0]!.decision).toMatchObject({ verdict: 'pass', flags: [] });
+    expect(asked.map((keys) => keys.includes('names_a_business'))).toEqual([true, false]);
+    const borderline = applyQualityPolicy({
+      cohort: 'core',
+      answers: {
+        ...Object.fromEntries(coreQuestions.map((key) => [key, 0.9])),
+        names_a_business: 0.38,
+      },
+    });
+    expect(borderline).toMatchObject({ verdict: 'uncertain', flags: ['names_a_business'] });
+  });
 });
 
 it('keeps incomplete judgments uncertain, gates strong failures and prefers passing drafts', () => {
   expect(applyQualityPolicy({ answers: {} }).verdict).toBe('uncertain');
-  const answers = Object.fromEntries(
-    Object.keys(policy.models.quality.noul_questions).map((key) => [key, 0.9]),
-  );
+  const answers = Object.fromEntries(coreQuestions.map((key) => [key, 0.9]));
   const input = generationInput.parse({ count: 2 }),
     slots = planSlots(context, input, []);
   const drafts: Draft[] = slots.slice(0, 3).map((slot, index) => ({

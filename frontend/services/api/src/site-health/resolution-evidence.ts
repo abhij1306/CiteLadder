@@ -38,6 +38,19 @@ const MAX_HOPS = policy.site_health.page_analysis.rules.redirect_max_hops;
 const REDIRECT_LIMIT = policy.site_health.page_analysis.acquisition.error_codes.redirect_limit;
 /** Statuses that mean "sign in first", not "this link is broken". */
 const ACCESS_RESTRICTED = new Set([401, 403]);
+/**
+ * Targets the crawler deliberately did not fetch (robots-denied, refused by
+ * admission). They answered no HTTP request, so they are neither broken nor
+ * redirecting. They leave the judged set (named as excluded_targets) instead
+ * of staying unchecked: unchecked, one robots-denied footer link made every
+ * page's link checks unknown.
+ */
+const EXCLUDED_ERRORS = new Set<string>(policy.site_health.reads.corpus_exclusion_error_codes);
+const isExcludedTarget = (resolution: Resolution) =>
+  resolution.status === null && EXCLUDED_ERRORS.has(resolution.errorCode);
+/** Excluded targets stay named in the evidence, distinct from the ones that answered. */
+const excludedTargets = (urls: string[], resolutions: Map<string, Resolution>) =>
+  urls.slice(0, limit).map((url) => ({ url, reason: resolutions.get(url)!.errorCode }));
 
 export async function fetchResolutions(db: Database, crawl: Crawl) {
   const rows = await db
@@ -154,20 +167,26 @@ export function resolutionSet(
   const checked: string[] = [];
   const limited: string[] = [];
   const broken: string[] = [];
+  const excluded: string[] = [];
   for (const target of targets) {
     const resolution = resolutions.get(target);
     if (resolution?.status === 429) {
       limited.push(target);
       continue;
     }
+    if (resolution && isExcludedTarget(resolution)) {
+      excluded.push(target);
+      continue;
+    }
     if (resolution?.status === undefined || resolution.status === null) continue;
     checked.push(target);
     if (isBroken(resolution.status, sitemap)) broken.push(target);
   }
+  // Excluded targets are outside the set this rule judges, not passes within it.
   const evaluation =
     sitemap && !targets.length
       ? finalizeEvaluation(rule, 'not_applicable', { reason: 'no_sitemap' })
-      : entitySetEvaluation(rule, targets.length, checked.length, broken);
+      : entitySetEvaluation(rule, targets.length - excluded.length, checked.length, broken);
   if (limited.length && !broken.length) {
     evaluation.outcome = 'unknown';
     evaluation.reason_code = 'rate_limited_targets';
@@ -179,6 +198,7 @@ export function resolutionSet(
       .slice(0, limit)
       .map((url) => ({ url, status_code: resolutions.get(url)!.status })),
     rate_limited_targets: limited.slice(0, limit).map((url) => ({ url, status_code: 429 })),
+    excluded_targets: excludedTargets(excluded, resolutions),
     resolution_source_ids: [
       ...new Set([...checked, ...limited].flatMap((url) => sourceIds(resolutions.get(url)!))),
     ]
@@ -202,16 +222,21 @@ const redirectTarget = (url: string, resolution: Resolution) =>
 export function linkRedirects(targets: string[], resolutions: Map<string, Resolution>) {
   const checked: string[] = [];
   const failing: string[] = [];
+  const excluded: string[] = [];
   for (const target of targets) {
     const resolution = resolutions.get(target);
     if (!resolution || resolution.status === 429) continue;
+    if (isExcludedTarget(resolution)) {
+      excluded.push(target);
+      continue;
+    }
     if (resolution.status === null && resolution.errorCode !== REDIRECT_LIMIT) continue;
     checked.push(target);
     if (redirects(resolution)) failing.push(target);
   }
   const evaluation = entitySetEvaluation(
     'technical.internal_link_redirect',
-    targets.length,
+    targets.length - excluded.length,
     checked.length,
     failing,
   );
@@ -222,6 +247,7 @@ export function linkRedirects(targets: string[], resolutions: Map<string, Resolu
     failing_targets: failing
       .slice(0, limit)
       .map((url) => redirectTarget(url, resolutions.get(url)!)),
+    excluded_targets: excludedTargets(excluded, resolutions),
     resolution_source_ids: [...new Set(checked.flatMap((url) => sourceIds(resolutions.get(url)!)))]
       .toSorted(compareText)
       .slice(0, limit),

@@ -31,6 +31,10 @@ export const mcp = {
     max_list_limit: 200,
     // Pages one internal-link read names; each row carries sampled neighbors.
     max_link_pages: 10,
+    // Neighbors per side when pages are named, so all of them fit one Agent tool result.
+    named_link_page_neighbors: 3,
+    // Per-page evidence lines a rule-filtered page read carries.
+    rule_evidence_items: 3,
     max_document_bytes: 256000,
     protocol_cleanup_batch: 100,
     last_used_resolution_seconds: 300,

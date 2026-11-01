@@ -125,11 +125,9 @@ export type IssuesParams = {
   page_kind?: string;
 };
 
-/** Keyset params for a grouped issue's affected-URL page. */
-type IssueDetailParams = { cursor?: string; limit?: number };
-
-/** Keyset params for a URL's crawl-bounded issue history. */
-type IssueHistoryParams = { cursor?: string; limit?: number };
+/** Keyset params for a grouped issue's affected-URL page and a URL's issue history. */
+type IssueDetailParams = Pick<IssuesParams, 'cursor' | 'limit' | 'page_kind'>;
+type IssueHistoryParams = Pick<IssuesParams, 'cursor' | 'limit'>;
 
 export const siteHealthApi = {
   getRobotsHistory: async (projectId: string, cursor?: string, options?: ApiRequestOptions) => {
@@ -446,6 +444,7 @@ export const siteHealthQueries = {
       queryKey: queryKeys.siteHealth.issue(crawlId, groupId, {
         cursor: params?.cursor ?? null,
         limit: params?.limit ?? null,
+        page_kind: params?.page_kind ?? null,
       }),
       queryFn: ({ signal }) =>
         siteHealthApi.getIssue(crawlId, groupId, params, { signal, workspaceId }),

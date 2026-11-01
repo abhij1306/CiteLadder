@@ -21,6 +21,7 @@ import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';
 import type { SiteIssue, SiteIssueDetail } from '@/lib/api/types';
+import { siteLevelEvidence, type SiteLevelEvidence } from '@/lib/site-health/site-level-evidence';
 import { dimensionLabel, issueTitle, severityLabel } from '@/lib/site-health/issues';
 import { pageKindLabel } from '@/lib/site-health/page-kinds';
 import { pageDisplayTitle } from '@/lib/site-health/status';
@@ -98,9 +99,9 @@ export function IssueDetailRail({
         ) : null
       }
     >
-      {issue.description ? (
-        <p className="type-body whitespace-pre-line">{issue.description}</p>
-      ) : null}
+      {/* The rule's description is phrased as the PASSING state ("Page is not
+          blocked from indexing…"); printed under a failing title it read as a
+          contradiction. The fix is what the reader came for. */}
       {issue.remediation ? (
         <Stack gap="tight" className={panelClasses({ tone: 'tonal' })}>
           <span className={textRole('label')}>How to fix</span>
@@ -189,51 +190,146 @@ function OccurrenceList({
   }
   if (detail.occurrences.length === 0)
     return <QueryState kind="empty" inline message="No affected URLs found." />;
+  // A site-level finding has one occurrence, on the homepage; the pages it
+  // found are in that occurrence's evidence.
+  const first = detail.occurrences[0];
+  const siteLevel = first ? siteLevelEvidence(issue.rule_id, first.evidence) : null;
+  if (siteLevel) return <SiteLevelList evidence={siteLevel} crawlId={crawlId} />;
   return (
     <ul className={ledgerClasses('open')}>
       {detail.occurrences.map((occurrence) => (
-        <Stack as="li" key={occurrence.occurrence_id} className={ledgerItemClasses()}>
-          <TextLink
-            text="inherit"
-            className="flex min-w-0 flex-col"
-            href={`/site/crawls/${crawlId}/pages/${occurrence.site_url_id}`}
-          >
-            <Inline as="span" className="flex-wrap">
-              <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
-                {pageDisplayTitle(occurrence.title, occurrence.display_url)}
-              </span>
-              {occurrence.page_kind ? <Badge>{pageKindLabel(occurrence.page_kind)}</Badge> : null}
-            </Inline>
-            <span
-              className="type-caption [overflow-wrap:anywhere] tabular-nums"
-              title={occurrence.display_url}
-            >
-              {occurrence.display_url}
-            </span>
-          </TextLink>
+        <Stack as="li" gap="tight" key={occurrence.occurrence_id} className={ledgerItemClasses()}>
+          <AffectedPageLink
+            crawlId={crawlId}
+            siteUrlId={occurrence.site_url_id}
+            title={occurrence.title}
+            url={occurrence.display_url}
+            pageKind={occurrence.page_kind}
+          />
           <IssueEvidence occurrence={occurrence} />
-          <Button variant="ghost" asChild className="w-fit">
-            <ProjectLink
-              href={agentHandoffHref({
-                issueGroup: { crawlId, groupId: issue.group_id, siteUrlId: occurrence.site_url_id },
-                prompt: askAgentPrompt(issue, occurrence.display_url),
-                skillId: 'technical_health',
-              })}
-            >
-              Ask agent about this page
-            </ProjectLink>
-          </Button>
+          <TextLink
+            text="caption"
+            className="w-fit"
+            href={agentHandoffHref({
+              issueGroup: { crawlId, groupId: issue.group_id, siteUrlId: occurrence.site_url_id },
+              prompt: askAgentPrompt(issue, occurrence.display_url),
+              skillId: 'technical_health',
+            })}
+          >
+            Ask agent about this page
+          </TextLink>
         </Stack>
       ))}
     </ul>
   );
 }
 
+/** One affected page: its title and kind, linking to its detail, over its URL. */
+function AffectedPageLink({
+  crawlId,
+  siteUrlId,
+  title,
+  url,
+  pageKind,
+}: Readonly<{
+  crawlId: string;
+  siteUrlId: string;
+  title: string | null;
+  url: string;
+  pageKind: string | null;
+}>) {
+  return (
+    <TextLink
+      text="inherit"
+      className="flex min-w-0 flex-col"
+      href={`/site/crawls/${crawlId}/pages/${siteUrlId}`}
+    >
+      <Inline as="span" className="flex-wrap">
+        <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
+          {pageDisplayTitle(title, url)}
+        </span>
+        {pageKind ? <Badge>{pageKindLabel(pageKind)}</Badge> : null}
+      </Inline>
+      <span className="type-caption [overflow-wrap:anywhere] tabular-nums" title={url}>
+        {url}
+      </span>
+    </TextLink>
+  );
+}
+
+function SiteLevelList({
+  evidence,
+  crawlId,
+}: Readonly<{ evidence: SiteLevelEvidence; crawlId: string }>) {
+  if (evidence.kind === 'page_kinds') {
+    return (
+      <ul className={ledgerClasses('open')}>
+        {evidence.pageKinds.map((row) => (
+          <Inline
+            as="li"
+            key={row.pageKind}
+            className={ledgerItemClasses('flex-wrap justify-between')}
+          >
+            <span className={textRole('itemTitle')}>{pageKindLabel(row.pageKind)}</span>
+            {row.pageCount === null ? null : (
+              <span className="type-caption tabular-nums">
+                {row.pageCount} {row.pageCount === 1 ? 'page' : 'pages'}
+              </span>
+            )}
+          </Inline>
+        ))}
+      </ul>
+    );
+  }
+  if (evidence.pages.length === 0)
+    return (
+      <QueryState
+        kind="empty"
+        inline
+        message={
+          evidence.total > 0
+            ? 'This finding did not record which pages it affects.'
+            : 'No affected URLs found.'
+        }
+      />
+    );
+  const hidden = evidence.total - evidence.pages.length;
+  return (
+    <Stack gap="item">
+      <ul className={ledgerClasses('open')}>
+        {evidence.pages.map((page) => (
+          <Stack as="li" gap="tight" key={page.siteUrlId} className={ledgerItemClasses()}>
+            <AffectedPageLink
+              crawlId={crawlId}
+              siteUrlId={page.siteUrlId}
+              title={page.title}
+              url={page.url}
+              pageKind={page.pageKind}
+            />
+            {page.clicksFromHome === null ? null : (
+              <span className="type-caption tabular-nums">
+                {page.clicksFromHome} clicks from the homepage
+              </span>
+            )}
+          </Stack>
+        ))}
+      </ul>
+      {hidden > 0 ? (
+        <p className="type-caption">
+          Showing {evidence.pages.length} of {evidence.total} pages.
+        </p>
+      ) : null}
+    </Stack>
+  );
+}
+
 function buildFixPrompt(issue: SiteIssue): string {
+  const rating =
+    issue.finding_class === 'defect' ? `${severityLabel(issue.severity)} severity` : 'advisory';
   const lines = [
-    `Fix this Site Health issue on my website: "${issueTitle(issue)}" (${dimensionLabel(issue.dimension)}, ${severityLabel(issue.severity)} severity).`,
+    `Fix this Site Health issue on my website: "${issueTitle(issue)}" (${dimensionLabel(issue.dimension)}, ${rating}).`,
   ];
-  if (issue.description) lines.push('', 'What is wrong:', issue.description);
+  if (issue.description) lines.push('', 'The check passes when:', issue.description);
   if (issue.remediation) lines.push('', 'Recommended remediation:', issue.remediation);
   return lines.join('\n');
 }

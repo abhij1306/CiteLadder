@@ -190,7 +190,9 @@ export function TableHead({
       className={cn(
         tableHeadClasses,
         'aria-[sort=ascending]:text-foreground aria-[sort=descending]:text-foreground',
-        'border-border bg-panel sticky top-0 z-10 h-[var(--table-header-height)] border-b px-[var(--table-cell-padding-x)] text-left align-middle',
+        // The header row is the nested step inside its table's paper, so its
+        // fill separates it from the rows and its rule stays subtle.
+        'border-border-subtle bg-panel-tonal sticky top-0 z-10 h-[var(--table-header-height)] border-b px-[var(--table-cell-padding-x)] text-left align-middle',
         numeric && 'tabular-nums text-right',
         desktopOnly && desktopOnlyClasses,
         className,

@@ -44,6 +44,9 @@ export function architectureRules(
       ),
       'pages',
       coverage,
+      // Depth is shortest path over the observed graph: a link the crawl did
+      // not see can only make a page shallower, so it needs complete coverage.
+      true,
     ),
     evaluation(
       'architecture.breadcrumb_hierarchy_conflict',

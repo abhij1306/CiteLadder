@@ -17,7 +17,6 @@ const PATH_EXCLUSIONS = acquisition.hard_exclusion_path_patterns.map(
 );
 const HOST_EXCLUSIONS = new Set(acquisition.hard_exclusion_host_labels);
 const QUERY_EXCLUSIONS = new Set(acquisition.hard_exclusion_query_keys);
-const TRACKING = new Set(policy.site_health.tracking_params);
 const MAX_URL_CHARS = policy.site_health.page_analysis.facts.limits.url_chars;
 const PRIORITIES: Record<string, number> = crawl.value_priorities;
 // Highest value first, so a path naming two kinds takes the more valuable one.
@@ -214,10 +213,14 @@ function resolve(raw: string, base: string | undefined) {
   return new URL(raw, base).href;
 }
 
+/**
+ * Tracking and ignored keys are not refused: the canonical identity drops
+ * them, so a tagged link admits its clean target, which the link checks
+ * judge under the same tracking-stripped URL.
+ */
 function queryRejection(url: URL) {
   const keys = [...url.searchParams.keys()].map((key) => key.toLowerCase());
   if (keys.some((key) => QUERY_EXCLUSIONS.has(key))) return reasons.hard_query;
-  if (keys.some((key) => TRACKING.has(key))) return reasons.tracking;
   return null;
 }
 function canonicalRejection(canonical: URL, infrastructure: 'sitemap' | undefined) {

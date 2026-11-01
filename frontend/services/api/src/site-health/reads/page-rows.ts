@@ -292,6 +292,27 @@ export async function currentIssueRules(db: Database, crawl: Crawl, analysisIds:
   return result;
 }
 
+/** Each analysis's current evidence for one rule, keyed by analysis id. */
+export async function currentRuleEvidence(
+  db: Database,
+  crawl: Crawl,
+  analysisIds: string[],
+  ruleId: string,
+) {
+  const result = new Map<string, unknown>();
+  if (!analysisIds.length) return result;
+  const { rows } = await sql<{ analysis_id: string; evidence: unknown }>`
+    select distinct on (a.id) a.id as analysis_id, i.evidence
+    from site_page_analyses a
+    join site_issues i on i.workspace_id = a.workspace_id and i.crawl_id = ${crawl.id}
+      and i.site_url_id = a.site_url_id and ${currentIssueFilter('i', 'a')}
+    where a.workspace_id = ${crawl.workspace_id} and a.crawl_id = ${crawl.id}
+      and a.id = any(${analysisIds}::uuid[]) and i.rule_id = ${ruleId}
+    order by a.id, i.created_at, i.id`.execute(db);
+  for (const row of rows) result.set(row.analysis_id, row.evidence);
+  return result;
+}
+
 export type Referrer = { site_url_id: string; url: string };
 
 /**

@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
@@ -62,10 +62,11 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
   top_issues: [
     {
       rule_id: 'technical.title_present',
+      title: 'Missing page title',
       finding_class: 'defect',
       severity: 'critical',
       category: 'technical',
-      description: 'Title is missing',
+      description: 'The page has a non-empty title.',
       remediation: 'Add a title.',
       score_roles: ['web_fundamentals'],
       affected_pages: 1,
@@ -75,10 +76,11 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
     },
     {
       rule_id: 'aeo.visible_attribution',
+      title: 'Visible creator attribution incomplete',
       finding_class: 'advisory',
       severity: 'medium',
       category: 'content',
-      description: 'Author attribution is missing',
+      description: 'The page names its author visibly.',
       remediation: 'Add a named author.',
       score_roles: ['aeo_readiness'],
       affected_pages: 1,
@@ -88,10 +90,11 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
     },
     {
       rule_id: 'technical.meta_description_present',
+      title: 'Missing meta description',
       finding_class: 'advisory',
       severity: 'info',
       category: 'content',
-      description: 'Meta description is missing',
+      description: 'The page has a meta description.',
       remediation: 'Add a meta description.',
       score_roles: [],
       affected_pages: 1,
@@ -296,16 +299,44 @@ describe('OverviewPanel', () => {
       />,
     );
 
-    const issueLink = await screen.findByRole('link', { name: 'Author attribution is missing' });
-    expect(issueLink).toHaveAttribute(
-      'href',
-      '/issues?rule=aeo.visible_attribution&finding_class=advisory',
-    );
+    await screen.findByRole('table', { name: 'Top issues' });
     await user.click(screen.getByRole('button', { name: 'View evidence' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('Images missing alt attributes');
     expect(screen.getByRole('dialog')).not.toHaveTextContent('mobile_layout');
     expect(screen.getByRole('dialog')).not.toHaveTextContent('HTTP evidence only');
     expect(screen.getByRole('dialog')).not.toHaveTextContent('Core Web Vitals');
+  });
+
+  it('names each top issue by its failing title and marks only advisories', async () => {
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
+        HttpResponse.json(terminalOverview()),
+      ),
+    );
+    renderWithProviders(
+      <OverviewPanel
+        projectId={PROJECT}
+        crawlId={CRAWL}
+        crawl={{ status: 'completed' } as never}
+        dashboard={undefined}
+      />,
+    );
+
+    const table = await screen.findByRole('table', { name: 'Top issues' });
+    expect(
+      screen.getByRole('link', { name: 'Visible creator attribution incomplete' }),
+    ).toHaveAttribute('href', '/issues?rule=aeo.visible_attribution&finding_class=advisory');
+    expect(screen.getByRole('link', { name: 'Missing page title' })).toHaveAttribute(
+      'href',
+      '/issues?rule=technical.title_present',
+    );
+    const rows = within(table).getAllByRole('row');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      'ImpactIssuePagesEffect',
+      'HighMissing page title1Web',
+      'MediumVisible creator attribution incompleteAdvisory1AEO',
+      'LowMissing meta descriptionAdvisory1–Not measured',
+    ]);
   });
 
   const ALERT = 'Could not load the persisted Site Health Overview.';

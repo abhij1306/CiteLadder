@@ -17,9 +17,9 @@ it.each(['https://example..com/', 'https://.example.com/'])(
 );
 
 it('rejects an unknown prompt cohort before model I/O', () => {
-  expect(() => generationSystemPrompt('retail', 'new_cohort' as 'core')).toThrow(
-    'Unknown prompt cohort',
-  );
+  expect(() =>
+    generationSystemPrompt({ businessModel: 'retail', cohort: 'new_cohort' as 'core' }),
+  ).toThrow('Unknown prompt cohort');
 });
 
 afterEach(() => vi.unstubAllEnvs());

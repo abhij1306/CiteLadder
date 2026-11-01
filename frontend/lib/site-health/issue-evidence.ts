@@ -25,25 +25,20 @@
  * and mean different things.
  */
 
-type Evidence = Record<string, unknown>;
+import {
+  originOf,
+  records,
+  sitePath,
+  text,
+  textList,
+  withoutQuery,
+  type Evidence,
+} from './evidence-values';
+import { architecturePageFacts, pageListRules } from './site-level-evidence';
 
 /** More than this and the reader is scanning, not reading. */
 const MAX_FACTS = 8;
 const MAX_FACT_CHARS = 140;
-
-function text(value: unknown): string {
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function textList(value: unknown): string[] {
-  return Array.isArray(value) ? value.map(text).filter((item) => item.length > 0) : [];
-}
-
-function records(value: unknown): Evidence[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is Evidence => typeof item === 'object' && item !== null)
-    : [];
-}
 
 /**
  * The notations the page does NOT have. A check that fails on two of three
@@ -150,6 +145,52 @@ function failingLinkTargets(evidence: Evidence): string[] {
     );
 }
 
+/**
+ * Links found ON this page, one fact per distinct link. The same link with
+ * different query strings (a theme's `?qv=` quick-view variants) is one thing
+ * to fix, so it collapses into one fact with a variant count.
+ */
+function pageLinks(
+  evidence: Evidence,
+  outcome: (target: Evidence, origin: string | null) => string,
+): string[] {
+  const groups = new Map<string, { fact: string; variants: number }>();
+  for (const target of records(evidence.failing_targets)) {
+    const url = text(target.url);
+    if (!url) continue;
+    const origin = originOf(url);
+    const link = sitePath(withoutQuery(url), origin);
+    const fact = `${link} → ${outcome(target, origin)}`;
+    const group = groups.get(fact);
+    if (group) group.variants += 1;
+    else groups.set(fact, { fact, variants: 0 });
+  }
+  return [...groups.values()].map(({ fact, variants }) =>
+    variants > 0
+      ? `${fact} (+${String(variants)} ${variants === 1 ? 'variant' : 'variants'})`
+      : fact,
+  );
+}
+
+/** Where a redirecting link on this page lands; a link back to this page says so. */
+function linkRedirects(evidence: Evidence, pageUrl: string | null): string[] {
+  const page = pageUrl ? withoutQuery(pageUrl) : null;
+  return pageLinks(evidence, (target, origin) => {
+    if (target.reason === 'redirect_limit') return 'redirect loop';
+    const final = withoutQuery(text(target.final_url));
+    const hops =
+      typeof target.hops === 'number' && target.hops > 1 ? ` (${String(target.hops)} hops)` : '';
+    const landing = page !== null && final === page ? 'this page' : sitePath(final, origin);
+    return `${landing}${hops}`;
+  });
+}
+
+function brokenLinks(evidence: Evidence): string[] {
+  return pageLinks(evidence, (target) =>
+    typeof target.status_code === 'number' ? String(target.status_code) : 'unreachable',
+  );
+}
+
 /** A redirecting URL and where it landed; an abandoned one is named a loop. */
 function redirectTargets(evidence: Evidence): string[] {
   return records(evidence.failing_targets)
@@ -232,12 +273,26 @@ function offerFreshness(evidence: Evidence): string[] {
     : reasonPhrase(evidence);
 }
 
+/** A noindex directive, and the signal that says the page was meant to be indexed. */
+function indexable(evidence: Evidence): string[] {
+  if (evidence.noindex !== true) return reasonPhrase(evidence);
+  const directives = evidence.nofollow === true ? 'noindex, nofollow' : 'noindex';
+  const intent: Readonly<Record<string, string>> = {
+    sitemap_membership: 'listed in sitemap.xml',
+    explicit_user_policy: 'marked for indexing in project settings',
+  };
+  const why = intent[text(evidence.intent_source)];
+  return why ? [directives, why] : [directives];
+}
+
 /**
  * Rules whose evidence has a native notation. Anything absent from this table
  * falls through to `reasonPhrase` and then to bounded scalars, so a new rule
  * still renders something honest before it gets a spelling of its own.
  */
-const FACTS_BY_RULE: Readonly<Record<string, (evidence: Evidence) => string[]>> = {
+const FACTS_BY_RULE: Readonly<
+  Record<string, (evidence: Evidence, pageUrl: string | null) => string[]>
+> = {
   'technical.title_present': () => ['<title>'],
   'technical.meta_description_present': () => ['<meta name="description">'],
   'technical.canonical_present': () => ['<link rel="canonical">'],
@@ -275,7 +330,8 @@ const FACTS_BY_RULE: Readonly<Record<string, (evidence: Evidence) => string[]>> 
   'technical.sitemap_lastmod': sitemapLastmod,
   'technical.client_side_redirect': clientRedirect,
   'technical.canonical_integrity': canonicalTarget,
-  'technical.internal_link_redirect': redirectTargets,
+  'technical.internal_link_redirect': linkRedirects,
+  'technical.indexable': indexable,
   'technical.redirect_chain': redirectTargets,
   'technical.duplicate_content': duplicatePages,
   'aeo.visible_attribution': (evidence) =>
@@ -297,10 +353,30 @@ const FACTS_BY_RULE: Readonly<Record<string, (evidence: Evidence) => string[]>> 
   'web.accessibility_document_language': () => ['<html lang>'],
   'web.mobile_viewport': () => ['<meta name="viewport">'],
   'web.security_mixed_content': (evidence) => textList(evidence.assets),
-  'technical.broken_internal_link': failingLinkTargets,
+  'technical.broken_internal_link': brokenLinks,
   'technical.sitemap_url_unreachable': failingLinkTargets,
   'architecture.duplicate_metadata_in_page_kind': duplicateMetadataKinds,
+  'architecture.unhubbed_page_kind': duplicateMetadataKinds,
+  ...Object.fromEntries(pageListRules.map((rule) => [rule, architecturePageFacts(rule)])),
 };
+
+/**
+ * The words before the facts, for rules whose facts are not about the page's
+ * own markup. A redirecting link is named under the page that CONTAINS it;
+ * without "Links on this page" the line reads as the page itself redirecting.
+ */
+const LEAD_BY_RULE: Readonly<Record<string, string>> = {
+  'technical.internal_link_redirect': 'Links on this page that redirect:',
+  'technical.broken_internal_link': 'Broken links on this page:',
+  ...Object.fromEntries(pageListRules.map((rule) => [rule, 'Affected pages:'])),
+  'architecture.duplicate_metadata_in_page_kind': 'Affected page kinds:',
+  'architecture.unhubbed_page_kind': 'Affected page kinds:',
+};
+
+/** The label to print before a rule's facts, when the facts need one. */
+export function evidenceLead(ruleId: string): string | null {
+  return LEAD_BY_RULE[ruleId] ?? null;
+}
 
 /**
  * The evaluator's own reason code, spelled as words. Used only when a rule has
@@ -341,9 +417,13 @@ function scalarFacts(evidence: Evidence): string[] {
  * caller then renders nothing at all rather than a placeholder, because the
  * title plus "how to fix" already stand on their own.
  */
-export function evidenceFacts(ruleId: string, evidence: Evidence): string[] {
+export function evidenceFacts(
+  ruleId: string,
+  evidence: Evidence,
+  context: Readonly<{ pageUrl?: string }> = {},
+): string[] {
   const formatter = FACTS_BY_RULE[ruleId];
-  const facts = formatter ? formatter(evidence) : [];
+  const facts = formatter ? formatter(evidence, context.pageUrl ?? null) : [];
   const resolved = facts.length > 0 ? facts : [...reasonPhrase(evidence), ...scalarFacts(evidence)];
   return resolved.slice(0, MAX_FACTS).map((fact) => fact.slice(0, MAX_FACT_CHARS));
 }
