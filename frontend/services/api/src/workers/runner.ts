@@ -29,7 +29,7 @@ import { getLogger } from '../logging.ts';
 import { cleanupMcpProtocol } from '../mcp/maintenance.ts';
 import { pruneUsageWindows } from '../abuse/usage.ts';
 import { purgeApiIdempotency } from '../public-api/idempotency.ts';
-import { DRAIN_LOCK } from '../config/execution.ts';
+import { DRAIN_LOCK, runnerLanes } from '../config/execution.ts';
 import { maintainLease } from '../queue/heartbeat.ts';
 
 export type RunnerLane = {
@@ -37,6 +37,8 @@ export type RunnerLane = {
   run: (canAdmit: () => boolean) => Promise<number | boolean | void>;
   /** When this owner's earliest pending task becomes claimable; null when none is pending. */
   nextDue?: () => Promise<Date | null>;
+  /** Lanes sharing a group take turns instead of overlapping (one crawler identity). */
+  group?: string;
 };
 type DrainOptions = {
   signal: AbortSignal;
@@ -87,70 +89,171 @@ export class LaneFailures extends AggregateError {
   }
 }
 
-/** Round-robin passes also catch successors enqueued into an earlier lane.
- * An idle drain keeps the execution while deferred work becomes due within the
- * budget; exiting would leave it for the next tick. Stop admitting at the
- * deadline; finish claimed work and retain all lease owners.
+type Pause = (ms: number, signal: AbortSignal) => Promise<unknown>;
+type LaneState = {
+  lane: RunnerLane;
+  phase: 'ready' | 'running' | 'idle' | 'failed';
+  /** Start order; the least recently started ready lane goes first. */
+  started: number;
+  /** Progress count when this run started: progress elsewhere since means successors may wait. */
+  seen: number;
+};
+type Settlement = { state: LaneState; progress: number } | { state: LaneState; error: unknown };
+
+/** Which lanes run, wait their group's turn, idle or failed during one drain. */
+class LaneTurns {
+  readonly running = new Map<LaneState, Promise<Settlement>>();
+  readonly failures: unknown[] = [];
+  tasks = 0;
+  readonly #states: LaneState[];
+  readonly #canAdmit: () => boolean;
+  #starts: number;
+  #progress = 0;
+  constructor(lanes: readonly RunnerLane[], first: number, canAdmit: () => boolean) {
+    this.#canAdmit = canAdmit;
+    this.#starts = lanes.length;
+    this.#states = lanes.map((lane, index) => ({
+      lane,
+      phase: 'ready',
+      started: (index - first + lanes.length) % lanes.length,
+      seen: 0,
+    }));
+  }
+  /** Start ready lanes, least recently started first, one per group at a time. */
+  startReady() {
+    const busy = new Set(
+      this.#states.filter((s) => s.phase === 'running' && s.lane.group).map((s) => s.lane.group),
+    );
+    const ready = this.#states
+      .filter((s) => s.phase === 'ready')
+      .sort((a, b) => a.started - b.started);
+    for (const state of ready) {
+      if (!this.#canAdmit()) return;
+      const group = state.lane.group;
+      if (group && busy.has(group)) continue;
+      if (group) busy.add(group);
+      state.phase = 'running';
+      state.started = this.#starts++;
+      state.seen = this.#progress;
+      this.running.set(state, settle(state, this.#canAdmit));
+    }
+  }
+  wakeIdle() {
+    for (const state of this.#states) if (state.phase === 'idle') state.phase = 'ready';
+  }
+  /** Record the next lane to settle; while admitting, idle lanes wake each poll interval. */
+  async next(admitting: boolean, pollMs: number, pause: Pause, signal: AbortSignal) {
+    const polling = admitting && this.#states.some((state) => state.phase === 'idle');
+    const settled = await nextSettlement(this.running, polling ? pollMs : null, pause, signal);
+    if (settled) this.record(settled);
+    else this.wakeIdle();
+  }
+  lanes(phase?: LaneState['phase']) {
+    return this.#states
+      .filter((state) => (phase ? state.phase === phase : state.phase !== 'failed'))
+      .map((state) => state.lane);
+  }
+  record(settled: Settlement) {
+    const { state } = settled;
+    this.running.delete(state);
+    if ('error' in settled) {
+      // Attempt other owners, but leave an infrastructure failure visible to the job.
+      state.phase = 'failed';
+      this.failures.push(settled.error);
+      getLogger('workers.runner').exception('runner_lane_failed', settled.error, {
+        lane: state.lane.name,
+      });
+    } else if (settled.progress) {
+      this.tasks += settled.progress;
+      this.#progress++;
+      state.phase = 'ready';
+      this.wakeIdle();
+    } else state.phase = this.#progress > state.seen ? 'ready' : 'idle';
+  }
+}
+
+/**
+ * Lanes run concurrently, each bounded by its own batch, so one owner's claim
+ * window or slow batch never holds another's queued work. A lane that made
+ * progress runs again at once; an idle lane runs again after progress elsewhere
+ * (successors) or each poll interval while others are busy. Grouped lanes take
+ * turns. With every lane idle, the drain keeps the execution while deferred
+ * work becomes due within the budget; exiting would leave it for the next tick.
+ * Stop admitting at the deadline; finish claimed work and retain all lease owners.
  */
 export async function drainLanes(lanes: readonly RunnerLane[], options: DrainOptions) {
   const now = options.now ?? (() => performance.now());
   const canAdmit = () => !options.signal.aborted && now() < options.deadline;
-  const pause =
-    options.pause ??
-    ((ms: number, signal: AbortSignal) => sleep(ms, undefined, { signal }).catch(() => undefined));
-  const failures: unknown[] = [];
-  const failed = new Set<string>();
-  const first = options.firstLane ?? randomInt(Math.max(1, lanes.length));
-  let tasks = 0;
-  while (canAdmit()) {
-    const progress = await drainPass(lanes, first, canAdmit, failed, failures); // NOSONAR -- Passes are sequential.
-    tasks += progress;
-    if (progress || !canAdmit()) continue;
-    const ms = idlePause(
-      await nextDueDelay(lanes.filter((lane) => !failed.has(lane.name))), // NOSONAR -- Probed only when idle.
-      options.deadline - now(),
-      options.idlePollMs ?? 5000,
-    );
-    if (ms === null) break;
-    await pause(ms, options.signal); // NOSONAR -- Idle until deferred work is due.
+  const pause: Pause =
+    options.pause ?? ((ms, signal) => sleep(ms, undefined, { signal }).catch(() => undefined));
+  const pollMs = options.idlePollMs ?? runnerLanes.idlePollMs;
+  const turns = new LaneTurns(
+    lanes,
+    options.firstLane ?? randomInt(Math.max(1, lanes.length)),
+    canAdmit,
+  );
+  const remaining = () => options.deadline - now();
+  for (;;) {
+    turns.startReady();
+    if (turns.running.size) await turns.next(canAdmit(), pollMs, pause, options.signal); // NOSONAR -- Wait for the next lane or poll.
+    else if (!canAdmit() || !(await waitForDue(turns, remaining, pollMs, pause, options.signal)))
+      break; // NOSONAR -- Idle until deferred work is due.
   }
-  if (failures.length)
+  if (turns.failures.length)
     throw new LaneFailures({
-      lanes: failed,
-      errors: failures,
-      tasks,
+      lanes: new Set(turns.lanes('failed').map((lane) => lane.name)),
+      errors: turns.failures,
+      tasks: turns.tasks,
       message: 'Runner lanes failed',
     });
-  return tasks;
+  return turns.tasks;
 }
 
-/** One round-robin pass; a failed lane is skipped for the rest of the drain. */
-async function drainPass(
-  lanes: readonly RunnerLane[],
-  first: number,
-  canAdmit: () => boolean,
-  failed: Set<string>,
-  failures: unknown[],
+/** Every lane is idle: pause until deferred work is due within the budget; false to exit. */
+async function waitForDue(
+  turns: LaneTurns,
+  remaining: () => number,
+  pollMs: number,
+  pause: Pause,
+  signal: AbortSignal,
 ) {
-  let progress = 0;
-  for (let offset = 0; offset < lanes.length; offset++) {
-    if (!canAdmit()) break;
-    const lane = lanes[(first + offset) % lanes.length]!;
-    if (failed.has(lane.name)) continue;
-    try {
-      progress += Number((await lane.run(canAdmit)) ?? 0); // NOSONAR -- Sequential admission preserves the shared pool and budget.
-    } catch (error) {
-      // Attempt other owners, but leave an infrastructure failure visible to the job.
-      failed.add(lane.name);
-      failures.push(error);
-      getLogger('workers.runner').exception('runner_lane_failed', error, { lane: lane.name });
-    }
+  const wait = await nextDueDelay(turns.lanes());
+  const ms = idlePause(wait, remaining(), pollMs);
+  if (ms === null) return false;
+  await pause(ms, signal);
+  turns.wakeIdle();
+  return true;
+}
+
+async function settle(state: LaneState, canAdmit: () => boolean): Promise<Settlement> {
+  try {
+    return { state, progress: Number((await state.lane.run(canAdmit)) ?? 0) };
+  } catch (error) {
+    return { state, error };
   }
-  return progress;
+}
+
+/** The next lane to settle, or null when the idle-lane poll interval elapses first. */
+async function nextSettlement(
+  running: ReadonlyMap<LaneState, Promise<Settlement>>,
+  pollMs: number | null,
+  pause: Pause,
+  signal: AbortSignal,
+) {
+  if (pollMs === null) return Promise.race(running.values());
+  const poll = new AbortController();
+  try {
+    return await Promise.race([
+      ...running.values(),
+      pause(pollMs, AbortSignal.any([signal, poll.signal])).then(() => null),
+    ]);
+  } finally {
+    poll.abort();
+  }
 }
 
 /**
- * How long an idle drain pauses before its next pass, or null to exit. Work
+ * How long an idle drain pauses before its lanes run again, or null to exit. Work
  * already due but unclaimed (a row locked by another claimer) backs off briefly
  * instead of spinning; a pause must fit inside the remaining budget.
  */
@@ -232,8 +335,8 @@ async function untilAdmissionEnds<T>(
 export async function runnerOwners(db: Database, config: ServiceConfig) {
   const env = configEnvironment(config);
   const runtime = auditRuntime(env);
-  // Provider calls hold no connection, so audits admit a pool-bounded batch like
-  // Site Health below; per-transport capacity still caps each provider.
+  // Provider calls hold no connection, so audits keep a pool-bounded set in
+  // flight like Site Health below; per-transport capacity still caps each provider.
   runtime.audits.worker_concurrency = Math.min(
     runtime.audits.worker_concurrency,
     config.execution.poolSize,
@@ -254,11 +357,20 @@ export async function runnerOwners(db: Database, config: ServiceConfig) {
   const maintenance = new AuditMaintenance(db, projections.finalize);
   const scheduler = new AuditScheduler(db, runtime, schedulerSettings(env));
   const dispatcher = new IntegrationDispatcher(db);
+  // Owners that fetch public websites take turns, as interactive crawls and
+  // competitor discovery do under the drain lock, to keep publisher pacing.
+  const crawler = 'web-fetch';
   return {
     lanes: [
-      { name: 'analytics', run: () => analytics.runOnce(), nextDue: () => analytics.nextDue() },
+      {
+        name: 'analytics',
+        group: crawler,
+        run: () => analytics.runOnce(),
+        nextDue: () => analytics.nextDue(),
+      },
       {
         name: 'discovery',
+        group: crawler,
         run: () => discovery.runOnce(owner),
         nextDue: () => discovery.queue.nextDue(),
       },
@@ -273,12 +385,13 @@ export async function runnerOwners(db: Database, config: ServiceConfig) {
         run: async (canAdmit) => {
           const reclaimed = await maintenance.recoverLeases(new Date(), canAdmit);
           // Recovery may spend the rest of the budget; claim nothing after admission closes.
-          return reclaimed + (canAdmit() ? await audit.runOnce() : 0);
+          return reclaimed + (canAdmit() ? await audit.drain(canAdmit) : 0);
         },
         nextDue: () => audit.nextDue(),
       },
       {
         name: 'site-health',
+        group: crawler,
         run: (canAdmit) =>
           site.drain(Math.min(site.settings.concurrency, config.execution.poolSize), canAdmit),
         nextDue: () => site.nextDue(),

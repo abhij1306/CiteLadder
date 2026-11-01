@@ -94,6 +94,12 @@
       "default": 10,
       "exclusive_minimum": 0
     },
+    "claim_window_seconds": {
+      "env": ["AUDIT_CLAIM_WINDOW_SECONDS"],
+      "type": "float",
+      "default": 30.0,
+      "exclusive_minimum": 0
+    },
     "per_transport_concurrency": {
       "env": ["AUDIT_PER_TRANSPORT_CONCURRENCY"],
       "type": "int",

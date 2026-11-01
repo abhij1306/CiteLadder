@@ -123,6 +123,48 @@ export class AuditWorker {
     await Promise.all(tasks.map((task) => this.#execute(task, signal)));
     return tasks.length;
   }
+  /**
+   * Keep up to `worker_concurrency` tasks in flight while the caller admits:
+   * each settlement frees a slot the next claim refills, so one slow answer
+   * never idles the others. Refills stop once a claim finds nothing, admission
+   * ends or the claim window closes; claimed work always settles.
+   */
+  async drain(canAdmit: () => boolean) {
+    const limit = this.#runtime.audits.worker_concurrency;
+    const windowEnd = performance.now() + this.#runtime.audits.claim_window_seconds * 1000;
+    const inFlight = new Set<Promise<void>>();
+    const failures: unknown[] = [];
+    let claimed = 0;
+    let queued = true;
+    const refill = async () => {
+      let tasks: AuditTask[];
+      try {
+        tasks = await this.#queue.claim(this.owner, limit - inFlight.size, this.#taskScope);
+      } catch (error) {
+        // In-flight work still settles before the failure surfaces.
+        failures.push(error);
+        return;
+      }
+      queued = tasks.length > 0;
+      claimed += tasks.length;
+      for (const task of tasks) {
+        const running: Promise<void> = this.#execute(task)
+          .catch((error: unknown) => {
+            failures.push(error);
+          })
+          .finally(() => inFlight.delete(running));
+        inFlight.add(running);
+      }
+    };
+    const admit = () => queued && !failures.length && canAdmit() && performance.now() < windowEnd;
+    if (admit()) await refill();
+    while (inFlight.size) {
+      await Promise.race(inFlight); // NOSONAR -- Wait for the next free slot.
+      if (admit()) await refill(); // NOSONAR -- One refill per settlement.
+    }
+    if (failures.length) throw failures[0];
+    return claimed;
+  }
   async #execute(claimed: AuditTask, signal?: AbortSignal) {
     const heartbeat = maintainLease(
       () => this.#queue.heartbeat(claimed, this.owner),

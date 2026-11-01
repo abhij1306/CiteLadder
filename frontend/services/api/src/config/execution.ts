@@ -8,6 +8,11 @@ export const interactiveExecution = {
   concurrency: 2,
 };
 
+/** Runner lanes run concurrently; an idle lane is polled at most this far apart. */
+export const runnerLanes = {
+  idlePollMs: 5000,
+};
+
 const defaults = {
   budgetSeconds: 300,
   poolSize: 4,
