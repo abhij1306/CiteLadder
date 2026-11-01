@@ -10,7 +10,7 @@ import { createApp } from '../src/app.ts';
 import { previewTopics } from '../src/prompts/topic-preview.ts';
 import { recordingMeter } from './meter-fixtures.ts';
 import { echoDependencies, prompt, promptSet, topic } from './prompt-fixtures.ts';
-import { sessionToken, testConfig, testDatabase } from './support.ts';
+import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
 type Topic = z.infer<typeof topicSchema>;
@@ -61,7 +61,7 @@ async function call<T>(path: string, options: { method?: string; body?: unknown 
     method: options.method ?? 'GET',
     headers: {
       'x-workspace-id': t.workspaceId,
-      cookie: `${config.session.cookieName}=${token}`,
+      cookie: `${TEST_SESSION_COOKIE}=${token}`,
       'content-type': 'application/json',
     },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),

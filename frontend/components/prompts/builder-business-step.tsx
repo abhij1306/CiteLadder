@@ -63,7 +63,7 @@ function OfferingFacts({
         label="Attributes"
         items={entryChips(map.attributes)}
         onChange={(items) => onChange({ ...map, attributes: entries(items) })}
-        placeholder="e.g. returns the ball"
+        placeholder="e.g. self-standing frame"
         disabled={disabled}
         max={LIST_MAX}
       />

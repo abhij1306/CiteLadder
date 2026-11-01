@@ -13,7 +13,7 @@ import {
   withOfferings,
 } from './builder-business';
 
-const NET = 'Golf practice net (returns the ball, for gardens, and clubs)';
+const NET = 'Golf practice net (self-standing frame, for gardens, and clubs)';
 const MAT = 'Hitting mat';
 const noSources = {
   description: null,
@@ -55,10 +55,10 @@ const map: BusinessMap = {
   offerings: [
     {
       offering: NET,
-      attributes: [entry('returns the ball', 'confirmed')],
+      attributes: [entry('self-standing frame', 'confirmed')],
       situations: [entry('small garden', 'suggested')],
       audiences: [entry('Beginner golfers', 'confirmed')],
-      exclusions: [{ first: 'returns the ball', second: 'small garden' }],
+      exclusions: [{ first: 'self-standing frame', second: 'small garden' }],
     },
   ],
 };
@@ -111,7 +111,7 @@ describe('the business step draft', () => {
       offerings: [
         {
           offering: NET,
-          attributes: [{ value: 'returns the ball', review_state: 'confirmed' }],
+          attributes: [{ value: 'self-standing frame', review_state: 'confirmed' }],
           situations: [],
           audiences: [{ value: 'Beginner golfers', review_state: 'confirmed' }],
           exclusions: [],

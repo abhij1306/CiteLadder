@@ -430,7 +430,7 @@ const writeDefinitions = {
   generate_prompts: tool({
     title: 'Generate prompts',
     description:
-      "Run CiteLadder's prompt generator for the project, as the Prompt Builder's Generate step does, once the user agreed to the run. The suggestions are staged for review and never tracked: only the user's Accept in CiteLadder's Prompts review (review_url) activates them. Spends AI credits, so call it once per agreed run: choose a new run_key for each agreed run and resend the same run_key on a retry, which returns the staged result instead of running again. distribution sets the branded and competitor-alternative shares, intent mix and personas; seed_source and seed_query_ids come from read_seed_queries; run_context is a note for this run only. A shortfall is reported with its reasons, never filled.",
+      "Run CiteLadder's prompt generator for the project, as the Prompt Builder's Generate step does, once the user agreed to the run. The suggestions are staged for review and never tracked: only the user's Accept in CiteLadder's Prompts review (review_url) activates them. Spends model calls, so call it once per agreed run: choose a new run_key for each agreed run and resend the same run_key on a retry, which returns the staged result instead of running again. distribution sets the branded and competitor-alternative shares, intent mix and personas; seed_source and seed_query_ids come from read_seed_queries; run_context is a note for this run only. A shortfall is reported with its reasons, never filled.",
     schema: z.strictObject({
       ...project,
       prompt_set_id: promptSet,

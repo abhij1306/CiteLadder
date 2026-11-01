@@ -9,7 +9,7 @@ import type { topicPreviewResponseSchema } from '@citeladder/contracts/project';
 import type { z } from 'zod';
 
 import { agentCallLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { meterFor, type Meter } from '../billing/metering.ts';
+import { meterFor, type Meter } from '../models/metering.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';

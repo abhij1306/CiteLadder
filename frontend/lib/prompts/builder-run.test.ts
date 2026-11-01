@@ -44,7 +44,7 @@ const candidate = (topicId: string, cohort: PromptCandidate['cohort']): PromptCa
   run_id: '66666666-6666-4666-8666-666666666666',
   prompt_set_id: '77777777-7777-4777-8777-777777777777',
   topic_id: topicId,
-  text: 'Which golf net returns the ball?',
+  text: 'Which golf net catches every shot?',
   intent: 'purchase',
   buyer_stage: 'decision',
   prompt_intent: 'buy',
