@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import { DetailScreen } from './page-shell';
 
 describe('DetailScreen', () => {
-  it('puts the way back above the route title', () => {
+  it('puts a back button to the collection before the route title', () => {
     render(
       <MemoryRouter initialEntries={['/runs/abc']}>
         <DetailScreen title="Run details" back={{ href: '/runs', label: 'Back to runs' }}>
