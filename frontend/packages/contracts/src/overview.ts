@@ -27,6 +27,25 @@ export const overviewWidgetKeySchema = z.enum([
 ]);
 export type OverviewWidgetKey = z.infer<typeof overviewWidgetKeySchema>;
 
+/** Each widget's title, on the Overview and as its section heading in the PDF. */
+export const overviewWidgetTitles: Record<OverviewWidgetKey, string> = {
+  project_state: 'Project state',
+  citation_share: 'Citation share',
+  movement: 'Movement',
+  next_action: 'Next action',
+  missing_prompts: "Where you're missing",
+  ranked_actions: 'Ranked actions',
+  progress_proof: 'Progress and report proof',
+  company_facts: 'Company facts',
+  visibility_trend: 'Visibility over time',
+  share_of_voice: 'Share of voice',
+  top_movers: 'Top movers',
+  retrieval: 'Retrieved versus cited',
+  perception: 'Perception',
+  ai_traffic: 'AI Traffic',
+  search_console: 'Search Console',
+};
+
 /** Half takes one column of the two-column grid; full spans both. */
 const overviewWidgetSizeSchema = z.enum(['half', 'full']);
 

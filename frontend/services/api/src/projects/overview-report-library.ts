@@ -4,7 +4,7 @@
  * (`core`) prompts and the default market.
  */
 import type { commandCenterSchema } from '@citeladder/contracts/opportunities';
-import type { OverviewWidgetKey } from '@citeladder/contracts/overview';
+import { overviewWidgetTitles, type OverviewWidgetKey } from '@citeladder/contracts/overview';
 import type { z } from 'zod';
 
 import { getAiReferrals } from '../analytics/ai-referrals.ts';
@@ -15,29 +15,48 @@ import { crawlSummary } from '../crawl-logs/reads.ts';
 import { getPerformance } from '../traffic/performance.ts';
 import { getVisibility } from '../visibility/dashboard.ts';
 import { getPerception } from '../visibility/perception.ts';
-import { getPromptMetrics } from '../visibility/prompts.ts';
+import type { PromptMetricItem } from '../visibility/prompts.ts';
 import { getSourceMovers } from '../visibility/source-movers.ts';
 import { getSourceNearMisses } from '../visibility/source-retrieval.ts';
 import type { RunSelection } from '../visibility/selection.ts';
 import { getVisibilityTrends } from '../visibility/trends.ts';
 import type { ProjectScope } from './brand-profile.ts';
+import {
+  count,
+  engines,
+  figure,
+  plural,
+  points,
+  rate,
+  shortDate,
+} from './overview-report-format.ts';
 
 export type ReportContext = {
   db: Database;
   scope: ProjectScope;
   view: z.output<typeof commandCenterSchema>;
   report: PdfReport;
+  /** The latest run's prompts; null before the first completed run. */
+  prompts: PromptMetricItem[] | null;
+  /** How many brands the latest run ranked; null before the first completed run. */
+  brands: number | null;
+  /** The widgets on the saved layout. */
+  shown: ReadonlySet<OverviewWidgetKey>;
 };
 export type Section = (context: ReportContext) => Promise<void> | void;
 
 const ROWS = policy.projects.overview_report_list_rows;
 const COHORT = policy.visibility.core_cohort;
 
-export const metric = (value: number | null | undefined, suffix = '') =>
-  value == null ? 'Unknown' : `${value}${suffix}`;
-/** A 0-1 rate as a whole percent. */
-const rate = (value: number | null | undefined) =>
-  value == null ? 'Unknown' : `${Math.round(value * 100)}%`;
+export const heading = (report: PdfReport, key: OverviewWidgetKey) =>
+  report.heading(overviewWidgetTitles[key]);
+/** A quiet line: an empty state or a qualification. */
+export const quiet = (report: PdfReport, text: string) =>
+  report.text(text, { size: 9, tone: 'muted' });
+/** Says how much of a longer list the report printed. */
+export function truncated(report: PdfReport, total: number, noun: string) {
+  if (total > ROWS) quiet(report, `Showing ${ROWS} of ${plural(total, noun)}.`);
+}
 
 function latest({ scope }: ReportContext): RunSelection {
   return {
@@ -68,34 +87,32 @@ const visibilityRead = ({ db, scope }: ReportContext) =>
     },
   );
 
-const missingPrompts: Section = async (context) => {
-  const { db, scope, report } = context;
-  report.heading("Where you're missing");
-  const items = await getPromptMetrics(
-    db,
-    { ...scope, marketId: null },
-    {
-      auditId: null,
-      auditIds: null,
-      baselineAuditIds: null,
-      logicalEngine: null,
-      baselineId: null,
-      cohort: COHORT,
-    },
-  );
-  const rows = items.flatMap((item) => {
-    const engines = (item.outcomes ?? [])
+const missingPrompts: Section = ({ report, prompts }) => {
+  heading(report, 'missing_prompts');
+  const rows = (prompts ?? []).flatMap((item) => {
+    const missed = (item.outcomes ?? [])
       .filter((outcome) => Object.keys(outcome.gap_counts).length > 0)
       .map((outcome) => outcome.logical_engine);
-    return engines.length ? [[item.prompt_text, [...new Set(engines)].join(', ')]] : [];
+    return missed.length ? [[item.prompt_text, engines(missed)]] : [];
   });
-  if (!rows.length) report.text('No prompt in the latest run named a competitor without you.');
-  else report.table(['Prompt', 'Engines'], rows.slice(0, ROWS), [4, 2]);
+  if (!prompts) quiet(report, 'Not available until the first completed run.');
+  else if (!rows.length)
+    quiet(report, 'No prompt in the latest run named a competitor without you.');
+  else {
+    report.table({
+      columns: [
+        { header: 'Prompt where a competitor was named and you were not', width: 4 },
+        { header: 'Engines', width: 2 },
+      ],
+      rows: rows.slice(0, ROWS),
+    });
+    truncated(report, rows.length, 'prompt');
+  }
 };
 
 const visibilityTrend: Section = async ({ db, scope, report }) => {
-  report.heading('Visibility over time');
-  const points = await getVisibilityTrends(
+  heading(report, 'visibility_trend');
+  const runs = await getVisibilityTrends(
     db,
     { ...scope, marketId: null },
     {
@@ -108,45 +125,56 @@ const visibilityTrend: Section = async ({ db, scope, report }) => {
       cohort: COHORT,
     },
   );
-  if (!points.length) {
-    report.text('No completed runs yet.');
+  if (!runs.length) {
+    quiet(report, 'No completed runs yet.');
     return;
   }
-  report.table(
-    ['Completed', 'Visibility', 'Owned citation rate'],
-    points
+  report.table({
+    columns: [
+      { header: 'Run completed', width: 2 },
+      { header: 'Visibility', width: 1, align: 'right' },
+      { header: 'Citation share', width: 1, align: 'right' },
+    ],
+    rows: runs
       .slice(-ROWS)
       .map((point) => [
-        point.completed_at.slice(0, 10),
+        shortDate(point.completed_at),
         rate(point.visibility_rate),
         rate(point.owned_citation_rate),
       ]),
-    [2, 1, 1],
-  );
+  });
 };
 
 const shareOfVoice: Section = async (context) => {
-  context.report.heading('Share of voice');
+  heading(context.report, 'share_of_voice');
   const rankings = (await visibilityRead(context)).rankings;
   if (!rankings.length) {
-    context.report.text('No brands measured in the latest run.');
+    quiet(context.report, 'No brands measured in the latest run.');
     return;
   }
-  context.report.table(
-    ['Brand', 'Share of voice', 'Mention rate'],
-    rankings
+  context.report.table({
+    columns: [
+      { header: 'Brand', width: 3 },
+      { header: 'Share of voice', width: 1, align: 'right' },
+      { header: 'Visibility', width: 1, align: 'right' },
+    ],
+    rows: rankings
       .slice(0, ROWS)
-      .map((row) => [row.name, rate(row.share_of_voice), rate(row.mention_rate)]),
-    [3, 1, 1],
-  );
+      .map((row) => [
+        row.is_brand ? `${row.name} (you)` : row.name,
+        rate(row.share_of_voice),
+        rate(row.mention_rate),
+      ]),
+  });
+  truncated(context.report, rankings.length, 'brand');
 };
 
 const topMovers: Section = async (context) => {
   const { db, report } = context;
-  report.heading('Top movers');
+  heading(report, 'top_movers');
   const comparison = (await visibilityRead(context)).comparison;
   if (comparison?.status !== 'comparable') {
-    report.text('No comparable earlier period to compare this one with yet.');
+    quiet(report, 'No comparable earlier period to compare this one with yet.');
     return;
   }
   const movers = await getSourceMovers(db, latest(context), {
@@ -158,54 +186,73 @@ const topMovers: Section = async (context) => {
     mover.key,
     rate(mover.previous_share),
     rate(mover.current_share),
-    `${mover.delta > 0 ? '+' : ''}${mover.delta} pp`,
+    points(mover.delta),
   ]);
-  if (!rows.length) report.text('No source changed its citation share.');
-  else report.table(['Domain', 'Before', 'Now', 'Change'], rows, [3, 1, 1, 1]);
+  if (!rows.length) quiet(report, 'No source changed its citation share.');
+  else
+    report.table({
+      columns: [
+        { header: 'Cited domain', width: 3 },
+        { header: 'Before', width: 1, align: 'right' },
+        { header: 'Now', width: 1, align: 'right' },
+        { header: 'Change', width: 1, align: 'right' },
+      ],
+      rows,
+    });
 };
 
 const retrieval: Section = async (context) => {
   const { db, report } = context;
-  report.heading('Retrieved versus cited');
+  heading(report, 'retrieval');
   const misses = await getSourceNearMisses(db, latest(context), {
     asOf: new Date().toISOString(),
     limit: ROWS,
   });
+  const unavailable = misses.unavailable_engines.length
+    ? ` ${engines(misses.unavailable_engines)} ${misses.unavailable_engines.length === 1 ? 'does' : 'do'} not show what was read.`
+    : '';
   report.text(
-    `${misses.responses} answer(s) exposed what the engine read.${misses.unavailable_engines.length ? ` Not available for ${misses.unavailable_engines.join(', ')}.` : ''}`,
+    `${plural(misses.responses, 'answer')} showed which pages the engine read.${unavailable}`,
   );
   if (misses.items.length)
-    report.table(
-      ['Your page read but not cited', 'Read in', 'Cited in'],
-      misses.items.map((item) => [item.url, String(item.retrieved), String(item.cited)]),
-      [4, 1, 1],
-    );
+    report.table({
+      columns: [
+        { header: 'Your page, read but not cited', width: 4 },
+        { header: 'Read in', width: 1, align: 'right' },
+        { header: 'Cited in', width: 1, align: 'right' },
+      ],
+      rows: misses.items.map((item) => [item.url, count(item.retrieved), count(item.cited)]),
+    });
 };
 
 const perception: Section = async (context) => {
-  context.report.heading('Perception');
+  heading(context.report, 'perception');
   const read = await getPerception(context.db, latest(context));
   const score = read.brand?.score;
   if (read.state !== 'value' || !score) {
-    context.report.text('Perception is not available for the latest run.');
+    quiet(context.report, 'Perception is not available for the latest run.');
     return;
   }
-  context.report.table(
-    ['Net sentiment', 'Positive', 'Negative', 'Classified mentions'],
-    [
+  context.report.table({
+    columns: [
+      { header: 'Net sentiment', width: 1, align: 'right' },
+      { header: 'Positive', width: 1, align: 'right' },
+      { header: 'Negative', width: 1, align: 'right' },
+      { header: 'Classified mentions', width: 1, align: 'right' },
+    ],
+    rows: [
       [
-        metric(score.net_sentiment === null ? null : Math.round(score.net_sentiment)),
+        figure(score.net_sentiment === null ? null : Math.round(score.net_sentiment)),
         rate(score.positive_share),
         rate(score.negative_share),
-        String(score.classified),
+        count(score.classified),
       ],
     ],
-    [1, 1, 1, 1],
-  );
+  });
 };
 
 const aiTraffic: Section = async ({ db, scope, report }) => {
-  report.heading('AI Traffic');
+  heading(report, 'ai_traffic');
   const crawl = await crawlSummary(db, scope);
   const referrals = await getAiReferrals(db, {
     ...scope,
@@ -215,34 +262,37 @@ const aiTraffic: Section = async ({ db, scope, report }) => {
     granularity: 'day',
   });
   const visits = referrals.referral_volume.at(-1)?.value ?? null;
-  report.table(
-    ['AI crawler requests', 'Pages crawled', 'Active bots', 'Latest AI referrals'],
-    [[metric(crawl.requests), metric(crawl.pages), metric(crawl.active_bots), metric(visits)]],
-    [1, 1, 1, 1],
-  );
+  report.table({
+    columns: [
+      { header: 'AI crawler requests', width: 1, align: 'right' },
+      { header: 'Pages crawled', width: 1, align: 'right' },
+      { header: 'Active bots', width: 1, align: 'right' },
+      { header: 'Latest AI referrals', width: 1, align: 'right' },
+    ],
+    rows: [[count(crawl.requests), count(crawl.pages), count(crawl.active_bots), count(visits)]],
+  });
 };
 
 const searchConsole: Section = async ({ db, scope, report }) => {
-  report.heading('Search Console');
+  heading(report, 'search_console');
   const performance = await getPerformance(db, scope);
   const totals = performance.selected.totals;
   // An observed zero is a measurement, so only a window never synced reads as unavailable.
   if (performance.selected.evidence_state === 'not_run') {
-    report.text('Search Console data is not available for this window.');
+    quiet(report, 'Search Console data is not available for this window.');
     return;
   }
-  report.table(
-    ['Clicks', 'Impressions', 'CTR', 'Average position'],
-    [
-      [
-        metric(totals.clicks),
-        metric(totals.impressions),
-        rate(totals.ctr),
-        metric(totals.position),
-      ],
+  report.table({
+    columns: [
+      { header: 'Clicks', width: 1, align: 'right' },
+      { header: 'Impressions', width: 1, align: 'right' },
+      { header: 'CTR', width: 1, align: 'right' },
+      { header: 'Average position', width: 1, align: 'right' },
     ],
-    [1, 1, 1, 1],
-  );
+    rows: [
+      [count(totals.clicks), count(totals.impressions), rate(totals.ctr), figure(totals.position)],
+    ],
+  });
 };
 
 export const librarySections: Partial<Record<OverviewWidgetKey, Section>> = {

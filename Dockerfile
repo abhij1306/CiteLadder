@@ -24,11 +24,13 @@ COPY frontend ./
 ARG NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE=
 ENV NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE=${NEXT_PUBLIC_LOGO_DEV_PUBLISHABLE}
 
-# The browser app (static files) and the MCP Apps view the API embeds.
+# The browser app (static files), the MCP Apps view the API embeds, and the
+# design tokens the Overview PDF paints with.
 RUN pnpm build \
     && pnpm --filter @citeladder/mcp-app build \
     && mkdir -p services/api/assets/mcp-app/v1 \
-    && cp packages/mcp-app/dist/analytics.html services/api/assets/mcp-app/v1/analytics.html
+    && cp packages/mcp-app/dist/analytics.html services/api/assets/mcp-app/v1/analytics.html \
+    && cp apps/app/src/globals.css services/api/assets/design-tokens.css
 
 # Export only the API's production graph, not the workspace-wide store.
 RUN pnpm --filter @citeladder/api deploy --prod --ignore-scripts /runtime

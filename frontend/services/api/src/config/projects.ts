@@ -3,6 +3,8 @@ import type { OverviewWidget } from '@citeladder/contracts/overview';
 /** Bounds for persisted dashboard/report measurement history. */
 export const projectReads = {
   default_benchmark_mode: 'controlled_localized',
+  /** The industry a project carries until someone names one; reports leave it out. */
+  default_industry: 'General',
   default_repetitions: 1,
   command_center_max_audits: 100,
   /** The Overview a project shows until someone edits it, and what Reset restores. */

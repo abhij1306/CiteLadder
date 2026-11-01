@@ -19,6 +19,7 @@ frontend/.playwright-cli/
 
 # Generated MCP App HTML (built from frontend/packages/mcp-app)
 frontend/services/api/assets/mcp-app/
+frontend/services/api/assets/design-tokens.css
 frontend/packages/mcp-app/dist/
 
 # Playwright saved browser state

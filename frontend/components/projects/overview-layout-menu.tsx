@@ -2,7 +2,11 @@
 
 import { LayoutGrid } from 'lucide-react';
 
-import type { OverviewLayout, OverviewWidget } from '@citeladder/contracts/overview';
+import {
+  overviewWidgetTitles,
+  type OverviewLayout,
+  type OverviewWidget,
+} from '@citeladder/contracts/overview';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import {
@@ -13,7 +17,7 @@ import {
   DropdownSeparator,
   DropdownTrigger,
 } from '@/components/ui/dropdown';
-import { addableWidgets, addWidget, WIDGET_TITLES } from '@/lib/overview/layout';
+import { addableWidgets, addWidget } from '@/lib/overview/layout';
 
 /**
  * One fixed "Layout" button for members who can edit: editing, adding and
@@ -58,7 +62,7 @@ export function OverviewLayoutMenu({
                   onEditingChange(true);
                 }}
               >
-                {WIDGET_TITLES[key]}
+                {overviewWidgetTitles[key]}
               </DropdownItem>
             ))}
           </>

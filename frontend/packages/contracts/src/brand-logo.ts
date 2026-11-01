@@ -3,6 +3,7 @@
  * The wordmark letters are font-unit outlines placed by an x offset on a
  * shared baseline and scale; `accent` letters spell "Cite", `ink` letters
  * spell "Ladder". Keep in step with the SVG asset (JSON-LD and docs use it).
+ * Shared so the app's `LogoMark` and the API's PDF documents draw one drawing.
  */
 
 export const LOGO_VIEWBOX_WIDTH = 662.356616;
