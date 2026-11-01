@@ -195,10 +195,15 @@ export function useIssueFilters() {
     [query, severity, category, dimension, rule, siteUrlId, findingClass, pageKind],
   );
 
-  /** Apply a filter change: back to page one, no selection, no occurrence stack. */
+  /**
+   * Apply a filter change: back to page one, no selection, no occurrence
+   * stack. A deep link's one-rule filter (`rule=`, from an Overview row) ends
+   * with any other change: kept, it silently held every count at one issue.
+   */
   const updateFilters = useCallback(
     (change: Partial<IssueFilters>) => {
-      setUrlParams({ ...issueFilterParams({ ...filters, ...change }), cursor: null, issue: null });
+      const next = { ...filters, rule_id: '', ...change };
+      setUrlParams({ ...issueFilterParams(next), cursor: null, issue: null });
       setOccurrenceCursors([]);
     },
     [filters],

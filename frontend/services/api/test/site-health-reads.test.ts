@@ -344,6 +344,7 @@ describe('issue catalog', () => {
         crawl_id: seed.crawlId,
         group_id: groupId,
         site_url_id: home.id,
+        page_kind: null,
       },
       ['https://example.test/zzz', randomUUID()],
     );
@@ -352,6 +353,29 @@ describe('issue catalog', () => {
     ).toMatchObject({ occurrences: [], next_cursor: null });
     await expect(
       issueDetail(db, seed.workspaceId, seed.crawlId, groupId, { limit: 1, cursor }, product.id),
+    ).rejects.toThrow('cursor');
+    // The catalog's page-kind filter narrows the rail to the pages its row counted.
+    const products = await issueDetail(
+      db,
+      seed.workspaceId,
+      seed.crawlId,
+      groupId,
+      { limit: 10, cursor: null },
+      undefined,
+      'product',
+    );
+    expect(products.occurrences.map((row) => row.site_url_id)).toEqual([product.id]);
+    expect(products.affected_url_count).toBe(1);
+    await expect(
+      issueDetail(
+        db,
+        seed.workspaceId,
+        seed.crawlId,
+        groupId,
+        { limit: 1, cursor: first.next_cursor! },
+        undefined,
+        'product',
+      ),
     ).rejects.toThrow('cursor');
   });
 
@@ -409,6 +433,42 @@ describe('issue catalog', () => {
     const [header, first] = csv.split('\r\n');
     expect(header!.split(',')[0]).toBe('group_id');
     expect(first).toContain('"homepage, product"');
+  });
+
+  it('ranks a severity tier by pages affected, pages it on that order, and searches titles', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    const product = await page(seed, '/product');
+    await issue(seed, home, 'technical.https');
+    for (const target of [home, product]) await issue(seed, target, 'web.mobile_viewport');
+
+    const firstPage = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?limit=1`,
+      siteIssuesPageSchema,
+    );
+    expect(firstPage.items.map((group: { rule_id: string }) => group.rule_id)).toEqual([
+      'web.mobile_viewport',
+    ]);
+    const secondPage = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?limit=1&cursor=${encodeURIComponent(firstPage.next_cursor!)}`,
+      siteIssuesPageSchema,
+    );
+    expect(secondPage.items.map((group: { rule_id: string }) => group.rule_id)).toEqual([
+      'technical.https',
+    ]);
+    expect(secondPage.next_cursor).toBeNull();
+
+    // "Mobile viewport missing" is found by the words on screen, not only its rule id.
+    const searched = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?query=${encodeURIComponent('VIEWPORT missing')}`,
+      siteIssuesPageSchema,
+    );
+    expect(searched.items.map((group: { rule_id: string }) => group.rule_id)).toEqual([
+      'web.mobile_viewport',
+    ]);
   });
 });
 

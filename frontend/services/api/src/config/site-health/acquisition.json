@@ -193,7 +193,17 @@
     "utm_source",
     "utm_term"
   ],
-  "ignored_query_keys": ["variant", "variant_id"],
+  "ignored_query_keys": [
+    "_pos",
+    "_psq",
+    "_sid",
+    "_ss",
+    "_v",
+    "qv",
+    "srsltid",
+    "variant",
+    "variant_id"
+  ],
   "ts_owned_task_kinds": [
     "analyze",
     "architecture",

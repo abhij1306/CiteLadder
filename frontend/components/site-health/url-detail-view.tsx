@@ -1,8 +1,7 @@
-import { useState, useSyncExternalStore } from 'react';
+import type { ReactNode } from 'react';
 
 import { ListScreen } from '@/components/layout/page-shell';
 import { Inline, Stack } from '@/components/ui/layout';
-import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { InternalLinksCard } from '@/components/site-health/internal-links-card';
 import { IssueEvidence } from '@/components/site-health/issue-evidence';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
@@ -10,19 +9,16 @@ import { UrlScoreSummary } from '@/components/site-health/url-score-summary';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Disclosure } from '@/components/ui/disclosure';
+import { FactList } from '@/components/ui/facts';
 import { QueryState } from '@/components/ui/query-state';
-import { StatRow, type StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
+import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses, SubsectionHeader } from '@/components/ui/workspace';
 import type { DeliveryFacts, IssueOccurrence, PageDetail } from '@/lib/api/types';
-import {
-  dimensionLabel,
-  severityBadgeValue,
-  severityLabel,
-  severityRank,
-} from '@/lib/site-health/issues';
+import { severityBadgeValue, severityLabel, severityRank } from '@/lib/site-health/issues';
 import {
   formatAudited,
   pageDisplayTitle,
@@ -39,6 +35,12 @@ function rerunLabel(pending: boolean, queued: boolean): string {
   return 'Re-audit this page';
 }
 
+/**
+ * One page of a crawl, in the order a site owner reads it: what to fix here,
+ * then how the page scores, then — collapsed at the foot — the HTTP and
+ * link-graph measurements only a developer reaches for. The measurements used
+ * to lead the page at hero size and bury the fixes under them.
+ */
 export function UrlDetailView({
   detail,
   rerunPending,
@@ -52,8 +54,8 @@ export function UrlDetailView({
   rerunQueued: boolean;
   onRerun: () => void;
   /** The page action that opens its resolved-issue history. */
-  history?: React.ReactNode;
-  children?: React.ReactNode;
+  history?: ReactNode;
+  children?: ReactNode;
 }>) {
   return (
     <ListScreen
@@ -69,96 +71,38 @@ export function UrlDetailView({
       }
     >
       <Stack gap="workspace">
-        <PageMetadata detail={detail} />
-        <LinkedFrom detail={detail} />
-        <UrlScoreSummary detail={detail} />
-        <PageMeasurements detail={detail} />
-        <IssuesList issues={detail.issues} />
+        <PageMetaLine detail={detail} />
         {children}
+        <LinkedFrom detail={detail} />
+        <PageIssues issues={detail.issues} audited={detail.analysis_status === 'completed'} />
+        <UrlScoreSummary detail={detail} />
+        <TechnicalDetails detail={detail} />
       </Stack>
     </ListScreen>
   );
 }
 
-const LINKS_NOT_MEASURED = 'Internal links not measured for this page.';
-
-const mobileMeasurementsQuery = '(max-width: 980px)';
-
-function subscribeMobileMeasurements(notify: () => void): () => void {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function')
-    return () => undefined;
-  const media = window.matchMedia(mobileMeasurementsQuery);
-  media.addEventListener('change', notify);
-  return () => media.removeEventListener('change', notify);
-}
-
-function isMobileMeasurementsViewport(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia(mobileMeasurementsQuery).matches
-    : false;
-}
-
-function PageMeasurements({ detail }: Readonly<{ detail: PageDetail }>) {
-  const [selected, setSelected] = useState<'delivery' | 'links'>('delivery');
-  const isMobile = useSyncExternalStore(
-    subscribeMobileMeasurements,
-    isMobileMeasurementsViewport,
-    () => false,
-  );
-  if (isMobile) {
-    return (
-      <Stack gap="workspace" className="min-w-0">
-        <Card>
-          <CardHeader>
-            <CardTitle>Delivery Metrics</CardTitle>
-            <CardDescription>Static HTTP-level measurements</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DeliveryMetrics delivery={detail.delivery} />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            {/* The card states its own crawl scope; repeating it here doubled it. */}
-            <CardTitle>Internal Links</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {detail.internal_links ? (
-              <InternalLinksCard links={detail.internal_links} crawlId={detail.crawl_id} />
-            ) : (
-              <QueryState kind="empty" inline message={LINKS_NOT_MEASURED} />
-            )}
-          </CardContent>
-        </Card>
-      </Stack>
-    );
-  }
+/** The page's URL, kind and audit date on one line; its status only when it is not done. */
+function PageMetaLine({ detail }: Readonly<{ detail: PageDetail }>) {
+  const timeZone = useDisplayTimeZone();
   return (
-    <Card className="min-w-0">
-      <CardContent>
-        <Tabs
-          value={selected}
-          onValueChange={setSelected}
-          items={[
-            { value: 'delivery', label: 'Delivery Metrics' },
-            { value: 'links', label: 'Internal Links' },
-          ]}
-          ariaLabel="Page measurements"
-          spaced
-        >
-          <TabPanel value="delivery" forceMount>
-            <DeliveryMetrics delivery={detail.delivery} />
-          </TabPanel>
-          <TabPanel value="links" forceMount>
-            {detail.internal_links ? (
-              <InternalLinksCard links={detail.internal_links} crawlId={detail.crawl_id} />
-            ) : (
-              <QueryState kind="empty" inline message={LINKS_NOT_MEASURED} />
-            )}
-          </TabPanel>
-        </Tabs>
-      </CardContent>
-    </Card>
+    <Inline gap="meta" className="min-w-0 items-center">
+      <TextLink
+        variant="external"
+        text="caption"
+        href={detail.display_url}
+        className="min-w-0 [overflow-wrap:anywhere]"
+      >
+        {detail.display_url}
+      </TextLink>
+      <PageKindBadge pageKind={detail.page_kind} />
+      <span className="type-caption">Audited {formatAudited(detail.last_audited, timeZone)}</span>
+      {detail.analysis_status === 'completed' ? null : (
+        <Badge variant="status" value={pageStatusBadgeValue(detail.analysis_status)}>
+          {statusLabel(detail.analysis_status)}
+        </Badge>
+      )}
+    </Inline>
   );
 }
 
@@ -190,124 +134,142 @@ function LinkedFrom({ detail }: Readonly<{ detail: PageDetail }>) {
   );
 }
 
-function PageMetadata({ detail }: Readonly<{ detail: PageDetail }>) {
-  const timeZone = useDisplayTimeZone();
+/**
+ * The page's findings: defects first, worst first, and the count in the
+ * heading counts only those. Advisories follow in their own group, labelled
+ * as the catalog labels them, so a recommendation never reads as a rated
+ * defect.
+ */
+function PageIssues({
+  issues,
+  audited,
+}: Readonly<{
+  issues: IssueOccurrence[];
+  /** No issues before the audit finishes means "not checked yet", not "clean". */
+  audited: boolean;
+}>) {
+  const defects = issues
+    .filter((issue) => issue.finding_class === 'defect')
+    .sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+  const advisories = issues.filter((issue) => issue.finding_class !== 'defect');
   return (
-    <Card className="min-w-0">
+    <Card>
+      <CardHeader>
+        <CardTitle>Issues on this page ({defects.length})</CardTitle>
+      </CardHeader>
       <CardContent>
-        <StatRow
-          segments={[
-            {
-              key: 'url',
-              label: 'URL',
-              value: (
-                <TextLink
-                  variant="external"
-                  text="itemTitle"
-                  href={detail.display_url}
-                  className="min-w-0 [overflow-wrap:anywhere] tabular-nums"
-                >
-                  {detail.display_url}
-                </TextLink>
-              ),
-            },
-            {
-              key: 'kind',
-              label: 'Page Kind',
-              value: <PageKindBadge pageKind={detail.page_kind} />,
-            },
-            {
-              key: 'audit',
-              label: 'Last Audit',
-              value: (
-                <span className={textRole('itemTitle')}>
-                  {formatAudited(detail.last_audited, timeZone)}
-                </span>
-              ),
-            },
-            {
-              key: 'status',
-              label: 'Status',
-              value: (
-                <Badge variant="status" value={pageStatusBadgeValue(detail.analysis_status)}>
-                  {statusLabel(detail.analysis_status)}
-                </Badge>
-              ),
-            },
-          ]}
-        />
+        <Stack gap="workspace">
+          {defects.length === 0 ? (
+            <QueryState
+              kind="empty"
+              inline
+              message={
+                audited
+                  ? 'No issues found on this page.'
+                  : 'Issues appear here once this page’s audit finishes.'
+              }
+            />
+          ) : (
+            <IssueRows issues={defects} />
+          )}
+          {advisories.length > 0 ? (
+            <Stack as="section" gap="item">
+              <SubsectionHeader
+                title={`Advisories (${advisories.length})`}
+                description="Recommendations to consider."
+              />
+              <IssueRows issues={advisories} />
+            </Stack>
+          ) : null}
+        </Stack>
       </CardContent>
     </Card>
   );
 }
 
+function IssueRows({ issues }: Readonly<{ issues: IssueOccurrence[] }>) {
+  return (
+    <ol className={ledgerClasses()}>
+      {issues.map((issue) => (
+        <Stack as="li" gap="tight" key={issue.occurrence_id} className={ledgerItemClasses()}>
+          <Inline className="flex-wrap items-start justify-between">
+            <span className={textRole('itemTitle', 'min-w-0')}>{issue.issue_title}</span>
+            {issue.finding_class === 'defect' ? (
+              <Badge variant="status" value={severityBadgeValue(issue.severity)}>
+                {severityLabel(issue.severity)}
+              </Badge>
+            ) : (
+              <Badge>Advisory</Badge>
+            )}
+          </Inline>
+          <IssueEvidence occurrence={issue} />
+          {issue.remediation ? (
+            <p className="type-body whitespace-pre-line">{issue.remediation}</p>
+          ) : null}
+        </Stack>
+      ))}
+    </ol>
+  );
+}
+
+/** HTTP delivery and link-graph measurements, closed by default at the page's foot. */
+function TechnicalDetails({ detail }: Readonly<{ detail: PageDetail }>) {
+  return (
+    <Card className="min-w-0">
+      <CardContent>
+        <Disclosure title="Technical details">
+          <Stack gap="workspace" className="min-w-0">
+            <Stack as="section" gap="item">
+              <SubsectionHeader title="Delivery" description="Static HTTP-level measurements" />
+              <DeliveryMetrics delivery={detail.delivery} />
+            </Stack>
+            <Stack as="section" gap="item">
+              <SubsectionHeader title="Internal links" />
+              {detail.internal_links ? (
+                <InternalLinksCard links={detail.internal_links} crawlId={detail.crawl_id} />
+              ) : (
+                <QueryState
+                  kind="empty"
+                  inline
+                  message="Internal links not measured for this page."
+                />
+              )}
+            </Stack>
+          </Stack>
+        </Disclosure>
+      </CardContent>
+    </Card>
+  );
+}
+
+function measured(value: string | null): ReactNode {
+  return value === null ? <UnavailableValue state="not_measured" /> : value;
+}
+
 function DeliveryMetrics({ delivery }: Readonly<{ delivery: DeliveryFacts }>) {
-  const segments: StatSegment[] = [
-    { key: 'ttfb', label: 'TTFB', value: formatMeasuredMs(delivery.ttfb_ms) },
+  const facts = [
+    { label: 'TTFB', value: formatMeasuredMs(delivery.ttfb_ms) },
+    { label: 'Response Size', value: formatBytes(delivery.decoded_bytes ?? delivery.html_bytes) },
     {
-      key: 'size',
-      label: 'Response Size',
-      value: formatBytes(delivery.decoded_bytes ?? delivery.html_bytes),
-    },
-    {
-      key: 'status',
       label: 'HTTP Status',
       value: delivery.status_code === null ? null : `${delivery.status_code}`,
     },
-    { key: 'compression', label: 'Compression', value: delivery.compression ?? 'none' },
-    { key: 'version', label: 'HTTP Version', value: delivery.http_version ?? null },
-    { key: 'cache', label: 'Cache-Control', value: delivery.cache_control ?? null },
+    { label: 'Compression', value: delivery.compression ?? 'none' },
+    { label: 'HTTP Version', value: delivery.http_version ?? null },
+    { label: 'Cache-Control', value: delivery.cache_control ?? null },
     {
-      key: 'blocking',
       label: 'Blocking Resources',
       value:
         delivery.blocking_resource_count === null ? null : `${delivery.blocking_resource_count}`,
     },
-    { key: 'wire', label: 'Wire Size', value: formatBytes(delivery.wire_bytes) },
+    { label: 'Wire Size', value: formatBytes(delivery.wire_bytes) },
   ];
   return (
-    <Stack>
-      <p className={textRole('caption', 'hidden desktop:block')}>Static HTTP-level measurements</p>
-      <StatRow segments={segments} />
-    </Stack>
-  );
-}
-
-function IssuesList({ issues }: Readonly<{ issues: IssueOccurrence[] }>) {
-  const ordered = [...issues].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
-  return (
-    <Card>
-      <CardHeader actions={<span className="type-caption">Sorted by severity</span>}>
-        <CardTitle>All Issues ({issues.length})</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {ordered.length === 0 ? (
-          <QueryState kind="empty" inline message="No issues detected on this page." />
-        ) : (
-          <ol className={ledgerClasses()}>
-            {ordered.map((issue) => (
-              <Inline
-                as="li"
-                gap="compact"
-                key={issue.occurrence_id}
-                className={ledgerItemClasses('flex-wrap items-start justify-between')}
-              >
-                <Stack gap="item" className="min-w-0">
-                  <span className={textRole('itemTitle')}>{issue.issue_title}</span>
-                  <IssueEvidence occurrence={issue} />
-                </Stack>
-                <Inline className="shrink-0 flex-wrap">
-                  <Badge>{dimensionLabel(issue.dimension)}</Badge>
-                  <Badge variant="status" value={severityBadgeValue(issue.severity)}>
-                    {severityLabel(issue.severity)}
-                  </Badge>
-                </Inline>
-              </Inline>
-            ))}
-          </ol>
-        )}
-      </CardContent>
-    </Card>
+    <FactList
+      layout="ruled"
+      label="Delivery"
+      facts={facts.map((fact) => ({ label: fact.label, value: measured(fact.value) }))}
+    />
   );
 }
 

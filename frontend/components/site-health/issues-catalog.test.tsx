@@ -320,10 +320,15 @@ describe('IssuesCatalog', () => {
     renderIssues(<IssuesCatalog crawlId={CRAWL} />);
     await screen.findAllByText('WebSite schema is missing');
 
+    // The deep link's one-issue filter is shown, and any other filter ends it.
+    expect(
+      screen.getByRole('button', { name: /^Showing: WebSite schema is missing/ }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'Medium (23)' }));
     await waitFor(() => expect(currentUrl()).toContain('severity=medium'));
-    expect(currentUrl()).toContain('rule=aeo.website_schema');
+    expect(currentUrl()).not.toContain('rule=');
     expect(currentUrl()).toContain('campaign=overview');
+    expect(screen.queryByRole('button', { name: /^Showing:/ })).not.toBeInTheDocument();
 
     window.history.back();
     await waitFor(() =>
@@ -364,6 +369,41 @@ describe('IssuesCatalog', () => {
     expect(currentUrl()).toContain('campaign=overview');
   });
 
+  it('clears a deep-linked issue filter from its chip', async () => {
+    window.history.replaceState(null, '', '/issues?rule=aeo.website_schema');
+    mswServer.use(
+      http.get(`/api/v1/site-crawls/${CRAWL}/issues`, () =>
+        HttpResponse.json({ items: [issue()], next_cursor: null, summary }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderIssues(<IssuesCatalog crawlId={CRAWL} />);
+
+    await user.click(
+      await screen.findByRole('button', { name: /^Showing: WebSite schema is missing/ }),
+    );
+    await waitFor(() => expect(currentUrl()).not.toContain('rule='));
+  });
+
+  it('narrows the rail to the page kind the list is filtered to', async () => {
+    window.history.replaceState(null, '', '/issues?page_kind=product');
+    const detailKinds: Array<string | null> = [];
+    mswServer.use(
+      http.get(`/api/v1/site-crawls/${CRAWL}/issues`, () =>
+        HttpResponse.json({ items: [issue()], next_cursor: null, summary }),
+      ),
+      http.get(`/api/v1/site-crawls/${CRAWL}/issues/${ISSUE_A}`, ({ request }) => {
+        detailKinds.push(new URL(request.url).searchParams.get('page_kind'));
+        return HttpResponse.json(issueDetail());
+      }),
+    );
+
+    renderIssues(<IssuesCatalog crawlId={CRAWL} />);
+
+    await screen.findByRole('link', { name: /Homepage/ });
+    expect(detailKinds).toEqual(['product']);
+  });
+
   it('renders the API-owned summary and grouped issue rows', async () => {
     mswServer.use(
       http.get(`/api/v1/site-crawls/${CRAWL}/issues`, () =>
@@ -387,6 +427,75 @@ describe('IssuesCatalog', () => {
     expect(screen.queryByText('Observed evidence')).not.toBeInTheDocument();
     expect(screen.queryByText('Reason: expected_schema_absent')).not.toBeInTheDocument();
     expect(screen.getByText('Add a JSON-LD WebSite schema.')).toBeInTheDocument();
+    // The rule description states the PASSING expectation; under a failing
+    // title it read as a contradiction, so neither the row nor the rail prints it.
+    expect(
+      screen.queryByText('Search engines cannot find WebSite structured data on this page.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('lists the pages a site-level architecture finding names, not the homepage it is filed on', async () => {
+    const depth = issue({
+      rule_id: 'architecture.excessive_depth',
+      title: 'Pages buried too deeply',
+      dimension: 'technical',
+      severity: 'medium',
+      affected_url_count: 3,
+    });
+    const deep = (id: string, path: string, title: string, clicks: number) => ({
+      url: `https://acme.com${path}`,
+      title,
+      page_kind: 'article',
+      site_url_id: id,
+      depth_from_home: clicks,
+      parent_site_url_id: URL_A,
+    });
+    mswServer.use(
+      http.get(`/api/v1/site-crawls/${CRAWL}/issues`, () =>
+        HttpResponse.json({ items: [depth], next_cursor: null, summary }),
+      ),
+      http.get(`/api/v1/site-crawls/${CRAWL}/issues/${ISSUE_A}`, () =>
+        HttpResponse.json(
+          issueDetail({
+            rule_id: 'architecture.excessive_depth',
+            affected_url_count: 3,
+            occurrences: [
+              occurrence({
+                rule_id: 'architecture.excessive_depth',
+                page_kind: 'homepage',
+                evidence: {
+                  count: 3,
+                  pages: [
+                    deep(
+                      'dddddddd-2222-4111-8111-111111111111',
+                      '/blogs/news/winner',
+                      'Winner announced',
+                      7,
+                    ),
+                    deep('dddddddd-3333-4111-8111-111111111111', '/blogs/news/old', '', 5),
+                  ],
+                  coverage_state: 'unknown',
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+
+    renderIssues(<IssuesCatalog crawlId={CRAWL} />);
+
+    expect(await screen.findByText('3 pages')).toBeInTheDocument();
+    const winner = await screen.findByRole('link', { name: /Winner announced/ });
+    expect(winner).toHaveAttribute(
+      'href',
+      `/site/crawls/${CRAWL}/pages/dddddddd-2222-4111-8111-111111111111`,
+    );
+    expect(screen.getByText('7 clicks from the homepage')).toBeInTheDocument();
+    expect(screen.getByText('5 clicks from the homepage')).toBeInTheDocument();
+    // Evidence carried two of three pages: the remainder is said, not hidden.
+    expect(screen.getByText('Showing 2 of 3 pages.')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Homepage/ })).not.toBeInTheDocument();
   });
 
   it('applies a severity filter as a server param (not a client filter)', async () => {
@@ -434,25 +543,25 @@ describe('IssuesCatalog', () => {
     const user = userEvent.setup();
     renderIssues(<IssuesCatalog crawlId={CRAWL} />);
     expect(
-      await screen.findByText((_, element) => element?.textContent === '47 defect issue types'),
+      await screen.findByText(
+        (_, element) =>
+          element?.tagName === 'P' &&
+          element.textContent === '47 issues · 94 occurrences · 50 pages',
+      ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => element?.textContent === '94 defect occurrences'),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => element?.textContent === '50 affected URLs'),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Issues (47)' })).toBeInTheDocument();
 
     await user.click(screen.getByRole('radio', { name: 'Advisories (2)' }));
     expect(await screen.findAllByText('Title length outside recommended band')).not.toHaveLength(0);
     expect(screen.getAllByText('Advisory')).toHaveLength(2);
     expect(
-      screen.getByText((_, element) => element?.textContent === '2 advisory issue types'),
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === 'P' &&
+          element.textContent === '2 advisories · 94 occurrences · 50 pages',
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /High/ })).not.toBeInTheDocument();
-    expect(
-      screen.getByText((_, element) => element?.textContent === '94 advisory occurrences'),
-    ).toBeInTheDocument();
     expect(seen).toContain('advisory');
   });
 

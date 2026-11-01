@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Insertable } from 'kysely';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { SiteCrawls } from '../src/generated/db-schema.ts';
@@ -434,6 +435,69 @@ describe('crawl lifecycle', () => {
       partial_reason: '',
       failed_url_count: 0,
     });
+  });
+
+  it('does not call discovery failed for robots exclusions and pages that are gone', async () => {
+    const seed = await running();
+    await monitoredPage(seed, '/');
+    const failedDiscovery = async (
+      path: string,
+      error_code: string,
+      status_code: number | null,
+    ) => {
+      const page = await fixtures.analyzable(seed, path);
+      await db
+        .updateTable('site_crawl_tasks')
+        .set({ task_kind: 'discover', status: 'failed', error_code })
+        .where('id', '=', page.taskId)
+        .execute();
+      await db
+        .insertInto('site_fetch_attempts')
+        .values({
+          id: randomUUID(),
+          workspace_id: seed.workspaceId,
+          crawl_id: seed.crawlId,
+          task_id: page.taskId,
+          attempt_number: 1,
+          request_ordinal: 0,
+          method: 'GET',
+          outcome: 'error',
+          error_code,
+          status_code,
+          target_host: 'example.test',
+          acquisition_policy_version: 'fixture',
+          acquisition_transport: 'recorded',
+          acquisition_trigger: 'fixture',
+          impersonation_profile: '',
+          created_at: new Date(),
+        })
+        .execute();
+    };
+    await failedDiscovery('/policies/privacy-policy', 'robots_denied', null);
+    await failedDiscovery('/products/retired', 'http_4xx', 404);
+    await reconcileCrawl(db, seed.workspaceId, seed.crawlId);
+    expect(await crawlRow(seed.crawlId)).toMatchObject({ status: 'completed', partial_reason: '' });
+    const snapshot = await db
+      .selectFrom('site_health_snapshots')
+      .select('coverage_evidence')
+      .where('crawl_id', '=', seed.crawlId)
+      .executeTakeFirstOrThrow();
+    expect(
+      (snapshot.coverage_evidence as { reasons: string[]; failed_discovery_task_count: number })
+        .failed_discovery_task_count,
+    ).toBe(0);
+
+    // A server error is a real discovery failure.
+    const other = await running();
+    await monitoredPage(other, '/');
+    const page = await fixtures.analyzable(other, '/broken');
+    await db
+      .updateTable('site_crawl_tasks')
+      .set({ task_kind: 'discover', status: 'failed', error_code: 'http_5xx' })
+      .where('id', '=', page.taskId)
+      .execute();
+    await reconcileCrawl(db, other.workspaceId, other.crawlId);
+    expect((await crawlRow(other.crawlId)).status).toBe('partially_completed');
   });
 
   it('counts a page whose fetch failed as an error or exclusion, never as pending', async () => {

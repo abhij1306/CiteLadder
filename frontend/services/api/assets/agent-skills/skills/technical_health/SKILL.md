@@ -33,7 +33,7 @@ A score alone can direct attention but cannot support a specific fix. If no snap
 7. **Page-type checks.** Structured data must match visible content and the page's purpose. You cannot browse, so ask the user to confirm current rich-result support before recommending markup for it.
 8. **Performance.** Keep real-user field data and lab tests apart, with device and period. Never invent Core Web Vitals values.
 9. **Search vs training bots.** Keep the recorded crawler identities. Ask the owner about search versus training policy before suggesting a change; "allow every AI bot" is not a default fix.
-10. **Group root causes** only when the evidence shows a shared template or setting; otherwise call the grouping a hypothesis.
+10. **Group root causes** only when the evidence shows a shared template or setting; otherwise call the grouping a hypothesis. Check each page's `rule_evidence` (from `read_site_pages` with the `rule_id`) before proposing a site-wide fix: pages failing one check often fail it for different reasons.
 
 ## Severity
 

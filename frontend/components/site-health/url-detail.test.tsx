@@ -526,7 +526,8 @@ describe('UrlDetail', () => {
     // Initial fetch observes the prior run's terminal 'completed' snapshot.
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     expect(screen.getByRole('button', { name: 'Re-audit this page' })).toBeInTheDocument();
-    expect(screen.getByText('Completed')).toBeInTheDocument();
+    // A completed analysis carries no status badge; only an unfinished one does.
+    expect(screen.queryByText('Completed')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Re-audit this page' }));
 
@@ -540,7 +541,7 @@ describe('UrlDetail', () => {
 
     // Polling continues past 'running' until the freshly-enqueued task
     // reaches its own terminal 'completed' snapshot.
-    await waitFor(() => expect(screen.getByText('Completed')).toBeInTheDocument(), {
+    await waitFor(() => expect(screen.queryByText('Running')).not.toBeInTheDocument(), {
       timeout: 15_000,
     });
 
@@ -634,51 +635,36 @@ describe('UrlDetail', () => {
     // No button click: `?rerun=1` seeds polling on mount, so the fresh run's
     // progress advances to its terminal snapshot on its own.
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    await waitFor(() => expect(screen.getByText('Completed')).toBeInTheDocument(), {
+    expect(screen.getByText('Pending')).toBeInTheDocument();
+    await waitFor(() => expect(getCallCount).toBeGreaterThanOrEqual(statuses.length), {
       timeout: 15_000,
     });
-    expect(getCallCount).toBeGreaterThanOrEqual(statuses.length);
+    // The terminal snapshot drops the in-progress badge.
+    await waitFor(() => expect(screen.queryByText('Running')).not.toBeInTheDocument());
+    expect(screen.queryByText('Pending')).not.toBeInTheDocument();
   }, 20_000);
 
-  it('switches page measurements without losing internal-link evidence', async () => {
+  it('keeps delivery and internal-link measurements collapsed under Technical details', async () => {
     mswServer.use(...handlers(detail()));
 
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
     const user = userEvent.setup();
-    const delivery = screen.getByRole('tab', { name: 'Delivery Metrics' });
-    const links = screen.getByRole('tab', { name: 'Internal Links' });
-    expect(delivery).toHaveAttribute('aria-selected', 'true');
-    await user.click(links);
-    expect(links).toHaveAttribute('aria-selected', 'true');
+    const summary = screen.getByText('Technical details');
+    const disclosure = summary.closest('details')!;
+    expect(disclosure).not.toHaveAttribute('open');
+    await user.click(summary);
+    expect(disclosure).toHaveAttribute('open');
+    expect(within(disclosure).getByText('840ms')).toBeVisible();
     // Inbound and main-content inbound are different facts and both are shown.
-    expect(screen.getByText('Main-content inbound')).toBeInTheDocument();
+    expect(within(disclosure).getByText('Main-content inbound')).toBeVisible();
     expect(screen.getByText('Modelled over 7 observed crawl pages')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://acme.com/collections/bags' })).toHaveAttribute(
       'href',
       `/site/crawls/${CRAWL}/pages/dddddddd-1111-4111-8111-111111111111`,
     );
     expect(screen.getByText('This page links to no other crawled page.')).toBeInTheDocument();
-    links.focus();
-    await user.keyboard('{ArrowLeft}');
-    expect(delivery).toHaveAttribute('aria-selected', 'true');
-  });
-
-  it('shows both measurement sections on a phone without requiring a tab switch', async () => {
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: query === '(max-width: 980px)',
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }));
-    mswServer.use(...handlers(detail()));
-    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
-
-    await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    expect(screen.getByRole('heading', { name: 'Delivery Metrics' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Internal Links' })).toBeInTheDocument();
-    expect(screen.getByText('Main-content inbound')).toBeInTheDocument();
-    expect(screen.queryByRole('tab', { name: 'Internal Links' })).not.toBeInTheDocument();
   });
 
   it('distinguishes unmeasured internal links from an observed zero', async () => {
@@ -687,21 +673,77 @@ describe('UrlDetail', () => {
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
     await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    await userEvent.setup().click(screen.getByRole('tab', { name: 'Internal Links' }));
-    expect(screen.getByText('Internal links not measured for this page.')).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByText('Technical details'));
+    expect(screen.getByText('Internal links not measured for this page.')).toBeVisible();
   });
 
-  it('explains unavailable internal links in the phone layout', async () => {
-    vi.stubGlobal('matchMedia', (query: string) => ({
-      matches: query === '(max-width: 980px)',
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
-    }));
-    mswServer.use(...handlers(detail({ internal_links: null })));
+  it('leads with what to fix: defects worst first with their fix, advisories apart', async () => {
+    const [low, high] = detail().issues;
+    mswServer.use(
+      ...handlers(
+        detail({
+          issues: [
+            { ...low!, remediation: 'Add FAQPage markup to the questions.' },
+            high!,
+            {
+              ...low!,
+              occurrence_id: 'ffffffff-1111-4111-8111-111111111111',
+              rule_id: 'technical.meta_description_present',
+              issue_title: 'Missing meta description',
+              severity: 'medium',
+              finding_class: 'advisory',
+              evidence: { present: false },
+            },
+          ],
+        }),
+      ),
+    );
+
     renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
 
-    await screen.findByRole('heading', { name: 'Acme Retail Online', level: 1 });
-    expect(screen.getByRole('heading', { name: 'Internal Links' })).toBeInTheDocument();
-    expect(screen.getByText('Internal links not measured for this page.')).toBeVisible();
+    const heading = await screen.findByRole('heading', { name: 'Issues on this page (2)' });
+    const order = [
+      'WebSite schema is missing',
+      'FAQ schema not present',
+      'Missing meta description',
+    ].map((title) => screen.getByText(title));
+    for (const [earlier, later] of [
+      [order[0]!, order[1]!],
+      [order[1]!, order[2]!],
+    ] as const)
+      expect(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    expect(screen.getByText('Add FAQPage markup to the questions.')).toBeInTheDocument();
+    expect(screen.getByText('Advisories (1)')).toBeInTheDocument();
+    // The advisory is labelled as one, never with a severity.
+    const advisory = screen.getByText('Missing meta description').closest('li')!;
+    expect(within(advisory).getByText('Advisory')).toBeInTheDocument();
+    expect(within(advisory).queryByText('Medium')).not.toBeInTheDocument();
+    // The scores come after the fixes.
+    const score = screen.getByRole('img', { name: 'Web Fundamentals score: 46' });
+    expect(heading.compareDocumentPosition(score) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says so plainly when a page has nothing to fix', async () => {
+    mswServer.use(...handlers(detail({ issues: [] })));
+
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Issues on this page (0)' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('No issues found on this page.')).toBeInTheDocument();
+  });
+
+  it('does not call a page clean before its audit finishes', async () => {
+    mswServer.use(...handlers(detail({ issues: [], analysis_status: 'pending' })));
+
+    renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+
+    expect(
+      await screen.findByText('Issues appear here once this page’s audit finishes.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No issues found on this page.')).not.toBeInTheDocument();
   });
 });

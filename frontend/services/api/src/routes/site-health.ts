@@ -259,11 +259,19 @@ export const siteHealthRoutes = [
   defineGetRoute({
     family,
     path: `${crawlRoot}/issues/{group_id}`,
-    params: { path: { ...crawlPath, group_id: uuid }, query: paging },
+    params: { path: { ...crawlPath, group_id: uuid }, query: { ...paging, page_kind: text } },
     response: siteIssueDetailSchema,
     handle: ({ c, db }, { path, query }) =>
       withCursor(
-        issueDetail(db, c.get('workspace').workspaceId, path.crawl_id, path.group_id, query),
+        issueDetail(
+          db,
+          c.get('workspace').workspaceId,
+          path.crawl_id,
+          path.group_id,
+          query,
+          undefined,
+          query.page_kind || null,
+        ),
       ),
   }),
   defineGetRoute({

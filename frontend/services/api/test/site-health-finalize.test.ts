@@ -239,6 +239,39 @@ describe('terminal checks from persisted evidence', () => {
     ]);
   });
 
+  it('counts a robots-denied link as checked, so it never leaves a page’s link checks unknown', () => {
+    const resolution = (status: number | null, errorCode = ''): Resolution => ({
+      status,
+      finalUrl: '',
+      redirected: false,
+      hops: 0,
+      errorCode,
+      taskId: `task-${String(status)}`,
+      attemptId: `attempt-${String(status)}`,
+      artifactId: null,
+    });
+    // A store footer link to /policies/privacy-policy, which robots.txt disallows.
+    const resolutions = new Map([
+      ['https://example.test/ok', resolution(200)],
+      ['https://example.test/policies/privacy-policy', resolution(null, 'robots_denied')],
+      ['https://example.test/timeout', resolution(null, 'timeout')],
+    ]);
+    const passing = ['https://example.test/ok', 'https://example.test/policies/privacy-policy'];
+    const excluded = [
+      { url: 'https://example.test/policies/privacy-policy', reason: 'robots_denied' },
+    ];
+    const links = resolutionSet(passing, resolutions);
+    expect(links.outcome).toBe('satisfied');
+    expect(links.evidence.excluded_targets).toEqual(excluded);
+    const redirects = linkRedirects(passing, resolutions);
+    expect(redirects.outcome).toBe('satisfied');
+    expect(redirects.evidence.excluded_targets).toEqual(excluded);
+    // A target that failed for another reason is still unchecked.
+    const timedOut = [...passing, 'https://example.test/timeout'];
+    expect(resolutionSet(timedOut, resolutions).outcome).toBe('unknown');
+    expect(linkRedirects(timedOut, resolutions).outcome).toBe('unknown');
+  });
+
   it('weights pages equally and keeps missing measurements out of the score denominator', () => {
     const passed = canonical(['/a']);
     const failed = canonical(['/a'], { statusCode: 404 });

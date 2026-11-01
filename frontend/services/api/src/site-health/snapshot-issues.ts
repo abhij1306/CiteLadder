@@ -5,7 +5,7 @@
  */
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
-import { issueImpact } from './reads/rules.ts';
+import { issueImpact, siteLevelScope } from './reads/rules.ts';
 import type { Crawl } from './task-fence.ts';
 import { compareText } from '../text-order.ts';
 
@@ -27,6 +27,7 @@ export async function snapshotIssues(db: Database, crawl: Crawl, evaluationIds: 
       'i.site_url_id',
       'i.description',
       'i.remediation',
+      'i.evidence',
       'e.score_roles',
       'e.scope',
     ])
@@ -74,7 +75,8 @@ export async function snapshotIssues(db: Database, crawl: Crawl, evaluationIds: 
         description: row.description,
         remediation: row.remediation,
         score_roles: [...roles].toSorted(compareText),
-        affected_pages: urls.size,
+        // A site-level finding is one row against the homepage; its pages are its evidence.
+        affected_pages: siteLevelScope(row.rule_id, row.evidence)?.affected ?? urls.size,
         eligibility_blocker: row.rule_id === 'technical.indexable',
         impact_band: impact.band,
         impact_label: impact.label,

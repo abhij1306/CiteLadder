@@ -184,15 +184,55 @@ function dropMentions(supplied: SuppliedManifest, over: () => boolean) {
     supplied.omissions.push(`mentioned_action:${removed.id}`);
   }
 }
+/** Summary keys that stay in the run's manifest and never reach the model. */
+const MANIFEST_ONLY_SUMMARY_KEYS = [
+  // Record IDs, hashes and processor versions: the model cannot use them and
+  // must never repeat them.
+  'provenance',
+  'site_url_ids',
+  'artifact_ids',
+  'crawl_urls',
+  // The context selector's own trimming. A `page_limit` count here was read as
+  // "the crawl did not analyse N URLs"; it is said below, unambiguously.
+  'omissions',
+] as const;
+
+/** Selector reasons that drop crawl pages from the Agent's context, not from the crawl. */
+const CONTEXT_PAGE_OMISSIONS = new Set(['page_limit', 'character_budget']);
+
+/**
+ * The context summary as the model sees it. Selector omissions are restated
+ * under names that cannot be mistaken for crawl coverage: how many crawl pages
+ * were left out of ITS context, and whether there was no usable crawl at all
+ * (so a zero page count reads as unavailable, not as measured zero).
+ */
+function modelSummary(summary: Record<string, Json>): Record<string, Json> {
+  const supplied = { ...summary };
+  for (const key of MANIFEST_ONLY_SUMMARY_KEYS) delete supplied[key];
+  const omissions = (Array.isArray(summary.omissions) ? summary.omissions : []).map(
+    (item): Record<string, Json> =>
+      item !== null && typeof item === 'object' && !Array.isArray(item) ? item : {},
+  );
+  const omitted = omissions.reduce<number>(
+    (total, row) =>
+      typeof row.reason === 'string' &&
+      CONTEXT_PAGE_OMISSIONS.has(row.reason) &&
+      typeof row.count === 'number'
+        ? total + row.count
+        : total,
+    0,
+  );
+  if (omitted > 0) supplied.agent_context_pages_omitted = omitted;
+  if (omissions.some((row) => row.reason === 'no_usable_crawl')) supplied.crawl_unavailable = true;
+  return supplied;
+}
+
 export function suppliedManifest(
   manifest: Manifest,
   limit = agentPolicy.context_package_max_chars,
 ) {
   const omissions: string[] = [];
-  // Provenance (record IDs, hashes, processor versions) stays in the run's
-  // manifest; the model cannot use it and must never repeat it.
-  const summary = { ...manifest.package.summary };
-  delete summary.provenance;
+  const summary = modelSummary(manifest.package.summary);
   const supplied: SuppliedManifest = {
     instructions: manifest.instructions,
     package: { ...manifest.package, summary, sections: { ...manifest.package.sections } },
