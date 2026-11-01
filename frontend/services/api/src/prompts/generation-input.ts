@@ -46,7 +46,6 @@ export const generationInput = z.object({
     .default(() => generationSetting('default_count')),
   topic_ids: z.array(z.uuid()).default([]),
   topic_id: z.uuid().nullish(),
-  agent_revision_id: z.uuid().nullish(),
   cohort: z.enum(generationCohorts).default('core'),
   /** A short note for this run only; reference data for drafting, never a business fact. */
   run_context: z.string().trim().max(G.run_context_max_chars).nullish(),
@@ -88,7 +87,6 @@ export function requestKey(input: GenerationInput) {
   return JSON.stringify({
     count: input.count,
     cohort: input.cohort,
-    agent_revision_id: input.agent_revision_id ?? null,
     topics: wantedTopics(input).toSorted(compareText),
     run_context: input.run_context || null,
     distribution: input.distribution
@@ -105,13 +103,6 @@ export function validateRequest(input: GenerationInput) {
     throw generationInvalid('Requested count exceeds generation limit');
   if (wantedTopics(input).length > generationSetting('max_topic_ids'))
     throw generationInvalid('Too many topics selected');
-  if (input.agent_revision_id && input.cohort !== 'core')
-    throw generationInvalid('Agent portfolios require the core cohort');
-  if (
-    input.agent_revision_id &&
-    (input.distribution || input.run_context || input.seed_source || input.seed_query_ids.length)
-  )
-    throw generationInvalid('Agent portfolios take no run context, distribution or seeds');
   if (input.distribution && input.cohort !== 'core')
     throw generationInvalid('A distribution plans its own cohorts; leave the cohort as core');
   if (input.seed_query_ids.length && (!input.seed_source || input.seed_source === 'none'))

@@ -2,6 +2,7 @@
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import { groundedSql } from '../prompts/observed-queries.ts';
+import { readSeedQueries } from '../prompts/seed-queries.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { strings } from '../db/json.ts';
 import { isoDateText, utcText } from '../db/timestamps.ts';
@@ -185,7 +186,7 @@ export async function promptPortfolio(
     active: enabled && row.status === 'active',
     record_uri: `citeladder://prompt/${row.id}`,
   }));
-  // Every topic, including empty ones: a prompt proposal may only name these IDs.
+  // Every topic, including empty ones: a change may only name these IDs.
   const topics = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'projects')
     .innerJoin('topics as t', 't.project_id', 'projects.id')
@@ -204,6 +205,32 @@ export async function promptPortfolio(
       items,
       rows.length > count && last ? encodeCursor(filters, last.cursor_at, last.id) : null,
     ),
+  };
+}
+
+/**
+ * The searches a generation run could ground its wording on, per persisted
+ * source, each named with its topic. Read through the Prompt Builder's owner,
+ * so a listed query is one generation can use; never volume or impressions.
+ */
+export async function seedQueriesRead({ db, scope }: ProjectRead): Promise<Evidence> {
+  const { sources } = await readSeedQueries(db, scope.workspaceId, scope.projectId);
+  if (!sources.length) return unavailable('no_search_data');
+  const topics = new Map(
+    (
+      await db
+        .selectFrom('topics')
+        .select(['id', 'name'])
+        .where('project_id', '=', scope.projectId)
+        .execute()
+    ).map((row) => [row.id, row.name]),
+  );
+  return {
+    state: 'available',
+    sources: sources.map(({ source, queries }) => ({
+      source,
+      queries: queries.map((query) => ({ ...query, topic: topics.get(query.topic_id) ?? null })),
+    })),
   };
 }
 

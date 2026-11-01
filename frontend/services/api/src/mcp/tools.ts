@@ -24,6 +24,7 @@ import {
   promptPortfolio,
   searchDataset,
   searchIntelligence,
+  seedQueriesRead,
   shelfRead,
 } from './evidence.ts';
 import {
@@ -450,6 +451,13 @@ export const definitions = {
       ...page,
     }),
     read: promptPortfolio,
+  }),
+  read_seed_queries: projectTool({
+    title: 'Read seed queries',
+    description:
+      "List the searches a prompt generation run could ground its wording on, for each search data source the project has (search_console or search_intelligence): each query's id, text and topic. Only non-branded, question-like searches are listed; a seed steers wording and is never copied into a prompt. There is no volume or impression count: never present a query as AI prompt volume. unavailable no_search_data means no source is connected. Pass the source as seed_source and the kept query ids as seed_query_ids to generate_prompts.",
+    schema: z.strictObject(project),
+    read: seedQueriesRead,
   }),
   read_actions: projectTool({
     title: 'Read Actions',

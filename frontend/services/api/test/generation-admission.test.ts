@@ -7,7 +7,7 @@ import { bindingFailure } from '../src/prompts/binding.ts';
 import type { GenerationContext } from '../src/prompts/generation-context.ts';
 import { admitDrafts, type Draft } from '../src/prompts/generation-drafts.ts';
 import { planSlots } from '../src/prompts/generation-plan.ts';
-import { generationInput, validateSelection } from '../src/prompts/generation-input.ts';
+import { generationInput } from '../src/prompts/generation-input.ts';
 import {
   applyQualityPolicy,
   judgeDrafts,
@@ -139,15 +139,6 @@ it('binds identities written in any script and still rejects unrelated text', ()
   expect(bindingFailure('Which café machines suit a small office?', vocabulary, 'Cafe')).toBeNull();
   expect(bindingFailure('आज मौसम कैसा है?', vocabulary, 'जूते')).toBe('off_topic');
   expect(bindingFailure('今天天气怎么样？', vocabulary, '连衣裙')).toBe('off_topic');
-});
-
-it('refuses agent portfolios outside the core cohort', () => {
-  expect(() =>
-    validateSelection(
-      generationInput.parse({ agent_revision_id: crypto.randomUUID(), cohort: 'comparison' }),
-      [],
-    ),
-  ).toThrow(expect.objectContaining({ status: 422 }));
 });
 
 it('caps drafts at 16 words and drops near duplicates across topics, pending and tracked texts', () => {

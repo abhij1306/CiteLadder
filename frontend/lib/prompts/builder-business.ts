@@ -21,7 +21,10 @@ export type BusinessDraft = {
   categoryTerms: string[];
   jobs: string[];
   businessModel: BusinessModel | null;
-  /** One map per offering, in offering order; attributes and exclusions ride along unedited. */
+  /**
+   * One map per offering, in offering order. Exclusions ride along unedited
+   * (generation reads none) and drop when an entry they name is removed.
+   */
   maps: OfferingMapDraft[];
 };
 
@@ -114,10 +117,12 @@ function liveExclusions(map: OfferingMapDraft): OfferingMapDraft['exclusions'] {
   );
 }
 
+const MAP_DIMENSIONS = ['audiences', 'situations', 'attributes'] as const;
+
 /**
- * The full business-map edit when any offering's audiences or situations
- * changed, else null. It covers exactly the draft's offerings, so the map
- * never names one the profile no longer lists.
+ * The full business-map edit when any offering's audiences, situations or
+ * attributes changed, else null. It covers exactly the draft's offerings, so
+ * the map never names one the profile no longer lists.
  */
 export function mapChanges(
   draft: BusinessDraft,
@@ -125,9 +130,7 @@ export function mapChanges(
 ): BusinessMapUpdateInput | null {
   const changed = draft.maps.some((map) => {
     const prior = saved.maps.find((item) => sameValue(item.offering, map.offering));
-    return (
-      !prior || !same(map.audiences, prior.audiences) || !same(map.situations, prior.situations)
-    );
+    return !prior || MAP_DIMENSIONS.some((key) => !same(map[key], prior[key]));
   });
   if (!changed) return null;
   return { offerings: draft.maps.map((map) => ({ ...map, exclusions: liveExclusions(map) })) };

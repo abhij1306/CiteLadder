@@ -247,7 +247,11 @@ async function callTool(call: McpCall): Promise<MethodResult> {
     const value =
       writeName === null
         ? await dispatchTool(db, principal, name, args, settings.browserOrigin)
-        : await dispatchWrite({ db, config, principal }, writeName, args);
+        : await dispatchWrite(
+            { db, config, principal, origin: settings.browserOrigin },
+            writeName,
+            args,
+          );
     return {
       content: [{ type: 'text', text: JSON.stringify(value) }],
       structuredContent: value,

@@ -2,7 +2,6 @@ import type {
   PromptAdmissionDropReason,
   promptGenerateResponseSchema,
 } from '@citeladder/contracts/project';
-import { parsePromptProposal } from '@citeladder/contracts/prompt-proposal';
 import { z } from 'zod';
 
 import { namesAlias, namesEntity } from '../analysis/aliases.ts';
@@ -17,7 +16,6 @@ import { bindingFailure } from './binding.ts';
 import type { GenerationContext, OfferingMap } from './generation-context.ts';
 import {
   cohortShares,
-  generationInvalid,
   generationSetting,
   type GenerationCohort,
   type GenerationInput,
@@ -138,9 +136,7 @@ export function admitDrafts(
     ...context.observed.map((query) => promptTextHash(query.text)),
   ]);
   const brands = brandTerms(context);
-  // Agent rows are targeted on purpose; only quick-generate cells plan places.
-  const quick = !context.revision;
-  const geo = quick ? geoTerms(context) : [];
+  const geo = geoTerms(context);
   // Names count under the project's matching policy, so a common-word brand
   // in ordinary language ("target audience") is not a branded draft.
   const brandRule = context.matching[entityKey(context.context.brand_name)];
@@ -157,14 +153,12 @@ export function admitDrafts(
   ): PromptAdmissionDropReason | null => {
     if (!slot || usedSlots.has(slot.slot_id)) return 'unplanned_slot';
     if (!slot.allowed_prompt_intents.includes(row.prompt_intent)) return 'intent';
-    // Every planned row keeps to the planned stages, and a core row's intent
-    // must suit the stage the model labelled it with; Agent rows keep the
-    // labels the user reviewed in the portfolio.
-    const plannedCore = quick && slot.cohort === 'core';
-    const stages: readonly string[] = quick ? G.planned_stages : G.stages;
+    // Every row keeps to the planned stages, and a core row's intent must suit
+    // the stage the model labelled it with.
+    const stages: readonly string[] = G.planned_stages;
     if (!stages.includes(row.buyer_stage)) return 'stage';
     const coherent = G.stage_intents[row.buyer_stage]?.includes(row.prompt_intent);
-    return plannedCore && !coherent ? 'intent' : null;
+    return slot.cohort === 'core' && !coherent ? 'intent' : null;
   };
   /** Identity checks: who the row names, by cohort. */
   const cohortReason = (
@@ -330,75 +324,6 @@ async function suggestMaps(
     });
     return [];
   }
-}
-
-/** Agent targeting as planned-cell facets, so selection and provenance see one shape. */
-const TARGETING_FACETS = {
-  place: 'market',
-  persona: 'audience',
-  constraint: 'situation_or_constraint',
-} as const;
-function agentNeed(
-  offering: string,
-  targeting: Partial<Record<keyof typeof TARGETING_FACETS, string>> = {},
-) {
-  const need: Record<string, string> = { offering };
-  for (const [key, facet] of Object.entries(TARGETING_FACETS)) {
-    const value = targeting[key as keyof typeof TARGETING_FACETS];
-    if (value) need[facet] = value;
-  }
-  return need;
-}
-
-function proposal(context: GenerationContext) {
-  const revision = context.revision!;
-  const parsed = parsePromptProposal(revision.body, generationSetting('max_count'));
-  if (!parsed)
-    throw generationInvalid('Portfolio requires one JSON proposal with valid prompt rows');
-  // A row filed under a topic that no longer exists is dropped on its own,
-  // like any other inadmissible row, rather than failing the portfolio.
-  const drops: Drops = {};
-  const dropRecords: AdmissionDrop[] = [];
-  const rows = parsed.rows.flatMap((row, index) => {
-    const topic = context.selected.find((item) => item.id === row.topic_id);
-    if (topic) return [{ row, topic, slot_id: `agent-${index + 1}` }];
-    countDrop(drops, 'unknown_topic');
-    dropRecords.push({
-      reason: 'unknown_topic',
-      slot_id: `agent-${index + 1}`,
-      normalized_text_hash: promptTextHash(row.text),
-      phase: 'admission',
-      batch: 0,
-      row_index: index,
-    });
-    return [];
-  });
-  const slots: Slot[] = rows.map(({ row, topic, slot_id }) => {
-    const need = agentNeed(topic.name, row.targeting);
-    return {
-      slot_id,
-      cohort: 'core',
-      topic_id: topic.id,
-      topic_name: topic.name,
-      topic_description: topic.description,
-      buyer_need: need,
-      target_buyer_stage: '',
-      allowed_prompt_intents: Object.keys(G.intent_legacy),
-      evidence_ref: {
-        kind: 'agent_output_revision',
-        id: revision.id,
-        ...need,
-        evidence_type: 'hypothesis',
-        review_state: 'suggested',
-      },
-    };
-  });
-  return {
-    slots,
-    rows: rows.map(({ row, slot_id }) => ({ ...row, slot_id })),
-    drops,
-    dropRecords,
-  };
 }
 
 /**
@@ -584,25 +509,9 @@ function groundingSummary(context: GenerationContext, slots: readonly Slot[]) {
 export async function generateDrafts(
   context: GenerationContext,
   input: GenerationInput,
-  gateway: ModelGateway | null,
+  gateway: ModelGateway,
   deadline: AbortSignal,
 ) {
-  if (context.revision) {
-    const { slots, rows, drops, dropRecords } = proposal(context);
-    const admitted = admitDrafts(rows, slots, context, []);
-    mergeDrops(drops, admitted.drops);
-    return {
-      drafts: admitted.admitted,
-      drops,
-      dropRecords: [...dropRecords, ...admitted.dropRecords],
-      maps: [] as OfferingMap[],
-      models: [] as unknown[],
-      stop: null as Stop,
-      reference: context.context as unknown,
-      grounding: groundingSummary(context, []),
-    };
-  }
-  if (!gateway) throw new ModelError('not_configured');
   const maps = await suggestMaps(gateway, context, deadline);
   const slots = planSlots(context, input, maps);
   return {

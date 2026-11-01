@@ -10,10 +10,7 @@ import { OutputCanvas } from '@/components/agent/output-canvas';
 import { EvidenceChips } from '@/components/agent/evidence-chips';
 import { OutputEditor, type OutputDraft } from '@/components/agent/output-editor';
 import { OutputHistory } from '@/components/agent/output-history';
-import {
-  PromptProposalAction,
-  promptPortfolioReport,
-} from '@/components/agent/prompt-proposal-action';
+import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,7 +25,7 @@ import { newIdempotencyKey } from '@/lib/agent/idempotency';
 import { OUTPUT_PHASE_LABEL } from '@/lib/agent/vocabulary';
 import { agentMutations, type AgentOutput, type AgentRevision } from '@/lib/api/agent';
 import { queryKeys } from '@/lib/api/query-keys';
-import { ContentMarkdown } from '@/lib/markdown/markdown';
+import { PROMPTS_GENERATE_HREF } from '@/lib/prompts/routes';
 
 type PaneTab = 'output' | 'sources' | 'history';
 
@@ -63,19 +60,16 @@ export function OutputPane({
   const editing = draft !== null;
   if (!revision) return null;
   const locked = runActive || !canEdit;
-  const document =
-    output.kind === 'prompt_portfolio' ? (
-      <ContentMarkdown markdown={promptPortfolioReport(revision.body)} density="compact" />
-    ) : (
-      <OutputCanvas
-        workspaceId={workspaceId}
-        chatId={chatId}
-        revision={revision}
-        locked={locked}
-        canSend={canSend}
-        onRevise={onRevise}
-      />
-    );
+  const document = (
+    <OutputCanvas
+      workspaceId={workspaceId}
+      chatId={chatId}
+      revision={revision}
+      locked={locked}
+      canSend={canSend}
+      onRevise={onRevise}
+    />
+  );
   return (
     <Stack
       as="section"
@@ -112,7 +106,6 @@ export function OutputPane({
         <OutlineApproval
           workspaceId={workspaceId}
           chatId={chatId}
-          kind={output.kind}
           revision={revision}
           runActive={runActive}
           canSend={canSend}
@@ -120,14 +113,7 @@ export function OutputPane({
         {editing ? null : (
           <OutputDeclaration workspaceId={workspaceId} output={output} runActive={runActive} />
         )}
-        {editing ? null : (
-          <PortfolioSubmission
-            workspaceId={workspaceId}
-            kind={output.kind}
-            revision={revision}
-            disabled={locked || !canSend}
-          />
-        )}
+        {editing ? null : <PromptBuilderHandoff kind={output.kind} />}
       </Stack>
       <Tabs
         value={tab}
@@ -176,26 +162,16 @@ export function OutputPane({
   );
 }
 
-/** A written question portfolio (not its coverage plan) can go to Prompts review. */
-function PortfolioSubmission({
-  workspaceId,
-  kind,
-  revision,
-  disabled,
-}: Readonly<{
-  workspaceId: string;
-  kind: AgentOutput['kind'];
-  revision: AgentRevision;
-  disabled: boolean;
-}>) {
-  if (kind !== 'prompt_portfolio' || revision.phase === 'outline') return null;
+/**
+ * A prompt plan is applied in the Prompt Builder, where a person confirms
+ * topics and starts the run; the Agent writes no prompts itself.
+ */
+function PromptBuilderHandoff({ kind }: Readonly<{ kind: AgentOutput['kind'] }>) {
+  if (kind !== 'prompt_plan') return null;
   return (
-    <PromptProposalAction
-      workspaceId={workspaceId}
-      revisionId={revision.id}
-      body={revision.body}
-      disabled={disabled}
-    />
+    <Button asChild className="justify-self-start">
+      <ProjectLink href={PROMPTS_GENERATE_HREF}>Open Prompt Builder</ProjectLink>
+    </Button>
   );
 }
 
@@ -224,29 +200,22 @@ function OutputActions({
   );
 }
 
-const OUTLINE_APPROVAL: Partial<Record<string, { help: string; action: string }>> = {
-  content: {
-    help: 'Review the outline, edit it if needed, then approve it to write the draft.',
-    action: 'Use outline & write',
-  },
-  prompt_portfolio: {
-    help: 'Review the coverage plan: edit the decisions, topics and answers to any questions, then approve it to write the buyer questions.',
-    action: 'Approve plan & write questions',
-  },
+/** Only long-form content is outline-first. */
+const OUTLINE_APPROVAL = {
+  help: 'Review the outline, edit it if needed, then approve it to write the draft.',
+  action: 'Use outline & write',
 };
 
 /** The explicit approval that lets the full deliverable be written. */
 function OutlineApproval({
   workspaceId,
   chatId,
-  kind,
   revision,
   runActive,
   canSend,
 }: Readonly<{
   workspaceId: string;
   chatId: string;
-  kind: AgentOutput['kind'];
   revision: AgentRevision;
   runActive: boolean;
   canSend: boolean;
@@ -260,10 +229,9 @@ function OutlineApproval({
       }),
   });
   if (revision.phase !== 'outline' || revision.approved_at) return null;
-  const copy = OUTLINE_APPROVAL[kind] ?? OUTLINE_APPROVAL.content!;
   return (
     <Stack gap="compact">
-      <p className={textRole('body')}>{copy.help}</p>
+      <p className={textRole('body')}>{OUTLINE_APPROVAL.help}</p>
       {approve.isError ? (
         <Alert tone="danger">{agentWriteFailure(approve.error).message}</Alert>
       ) : null}
@@ -278,7 +246,7 @@ function OutlineApproval({
           })
         }
       >
-        {copy.action}
+        {OUTLINE_APPROVAL.action}
       </Button>
     </Stack>
   );

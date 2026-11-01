@@ -3,8 +3,13 @@
  * (`apps/app/src/router.tsx`); `?project=` is the shell's project hand-off.
  * In-app Agent reads have no origin and keep relative links.
  */
-export function appLink(origin: string, path: string, projectId: string): string {
-  const relative = `${path}?${new URLSearchParams({ project: projectId })}`;
+export function appLink(
+  origin: string,
+  path: string,
+  projectId: string,
+  params: Record<string, string> = {},
+): string {
+  const relative = `${path}?${new URLSearchParams({ ...params, project: projectId })}`;
   return origin ? new URL(relative, origin).href : relative;
 }
 

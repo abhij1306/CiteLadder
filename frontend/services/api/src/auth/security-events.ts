@@ -23,6 +23,8 @@ export type McpWriteKind =
   | 'add_competitor'
   | 'remove_competitor'
   | 'delete_topic'
+  | 'confirm_topics'
+  | 'generate_prompts'
   | 'update_action_status'
   | 'cancel_audit'
   | 'add_prompts'

@@ -20,10 +20,13 @@ import { auditRuntime } from '../audits/config.ts';
 import { estimateAudit } from '../audits/estimate.ts';
 import { marketIdList } from '../audits/inputs.ts';
 import {
+  confirmTopics,
   createPrompts,
   createTopic,
   deleteTopic,
+  previewTopics,
   setPromptStatuses,
+  startGeneration,
   updatePrompt,
   updateTopic,
 } from '../commands/prompts.ts';
@@ -34,15 +37,18 @@ import { plainJson } from '../db/json.ts';
 import { operatorTransaction } from '../db/operator-transaction.ts';
 import { isNonEmpty } from '../lists.ts';
 import { competitorCreate } from '../projects/competitors.ts';
+import { generationInput } from '../prompts/generation-input.ts';
 import { promptInput, screenPrompts } from '../prompts/prompts.ts';
-import { topicCreate } from '../prompts/topics.ts';
+import { listTopics, topicConfirm, topicCreate } from '../prompts/topics.ts';
 import { confirmChange, issueConfirmation } from './confirmations.ts';
 import { declarationKey, payloads, runConfirmed } from './confirmed-changes.ts';
 import { writeActor } from './data.ts';
+import { appLink } from './links.ts';
 import { argumentProblem, inputSchema } from './tools.ts';
 import { McpInputError, type Evidence, type McpPrincipal } from './types.ts';
 
-type Context = { db: Database; config: ServiceConfig; principal: McpPrincipal };
+/** `origin` is the app's browser origin, for links into CiteLadder screens. */
+type Context = { db: Database; config: ServiceConfig; principal: McpPrincipal; origin: string };
 type Annotations = {
   readOnlyHint: false;
   destructiveHint: boolean;
@@ -204,6 +210,33 @@ async function prepared(
 
 const quoted = (texts: readonly string[]) => texts.map((text) => `"${text}"`).join(', ');
 
+/**
+ * A generation run as the user reviews it: the staged suggestions without
+ * ids, what limited the run, and the CiteLadder screen where they accept.
+ */
+function generated(
+  origin: string,
+  projectId: string,
+  result: Awaited<ReturnType<typeof startGeneration>>,
+): Evidence {
+  const topics = new Map(result.topics.map((topic) => [topic.id, topic.name]));
+  const staged = result.candidates.length;
+  return {
+    state: 'changed',
+    change: 'generate_prompts',
+    summary: `Staged ${staged} of ${result.requested_count} requested suggestion(s) for review. Nothing is tracked until the user accepts them in CiteLadder.`,
+    suggestions: result.candidates.map((candidate) => ({
+      text: candidate.text,
+      topic: candidate.topic_id ? (topics.get(candidate.topic_id) ?? null) : null,
+      cohort: candidate.cohort,
+    })),
+    admission_drops: result.admission_drops,
+    quality_rejected: result.quality_rejected,
+    shortfall_reason: result.shortfall_reason,
+    review_url: appLink(origin, '/prompts', projectId, { review: '1' }),
+  };
+}
+
 const writeDefinitions = {
   create_topic: direct('create_topic', {
     title: 'Create a topic',
@@ -349,6 +382,106 @@ const writeDefinitions = {
       return {
         summary: `Deleted the topic "${topic.name}"; its prompts are kept without a topic.`,
       };
+    },
+  }),
+  preview_topics: tool({
+    title: 'Preview topics',
+    description:
+      'Propose buyer-facing topics for the project beside the topics it already has, as the Prompt Builder\'s topic step does. A topic is a category a buyer asks about (for example "golf nets"), never a product line, model, size or the brand. Spends one AI model call and saves nothing: show the user the existing and proposed topic names, let them keep, rename, delete or add, then save the plan they agreed to with confirm_topics. more lists proposals past the cap. Refused until the project lists at least one offering.',
+    schema: z.strictObject(project),
+    annotations: hints(false, false),
+    run: async (context, args) => {
+      const actor = await writeActor(context.db, context.principal, args.project_id);
+      const preview = await previewTopics(context.db, actor, args.project_id);
+      const existing = await listTopics(context.db, actor.workspaceId, args.project_id);
+      return {
+        state: 'proposed',
+        existing_topics: existing.map(({ id, name }) => ({ id, name })),
+        proposed_topics: preview.topics,
+        more: preview.overflow,
+        instruction:
+          'Show the user the topic names without ids. Nothing is saved until confirm_topics.',
+      };
+    },
+  }),
+  confirm_topics: direct('confirm_topics', {
+    title: 'Confirm topics',
+    description:
+      "Save the topic plan the user agreed to after preview_topics, in one change: create the topics they kept or added (each with the offerings preview_topics listed for it, or none), rename and delete existing ones. A deleted topic's prompts stay tracked without a topic. Runs at once and returns the project's topics with their ids for generate_prompts; refused if a named topic is not in this project or two topics would share a name.",
+    schema: z.strictObject({
+      ...project,
+      create: topicConfirm.shape.create.describe(
+        "Topics to create: name, and offerings as preview_topics listed them (the project's saved offerings).",
+      ),
+      rename: topicConfirm.shape.rename.describe(
+        'Existing topics to rename: id from existing_topics, and the new name.',
+      ),
+      delete: topicConfirm.shape.delete.describe('Ids of existing topics to delete.'),
+    }),
+    annotations: hints(true, false),
+    run: async (trx, actor, { project_id: projectId, ...plan }) => {
+      const topics = await confirmTopics(trx, actor, projectId, plan);
+      return {
+        summary: `Saved the topics. The project now has ${topics.length}: ${quoted(topics.map((topic) => topic.name))}.`,
+        topics: topics.map(({ id, name }) => ({ id, name })),
+      };
+    },
+  }),
+  generate_prompts: tool({
+    title: 'Generate prompts',
+    description:
+      "Run CiteLadder's prompt generator for the project, as the Prompt Builder's Generate step does, once the user agreed to the run. The suggestions are staged for review and never tracked: only the user's Accept in CiteLadder's Prompts review (review_url) activates them. Spends AI credits, so call it once per agreed run: choose a new run_key for each agreed run and resend the same run_key on a retry, which returns the staged result instead of running again. distribution sets the branded and competitor-alternative shares, intent mix and personas; seed_source and seed_query_ids come from read_seed_queries; run_context is a note for this run only. A shortfall is reported with its reasons, never filled.",
+    schema: z.strictObject({
+      ...project,
+      prompt_set_id: promptSet,
+      run_key: z
+        .string()
+        .trim()
+        .min(1)
+        .max(policy.prompts.generation.idempotency_key_max_chars)
+        .describe(
+          'A key you choose once for this agreed run, such as a new random UUID. Resend it unchanged on a retry; a new run needs a new key.',
+        ),
+      count: generationInput.shape.count.describe(
+        'How many suggestions to stage; omit for the default.',
+      ),
+      topic_ids: generationInput.shape.topic_ids.describe(
+        'Topic ids from confirm_topics or read_prompt_portfolio to cover; omit for every topic.',
+      ),
+      run_context: generationInput.shape.run_context.describe(
+        'A short note for this run only, such as a season or offering to focus on; never saved as a business fact.',
+      ),
+      distribution: generationInput.shape.distribution.describe(
+        'Shares of the run (0–1): branded_share names the brand, comparison_share asks for alternatives to a competitor, the rest is unbranded. intent_mix weights informational, commercial and transactional questions; personas are buyers to balance across. Omit for an unbranded run.',
+      ),
+      seed_source: generationInput.shape.seed_source.describe(
+        'The search data that may steer wording: search_console, search_intelligence or none; omit to read every source.',
+      ),
+      seed_query_ids: generationInput.shape.seed_query_ids.describe(
+        'The read_seed_queries ids the user kept for that source; omit for all of them.',
+      ),
+    }),
+    // A retry with the same run_key replays the persisted run.
+    annotations: hints(false, true),
+    run: async (context, args) => {
+      const { project_id: projectId, prompt_set_id: setId, run_key: runKey, ...request } = args;
+      const actor = await writeActor(context.db, context.principal, projectId);
+      const set = await promptSetOf(context.db, projectId, setId);
+      const result = await startGeneration(
+        context.db,
+        actor,
+        set.id,
+        generationInput.parse(request),
+        { idempotencyKey: runKey },
+      );
+      await recordSecurityEvent(
+        context.db,
+        'mcp.write.generate_prompts',
+        context.principal.userId,
+        actor.workspaceId,
+        projectId,
+      );
+      return generated(context.origin, projectId, result);
     },
   }),
   prepare_add_prompts: tool({

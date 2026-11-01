@@ -1,10 +1,12 @@
 # CiteLadder plugin
 
-Review skills for agents that can talk to CiteLadder's MCP server:
+Skills for agents that can talk to CiteLadder's MCP server:
 
 - `ai-visibility-review`: review AI visibility and explain its limits
 - `ai-search-change-review`: explain what changed between measured runs
 - `technical-seo-triage`: triage Site Health evidence
+- `prompt-discovery`: follow the Prompt Builder's steps to generate prompt
+  suggestions for review in CiteLadder (uses change tools)
 
 `mcp.json` points at a local instance (`http://localhost:8100/mcp`) and sends
 `Authorization: Bearer ${CITELADDER_MCP_TOKEN}`. Set `MCP_TOKEN` in the server's

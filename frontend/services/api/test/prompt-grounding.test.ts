@@ -6,6 +6,7 @@ import { generationInput, generationSetting } from '../src/prompts/generation-in
 import { generatePrompts } from '../src/prompts/generation.ts';
 import { loadObservedQueries } from '../src/prompts/observed-queries.ts';
 import { readSeedQueries } from '../src/prompts/seed-queries.ts';
+import { seedQueriesRead } from '../src/mcp/evidence.ts';
 import { echoDependencies, promptSet, topic, type DraftRequest } from './prompt-fixtures.ts';
 import { searchIntelligenceRun } from './search-intelligence-fixtures.ts';
 import { testDatabase } from './support.ts';
@@ -322,6 +323,35 @@ describe('seed queries for the Prompt Builder', () => {
         },
       ],
     });
+  });
+
+  it('reads them through MCP with each topic named, and no data as unavailable', async () => {
+    const { p, trail } = await groundedProject();
+    const read = await seedQueriesRead({
+      db,
+      scope: { workspaceId: p.workspaceId, projectId: p.projectId },
+      origin: '',
+    });
+    expect(read.state).toBe('available');
+    expect(read.sources).toContainEqual({
+      source: 'search_intelligence',
+      queries: [
+        {
+          id: trail,
+          text: 'trail running shoes waterproof',
+          topic_id: p.topicId,
+          topic: 'Running shoes',
+        },
+      ],
+    });
+    const empty = await project();
+    expect(
+      await seedQueriesRead({
+        db,
+        scope: { workspaceId: empty.workspaceId, projectId: empty.projectId },
+        origin: '',
+      }),
+    ).toEqual({ state: 'unavailable', reason: 'no_search_data', artifact_refs: [] });
   });
 
   it('lists no source a project has no data for, and hides other workspaces', async () => {

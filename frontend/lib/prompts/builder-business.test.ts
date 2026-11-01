@@ -128,6 +128,28 @@ describe('the business step draft', () => {
     expect(personaChoices(edited)).toEqual(['Club coach', 'Beginner golfers', 'Clubs']);
   });
 
+  it('saves an attribute edit on its own, keeping the other offerings as saved', () => {
+    const saved = draft();
+    const [net, mat] = saved.maps;
+    if (!net || !mat) throw new Error('fixture maps missing');
+    const edited = {
+      ...saved,
+      maps: [{ ...net, attributes: [] }, mat],
+    };
+    expect(mapChanges(edited, saved)).toEqual({
+      offerings: [
+        {
+          offering: NET,
+          attributes: [],
+          situations: [{ value: 'small garden', review_state: 'suggested' }],
+          audiences: [{ value: 'Beginner golfers', review_state: 'confirmed' }],
+          exclusions: [],
+        },
+        { offering: MAT, attributes: [], situations: [], audiences: [], exclusions: [] },
+      ],
+    });
+  });
+
   it('labels every business model the API accepts', () => {
     expect(BUSINESS_MODEL_CHOICES.map((choice) => choice.value)).toEqual(
       businessModelSchema.options,

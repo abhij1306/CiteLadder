@@ -106,7 +106,7 @@ export async function recoverTopics(
   scope: { workspaceId: string; setId: string },
   model: {
     /** Configures the model only once the set is authorized and needs topics. */
-    gateway: () => ModelGateway | null;
+    gateway: () => ModelGateway;
     deadline: AbortSignal;
     reserve: () => Promise<void>;
   },
@@ -116,7 +116,7 @@ export async function recoverTopics(
   if (!input.offerings.length)
     throw generationInvalid('Add at least one offering before generating prompts');
   const gateway = model.gateway();
-  if (gateway) await model.reserve();
+  await model.reserve();
   const proposal = await proposeTopics(input, gateway, model.deadline);
   return db.transaction().execute(async (trx) => {
     const set = await scopedPromptSet(trx, scope.workspaceId, scope.setId);
@@ -329,27 +329,6 @@ export function generationContext(
       { name: context.brand_name, aliases: context.brand_aliases },
       ...context.competitors,
     ]);
-    const revision = input.agent_revision_id
-      ? await trx
-          .selectFrom('agent_output_revisions as revision')
-          .innerJoin('agent_outputs as output', 'output.id', 'revision.output_id')
-          .select([
-            'revision.id',
-            'revision.output_id',
-            'revision.run_id',
-            'revision.source_refs',
-            'revision.body',
-          ])
-          .where('revision.id', '=', input.agent_revision_id)
-          .where('revision.workspace_id', '=', workspaceId)
-          .where('revision.project_id', '=', project.id)
-          .where('output.workspace_id', '=', workspaceId)
-          .where('output.project_id', '=', project.id)
-          .where('output.kind', '=', 'prompt_portfolio')
-          .executeTakeFirst()
-      : null;
-    if (input.agent_revision_id && !revision)
-      throw generationInvalid('Portfolio revision is unavailable in this project');
     // Persisted search data only: grounding never fetches, and an empty result
     // leaves generation exactly as it is without it.
     const observed = await loadObservedQueries(trx, {
@@ -376,7 +355,6 @@ export function generationContext(
       snapshot,
       demand,
       observed,
-      revision,
       vocabulary: await loadVocabulary(
         trx,
         project.id,

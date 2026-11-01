@@ -30,7 +30,7 @@ const entries = (items: readonly ChipItem[]): MapEntryDraft[] =>
     review_state: item.suggested ? 'suggested' : 'confirmed',
   }));
 
-/** One offering's buyers and buying situations, from the business map. */
+/** One offering's buyers, buying situations and attributes, from the business map. */
 function OfferingFacts({
   map,
   disabled,
@@ -56,6 +56,14 @@ function OfferingFacts({
         items={entryChips(map.situations)}
         onChange={(items) => onChange({ ...map, situations: entries(items) })}
         placeholder="e.g. small back garden"
+        disabled={disabled}
+        max={LIST_MAX}
+      />
+      <ChipListField
+        label="Attributes"
+        items={entryChips(map.attributes)}
+        onChange={(items) => onChange({ ...map, attributes: entries(items) })}
+        placeholder="e.g. returns the ball"
         disabled={disabled}
         max={LIST_MAX}
       />
