@@ -136,6 +136,8 @@ const promptAdmissionDropReasons = [
   'stage',
   'duplicate',
   'length',
+  // Over the 16-word cap: a buyer types a short question.
+  'too_many_words',
   'placeholder',
   'observed_copy',
   'off_topic',
@@ -143,6 +145,8 @@ const promptAdmissionDropReasons = [
   'branded_core',
   'brand_missing',
   'competitor_missing',
+  // Asks what a tracked prompt, a pending candidate or an earlier draft asks.
+  'near_duplicate',
 ] as const;
 const promptAdmissionDropReasonSchema = z.enum(promptAdmissionDropReasons);
 export type PromptAdmissionDropReason = z.infer<typeof promptAdmissionDropReasonSchema>;

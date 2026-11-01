@@ -1,16 +1,24 @@
 /**
  * The quick-generate universe plan: a deterministic, coverage-first sample of
- * offering × stage × intent × facet × market cells, the narrow brief a draft
+ * offering × facet × stage × cohort × market cells, the narrow brief a draft
  * batch receives, and the geography vocabulary admission and metrics read.
  */
 import { DENSE_SCRIPT } from '../analysis/aliases.ts';
 import { policy } from '../config.ts';
 import { record, strings } from '../db/json.ts';
+import { z } from 'zod';
+
 import type { GenerationContext, OfferingMap } from './generation-context.ts';
-import { generationSetting, type GenerationInput } from './generation-input.ts';
+import {
+  cohortShares,
+  generationCohorts,
+  generationSetting,
+  type GenerationCohort,
+  type GenerationInput,
+} from './generation-input.ts';
 import { isNonEmpty, type NonEmpty } from '../lists.ts';
 import { bindingTokens, sharedTokens } from './binding.ts';
-import type { ObservedQuery } from './observed-queries.ts';
+import { seedQueries, type ObservedQuery } from './observed-queries.ts';
 
 const G = policy.prompts.generation;
 export const dimensions = ['attributes', 'situations', 'audiences'] as const;
@@ -19,6 +27,8 @@ const PERSONA = dimensions.indexOf('audiences');
 
 export type Slot = {
   slot_id: string;
+  /** The cohort the cell is drafted and admitted under. */
+  cohort: GenerationCohort;
   topic_id: string;
   topic_name: string;
   topic_description: string;
@@ -35,12 +45,39 @@ type Grounding = Pick<
   ObservedQuery,
   'id' | 'source' | 'text' | 'classifier_version' | 'override_id'
 >;
-type Facet = { dimension: number; value: string; suggested: boolean };
+/**
+ * Where a facet value comes from: `confirmed` by a person in the business map,
+ * `suggested` by a model or inferred buyer roles, or `requested` as a persona
+ * for this run only.
+ */
+type FacetSource = 'confirmed' | 'suggested' | 'requested';
+type Facet = { dimension: number; value: string; source: FacetSource };
+/** A cell's evidence review state; `not_applicable` when it carries no facet. */
+type CellReviewState = FacetSource | 'not_applicable';
 type PlanContext = Pick<GenerationContext, 'selected' | 'topics' | 'maps' | 'observed'> & {
   context: Pick<GenerationContext['context'], 'business_context'>;
 };
 
 const business = (context: PlanContext) => record(context.context.business_context);
+
+/**
+ * `business_context.topic_offerings`: the saved offerings each recovered topic
+ * was proposed from, by topic id, so a buyer-facing category keeps its
+ * offerings' business-map facets whatever it is named.
+ */
+export const topicLinks = z.record(z.string(), z.array(z.string())).catch({});
+
+/**
+ * The offerings a topic covers: those it was proposed from, else the offering
+ * it is named after.
+ */
+export function topicOfferings(
+  values: Record<string, unknown>,
+  topic: { id: string; name: string },
+): string[] {
+  const linked = topicLinks.parse(values.topic_offerings ?? {})[topic.id] ?? [];
+  return linked.length ? linked : [topic.name];
+}
 
 /** The reviewed market scope's share of cells that may name a market. */
 function locationShare(context: PlanContext): number {
@@ -97,93 +134,153 @@ export function namesPlace(text: string, terms: readonly string[]): boolean {
   });
 }
 
-function combinations(map: OfferingMap | undefined, personas: Facet[]): Facet[][] {
-  const options = [
-    ...dimensions.flatMap((dimension, index) =>
-      (map?.[dimension] ?? []).map((entry) => ({
-        dimension: index,
-        value: entry.value,
-        suggested: entry.review_state !== 'confirmed',
-      })),
-    ),
-    ...(map?.audiences.some((entry) => entry.review_state === 'confirmed') ? [] : personas),
-  ];
-  const result: Facet[][] = [[]];
-  for (const option of options) {
-    // Extend only the combinations that existed before this option.
-    const size = result.length;
-    for (let index = 0; index < size; index++) {
-      const prior = result[index]!;
-      if (
-        prior.length >= G.cell_max_facets ||
-        prior.some((item) => item.dimension === option.dimension)
-      )
-        continue;
-      const values = new Set([
-        ...prior.map((item) => item.value.toLowerCase()),
-        option.value.toLowerCase(),
-      ]);
-      if (
-        map?.exclusions.some(
-          (pair) => values.has(pair.first.toLowerCase()) && values.has(pair.second.toLowerCase()),
-        )
-      )
-        continue;
-      result.push([...prior, option]);
-    }
-  }
-  return result.slice(1);
-}
+const entryFacets = (dimension: number, entries: OfferingMap[(typeof dimensions)[number]]) =>
+  entries.map((entry) => ({
+    dimension,
+    value: entry.value,
+    source: entry.review_state === 'confirmed' ? ('confirmed' as const) : ('suggested' as const),
+  }));
+const personaFacets = (values: readonly string[], source: FacetSource) =>
+  values.map((value) => ({ dimension: PERSONA, value, source }));
+/** Facets with case-insensitively repeated values removed, first spelling kept. */
+const distinctFacets = (facets: readonly Facet[]) => [
+  ...new Map(facets.map((facet) => [facet.value.toLowerCase(), facet])).values(),
+];
 
 type Planner = {
   topic: GenerationContext['selected'][number];
-  map: OfferingMap | undefined;
-  combos: Facet[][];
+  /** The offering label cells carry. */
+  offering: string;
+  /** The topic's facet options; every cell takes exactly one when any exist. */
+  options: Facet[];
   cells: number;
-  faceted: number;
   located: number;
   usage: Map<string, number>;
 };
 
-function planners(context: PlanContext, suggestions: OfferingMap[]): Planner[] {
+/**
+ * The offering maps a topic draws facets from: the map named like the topic,
+ * else the maps of the offerings it was proposed from (`topicOfferings`),
+ * else its parent's. A map named like the topic lends its offering label; a
+ * category proposed from offerings keeps its own buyer-facing name.
+ */
+function topicMaps(
+  context: PlanContext,
+  maps: readonly OfferingMap[],
+  topic: GenerationContext['selected'][number],
+): { maps: OfferingMap[]; offering: string } {
+  const values = business(context);
+  const withFacets = (name: string) =>
+    maps.filter(
+      (map) =>
+        map.offering.toLowerCase() === name.toLowerCase() &&
+        dimensions.some((dimension) => map[dimension].length),
+    );
+  const parent = context.topics.find((item) => item.id === topic.parent_id);
+  for (const owner of parent ? [topic, parent] : [topic]) {
+    const named = withFacets(owner.name);
+    if (named[0]) return { maps: named.slice(0, 1), offering: named[0].offering };
+    const linked = topicOfferings(values, owner).flatMap(withFacets);
+    if (linked.length) return { maps: linked, offering: topic.name };
+  }
+  return { maps: [], offering: topic.name };
+}
+
+/**
+ * Each selected topic's facet options: its offering maps' attributes,
+ * situations and audiences. The run's personas, when requested, replace the
+ * audiences; otherwise inferred buyer roles stand in for missing confirmed
+ * audiences. A topic without map facets falls back to those personas and
+ * every audience the business map lists; only a business without any of them
+ * plans bare cells.
+ */
+function planners(
+  context: PlanContext,
+  suggestions: OfferingMap[],
+  input: GenerationInput,
+): Planner[] {
   const maps = [...context.maps, ...suggestions];
-  // Without confirmed audiences, inferred buyer roles are suggested personas.
-  const personas = strings(business(context).buyer_roles).map((value) => ({
-    dimension: PERSONA,
-    value,
-    suggested: true,
-  }));
+  const requested = personaFacets(input.distribution?.personas ?? [], 'requested');
+  const roles = personaFacets(strings(business(context).buyer_roles), 'suggested');
+  const audiences = maps.flatMap((map) => entryFacets(PERSONA, map.audiences));
+  const fallback = distinctFacets(requested.length ? requested : [...roles, ...audiences]);
   return context.selected.map((topic) => {
-    const parent = context.topics.find((item) => item.id === topic.parent_id);
-    const match = (name: string) =>
-      maps.find(
-        (map) =>
-          map.offering.toLowerCase() === name.toLowerCase() &&
-          dimensions.some((dimension) => map[dimension].length),
-      );
-    const map = match(topic.name) ?? (parent ? match(parent.name) : undefined);
+    const { maps: own, offering } = topicMaps(context, maps, topic);
+    const confirmedAudience = own.some((map) =>
+      map.audiences.some((entry) => entry.review_state === 'confirmed'),
+    );
+    let people = requested;
+    if (!requested.length)
+      people = [
+        ...own.flatMap((map) => entryFacets(PERSONA, map.audiences)),
+        ...(confirmedAudience ? [] : roles),
+      ];
+    const options = own.length
+      ? distinctFacets([
+          ...own.flatMap((map) => entryFacets(dimensions.indexOf('attributes'), map.attributes)),
+          ...own.flatMap((map) => entryFacets(dimensions.indexOf('situations'), map.situations)),
+          ...people,
+        ])
+      : [];
     return {
       topic,
-      map,
-      combos: combinations(map, personas),
+      offering,
+      options: options.length ? options : fallback,
       cells: 0,
-      faceted: 0,
       located: 0,
       usage: new Map(),
     };
   });
 }
 
-/** The least-used facet combination, confirmed values before suggested ones. */
-function nextCombo(plan: Planner, combos: NonEmpty<Facet[]>): Facet[] {
-  const used = (facet: Facet) => plan.usage.get(`${facet.dimension}:${facet.value}`) ?? 0;
-  const score = (combo: Facet[]) => combo.reduce((sum, facet) => sum + used(facet), 0);
-  const compare = (a: Facet[], b: Facet[]) =>
-    score(a) - score(b) ||
-    Number(a.some((facet) => facet.suggested)) - Number(b.some((facet) => facet.suggested)) ||
-    a.length - b.length;
+const facetKey = (facet: Facet) => `${facet.dimension}:${facet.value}`;
+
+/**
+ * The topic's least-used facet: fewest uses of the value, then of its
+ * dimension (so attributes, situations and audiences alternate), confirmed
+ * values before suggestions, then map order.
+ */
+function nextFacet(plan: Planner, options: NonEmpty<Facet>): Facet {
+  const used = (key: string) => plan.usage.get(key) ?? 0;
+  const compare = (a: Facet, b: Facet) =>
+    used(facetKey(a)) - used(facetKey(b)) ||
+    used(`dimension:${a.dimension}`) - used(`dimension:${b.dimension}`) ||
+    Number(a.source === 'suggested') - Number(b.source === 'suggested');
   // The first of the least: the head of a stable sort.
-  return combos.reduce((best, combo) => (compare(combo, best) < 0 ? combo : best));
+  return options.reduce((best, facet) => (compare(facet, best) < 0 ? facet : best));
+}
+
+/** Planned stages weighted by the requested intent mix; equal without one. */
+function stageWeights(input: GenerationInput): [string, number][] {
+  const mix = input.distribution?.intent_mix;
+  return G.planned_stages.map((stage) => {
+    if (!mix) return [stage, 1];
+    const shares = Object.entries(mix).filter(([intent]) => G.intent_mix_stages[intent] === stage);
+    return [stage, shares.reduce((sum, [, share]) => sum + share, 0)];
+  });
+}
+
+/**
+ * The next label by highest averages (Sainte-Laguë): the option whose next use
+ * keeps its count closest to its weight's share. Each later counter breaks the
+ * ties of the one before; remaining ties keep option order. Zero weights never
+ * win.
+ */
+function proportional<T extends string>(
+  weights: readonly (readonly [T, number])[],
+  ...counters: ((option: T) => number)[]
+): T | null {
+  let best: { option: T; quotients: number[] } | null = null;
+  const ahead = (a: number[], b: number[]) => {
+    const index = a.findIndex((value, at) => value !== b[at]);
+    return index >= 0 && a[index]! > b[index]!;
+  };
+  for (const [option, weight] of weights) {
+    if (weight <= 0) continue;
+    const quotients = counters.map((used) => weight / (2 * used(option) + 1));
+    if (!best || ahead(quotients, best.quotients)) best = { option, quotients };
+  }
+  return best?.option ?? null;
 }
 
 /**
@@ -223,69 +320,87 @@ function groundingFor(
 
 /**
  * Plan `count × overgenerate_factor` cells round-robin over the selected
- * offerings. Each offering covers every stage with a bare cell before any
- * facet; afterwards facets attach to at most `facet_cell_share` of its cells
- * and a market to at most the scope's `location_policy` share.
+ * offerings. Every cell carries exactly one facet (the topic's least-used
+ * attribute, situation or audience) from the first cell on. The buyer stage
+ * is a label balanced per topic and across the run, weighted by any requested
+ * intent mix; cohorts follow the requested shares. A market attaches to at
+ * most the scope's `location_policy` share of a topic's cells. Grounding
+ * comes only from the searches the request's seeds allow.
  */
 export function planSlots(
   context: PlanContext,
   input: GenerationInput,
   suggestions: OfferingMap[],
 ): Slot[] {
-  const plans = planners(context, suggestions);
-  const searches = searchesByTopic(context.observed);
+  const plans = planners(context, suggestions, input);
+  const searches = searchesByTopic(seedQueries(context.observed, input));
   const markets = plannedMarkets(context),
     share = locationShare(context),
-    stages = G.stages;
-  if (!isNonEmpty(stages)) throw new Error('Expected at least one configured buyer stage');
+    stages = stageWeights(input),
+    shares = cohortShares(input),
+    plannedStages = G.planned_stages;
+  if (!isNonEmpty(plannedStages)) throw new Error('Expected at least one planned buyer stage');
+  const run = new Map<string, number>();
+  const runUsed = (key: string) => run.get(key) ?? 0;
+  const count = (usage: Map<string, number>, key: string) =>
+    usage.set(key, (usage.get(key) ?? 0) + 1);
   return Array.from(
     { length: input.count * generationSetting('overgenerate_factor') },
     (_, index) => {
       const plan = plans[index % plans.length]!;
       plan.cells += 1;
       const used = (key: string) => plan.usage.get(key) ?? 0;
-      const least = (key: string, options: NonEmpty<string>) =>
-        options.reduce((best, option) =>
-          used(`${key}:${option}`) < used(`${key}:${best}`) ? option : best,
-        );
-      const stage = least('stage', stages);
-      const combo =
-        plan.cells > G.stages.length &&
-        isNonEmpty(plan.combos) &&
-        plan.faceted + 1 <= G.facet_cell_share * plan.cells
-          ? nextCombo(plan, plan.combos)
-          : [];
+      const cohort =
+        proportional(
+          generationCohorts.map((name) => [name, shares[name]] as const),
+          (name) => runUsed(`cohort:${name}`),
+        ) ?? 'core';
+      // A topic first covers each weighted stage once; then the run keeps the
+      // requested proportions, and the topic's own counts break ties.
+      const uncovered = stages.filter(([name]) => !used(`stage:${name}`));
+      const stage =
+        proportional(
+          uncovered.some(([, weight]) => weight > 0) ? uncovered : stages,
+          (name) => runUsed(`stage:${name}`),
+          (name) => used(`stage:${name}`),
+        ) ?? plannedStages[0];
+      const facet = isNonEmpty(plan.options) ? nextFacet(plan, plan.options) : null;
       const market =
         isNonEmpty(markets) && plan.located + 1 <= share * plan.cells
-          ? least('market', markets)
+          ? markets.reduce((best, option) =>
+              used(`market:${option}`) < used(`market:${best}`) ? option : best,
+            )
           : '';
-      if (combo.length) plan.faceted += 1;
       if (market) plan.located += 1;
       for (const key of [
-        ...combo.map((facet) => `${facet.dimension}:${facet.value}`),
+        ...(facet ? [facetKey(facet), `dimension:${facet.dimension}`] : []),
         `stage:${stage}`,
         ...(market ? [`market:${market}`] : []),
       ])
-        plan.usage.set(key, used(key) + 1);
-      const need: Record<string, string> = { offering: plan.map?.offering ?? plan.topic.name };
-      for (const facet of combo) need[facets[facet.dimension]!] = facet.value;
+        count(plan.usage, key);
+      count(run, `stage:${stage}`);
+      count(run, `cohort:${cohort}`);
+      const need: Record<string, string> = { offering: plan.offering };
+      const reviewState: CellReviewState = facet?.source ?? 'not_applicable';
+      if (facet) need[facets[facet.dimension]!] = facet.value;
       if (market) need.market = market;
       const grounding = groundingFor(searches.get(plan.topic.id) ?? [], need);
       return {
         slot_id: `q${index + 1}`,
+        cohort,
         topic_id: plan.topic.id,
         topic_name: plan.topic.name,
         topic_description: plan.topic.description,
         buyer_need: need,
         target_buyer_stage: stage,
         allowed_prompt_intents:
-          input.cohort === 'comparison' ? ['compare'] : Object.keys(G.intent_legacy),
+          cohort === 'comparison' ? ['compare'] : Object.keys(G.intent_legacy),
         target_prompt_intents: G.stage_intents[stage] ?? [],
         evidence_ref: {
           kind: 'business_map_cell',
           ...need,
           target_buyer_stage: stage,
-          review_state: combo.some((facet) => facet.suggested) ? 'suggested' : 'confirmed',
+          review_state: reviewState,
           evidence_type: 'hypothesis',
         },
         ...(grounding.length ? { grounding } : {}),
@@ -306,11 +421,17 @@ export function modelSlot({ grounding, ...slot }: Slot) {
 
 /**
  * What a quick-generate draft batch knows about the business: category,
- * offerings, closed facets and register. No prose, sources, demand signals or
- * competitors, so the wording follows the planned cell rather than the profile.
- * The only observed data a batch sees is a grounded slot's example searches.
+ * offerings, closed facets and register, plus the request's note for the run.
+ * No prose, sources or demand signals, so the wording follows the planned cell
+ * rather than the profile. Only branded cohorts see the brand's name, and only
+ * comparisons its competitors' names: core drafts must name neither. The only
+ * observed data a batch sees is a grounded slot's example searches.
  */
-export function generationBrief(context: GenerationContext) {
+export function generationBrief(
+  context: GenerationContext,
+  input: Pick<GenerationInput, 'run_context'>,
+  cohort: GenerationCohort = 'core',
+) {
   const values = business(context);
   const fields = G.quick_brief_fields.filter(
     (field) => values[field] != null && values[field] !== '',
@@ -324,5 +445,10 @@ export function generationBrief(context: GenerationContext) {
     field_sources: Object.fromEntries(
       fields.filter((field) => field in sources).map((field) => [field, sources[field]]),
     ),
+    ...(input.run_context ? { run_context: input.run_context } : {}),
+    ...(cohort === 'core' ? {} : { brand_name: context.context.brand_name }),
+    ...(cohort === 'comparison'
+      ? { competitors: context.context.competitors.map((row) => row.name) }
+      : {}),
   };
 }

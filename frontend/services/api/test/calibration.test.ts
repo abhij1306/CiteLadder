@@ -6,9 +6,13 @@ import { calibrationReport } from '../src/prompts/calibration.ts';
 it('separates gate outcomes from reviewed outcomes and excludes older question schemas', () => {
   const decision = {
     question_schema_version: policy.models.quality.question_schema_version,
-    answers: Object.fromEntries(
-      Object.keys(policy.models.quality.noul_questions).map((key) => [key, 0.01]),
-    ),
+    answers: {
+      ...Object.fromEntries(
+        Object.keys(policy.models.quality.noul_questions).map((key) => [key, 0.01]),
+      ),
+      // Flagged under its own provisional threshold (0.4), not the shared one (0.35).
+      names_a_business: 0.38,
+    },
   };
   const report = calibrationReport([
     { decision, disposition: 'accepted', category: 'Shoes', grounded: true },
@@ -29,6 +33,14 @@ it('separates gate outcomes from reviewed outcomes and excludes older question s
     false_reject_rate: 1,
     false_accept_rate: 0,
     by_category: { Shoes: { reviewed: 2, agreement: 0.5 } },
+    questions: {
+      names_a_business: {
+        answered_accepted: 1,
+        answered_rejected: 1,
+        false_flag_rate: 1,
+        false_reject_rate: 0,
+      },
+    },
     by_grounding: {
       grounded: { gate_rejected: 1, accepted: 1, rejected: 0, accept_rate: 1 },
       ungrounded: { gate_rejected: 0, accepted: 0, rejected: 1, accept_rate: 0 },

@@ -69,6 +69,18 @@ export type PromptGenerateInput = {
   count?: number;
   // Scope generation to existing topics; omitted or empty = every topic.
   topic_ids?: string[];
+  // A short note for this run only; never saved as a business fact.
+  run_context?: string;
+  // Omitted = a core-only run with stages balanced; shares are 0–1.
+  distribution?: {
+    branded_share?: number;
+    comparison_share?: number;
+    intent_mix?: { informational: number; commercial: number; transactional: number };
+    personas?: string[];
+  };
+  // Which persisted searches may steer wording; omitted = every source.
+  seed_source?: 'search_console' | 'search_intelligence' | 'none';
+  seed_query_ids?: string[];
 };
 
 export const promptsApi = {

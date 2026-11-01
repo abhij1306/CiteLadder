@@ -97,6 +97,21 @@ export const jev = {
     minimum: 0,
     maximum: 1,
   },
+  /** Provisional thresholds of the core-only `names_a_business` question, calibrated apart. */
+  answerable_flag_below: {
+    env: ['JEV_ANSWERABLE_FLAG_BELOW'],
+    type: 'float',
+    default: 0.4,
+    minimum: 0,
+    maximum: 1,
+  },
+  answerable_fail_below: {
+    env: ['JEV_ANSWERABLE_FAIL_BELOW'],
+    type: 'float',
+    default: 0.15,
+    minimum: 0,
+    maximum: 1,
+  },
 };
 
 export const quality = {
@@ -160,6 +175,20 @@ export const quality = {
       },
     },
   },
+  /**
+   * Asked of core drafts only (branded diagnostics and comparisons name the
+   * brand by design), under the `answerable_*` thresholds.
+   */
+  core_noul_questions: {
+    names_a_business: {
+      instructions:
+        'Would a good answer to `candidate.question` mainly name specific businesses, products, providers or places to buy from, for one concise buyer need? A yes/no question, a request for general advice or instructions, or a question stacking several requirements is not.',
+      criteria: {
+        true: 'One concise need, answered by naming businesses or products',
+        false: 'Answered with advice, a yes/no or an explanation, or it stacks several needs',
+      },
+    },
+  },
   intent_instructions: 'What does the person asking `candidate.question` want from the answer?',
   intent_descriptions: {
     learn: 'To understand a topic or how something works',
@@ -189,6 +218,7 @@ export const qualityGatesReported = ['off', 'unavailable'];
 export function validateJevSettings(settings: Record<keyof typeof jev, unknown>): void {
   if (
     Number(settings.fail_below) > Number(settings.flag_below) ||
+    Number(settings.answerable_fail_below) > Number(settings.answerable_flag_below) ||
     Number(settings.duplicate_fail_at) < Number(settings.duplicate_flag_at)
   )
     throw new ConfigError('Invalid JEV thresholds');

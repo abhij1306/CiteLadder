@@ -8,6 +8,12 @@ import { ModelError, providerErrorCode } from '../models/http.ts';
 import type { JevClient } from '../models/jev.ts';
 import type { GenerationContext } from './generation-context.ts';
 import type { Draft } from './generation-drafts.ts';
+import {
+  cohortShares,
+  generationCohorts,
+  type GenerationCohort,
+  type GenerationInput,
+} from './generation-input.ts';
 
 const Q = policy.models.quality;
 const setting = (name: keyof typeof policy.models.jev) =>
@@ -16,40 +22,56 @@ export const probability = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
 const logger = getLogger('app.domain.prompts.quality_judge');
 
+/** The yes/no questions a draft of `cohort` is asked; core drafts add the core-only ones. */
+export const noulQuestions = (cohort: unknown) => ({
+  ...Q.noul_questions,
+  ...(cohort === 'core' ? Q.core_noul_questions : {}),
+});
+
 export function applyQualityPolicy(decision: Record<string, unknown>) {
   const thresholds = {
     flag_below: Number(setting('flag_below')),
     fail_below: Number(setting('fail_below')),
+    answerable_flag_below: Number(setting('answerable_flag_below')),
+    answerable_fail_below: Number(setting('answerable_fail_below')),
     duplicate_flag_at: Number(setting('duplicate_flag_at')),
     duplicate_fail_at: Number(setting('duplicate_fail_at')),
   };
   if (
     thresholds.fail_below > thresholds.flag_below ||
+    thresholds.answerable_fail_below > thresholds.answerable_flag_below ||
     thresholds.duplicate_fail_at < thresholds.duplicate_flag_at
   )
     throw new Error('Invalid JEV thresholds');
   const answers = record(decision.answers),
     duplicate = record(decision.duplicate_of);
-  const values = Object.keys(Q.noul_questions).map(
-    (key) => [key, probability(answers[key])] as const,
-  );
+  // A decision recorded without a cohort was a core draft's.
+  const values = Object.keys(noulQuestions(decision.cohort ?? 'core')).map((key) => {
+    const core = Object.hasOwn(Q.core_noul_questions, key);
+    return {
+      key,
+      value: probability(answers[key]),
+      flagBelow: core ? thresholds.answerable_flag_below : thresholds.flag_below,
+      failBelow: core ? thresholds.answerable_fail_below : thresholds.fail_below,
+    };
+  });
   const duplicateP =
     duplicate.choice === Q.duplicate_none
       ? null
       : probability(record(duplicate.probabilities)[String(duplicate.choice)]);
   const flags = values
-    .filter(([, value]) => value !== null && value < thresholds.flag_below)
-    .map(([key]) => key);
+    .filter(({ value, flagBelow }) => value !== null && value < flagBelow)
+    .map(({ key }) => key);
   if (duplicateP !== null && duplicateP >= thresholds.duplicate_flag_at) flags.push('duplicate_of');
   if (
-    values.some(([, value]) => value === null) ||
+    values.some(({ value }) => value === null) ||
     (Object.keys(duplicate).length > 0 &&
       duplicate.choice !== Q.duplicate_none &&
       duplicateP === null)
   )
     flags.push(Q.flag_incomplete);
   const fail =
-    values.some(([, value]) => value !== null && value < thresholds.fail_below) ||
+    values.some(({ value, failBelow }) => value !== null && value < failBelow) ||
     (duplicateP !== null && duplicateP >= thresholds.duplicate_fail_at);
   let verdict = flags.length ? 'uncertain' : 'pass';
   if (fail) verdict = 'fail';
@@ -78,9 +100,9 @@ function choice(value: unknown, allowed: readonly string[]) {
 }
 
 /** The JEV question set; `duplicate_of` only when the topic has prior texts. */
-function jevQuestions(options: Record<string, string>, hasPrior: boolean) {
+function jevQuestions(options: Record<string, string>, hasPrior: boolean, cohort: string) {
   const questions: Record<string, unknown> = Object.fromEntries(
-    Object.entries(Q.noul_questions).map(([key, value]) => [key, { type: 'noul', ...value }]),
+    Object.entries(noulQuestions(cohort)).map(([key, value]) => [key, { type: 'noul', ...value }]),
   );
   questions.intent = {
     type: 'choice',
@@ -166,7 +188,7 @@ export async function judgeDrafts(
         buyer_need: draft.slot.buyer_need,
         candidate: { question: draft.text },
       };
-      const questions = jevQuestions(options, texts.length > 0);
+      const questions = jevQuestions(options, texts.length > 0, draft.slot.cohort);
       const hash = createHash('sha256')
         .update(
           JSON.stringify({
@@ -199,12 +221,16 @@ export async function judgeDrafts(
         return;
       }
       const answers = Object.fromEntries(
-        Object.keys(Q.noul_questions).map((key) => [key, probability(result.answers[key]?.noul)]),
+        Object.keys(noulQuestions(draft.slot.cohort)).map((key) => [
+          key,
+          probability(result.answers[key]?.noul),
+        ]),
       );
       const values = Object.values(answers).filter((value): value is number => value !== null);
       draft.decision = applyQualityPolicy({
         model: result.model,
         question_schema_version: Q.question_schema_version,
+        cohort: draft.slot.cohort,
         state_hash: hash,
         answers,
         intent: choice(result.answers.intent, Object.keys(Q.intent_descriptions)),
@@ -224,19 +250,78 @@ export async function judgeDrafts(
 export const gatedOut = (draft: Draft) =>
   draft.decision?.mode === 'gate' && draft.decision.verdict === 'fail';
 
-export function selectDrafts(drafts: Draft[], count: number): Draft[] {
+/**
+ * Each cohort's share of `count` by largest remainder: a single-cohort run
+ * keeps the whole count in its cohort.
+ */
+export function cohortQuotas(
+  input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>,
+): Record<GenerationCohort, number> {
+  const shares = cohortShares(input);
+  const exact = generationCohorts.map((cohort) => ({
+    cohort,
+    value: shares[cohort] * input.count,
+  }));
+  const quotas: Record<GenerationCohort, number> = { core: 0, brand_diagnostic: 0, comparison: 0 };
+  for (const { cohort, value } of exact) quotas[cohort] = Math.floor(value);
+  let left = input.count - Object.values(quotas).reduce((sum, value) => sum + value, 0);
+  // A stable sort: equal remainders keep cohort order.
+  for (const { cohort, value } of exact.toSorted(
+    (a, b) => b.value - Math.floor(b.value) - (a.value - Math.floor(a.value)),
+  )) {
+    if (left <= 0) break;
+    if (value <= 0) continue;
+    quotas[cohort] += 1;
+    left -= 1;
+  }
+  return quotas;
+}
+
+/**
+ * Selection for a run: each cohort fills its own quota from its own drafts,
+ * so a cohort's shortfall is reported, never filled from another cohort.
+ */
+export function selectRun(
+  drafts: Draft[],
+  input: Pick<GenerationInput, 'count' | 'cohort' | 'distribution'>,
+): Draft[] {
+  const quotas = cohortQuotas(input);
+  return generationCohorts
+    .flatMap((cohort) =>
+      selectDrafts(
+        drafts.filter((draft) => draft.slot.cohort === cohort),
+        quotas[cohort],
+        { balanceStages: !input.distribution?.intent_mix },
+      ),
+    )
+    .sort((a, b) => drafts.indexOf(a) - drafts.indexOf(b));
+}
+
+/**
+ * Up to `count` drafts, passing judgments first, spread across topic, stage,
+ * intent and the cell's facets. A requested intent mix already weighted the
+ * planned stages, so `balanceStages: false` keeps selection from evening it out.
+ */
+export function selectDrafts(
+  drafts: Draft[],
+  count: number,
+  { balanceStages = true }: { balanceStages?: boolean } = {},
+): Draft[] {
   const remaining = drafts.filter((draft) => !gatedOut(draft)),
     selected: Draft[] = [];
   const usage = new Map<string, number>();
   const features = (draft: Draft) => [
     `topic:${draft.slot.topic_id}`,
-    `stage:${draft.buyer_stage}`,
+    ...(balanceStages ? [`stage:${draft.buyer_stage}`] : []),
     `intent:${draft.prompt_intent}`,
     ...Object.entries(draft.slot.buyer_need).map(([key, value]) => `${key}:${value}`),
   ];
   const used = (key: string) => usage.get(key) ?? 0;
   const quality = (draft: Draft) =>
     draft.decision?.mode === 'gate' && draft.decision.verdict === 'pass' ? 0 : 1;
+  // A facet a person confirmed in the map or requested for this run comes first.
+  const chosenByPerson = (draft: Draft) =>
+    ['confirmed', 'requested'].includes(String(draft.slot.evidence_ref.review_state));
   while (remaining.length && selected.length < count) {
     remaining.sort(
       (a, b) =>
@@ -244,8 +329,7 @@ export function selectDrafts(drafts: Draft[], count: number): Draft[] {
         used(`topic:${a.slot.topic_id}`) - used(`topic:${b.slot.topic_id}`) ||
         features(a).reduce((sum, key) => sum + used(key), 0) -
           features(b).reduce((sum, key) => sum + used(key), 0) ||
-        Number(a.slot.evidence_ref.review_state !== 'confirmed') -
-          Number(b.slot.evidence_ref.review_state !== 'confirmed'),
+        Number(chosenByPerson(b)) - Number(chosenByPerson(a)),
     );
     const best = remaining.shift()!;
     selected.push(best);

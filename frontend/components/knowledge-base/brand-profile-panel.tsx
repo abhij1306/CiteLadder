@@ -1,12 +1,12 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Save } from 'lucide-react';
-import { useState, type ComponentType, type ReactNode } from 'react';
+import { Plus, Save, X } from 'lucide-react';
+import { useId, useState, type ComponentType, type ReactNode } from 'react';
 
 import { Alert } from '@/components/ui/alert';
 import { BrandLogo } from '@/components/ui/brand-logo';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Icon } from '@/components/ui/icon';
@@ -80,11 +80,14 @@ function identityUpdate(identity: IdentityFacets, saved: IdentityFacets) {
   };
 }
 
-function parseProductsInput(value: string): string[] {
-  return value.split(',').flatMap((item) => {
-    const trimmed = item.trim();
-    return trimmed ? [trimmed] : [];
-  });
+const sameOffering = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The offerings with a typed but not yet added entry appended, so Save never drops it. */
+function withPending(offerings: readonly string[], pending: string): string[] {
+  const value = pending.trim();
+  return value && !offerings.some((item) => sameOffering(item, value))
+    ? [...offerings, value]
+    : [...offerings];
 }
 
 export function BrandProfilePanel({
@@ -115,7 +118,7 @@ export function BrandProfilePanel({
     identityFacets(profile.business_context),
   );
   const [identity, setIdentity] = useState(savedIdentity);
-  const [productsInput, setProductsInput] = useState(() => profile.products_services.join(', '));
+  const [pendingOffering, setPendingOffering] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<ProfileTab>('facts');
 
@@ -126,7 +129,7 @@ export function BrandProfilePanel({
         projectId,
         {
           ...profileUpdate(
-            { ...draft, products_services: parseProductsInput(productsInput) },
+            { ...draft, products_services: withPending(draft.products_services, pendingOffering) },
             savedDraft,
           ),
           ...identityUpdate(identity, savedIdentity),
@@ -143,7 +146,7 @@ export function BrandProfilePanel({
       const nextIdentity = identityFacets(next.business_context);
       setSavedIdentity(nextIdentity);
       setIdentity(nextIdentity);
-      setProductsInput(next.products_services.join(', '));
+      setPendingOffering('');
       setNotice('Brand knowledge saved. These details now inform assisted features.');
     },
   });
@@ -184,13 +187,13 @@ export function BrandProfilePanel({
               activeTab={activeTab}
               draft={draft}
               identity={identity}
-              productsInput={productsInput}
+              pendingOffering={pendingOffering}
               disabled={saveMutation.isPending}
               competitors={competitors}
               competitorSuggestions={competitorSuggestions}
               onDraftChange={setDraft}
               onIdentityChange={setIdentity}
-              onProductsChange={setProductsInput}
+              onPendingOfferingChange={setPendingOffering}
             />
           )}
         </TabPanel>
@@ -203,24 +206,24 @@ function ProfileTabPanel({
   activeTab,
   draft,
   identity,
-  productsInput,
+  pendingOffering,
   disabled,
   competitors,
   competitorSuggestions,
   onDraftChange,
   onIdentityChange,
-  onProductsChange,
+  onPendingOfferingChange,
 }: Readonly<{
   activeTab: ProfileTab;
   draft: BrandProfileDraft;
   identity: IdentityFacets;
-  productsInput: string;
+  pendingOffering: string;
   disabled: boolean;
   competitors: readonly TrackedCompetitor[];
   competitorSuggestions?: ReactNode;
   onDraftChange: (draft: BrandProfileDraft) => void;
   onIdentityChange: (identity: IdentityFacets) => void;
-  onProductsChange: (value: string) => void;
+  onPendingOfferingChange: (value: string) => void;
 }>) {
   if (activeTab === 'facts') {
     return (
@@ -272,17 +275,13 @@ function ProfileTabPanel({
             />
           )}
         </Field>
-        <Field label="Products and services" hint="Comma-separated category labels.">
-          {(field) => (
-            <Textarea
-              {...field}
-              rows={6}
-              disabled={disabled}
-              value={productsInput}
-              onChange={(event) => onProductsChange(event.target.value)}
-            />
-          )}
-        </Field>
+        <OfferingList
+          offerings={draft.products_services}
+          pending={pendingOffering}
+          disabled={disabled}
+          onChange={(products_services) => onDraftChange({ ...draft, products_services })}
+          onPendingChange={onPendingOfferingChange}
+        />
       </Stack>
     );
   }
@@ -394,6 +393,77 @@ function FacetChoice<T extends string>({
           if (next && !disabled) onPick(next);
         }}
       />
+    </Stack>
+  );
+}
+
+/**
+ * One offering per entry, so an offering whose name contains a comma
+ * ("simulator bays for golf courses, and community centres") stays one offering.
+ * A typed but unadded entry is held by the panel and saved with the list.
+ */
+function OfferingList({
+  offerings,
+  pending,
+  disabled,
+  onChange,
+  onPendingChange,
+}: Readonly<{
+  offerings: readonly string[];
+  pending: string;
+  disabled: boolean;
+  onChange: (offerings: string[]) => void;
+  onPendingChange: (value: string) => void;
+}>) {
+  const label = 'Products and services';
+  const hintId = useId();
+  const trimmed = pending.trim();
+  const canAdd = trimmed !== '' && !offerings.some((item) => sameOffering(item, trimmed));
+  const add = () => {
+    if (!canAdd) return;
+    onChange([...offerings, trimmed]);
+    onPendingChange('');
+  };
+  return (
+    <Stack gap="compact">
+      <span className={textRole('label')}>{label}</span>
+      {offerings.length ? (
+        <Stack as="ul" gap="tight" aria-label={label}>
+          {offerings.map((offering) => (
+            <Inline as="li" key={offering} className="type-body text-foreground">
+              <span>{offering}</span>
+              <IconButton
+                icon={X}
+                label={`Remove ${offering}`}
+                disabled={disabled}
+                onClick={() => onChange(offerings.filter((item) => item !== offering))}
+              />
+            </Inline>
+          ))}
+        </Stack>
+      ) : null}
+      <Inline>
+        <Input
+          value={pending}
+          aria-label={`Add to ${label}`}
+          aria-describedby={hintId}
+          disabled={disabled}
+          onChange={(event) => onPendingChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              add();
+            }
+          }}
+        />
+        <Button variant="secondary" onClick={add} disabled={disabled || !canAdd}>
+          <Icon icon={Plus} />
+          Add
+        </Button>
+      </Inline>
+      <span id={hintId} className="type-caption">
+        One offering per entry, named as a buyer would.
+      </span>
     </Stack>
   );
 }

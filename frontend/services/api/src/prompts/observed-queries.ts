@@ -53,6 +53,31 @@ export const isGrounded = (refs: unknown) =>
 export const groundedSql = (refs: RawBuilder<unknown>) =>
   sql<boolean>`coalesce(${refs} @> ${JSON.stringify([{ kind: O.evidence_kind }])}::jsonb, false)`;
 
+const SEED_SOURCES = {
+  search_console: 'gsc',
+  search_intelligence: 'search_intelligence',
+} as const satisfies Record<string, ObservedSource>;
+
+/**
+ * The searches a request lets steer wording: every loaded search when it names
+ * no seed source, none for `none`, else that source's searches, narrowed to
+ * the chosen ids when it names any. Admission still checks copies against
+ * every search the run read, whichever steered it.
+ */
+export function seedQueries(
+  observed: readonly ObservedQuery[],
+  seeds: {
+    seed_source?: keyof typeof SEED_SOURCES | 'none' | null;
+    seed_query_ids: readonly string[];
+  },
+): ObservedQuery[] {
+  if (!seeds.seed_source) return [...observed];
+  if (seeds.seed_source === 'none') return [];
+  const source = SEED_SOURCES[seeds.seed_source];
+  const ids = new Set(seeds.seed_query_ids);
+  return observed.filter((query) => query.source === source && (!ids.size || ids.has(query.id)));
+}
+
 export type ObservedScope = {
   workspaceId: string;
   projectId: string;

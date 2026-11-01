@@ -390,6 +390,7 @@ describe('grounded generation', () => {
       requests[0]!.slots.map(() => [
         'allowed_prompt_intents',
         'buyer_need',
+        'cohort',
         'evidence_ref',
         'slot_id',
         'target_buyer_stage',

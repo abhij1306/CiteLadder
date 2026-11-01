@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
-import { applyQualityPolicy, probability } from './generation-quality.ts';
+import { applyQualityPolicy, noulQuestions, probability } from './generation-quality.ts';
 import { groundedSql } from './observed-queries.ts';
 
 type Row = {
@@ -50,20 +50,24 @@ export function calibrationReport(rows: Row[]) {
       rejected.filter((row) => verdict(row) === 'pass').length,
       rejected.length,
     ),
+    // Every question a core draft is asked; the core-only ones under their own thresholds.
     questions: Object.fromEntries(
-      Object.keys(Q.noul_questions).map((question) => {
+      Object.keys(noulQuestions('core')).map((question) => {
         const a = values(accepted, question),
           r = values(rejected, question);
         const below = (values: number[], threshold: number) =>
           values.filter((value) => value < threshold).length;
-        const failed = below(r, thresholds.fail_below),
-          falseFails = below(a, thresholds.fail_below);
+        const own = Object.hasOwn(Q.core_noul_questions, question);
+        const failBelow = own ? thresholds.answerable_fail_below : thresholds.fail_below,
+          flagBelow = own ? thresholds.answerable_flag_below : thresholds.flag_below;
+        const failed = below(r, failBelow),
+          falseFails = below(a, failBelow);
         return [
           question,
           {
             answered_accepted: a.length,
             answered_rejected: r.length,
-            false_flag_rate: rate(below(a, thresholds.flag_below), a.length),
+            false_flag_rate: rate(below(a, flagBelow), a.length),
             false_reject_rate: rate(falseFails, a.length),
             rejected_caught_by_flag: rate(below(r, thresholds.flag_below), r.length),
             rejected_caught_by_fail: rate(failed, r.length),

@@ -76,8 +76,8 @@ describe('BrandProfilePanel', () => {
     );
     await user.type(screen.getByLabelText('Description'), 'A value-focused family retailer.');
     await user.click(screen.getByRole('tab', { name: 'Audience & Offerings' }));
-    await user.type(screen.getByLabelText('Products and services'), 'Clothing,');
-    expect(screen.getByLabelText('Products and services')).toHaveValue('Clothing,');
+    // A typed offering is saved even when Add was not pressed.
+    await user.type(screen.getByLabelText('Add to Products and services'), 'Clothing');
     await user.click(screen.getByRole('button', { name: /save brand knowledge/i }));
 
     expect(await screen.findByText(/brand knowledge saved/i)).toBeInTheDocument();
@@ -86,6 +86,70 @@ describe('BrandProfilePanel', () => {
       products_services: ['Clothing'],
     });
     expect(onSaved).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an offering containing a comma as one entry through a save', async () => {
+    const user = userEvent.setup({ delay: null });
+    const bays = 'Commercial simulator bays for golf courses, and community centers';
+    let requestBody: unknown;
+    mswServer.use(
+      http.put(`/api/v1/projects/${projectId}/brand-profile`, async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({
+          ...profile,
+          products_services: [bays, 'Golf nets, cages and mats'],
+        });
+      }),
+    );
+    renderWithProviders(
+      <BrandProfilePanel
+        projectId={projectId}
+        profile={{ ...profile, products_services: [bays] }}
+      />,
+    );
+    await user.click(screen.getByRole('tab', { name: 'Audience & Offerings' }));
+    await user.type(
+      screen.getByLabelText('Add to Products and services'),
+      'Golf nets, cages and mats{Enter}',
+    );
+    // A duplicate, in any case, cannot be added twice.
+    await user.type(
+      screen.getByLabelText('Add to Products and services'),
+      'golf NETS, cages and mats',
+    );
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+    await user.clear(screen.getByLabelText('Add to Products and services'));
+    await user.click(screen.getByRole('button', { name: /save brand knowledge/i }));
+
+    expect(await screen.findByText(/brand knowledge saved/i)).toBeInTheDocument();
+    expect(requestBody).toEqual({ products_services: [bays, 'Golf nets, cages and mats'] });
+    const saved = screen.getByRole('list', { name: 'Products and services' });
+    expect([...saved.querySelectorAll('li')].map((item) => item.textContent)).toEqual([
+      bays,
+      'Golf nets, cages and mats',
+    ]);
+  });
+
+  it('removes an offering from the saved list', async () => {
+    const user = userEvent.setup({ delay: null });
+    let requestBody: unknown;
+    mswServer.use(
+      http.put(`/api/v1/projects/${projectId}/brand-profile`, async ({ request }) => {
+        requestBody = await request.json();
+        return HttpResponse.json({ ...profile, products_services: ['Golf mats'] });
+      }),
+    );
+    renderWithProviders(
+      <BrandProfilePanel
+        projectId={projectId}
+        profile={{ ...profile, products_services: ['Golf nets', 'Golf mats'] }}
+      />,
+    );
+    await user.click(screen.getByRole('tab', { name: 'Audience & Offerings' }));
+    await user.click(screen.getByRole('button', { name: 'Remove Golf nets' }));
+    await user.click(screen.getByRole('button', { name: /save brand knowledge/i }));
+
+    await waitFor(() => expect(requestBody).toEqual({ products_services: ['Golf mats'] }));
   });
 
   it('edits the confirmed category, buyer and market after onboarding', async () => {
