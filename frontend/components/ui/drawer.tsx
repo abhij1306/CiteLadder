@@ -7,6 +7,16 @@ import { useInsertionEffect, useRef, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
+/**
+ * Width is a role, as for `Dialog`: `default` (32.5rem) for evidence and
+ * detail, `review` (51.25rem) for a sheet whose body is a multi-step form or
+ * a review table the reader works through row by row.
+ */
+const DRAWER_WIDTH = {
+  default: 'max-w-[32.5rem]',
+  review: 'max-w-205',
+} as const;
+
 /** Accessible right-side sheet for contextual evidence and detail. */
 export function Drawer({
   open,
@@ -22,6 +32,7 @@ export function Drawer({
   side = 'right',
   hideHeader = false,
   onAfterClose,
+  width = 'default',
 }: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,6 +55,7 @@ export function Drawer({
   hideHeader?: boolean;
   /** Runs after Radix restores focus to the drawer's original opener. */
   onAfterClose?: () => void;
+  width?: keyof typeof DRAWER_WIDTH;
 }>) {
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const wasOpenRef = useRef(false);
@@ -80,7 +92,8 @@ export function Drawer({
           }}
           data-side={side}
           className={cn(
-            'drawer-panel border-transparent bg-elevated shadow-modal z-modal fixed inset-y-0 flex w-full max-w-[32.5rem] flex-col focus-ring',
+            'drawer-panel border-transparent bg-elevated shadow-modal z-modal fixed inset-y-0 flex w-full flex-col focus-ring',
+            DRAWER_WIDTH[width],
             side === 'left'
               ? 'left-0 rounded-r-[var(--radius-card)] border-r'
               : 'right-0 rounded-l-[var(--radius-card)] border-l',

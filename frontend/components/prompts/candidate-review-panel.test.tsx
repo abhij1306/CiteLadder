@@ -4,7 +4,6 @@ import type { ComponentProps } from 'react';
 import { expect, it, vi } from 'vite-plus/test';
 
 import { CandidateReviewPanel } from './candidate-review';
-import { GeneratePromptsDialog } from './generate-prompts-dialog';
 
 const review: ComponentProps<typeof CandidateReviewPanel>['review'] = {
   candidates: [],
@@ -19,24 +18,14 @@ const review: ComponentProps<typeof CandidateReviewPanel>['review'] = {
   clearNotice: vi.fn(),
 };
 
-it('keeps review open while loading and explains an empty or expired batch', async () => {
+it('says it is loading, then explains an empty or expired batch', () => {
   const view = (loading: boolean) => (
-    <GeneratePromptsDialog
-      open
-      onOpenChange={vi.fn()}
-      topics={[]}
-      onGenerate={vi.fn()}
-      review={<CandidateReviewPanel review={{ ...review, isLoading: loading }} topics={[]} />}
-    />
+    <CandidateReviewPanel review={{ ...review, isLoading: loading }} topics={[]} />
   );
   const { rerender } = render(view(true));
-  expect(screen.getByRole('status')).toBeVisible();
-  expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('Loading suggestions…');
   rerender(view(false));
   expect(screen.getByText(/expired or already been reviewed/i)).toBeVisible();
-  expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
-  await userEvent.setup().click(screen.getByRole('button', { name: 'Generate more' }));
-  expect(screen.getByRole('spinbutton')).toBeVisible();
 });
 
 it('offers retry rather than showing an empty batch when the read fails', async () => {

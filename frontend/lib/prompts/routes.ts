@@ -1,5 +1,6 @@
-/** Query parameter that opens the Generate prompts dialog when the library loads. */
+/** Query parameter that opens the Prompt Builder when the library loads. */
 export const GENERATE_PROMPTS_PARAM = 'generate';
+/** Query parameter that opens the Prompt Builder on its review step. */
 export const REVIEW_PROMPTS_PARAM = 'review';
 
 export const PROMPTS_HREF = '/prompts';

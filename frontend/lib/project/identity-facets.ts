@@ -1,4 +1,8 @@
-import { buyerTypeSchema, marketScopeSchema } from '@citeladder/contracts/project';
+import {
+  businessModelSchema,
+  buyerTypeSchema,
+  marketScopeSchema,
+} from '@citeladder/contracts/project';
 import type { z } from 'zod';
 
 type BuyerType = z.infer<typeof buyerTypeSchema>;
@@ -18,6 +22,21 @@ export const MARKET_SCOPE_CHOICES = [
   { value: 'regional', label: 'Regional' },
   { value: 'global', label: 'Worldwide' },
 ] as const satisfies readonly { value: MarketScope; label: string }[];
+
+type BusinessModel = z.infer<typeof businessModelSchema>;
+
+/** How the business sells, as onboarding resolved it. */
+export const BUSINESS_MODEL_CHOICES = [
+  { value: 'b2b_saas', label: 'Software for businesses' },
+  { value: 'marketplace', label: 'Marketplace' },
+  { value: 'd2c_product', label: 'Products sold direct' },
+  { value: 'retail', label: 'Retailer' },
+  { value: 'local_service', label: 'Local service' },
+  { value: 'professional_service', label: 'Professional service' },
+  { value: 'regulated_finance', label: 'Financial services' },
+  { value: 'healthcare_provider', label: 'Healthcare provider' },
+  { value: 'education_provider', label: 'Education provider' },
+] as const satisfies readonly { value: BusinessModel; label: string }[];
 
 export type IdentityFacets = {
   category: string;

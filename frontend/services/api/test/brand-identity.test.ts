@@ -269,6 +269,56 @@ describe('brand profile', () => {
     }
   });
 
+  it('reviews the onboarding-only lists and business model, keeping new terms over a new category', async () => {
+    await profile({
+      businessContext: {
+        category: 'footwear',
+        category_terms: ['shoes'],
+        buyer_roles: ['runner'],
+        market_scope: 'local',
+        field_sources: { category_terms: 'inferred', buyer_roles: 'inferred' },
+      },
+    });
+    const edited = await call<BrandProfile>('/brand-profile', {
+      method: 'PUT',
+      body: {
+        category: 'trail running shoes',
+        category_terms: [' trail shoes ', 'Trail Shoes', 'hiking shoes'],
+        buyer_roles: [],
+        service_areas: ['Leeds', 'York'],
+        jobs_to_be_done: ['run muddy trails'],
+        business_model: 'd2c_product',
+      },
+    });
+    expect(edited.status).toBe(200);
+    // Sent terms survive the category change that drops inferred ones; lists
+    // are trimmed and deduplicated, and an empty list clears the field.
+    expect(edited.body.business_context).toEqual({
+      category: 'trail running shoes',
+      category_terms: ['trail shoes', 'hiking shoes'],
+      buyer_roles: [],
+      service_areas: ['Leeds', 'York'],
+      jobs_to_be_done: ['run muddy trails'],
+      business_model: 'd2c_product',
+      market_scope: 'local',
+      field_sources: {
+        category: 'reviewed',
+        category_terms: 'reviewed',
+        buyer_roles: 'reviewed',
+        service_areas: 'reviewed',
+        jobs_to_be_done: 'reviewed',
+        business_model: 'reviewed',
+      },
+    });
+    for (const body of [
+      { business_model: 'franchise' },
+      { service_areas: [' '] },
+      { buyer_roles: Array.from({ length: 21 }, (_, index) => `role ${index}`) },
+    ]) {
+      expect((await call('/brand-profile', { method: 'PUT', body })).status).toBe(422);
+    }
+  });
+
   it('creates the profile on the first edit and rejects oversized fields', async () => {
     await brand();
     const created = await call<BrandProfile>('/brand-profile', {

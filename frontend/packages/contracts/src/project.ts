@@ -188,6 +188,38 @@ export const promptCandidateReviewResponseSchema = responseObject({
   unavailable_count: z.number().int(),
 });
 
+// A buyer-facing topic proposal and the saved offerings it covers.
+const topicProposalSchema = responseObject({
+  name: z.string(),
+  offerings: z.array(z.string()),
+});
+
+// `POST /projects/{id}/topics/preview`: proposals that fill gaps beside the
+// project's existing topics. Nothing is written until the topics are confirmed.
+export const topicPreviewResponseSchema = responseObject({
+  // `model` when the model's proposal was used, `offerings` for the fallback.
+  source: z.enum(['model', 'offerings']),
+  topics: z.array(topicProposalSchema),
+  // Admissible proposals beyond the cap: shown as "+N more", never dropped silently.
+  overflow: z.array(topicProposalSchema),
+});
+
+// Which persisted search data may steer a run's wording.
+export const seedQuerySourceSchema = z.enum(['search_console', 'search_intelligence']);
+
+// `GET /projects/{id}/seed-queries`: the non-branded, question-like searches
+// generation would ground on, per connected source. A source the project has
+// not connected is absent; a connected one with nothing usable lists none.
+// No weight is carried: impressions are never AI prompt volume.
+export const seedQueriesResponseSchema = responseObject({
+  sources: z.array(
+    responseObject({
+      source: seedQuerySourceSchema,
+      queries: z.array(responseObject({ id: uuid(), text: z.string(), topic_id: uuid() })),
+    }),
+  ),
+});
+
 // Business map: per-offering facts that ground generation. Entries carry
 // provenance; a model suggestion stays `suggested` until a person confirms it.
 export const businessMapEntrySchema = responseObject({
@@ -245,6 +277,18 @@ const brandProfileSourceArtifactsSchema = responseObject({
 // Closed identity facets confirmed at onboarding and editable on the brand profile.
 export const buyerTypeSchema = z.enum(['b2b', 'b2c', 'both']);
 export const marketScopeSchema = z.enum(['global', 'national', 'regional', 'local']);
+// The business model resolved at onboarding; it decides which kinds of question are drafted.
+export const businessModelSchema = z.enum([
+  'b2b_saas',
+  'marketplace',
+  'd2c_product',
+  'retail',
+  'local_service',
+  'professional_service',
+  'regulated_finance',
+  'healthcare_provider',
+  'education_provider',
+]);
 
 export const brandProfileDraftSchema = responseObject({
   description: z.string(),

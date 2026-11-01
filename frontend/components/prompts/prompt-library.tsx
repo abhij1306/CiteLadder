@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
@@ -16,13 +16,7 @@ import {
 import { queryKeys } from '@/lib/api/query-keys';
 import { humanizeApiError } from '@/lib/api/errors';
 import { topicsApi } from '@/lib/api/topics';
-import type {
-  Prompt,
-  PromptGenerateResponse,
-  PromptSet,
-  PromptStatus,
-  Topic,
-} from '@/lib/api/types';
+import type { Prompt, PromptSet, PromptStatus, Topic } from '@/lib/api/types';
 import {
   emptyFilters,
   filterPrompts,
@@ -51,7 +45,9 @@ import { ResizableSplitPane } from '@/components/ui/split-pane';
 import { PromptActions, promptFilterControls } from './prompt-toolbar';
 import { TopicRail } from './topic-rail';
 import { useTopicMutations } from './use-topic-mutations';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useActiveProject, useActiveWorkspaceId } from '@/lib/project/project-context';
+
+import type { BuilderStep } from './prompt-builder';
 import { resolveProjectRequestScope } from '@/lib/project/request-scope';
 
 function mutationErrorMessage(
@@ -79,15 +75,15 @@ const STATUS_TABS: { id: PromptStatus; label: string }[] = [
  * context), the topic/status/search filter state, and every CRUD, import,
  * lifecycle, and AI-generation mutation. Layout: topics rail on the left;
  * Active / Archived status tabs over the prompt table on the
- * right. The desktop split is user-resizable; "Generate prompts"
- * opens the consent-gated AI dialog.
+ * right. The desktop split is user-resizable; "Prompt Builder" opens the
+ * sheet that steers generation and reviews its suggestions.
  */
 // react-doctor-disable-next-line react-doctor/no-giant-component -- this component only orchestrates queries/mutations; toolbar, topic rail, table, empty state, and dialogs are extracted.
 export function PromptLibrary({
   generateRequest = 0,
   reviewRequest = false,
 }: Readonly<{
-  /** Increments once per URL request to open the Generate dialog. */
+  /** Increments once per URL request to open the Prompt Builder. */
   generateRequest?: number;
   reviewRequest?: boolean;
 }>) {
@@ -108,10 +104,10 @@ export function PromptLibrary({
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Prompt | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
-  const [generateOpen, setGenerateOpen] = useState(false);
-  const [reviewOnly, setReviewOnly] = useState(false);
-  const [generateResult, setGenerateResult] = useState<PromptGenerateResponse | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderStep, setBuilderStep] = useState<BuilderStep>('business');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const hasCompetitors = (useActiveProject()?.competitors.length ?? 0) > 0;
 
   const topicsQuery = useQuery({
     queryKey: queryKeys.topics.list(requestScope.projectId),
@@ -222,15 +218,11 @@ export function PromptLibrary({
         idempotencyKey: generateKey.current.key,
       });
     },
-    // Clear any prior success summary before a new attempt so a stale result
-    // can never render alongside a later retry's error.
-    onMutate: () => setGenerateResult(null),
-    onSuccess: async (result, input) => {
+    onSuccess: async (_result, input) => {
       // Only this request's key retires; a different pending request keeps its own.
       if (generateKey.current?.request === JSON.stringify(input)) generateKey.current = null;
-      setGenerateResult(result);
       review.clearNotice();
-      // Candidates are reviewed in the dialog; topics may have been created.
+      // Candidates are reviewed in the builder; topics may have been created.
       await review.refresh();
       await invalidate();
     },
@@ -238,15 +230,19 @@ export function PromptLibrary({
     // after staging), so the review list is re-read rather than assumed empty.
     onError: () => void review.refresh(),
   });
-  const { reset: resetGenerate } = generateMutation;
+  // A fresh open clears the last run's outcome, but never a run still in
+  // flight: resetting it would drop `isPending` and allow a second paid run.
+  const openBuilder = (step: BuilderStep) => {
+    if (!generateMutation.isPending) generateMutation.reset();
+    setBuilderStep(step);
+    setBuilderOpen(true);
+  };
+  const openFromUrl = useEffectEvent((step: BuilderStep) => openBuilder(step));
   useEffect(() => {
     if (generateRequest === 0) return;
-    resetGenerate();
-    // oxlint-disable-next-line react-hooks/set-state-in-effect -- open the dialog for a URL request.
-    setGenerateResult(null);
-    setGenerateOpen(true);
-    setReviewOnly(reviewRequest);
-  }, [generateRequest, reviewRequest, resetGenerate]);
+    // oxlint-disable-next-line react-hooks/set-state-in-effect -- open the builder for a URL request.
+    openFromUrl(reviewRequest ? 'review' : 'business');
+  }, [generateRequest, reviewRequest]);
 
   const topicMutations = useTopicMutations({
     projectId: requestScope.projectId,
@@ -336,12 +332,6 @@ export function PromptLibrary({
       topics={topics}
     />
   );
-  const openGenerateDialog = () => {
-    setReviewOnly(false);
-    setGenerateResult(null);
-    generateMutation.reset();
-    setGenerateOpen(true);
-  };
   // A failed read with nothing to show takes the empty state's slot; a failed
   // refresh keeps the prompts already shown and says so above them.
   const failedEmpty = Boolean(error) && !hasPrompts;
@@ -356,7 +346,7 @@ export function PromptLibrary({
       />
     );
   } else if (!hasPrompts) {
-    libraryBody = <PromptEmptyState onGenerate={openGenerateDialog} onAdd={openAdd} />;
+    libraryBody = <PromptEmptyState onGenerate={() => openBuilder('business')} onAdd={openAdd} />;
   }
 
   if (isLoading) {
@@ -373,7 +363,7 @@ export function PromptLibrary({
         <PromptActions
           onImport={() => setImportOpen(true)}
           onAdd={openAdd}
-          onGenerate={openGenerateDialog}
+          onGenerate={() => openBuilder('business')}
           hasActivePrompts={statusCounts.active > 0}
         />
       }
@@ -396,11 +386,8 @@ export function PromptLibrary({
         ) : null}
         <PendingReviewNotice
           count={review.candidates.length}
-          hidden={generateOpen}
-          onReview={() => {
-            openGenerateDialog();
-            setReviewOnly(true);
-          }}
+          hidden={builderOpen}
+          onReview={() => openBuilder('review')}
         />
 
         <ResizableSplitPane
@@ -474,18 +461,19 @@ export function PromptLibrary({
           importError={
             importMutation.isError ? humanizeApiError(importMutation.error).message : undefined
           }
-          generateOpen={generateOpen}
-          setGenerateOpen={setGenerateOpen}
+          projectId={requestScope.projectId}
+          workspaceId={requestScope.workspaceId}
+          builderOpen={builderOpen}
+          setBuilderOpen={setBuilderOpen}
+          builderStep={builderStep}
+          hasCompetitors={hasCompetitors}
           topics={topics}
           selectedTopicId={selectedTopicId}
-          generatePrompts={async (input) => {
-            await generateMutation.mutateAsync(input).catch(() => undefined);
-          }}
+          generatePrompts={(input) => generateMutation.mutateAsync(input).catch(() => null)}
           isGenerating={generateMutation.isPending}
           generateError={generateMutation.isError ? generateMutation.error : undefined}
-          generateResult={generateResult}
+          onTopicsChanged={invalidate}
           review={review}
-          reviewOnly={reviewOnly}
           setsLoading={isLoading}
           setsError={error !== null}
           retrySets={retry}

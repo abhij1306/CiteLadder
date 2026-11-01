@@ -1,10 +1,8 @@
 'use client';
 
-import { Bot, ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
+import { ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
-import { ProjectLink } from '@/components/layout/scoped-link';
-import { agentHandoffHref } from '@/lib/agent/handoff';
 import { Button } from '@/components/ui/button';
 import {
   Dropdown,
@@ -182,7 +180,7 @@ export function promptFilterControls({
 }
 
 /**
- * The library's own actions, for the `ListScreen` identity band: the four ways to
+ * The library's own actions, for the `ListScreen` identity band: the three ways to
  * add prompts share one menu, so the band holds one secondary and one primary
  * action at every width instead of wrapping five buttons over the title.
  */
@@ -215,24 +213,11 @@ export function PromptActions({
           </DropdownItem>
           <DropdownItem onSelect={onGenerate}>
             <Icon icon={Sparkles} />
-            Generate prompts
+            Prompt Builder
           </DropdownItem>
           <DropdownItem onSelect={onImport}>
             <Icon icon={Upload} />
             Bulk upload
-          </DropdownItem>
-          <DropdownSeparator />
-          <DropdownItem asChild>
-            <ProjectLink
-              href={agentHandoffHref({
-                skillId: 'prompt_discovery',
-                prompt:
-                  'Build a portfolio of distinct buyer questions for this project. Keep the existing topics. Read the current prompt portfolio and business evidence, identify meaningful buying decisions and gaps, and prepare new unbranded questions for prompt review.',
-              })}
-            >
-              <Icon icon={Bot} />
-              Build with Agent
-            </ProjectLink>
           </DropdownItem>
         </DropdownContent>
       </Dropdown>

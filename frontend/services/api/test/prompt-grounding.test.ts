@@ -5,6 +5,7 @@ import { policy } from '../src/config.ts';
 import { generationInput, generationSetting } from '../src/prompts/generation-input.ts';
 import { generatePrompts } from '../src/prompts/generation.ts';
 import { loadObservedQueries } from '../src/prompts/observed-queries.ts';
+import { readSeedQueries } from '../src/prompts/seed-queries.ts';
 import { echoDependencies, promptSet, topic, type DraftRequest } from './prompt-fixtures.ts';
 import { searchIntelligenceRun } from './search-intelligence-fixtures.ts';
 import { testDatabase } from './support.ts';
@@ -299,6 +300,45 @@ describe('observed queries at the PostgreSQL boundary', () => {
     } finally {
       observed.max_per_topic = cap;
     }
+  });
+});
+
+describe('seed queries for the Prompt Builder', () => {
+  it('lists what each persisted source would ground on, without weights', async () => {
+    const { p, flatFeetTop, trail } = await groundedProject();
+    expect(await readSeedQueries(db, p.workspaceId, p.projectId)).toEqual({
+      sources: [
+        {
+          source: 'search_console',
+          queries: [
+            { id: flatFeetTop, text: 'best running shoes for flat feet', topic_id: p.topicId },
+            { id: expect.any(String), text: 'which shoes', topic_id: p.topicId },
+          ],
+        },
+        {
+          // The keyword Search Console already supplied is read once, from Search Console.
+          source: 'search_intelligence',
+          queries: [{ id: trail, text: 'trail running shoes waterproof', topic_id: p.topicId }],
+        },
+      ],
+    });
+  });
+
+  it('lists no source a project has no data for, and hides other workspaces', async () => {
+    const p = await project();
+    expect(await readSeedQueries(db, p.workspaceId, p.projectId)).toEqual({ sources: [] });
+    await searchConsole(p, isoDay(1), [
+      { query: 'acme running shoes', impressions: 50, daysAgo: 2 },
+    ]);
+    // Connected, but nothing usable: the source is listed with no queries.
+    expect(await readSeedQueries(db, p.workspaceId, p.projectId)).toEqual({
+      sources: [{ source: 'search_console', queries: [] }],
+    });
+    const other = await fixtures.tenant();
+    tenants.push(other);
+    await expect(readSeedQueries(db, other.workspaceId, p.projectId)).rejects.toMatchObject({
+      status: 404,
+    });
   });
 });
 

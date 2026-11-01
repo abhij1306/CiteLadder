@@ -16,11 +16,11 @@ import {
   wantedTopics,
   type GenerationInput,
 } from './generation-input.ts';
-import { topicLinks } from './generation-plan.ts';
 import { acquireProjectLock } from './locks.ts';
 import { loadObservedQueries } from './observed-queries.ts';
 import { scopedPromptSet } from './prompt-sets.ts';
-import { proposeTopics } from './topic-proposals.ts';
+import { proposeTopics, type TopicProposalInput } from './topic-proposals.ts';
+import { linkTopicOfferings } from './topics.ts';
 
 export type OfferingMap = z.infer<typeof offeringMapSchema>;
 const businessMap = z.object({ offerings: z.array(offeringMapSchema).default([]) });
@@ -33,82 +33,64 @@ const topicColumns = ['id', 'name', 'description', 'parent_id'] as const;
 const promptColumns = ['id', 'topic_id', 'text', 'normalized_text_hash'] as const;
 const candidateColumns = ['text', 'normalized_text_hash', 'disposition', 'jev_decision'] as const;
 
-/** What a topic proposal reads, authorized; null when the project already has topics. */
+/**
+ * What a topic proposal reads for an authorized project: the saved
+ * offerings, the brand names to strip, the category vocabulary and the
+ * names of the topics it already has, which proposals never repeat.
+ */
+export async function topicProposalInput(
+  trx: Database,
+  scope: { workspaceId: string; projectId: string },
+): Promise<TopicProposalInput> {
+  const project = await trx
+    .selectFrom('projects')
+    .select(['brand_name'])
+    .where('id', '=', scope.projectId)
+    .where('workspace_id', '=', scope.workspaceId)
+    .executeTakeFirstOrThrow();
+  const profile = await trx
+    .selectFrom('brand_profiles')
+    .select(['products_services', 'business_context'])
+    .where('project_id', '=', scope.projectId)
+    .where('workspace_id', '=', scope.workspaceId)
+    .executeTakeFirst();
+  const brand = await trx
+    .selectFrom('brands')
+    .select(['id', 'name'])
+    .where('project_id', '=', scope.projectId)
+    .executeTakeFirst();
+  const aliases = brand
+    ? await trx
+        .selectFrom('brand_aliases')
+        .select('alias')
+        .where('brand_id', '=', brand.id)
+        .execute()
+    : [];
+  const existing = await trx
+    .selectFrom('topics')
+    .select('name')
+    .where('project_id', '=', scope.projectId)
+    .execute();
+  const business = record(profile?.business_context);
+  return {
+    // The saved offerings, whatever their review state: onboarding saves the
+    // ones its reader just reviewed as unreviewed, and the proposal filter
+    // keeps only buyer-facing names grounded in them.
+    offerings: strings(profile?.products_services),
+    brandNames: [brand?.name ?? project.brand_name, ...aliases.map((row) => row.alias)],
+    categoryTerms: [...strings(business.category_terms), ...strings(business.category_aliases)],
+    existing: existing.map((row) => row.name),
+    limit: policy.prompts.generation.topic_max,
+  };
+}
+
+/** What a topic recovery reads, authorized; null when the project already has topics. */
 function recoveryInput(db: Database, workspaceId: string, setId: string) {
   return db.transaction().execute(async (trx) => {
     const set = await scopedPromptSet(trx, workspaceId, setId);
-    const topic = await trx
-      .selectFrom('topics')
-      .select('id')
-      .where('project_id', '=', set.project_id)
-      .executeTakeFirst();
-    if (topic) return null;
-    const project = await trx
-      .selectFrom('projects')
-      .select(['brand_name'])
-      .where('id', '=', set.project_id)
-      .where('workspace_id', '=', workspaceId)
-      .executeTakeFirstOrThrow();
-    const profile = await trx
-      .selectFrom('brand_profiles')
-      .select(['products_services', 'business_context'])
-      .where('project_id', '=', set.project_id)
-      .where('workspace_id', '=', workspaceId)
-      .executeTakeFirst();
-    const brand = await trx
-      .selectFrom('brands')
-      .select(['id', 'name'])
-      .where('project_id', '=', set.project_id)
-      .executeTakeFirst();
-    const aliases = brand
-      ? await trx
-          .selectFrom('brand_aliases')
-          .select('alias')
-          .where('brand_id', '=', brand.id)
-          .execute()
-      : [];
-    const business = record(profile?.business_context);
-    return {
-      // The saved offerings, whatever their review state: onboarding saves the
-      // ones its reader just reviewed as unreviewed, and the proposal filter
-      // keeps only buyer-facing names grounded in them.
-      offerings: strings(profile?.products_services),
-      brandNames: [brand?.name ?? project.brand_name, ...aliases.map((row) => row.alias)],
-      categoryTerms: [...strings(business.category_terms), ...strings(business.category_aliases)],
-      existing: [],
-      limit: policy.prompts.generation.topic_max,
-    };
+    const input = await topicProposalInput(trx, { workspaceId, projectId: set.project_id });
+    return input.existing.length ? null : input;
   });
-}
-
-/** Records which saved offerings each recovered topic covers (`topicOfferings`). */
-async function linkTopicOfferings(
-  trx: Database,
-  workspaceId: string,
-  projectId: string,
-  topics: readonly { id: string; offerings: string[] }[],
-  now: Date,
-) {
-  const profile = await trx
-    .selectFrom('brand_profiles')
-    .select(['id', 'business_context'])
-    .where('project_id', '=', projectId)
-    .where('workspace_id', '=', workspaceId)
-    .executeTakeFirst();
-  if (!profile) return;
-  const business = record(profile.business_context);
-  const links = {
-    ...topicLinks.parse(business.topic_offerings ?? {}),
-    ...Object.fromEntries(topics.map((topic) => [topic.id, topic.offerings])),
-  };
-  await trx
-    .updateTable('brand_profiles')
-    .set({
-      business_context: JSON.stringify({ ...business, topic_offerings: links }),
-      updated_at: now,
-    })
-    .where('id', '=', profile.id)
-    .execute();
 }
 
 /**
@@ -164,7 +146,12 @@ export async function recoverTopics(
         })),
       )
       .execute();
-    await linkTopicOfferings(trx, scope.workspaceId, set.project_id, created, now);
+    await linkTopicOfferings(
+      trx,
+      { workspaceId: scope.workspaceId, projectId: set.project_id },
+      { links: created },
+      now,
+    );
     return {
       source: proposal.source,
       model: proposal.model,
