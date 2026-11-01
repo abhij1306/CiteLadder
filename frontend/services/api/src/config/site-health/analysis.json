@@ -654,6 +654,10 @@
       "content_recency_future_tolerance_days": 2,
       "sitemap_lastmod_tolerance_days": 2,
       "redirect_max_hops": 1,
+      "sitewide_link": {
+        "min_linking_pages": 5,
+        "min_page_share": 0.5
+      },
       "duplicate_content": {
         "min_words": 50,
         "shingle_words": 3,

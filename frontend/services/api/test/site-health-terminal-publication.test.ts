@@ -302,6 +302,64 @@ describe('terminal analysis publication', () => {
     ]);
   });
 
+  it('files a redirecting link every page shares as one root issue keyed by the link', async () => {
+    const seed = await fixtures.crawl('running');
+    const page = (links: string[]) => ({
+      has_html: true,
+      links: { anchors: links.map((url) => ({ url, is_internal: true, region: 'footer' })) },
+    });
+    const root = await fixtures.page(seed, '/', page(['/screens']));
+    const paths = ['/a', '/b', '/c', '/d', '/e'];
+    const others = [];
+    for (const path of paths)
+      others.push(
+        await fixtures.page(seed, path, page(path === '/a' ? ['/screens', '/old'] : ['/screens'])),
+      ); // NOSONAR: sequential fixtures.
+    await fixtures.redirect(seed, '/screens', '/simulation');
+    await fixtures.redirect(seed, '/old', '/new');
+    await finalize(seed);
+    const crawlIssues = await db
+      .selectFrom('site_issues')
+      .select(['rule_id', 'site_url_id'])
+      .where('crawl_id', '=', seed.crawlId)
+      .where('rule_id', 'in', [
+        'technical.internal_link_redirect',
+        'technical.sitewide_link_redirect',
+      ])
+      .orderBy('rule_id')
+      .execute();
+    // The page-specific redirect stays on its page; the shared one is one root issue.
+    expect(crawlIssues).toEqual([
+      { rule_id: 'technical.internal_link_redirect', site_url_id: others[0]!.id },
+      { rule_id: 'technical.sitewide_link_redirect', site_url_id: root.id },
+    ]);
+    const catalog = await issues(
+      db,
+      seed.workspaceId,
+      seed.crawlId,
+      {
+        query: null,
+        severity: null,
+        category: null,
+        dimension: null,
+        rule: null,
+        siteUrlId: null,
+        pageKind: null,
+        findingClass: 'defect',
+      },
+      { limit: 50, cursor: null },
+    );
+    const counts = catalog.items
+      .filter((item) => item.rule_id.includes('link_redirect'))
+      .map((item) => [item.rule_id, item.affected_url_count]);
+    expect(counts).toEqual([
+      ['technical.sitewide_link_redirect', 6],
+      ['technical.internal_link_redirect', 1],
+    ]);
+    // Two rows, but the summary's pages are at least the six the shared link is on.
+    expect([catalog.summary.occurrence_count, catalog.summary.affected_url_count]).toEqual([2, 6]);
+  });
+
   it('does not publish another workspace through a mismatched crawl scope', async () => {
     const seed = await fixtures.crawl('running');
     const foreign = await fixtures.crawl('running');

@@ -158,16 +158,33 @@ export function canonicalResolution(
 const isBroken = (status: number, sitemap: boolean) =>
   status >= 400 && (sitemap || !ACCESS_RESTRICTED.has(status));
 
+/** A link target this crawl fetched whose answer was an HTTP error. */
+const isBrokenLink = (resolution: Resolution | undefined) =>
+  typeof resolution?.status === 'number' &&
+  resolution.status !== 429 &&
+  !isExcludedTarget(resolution) &&
+  isBroken(resolution.status, false);
+
+/** A link target this crawl fetched that redirected or was abandoned as a loop. */
+const isRedirectingLink = (resolution: Resolution | undefined) =>
+  resolution !== undefined &&
+  resolution.status !== 429 &&
+  !isExcludedTarget(resolution) &&
+  (resolution.status !== null || resolution.errorCode === REDIRECT_LIMIT) &&
+  redirects(resolution);
+
 export function resolutionSet(
   targets: string[],
   resolutions: Map<string, Resolution>,
-  sitemap = false,
+  options: { sitemap?: boolean; sitewide?: ReadonlySet<string> } = {},
 ): RuleEvaluation {
+  const { sitemap = false, sitewide = new Set<string>() } = options;
   const rule = sitemap ? 'technical.sitemap_url_unreachable' : 'technical.broken_internal_link';
   const checked: string[] = [];
   const limited: string[] = [];
   const broken: string[] = [];
   const excluded: string[] = [];
+  const shared: string[] = [];
   for (const target of targets) {
     const resolution = resolutions.get(target);
     if (resolution?.status === 429) {
@@ -179,14 +196,20 @@ export function resolutionSet(
       continue;
     }
     if (resolution?.status === undefined || resolution.status === null) continue;
+    if (!sitemap && sitewide.has(target) && isBroken(resolution.status, false)) {
+      shared.push(target);
+      continue;
+    }
     checked.push(target);
     if (isBroken(resolution.status, sitemap)) broken.push(target);
   }
-  // Excluded targets are outside the set this rule judges, not passes within it.
+  // Excluded targets are outside the set this rule judges, not passes within it;
+  // a broken sitewide link is judged once, on the crawl root.
+  const judged = targets.length - excluded.length - shared.length;
   const evaluation =
     sitemap && !targets.length
       ? finalizeEvaluation(rule, 'not_applicable', { reason: 'no_sitemap' })
-      : entitySetEvaluation(rule, targets.length - excluded.length, checked.length, broken);
+      : entitySetEvaluation(rule, judged, checked.length, broken);
   if (limited.length && !broken.length) {
     evaluation.outcome = 'unknown';
     evaluation.reason_code = 'rate_limited_targets';
@@ -200,7 +223,9 @@ export function resolutionSet(
     rate_limited_targets: limited.slice(0, limit).map((url) => ({ url, status_code: 429 })),
     excluded_targets: excludedTargets(excluded, resolutions),
     resolution_source_ids: [
-      ...new Set([...checked, ...limited].flatMap((url) => sourceIds(resolutions.get(url)!))),
+      ...new Set(
+        [...checked, ...limited, ...shared].flatMap((url) => sourceIds(resolutions.get(url)!)),
+      ),
     ]
       .toSorted(compareText)
       .slice(0, limit),
@@ -208,6 +233,9 @@ export function resolutionSet(
   if (!sitemap) {
     delete evaluation.evidence.normalized_score;
     delete evaluation.evidence.normalized_coverage;
+    evaluation.evidence.sitewide_targets = shared
+      .slice(0, limit)
+      .map((url) => ({ url, status_code: resolutions.get(url)!.status }));
   }
   return evaluation;
 }
@@ -218,11 +246,20 @@ const redirectTarget = (url: string, resolution: Resolution) =>
     ? { url, reason: 'redirect_limit' }
     : { url, final_url: resolution.finalUrl, hops: resolution.hops };
 
-/** Internal link targets this crawl fetched that answered with a redirect. */
-export function linkRedirects(targets: string[], resolutions: Map<string, Resolution>) {
+/**
+ * Internal link targets this crawl fetched that answered with a redirect. A
+ * redirecting sitewide link leaves the page's set, named as a sitewide
+ * target: the crawl root judges it once.
+ */
+export function linkRedirects(
+  targets: string[],
+  resolutions: Map<string, Resolution>,
+  sitewide: ReadonlySet<string> = new Set(),
+) {
   const checked: string[] = [];
   const failing: string[] = [];
   const excluded: string[] = [];
+  const shared: string[] = [];
   for (const target of targets) {
     const resolution = resolutions.get(target);
     if (!resolution || resolution.status === 429) continue;
@@ -231,12 +268,16 @@ export function linkRedirects(targets: string[], resolutions: Map<string, Resolu
       continue;
     }
     if (resolution.status === null && resolution.errorCode !== REDIRECT_LIMIT) continue;
+    if (sitewide.has(target) && redirects(resolution)) {
+      shared.push(target);
+      continue;
+    }
     checked.push(target);
     if (redirects(resolution)) failing.push(target);
   }
   const evaluation = entitySetEvaluation(
     'technical.internal_link_redirect',
-    targets.length - excluded.length,
+    targets.length - excluded.length - shared.length,
     checked.length,
     failing,
   );
@@ -248,11 +289,133 @@ export function linkRedirects(targets: string[], resolutions: Map<string, Resolu
       .slice(0, limit)
       .map((url) => redirectTarget(url, resolutions.get(url)!)),
     excluded_targets: excludedTargets(excluded, resolutions),
-    resolution_source_ids: [...new Set(checked.flatMap((url) => sourceIds(resolutions.get(url)!)))]
+    sitewide_targets: shared
+      .slice(0, limit)
+      .map((url) => redirectTarget(url, resolutions.get(url)!)),
+    resolution_source_ids: [
+      ...new Set([...checked, ...shared].flatMap((url) => sourceIds(resolutions.get(url)!))),
+    ]
       .toSorted(compareText)
       .slice(0, limit),
   };
   return evaluation;
+}
+
+const SITEWIDE = policy.site_health.page_analysis.rules.sitewide_link;
+
+/** A page whose links were judged, as sitewide-link evidence names it. */
+export type LinkingPage = {
+  siteUrlId: string;
+  url: string;
+  title: string;
+  pageKind: string;
+  artifactId: string;
+};
+
+/**
+ * The internal link targets most judged pages share: template navigation,
+ * header and footer links. A target is sitewide when at least
+ * `min_linking_pages` pages, and `min_page_share` of all judged pages, link it.
+ */
+export function sitewideTargets(linksByPage: readonly (readonly string[])[]): Set<string> {
+  const counts = new Map<string, number>();
+  for (const links of linksByPage)
+    for (const target of new Set(links)) counts.set(target, (counts.get(target) ?? 0) + 1);
+  const threshold = Math.max(
+    SITEWIDE.min_linking_pages,
+    Math.ceil(SITEWIDE.min_page_share * linksByPage.length),
+  );
+  return new Set([...counts].filter(([, count]) => count >= threshold).map(([target]) => target));
+}
+
+/**
+ * One crawl-root finding per link problem, keyed by the sitewide target rather
+ * than by every page that carries it: each failing target names how many
+ * judged pages link it and a bounded sample of them, with the exact attempt
+ * and artifact IDs of its resolution and of the sampled pages.
+ */
+function sitewideFinding(
+  ruleId: string,
+  { failing, unchecked }: { failing: readonly string[]; unchecked: readonly string[] },
+  linkers: ReadonlyMap<string, readonly LinkingPage[]>,
+  resolutions: Map<string, Resolution>,
+  outcome: (url: string, resolution: Resolution) => Record<string, unknown>,
+) {
+  // Like a page's link checks, an unfetched or rate-limited target cannot pass.
+  if (!failing.length && unchecked.length)
+    return finalizeEvaluation(ruleId, 'unknown', {
+      reason: 'unchecked_targets',
+      unchecked_targets: unchecked.slice(0, limit),
+    });
+  if (!failing.length) return finalizeEvaluation(ruleId, 'satisfied', { count: 0, targets: [] });
+  const pages = new Map<string, LinkingPage>();
+  for (const url of failing)
+    for (const page of linkers.get(url) ?? []) pages.set(page.siteUrlId, page);
+  const sample = (rows: readonly LinkingPage[]) =>
+    rows.slice(0, limit).map((page) => ({
+      site_url_id: page.siteUrlId,
+      url: page.url,
+      title: page.title,
+      page_kind: page.pageKind,
+      artifact_id: page.artifactId,
+    }));
+  return finalizeEvaluation(ruleId, 'missing', {
+    count: pages.size,
+    linking_page_kinds: [...new Set([...pages.values()].map((page) => page.pageKind))]
+      .filter(Boolean)
+      .toSorted(compareText),
+    targets: failing.slice(0, limit).map((url) => {
+      const rows = linkers.get(url) ?? [];
+      return {
+        ...outcome(url, resolutions.get(url)!),
+        linking_page_count: rows.length,
+        pages: sample(rows),
+      };
+    }),
+    resolution_source_ids: [...new Set(failing.flatMap((url) => sourceIds(resolutions.get(url)!)))]
+      .toSorted(compareText)
+      .slice(0, limit),
+  });
+}
+
+/**
+ * The crawl root's sitewide link checks: broken targets and redirecting
+ * targets among `sitewide`, judged once for the pages that link them.
+ */
+export function sitewideLinks(
+  sitewide: ReadonlySet<string>,
+  linkers: ReadonlyMap<string, readonly LinkingPage[]>,
+  resolutions: Map<string, Resolution>,
+) {
+  const targets = [...sitewide].toSorted(compareText);
+  // The same targets a page's link checks leave unchecked: no answer, or a 429.
+  const unanswered = (resolution: Resolution | undefined, loopAnswers: boolean) =>
+    resolution === undefined ||
+    resolution.status === 429 ||
+    (resolution.status === null &&
+      !isExcludedTarget(resolution) &&
+      !(loopAnswers && resolution.errorCode === REDIRECT_LIMIT));
+  const broken = {
+    failing: targets.filter((url) => isBrokenLink(resolutions.get(url))),
+    unchecked: targets.filter((url) => unanswered(resolutions.get(url), false)),
+  };
+  const redirecting = {
+    failing: targets.filter((url) => isRedirectingLink(resolutions.get(url))),
+    unchecked: targets.filter((url) => unanswered(resolutions.get(url), true)),
+  };
+  return [
+    sitewideFinding('technical.sitewide_broken_link', broken, linkers, resolutions, (url, row) => ({
+      url,
+      status_code: row.status,
+    })),
+    sitewideFinding(
+      'technical.sitewide_link_redirect',
+      redirecting,
+      linkers,
+      resolutions,
+      redirectTarget,
+    ),
+  ];
 }
 
 /**

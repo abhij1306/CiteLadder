@@ -132,6 +132,14 @@ describe('analyze acquisition', () => {
       reason: 'sitemap_lists_noindex',
       context_sources: { sitemap_crawl_id: seed.crawlId, sitemap_observation_id: observationId },
     });
+    // Sitemap hygiene, not a visibility blocker: it lists under Advisories, not Issues.
+    const issues = await db
+      .selectFrom('site_issues')
+      .select(['rule_id', 'finding_class'])
+      .where('analysis_id', '=', analysis!.id)
+      .where('rule_id', '=', 'technical.sitemap_noindex')
+      .execute();
+    expect(issues).toEqual([{ rule_id: 'technical.sitemap_noindex', finding_class: 'advisory' }]);
   });
 
   it('acquires, analyzes and settles the page with its evidence in one commit', async () => {

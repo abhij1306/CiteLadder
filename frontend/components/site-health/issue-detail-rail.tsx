@@ -21,7 +21,13 @@ import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';
 import type { SiteIssue, SiteIssueDetail } from '@/lib/api/types';
-import { siteLevelEvidence, type SiteLevelEvidence } from '@/lib/site-health/site-level-evidence';
+import { originOf, sitePath } from '@/lib/site-health/evidence-values';
+import {
+  linkOutcomeLabel,
+  pageCountLabel,
+  siteLevelEvidence,
+  type SiteLevelEvidence,
+} from '@/lib/site-health/site-level-evidence';
 import { dimensionLabel, issueTitle, severityLabel } from '@/lib/site-health/issues';
 import { pageKindLabel } from '@/lib/site-health/page-kinds';
 import { pageDisplayTitle } from '@/lib/site-health/status';
@@ -281,6 +287,8 @@ function SiteLevelList({
       </ul>
     );
   }
+  if (evidence.kind === 'link_targets')
+    return <LinkTargetList evidence={evidence} crawlId={crawlId} />;
   if (evidence.pages.length === 0)
     return (
       <QueryState
@@ -296,6 +304,22 @@ function SiteLevelList({
   const hidden = evidence.total - evidence.pages.length;
   return (
     <Stack gap="item">
+      {evidence.sections.length > 0 ? (
+        <ul className={ledgerClasses('open')}>
+          {evidence.sections.map((section) => (
+            <Inline
+              as="li"
+              key={section.pathPrefix}
+              className={ledgerItemClasses('flex-wrap justify-between')}
+            >
+              <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
+                {section.pathPrefix}
+              </span>
+              <span className="type-caption tabular-nums">{pageCountLabel(section.pageCount)}</span>
+            </Inline>
+          ))}
+        </ul>
+      ) : null}
       <ul className={ledgerClasses('open')}>
         {evidence.pages.map((page) => (
           <Stack as="li" gap="tight" key={page.siteUrlId} className={ledgerItemClasses()}>
@@ -320,6 +344,60 @@ function SiteLevelList({
         </p>
       ) : null}
     </Stack>
+  );
+}
+
+/**
+ * A sitewide link finding, one row per link target: where the link lands, how
+ * many pages carry it, and a sample of them. One template fix clears the row.
+ */
+function LinkTargetList({
+  evidence,
+  crawlId,
+}: Readonly<{
+  evidence: Extract<SiteLevelEvidence, { kind: 'link_targets' }>;
+  crawlId: string;
+}>) {
+  if (evidence.targets.length === 0)
+    return (
+      <QueryState
+        kind="empty"
+        inline
+        message={
+          evidence.total === 0
+            ? 'No affected links found.'
+            : 'This finding did not record which links it affects.'
+        }
+      />
+    );
+  return (
+    <ul className={ledgerClasses('open')}>
+      {evidence.targets.map((target) => {
+        const origin = originOf(target.url);
+        const hidden = target.pageCount - target.pages.length;
+        return (
+          <Stack as="li" gap="tight" key={target.url} className={ledgerItemClasses()}>
+            <span className={textRole('itemTitle', '[overflow-wrap:anywhere]')}>
+              {sitePath(target.url, origin)} → {linkOutcomeLabel(target.outcome, origin)}
+            </span>
+            <span className="type-caption tabular-nums">
+              On {pageCountLabel(target.pageCount)}
+              {hidden > 0 ? ', including:' : ':'}
+            </span>
+            {target.pages.map((page) => (
+              <AffectedPageLink
+                key={page.siteUrlId}
+                crawlId={crawlId}
+                siteUrlId={page.siteUrlId}
+                title={page.title}
+                url={page.url}
+                pageKind={page.pageKind}
+              />
+            ))}
+          </Stack>
+        );
+      })}
+    </ul>
   );
 }
 

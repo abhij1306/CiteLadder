@@ -498,6 +498,58 @@ describe('IssuesCatalog', () => {
     expect(screen.queryByRole('link', { name: /Homepage/ })).not.toBeInTheDocument();
   });
 
+  it('lists a sitewide link finding by the link, with how many pages carry it', async () => {
+    const sitewide = issue({
+      rule_id: 'technical.sitewide_link_redirect',
+      affected_url_count: 438,
+    });
+    mswServer.use(
+      http.get(`/api/v1/site-crawls/${CRAWL}/issues`, () =>
+        HttpResponse.json({ items: [sitewide], next_cursor: null, summary }),
+      ),
+      http.get(`/api/v1/site-crawls/${CRAWL}/issues/${ISSUE_A}`, () =>
+        HttpResponse.json(
+          issueDetail({
+            rule_id: 'technical.sitewide_link_redirect',
+            affected_url_count: 438,
+            occurrences: [
+              occurrence({
+                rule_id: 'technical.sitewide_link_redirect',
+                evidence: {
+                  count: 438,
+                  targets: [
+                    {
+                      url: 'https://acme.com/collections/screens',
+                      final_url: 'https://acme.com/collections/simulation/',
+                      hops: 1,
+                      linking_page_count: 438,
+                      pages: [
+                        {
+                          site_url_id: 'dddddddd-2222-4111-8111-111111111111',
+                          url: 'https://acme.com/blogs/news/winner',
+                          title: 'Winner announced',
+                          page_kind: 'article',
+                        },
+                      ],
+                    },
+                  ],
+                },
+              }),
+            ],
+          }),
+        ),
+      ),
+    );
+    renderIssues(<IssuesCatalog crawlId={CRAWL} />);
+    const link = '/collections/screens → /collections/simulation/';
+    expect(await screen.findByText(link)).toBeInTheDocument();
+    expect(screen.getByText('On 438 pages, including:')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /Winner announced/ })).toHaveAttribute(
+      'href',
+      `/site/crawls/${CRAWL}/pages/dddddddd-2222-4111-8111-111111111111`,
+    );
+  });
+
   it('applies a severity filter as a server param (not a client filter)', async () => {
     const seen: string[] = [];
     mswServer.use(

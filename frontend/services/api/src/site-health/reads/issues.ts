@@ -36,6 +36,7 @@ import {
   ruleTitle,
   severityRank,
   siteLevelScope,
+  sitewideLinkRules,
   type IssueRow,
 } from './rules.ts';
 
@@ -143,7 +144,7 @@ async function issueSummary(db: Database, crawl: Crawl, filters: IssueFilters) {
   const unchipped = { ...filters, severity: null, dimension: null };
   const scoped = issueWhere(crawl, unchipped);
   const anyClass = issueWhere(crawl, { ...unchipped, findingClass: null });
-  const [classes, severities, dimensions, totals] = await Promise.all([
+  const [classes, severities, dimensions, totals, siteLevel] = await Promise.all([
     sql<{ finding_class: string; count: number }>`
       select i.finding_class, count(distinct i.rule_id)::int as count
       from site_issues i where ${anyClass} group by i.finding_class`.execute(db),
@@ -161,6 +162,12 @@ async function issueSummary(db: Database, crawl: Crawl, filters: IssueFilters) {
           where m.workspace_id = i.workspace_id and m.site_url_id = i.site_url_id and m.active
         ))::int as monitored
       from site_issues i where ${scoped}`.execute(db),
+    sql<{ rule_id: string; evidence: unknown }>`
+      select i.rule_id, i.evidence from site_issues i
+      where ${scoped}
+        and (i.rule_id like 'architecture.%' or i.rule_id = any(${sitewideLinkRules}::text[]))`.execute(
+      db,
+    ),
   ]);
   const byClass = Object.fromEntries(classes.rows.map((row) => [row.finding_class, row.count]));
   const severityCounts: Record<string, number> = {
@@ -180,6 +187,13 @@ async function issueSummary(db: Database, crawl: Crawl, filters: IssueFilters) {
   );
   for (const row of dimensions.rows) dimensionCounts[row.dimension] = row.count;
   const total = firstOf(totals.rows, 'the issue totals');
+  // A site-level finding is one row on the homepage that names a count and a
+  // sample of its pages, so the distinct pages it touches cannot be unioned
+  // exactly: the total is at least its largest group, never the homepage alone.
+  const siteLevelAffected = Math.max(
+    0,
+    ...siteLevel.rows.map((row) => siteLevelScope(row.rule_id, row.evidence)?.affected ?? 0),
+  );
   return {
     issue_count: byClass.defect ?? 0,
     defect_issue_type_count: byClass.defect ?? 0,
@@ -187,7 +201,7 @@ async function issueSummary(db: Database, crawl: Crawl, filters: IssueFilters) {
     occurrence_count: total.occurrences,
     severity_counts: severityCounts,
     dimension_counts: dimensionCounts,
-    affected_url_count: total.affected,
+    affected_url_count: Math.max(total.affected, siteLevelAffected),
     monitored_affected_url_count: total.monitored,
   };
 }
