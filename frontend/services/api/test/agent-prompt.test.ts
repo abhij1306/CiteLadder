@@ -81,6 +81,7 @@ describe('structurally bounded Agent context and tool results', () => {
           omissions: [
             { reason: 'page_limit', count: 429 },
             { reason: 'character_budget', count: 3 },
+            { reason: 'background_candidate_limit', count: 5 },
           ],
           site_url_ids: ['58fde15a-53a5-4ffc-b32b-8fd34a67ecd8'],
           artifact_ids: ['68fde15a-53a5-4ffc-b32b-8fd34a67ecd8'],
@@ -90,7 +91,7 @@ describe('structurally bounded Agent context and tool results', () => {
     });
     expect(JSON.parse(supplied.text).package.summary).toEqual({
       page_count: 10,
-      agent_context_pages_omitted: 432,
+      agent_context_pages_omitted: 437,
     });
   });
   it('says a crawl was unavailable rather than leaving a zero page count to read as measured', () => {

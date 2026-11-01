@@ -23,13 +23,22 @@ export function document(body: Buffer, charset = '') {
 }
 const isElement = (node: HtmlNode): node is HtmlElement => 'tagName' in node;
 const isText = (node: HtmlNode): node is HtmlText => node.nodeName === '#text';
+/**
+ * Pushes `items` last-first so the stack pops them in order. A loop, not a
+ * spread: an element with very many children must not exceed the engine's
+ * argument limit.
+ */
+function pushReversed<T, U>(stack: U[], items: readonly T[], map: (item: T) => U) {
+  for (let index = items.length - 1; index >= 0; index--) stack.push(map(items[index]!));
+}
+const same = <T>(item: T) => item;
 /** Elements in document order, the root first when it is one. Template content is not traversed. */
 export function* elements(root: HtmlNode, tag?: string): Generator<HtmlElement> {
   const pending: HtmlNode[] = [root];
   while (pending.length) {
     const node = pending.pop()!;
     if (isElement(node) && (!tag || node.tagName === tag)) yield node;
-    if ('childNodes' in node) pending.push(...node.childNodes.toReversed());
+    if ('childNodes' in node) pushReversed(pending, node.childNodes, same);
   }
 }
 const isTemplate = (node: HtmlElement): node is DefaultTreeAdapterTypes.Template =>
@@ -50,7 +59,7 @@ export function* anchorElements(
     const content = isElement(node) && isTemplate(node) ? node.content : null;
     const children = content ? content.childNodes : 'childNodes' in node ? node.childNodes : [];
     const nested = inTemplate || content !== null;
-    pending.push(...children.toReversed().map((child) => ({ node: child, inTemplate: nested })));
+    pushReversed(pending, children, (child) => ({ node: child, inTemplate: nested }));
   }
 }
 /** Text nodes in document order. */
@@ -59,7 +68,7 @@ export function* textNodes(root: HtmlNode): Generator<HtmlText> {
   while (pending.length) {
     const node = pending.pop()!;
     if (isText(node)) yield node;
-    if ('childNodes' in node) pending.push(...node.childNodes.toReversed());
+    if ('childNodes' in node) pushReversed(pending, node.childNodes, same);
   }
 }
 export const attribute = (node: HtmlElement, name: string) =>

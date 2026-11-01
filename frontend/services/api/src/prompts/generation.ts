@@ -393,6 +393,16 @@ async function replay(
   });
 }
 
+async function requireCompetitor(db: Database, workspaceId: string, setId: string) {
+  const set = await scopedPromptSet(db, workspaceId, setId);
+  const competitor = await db
+    .selectFrom('competitors')
+    .select('id')
+    .where('project_id', '=', set.project_id)
+    .executeTakeFirst();
+  if (!competitor) throw generationInvalid('Add a competitor before generating comparison prompts');
+}
+
 export async function generatePrompts(
   db: Database,
   workspaceId: string,
@@ -410,6 +420,9 @@ export async function generatePrompts(
   // Request-shape checks need no topics; ownership of named topics is checked
   // with the project's topics in the context read, before any model call.
   validateRequest(input);
+  // A comparison share needs a competitor; refuse before topic recovery can
+  // spend a model call or write topics for a request that would fail anyway.
+  if (cohortShares(input).comparison > 0) await requireCompetitor(db, workspaceId, setId);
   const meter = (dependencies.meter ?? meterFor)(db, workspaceId);
   // Configured only once the set is authorized: an Agent portfolio drafts nothing.
   let metered: ModelGateway | undefined;

@@ -198,7 +198,11 @@ const MANIFEST_ONLY_SUMMARY_KEYS = [
 ] as const;
 
 /** Selector reasons that drop crawl pages from the Agent's context, not from the crawl. */
-const CONTEXT_PAGE_OMISSIONS = new Set(['page_limit', 'character_budget']);
+const CONTEXT_PAGE_OMISSIONS = new Set([
+  'page_limit',
+  'character_budget',
+  'background_candidate_limit',
+]);
 
 /**
  * The context summary as the model sees it. Selector omissions are restated

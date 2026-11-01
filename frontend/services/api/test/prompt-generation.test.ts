@@ -563,6 +563,31 @@ describe('prompt generation at the PostgreSQL boundary', () => {
         .execute(),
     ).toEqual([]);
   });
+  it('refuses a comparison share without competitors before recovering any topic', async () => {
+    const { other, otherSet } = await topiclessProject({ category_terms: ['running shoes'] }, [
+      'Trail running shoes',
+    ]);
+    const deps = echoDependencies({
+      topics: [{ name: 'Trail running shoes', offerings: ['Trail running shoes'] }],
+    });
+    await expect(
+      generatePrompts(
+        db,
+        other.workspaceId,
+        otherSet,
+        generationInput.parse({ count: 2, distribution: { comparison_share: 0.5 } }),
+        deps,
+      ),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(deps.io.fetch).not.toHaveBeenCalled();
+    expect(
+      await db
+        .selectFrom('topics')
+        .select('id')
+        .where('project_id', '=', other.projectId)
+        .execute(),
+    ).toEqual([]);
+  });
   it('proposes buyer-facing topics from the saved offerings, before drafting', async () => {
     const offerings = ['Pro Series running shoes', 'Strider trail shoes (sizes 9-13)'];
     const { other, otherSet } = await topiclessProject({
