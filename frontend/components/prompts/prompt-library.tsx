@@ -123,9 +123,8 @@ export function PromptLibrary({
       await queryClient.invalidateQueries({
         queryKey: queryKeys.prompts.sets(projectId),
       });
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.topics.list(projectId),
-      });
+      // Seed queries bind to topics, so a topic change refreshes them with the list.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.topics.all });
     }
     if (promptSet)
       await queryClient.invalidateQueries({

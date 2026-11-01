@@ -36,8 +36,10 @@ Accept in CiteLadder tracks them.
 
 1. Call `read_seed_queries`. If it is unavailable, say no search data is
    connected and continue without it. Otherwise show the queries by source and
-   topic, and let the user choose a source and untick queries. A query steers
-   wording only; there is no AI prompt volume to report.
+   topic, and let the user choose a source and untick queries. If they untick
+   every query, pass `seed_source` `none`: an empty `seed_query_ids` means all
+   of the source's queries. A query steers wording only; there is no AI prompt
+   volume to report.
 2. Ask how many prompts they want and whether to change the mix: share naming
    the brand, share asking for alternatives to a competitor, informational,
    commercial and transactional weights, and buyers to balance across. The

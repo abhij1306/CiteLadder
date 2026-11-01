@@ -59,6 +59,10 @@ export const topicConfirm = z.object({
   rename: z
     .array(z.object({ id: z.uuid(), name }))
     .max(P.create_batch_max)
+    // One final name per topic: a repeated id would apply only its first name.
+    .refine((items) => new Set(items.map((item) => item.id)).size === items.length, {
+      message: 'Rename each topic once',
+    })
     .default([]),
   delete: z.array(z.uuid()).max(P.create_batch_max).default([]),
 });

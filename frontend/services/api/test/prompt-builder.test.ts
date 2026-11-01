@@ -198,12 +198,23 @@ describe('topic confirm', () => {
   });
 
   it('applies nothing when a name collides or a topic belongs elsewhere', async () => {
-    await topic(db, t.projectId, 'Boots');
+    const boots = await topic(db, t.projectId, 'Boots');
     const duplicate = await call(`/projects/${t.projectId}/topics/confirm`, {
       method: 'POST',
       body: { create: [{ name: 'Sandals' }, { name: 'boots' }] },
     });
     expect(duplicate.status).toBe(409);
+    // A topic renamed twice in one plan is refused, not resolved to its first name.
+    const renamedTwice = await call(`/projects/${t.projectId}/topics/confirm`, {
+      method: 'POST',
+      body: {
+        rename: [
+          { id: boots, name: 'Hiking boots' },
+          { id: boots, name: 'Snow boots' },
+        ],
+      },
+    });
+    expect(renamedTwice.status).toBe(422);
     const other = await fixtures.tenant();
     const foreign = await topic(db, other.projectId, 'Foreign');
     const crossed = await call(`/projects/${t.projectId}/topics/confirm`, {
