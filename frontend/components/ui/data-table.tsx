@@ -187,6 +187,7 @@ export function DataTable({
   const headingId = useId();
   const colSpan = columns.length + (selection ? 1 : 0);
   const paging = pagingLayout(pager, pageSize);
+  const fit = FITS[nested ? 'nested' : 'card'];
   // The region and the table share one name: the visible title, else `label`.
   const naming = title
     ? { ariaLabelledBy: headingId, ariaLabel: undefined }
@@ -197,16 +198,10 @@ export function DataTable({
       aria-label={naming.ariaLabel}
       aria-busy={busy?.active || undefined}
       data-data-table=""
-      // The card's first row (the title band, else the column header) is its
-      // own top inset: card padding above it read as a gap over the header.
-      className={cn(
-        !nested && cardClasses(),
-        !nested && 'pt-0',
-        'relative grid min-w-0 content-start',
-      )}
+      className={cn(fit.box, 'relative grid min-w-0 content-start')}
     >
       {busy ? <BusyBar active={busy.active} label={busy.label} /> : null}
-      <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} />
+      <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} className={fit.row} />
       {description ? (
         <p data-data-table-description="" className={textRole('caption', 'py-3')}>
           {description}
@@ -216,7 +211,8 @@ export function DataTable({
         fixed
         minWidth={minWidth}
         {...naming}
-        className={pinFirstColumn ? PINNED_FIRST_COLUMN : undefined}
+        wrapperClassName={fit.frame}
+        className={cn(fit.cells, pinFirstColumn && PINNED_FIRST_COLUMN)}
       >
         <DataTableColumns columns={columns} selection={selection} />
         <DataTableBody
@@ -229,9 +225,14 @@ export function DataTable({
           {children}
         </DataTableBody>
       </Table>
-      {paging.pager ? <Pager frame="table" {...paging.pager} /> : null}
+      {paging.pager ? <Pager frame="table" className={fit.row} {...paging.pager} /> : null}
       {footer ? (
-        <div className="type-caption border-border-subtle grid gap-1 border-t px-[var(--table-cell-padding-x)] py-2">
+        <div
+          className={cn(
+            'type-caption border-border-subtle grid gap-1 border-t px-[var(--table-cell-padding-x)] py-2',
+            fit.row,
+          )}
+        >
           {footer}
         </div>
       ) : null}
@@ -266,6 +267,27 @@ function pagingLayout(
   if (pager === undefined) return { pageSize };
   return hasMorePages(pager) ? { pager, pageSize } : {};
 }
+
+/**
+ * In a card, the table runs to the card's edges so the header fill and row
+ * rules span it, rather than reading as a second surface inset on the card.
+ * The outer cells keep the card's padding, so text stays on the title's line.
+ */
+const FITS = {
+  card: {
+    // The card's first row (the title band, else the column header) is its
+    // own top inset: card padding above it read as a gap over the header.
+    // The card clips, so the bleeding header fill takes its corners.
+    box: cn(cardClasses(), 'overflow-hidden pt-0'),
+    frame: '-mx-[var(--card-padding)] w-[calc(100%+2*var(--card-padding))] max-w-none rounded-none',
+    cells:
+      '[&_tr>:first-child]:ps-[var(--card-padding)] [&_tr>:last-child]:pe-[var(--card-padding)]',
+    // The title band, pager and footer rules span the card too, their text on the same line.
+    row: '-mx-[var(--card-padding)] px-[var(--card-padding)]',
+  },
+  // Inside a box that already frames it: no card of its own.
+  nested: { box: undefined, frame: undefined, cells: undefined, row: undefined },
+} as const;
 
 /** The first column stays in view while a wide table scrolls in its frame. */
 const PINNED_FIRST_COLUMN =
@@ -306,12 +328,16 @@ function DataTableHeader({
   title,
   headingId,
   toolbar,
-}: Readonly<{ title?: string; headingId: string; toolbar?: FilterBarProps }>) {
+  className,
+}: Readonly<{ title?: string; headingId: string; toolbar?: FilterBarProps; className?: string }>) {
   if (!title && !toolbar) return null;
   return (
     <header
       data-data-table-header=""
-      className="border-border-subtle flex min-h-[var(--data-table-header-height)] min-w-0 flex-wrap items-center gap-x-4 border-b"
+      className={cn(
+        'border-border-subtle flex min-h-[var(--data-table-header-height)] min-w-0 flex-wrap items-center gap-x-4 border-b',
+        className,
+      )}
     >
       {title ? (
         <h3 id={headingId} className={textRole('sectionTitle', 'min-w-0 truncate')}>
