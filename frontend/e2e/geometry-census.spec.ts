@@ -327,17 +327,37 @@ function measure(route: string) {
   return records;
 }
 
+/**
+ * The owner's viewport and a wide one. Each settled page is loaded at the
+ * first and measured at both: a reader resizing the window is shown the same
+ * page, and one load per page state keeps the census affordable.
+ */
+const WIDTHS = [982, 1280] as const;
+
 async function census(
   page: Page,
   route: string,
-  prepare?: (page: Page) => Promise<void>,
+  { label = route, prepare }: { label?: string; prepare?: (page: Page) => Promise<void> } = {},
 ): Promise<Box[]> {
+  await page.setViewportSize({ width: WIDTHS[0], height: 900 });
   await page.goto(fixtureProjectPath(route));
   await expect(page.getByRole('heading', { level: 1 })).toBeAttached();
   await page.waitForLoadState('networkidle');
-  await expect(page.locator('[data-query-state="loading"]')).toHaveCount(0);
   await prepare?.(page);
-  return page.evaluate(measure, route);
+  const records: Box[] = [];
+  for (const width of WIDTHS) {
+    await page.setViewportSize({ width, height: 900 });
+    // A resize re-renders whatever listens for it; measure the next painted frame.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await expect(page.locator('[data-query-state="loading"]')).toHaveCount(0);
+    records.push(...(await page.evaluate(measure, `${label} @${width}`)));
+  }
+  return records;
 }
 
 /** The distinct values one role rendered, with where each came from. */
@@ -403,17 +423,10 @@ const CONNECTIONS = [
   },
 ];
 
-/** The owner's viewport and a wide one, each in both themes: the same literals. */
-const CONFIGURATIONS = [
-  { width: 982, theme: 'light' },
-  { width: 982, theme: 'dark' },
-  { width: 1280, theme: 'light' },
-  { width: 1280, theme: 'dark' },
-] as const;
-
-for (const { width, theme } of CONFIGURATIONS) {
-  test.describe(`${width}×900 ${theme}`, () => {
-    test.use({ viewport: { width, height: 900 }, deviceScaleFactor: 1, colorScheme: theme });
+// Both themes, each at both widths (WIDTHS): the same literals everywhere.
+for (const theme of ['light', 'dark'] as const) {
+  test.describe(`${theme} theme`, () => {
+    test.use({ deviceScaleFactor: 1, colorScheme: theme });
 
     test('every product route renders one value per geometric role', async ({ page }) => {
       test.setTimeout(240_000);
@@ -434,8 +447,7 @@ async function expectOneGeometry(page: Page) {
 
   // A list route with rows, so tables, badges and real cards are measured.
   await stubAuthedShell(page, [[/\/api\/v1\/audits(\?.*)?$/, RUNS]]);
-  const runs = await census(page, '/runs');
-  records.push(...runs.map((record) => ({ ...record, route: '/runs (rows)' })));
+  records.push(...(await census(page, '/runs', { label: '/runs (rows)' })));
 
   // One run's detail, so a StatRow (the run's progress figures) is measured.
   const [run] = RUNS;
@@ -444,23 +456,27 @@ async function expectOneGeometry(page: Page) {
     [new RegExp(String.raw`/api/v1/audits/${run.id}$`), run],
     [new RegExp(String.raw`/api/v1/audits/${run.id}/executions(\?.*)?$`), []],
   ]);
-  const detail = await census(page, `/runs/${run.id}`);
-  records.push(...detail.map((record) => ({ ...record, route: '/runs/:id (detail)' })));
+  records.push(...(await census(page, `/runs/${run.id}`, { label: '/runs/:id (detail)' })));
 
   // Neighbouring cards, so the card → card gap is measured, not assumed.
   await stubAuthedShell(page, [[/\/api\/v1\/integrations(\?.*)?$/, CONNECTIONS]]);
-  const integrations = await census(page, '/settings?tab=integrations');
   records.push(
-    ...integrations.map((record) => ({ ...record, route: '/settings integrations (cards)' })),
+    ...(await census(page, '/settings?tab=integrations', {
+      label: '/settings integrations (cards)',
+    })),
   );
 
   // A search holding a value, so its end target (Clear search) is drawn.
   await stubAuthedShell(page);
-  const searched = await census(page, '/prompts', async (current) => {
-    await current.getByRole('searchbox').first().fill('pricing');
-    await expect(current.getByRole('button', { name: 'Clear search' })).toBeVisible();
-  });
-  records.push(...searched.map((record) => ({ ...record, route: '/prompts (searched)' })));
+  records.push(
+    ...(await census(page, '/prompts', {
+      label: '/prompts (searched)',
+      prepare: async (current) => {
+        await current.getByRole('searchbox').first().fill('pricing');
+        await expect(current.getByRole('button', { name: 'Clear search' })).toBeVisible();
+      },
+    })),
+  );
 
   expectOneValue(records, 'button.height', CONTROL_HEIGHT);
   expectOneValue(records, 'input.height', CONTROL_HEIGHT);

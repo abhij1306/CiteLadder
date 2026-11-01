@@ -146,7 +146,6 @@ for (const width of [1280, 390]) {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
-    await page.screenshot({ path: test.info().outputPath(`ordered-chat-${width}.png`) });
   });
   for (const surface of ['page', 'panel']) {
     test(`${surface} conversation preserves reading and recovers a send at ${width}px`, async ({
@@ -210,7 +209,6 @@ for (const width of [1280, 390]) {
       await expect(page.getByText('Selected crawl robots policy', { exact: true })).toBeVisible();
       // Context is described in plain words; record identities never reach the reader.
       await expect(page.getByText(RUN)).toHaveCount(0);
-      await page.screenshot({ path: test.info().outputPath(`context-${surface}-${width}.png`) });
       await expect(
         page.getByRole('button', { name: 'Skill: Continue with Growth plan' }),
       ).toBeVisible();
@@ -297,7 +295,6 @@ for (const width of [1280, 390]) {
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
       ).toBe(true);
-      await page.screenshot({ path: test.info().outputPath(`${surface}-${width}.png`) });
     });
   }
 }

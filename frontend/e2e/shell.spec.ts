@@ -28,7 +28,9 @@ test('the first-load indicator keeps rotating until the workspace answers', asyn
 });
 
 /** Authenticated shell navigation and persistent launcher workflows. */
-test('authenticated shell exposes authorized navigation and search', async ({ page }) => {
+test('authenticated shell exposes authorized navigation and search, and navigation loads routes', async ({
+  page,
+}) => {
   // stubAuthedShell supplies the canonical user/project AND the 404 catch-all
   // that keeps unstubbed downstream queries (audits) off the live backend.
   await stubAuthedShell(page);
@@ -46,17 +48,9 @@ test('authenticated shell exposes authorized navigation and search', async ({ pa
 
   await expect(page.getByRole('heading', { level: 1, name: 'AI Visibility' })).toBeVisible();
   await expect(page.getByRole('button', { name: /search or jump to/i })).toBeVisible();
-});
 
-test('primary navigation loads the destination route', async ({ page }) => {
-  await stubAuthedShell(page);
-  await page.goto(fixtureProjectPath('/projects'));
-  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
-
-  await page
-    .getByRole('navigation', { name: 'Primary' })
-    .getByRole('link', { name: 'Performance', exact: true })
-    .click();
+  // Primary navigation loads the destination route.
+  await nav.getByRole('link', { name: 'Performance', exact: true }).click();
   await page.waitForURL((url) => url.pathname === '/performance');
   await expect(page.getByRole('heading', { level: 1, name: 'Performance' })).toBeVisible();
 });

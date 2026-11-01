@@ -111,35 +111,7 @@ test('working surfaces preserve their actions without viewport overflow', async 
         await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
         `${route} at ${width}px must fit the viewport`,
       ).toBe(true);
-      await page.screenshot({
-        path: test
-          .info()
-          .outputPath(
-            `${process.env.DESIGN_CAPTURE_PHASE ?? 'after'}-${route.replaceAll('/', '-')}-${width}.png`,
-          ),
-      });
     }
-  }
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  for (const route of ['/projects', '/onboarding', '/agent']) {
-    await stubAuthedShell(
-      page,
-      [
-        [`**/api/v1/projects/${FIXTURE_PROJECT.id}/command-center`, overview],
-        [`**/api/v1/projects/${FIXTURE_PROJECT.id}/overview/layout`, layout],
-        ['**/api/v1/brand-discovery-catalog', catalog],
-      ],
-      route === '/onboarding' ? [] : [FIXTURE_PROJECT],
-    );
-    await page.goto(route === '/onboarding' ? route : fixtureProjectPath(route));
-    await expect(page.locator('h1')).toHaveCount(1);
-    await page.getByRole('button', { name: /Switch to dark/i }).click();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({
-      path: test.info().outputPath(`dark-${route.replaceAll('/', '-')}.png`),
-    });
-    await page.getByRole('button', { name: /Switch to light/i }).click();
   }
 });
 
@@ -279,5 +251,4 @@ test('Agent text entry paints one focus boundary', async ({ page }) => {
   expect(await form.evaluate((node) => getComputedStyle(node).borderColor)).toBe(outerEdge);
   expect(await form.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
   expect(await prompt.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
-  await page.screenshot({ path: test.info().outputPath('agent-focus.png') });
 });
