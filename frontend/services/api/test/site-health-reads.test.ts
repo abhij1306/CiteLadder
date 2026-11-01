@@ -650,7 +650,11 @@ describe('snapshot projections', () => {
       label: 'Machine readability',
       unresolved_count: 0,
     });
-    expect(overview.top_issues[0]).toMatchObject({ impact_band: 4, impact_label: 'Critical' });
+    expect(overview.top_issues[0]).toMatchObject({
+      title: 'Page blocked from indexing',
+      impact_band: 4,
+      impact_label: 'Critical',
+    });
     expect(overview.trend.reason).toBe('no_comparable_snapshot');
 
     const readiness = await json(

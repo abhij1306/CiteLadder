@@ -45,7 +45,7 @@ export function ComposerDock({
   floating,
 }: Readonly<{ children: ReactNode; floating?: ReactNode }>) {
   return (
-    <div className="bg-panel z-sticky sticky bottom-0 pt-2 pb-4">
+    <div className="surface-fill z-sticky sticky bottom-0 pt-2 pb-4">
       {floating ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-full flex justify-center pb-2">
           <div className="pointer-events-auto">{floating}</div>

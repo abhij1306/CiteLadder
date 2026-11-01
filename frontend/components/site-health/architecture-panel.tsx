@@ -285,7 +285,7 @@ function PageKindPages({
   crawlId,
 }: Readonly<{ pages: ArchitectureNode[]; crawlId: string | null }>) {
   return (
-    <TableRow className="bg-background-alt hover:bg-background-alt">
+    <TableRow className="bg-panel-tonal hover:bg-panel-tonal">
       <TableCell colSpan={6}>
         {pages.length === 0 ? (
           <QueryState

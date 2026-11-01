@@ -208,10 +208,9 @@ function PageBand({
   return (
     <div
       data-page-band={kind}
-      className={cn(
-        'border-border-subtle border-b',
-        kind === 'control' ? 'bg-panel-tonal' : 'bg-panel',
-      )}
+      // Every band is the sheet itself, closed by its rule; cards on the
+      // sheet are the raised step, so a band never wears a card's fill.
+      className="bg-sheet border-border-subtle border-b"
     >
       <div className={cn(pageGutterClasses, 'flex', className)}>{children}</div>
     </div>
@@ -239,7 +238,7 @@ function IdentityBand({
     <div
       data-page-band="identity"
       className={cn(
-        'bg-panel border-border-subtle border-b',
+        'bg-sheet border-border-subtle border-b',
         // Below the desktop breakpoint the compact topbar already names the
         // page, so a band holding only a screen-reader title would be an
         // empty ruled row. A back link is visible content, so it keeps the band.

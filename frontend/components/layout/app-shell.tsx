@@ -124,7 +124,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
               {/* Compact only, exactly as before. On desktop the account
                   trigger rides the route's own header row instead, so the shell
                   adds no second bar above the work. */}
-              <header className="bg-panel border-border-subtle z-sticky desktop:hidden sticky top-0 grid h-[var(--compact-topbar-height)] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-[var(--content-gutter)]">
+              <header className="bg-sheet border-border-subtle z-sticky desktop:hidden sticky top-0 grid h-[var(--compact-topbar-height)] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-[var(--content-gutter)]">
                 <div className="flex items-center">
                   <Button
                     variant="ghost"

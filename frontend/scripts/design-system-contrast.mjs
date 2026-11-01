@@ -39,13 +39,15 @@ const CONTRAST_PAIRS = [
   },
   {
     inks: ['foreground', 'secondary', 'muted'].map(color),
-    surfaces: ['panel-tonal', 'active'].map(color),
+    surfaces: ['sheet', 'panel-tonal', 'active'].map(color),
     minimum: 4.5,
     scopes: ALL_SCOPES,
   },
+  // A status ink reads on its own wash and on every surface of the ladder a
+  // badge or a status cell sits on: the sheet, a card and a nested surface.
   ...STATUSES.map((status) => ({
     inks: [color(`${status}-text`)],
-    surfaces: [color(`${status}-bg`), color('panel')],
+    surfaces: [color(`${status}-bg`), ...['sheet', 'panel', 'panel-tonal'].map(color)],
     minimum: 4.5,
     scopes: ALL_SCOPES,
   })),

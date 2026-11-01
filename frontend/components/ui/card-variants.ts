@@ -14,9 +14,12 @@ import { cn } from '@/lib/utils';
  * every card in the app and put an `overflow` boundary between a sticky child
  * and its scroll container. `CardGrid` opts a row into that column layout
  * instead, so only the cards that need aligned footers get it.
+ *
+ * The card's `panel` fill is one step above the sheet it sits on, so the fill
+ * carries the separation and the edge is only the `subtle` hairline.
  */
 const CARD_BOX =
-  'surface-card bg-panel rounded-[var(--radius-card)] border border-border p-[var(--card-padding)]';
+  'surface-card bg-panel rounded-[var(--radius-card)] border border-border-subtle p-[var(--card-padding)]';
 
 export type CardTone = 'default' | 'danger' | 'recommendation';
 

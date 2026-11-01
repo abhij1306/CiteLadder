@@ -70,7 +70,7 @@ export type RunStatusValue = keyof typeof runStatusBadge;
  * call site so product nouns keep their capitalization.
  */
 export const badgeBase =
-  'type-badge inline-flex min-h-[var(--badge-height-sm)] items-center gap-2 rounded-[var(--radius-xs)] px-2 py-0.5 whitespace-nowrap';
+  'type-badge inline-flex min-h-[var(--badge-height-sm)] shrink-0 items-center gap-2 rounded-[var(--radius-xs)] px-2 py-0.5 whitespace-nowrap';
 
 /**
  * A link whose face is a badge (a cited-evidence group that opens its
