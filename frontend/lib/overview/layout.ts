@@ -8,24 +8,6 @@ import {
   type OverviewWidgetKey,
 } from '@citeladder/contracts/overview';
 
-export const WIDGET_TITLES: Record<OverviewWidgetKey, string> = {
-  project_state: 'Project state',
-  citation_share: 'Citation share',
-  movement: 'Movement',
-  next_action: 'Next action',
-  missing_prompts: "Where you're missing",
-  ranked_actions: 'Ranked actions',
-  progress_proof: 'Progress and report proof',
-  company_facts: 'Company facts',
-  visibility_trend: 'Visibility over time',
-  share_of_voice: 'Share of voice',
-  top_movers: 'Top movers',
-  retrieval: 'Retrieved versus cited',
-  perception: 'Perception',
-  ai_traffic: 'AI Traffic',
-  search_console: 'Search Console',
-};
-
 /** Widgets the layout does not show yet, in catalog order. */
 export function addableWidgets(widgets: readonly OverviewWidget[]): OverviewWidgetKey[] {
   const shown = new Set(widgets.map((widget) => widget.key));

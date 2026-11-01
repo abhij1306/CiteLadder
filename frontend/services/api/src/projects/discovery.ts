@@ -43,7 +43,7 @@ export function discoveryView(row: DiscoveryRow) {
       positioning: '',
       products_services: [],
       target_audience: '',
-      industry: 'General',
+      industry: policy.projects.default_industry,
       business_type: null,
       price_tier: 'unknown',
       field_confidence: {},

@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   drainLanes,
@@ -8,6 +9,9 @@ import {
   runnerOwners,
 } from '../src/workers/runner.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
+import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
+import { AuditWorker } from '../src/workers/audit-worker.ts';
+import { AuditMaintenance } from '../src/audits/maintenance.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { sql } from 'kysely';
@@ -81,6 +85,44 @@ describe('bounded runner', () => {
       }
     },
   );
+  it('claims audits while the Site Health lane holds the runner, but never overlaps crawlers', async () => {
+    const config = testConfig({});
+    const db = createDatabase(config, { execution: true });
+    const audited = Promise.withResolvers<void>();
+    const seen: string[] = [];
+    let crawling = 0;
+    const crawl = (name: string) => async () => {
+      if (seen.includes(name)) return 0;
+      crawling++;
+      seen.push(crawling > 1 ? `${name} overlapped` : name);
+      if (name === 'site-health') await Promise.race([audited.promise, sleep(1000)]);
+      crawling--;
+      return 1;
+    };
+    const spies = [
+      vi.spyOn(SiteHealthWorker.prototype, 'drain').mockImplementation(crawl('site-health')),
+      vi.spyOn(AnalyticsWorker.prototype, 'runOnce').mockImplementation(crawl('analytics')),
+      vi.spyOn(AuditMaintenance.prototype, 'recoverLeases').mockResolvedValue(0),
+      vi.spyOn(AuditWorker.prototype, 'drain').mockImplementation(async () => {
+        if (seen.some((step) => step.startsWith('audits'))) return 0;
+        seen.push(crawling ? 'audits while crawling' : 'audits');
+        audited.resolve();
+        return 1;
+      }),
+    ];
+    try {
+      const owners = await runnerOwners(db, config);
+      const lanes = owners.lanes.filter((lane) =>
+        ['site-health', 'audits', 'analytics'].includes(lane.name),
+      );
+      const site = lanes.findIndex((lane) => lane.name === 'site-health');
+      expect(await drainLanes(lanes, { ...options(), firstLane: site })).toBe(3);
+      expect(seen).toEqual(['site-health', 'audits while crawling', 'analytics']);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+      await db.destroy();
+    }
+  });
   it('passes the same live budget to periodic work and stops within a phase', async () => {
     let clock = 0;
     let processed = 0;
@@ -286,6 +328,119 @@ describe('bounded runner', () => {
     );
     expect(tasks).toBe(2);
     expect(seen).toEqual(['earlier', 'later', 'earlier', 'later', 'earlier', 'later']);
+  });
+
+  it("runs one lane's queued work while another lane holds its claim window", async () => {
+    const released = Promise.withResolvers<void>();
+    const order: string[] = [];
+    let queued = 3;
+    const tasks = await drainLanes(
+      [
+        {
+          name: 'site-health',
+          run: async () => {
+            if (order.includes('site claimed')) return 0;
+            order.push('site claimed');
+            // The pre-fix sequential drain reaches the audits only after this window.
+            await Promise.race([released.promise, sleep(1000)]);
+            order.push('site settled');
+            return 1;
+          },
+        },
+        {
+          name: 'audits',
+          run: async () => {
+            if (!queued) {
+              released.resolve();
+              return 0;
+            }
+            queued--;
+            order.push('audit');
+            return 1;
+          },
+        },
+      ],
+      { ...options(), deadline: Number.POSITIVE_INFINITY },
+    );
+    expect(tasks).toBe(4);
+    expect(order).toEqual(['site claimed', 'audit', 'audit', 'audit', 'site settled']);
+  });
+
+  it('lets grouped lanes take turns while an ungrouped lane runs alongside', async () => {
+    const order: string[] = [];
+    let crawling = 0;
+    let overlapped = false;
+    const crawler = (name: string) => {
+      let left = 2;
+      return {
+        name,
+        group: 'web-fetch',
+        run: async () => {
+          if (!left) return 0;
+          left--;
+          crawling++;
+          overlapped ||= crawling > 1;
+          order.push(name);
+          await sleep(10);
+          crawling--;
+          return 1;
+        },
+      };
+    };
+    let auditsAlongside = false;
+    let audited = false;
+    await drainLanes(
+      [
+        crawler('analytics'),
+        crawler('site-health'),
+        {
+          name: 'audits',
+          run: async () => {
+            if (audited) return 0;
+            audited = true;
+            auditsAlongside = crawling === 1;
+            return 1;
+          },
+        },
+      ],
+      { ...options(), deadline: Number.POSITIVE_INFINITY },
+    );
+    expect(order).toEqual(['analytics', 'site-health', 'analytics', 'site-health']);
+    expect(overlapped).toBe(false);
+    expect(auditsAlongside).toBe(true);
+  });
+
+  it('polls an idle lane for new work while another lane stays busy', async () => {
+    let busy = true;
+    let picked = 0;
+    let queued = 0;
+    await drainLanes(
+      [
+        {
+          name: 'site-health',
+          run: async () => {
+            if (!busy) return 0;
+            // New audit work is committed after the audits lane went idle.
+            setTimeout(() => (queued = 1), 20);
+            await sleep(200);
+            busy = false;
+            return 1;
+          },
+        },
+        {
+          name: 'audits',
+          run: async () => {
+            if (!queued) return 0;
+            queued = 0;
+            picked = Number(busy);
+            return 1;
+          },
+        },
+      ],
+      { ...options(), deadline: Number.POSITIVE_INFINITY, idlePollMs: 50 },
+    );
+    // Picked up within the poll interval, before the busy lane returned.
+    expect(picked).toBe(1);
   });
 
   it.each(['deadline', 'signal'])(

@@ -39,6 +39,7 @@ it('separates gate outcomes from reviewed outcomes and excludes older question s
         answered_rejected: 1,
         false_flag_rate: 1,
         false_reject_rate: 0,
+        rejected_caught_by_flag: 1,
       },
     },
     by_grounding: {

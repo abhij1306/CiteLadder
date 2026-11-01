@@ -518,14 +518,6 @@ for (const width of [1280, 375]) {
       },
     });
     await page.goto(fixtureProjectPath(`/visibility?run=${AUDIT_EARLIER}&engine=gemini`));
-    // The Next.js dev overlay is pinned bottom-left and, at 375px, sits over
-    // the engine table at the bottom of this page — it swallowed the click
-    // while the button underneath reported visible, enabled and stable. It
-    // ships in dev only, so hiding it tests the product rather than the
-    // toolchain; forcing the click would have hidden a real overlap instead.
-    await page.addStyleTag({
-      content: 'nextjs-portal { display: none !important; }',
-    });
     await page.getByRole('button', { name: 'Gemini API', exact: true }).click();
     // The drill-down lands on Query fanouts, which is where execution evidence
     // is rendered now that the Mentions tab is gone. What this test is for is
@@ -538,9 +530,5 @@ for (const width of [1280, 375]) {
     expect(evidenceUrl.searchParams.get('engine')).toBe('gemini');
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`run=${AUDIT_EARLIER}.*engine=gemini`));
-    await page.screenshot({
-      path: `test-results/visibility-${width}.png`,
-      fullPage: true,
-    });
   });
 }

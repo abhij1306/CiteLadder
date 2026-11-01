@@ -16,7 +16,7 @@ export function discoverySettings(env: Record<string, string | undefined> = proc
 export const discoveryCreate = z.object({
   brand_name: z.string().trim().min(1).max(255),
   website_url: z.string().trim().min(1).max(1024),
-  industry: z.string().trim().max(255).default('General'),
+  industry: z.string().trim().max(255).default(policy.projects.default_industry),
   subindustry: z.string().trim().max(255).default(''),
   primary_market: marketInput,
   language_code: z.string().trim().max(16).default('en'),
@@ -46,7 +46,7 @@ export const discoveryProfile = brandDiscoverySchema.shape.profile.extend({
     .array(z.string().trim().max(profile.profile_product_max_chars))
     .max(profile.profile_products_max_count)
     .default([]),
-  industry: z.string().default('General'),
+  industry: z.string().default(policy.projects.default_industry),
   business_type: z.enum(['b2b', 'b2c', 'both']).nullable().default(null),
   price_tier: z.enum(constants.price_tiers as [string, ...string[]]).default('unknown'),
   field_confidence: z.record(z.string(), z.number().min(0).max(1)).default({}),

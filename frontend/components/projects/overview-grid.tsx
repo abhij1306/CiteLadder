@@ -3,10 +3,10 @@
 import { ArrowDown, ArrowUp, Maximize2, Minimize2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import type { OverviewWidget } from '@citeladder/contracts/overview';
+import { overviewWidgetTitles, type OverviewWidget } from '@citeladder/contracts/overview';
 import { IconButton } from '@/components/ui/button';
 import { FloatingToolbar, splitPaneClasses } from '@/components/ui/workspace';
-import { moveWidget, removeWidget, toggleWidth, WIDGET_TITLES } from '@/lib/overview/layout';
+import { moveWidget, removeWidget, toggleWidth } from '@/lib/overview/layout';
 import { cn } from '@/lib/utils';
 
 /**
@@ -77,7 +77,7 @@ function WidgetControls({
   onResize: () => void;
   onRemove: () => void;
 }>) {
-  const title = WIDGET_TITLES[widget.key];
+  const title = overviewWidgetTitles[widget.key];
   const wide = widget.size === 'full';
   return (
     <FloatingToolbar>

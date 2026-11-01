@@ -233,7 +233,11 @@ export function parseAnswer(payload: unknown, request: AnswerRequest, latencyMs 
     usage.total_tokens = counter(rawUsage, 'total_tokens') ?? sum(input, output);
     usage.web_search_requests = calls.length;
     rawFinish = text(object(source.incomplete_details).reason) || text(source.status);
-    finish = OPENAI_FINISH[rawFinish] ?? 'unknown';
+    // A refusal arrives as a message block on a `completed` response.
+    const refused = items
+      .filter((item) => item.type === 'message')
+      .some((item) => objects(item.content).some((block) => block.type === 'refusal'));
+    finish = refused ? 'content_filter' : (OPENAI_FINISH[rawFinish] ?? 'unknown');
   } else if (transport === 'google') {
     const input = counter(rawUsage, 'promptTokenCount', 'prompt_token_count');
     usage.cached_input_tokens = counter(

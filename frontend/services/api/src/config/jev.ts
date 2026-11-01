@@ -174,7 +174,38 @@ export const quality = {
         false: 'Contradictory, impossible or nonsensical',
       },
     },
+    single_need: {
+      instructions:
+        'Does `candidate.question` carry exactly one buyer need: one setting, audience, requirement or problem? Joining two settings, audiences or requirements with "or" or "and" (a sofa for a small flat or an office; shoes for runners and hikers), or stacking several requirements, is not one need. The kind of thing plus one qualifier is one need.',
+      criteria: {
+        true: 'One need a single shortlist can serve',
+        false: 'Two or more needs joined or stacked in one question',
+      },
+    },
   },
+  /**
+   * Asked of brand diagnostics only, which name the business and so can
+   * assert things about it. Comparisons also name a competitor, which the
+   * judge's state cannot tell apart from the tracked brand.
+   */
+  brand_noul_questions: {
+    grounded_claims: {
+      instructions:
+        'Does `candidate.question` attribute to the business it names only properties found in `grounded_attributes`, or none at all? Asking whether the business suits a situation or an audience is fine. Asserting that its offering has a feature, material, size, format or other property that `grounded_attributes` does not state (calling its product "portable" or "waterproof" when no grounded attribute says so) is not.',
+      criteria: {
+        true: 'Claims nothing about the business beyond the grounded attributes',
+        false: 'Attributes an ungrounded feature or claim to the business',
+      },
+    },
+  },
+  /**
+   * The topic choice asked when a run spans several topics: a draft the judge
+   * places under another selected topic with at least `topic_refile_at`
+   * probability is filed there. Provisional until calibrated.
+   */
+  topic_instructions:
+    "Which topic is `candidate.question` mainly about: the kind of product or service it asks for options of? A question about a single item belongs to that item's topic, not to a bundle, package or accessory topic the item could be part of.",
+  topic_refile_at: 0.6,
   /**
    * Asked of core drafts only (branded diagnostics and comparisons name the
    * brand by design), under the `answerable_*` thresholds.

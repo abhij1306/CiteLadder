@@ -122,7 +122,7 @@ for (const viewport of [
 ]) {
   test(`saved search results remain readable and do not trigger acquisition at ${viewport.width}px`, async ({
     page,
-  }, testInfo) => {
+  }) => {
     await page.setViewportSize(viewport);
     const project = {
       ...FIXTURE_PROJECT,
@@ -174,10 +174,8 @@ for (const viewport of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width,
     );
-    await page.screenshot({ path: testInfo.outputPath('overview.png'), fullPage: true });
     await page.getByRole('tab', { name: 'Keywords', exact: true }).click();
     await expect(page.getByRole('cell', { name: '8', exact: true }).first()).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath('keywords.png'), fullPage: true });
     await page.getByRole('combobox', { name: 'Saved market' }).click();
     await page.getByRole('option', { name: 'Australia · en' }).click();
     await page.getByRole('combobox', { name: 'Saved scope' }).click();
@@ -194,13 +192,11 @@ for (const viewport of [
     ).toBeVisible();
     await page.getByRole('button', { name: 'All competitors' }).click();
     await expect(page.getByRole('cell', { name: 'Summit Gear summit-gear.example' })).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath('competitors.png'), fullPage: true });
     await page.getByRole('tab', { name: 'Backlinks', exact: true }).click();
     await page.getByRole('radio', { name: 'Referring domains', exact: true }).click();
     await expect(
       page.getByText('The provider returned no data for this saved scope.'),
     ).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath('backlinks.png'), fullPage: true });
     await page.getByRole('combobox', { name: 'Saved scope' }).click();
     await page.getByRole('option', { name: 'Domain + subdomains' }).click();
     await page.getByRole('radio', { name: 'Backlinks', exact: true }).click();
@@ -208,11 +204,9 @@ for (const viewport of [
     await expect(page.getByText('400', { exact: true })).toBeVisible();
     await expect(page.getByText('250', { exact: true })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Saved backlink history' })).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath('broad-backlinks.png'), fullPage: true });
     await page.getByRole('tab', { name: 'Keywords', exact: true }).click();
     await page.getByRole('radio', { name: 'Top pages', exact: true }).click();
     await expect(page.getByRole('cell', { name: '22', exact: true })).toBeVisible();
-    await page.screenshot({ path: testInfo.outputPath('organic-pages.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width,
     );

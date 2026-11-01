@@ -67,7 +67,7 @@ export type DataTableColumn = Readonly<{
   key: string;
   label: string;
   width?: DataTableColumnWidth;
-  /** Right-aligned tabular figures (or a trailing control), header included. */
+  /** Right-aligned figures, digits in the figure face (or a trailing control), header included. */
   numeric?: boolean;
   /** Keep the header for assistive technology only (an actions column). */
   hideLabel?: boolean;

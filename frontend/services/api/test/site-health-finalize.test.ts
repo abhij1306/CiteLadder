@@ -19,8 +19,11 @@ import {
   linkRedirects,
   redirectChains,
   resolutionSet,
+  sitewideLinks,
+  sitewideTargets,
   type Resolution,
 } from '../src/site-health/resolution-evidence.ts';
+import { compareText } from '../src/text-order.ts';
 import { resolveDuplicateAliases } from '../src/site-health/canonical-alias.ts';
 import { assessCoverage, type CoverageSignals } from '../src/site-health/coverage.ts';
 import { ScoreRefreshCadence } from '../src/site-health/lifecycle.ts';
@@ -233,7 +236,7 @@ describe('terminal checks from persisted evidence', () => {
     expect(links.evidence.failing_targets).toEqual([
       { url: 'https://api.example.test/v1', status_code: 404 },
     ]);
-    const sitemap = resolutionSet(['https://example.test/account'], resolutions, true);
+    const sitemap = resolutionSet(['https://example.test/account'], resolutions, { sitemap: true });
     expect(sitemap.evidence.failing_targets).toEqual([
       { url: 'https://example.test/account', status_code: 403 },
     ]);
@@ -270,6 +273,116 @@ describe('terminal checks from persisted evidence', () => {
     const timedOut = [...passing, 'https://example.test/timeout'];
     expect(resolutionSet(timedOut, resolutions).outcome).toBe('unknown');
     expect(linkRedirects(timedOut, resolutions).outcome).toBe('unknown');
+  });
+
+  it('judges a link most pages share once on the root, keyed by the link, not on every page', () => {
+    const resolution = (changes: Partial<Resolution>): Resolution => ({
+      status: 200,
+      finalUrl: '',
+      redirected: false,
+      hops: 0,
+      errorCode: '',
+      taskId: 'task',
+      attemptId: 'attempt',
+      artifactId: null,
+      ...changes,
+    });
+    const url = (path: string) => `https://example.test${path}`;
+    // A store whose one footer link 301s, on every page.
+    const resolutions = new Map([
+      [url('/'), resolution({ finalUrl: url('/') })],
+      [
+        url('/collections/screens'),
+        resolution({
+          finalUrl: url('/collections/outdoor/'),
+          redirected: true,
+          hops: 1,
+          taskId: 'task-screens',
+          attemptId: 'attempt-screens',
+        }),
+      ],
+      [url('/gone'), resolution({ status: 404, taskId: 'task-gone', attemptId: 'attempt-gone' })],
+      [url('/old-product'), resolution({ finalUrl: url('/product'), redirected: true, hops: 1 })],
+    ]);
+    const footer = [url('/'), url('/collections/screens'), url('/gone')];
+    const pages = Array.from({ length: 6 }, (_, index) => `/p${index}`);
+    const linksByPage = [[...footer, url('/old-product')], ...pages.slice(1).map(() => footer)];
+    // Five of six pages carry a link that only one page has: not sitewide.
+    expect(
+      [...sitewideTargets([...linksByPage, [url('/old-product')]])].toSorted(compareText),
+    ).toEqual([url('/'), url('/collections/screens'), url('/gone')]);
+    const sitewide = sitewideTargets(linksByPage);
+    // Fewer than the minimum number of pages never makes a link sitewide.
+    expect(sitewideTargets(linksByPage.slice(0, 4))).toEqual(new Set());
+
+    // The page keeps its own redirect, and names the sitewide one it no longer judges.
+    const redirects = linkRedirects(linksByPage[0]!, resolutions, sitewide);
+    expect([redirects.outcome, redirects.evidence.failing_targets]).toEqual([
+      'partial',
+      [{ url: url('/old-product'), final_url: url('/product'), hops: 1 }],
+    ]);
+    expect(redirects.evidence.sitewide_targets).toEqual([
+      { url: url('/collections/screens'), final_url: url('/collections/outdoor/'), hops: 1 },
+    ]);
+    const onlyShared = linkRedirects(linksByPage[1]!, resolutions, sitewide);
+    expect([onlyShared.outcome, onlyShared.evidence.failing_targets]).toEqual(['satisfied', []]);
+    const broken = resolutionSet(linksByPage[1]!, resolutions, { sitewide });
+    expect([broken.outcome, broken.evidence.sitewide_targets]).toEqual([
+      'satisfied',
+      [{ url: url('/gone'), status_code: 404 }],
+    ]);
+
+    const linkers = new Map(
+      footer.map((target) => [
+        target,
+        pages.map((path) => ({
+          siteUrlId: `site-${path}`,
+          url: url(path),
+          title: `Page ${path}`,
+          pageKind: path === '/p0' ? 'homepage' : 'product',
+          artifactId: `artifact-${path}`,
+        })),
+      ]),
+    );
+    const [brokenShared, redirectShared] = sitewideLinks(sitewide, linkers, resolutions);
+    expect([brokenShared!.rule_id, brokenShared!.outcome, brokenShared!.scope]).toEqual([
+      'technical.sitewide_broken_link',
+      'missing',
+      'site',
+    ]);
+    expect(redirectShared!.evidence).toMatchObject({
+      count: 6,
+      linking_page_kinds: ['homepage', 'product'],
+      resolution_source_ids: ['attempt-screens', 'task-screens'],
+    });
+    const [target] = redirectShared!.evidence.targets as Record<string, unknown>[];
+    expect(target).toMatchObject({
+      url: url('/collections/screens'),
+      final_url: url('/collections/outdoor/'),
+      hops: 1,
+      linking_page_count: 6,
+    });
+    expect((target!.pages as unknown[])[0]).toEqual({
+      site_url_id: 'site-/p0',
+      url: url('/p0'),
+      title: 'Page /p0',
+      page_kind: 'homepage',
+      artifact_id: 'artifact-/p0',
+    });
+    // Nothing shared fails: the root's checks pass.
+    expect(
+      sitewideLinks(new Set([url('/')]), linkers, resolutions).map((row) => row.outcome),
+    ).toEqual(['satisfied', 'satisfied']);
+    // A shared link the crawl never fetched, or that was rate-limited, cannot pass.
+    resolutions.set(url('/busy'), resolution({ status: 429 }));
+    expect(
+      sitewideLinks(new Set([url('/'), url('/never'), url('/busy')]), linkers, resolutions).map(
+        (row) => [row.outcome, row.evidence.unchecked_targets],
+      ),
+    ).toEqual([
+      ['unknown', [url('/busy'), url('/never')]],
+      ['unknown', [url('/busy'), url('/never')]],
+    ]);
   });
 
   it('weights pages equally and keeps missing measurements out of the score denominator', () => {

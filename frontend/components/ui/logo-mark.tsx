@@ -1,5 +1,3 @@
-import { cn } from '@/lib/utils';
-
 import {
   LOGO_BARS,
   LOGO_BUBBLE,
@@ -9,7 +7,9 @@ import {
   LOGO_GLYPHS,
   LOGO_MARK_WIDTH,
   LOGO_VIEWBOX_WIDTH,
-} from './logo-glyphs';
+} from '@citeladder/contracts/brand-logo';
+
+import { cn } from '@/lib/utils';
 
 /**
  * Official CiteLadder brand logo: the speech-bubble mark, with or without the

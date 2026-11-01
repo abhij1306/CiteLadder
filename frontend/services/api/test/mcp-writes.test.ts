@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, afterEach, expect, it } from 'vitest';
+import { afterAll, afterEach, expect, it, onTestFinished, vi } from 'vitest';
 import { ApiError } from '../src/errors.ts';
 import { mcpPolicy } from '../src/mcp/config.ts';
 import { admitWriteCall } from '../src/mcp/registration.ts';
@@ -518,6 +518,11 @@ it('launches an audit only on confirmation, within the frozen estimate', async (
 it('spends a narrower per-connection budget on changes', async () => {
   const tenant = await auditTenant(db, fixtures);
   const principal = await connection(tenant);
+  // Budgets are fixed clock windows; a held clock keeps every call in one of them.
+  vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:15Z') });
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
   for (let index = 0; index < mcpPolicy.write_call_grant_limit; index++)
     await admitWriteCall(db, principal.grantId);
   const refused = await admitWriteCall(db, principal.grantId).catch((error: unknown) => error);

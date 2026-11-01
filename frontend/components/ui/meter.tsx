@@ -104,7 +104,7 @@ export function Meter({
  * One row of a distribution: the bucket's name, its bar and its figure, in
  * three tracks every row of the list shares, so the bars start and end on one
  * line. The name track fits a short label ("Depth 4+"); the figure is
- * right-aligned and tabular.
+ * right-aligned in the figure face.
  */
 export function MeterRow({
   name,
@@ -117,7 +117,7 @@ export function MeterRow({
     <div className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-[var(--compact-gap)]">
       <span className="type-caption">{name}</span>
       <Meter {...meter} />
-      <span className="type-label text-right tabular-nums">{figure}</span>
+      <span className="type-label font-numeric text-right">{figure}</span>
     </div>
   );
 }

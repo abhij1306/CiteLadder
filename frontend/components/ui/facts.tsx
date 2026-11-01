@@ -27,7 +27,9 @@ const LIST = {
 } as const;
 
 const ROW = {
-  ruled: 'grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4 py-2 first:pt-0 last:pb-0',
+  // Baseline-aligned, so a label sits on the line of a value drawn as chips.
+  ruled:
+    'grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-baseline gap-4 py-2 first:pt-0 last:pb-0',
   inline: 'flex items-center gap-2',
   spread: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1',
 } as const;
@@ -41,7 +43,9 @@ const TERM = {
 const DETAIL = {
   ruled: textRole('body', 'text-foreground tabular-nums'),
   inline: textRole('body'),
-  spread: textRole('body', 'text-foreground tabular-nums'),
+  // A spread row's value is a right-aligned amount or count (a quote line),
+  // so its digits take the figure face and line up with the total under it.
+  spread: textRole('body', 'text-foreground font-numeric'),
 } as const;
 
 function factKey(fact: Fact, index: number) {
@@ -73,7 +77,7 @@ export function FactList({
       {total && layout === 'spread' ? (
         <div className={cn(ROW.spread, 'border-border border-t pt-2')}>
           <dt className={textRole('emphasis')}>{total.label}</dt>
-          <dd className={textRole('emphasis', 'tabular-nums')}>{total.value}</dd>
+          <dd className={textRole('emphasis', 'font-numeric')}>{total.value}</dd>
         </div>
       ) : null}
     </dl>
@@ -106,7 +110,7 @@ export function ValueLedger({
           className="flex h-[var(--control-height-md)] items-center justify-between gap-3"
         >
           <span className={textRole('body', 'min-w-0 truncate')}>{item.label}</span>
-          <span className={textRole('label', 'shrink-0 tabular-nums')}>{item.value}</span>
+          <span className={textRole('label', 'shrink-0 font-numeric')}>{item.value}</span>
         </li>
       ))}
       {padding.map((slot) => (

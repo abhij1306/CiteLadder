@@ -88,23 +88,17 @@ function PagerSummary({
 }: Readonly<{ range?: PagerRange; page?: number; pageCount?: number }>) {
   if (range) {
     return (
-      <span className="type-caption" aria-live="polite">
-        <span className="tabular-nums">
-          {range.from}–{range.to}
-        </span>
-        {range.total === undefined ? null : (
-          <>
-            {' of '}
-            <span className="tabular-nums">{formatCount(range.total)}</span>
-          </>
-        )}{' '}
-        {range.noun}
+      // The figure face holds every digit to one width, so the summary does
+      // not change width as the reader pages.
+      <span className="type-caption font-numeric" aria-live="polite">
+        {range.from}–{range.to}
+        {range.total === undefined ? null : ` of ${formatCount(range.total)}`} {range.noun}
       </span>
     );
   }
   if (!page) return <span />;
   return (
-    <span className="type-caption tabular-nums" aria-live="polite">
+    <span className="type-caption font-numeric" aria-live="polite">
       Page {page}
       {pageCount ? ` of ${pageCount}` : null}
     </span>

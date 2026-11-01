@@ -264,17 +264,6 @@ describe('TextLink', () => {
     expect(screen.getByText('unsafe')).toBeInTheDocument();
     expect(screen.queryByText('(opens in a new tab)')).toBeNull();
   });
-
-  it('routes a back link through the router', () => {
-    render(
-      <MemoryRouter>
-        <TextLink variant="back" href="/runs">
-          Back to runs
-        </TextLink>
-      </MemoryRouter>,
-    );
-    expect(screen.getByRole('link', { name: 'Back to runs' })).toHaveAttribute('href', '/runs');
-  });
 });
 
 describe('FilterBar and FilterTrigger', () => {

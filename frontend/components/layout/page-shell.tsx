@@ -4,8 +4,8 @@ import { useContext, useLayoutEffect, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
+import { BackButton } from '@/components/ui/back-button';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
-import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { splitPaneClasses, type SplitPaneRole } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
@@ -15,14 +15,14 @@ import { navigationMode } from './nav-items';
 import { resolveTitle } from './page-titles';
 
 /**
- * A detail route's way back to the collection it was opened from. Rendered
- * above the H1 in the identity band — the one place every detail route puts
- * it, instead of a breadcrumb line at the top of the content.
+ * A detail route's way back to the collection it was opened from. Rendered as
+ * a round back button before the H1 in the identity band — the one place every
+ * detail route puts it, instead of a breadcrumb line at the top of the content.
  */
 export type PageBack = Readonly<{
   /** The collection route, e.g. `/runs`; scoped to the project like any app link. */
   href: string;
-  /** The link text, e.g. "Back to runs". */
+  /** The button's accessible name and hover hint, e.g. "Back to runs". */
   label: string;
   /** Scope to this project rather than the active one. */
   projectId?: string | null;
@@ -99,8 +99,8 @@ export function ListScreen<T extends string = string>({
 }
 
 /**
- * DetailScreen — the template for one record: identity band with the way
- * back above the title → optional tabs and controls → the content, either one
+ * DetailScreen — the template for one record: identity band with the back
+ * button before the title → optional tabs and controls → the content, either one
  * stack or a split from `splitPaneClasses` when an `aside` is given
  * (`main-aside` by default, `list-detail` for a list beside its selection).
  */
@@ -244,7 +244,7 @@ function IdentityBand({
         'bg-sheet border-border-subtle border-b',
         // Below the desktop breakpoint the compact topbar already names the
         // page, so a band holding only a screen-reader title would be an
-        // empty ruled row. A back link is visible content, so it keeps the band.
+        // empty ruled row. A back button is visible content, so it keeps the band.
         !actions && !back && 'hidden desktop:block',
       )}
     >
@@ -263,20 +263,12 @@ function IdentityBand({
             squeezing the page's name to nothing. */}
         <div
           className={cn(
-            'grid min-w-0 flex-1 gap-1 desktop:min-w-[var(--page-title-min-width)]',
+            'flex min-w-0 flex-1 items-center gap-3 desktop:min-w-[var(--page-title-min-width)]',
             !back && 'sr-only desktop:not-sr-only',
           )}
         >
           {back ? (
-            <TextLink
-              variant="back"
-              text="label"
-              className="justify-self-start"
-              href={back.href}
-              projectId={back.projectId}
-            >
-              {back.label}
-            </TextLink>
+            <BackButton href={back.href} label={back.label} projectId={back.projectId} />
           ) : null}
           {/* The route H1 is the top of the type ladder: nothing on the page
               out-ranks it except a figure. It stays the one H1 per route. */}

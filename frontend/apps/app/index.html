@@ -12,19 +12,33 @@
     <link rel="icon" href="/citeladder-favicon.ico" sizes="any" />
     <title>CiteLadder</title>
     <style>
-      /* Geist and Outfit are used when the reader has them installed;
-         otherwise these metric-matched Arial faces stand in, so the layout is
-         the same either way. */
-      /* Match Arial's x-height to Geist's (0.530em vs 0.519em). Vertical
-         overrides use Geist's 1005/-295/0 hhea metrics (1000 UPM), divided by
-         size-adjust. */
+      /* Lexend Deca, Outfit and the figure face are used when the reader has
+         them installed; otherwise these metric-matched Arial faces stand in,
+         so the layout is the same either way. */
+      /* The figure face sets numbers only: digits and the marks that sit
+         inside a number (. , : % + - −). Letters and spaces fall through to
+         Lexend Deca, so a figure's unit or a "Not measured" in a figure cell
+         stays in the text face, and the line box keeps Lexend Deca's metrics
+         (the first family that covers the space). Keep this range in step
+         with the fallback below and the MCP app. */
       @font-face {
-        font-family: 'Geist Fallback';
+        font-family: 'JetBrains Mono Variable';
+        src: local('JetBrains Mono'), local('JetBrainsMono-Regular');
+        font-weight: 300 500;
+        font-style: normal;
+        unicode-range: U+0025, U+002B-002E, U+0030-003A, U+2212;
+      }
+
+      /* Match Arial's x-height to Lexend Deca's (0.525em vs 0.519em). Vertical
+         overrides use Lexend Deca's 1000/-250/0 hhea metrics (1000 UPM),
+         divided by size-adjust. */
+      @font-face {
+        font-family: 'Lexend Deca Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 102.12%;
-        ascent-override: 98.41%;
-        descent-override: 28.89%;
+        size-adjust: 101.16%;
+        ascent-override: 98.86%;
+        descent-override: 24.71%;
         line-gap-override: 0%;
       }
 
@@ -41,12 +55,30 @@
         line-gap-override: 0%;
       }
 
+      /* Scale Arial's tabular digits (0.556em) to JetBrains Mono's 0.600em
+         advance, so a figure column keeps its width either way. Vertical
+         overrides use JetBrains Mono's 1020/-300/0 hhea metrics (1000 UPM),
+         divided by size-adjust. */
+      @font-face {
+        font-family: 'JetBrains Mono Fallback';
+        src: local('Arial');
+        font-weight: 100 500;
+        size-adjust: 107.88%;
+        ascent-override: 94.55%;
+        descent-override: 27.81%;
+        line-gap-override: 0%;
+        unicode-range: U+0025, U+002B-002E, U+0030-003A, U+2212;
+      }
+
       :root {
         font-synthesis-weight: none;
-        /* Geist carries body, UI and data (its tabular figures line up
-           columns); Outfit carries display headings. */
-        --font-text: 'Geist Variable', 'Geist Fallback', Arial;
+        /* Lexend Deca carries body, UI and data; Outfit carries display
+           headings; the figure face sets the digits of figures in data roles
+           (`--font-numeric` in globals.css), because Lexend Deca has no
+           tabular figures (no `tnum`). */
+        --font-text: 'Lexend Deca Variable', 'Lexend Deca Fallback', Arial;
         --font-heading: 'Outfit Variable', 'Outfit Fallback', Arial;
+        --font-figure: 'JetBrains Mono Variable', 'JetBrains Mono Fallback';
       }
     </style>
   </head>

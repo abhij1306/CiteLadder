@@ -11,7 +11,7 @@ const RING_STROKE = 4;
 
 /**
  * ScoreRing — circular progress. Color from the score-band token, center
- * shows the tabular display number. Carries an ARIA label with the percentage
+ * shows the display number in the `figureSm` role. Carries an ARIA label with the percentage
  * (role="img") so the value is announced to assistive tech.
  *
  * One form: the ring sits in a `StatRow` segment beside its label, so it is

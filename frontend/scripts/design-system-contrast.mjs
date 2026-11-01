@@ -75,6 +75,18 @@ const CONTRAST_PAIRS = [
 ];
 
 /**
+ * Every ink and every surface token the contrast matrix reads, so a fixture
+ * can bind a complete palette without restating the matrix row by row.
+ * @public — imported by the scripts/ fixture tests.
+ */
+export function contrastRoles() {
+  return {
+    inks: [...new Set(CONTRAST_PAIRS.flatMap(({ inks }) => inks))],
+    surfaces: [...new Set(CONTRAST_PAIRS.flatMap(({ surfaces }) => surfaces))],
+  };
+}
+
+/**
  * Marks that must stay distinguishable without full colour vision: by
  * lightness alone, or by hue under both red–green deficiencies.
  */

@@ -266,7 +266,7 @@ export function ChartTooltipContent({
           >
             {entry.color ? <LegendSwatch color={entry.color} /> : null}
             <span className="max-w-[16ch] truncate">{entry.name}</span>
-            <span className="ml-auto tabular-nums">{formatValue(entry.value as number)}</span>
+            <span className="font-numeric ml-auto">{formatValue(entry.value as number)}</span>
           </li>
         ))}
       </ul>

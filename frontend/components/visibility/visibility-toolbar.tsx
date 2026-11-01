@@ -42,11 +42,14 @@ const METRICS_HELP_URL = '/faq';
 /**
  * Trigger copy for the prompt cohort: whether the questions name a brand.
  * Unbranded questions are the honest headline; branded comparison questions
- * name the brand or a competitor, so they read separately.
+ * name the brand or a competitor, so they read separately. The menu's own
+ * label says "Prompts", so the two cohorts name only their branding: the
+ * longer "Unbranded prompts" wrapped the Trends band at 982px in the wider
+ * text face.
  */
 const COHORT_LABELS = {
-  core: 'Unbranded prompts',
-  comparison: 'Branded prompts',
+  core: 'Unbranded',
+  comparison: 'Branded',
   all: 'All prompts',
 } as const satisfies Record<PromptCohort, string>;
 

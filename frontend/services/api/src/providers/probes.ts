@@ -219,7 +219,8 @@ function probeRequest(
   const url = approvedEndpoint(transport, baseUrl, settings);
   const prompt = providerPolicy.probe_prompt;
   const cap = settings.outputTokens;
-  const effort = providerPolicy.routes[engine].reasoning_effort;
+  const route = providerPolicy.routes[engine];
+  const effort = route.reasoning_effort;
   if (transport === 'dataforseo') {
     const pair = z
       .object({ login: z.string().min(1), password: z.string().min(1) })
@@ -270,7 +271,7 @@ function probeRequest(
       model,
       max_tokens: cap,
       messages: [{ role: 'user', content: prompt }],
-      ...(effort === 'off' ? { thinking: { type: 'disabled' } } : {}),
+      ...(route.anthropic_thinking ? { thinking: { type: route.anthropic_thinking } } : {}),
     },
   };
 }

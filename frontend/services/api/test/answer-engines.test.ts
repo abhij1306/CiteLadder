@@ -17,6 +17,7 @@ function request(engine: 'chatgpt' | 'gemini' | 'claude', retrieval = true): Ans
     max_output_tokens: 512,
     timeout_seconds: 1,
     reasoning_effort: route.reasoning_effort,
+    anthropic_thinking: route.anthropic_thinking,
     country_code: 'AU',
     anthropic_max_uses: 0,
     openai_max_tool_calls: 0,
@@ -81,6 +82,99 @@ describe('frozen answer-engine execution', () => {
   ])('sends OpenAI reasoning effort %s as the model accepts it', (effort, reasoning) => {
     const body = answerPayload({ ...request('chatgpt'), reasoning_effort: effort });
     expect(body.reasoning).toEqual(reasoning);
+  });
+  it.each([
+    ['between_tools', 'low', { type: 'between_tools' }, { effort: 'low' }],
+    ['disabled', 'high', { type: 'disabled' }, { effort: 'high' }],
+    [null, 'unrecorded', undefined, undefined],
+  ] as const)(
+    'sends Anthropic thinking %s at effort %s within the frozen output budget',
+    (thinking, effort, sentThinking, sentConfig) => {
+      const body = answerPayload({
+        ...request('claude'),
+        anthropic_thinking: thinking,
+        reasoning_effort: effort,
+      });
+      expect(body.max_tokens).toBe(512);
+      expect(body.thinking).toEqual(sentThinking);
+      expect(body.output_config).toEqual(sentConfig);
+    },
+  );
+  it.each([
+    [
+      'claude',
+      {
+        stop_reason: 'max_tokens',
+        content: [
+          { type: 'thinking', thinking: '', signature: 'sig' },
+          { type: 'server_tool_use', name: 'web_search', input: { query: 'options' } },
+          { type: 'web_search_tool_result', content: [] },
+        ],
+        usage: { input_tokens: 900, output_tokens: 856 },
+      },
+      { code: 'truncated_before_answer', retryable: true },
+    ],
+    [
+      'chatgpt',
+      {
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [{ type: 'reasoning', text: 'private-reasoning' }],
+      },
+      { code: 'truncated_before_answer', retryable: true },
+    ],
+    [
+      'gemini',
+      { finish_reason: 'MAX_TOKENS', steps: [] },
+      { code: 'truncated_before_answer', retryable: true },
+    ],
+    [
+      'claude',
+      { stop_reason: 'refusal', content: [] },
+      { code: 'content_filter', retryable: false },
+    ],
+    [
+      'chatgpt',
+      {
+        status: 'completed',
+        output: [{ type: 'message', content: [{ type: 'refusal', refusal: 'I cannot help.' }] }],
+      },
+      { code: 'content_filter', retryable: false },
+    ],
+    [
+      'claude',
+      { stop_reason: 'end_turn', content: [{ type: 'text', text: '  ' }] },
+      { code: 'empty_answer', retryable: true },
+    ],
+  ] as const)(
+    'fails a %s exchange with no answer text instead of returning an observation (%j)',
+    async (engine, payload, failure) => {
+      await expect(
+        executeAnswer(
+          request(engine),
+          { secret: 'test-secret', base_url: '' },
+          providerSettings({}),
+          async () => Response.json(payload),
+        ),
+      ).rejects.toMatchObject(failure);
+    },
+  );
+  it('keeps non-empty text cut off by the budget as an observation with its finish reason', async () => {
+    const result = await executeAnswer(
+      request('claude'),
+      { secret: 'test-secret', base_url: '' },
+      providerSettings({}),
+      async () =>
+        Response.json({
+          stop_reason: 'max_tokens',
+          content: [{ type: 'text', text: 'Acme Running suits' }],
+        }),
+    );
+    expect(result).toMatchObject({
+      answer_text: 'Acme Running suits',
+      finish_reason: 'length',
+      raw_finish_reason: 'max_tokens',
+    });
   });
   it.each([
     [1, 1],

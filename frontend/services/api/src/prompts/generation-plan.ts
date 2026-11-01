@@ -40,6 +40,12 @@ export type Slot = {
   evidence_ref: Record<string, unknown>;
   /** Same-topic searches that steer phrasing; absent when the project has none. */
   grounding?: Grounding[];
+  /**
+   * A brand diagnostic cell's only claimable attributes: the topic's
+   * offerings and the attributes a person confirmed in its business map. The
+   * judge checks the draft against them; other cells carry none.
+   */
+  grounded_attributes?: string[];
 };
 type Grounding = Pick<
   ObservedQuery,
@@ -58,7 +64,9 @@ type PlanContext = Pick<GenerationContext, 'selected' | 'topics' | 'maps' | 'obs
   context: Pick<GenerationContext['context'], 'business_context'>;
 };
 
-const business = (context: PlanContext) => record(context.context.business_context);
+const business = (context: Pick<PlanContext, 'context'>) =>
+  record(context.context.business_context);
+const ATTRIBUTE = dimensions.indexOf('attributes');
 
 /**
  * `business_context.topic_offerings`: the saved offerings each recovered topic
@@ -77,6 +85,21 @@ export function topicOfferings(
 ): string[] {
   const linked = topicLinks.parse(values.topic_offerings ?? {})[topic.id] ?? [];
   return linked.length ? linked : [topic.name];
+}
+
+/**
+ * Each selected topic's weight in a run: how many saved offerings it covers
+ * (`topicOfferings`), so the category holding most of the catalogue gets the
+ * most cells and selected prompts. A topic covering one offering, or none
+ * recorded, weighs one; equal weights plan and select round-robin.
+ */
+export function topicWeights(
+  context: Pick<PlanContext, 'selected' | 'context'>,
+): Map<string, number> {
+  const values = business(context);
+  return new Map(
+    context.selected.map((topic) => [topic.id, Math.max(1, topicOfferings(values, topic).length)]),
+  );
 }
 
 /** The reviewed market scope's share of cells that may name a market. */
@@ -153,6 +176,8 @@ type Planner = {
   offering: string;
   /** The topic's facet options; every cell takes exactly one when any exist. */
   options: Facet[];
+  /** What a branded cell may attribute to the business (`Slot.grounded_attributes`). */
+  claims: string[];
   cells: number;
   located: number;
   usage: Map<string, number>;
@@ -222,10 +247,16 @@ function planners(
           ...people,
         ])
       : [];
+    const confirmed = own.flatMap((map) =>
+      map.attributes
+        .filter((entry) => entry.review_state === 'confirmed')
+        .map(({ value }) => value),
+    );
     return {
       topic,
       offering,
       options: options.length ? options : fallback,
+      claims: [...new Set([...topicOfferings(business(context), topic), ...confirmed])],
       cells: 0,
       located: 0,
       usage: new Map(),
@@ -319,13 +350,22 @@ function groundingFor(
 }
 
 /**
- * Plan `count × overgenerate_factor` cells round-robin over the selected
- * offerings. Every cell carries exactly one facet (the topic's least-used
- * attribute, situation or audience) from the first cell on. The buyer stage
- * is a label balanced per topic and across the run, weighted by any requested
- * intent mix; cohorts follow the requested shares. A market attaches to at
- * most the scope's `location_policy` share of a topic's cells. Grounding
- * comes only from the searches the request's seeds allow.
+ * A branded cell asserts something about the business, so it never takes an
+ * attribute only a model suggested: situations and audiences describe the
+ * buyer, while an unconfirmed attribute would become a claim about the brand.
+ */
+const claimable = (facet: Facet) => facet.dimension !== ATTRIBUTE || facet.source === 'confirmed';
+
+/**
+ * Plan `count × overgenerate_factor` cells over the selected topics. Cohorts
+ * follow the requested shares; within each cohort every topic gets a cell
+ * before any gets a second, then topics share cells by `topicWeights`. Every
+ * cell carries exactly one facet (the topic's least-used attribute, situation
+ * or audience; a branded cell only a `claimable` one) from the first cell on.
+ * The buyer stage is a label balanced per topic and across the run, weighted
+ * by any requested intent mix. A market attaches to at most the scope's
+ * `location_policy` share of a topic's cells. Grounding comes only from the
+ * searches the request's seeds allow.
  */
 export function planSlots(
   context: PlanContext,
@@ -333,6 +373,10 @@ export function planSlots(
   suggestions: OfferingMap[],
 ): Slot[] {
   const plans = planners(context, suggestions, input);
+  const weights = topicWeights(context);
+  const topicOptions = plans.map(
+    (plan) => [plan.topic.id, weights.get(plan.topic.id) ?? 1] as const,
+  );
   const searches = searchesByTopic(seedQueries(context.observed, input));
   const markets = plannedMarkets(context),
     share = locationShare(context),
@@ -347,14 +391,21 @@ export function planSlots(
   return Array.from(
     { length: input.count * generationSetting('overgenerate_factor') },
     (_, index) => {
-      const plan = plans[index % plans.length]!;
-      plan.cells += 1;
-      const used = (key: string) => plan.usage.get(key) ?? 0;
       const cohort =
         proportional(
           generationCohorts.map((name) => [name, shares[name]] as const),
           (name) => runUsed(`cohort:${name}`),
         ) ?? 'core';
+      const inCohort = (id: string) => runUsed(`${cohort}:topic:${id}`);
+      const uncoveredTopics = topicOptions.filter(([id]) => !inCohort(id));
+      const topicId = proportional(
+        uncoveredTopics.length ? uncoveredTopics : topicOptions,
+        inCohort,
+        (id) => runUsed(`topic:${id}`),
+      );
+      const plan = plans.find((item) => item.topic.id === topicId) ?? plans[index % plans.length]!;
+      plan.cells += 1;
+      const used = (key: string) => plan.usage.get(key) ?? 0;
       // A topic first covers each weighted stage once; then the run keeps the
       // requested proportions, and the topic's own counts break ties.
       const uncovered = stages.filter(([name]) => !used(`stage:${name}`));
@@ -364,7 +415,8 @@ export function planSlots(
           (name) => runUsed(`stage:${name}`),
           (name) => used(`stage:${name}`),
         ) ?? plannedStages[0];
-      const facet = isNonEmpty(plan.options) ? nextFacet(plan, plan.options) : null;
+      const options = cohort === 'core' ? plan.options : plan.options.filter(claimable);
+      const facet = isNonEmpty(options) ? nextFacet(plan, options) : null;
       const market =
         isNonEmpty(markets) && plan.located + 1 <= share * plan.cells
           ? markets.reduce((best, option) =>
@@ -380,6 +432,8 @@ export function planSlots(
         count(plan.usage, key);
       count(run, `stage:${stage}`);
       count(run, `cohort:${cohort}`);
+      count(run, `${cohort}:topic:${plan.topic.id}`);
+      count(run, `topic:${plan.topic.id}`);
       const need: Record<string, string> = { offering: plan.offering };
       const reviewState: CellReviewState = facet?.source ?? 'not_applicable';
       if (facet) need[facets[facet.dimension]!] = facet.value;
@@ -404,6 +458,7 @@ export function planSlots(
           evidence_type: 'hypothesis',
         },
         ...(grounding.length ? { grounding } : {}),
+        ...(cohort === 'brand_diagnostic' ? { grounded_attributes: plan.claims } : {}),
       };
     },
   );
@@ -411,9 +466,11 @@ export function planSlots(
 
 /**
  * A slot as a draft batch receives it: grounding becomes example wording,
- * without row identities, and a slot without grounding is sent unchanged.
+ * without row identities, and a slot without grounding is sent unchanged. A
+ * branded slot's grounded attributes stay with the judge: the drafter writes
+ * from the cell and the brief's offerings, so it cannot stack them.
  */
-export function modelSlot({ grounding, ...slot }: Slot) {
+export function modelSlot({ grounding, grounded_attributes: _claims, ...slot }: Slot) {
   return grounding?.length
     ? { ...slot, buyer_search_examples: grounding.map((example) => example.text) }
     : slot;

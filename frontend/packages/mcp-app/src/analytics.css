@@ -7,7 +7,18 @@
 /* The host CSP grants no resource domains, so no web font loads. The app
    shells define these families with hosted faces; here they resolve to an
    installed copy or the system stack, never to an undefined var(). */
+/* An installed JetBrains Mono sets figure digits only, as the hosted face does
+   in the app shells (same range); without one they stay in the text face. */
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  src: local('JetBrains Mono'), local('JetBrainsMono-Regular');
+  font-weight: 300 500;
+  font-style: normal;
+  unicode-range: U+0025, U+002B-002E, U+0030-003A, U+2212;
+}
+
 :root {
-  --font-text: 'Geist Variable', 'Geist', ui-sans-serif, system-ui;
+  --font-text: 'Lexend Deca Variable', 'Lexend Deca', ui-sans-serif, system-ui;
   --font-heading: 'Outfit Variable', 'Outfit', ui-sans-serif, system-ui;
+  --font-figure: 'JetBrains Mono Variable';
 }

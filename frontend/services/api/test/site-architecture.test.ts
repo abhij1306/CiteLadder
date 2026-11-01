@@ -134,7 +134,7 @@ it('keeps observed orphan and duplicate counts under partial coverage but gates 
   expect(
     partial.find((row) => row.rule.rule_id.endsWith('duplicate_metadata_in_page_kind'))!.outcome,
   ).toBe('missing');
-  expect(partial.filter((row) => row.reason === 'coverage_not_complete')).toHaveLength(4);
+  expect(partial.filter((row) => row.reason === 'coverage_not_complete')).toHaveLength(5);
   const complete = architectureRules(
     buildArchitecture(pages, 'complete', context),
     pages,
@@ -144,6 +144,52 @@ it('keeps observed orphan and duplicate counts under partial coverage but gates 
   expect(model.structure_depth.buckets.find((row) => row.key === 'depth_3_plus')!.percentage).toBe(
     0.75,
   );
+});
+it('groups pages no link path from the homepage reaches by section, apart from orphans', () => {
+  const pages = [
+    page('home', '/', 'homepage', { depth: 0, inbound: 1 }),
+    page('shop', '/collections/nets', 'category', { depth: 1, inbound: 3 }),
+    // A testimonials section that only links to itself.
+    page('hub', '/blogs/testimonials', 'editorial_index', { inbound: 3 }),
+    page('one', '/blogs/testimonials/one', 'article', { inbound: 1 }),
+    page('two', '/blogs/testimonials/two', 'article', { inbound: 1 }),
+    page('tag', '/blogs/testimonials/tagged/golf', 'editorial_index', { inbound: 2 }),
+    page('stray', '/products/old-cover', 'product', { inbound: 1 }),
+    // No inbound link at all: the orphan rule's finding, never repeated here.
+    page('orphan', '/pages/landing', 'other'),
+  ];
+  const rule = (coverage: string) =>
+    architectureRules(buildArchitecture(pages, coverage, context), pages, coverage).find(
+      (row) => row.rule.rule_id === 'architecture.unreachable_from_home',
+    )!;
+  const complete = rule('complete');
+  const evidence = record(complete.evidence);
+  expect([complete.outcome, complete.rule.finding_class, evidence.count]).toEqual([
+    'missing',
+    'defect',
+    5,
+  ]);
+  expect(evidence.sections).toEqual([
+    {
+      path_prefix: '/blogs/testimonials',
+      page_count: 4,
+      example_url: 'https://example.test/blogs/testimonials',
+    },
+    {
+      path_prefix: '/products/old-cover',
+      page_count: 1,
+      example_url: 'https://example.test/products/old-cover',
+    },
+  ]);
+  // A link the crawl did not see could make a page reachable.
+  expect(rule('partial')).toMatchObject({ outcome: 'unknown', reason: 'coverage_not_complete' });
+  // Without the homepage in the graph no page has a depth, and none is unreachable.
+  const homeless = pages.slice(1);
+  expect(
+    architectureRules(buildArchitecture(homeless, 'complete', context), homeless, 'complete').find(
+      (row) => row.rule.rule_id === 'architecture.unreachable_from_home',
+    ),
+  ).toMatchObject({ outcome: 'unknown', reason: 'homepage_not_observed' });
 });
 it.each([
   [{}, 'profile_absent'],
@@ -228,15 +274,16 @@ it('downgrades complete coverage when architecture evidence reaches its source c
       .select(['outcome', 'reason_code'])
       .where('source_architecture_id', '=', architecture.id)
       .execute();
-    // Orphans, parentless details, unhubbed kinds and depth all need complete coverage.
+    // Orphans, unreachable pages, parentless details, unhubbed kinds and depth
+    // all need complete coverage.
     expect(evaluations.filter((row) => row.reason_code === 'coverage_not_complete')).toHaveLength(
-      4,
+      5,
     );
   } finally {
     policy.site_health.architecture.max_pages = previous;
   }
 });
-it('persists exact source IDs, six root evaluations and replay-safe architecture from current metrics', async () => {
+it('persists exact source IDs, seven root evaluations and replay-safe architecture from current metrics', async () => {
   const seed = await fixtures.crawl();
   const snapshot = await fixtures.snapshot(seed);
   const profile = await fixtures.businessProfile(seed, context);
@@ -285,9 +332,9 @@ it('persists exact source IDs, six root evaluations and replay-safe architecture
     .selectAll()
     .where('source_architecture_id', '=', architecture.id)
     .execute();
-  expect(evaluations).toHaveLength(6);
+  expect(evaluations).toHaveLength(7);
   expect(evaluations.every((row) => row.analysis_id === home.analysisId)).toBe(true);
-  expect(evaluations.filter((row) => row.outcome === 'unknown')).toHaveLength(4);
+  expect(evaluations.filter((row) => row.outcome === 'unknown')).toHaveLength(5);
   expect(record(architecture.archetype).archetype).toBe('commerce');
   await fixtures.task(seed, 'architecture');
   expect(await fixtures.worker(seed, { settings }).runOnce()).toBe(1);
@@ -304,7 +351,7 @@ it('persists exact source IDs, six root evaluations and replay-safe architecture
       .select('id')
       .where('source_architecture_id', '=', architecture.id)
       .execute(),
-  ).toHaveLength(6);
+  ).toHaveLength(7);
 });
 it('complete coverage creates actionable root findings without borrowing foreign evidence', async () => {
   const seed = await fixtures.crawl();

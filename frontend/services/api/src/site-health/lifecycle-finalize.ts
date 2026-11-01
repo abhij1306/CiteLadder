@@ -22,7 +22,10 @@ import {
   linkRedirects,
   redirectChains,
   resolutionSet,
+  sitewideLinks,
+  sitewideTargets,
   type CanonicalTarget,
+  type LinkingPage,
   type Resolution,
 } from './resolution-evidence.ts';
 import { publishFinalPageAnalyses } from './terminal-analysis.ts';
@@ -185,7 +188,7 @@ async function rootEvaluations(
   const coverage = await crawlCoverage(db, crawl);
   return [
     sitemapOrphan(observed.length, orphans, coverage.state),
-    resolutionSet(targets, resolutions, true),
+    resolutionSet(targets, resolutions, { sitemap: true }),
     redirectChains(resolutions),
   ];
 }
@@ -209,7 +212,9 @@ function pendingAnalyses(db: Database, crawl: Crawl) {
       'p.id',
       'p.site_url_id',
       'p.artifact_id',
+      'p.page_kind',
       'u.url_hash',
+      'u.normalized_url',
       'a.final_url',
       'a.normalized_facts',
     ])
@@ -221,6 +226,34 @@ function pendingAnalyses(db: Database, crawl: Crawl) {
     .where('p.finalized_at', 'is', null)
     .orderBy('a.id')
     .execute();
+}
+
+type PendingAnalysis = Awaited<ReturnType<typeof pendingAnalyses>>[number];
+
+/** The pages linking each sitewide target, in URL order. */
+function linkingPages(
+  rows: PendingAnalysis[],
+  targets: Map<string, string[]>,
+  sitewide: ReadonlySet<string>,
+) {
+  const result = new Map<string, LinkingPage[]>();
+  for (const row of rows)
+    for (const target of targets.get(row.id) ?? []) {
+      if (!sitewide.has(target)) continue;
+      const page: LinkingPage = {
+        siteUrlId: row.site_url_id,
+        url: row.normalized_url,
+        title: scalarText(record(row.normalized_facts).title),
+        pageKind: row.page_kind,
+        artifactId: row.artifact_id,
+      };
+      const pages = result.get(target);
+      if (pages) pages.push(page);
+      else result.set(target, [page]);
+    }
+  for (const pages of result.values())
+    pages.sort((a, b) => compareText(a.url, b.url) || compareText(a.siteUrlId, b.siteUrlId));
+  return result;
 }
 
 /** Rules a replayed pass already recorded per analysis: a repeat is dropped on conflict. */
@@ -256,6 +289,11 @@ export async function finalizeCrawlAnalyses(db: Database, crawl: Crawl) {
     rows.map((row) => [row.id, internalTargets(row.final_url, record(row.normalized_facts))]),
   );
   const linked = new Set([...targets.values()].flat());
+  // Sitewide links are judged once, on the root; without the root in this pass
+  // every page keeps judging them itself.
+  const hasRoot = rows.some((row) => row.url_hash === rootHash);
+  const sitewide = hasRoot ? sitewideTargets([...targets.values()]) : new Set<string>();
+  const linkers = linkingPages(rows, targets, sitewide);
   const recorded = await recordedRules(
     db,
     crawl,
@@ -273,12 +311,15 @@ export async function finalizeCrawlAnalyses(db: Database, crawl: Crawl) {
         resolutions,
         canonicalTargets,
       ),
-      resolutionSet(links, resolutions),
-      linkRedirects(links, resolutions),
+      resolutionSet(links, resolutions, { sitewide }),
+      linkRedirects(links, resolutions, sitewide),
       duplicateContent(duplicates(url)),
     ];
     if (row.url_hash === rootHash)
-      evaluations.push(...(await rootEvaluations(db, crawl, linked, resolutions))); // NOSONAR: only the root page.
+      evaluations.push(
+        ...(await rootEvaluations(db, crawl, linked, resolutions)), // NOSONAR: only the root page.
+        ...sitewideLinks(sitewide, linkers, resolutions),
+      );
     const fresh = evaluations
       .filter((evaluation) => !recorded.has(`${row.id}:${evaluation.rule_id}`))
       .map((evaluation) => ({ ...evaluation, id: randomUUID() }));

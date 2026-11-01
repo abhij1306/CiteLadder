@@ -26,7 +26,7 @@ const scalars = {
   name: text(255).min(1),
   brand_name: text(255).default(''),
   website_url: text(1024).default(''),
-  industry: text(255).default('General'),
+  industry: text(255).default(cfg.default_industry),
   subindustry: text(255).default(''),
   primary_market: marketInput.default('GLOBAL'),
   country_code: text(8).default(''),

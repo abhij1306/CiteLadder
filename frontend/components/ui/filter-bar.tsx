@@ -62,7 +62,7 @@ export function FilterBar({ view, search, filters, status, actions }: FilterBarP
       className="flex min-h-[var(--control-height-md)] w-full min-w-0 flex-wrap items-center gap-2 py-2"
     >
       {view ? <div className="me-auto flex min-w-0">{view}</div> : null}
-      {search ? <div className="desktop:w-56 w-full min-w-0">{search}</div> : null}
+      {search ? <div className="desktop:w-44 w-full min-w-0">{search}</div> : null}
       {filters ? (
         // `contents` keeps the filters as the row's own flex items; it only
         // scopes the narrow-screen width to them (not the status or actions).
@@ -164,7 +164,7 @@ export function FilterTrigger({
         <>
           <span
             aria-hidden
-            className="type-badge bg-neutral-bg text-foreground min-w-5 rounded-full px-2 tabular-nums"
+            className="type-badge font-numeric bg-neutral-bg text-foreground min-w-5 rounded-full px-2"
           >
             {count}
           </span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Check, Plus, X } from 'lucide-react';
-import { useId, useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -14,6 +14,16 @@ import { cn } from '@/lib/utils';
 export type ChipItem = Readonly<{ value: string; suggested?: boolean }>;
 
 const sameValue = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** The chip face: the 32px control height, edge and radius; a suggestion's edge is dashed. */
+const chipFaceClasses = (suggested: boolean | undefined, className: string) =>
+  cn(
+    'type-control text-foreground bg-input inline-flex h-[var(--control-height-md)] max-w-full items-center rounded-[var(--radius-control)] border',
+    suggested ? 'border-border-strong border-dashed' : 'border-border',
+    className,
+  );
+
+const CHIP_ROW = 'flex min-w-0 flex-wrap items-center gap-2';
 
 /**
  * One value as a removable chip on the 32px control face. A suggestion keeps
@@ -32,12 +42,7 @@ function Chip({
   onConfirm: () => void;
 }>) {
   return (
-    <li
-      className={cn(
-        'type-control text-foreground bg-input inline-flex h-[var(--control-height-md)] max-w-full items-center gap-1 rounded-[var(--radius-control)] border ps-3',
-        item.suggested ? 'border-border-strong border-dashed' : 'border-border',
-      )}
-    >
+    <li className={chipFaceClasses(item.suggested, 'gap-1 ps-3')}>
       <span className="min-w-0 truncate">{item.value}</span>
       {item.suggested ? <span className="type-caption shrink-0">Suggested</span> : null}
       {item.suggested ? (
@@ -69,6 +74,8 @@ function Chip({
  * value is one entry however many commas it holds, so an offering such as
  * "bays for golf courses, and community centres" stays one offering. The
  * typed value is added on Enter or Add; a repeat (any case) is not added.
+ * An owner that saves the typed but unadded value too holds it through
+ * `pending` and `onPendingChange`.
  */
 export function ChipListField({
   label,
@@ -78,6 +85,8 @@ export function ChipListField({
   placeholder,
   disabled,
   max,
+  pending: heldPending,
+  onPendingChange,
 }: Readonly<{
   label: string;
   hint?: string;
@@ -87,9 +96,14 @@ export function ChipListField({
   disabled?: boolean;
   /** The most entries the owner accepts; Add stops there. */
   max?: number;
+  /** The typed value, when the owner holds it. */
+  pending?: string;
+  onPendingChange?: (value: string) => void;
 }>) {
   const id = useId();
-  const [pending, setPending] = useState('');
+  const [ownPending, setOwnPending] = useState('');
+  const pending = heldPending ?? ownPending;
+  const setPending = onPendingChange ?? setOwnPending;
   const trimmed = pending.trim();
   const full = max !== undefined && items.length >= max;
   const canAdd = trimmed !== '' && !full && !items.some((item) => sameValue(item.value, trimmed));
@@ -102,7 +116,7 @@ export function ChipListField({
     <fieldset className="grid min-w-0 gap-2">
       <legend className={textRole('label')}>{label}</legend>
       {items.length ? (
-        <ul aria-label={label} className="flex min-w-0 flex-wrap items-center gap-2">
+        <ul aria-label={label} className={CHIP_ROW}>
           {items.map((item) => (
             <Chip
               key={item.value}
@@ -143,5 +157,36 @@ export function ChipListField({
         </span>
       ) : null}
     </fieldset>
+  );
+}
+
+/** One read-only chip; `media` is a leading mark such as a `BrandLogo` at its `row` placement. */
+export type StaticChip = ChipItem & Readonly<{ key?: string; media?: ReactNode }>;
+
+/**
+ * Short values read, not edited, as one wrapping row of chips on the same face
+ * as `ChipListField`'s (a business map's roles, a project's competitors), so a
+ * value looks the same where it is reviewed and where it is edited. A
+ * suggestion keeps its dashed edge and says so. No values reads "Not set".
+ */
+export function ChipList({
+  label,
+  items,
+}: Readonly<{
+  /** Names the list when nothing visible does. */
+  label?: string;
+  items: readonly StaticChip[];
+}>) {
+  if (!items.length) return <UnavailableValue state="not_set" />;
+  return (
+    <ul aria-label={label} className={CHIP_ROW}>
+      {items.map((item) => (
+        <li key={item.key ?? item.value} className={chipFaceClasses(item.suggested, 'gap-2 px-3')}>
+          {item.media}
+          <span className="min-w-0 truncate">{item.value}</span>
+          {item.suggested ? <span className="type-caption shrink-0">Suggested</span> : null}
+        </li>
+      ))}
+    </ul>
   );
 }

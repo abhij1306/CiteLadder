@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
@@ -12,6 +13,10 @@ import { createConnection } from '../src/providers/connections.ts';
 import { createConnectionInput } from '../src/providers/inputs.ts';
 import { probeConnection } from '../src/providers/probes.ts';
 import { record } from '../src/db/json.ts';
+import { drainLanes } from '../src/workers/runner.ts';
+import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
+import { SiteFixtures } from './site-health-fixtures.ts';
+import { prompt } from './prompt-fixtures.ts';
 const db = testDatabase(),
   fixtures = new VisibilityFixtures(db),
   base = auditRuntime({});
@@ -202,6 +207,66 @@ describe('leased audit worker phases', () => {
       { status: 'succeeded', attempt_number: 2 },
     ]);
     expect(calls).toBe(2);
+  });
+  it('retries an answer truncated before any text, then fails it without a scored observation', async () => {
+    const t = await seed();
+    let calls = 0;
+    const w = worker(t, async () => {
+      calls++;
+      return Response.json({
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [{ type: 'reasoning', summary: [] }],
+        usage: { input_tokens: 40, output_tokens: 800, total_tokens: 840 },
+      });
+    });
+    const states = [];
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await ready(t.task.id);
+      await w.runOnce();
+      const task = await stored(t.task.id);
+      states.push([task.status, task.attempt_count, task.error_code]);
+    }
+    expect(states).toEqual([
+      ['retry_wait', 1, 'truncated_before_answer'],
+      ['retry_wait', 2, 'truncated_before_answer'],
+      ['failed', 3, 'truncated_before_answer'],
+    ]);
+    expect(calls).toBe(3);
+    const attempts = await db
+      .selectFrom('provider_attempts')
+      .select(['status', 'error_code', 'artifact_id'])
+      .where('task_id', '=', t.task.id)
+      .orderBy('attempt_number')
+      .execute();
+    expect(attempts).toEqual(
+      Array.from({ length: 3 }, () => ({
+        status: 'failed',
+        error_code: 'truncated_before_answer',
+        artifact_id: null,
+      })),
+    );
+    const observations = await Promise.all(
+      (['raw_response_artifacts', 'response_analyses', 'brand_mentions'] as const).map((table) =>
+        db
+          .selectFrom(table)
+          .select('id')
+          .where('audit_id', '=', t.auditId)
+          .execute()
+          .then((rows) => [table, rows.length]),
+      ),
+    );
+    expect(observations).toEqual([
+      ['raw_response_artifacts', 0],
+      ['response_analyses', 0],
+      ['brand_mentions', 0],
+    ]);
+    const audit = await db
+      .selectFrom('audits')
+      .select(['completed_count', 'failed_count'])
+      .where('id', '=', t.auditId)
+      .executeTakeFirstOrThrow();
+    expect(audit).toEqual({ completed_count: 0, failed_count: 1 });
   });
   it('recovers an uncertain paid submission by exact tag and then GET, never repeating task_post', async () => {
     const t = await seed(true),
@@ -400,5 +465,107 @@ describe('leased audit worker phases', () => {
         .where('task_id', '=', t.task.id)
         .execute(),
     ).toHaveLength(0);
+  });
+});
+describe('audit runner lane', () => {
+  it('answers queued tasks once each while a Site Health task holds the runner', async () => {
+    const t = await auditTenant(db, fixtures);
+    workspaces.push(t.workspaceId);
+    for (const text of ['Which trail shoes grip mud?', 'Which shoes suit marathon training?'])
+      await prompt(db, t.setId, text);
+    const [auditId] = await createAudits(
+      db,
+      t.workspaceId,
+      auditInput.parse({
+        project_id: t.projectId,
+        prompt_set_id: t.setId,
+        engines: ['chatgpt'],
+        repetitions: 1,
+      }),
+      {},
+      runtime,
+    );
+    const queued = await db
+      .selectFrom('audit_tasks')
+      .select('id')
+      .where('audit_id', '=', auditId!)
+      .execute();
+    tasks.push(...queued.map((task) => task.id));
+    const site = new SiteFixtures(db);
+    try {
+      const seedCrawl = await site.crawl('running');
+      const siteTask = await site.task(seedCrawl);
+      const answered = Promise.withResolvers<boolean>();
+      let answeredDuringCrawl = false;
+      const crawler = new SiteHealthWorker(db, {
+        taskScope: { workspaceId: seedCrawl.workspaceId, crawlId: seedCrawl.crawlId },
+        executors: {
+          link_metrics: async () => {
+            // The sequential drain reached audits only after this task's window.
+            answeredDuringCrawl = await Promise.race([answered.promise, sleep(3000, false)]);
+          },
+        },
+      });
+      let calls = 0;
+      const audits = worker(
+        { workspaceId: t.workspaceId, auditId: auditId! },
+        async () => {
+          calls++;
+          await sleep(20);
+          return Response.json({
+            status: 'completed',
+            output: [
+              { type: 'message', content: [{ type: 'output_text', text: 'Acme Running.' }] },
+            ],
+          });
+        },
+        { ...runtime, audits: { ...runtime.audits, worker_concurrency: 2 } },
+      );
+      await drainLanes(
+        [
+          {
+            name: 'site-health',
+            group: 'web-fetch',
+            run: (canAdmit) => crawler.drain(1, canAdmit),
+          },
+          {
+            name: 'audits',
+            run: async (canAdmit) => {
+              const claimed = await audits.drain(canAdmit);
+              if (!claimed) answered.resolve(true);
+              return claimed;
+            },
+          },
+        ],
+        {
+          signal: new AbortController().signal,
+          deadline: performance.now() + 20_000,
+          firstLane: 0,
+        },
+      );
+      expect(answeredDuringCrawl).toBe(true);
+      expect(calls).toBe(3);
+      const rows = await db
+        .selectFrom('audit_tasks')
+        .select(['status', 'attempt_count', 'lease_owner'])
+        .where('audit_id', '=', auditId!)
+        .execute();
+      expect(rows).toEqual(
+        Array.from({ length: 3 }, () => ({
+          status: 'succeeded',
+          attempt_count: 1,
+          lease_owner: null,
+        })),
+      );
+      expect(
+        await db
+          .selectFrom('site_crawl_tasks')
+          .select(['status', 'attempt_count', 'lease_owner'])
+          .where('id', '=', siteTask)
+          .executeTakeFirstOrThrow(),
+      ).toEqual({ status: 'succeeded', attempt_count: 1, lease_owner: null });
+    } finally {
+      await site.cleanup();
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { policy } from '../config.ts';
+import { compareText } from '../text-order.ts';
 import type { ArchitecturePage, buildArchitecture } from './architecture-model.ts';
 
 const p = policy.site_health.architecture;
@@ -27,6 +28,68 @@ function evaluation(
         },
   };
 }
+/** The first two path segments: `/blogs/testimonials/a-review` is `/blogs/testimonials`. */
+function sectionOf(url: string) {
+  try {
+    const segments = new URL(url).pathname.split('/').filter(Boolean);
+    return `/${segments.slice(0, 2).join('/')}`;
+  } catch {
+    return '/';
+  }
+}
+
+/** Unreachable pages grouped by section, largest first, each with one example. */
+function sections(pages: { url: string }[]) {
+  const groups = new Map<
+    string,
+    { path_prefix: string; page_count: number; example_url: string }
+  >();
+  for (const page of pages) {
+    const prefix = sectionOf(page.url);
+    const group = groups.get(prefix);
+    if (group) group.page_count += 1;
+    else groups.set(prefix, { path_prefix: prefix, page_count: 1, example_url: page.url });
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.page_count - a.page_count || compareText(a.path_prefix, b.path_prefix))
+    .slice(0, p.max_evidence_items);
+}
+
+/**
+ * Pages other pages link to but no link path from the homepage reaches: a
+ * section linked only from itself. Orphans (no inbound link at all) are
+ * `architecture.orphan_pages`, so they never repeat here. Without an observed
+ * homepage no page has a depth, and nothing can be called unreachable.
+ */
+function unreachableFromHome(
+  pages: ReturnType<typeof buildArchitecture>['hierarchy'],
+  byId: Map<string, ArchitecturePage>,
+  coverage: string,
+) {
+  const unreachable = pages.filter(
+    (page) =>
+      page.page_kind !== 'homepage' &&
+      page.depth_from_home === null &&
+      byId.get(page.site_url_id)!.inbound > 0,
+  );
+  const result = evaluation(
+    'architecture.unreachable_from_home',
+    unreachable,
+    'pages',
+    coverage,
+    true,
+  );
+  if (result.outcome === 'unknown') return result;
+  if (!pages.some((page) => page.depth_from_home === 0))
+    return {
+      ...result,
+      outcome: 'unknown',
+      reason: 'homepage_not_observed',
+      evidence: { reason: 'homepage_not_observed', coverage_state: coverage },
+    };
+  return { ...result, evidence: { ...result.evidence, sections: sections(unreachable) } };
+}
+
 export function architectureRules(
   model: ReturnType<typeof buildArchitecture>,
   source: ArchitecturePage[],
@@ -78,6 +141,7 @@ export function architectureRules(
       coverage,
       true,
     ),
+    unreachableFromHome(pages, byId, coverage),
     evaluation(
       'architecture.parentless_detail_pages',
       pages.filter(

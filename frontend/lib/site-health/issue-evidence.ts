@@ -34,7 +34,12 @@ import {
   withoutQuery,
   type Evidence,
 } from './evidence-values';
-import { architecturePageFacts, pageListRules } from './site-level-evidence';
+import {
+  architecturePageFacts,
+  linkTargetFacts,
+  linkTargetRules,
+  pageListRules,
+} from './site-level-evidence';
 
 /** More than this and the reader is scanning, not reading. */
 const MAX_FACTS = 8;
@@ -358,6 +363,7 @@ const FACTS_BY_RULE: Readonly<
   'architecture.duplicate_metadata_in_page_kind': duplicateMetadataKinds,
   'architecture.unhubbed_page_kind': duplicateMetadataKinds,
   ...Object.fromEntries(pageListRules.map((rule) => [rule, architecturePageFacts(rule)])),
+  ...Object.fromEntries(linkTargetRules.map((rule) => [rule, linkTargetFacts])),
 };
 
 /**
@@ -369,6 +375,9 @@ const LEAD_BY_RULE: Readonly<Record<string, string>> = {
   'technical.internal_link_redirect': 'Links on this page that redirect:',
   'technical.broken_internal_link': 'Broken links on this page:',
   ...Object.fromEntries(pageListRules.map((rule) => [rule, 'Affected pages:'])),
+  'architecture.unreachable_from_home': 'Unreachable sections:',
+  'technical.sitewide_broken_link': 'Broken links shared by most pages:',
+  'technical.sitewide_link_redirect': 'Links shared by most pages that redirect:',
   'architecture.duplicate_metadata_in_page_kind': 'Affected page kinds:',
   'architecture.unhubbed_page_kind': 'Affected page kinds:',
 };

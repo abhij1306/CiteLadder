@@ -151,7 +151,7 @@ export function RailItem({
           <span className="min-w-0 flex-1 truncate">{label}</span>
         </Tooltip>
         {typeof count === 'number' ? (
-          <span className="type-caption shrink-0 tabular-nums">{count}</span>
+          <span className="type-caption font-numeric shrink-0">{count}</span>
         ) : null}
       </Pressable>
       {actions}

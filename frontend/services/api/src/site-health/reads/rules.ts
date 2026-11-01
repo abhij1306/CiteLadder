@@ -72,19 +72,35 @@ export function issueGroupId(crawlId: string, ruleId: string, findingClass: stri
   return uuidV5(crawlId, `site-issue-group:${ruleId}${suffix}`);
 }
 
+/** Link problems judged once on the crawl root for every page that carries the link. */
+export const sitewideLinkRules: readonly string[] = [
+  'technical.sitewide_broken_link',
+  'technical.sitewide_link_redirect',
+];
+const SITEWIDE_LINK_RULES = new Set(sitewideLinkRules);
+
 /**
- * A site-level architecture finding is persisted once, against the homepage,
- * and names the pages (or page kinds) it found in its evidence. Its group
- * counts and page kinds come from that evidence, not from the one row, so
- * "Pages buried too deeply" reads 11 pages rather than the homepage. `null`
- * for every per-page rule.
+ * A site-level finding (an architecture rule or a sitewide link) is persisted
+ * once, against the homepage, and names the pages (or page kinds) it found in
+ * its evidence. Its group counts and page kinds come from that evidence, not
+ * from the one row, so "Pages buried too deeply" reads 11 pages rather than
+ * the homepage. `null` for every per-page rule.
  */
 export function siteLevelScope(
   ruleId: string,
   evidence: unknown,
 ): { affected: number; pageKinds: string[] } | null {
-  if (!ruleId.startsWith('architecture.')) return null;
   const facts = record(evidence);
+  if (SITEWIDE_LINK_RULES.has(ruleId)) {
+    // Without a recorded count the group falls back to its own rows, never to zero.
+    if (typeof facts.count !== 'number') return null;
+    const kinds = Array.isArray(facts.linking_page_kinds) ? facts.linking_page_kinds : [];
+    return {
+      affected: facts.count,
+      pageKinds: kinds.filter((kind): kind is string => typeof kind === 'string'),
+    };
+  }
+  if (!ruleId.startsWith('architecture.')) return null;
   const rows = (value: unknown) =>
     Array.isArray(value) ? value.map(record).filter((row) => Object.keys(row).length > 0) : [];
   const kindsOf = (items: Record<string, unknown>[]) =>

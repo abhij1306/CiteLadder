@@ -1,6 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 import { Slot, Slottable } from '@radix-ui/react-slot';
-import { ArrowLeft, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { ExternalHttpLink } from '@/components/ui/external-http-link';
 import { textRole, type TextRole } from '@/components/ui/typography';
@@ -20,13 +20,13 @@ import { cn } from '@/lib/utils';
  *     noreferrer`, a trailing external glyph and "(opens in a new tab)" for
  *     assistive tech. An unsafe or missing URL renders as plain text at the
  *     text role: no link ink, glyph or new-tab note.
- *   - `back` — the detail route's way up, scoped like `internal`: an arrow
- *     glyph and the label ("Back to runs"); never a typed "←".
+ *
+ * A detail route's way up is the `BackButton`, not a text link.
  *
  * `asChild` keeps the recipe (and glyphs) on a foreign link element the
  * caller must own.
  */
-export type TextLinkVariant = 'internal' | 'external' | 'back';
+export type TextLinkVariant = 'internal' | 'external';
 export type TextLinkText = TextRole | 'inherit';
 
 function textLinkClasses({
@@ -35,7 +35,7 @@ function textLinkClasses({
 }: Readonly<{ variant: TextLinkVariant; text: TextLinkText }>) {
   const recipe = cn(
     'focus-ring text-accent-text rounded-xs underline-offset-2 hover:underline',
-    variant !== 'internal' && 'inline-flex items-center gap-1',
+    variant === 'external' && 'inline-flex items-center gap-1',
   );
   return text === 'inherit' ? recipe : textRole(text, recipe);
 }
@@ -47,7 +47,7 @@ function textLinkClasses({
  */
 type TextLinkTarget =
   | {
-      variant?: 'internal' | 'back';
+      variant?: 'internal';
       /** An app route. */
       href?: string | null;
       /** The project the route belongs to, when not the active one. */
@@ -85,9 +85,6 @@ type TextLinkProps = Readonly<
  */
 function withGlyphs(variant: TextLinkVariant, children: ReactNode): ReactNode[] {
   const label = <Slottable key="label">{children}</Slottable>;
-  if (variant === 'back') {
-    return [<ArrowLeft key="glyph" className="size-3.5 shrink-0" aria-hidden />, label];
-  }
   if (variant === 'external') {
     return [
       label,

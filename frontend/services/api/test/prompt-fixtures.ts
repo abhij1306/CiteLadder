@@ -153,12 +153,15 @@ export function echoDependencies({
   onCall,
   onRequest,
   topics = [],
+  maps = [],
 }: {
   fail?: number[];
   onCall?: (call: number) => void;
   onRequest?: (request: DraftRequest) => void;
   /** The answer to a topic proposal request, which carries offerings instead of slots. */
   topics?: { name: string; offerings: string[] }[];
+  /** The answer to a business-map suggestion request, which also carries the knowledge base. */
+  maps?: { offering: string; attributes: string[]; situations: string[]; audiences: string[] }[];
 } = {}) {
   let calls = 0;
   const answer = (init?: RequestInit): Response => {
@@ -169,7 +172,12 @@ export function echoDependencies({
     const user = JSON.parse(body.messages[1]!.content.split('\n\nReturn only JSON')[0]!) as {
       slots?: DraftRequest['slots'];
       reference_evidence: DraftRequest['reference'];
+      knowledge_base?: unknown;
     };
+    if (user.knowledge_base)
+      return Response.json({
+        choices: [{ message: { content: JSON.stringify({ offerings: maps }) } }],
+      });
     if (!user.slots)
       return Response.json({ choices: [{ message: { content: JSON.stringify({ topics }) } }] });
     onRequest?.({
