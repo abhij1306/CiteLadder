@@ -766,6 +766,27 @@ describe('site audit regressions', () => {
     expect(tenant).toEqual([true, false]);
   });
 
+  it('keeps hidden-menu and template links apart from rendered anchors', () => {
+    const extracted = page(
+      `<header><nav><a href="/collections/nets">Nets</a>
+      <div hidden class="mega-menu"><a href="/collections/launch-monitors">Launch Monitors</a></div>
+      <ul aria-hidden="true"><li><a href="https://www.example.test/collections/mats" rel="nofollow">Mats</a></li></ul>
+      </nav></header>
+      <main><h1>Setup</h1><p>Read the <a href="/faq">FAQ</a>.</p></main>
+      <template><a href="/collections/packages">Packages</a></template>`,
+    );
+    expect(extracted.links.anchors.map((anchor) => [anchor.url, anchor.region])).toEqual([
+      ['/collections/nets', 'nav'],
+      ['/faq', 'main'],
+    ]);
+    expect(extracted.links.unrendered_anchors).toEqual([
+      { url: '/collections/launch-monitors', is_internal: true, rel: '' },
+      { url: 'https://www.example.test/collections/mats', is_internal: true, rel: 'nofollow' },
+      { url: '/collections/packages', is_internal: true, rel: '' },
+    ]);
+    expect(extracted.link_context).toEqual(['Nets', 'FAQ']);
+  });
+
   it('attaches the links of a numbered reference list as sources', () => {
     const items = ['openai.com', 'crossref.org', 'arxiv.org', 'aclanthology.org']
       .map((host) => `<li><span><a href="https://${host}/paper">${host} paper</a></span></li>`)

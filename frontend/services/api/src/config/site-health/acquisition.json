@@ -42,7 +42,6 @@
       "invalid": "invalid_url",
       "duplicate": "duplicate",
       "page_kind": "page_kind_filtered",
-      "tracking": "tracking_url",
       "hard_host": "hard_excluded_host"
     },
     "inventory_document_extensions": [

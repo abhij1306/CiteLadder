@@ -235,6 +235,9 @@ describe('terminal analysis publication', () => {
     const withPage = await fixtures.page(seed, '/guide', {
       links: { anchors: [...neverFetched, anchor('/pricing')] },
     });
+    const hiddenMenu = await fixtures.page(seed, '/menu', {
+      links: { anchors: [], unrendered_anchors: [anchor('/pricing')] },
+    });
     await finalize(seed);
     const brokenLinks = async (analysisId: string) => {
       const row = await db
@@ -249,6 +252,8 @@ describe('terminal analysis publication', () => {
     expect(await brokenLinks(excludedOnly.analysisId)).toEqual(['satisfied', 0]);
     // A fetchable target that was never checked still leaves the check open.
     expect(await brokenLinks(withPage.analysisId)).toEqual(['unknown', 1]);
+    // A link in a hidden menu is a link crawlers follow, so it is checked too.
+    expect(await brokenLinks(hiddenMenu.analysisId)).toEqual(['unknown', 1]);
   });
 
   it('judges duplicate content and redirects from the persisted crawl evidence', async () => {

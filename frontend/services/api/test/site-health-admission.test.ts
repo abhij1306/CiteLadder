@@ -55,11 +55,8 @@ describe('URL admission', () => {
     expect(performance.now() - started).toBeLessThan(1000);
   });
 
-  it('separates hard exclusions, tracking variants and documents from ordinary pages', () => {
+  it('separates hard exclusions and documents from ordinary pages', () => {
     expect(classifyUrlAdmission('https://example.test/search?q=x').reason).toBe(reasons.hard_query);
-    expect(classifyUrlAdmission('https://example.test/p?utm_source=x').reason).toBe(
-      reasons.tracking,
-    );
     expect(classifyUrlAdmission('https://account.example.test/').reason).toBe(reasons.hard_host);
     expect(classifyUrlAdmission('https://example.test/assets/app.js').reason).toBe(
       reasons.hard_asset,
@@ -76,6 +73,28 @@ describe('URL admission', () => {
       classifyUrlAdmission('https://example.test/sitemap-1.xml.gz', { infrastructure: 'sitemap' })
         .accepted,
     ).toBe(true);
+  });
+
+  it('admits the tracking-stripped target of a tagged link under the same scope rules', () => {
+    const base = 'https://www.example.test/blogs/news/simulators';
+    const tagged = classifyUrlAdmission(
+      '/products/simulator-series-12?srsltid=AfmBOo&utm_source=chatgpt.com&size=12',
+      { ...scope, base },
+    );
+    expect([tagged.accepted, tagged.url]).toEqual([
+      true,
+      'https://www.example.test/products/simulator-series-12?size=12',
+    ]);
+    expect(tagged.hash).toBe(
+      classifyUrlAdmission('https://www.example.test/products/simulator-series-12?size=12', scope)
+        .hash,
+    );
+    expect(
+      classifyUrlAdmission('https://other.test/products/x?utm_source=chatgpt.com', scope).reason,
+    ).toBe(reasons.out_of_scope);
+    expect(classifyUrlAdmission('https://example.test/search?q=x&utm_source=y').reason).toBe(
+      reasons.hard_query,
+    );
   });
 
   it('refuses hrefs that only look relative', () => {
@@ -174,6 +193,17 @@ describe('discovery links', () => {
       ['https://example.test/p', 1, policy.site_health.crawl.link_rewrite.reason],
       ['https://example.test/b', 2, ''],
     ]);
+  });
+
+  it('discovers a tagged link once, as its clean target', () => {
+    const root = document(
+      Buffer.from(
+        '<a href="/products/net?srsltid=AfmBOo&utm_source=chatgpt.com">tagged</a>' +
+          '<a href="/products/net">clean</a>',
+      ),
+    );
+    const { links } = discoveryLinks(root, 'https://example.test/blogs/news/a', scope, 10);
+    expect(links.map((link) => link.admission.url)).toEqual(['https://example.test/products/net']);
   });
 
   it('reads anchors the fact extractor prunes, keeps reserved escapes, and decodes the declared charset', () => {

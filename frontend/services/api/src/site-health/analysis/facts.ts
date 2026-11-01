@@ -9,6 +9,7 @@ import { compareText } from '../../text-order.ts';
 import { onlyOf } from '../../lists.ts';
 import {
   ancestors,
+  anchorElements,
   attribute,
   document,
   elements,
@@ -172,13 +173,28 @@ const isInternal = (href: string, baseHost: string) => {
   return host === null || (Boolean(baseHost) && sameSite(host, baseHost.toLowerCase()));
 };
 
+/**
+ * Rendered anchors carry text and region for content diagnostics. Anchors in
+ * template content or hidden markup (a collapsed menu) are links crawlers
+ * follow, as discovery does, so they are kept apart for reachability only.
+ */
 function linksAndAssets(root: HtmlNode, baseHost: string, maxLinks: number) {
   const anchors = [];
-  for (const anchor of elements(root, 'a')) {
-    if (anchors.length >= maxLinks) break;
-    if (!nodeIsRendered(anchor)) continue;
+  const unrendered = [];
+  for (const { anchor, inTemplate } of anchorElements(root)) {
+    if (anchors.length >= maxLinks && unrendered.length >= maxLinks) break;
     const href = attribute(anchor, 'href').trim();
     if (!href || NON_NAVIGABLE.some((prefix) => href.toLowerCase().startsWith(prefix))) continue;
+    if (inTemplate || !nodeIsRendered(anchor)) {
+      if (unrendered.length < maxLinks)
+        unrendered.push({
+          url: href.slice(0, limits.url_chars),
+          is_internal: isInternal(href, baseHost),
+          rel: attribute(anchor, 'rel').slice(0, 128),
+        });
+      continue;
+    }
+    if (anchors.length >= maxLinks) continue;
     anchors.push({
       kind: 'anchor',
       url: href.slice(0, limits.url_chars),
@@ -207,6 +223,7 @@ function linksAndAssets(root: HtmlNode, baseHost: string, maxLinks: number) {
       });
   return {
     anchors,
+    unrendered_anchors: unrendered,
     images: assets('img', 'src', 'image'),
     scripts: assets('script', 'src', 'script'),
     stylesheets: assets('link', 'href', 'stylesheet', (node) =>

@@ -1148,7 +1148,7 @@
     "display_label_variants": {},
     "finding_class": "defect",
     "kind_evidence": "expectation",
-    "remediation": "Link orphaned pages from a relevant crawlable hub or contextual page.",
+    "remediation": "Link important pages from a relevant hub or navigation; remove utility, seasonal or campaign pages from the sitemap or noindex them.",
     "rule_id": "architecture.orphan_pages",
     "scope": "graph",
     "score_roles": [],

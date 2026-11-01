@@ -119,7 +119,6 @@ const API_ERROR_CODES = [
   'timeout',
   'token_refresh_failed',
   'tool_failed',
-  'tracking_url',
   'turn_timeout',
   'unapproved_endpoint',
   'unauthorized',

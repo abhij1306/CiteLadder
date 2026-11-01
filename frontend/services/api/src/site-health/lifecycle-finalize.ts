@@ -15,6 +15,7 @@ import {
 } from './analysis/duplicate-content.ts';
 import { hreflangConflict, sitemapOrphan } from './analysis/finalize.ts';
 import { crawlCoverage } from './coverage.ts';
+import { pageAnchors } from './link-graph.ts';
 import {
   canonicalResolution,
   fetchResolutions,
@@ -40,10 +41,8 @@ const sorted = (values: Iterable<string>) => [...new Set(values)].sort(compareTe
  * is never an edge nor a target the broken-link check waits on.
  */
 function internalTargets(finalUrl: string, facts: Facts) {
-  const anchors = record(facts.links).anchors;
   const result = new Set<string>();
-  for (const value of Array.isArray(anchors) ? anchors : []) {
-    const anchor = record(value);
+  for (const { anchor } of pageAnchors(facts)) {
     if (!anchor.is_internal) continue;
     const url = canonicalUrl(scalarText(anchor.url), finalUrl);
     if (url && !hardExcluded(new URL(url))) result.add(url);

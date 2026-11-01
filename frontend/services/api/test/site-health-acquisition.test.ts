@@ -302,6 +302,25 @@ describe('discover', () => {
     ]);
     const counters = await crawlCounters(db, await crawlRow(seed));
     expect(counters).toMatchObject({ errors: 2, failure_breakdown: { http_4xx: 2 } });
+    // A final failure settles the URL's discovery as a fetch does, never leaving it running.
+    const statuses = await Promise.all(
+      ['/a', '/gone', '/seeded'].map(async (path) => (await urlRow(seed, path)).discovery_status),
+    );
+    expect(statuses).toEqual(['completed', 'failed', 'failed']);
+  });
+
+  it('settles a robots-excluded link failed rather than leaving it running', async () => {
+    const seed = await crawl();
+    const root = await queued(seed, 'discover');
+    const site = worker({
+      '/robots.txt': { body: 'User-agent: *\nDisallow: /private\n', contentType: 'text/plain' },
+      '/': { body: links('/private') },
+    });
+    await run(site, root);
+    expect((await urlRow(seed, '/private')).discovery_status).toBe('running');
+    const children = await tasks(seed, 'discover');
+    await run(site, children.find((row) => row.requested_url === url('/private'))!.id);
+    expect((await urlRow(seed, '/private')).discovery_status).toBe('failed');
   });
 
   it('keeps a document as inventory and excludes a canonical alias of an active page', async () => {
