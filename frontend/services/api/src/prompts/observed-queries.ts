@@ -86,7 +86,9 @@ export type ObservedScope = {
   competitors: readonly { aliases: readonly string[]; rule: EntityPolicy | undefined }[];
 };
 
-const baseLanguage = (code: string) => code.trim().toLowerCase().split(/[-_]/u)[0] ?? '';
+export const baseLanguage = (code: string) => code.trim().toLowerCase().split(/[-_]/u)[0] ?? '';
+/** A dataset's base language in SQL, split on `-` or `_` exactly like `baseLanguage`. */
+const datasetLanguage = sql<string>`split_part(replace(lower(language_code), '_', '-'), '-', 1)`;
 
 /** Search Console queries of the latest query snapshot within the window, summed per query. */
 async function searchConsoleQueries(db: Database, scope: ObservedScope): Promise<Sourced[]> {
@@ -137,7 +139,7 @@ async function keywordResearchQueries(db: Database, scope: ObservedScope): Promi
     .where('project_id', '=', scope.projectId)
     .where('status', '=', 'published')
     .where('dataset_kind', 'in', O.si_dataset_kinds)
-    .where(sql<string>`split_part(lower(language_code), '-', 1)`, '=', language)
+    .where(datasetLanguage, '=', language)
     .distinctOn('dataset_kind')
     .orderBy('dataset_kind')
     .orderBy('published_at', 'desc')
@@ -189,7 +191,7 @@ export async function persistedSeedSources(
         .where('project_id', '=', scope.projectId)
         .where('status', '=', 'published')
         .where('dataset_kind', 'in', O.si_dataset_kinds)
-        .where(sql<string>`split_part(lower(language_code), '-', 1)`, '=', language)
+        .where(datasetLanguage, '=', language)
         .executeTakeFirst()
     : undefined;
   return [

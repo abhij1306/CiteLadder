@@ -40,7 +40,7 @@ import {
 } from './generation-input.ts';
 import { frozenEntityMatching } from '../analysis/entity-matching.ts';
 import { distribution, nearDuplicate, promptTokens } from './generation-metrics.ts';
-import { dimensions, geoTerms } from './generation-plan.ts';
+import { dimensions, geoTerms, topicWeights } from './generation-plan.ts';
 import { cohortQuotas, gatedOut, judgeDrafts, selectRun } from './generation-quality.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { observedRef } from './observed-queries.ts';
@@ -229,7 +229,7 @@ function stage(
       });
       return false;
     });
-    const selected = selectRun(eligible, input),
+    const selected = selectRun(eligible, input, topicWeights(context)),
       rejected = eligible.filter(gatedOut),
       geo = geoTerms(context);
     const evidence = {

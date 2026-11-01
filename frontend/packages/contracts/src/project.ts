@@ -139,6 +139,8 @@ const promptAdmissionDropReasons = [
   // Over the 16-word cap: a buyer types a short question.
   'too_many_words',
   'placeholder',
+  // Joins two alternatives ("for a spare room or a commercial bay"): one need per prompt.
+  'two_needs',
   'observed_copy',
   'off_topic',
   'location_unplanned',

@@ -4,8 +4,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { enforceWorkspaceRequest, agentCallLimit } from '../src/abuse/usage.ts';
 import { policy } from '../src/config.ts';
 import { createApp } from '../src/app.ts';
+import { record } from '../src/db/json.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { createJevClient, jevSettings } from '../src/models/jev.ts';
+import { offeringMaps } from '../src/prompts/generation-context.ts';
 import { generationInput } from '../src/prompts/generation-input.ts';
 import { generatePrompts } from '../src/prompts/generation.ts';
 import { echoDependencies, promptSet, topic, type DraftRequest } from './prompt-fixtures.ts';
@@ -540,6 +542,45 @@ describe('prompt generation at the PostgreSQL boundary', () => {
       { offering: 'Trail shoes', situation_or_constraint: 'muddy trails' },
       { offering: 'Trail shoes', situation_or_constraint: 'muddy trails' },
     ]);
+  });
+  it('keeps only single-facet map suggestions, never a value listing alternatives', async () => {
+    const offering = 'Trail running shoes';
+    const { other, otherSet } = await topiclessProject({ category_terms: ['running shoes'] }, [
+      offering,
+    ]);
+    const deps = echoDependencies({
+      topics: [{ name: offering, offerings: [offering] }],
+      maps: [
+        {
+          offering,
+          attributes: ['Waterproof upper', 'Wide or narrow fit'],
+          situations: ['Muddy trails, rocky paths', 'Muddy trails'],
+          audiences: ['Beginners'],
+        },
+      ],
+    });
+    await generatePrompts(
+      db,
+      other.workspaceId,
+      otherSet,
+      generationInput.parse({ count: 2 }),
+      deps,
+    );
+    const profile = await db
+      .selectFrom('brand_profiles')
+      .select('business_context')
+      .where('project_id', '=', other.projectId)
+      .executeTakeFirstOrThrow();
+    const [map] = offeringMaps(record(profile.business_context));
+    expect({
+      attributes: map?.attributes.map((entry) => entry.value),
+      situations: map?.situations.map((entry) => entry.value),
+      audiences: map?.audiences.map((entry) => entry.value),
+    }).toEqual({
+      attributes: ['Waterproof upper'],
+      situations: ['Muddy trails'],
+      audiences: ['Beginners'],
+    });
   });
   it('serializes concurrent staging on the same set and drops newly pending duplicates', async () => {
     const deps = dependencies();

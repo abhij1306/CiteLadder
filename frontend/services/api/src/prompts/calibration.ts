@@ -50,31 +50,34 @@ export function calibrationReport(rows: Row[]) {
       rejected.filter((row) => verdict(row) === 'pass').length,
       rejected.length,
     ),
-    // Every question a core draft is asked; the core-only ones under their own thresholds.
+    // Every question a core or branded draft is asked; the core-only ones under
+    // their own thresholds, the brand-only ones answered by branded drafts alone.
     questions: Object.fromEntries(
-      Object.keys(noulQuestions('core')).map((question) => {
-        const a = values(accepted, question),
-          r = values(rejected, question);
-        const below = (values: number[], threshold: number) =>
-          values.filter((value) => value < threshold).length;
-        const own = Object.hasOwn(Q.core_noul_questions, question);
-        const failBelow = own ? thresholds.answerable_fail_below : thresholds.fail_below,
-          flagBelow = own ? thresholds.answerable_flag_below : thresholds.flag_below;
-        const failed = below(r, failBelow),
-          falseFails = below(a, failBelow);
-        return [
-          question,
-          {
-            answered_accepted: a.length,
-            answered_rejected: r.length,
-            false_flag_rate: rate(below(a, flagBelow), a.length),
-            false_reject_rate: rate(falseFails, a.length),
-            rejected_caught_by_flag: rate(below(r, thresholds.flag_below), r.length),
-            rejected_caught_by_fail: rate(failed, r.length),
-            fail_precision: rate(failed, failed + falseFails),
-          },
-        ];
-      }),
+      Object.keys({ ...noulQuestions('core'), ...noulQuestions('brand_diagnostic') }).map(
+        (question) => {
+          const a = values(accepted, question),
+            r = values(rejected, question);
+          const below = (values: number[], threshold: number) =>
+            values.filter((value) => value < threshold).length;
+          const own = Object.hasOwn(Q.core_noul_questions, question);
+          const failBelow = own ? thresholds.answerable_fail_below : thresholds.fail_below,
+            flagBelow = own ? thresholds.answerable_flag_below : thresholds.flag_below;
+          const failed = below(r, failBelow),
+            falseFails = below(a, failBelow);
+          return [
+            question,
+            {
+              answered_accepted: a.length,
+              answered_rejected: r.length,
+              false_flag_rate: rate(below(a, flagBelow), a.length),
+              false_reject_rate: rate(falseFails, a.length),
+              rejected_caught_by_flag: rate(below(r, flagBelow), r.length),
+              rejected_caught_by_fail: rate(failed, r.length),
+              fail_precision: rate(failed, failed + falseFails),
+            },
+          ];
+        },
+      ),
     ),
     fail_below_sweep: Q.calibration_sweep.map((threshold) => {
       const fails = (row: Row) =>

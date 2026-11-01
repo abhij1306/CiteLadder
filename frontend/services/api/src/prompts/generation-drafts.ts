@@ -32,7 +32,7 @@ import {
   type Slot,
 } from './generation-plan.ts';
 import { promptTextHash } from './normalization.ts';
-import { observedRef } from './observed-queries.ts';
+import { baseLanguage, observedRef } from './observed-queries.ts';
 
 const G = policy.prompts.generation;
 const containsName = (text: string, names: readonly string[]) =>
@@ -65,6 +65,10 @@ function brandTerms(context: GenerationContext): string[] {
     ),
   ];
 }
+
+/** The project language's words that join alternatives (`disjunction_words`). */
+const disjunctionsOf = (context: GenerationContext) =>
+  new Set(G.disjunction_words[baseLanguage(context.context.language_code || 'en')] ?? []);
 
 export type Draft = {
   slot: Slot;
@@ -137,6 +141,10 @@ export function admitDrafts(
   ]);
   const brands = brandTerms(context);
   const geo = geoTerms(context);
+  const disjunctions = disjunctionsOf(context);
+  /** Two alternatives joined into one prompt; comparisons ask "X or Y" by design. */
+  const joinsTwoNeeds = (text: string, cohort: GenerationCohort) =>
+    cohort !== 'comparison' && words(text).some((word) => disjunctions.has(word));
   // Names count under the project's matching policy, so a common-word brand
   // in ordinary language ("target audience") is not a branded draft.
   const brandRule = context.matching[entityKey(context.context.brand_name)];
@@ -189,6 +197,7 @@ export function admitDrafts(
       return 'length';
     if (words(text).length > G.text_max_words) return 'too_many_words';
     if (hasPlaceholder(text)) return 'placeholder';
+    if (joinsTwoNeeds(text, slot.cohort)) return 'two_needs';
     if (observed.has(hash)) return 'observed_copy';
     if (bindingFailure(text, context.vocabulary)) return 'off_topic';
     if (!slot.buyer_need.market && namesPlace(text, geo)) return 'location_unplanned';
@@ -273,6 +282,11 @@ async function suggestMaps(
       deadline,
     );
     const places = geoTerms(context);
+    const disjunctions = disjunctionsOf(context);
+    // A suggested value is one facet: a comma or an "or" lists several, which
+    // would hand a cell two needs.
+    const listsSeveral = (value: string) =>
+      value.includes(',') || words(value).some((word) => disjunctions.has(word));
     const banned = [
       context.context.brand_name,
       ...context.context.brand_aliases,
@@ -294,7 +308,13 @@ async function suggestMaps(
               ),
           ),
         ]
-          .filter((value) => value && !containsName(value, banned) && !namesPlace(value, places))
+          .filter(
+            (value) =>
+              value &&
+              !listsSeveral(value) &&
+              !containsName(value, banned) &&
+              !namesPlace(value, places),
+          )
           .map((value) => ({
             value,
             origin: 'model' as const,

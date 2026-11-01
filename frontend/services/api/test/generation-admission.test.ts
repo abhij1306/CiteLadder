@@ -130,6 +130,41 @@ it('requires the brand in diagnostics and a competitor comparison in the compari
   expect(comparison.drops).toEqual({ competitor_missing: 1, brand_missing: 1 });
 });
 
+it('drops a core or diagnostic draft joining two needs with "or", never a comparison', () => {
+  const admit = (cohort: 'core' | 'brand_diagnostic' | 'comparison', texts: string[]) => {
+    const slots = planSlots(context, generationInput.parse({ count: texts.length, cohort }), []);
+    return admitDrafts(
+      texts.map((text, index) => ({
+        text,
+        slot_id: slots[index]!.slot_id,
+        buyer_stage: 'decision',
+        prompt_intent: cohort === 'comparison' ? 'compare' : 'recommend',
+      })),
+      slots,
+      context,
+      [],
+    );
+  };
+  const core = admit('core', [
+    'Maxi dresses for a beach wedding or a garden party',
+    'Maxi dresses for a beach wedding',
+  ]);
+  expect(core.admitted.map((row) => row.text)).toEqual(['Maxi dresses for a beach wedding']);
+  expect(core.drops).toEqual({ two_needs: 1 });
+  const diagnostic = admit('brand_diagnostic', [
+    'Does Red Dress sell maxi or midi dresses?',
+    'Does Red Dress sell maxi dresses for petite women?',
+  ]);
+  expect(diagnostic.admitted.map((row) => row.text)).toEqual([
+    'Does Red Dress sell maxi dresses for petite women?',
+  ]);
+  expect(diagnostic.drops).toEqual({ two_needs: 1 });
+  const comparison = admit('comparison', ['Red Dress or Rival for maxi dresses?']);
+  expect(comparison.admitted.map((row) => row.text)).toEqual([
+    'Red Dress or Rival for maxi dresses?',
+  ]);
+});
+
 it('binds identities written in any script and still rejects unrelated text', () => {
   const vocabulary = { tokens: new Set(['unrelated']), phrases: new Set<string>() };
   expect(bindingFailure('सर्दियों के लिए सबसे अच्छे जूते कौन से हैं?', vocabulary, 'जूते')).toBeNull();
@@ -255,7 +290,12 @@ const coreQuestions = Object.keys({
 });
 
 describe('JEV judgments', () => {
-  const answers = Object.fromEntries(coreQuestions.map((key) => [key, { noul: 0.9 }]));
+  const answers = Object.fromEntries(
+    [...coreQuestions, ...Object.keys(policy.models.quality.brand_noul_questions)].map((key) => [
+      key,
+      { noul: 0.9 },
+    ]),
+  );
   const draft = (): Draft => ({
     slot: planSlots(context, generationInput.parse({ count: 1 }), [])[0]!,
     text: 'Which maxi dresses suit warm weather?',
@@ -354,6 +394,102 @@ describe('JEV judgments', () => {
       },
     });
     expect(borderline).toMatchObject({ verdict: 'uncertain', flags: ['names_a_business'] });
+  });
+
+  it('gates a branded draft that claims what its cell does not ground', async () => {
+    const seen: { state: unknown; questions: string[] }[] = [];
+    const ungrounded = judge(async (state, questions) => {
+      seen.push({ state, questions: Object.keys(questions) });
+      return { model: 'jev-test', answers: { ...answers, grounded_claims: { noul: 0.05 } } };
+    });
+    const slot = planSlots(
+      context,
+      generationInput.parse({ count: 1, cohort: 'brand_diagnostic' }),
+      [],
+    )[0]!;
+    const branded = [{ ...draft(), slot, text: 'Compare Red Dress waterproof maxi dresses' }];
+    await judgeDrafts(context, branded, ungrounded);
+    expect(branded[0]!.decision).toMatchObject({ verdict: 'fail', flags: ['grounded_claims'] });
+    expect(selectDrafts(branded, 1)).toEqual([]);
+    expect(seen[0]!.state).toMatchObject({ grounded_attributes: ['Dresses'] });
+    expect(seen[0]!.questions).toEqual(expect.arrayContaining(['single_need', 'grounded_claims']));
+    expect(seen[0]!.questions).not.toContain('names_a_business');
+    // A comparison also names a competitor the judge cannot tell apart, so its claims go unasked.
+    const comparison = planSlots(
+      context,
+      generationInput.parse({ count: 1, cohort: 'comparison' }),
+      [],
+    )[0]!;
+    await judgeDrafts(
+      context,
+      [{ ...draft(), slot: comparison, text: 'Red Dress or Rival for waterproof maxi dresses?' }],
+      ungrounded,
+    );
+    expect(seen[1]!.questions).not.toContain('grounded_claims');
+    expect(seen[1]!.state).not.toHaveProperty('grounded_attributes');
+    // A core draft is asked whether it carries one need, and gated when it carries two.
+    const core = [{ ...draft(), text: 'Maxi dresses for petite women and tall women' }];
+    await judgeDrafts(
+      context,
+      core,
+      judge(async () => ({
+        model: 'jev-test',
+        answers: { ...answers, single_need: { noul: 0.05 } },
+      })),
+    );
+    expect(core[0]!.decision).toMatchObject({ verdict: 'fail', flags: ['single_need'] });
+  });
+
+  describe('topic filing', () => {
+    const nets = { id: 'nets', name: 'Golf practice nets', description: '', parent_id: null };
+    const packages = {
+      id: 'packages',
+      name: 'Golf net packages',
+      description: '',
+      parent_id: null,
+    };
+    const golf = {
+      ...context,
+      selected: [nets, packages],
+      topics: [nets, packages],
+    } as GenerationContext;
+    const planned = () => {
+      const slot = planSlots(golf, generationInput.parse({ count: 2 }), []).find(
+        (item) => item.topic_id === 'packages',
+      )!;
+      return [{ ...draft(), slot, text: 'Compact golf practice net for a small basement' }];
+    };
+    const placing = (p: number) => {
+      const criteria: unknown[] = [];
+      const client = judge(async (_state, questions) => {
+        criteria.push((questions.topic as { criteria: unknown }).criteria);
+        return {
+          model: 'jev-test',
+          answers: { ...answers, topic: { choice: 't1', probabilities: { t1: p, t2: 1 - p } } },
+        };
+      });
+      return { client, criteria };
+    };
+
+    it('files a draft under the topic the judge places it in, when confident', async () => {
+      const drafts = planned();
+      const { client, criteria } = placing(0.8);
+      await judgeDrafts(golf, drafts, client);
+      expect(criteria).toEqual([{ t1: 'Golf practice nets', t2: 'Golf net packages' }]);
+      expect(drafts[0]!.slot).toMatchObject({ topic_id: 'nets', topic_name: 'Golf practice nets' });
+      expect(drafts[0]!.decision).toMatchObject({ refiled_from_topic_id: 'packages' });
+    });
+
+    it('keeps the planned topic when the judge is unsure or only shadowing', async () => {
+      const unsure = planned();
+      await judgeDrafts(golf, unsure, placing(0.5).client);
+      expect(unsure[0]!.slot.topic_id).toBe('packages');
+      vi.stubEnv('JEV_MODE', 'shadow');
+      const shadow = planned();
+      await judgeDrafts(golf, shadow, placing(0.9).client);
+      expect(shadow[0]!.slot.topic_id).toBe('packages');
+      expect(shadow[0]!.decision).not.toHaveProperty('refiled_from_topic_id');
+    });
   });
 });
 
