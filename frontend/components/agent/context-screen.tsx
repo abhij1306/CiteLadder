@@ -3,6 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent, type ReactNode } from 'react';
 
+import type { BrandFactList } from '@citeladder/contracts/fact-checking';
+
 import { BrandFactsPanel } from '@/components/knowledge-base/brand-facts-panel';
 import { BrandProfilePanel } from '@/components/knowledge-base/brand-profile-panel';
 import { ListScreen } from '@/components/layout/page-shell';
@@ -28,8 +30,9 @@ import { useBrandFacts } from '@/lib/project/use-brand-facts';
 
 /**
  * What the agent knows about the business before it reads any evidence: the
- * company facts and competitors every surface shares, and the project's Agent
- * instructions (audience, voice and standing requirements).
+ * company facts and competitors every surface shares (with a read-only
+ * business map the Prompt Builder edits, and the pilot's Brand facts), then the
+ * project's Agent instructions (audience, voice and standing requirements).
  */
 export function ContextScreen() {
   const { activeProject, activeWorkspaceId } = useProjectContext();
@@ -42,13 +45,12 @@ export function ContextScreen() {
   return (
     <ListScreen measure="workflow">
       <Stack gap="section">
+        <CompanyFacts workspaceId={activeWorkspaceId} project={activeProject} />
         <AgentInstructions
           key={activeProject.id}
           workspaceId={activeWorkspaceId}
           projectId={activeProject.id}
         />
-        <CompanyFacts workspaceId={activeWorkspaceId} project={activeProject} />
-        <BrandFacts workspaceId={activeWorkspaceId} projectId={activeProject.id} />
       </Stack>
     </ListScreen>
   );
@@ -179,30 +181,42 @@ function InstructionsEditor({
   );
 }
 
-/** Brand facts answers are checked against; shown only inside the fact-checking pilot. */
-function BrandFacts({
+/**
+ * Brand facts answers are checked against, as a Company facts tab; shown only
+ * inside the fact-checking pilot.
+ */
+function BrandFactsTab({
   workspaceId,
   projectId,
-}: Readonly<{ workspaceId: string; projectId: string }>) {
-  const query = useBrandFacts(projectId, workspaceId);
+  list,
+}: Readonly<{ workspaceId: string; projectId: string; list: BrandFactList }>) {
   const mayEdit = useWorkspaceCapability('write');
-  // Outside the pilot (or before the gate is known) there is nothing to show.
-  if (!query.data?.enabled) return null;
   return (
-    <Stack as="section" aria-labelledby="brand-facts">
-      <EditorialSectionHeader
-        title="Brand facts"
-        headingId="brand-facts"
-        description="Statements of record that AI answers about you are checked against. Runs check the facts confirmed when they start."
-      />
+    <Stack gap="workspace">
+      <p className={textRole('body', 'text-secondary')}>
+        Statements of record that AI answers about you are checked against. Runs check the facts
+        confirmed when they start.
+      </p>
       <BrandFactsPanel
         workspaceId={workspaceId}
         projectId={projectId}
-        list={query.data}
+        list={list}
         mayEdit={mayEdit}
       />
     </Stack>
   );
+}
+
+/** The Brand facts tab: the pilot's facts, the gate's read error, or none outside the pilot. */
+function brandFactsTab(
+  facts: ReturnType<typeof useBrandFacts>,
+  workspaceId: string,
+  projectId: string,
+): ReactNode {
+  if (facts.isError)
+    return <ReadError {...readErrorProps(facts)} fallback="Brand facts could not be loaded." />;
+  if (!facts.data?.enabled) return undefined;
+  return <BrandFactsTab workspaceId={workspaceId} projectId={projectId} list={facts.data} />;
 }
 
 /** Company facts and competitors, moved here from the Overview facts drawer. */
@@ -215,6 +229,10 @@ function CompanyFacts({
     queryKey: queryKeys.projects.brandProfile(project.id),
     queryFn: ({ signal }) => projectsApi.getBrandProfile(project.id, { signal, workspaceId }),
   });
+  // The pilot gate is known before the panel renders, so its tab never appears
+  // late. Outside the pilot there is no tab; an unreadable gate shows its error there.
+  const facts = useBrandFacts(project.id, workspaceId);
+  const ready = facts.isPending ? null : profile.data;
   const suggestions = useQuery({
     queryKey: queryKeys.visibility.competitorSuggestions(project.id),
     queryFn: ({ signal }) =>
@@ -225,20 +243,23 @@ function CompanyFacts({
   });
   return (
     <Stack as="section" aria-labelledby="company-facts">
-      {profile.data ? null : <CompanyFactsHeader />}
+      {ready ? null : <CompanyFactsHeader />}
       {profile.isError ? (
         <ReadError {...readErrorProps(profile)} fallback="Company facts could not be loaded." />
       ) : null}
-      {profile.isPending ? <QueryState kind="loading" label="Loading company facts…" /> : null}
-      {profile.data ? (
+      {profile.isPending || (profile.data && facts.isPending) ? (
+        <QueryState kind="loading" label="Loading company facts…" />
+      ) : null}
+      {ready ? (
         <BrandProfilePanel
           key={project.id}
           projectId={project.id}
-          profile={profile.data}
+          profile={ready}
           competitors={project.competitors ?? []}
           competitorSuggestions={
             <CompetitorSuggestions projectId={project.id} suggestionsQuery={suggestions} />
           }
+          brandFacts={brandFactsTab(facts, workspaceId, project.id)}
           onSaved={() =>
             void queryClient.invalidateQueries({
               queryKey: queryKeys.projects.commandCenter(project.id),

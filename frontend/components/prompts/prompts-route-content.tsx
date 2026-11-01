@@ -10,9 +10,9 @@ import { PromptLibrary } from './prompt-library';
 function PromptsRouteSurface() {
   const [searchParams, setSearchParams] = useSearchParams();
   // Each arrival with `generate=1` or `review=1`, including in-page navigation,
-  // is one request to open the dialog in that mode. Counting it while rendering
-  // records it before the effect below consumes the parameter, so a reload or
-  // back navigation does not reopen the dialog.
+  // is one request to open the Prompt Builder in that mode. Counting it while
+  // rendering records it before the effect below consumes the parameter, so a
+  // reload or back navigation does not reopen the builder.
   const [generateRequest, setGenerateRequest] = useState(0);
   const [reviewRequest, setReviewRequest] = useState(false);
   const [countedParams, setCountedParams] = useState<URLSearchParams | null>(null);

@@ -175,13 +175,15 @@
       "inputs": [{ "key": "focus", "label": "Topic or competitor", "required": false }]
     },
     {
-      "id": "prompt_portfolio",
+      "id": "prompt_plan",
       "group": "visibility",
-      "label": "Track a niche",
-      "description": "Buyer questions for a place, persona or constraint the general prompt set misses.",
+      "label": "Plan a prompt run",
+      "description": "The business facts, topics, mix and search data to set in the Prompt Builder before you generate prompts.",
       "skill_id": "prompt_discovery",
-      "prompt": "Propose buyer questions to track for a niche.",
-      "inputs": [{ "key": "niche", "label": "Place, persona or constraint", "required": true }]
+      "prompt": "Plan our next prompt run for the Prompt Builder.",
+      "inputs": [
+        { "key": "focus", "label": "Offering, place or buyer to focus on", "required": false }
+      ]
     },
     {
       "id": "growth_plan",
@@ -248,13 +250,13 @@
         { "workflow": "measure_results", "prompt": "Plan how to measure the result of" }
       ]
     },
-    "prompt_portfolio": {
-      "label": "Prompt portfolio",
+    "prompt_plan": {
+      "label": "Prompt plan",
       "refinements": ["Make it shorter", "Make it more specific"],
       "next": [
         {
           "workflow": "visibility_diagnosis",
-          "prompt": "Diagnose our AI visibility for the questions in"
+          "prompt": "Diagnose our AI visibility for the topics in"
         }
       ]
     },

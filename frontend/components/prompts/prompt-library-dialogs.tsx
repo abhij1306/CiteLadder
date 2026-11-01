@@ -8,10 +8,12 @@ import type { usePromptCandidates } from '@/lib/prompts/use-prompt-candidates';
 import { CandidateReviewPanel } from './candidate-review';
 import { ConfirmDeleteDialog, type PendingDelete } from './confirm-delete-dialog';
 import { CsvImportDialog } from './csv-import-dialog';
-import { GeneratePromptsDialog } from './generate-prompts-dialog';
+import { PromptBuilder, type BuilderStep } from './prompt-builder';
 import { PromptFormDialog } from './prompt-form-dialog';
 
 type PromptLibraryDialogsProps = {
+  projectId: string;
+  workspaceId: string;
   formOpen: boolean;
   setFormOpen: Dispatch<SetStateAction<boolean>>;
   editing: Prompt | undefined;
@@ -24,16 +26,17 @@ type PromptLibraryDialogsProps = {
   importPrompts: (rows: PromptImportRow[]) => Promise<void>;
   isImporting: boolean;
   importError?: string;
-  generateOpen: boolean;
-  setGenerateOpen: Dispatch<SetStateAction<boolean>>;
+  builderOpen: boolean;
+  setBuilderOpen: (open: boolean) => void;
+  builderStep: BuilderStep;
+  hasCompetitors: boolean;
   topics: Topic[];
   selectedTopicId: string | null;
-  generatePrompts: (input: PromptGenerateInput) => Promise<void>;
+  generatePrompts: (input: PromptGenerateInput) => Promise<PromptGenerateResponse | null>;
   isGenerating: boolean;
   generateError?: unknown;
-  generateResult: PromptGenerateResponse | null;
+  onTopicsChanged: () => Promise<void>;
   review: ReturnType<typeof usePromptCandidates>;
-  reviewOnly?: boolean;
   setsLoading?: boolean;
   setsError?: boolean;
   retrySets?: () => void;
@@ -43,6 +46,8 @@ type PromptLibraryDialogsProps = {
 };
 
 export function PromptLibraryDialogs({
+  projectId,
+  workspaceId,
   formOpen,
   setFormOpen,
   editing,
@@ -55,16 +60,17 @@ export function PromptLibraryDialogs({
   importPrompts,
   isImporting,
   importError,
-  generateOpen,
-  setGenerateOpen,
+  builderOpen,
+  setBuilderOpen,
+  builderStep,
+  hasCompetitors,
   topics,
   selectedTopicId,
   generatePrompts,
   isGenerating,
   generateError,
-  generateResult,
+  onTopicsChanged,
   review,
-  reviewOnly,
   setsLoading,
   setsError,
   retrySets,
@@ -72,14 +78,6 @@ export function PromptLibraryDialogs({
   setPendingDelete,
   confirmDelete,
 }: Readonly<PromptLibraryDialogsProps>) {
-  const reviewing =
-    reviewOnly ||
-    setsLoading ||
-    setsError ||
-    review.isLoading ||
-    Boolean(review.loadError) ||
-    review.candidates.length > 0 ||
-    Boolean(review.notice);
   return (
     <>
       <ConfirmDeleteDialog
@@ -110,25 +108,26 @@ export function PromptLibraryDialogs({
         isImporting={isImporting}
         error={importError}
       />
-      <GeneratePromptsDialog
-        open={generateOpen}
-        onOpenChange={setGenerateOpen}
+      <PromptBuilder
+        open={builderOpen}
+        onOpenChange={setBuilderOpen}
+        initialStep={builderStep}
+        projectId={projectId}
+        workspaceId={workspaceId}
         topics={topics}
-        defaultTopicId={selectedTopicId}
-        onGenerate={generatePrompts}
+        hasCompetitors={hasCompetitors}
+        generate={generatePrompts}
         isGenerating={isGenerating}
-        error={generateError}
-        result={generateResult}
+        generateError={generateError}
+        onTopicsChanged={onTopicsChanged}
         review={
-          reviewing ? (
-            <CandidateReviewPanel
-              review={review}
-              topics={topics}
-              setsLoading={setsLoading}
-              setsError={setsError}
-              retrySets={retrySets}
-            />
-          ) : null
+          <CandidateReviewPanel
+            review={review}
+            topics={topics}
+            setsLoading={setsLoading}
+            setsError={setsError}
+            retrySets={retrySets}
+          />
         }
       />
     </>

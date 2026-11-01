@@ -4,6 +4,8 @@ import {
   promptCandidateSchema,
   promptSchema,
   promptSetSchema,
+  seedQueriesResponseSchema,
+  topicPreviewResponseSchema,
   topicSchema,
 } from '@citeladder/contracts/project';
 import { z } from 'zod';
@@ -30,7 +32,8 @@ import {
   promptInput,
   promptUpdate,
 } from '../prompts/prompts.ts';
-import { listTopics, topicCreate, topicUpdate } from '../prompts/topics.ts';
+import { readSeedQueries } from '../prompts/seed-queries.ts';
+import { listTopics, topicConfirm, topicCreate, topicUpdate } from '../prompts/topics.ts';
 import { defineDeleteRoute, defineGetRoute, definePatchRoute, definePostRoute } from './define.ts';
 
 const family = 'prompts';
@@ -240,6 +243,34 @@ export const promptRoutes = [
       const input = await readBody(c, topicCreate);
       return commands.createTopic(db, actorOf(c), path.project_id, input);
     },
+  }),
+  definePostRoute({
+    family: 'prompt-generation',
+    path: `${api}/projects/{project_id}/topics/preview`,
+    capability: 'run',
+    params: { path: { project_id: uuid }, query: noQuery },
+    response: topicPreviewResponseSchema,
+    handle: ({ c, db }, { path }) => commands.previewTopics(db, actorOf(c), path.project_id),
+  }),
+  definePostRoute({
+    family,
+    path: `${api}/projects/{project_id}/topics/confirm`,
+    capability: 'write',
+    params: { path: { project_id: uuid }, query: noQuery },
+    body: topicConfirm,
+    response: z.array(topicSchema),
+    async handle({ c, db }, { path }) {
+      const input = await readBody(c, topicConfirm);
+      return commands.confirmTopics(db, actorOf(c), path.project_id, input);
+    },
+  }),
+  defineGetRoute({
+    family,
+    path: `${api}/projects/{project_id}/seed-queries`,
+    params: { path: { project_id: uuid }, query: noQuery },
+    response: seedQueriesResponseSchema,
+    handle: ({ c, db }, { path }) =>
+      readSeedQueries(db, c.get('workspace').workspaceId, path.project_id),
   }),
   definePatchRoute({
     family,

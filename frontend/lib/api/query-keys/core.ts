@@ -47,6 +47,8 @@ export const promptKeys = {
 export const topicKeys = {
   all: ['topics'] as const,
   list: (projectId: string) => ['topics', 'list', projectId] as const,
+  // Seed queries bind to topics, so a topic change refreshes them under `all`.
+  seedQueries: (projectId: string) => ['topics', 'seed-queries', projectId] as const,
 };
 
 export const providerKeys = {

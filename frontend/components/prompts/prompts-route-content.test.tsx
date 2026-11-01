@@ -44,7 +44,7 @@ describe('PromptsRouteContent', () => {
     );
     expect(screen.getByText('review mode: true')).toBeInTheDocument();
   });
-  it('requests the Generate dialog once when arriving with the generate parameter', async () => {
+  it('requests the Prompt Builder once when arriving with the generate parameter', async () => {
     renderAt('/prompts?generate=1&project=p1');
 
     expect(await screen.findByText('generate requests: 1')).toBeInTheDocument();

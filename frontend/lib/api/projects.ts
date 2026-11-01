@@ -20,6 +20,7 @@ import {
 } from '@citeladder/contracts/overview';
 import {
   brandProfileSchema,
+  businessModelSchema,
   buyerTypeSchema,
   marketScopeSchema,
   businessMapSchema,
@@ -68,6 +69,12 @@ export type BrandProfileUpdateInput = Partial<
     category: string;
     buyer_type: z.infer<typeof buyerTypeSchema>;
     market_scope: z.infer<typeof marketScopeSchema>;
+    business_model: z.infer<typeof businessModelSchema>;
+    // Business-context lists; an empty list clears one.
+    service_areas: string[];
+    buyer_roles: string[];
+    category_terms: string[];
+    jobs_to_be_done: string[];
   }
 >;
 

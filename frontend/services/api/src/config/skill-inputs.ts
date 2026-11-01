@@ -10,7 +10,7 @@ export function resolveSkillsDirectory(configured: string): string {
  * `fenced` is true inside a block. A fence line with an info string never
  * closes one.
  */
-export function fenceTracker() {
+function fenceTracker() {
   let fence: string | null = null;
   return (line: string) => {
     const [opening = '', fenceRun] = /^ {0,3}(`{3,}|~{3,})/u.exec(line) ?? [];

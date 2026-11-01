@@ -3,8 +3,10 @@
  *
  * Onboarding creates the profile and prompt generation records
  * business-map suggestions in its `business_context`; people edit the four
- * knowledge fields and the identity facets (category, buyer type, market scope)
- * here. Every TypeScript writer takes the project advisory
+ * knowledge fields, the identity facets (category, buyer type, market scope,
+ * business model) and the business-context lists onboarding resolved (service
+ * areas, buyer roles, category terms, jobs to be done) here. Every TypeScript
+ * writer takes the project advisory
  * lock before the profile row, shared with generation.
  */
 import { randomUUID } from 'node:crypto';
@@ -13,6 +15,7 @@ import {
   brandProfileReviewStateSchema,
   brandProfileSchema,
   brandProfileSourceSchema,
+  businessModelSchema,
   buyerTypeSchema,
   marketScopeSchema,
 } from '@citeladder/contracts/project';
@@ -49,6 +52,12 @@ type Field = keyof z.infer<typeof brandProfileSchema.shape.sources>;
 
 const text = z.string().max(TEXT_MAX).nullish();
 
+/** One business-context list: short phrases, one per entry; an empty list clears it. */
+const contextList = z
+  .array(z.string().trim().min(1).max(policy.brand_identity.map_value_max_chars))
+  .max(policy.brand_identity.context_list_max_entries)
+  .nullish();
+
 /** A partial edit: an absent or null field is left untouched. */
 export const brandProfileUpdate = z.object({
   description: text,
@@ -58,8 +67,20 @@ export const brandProfileUpdate = z.object({
   category: categoryInput.nullish(),
   buyer_type: buyerTypeSchema.nullish(),
   market_scope: marketScopeSchema.nullish(),
+  business_model: businessModelSchema.nullish(),
+  service_areas: contextList,
+  buyer_roles: contextList,
+  category_terms: contextList,
+  jobs_to_be_done: contextList,
 });
-const IDENTITY_FACETS = ['category', 'buyer_type', 'market_scope'] as const;
+const IDENTITY_FACETS = ['category', 'buyer_type', 'market_scope', 'business_model'] as const;
+/** Business-context lists onboarding resolved, editable here as reviewed facts. */
+const CONTEXT_LISTS = [
+  'service_areas',
+  'buyer_roles',
+  'category_terms',
+  'jobs_to_be_done',
+] as const;
 // Inferred from the onboarding category; they describe a replaced category.
 const CATEGORY_DERIVED = ['category_terms', 'category_aliases', 'category_options'] as const;
 export type BrandProfileUpdate = z.infer<typeof brandProfileUpdate>;
@@ -215,11 +236,21 @@ function applyFieldEdits(
   return values;
 }
 
-/** Records reviewed identity facets in `context`; a changed category drops what derived from it. */
-function applyIdentityFacets(
+type ContextField = (typeof IDENTITY_FACETS)[number] | (typeof CONTEXT_LISTS)[number];
+
+/** The supplied identity facets and business-context lists, in the order they apply. */
+const contextEdits = (update: BrandProfileUpdate): ContextField[] =>
+  [...IDENTITY_FACETS, ...CONTEXT_LISTS].filter((field) => update[field] != null);
+
+/**
+ * Records reviewed identity facets and business-context lists in `context`.
+ * A changed category drops what derived from it, before any supplied list
+ * (such as new category terms) is written.
+ */
+function applyContextEdits(
   context: Record<string, unknown>,
   update: BrandProfileUpdate,
-  facets: readonly (typeof IDENTITY_FACETS)[number][],
+  fields: readonly ContextField[],
 ) {
   const fieldSources: Record<string, unknown> = {
     ...jsonObject(context.field_sources ?? {}, 'business_context.field_sources'),
@@ -229,9 +260,10 @@ function applyIdentityFacets(
       delete context[derived];
       delete fieldSources[derived];
     }
-  for (const facet of facets) {
-    context[facet] = update[facet];
-    fieldSources[facet] = 'reviewed';
+  for (const field of fields) {
+    const value = update[field];
+    context[field] = Array.isArray(value) ? cleanProducts(value) : value;
+    fieldSources[field] = 'reviewed';
   }
   context.field_sources = fieldSources;
 }
@@ -282,13 +314,13 @@ export function updateBrandProfile(
     const context = withBuyerType(
       jsonObject(row.business_context, 'brand_profiles.business_context'),
     );
-    const facets = IDENTITY_FACETS.filter((facet) => update[facet] != null);
-    if (facets.length) applyIdentityFacets(context, update, facets);
+    const fields = contextEdits(update);
+    if (fields.length) applyContextEdits(context, update, fields);
     const updated = await trx
       .updateTable('brand_profiles')
       .set({
         ...values,
-        ...(facets.length ? { business_context: JSON.stringify(context) } : {}),
+        ...(fields.length ? { business_context: JSON.stringify(context) } : {}),
         sources: JSON.stringify(sources),
         source_artifact_ids: JSON.stringify(artifacts),
         updated_at: now,

@@ -31,16 +31,19 @@ import {
 } from '@/lib/project/identity-facets';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
-import { BusinessMapEditor } from './business-map-editor';
+import { BusinessMapSummary } from './business-map-summary';
 
 const PROFILE_TABS = [
   { id: 'facts', label: 'Facts & Positioning' },
   { id: 'audience', label: 'Audience & Offerings' },
   { id: 'map', label: 'Business map' },
   { id: 'competitors', label: 'Competitors' },
+  { id: 'brand-facts', label: 'Brand facts' },
 ] as const;
 
 type ProfileTab = (typeof PROFILE_TABS)[number]['id'];
+/** Tabs that save on their own or not at all; the profile's Save keeps its box there. */
+const SELF_SAVING_TABS: ReadonlySet<ProfileTab> = new Set(['map', 'brand-facts']);
 type TrackedCompetitor = Pick<Project['competitors'][number], 'name' | 'logo_url' | 'domains'>;
 
 function profileDraft(profile: BrandProfile): BrandProfileDraft {
@@ -95,6 +98,7 @@ export function BrandProfilePanel({
   profile,
   competitors = [],
   competitorSuggestions,
+  brandFacts,
   onSaved,
   header: Header = SaveRow,
 }: Readonly<{
@@ -102,11 +106,13 @@ export function BrandProfilePanel({
   profile: BrandProfile;
   competitors?: readonly TrackedCompetitor[];
   competitorSuggestions?: ReactNode;
+  /** The fact-checking pilot's Brand facts, as their own tab; omitted outside the pilot. */
+  brandFacts?: ReactNode;
   onSaved?: () => void;
   /**
    * Places the save action, normally in the section header beside its title.
-   * The action keeps its box on the Business map tab (which saves on its own),
-   * so switching tabs never moves the layout.
+   * The action keeps its box on the Business map and Brand facts tabs (which
+   * save on their own), so switching tabs never moves the layout.
    */
   header?: ComponentType<{ actions: ReactNode }>;
 }>) {
@@ -157,7 +163,7 @@ export function BrandProfilePanel({
         actions={
           <Button
             variant="primary"
-            className={activeTab === 'map' ? 'invisible' : undefined}
+            className={SELF_SAVING_TABS.has(activeTab) ? 'invisible' : undefined}
             onClick={() => saveMutation.mutate()}
             disabled={!workspaceId || saveMutation.isPending}
           >
@@ -175,14 +181,19 @@ export function BrandProfilePanel({
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        items={PROFILE_TABS.map((tab) => ({ value: tab.id, label: tab.label }))}
+        items={PROFILE_TABS.filter((tab) => tab.id !== 'brand-facts' || brandFacts).map((tab) => ({
+          value: tab.id,
+          label: tab.label,
+        }))}
         ariaLabel="Company facts sections"
         spaced
       >
         <TabPanel value={activeTab} className="focus-ring">
           {activeTab === 'map' ? (
-            <BusinessMapTab projectId={projectId} workspaceId={workspaceId} />
-          ) : (
+            <BusinessMapTab projectId={projectId} workspaceId={workspaceId} profile={profile} />
+          ) : null}
+          {activeTab === 'brand-facts' ? brandFacts : null}
+          {SELF_SAVING_TABS.has(activeTab) ? null : (
             <ProfileTabPanel
               activeTab={activeTab}
               draft={draft}
@@ -471,9 +482,14 @@ function OfferingList({
 function BusinessMapTab({
   projectId,
   workspaceId,
-}: Readonly<{ projectId: string; workspaceId: string | null | undefined }>) {
+  profile,
+}: Readonly<{
+  projectId: string;
+  workspaceId: string | null | undefined;
+  profile: BrandProfile;
+}>) {
   if (!workspaceId) return <Alert tone="info">Workspace is not available.</Alert>;
-  return <BusinessMapEditor projectId={projectId} workspaceId={workspaceId} />;
+  return <BusinessMapSummary projectId={projectId} workspaceId={workspaceId} profile={profile} />;
 }
 
 function SaveRow({ actions }: Readonly<{ actions: ReactNode }>) {

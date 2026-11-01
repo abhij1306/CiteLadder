@@ -3,8 +3,6 @@
  * model repeats. Record references are working values for later reads; they
  * never belong in text written for the user.
  */
-import { fenceTracker } from '../config/skill-inputs.ts';
-
 // Linear: a label never spans another `[`, so no start position rescans the
 // same text, and `[^)]*` takes the URI and any padding before `)` in one pass.
 const LINKED_REF = /\[([^[\]\n]+)\]\(\s*citeladder:\/\/[^)]*\)/giu;
@@ -25,19 +23,13 @@ function scrubLine(line: string) {
 }
 
 /**
- * Removes record references and UUIDs from user-facing text. A fenced block is
- * left exact, because a skill's machine-readable submission may need its IDs.
+ * Removes record references and UUIDs from user-facing text, fenced blocks
+ * included: no deliverable carries a machine-readable submission, so an ID in
+ * a document is always a leak into Copy and Export.
  */
 export function scrubRecordRefs(text: string) {
   if (!ANY_REF.test(text)) return text;
-  const fences = fenceTracker();
-  return text
-    .split('\n')
-    .map((line) => {
-      const { marker, fenced } = fences(line);
-      return marker || fenced ? line : scrubLine(line);
-    })
-    .join('\n');
+  return text.split('\n').map(scrubLine).join('\n');
 }
 
 /** The records one read returned, as the `citeladder://` references screens resolve. */

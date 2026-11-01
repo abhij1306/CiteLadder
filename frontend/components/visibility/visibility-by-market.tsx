@@ -13,12 +13,13 @@ import { TableCell, TableRow } from '@/components/ui/table';
 import { MissingValue, UnavailableValue } from '@/components/ui/unavailable-value';
 import { formatRate, measured } from '@/lib/visibility/dashboard';
 import { formatNet } from '@/lib/visibility/perception';
+import { SHARE_OF_VOICE_HINT } from '@/lib/config/visibility';
 
 const COLUMNS: readonly DataTableColumn[] = [
   { key: 'market', label: 'Market' },
   { key: 'mention', label: 'Mention rate', width: 'figure', numeric: true },
   { key: 'mention-change', label: 'Change', width: 'figure', numeric: true },
-  { key: 'voice', label: 'Share of voice', width: 'figure', numeric: true },
+  { key: 'voice', label: 'S.O.V.', hint: SHARE_OF_VOICE_HINT, width: 'figure', numeric: true },
   { key: 'voice-change', label: 'Change', width: 'figure', numeric: true },
   { key: 'net', label: 'Net sentiment', width: 'figure', numeric: true },
 ];

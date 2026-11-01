@@ -51,6 +51,8 @@ import type {
   surfaceKindSchema,
   transportProviderSchema,
   topicSchema,
+  topicPreviewResponseSchema,
+  seedQueriesResponseSchema,
   visibilityEngineSchema,
   visibilityEvidenceResponseSchema,
   visibilityExecutionEvidenceSchema,
@@ -115,6 +117,8 @@ export type Prompt = z.infer<typeof promptSchema>;
 export type PromptStatus = z.infer<typeof promptStatusSchema>;
 export type PromptSet = z.infer<typeof promptSetSchema>;
 export type Topic = z.infer<typeof topicSchema>;
+export type TopicPreview = z.infer<typeof topicPreviewResponseSchema>;
+export type SeedQueries = z.infer<typeof seedQueriesResponseSchema>;
 export type PromptGenerateResponse = z.infer<typeof promptGenerateResponseSchema>;
 export type PromptCandidate = z.infer<typeof promptCandidateSchema>;
 export type PromptCandidateReviewResponse = z.infer<typeof promptCandidateReviewResponseSchema>;

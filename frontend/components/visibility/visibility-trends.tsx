@@ -222,7 +222,15 @@ function HeadlineMetrics({ selected }: Readonly<{ selected: Visibility }>) {
       value: formatPosition(position),
     });
   }
-  return <StatRow segments={segments} />;
+  // A strip on the card fill, like every other metric row in the app, rather
+  // than bare figures on the page sheet.
+  return (
+    <Card>
+      <CardContent>
+        <StatRow segments={segments} />
+      </CardContent>
+    </Card>
+  );
 }
 
 function MeasurementHistory({

@@ -1,3 +1,4 @@
+import { businessModelSchema } from '@citeladder/contracts/project';
 import { describe, expect, it, vi } from 'vitest';
 import auditRuntime from '../src/config/audits.json' with { type: 'json' };
 import trafficRuntime from '../src/config/traffic.json' with { type: 'json' };
@@ -5,6 +6,10 @@ import trafficRuntime from '../src/config/traffic.json' with { type: 'json' };
 import { ConfigError, loadConfig, policy, resolveSettingSpec } from '../src/config.ts';
 import { poolOptions } from '../src/db/database.ts';
 import { productionEnv } from './production-config.ts';
+
+it('lets the brand profile edit every business model discovery can resolve', () => {
+  expect(businessModelSchema.options).toEqual(policy.discovery.constants.business_models);
+});
 
 describe('loadConfig', () => {
   it('reports missing provider routes as configuration failures during composition', async () => {

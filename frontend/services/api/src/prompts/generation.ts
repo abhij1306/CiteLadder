@@ -232,11 +232,9 @@ function stage(
     const selected = selectRun(eligible, input),
       rejected = eligible.filter(gatedOut),
       geo = geoTerms(context);
-    const revision = context.revision;
     const evidence = {
       generator_version: policy.prompts.generation.version,
       buyer_query_policy_version: policy.prompts.generation.policy_version,
-      generation_mode: revision ? 'agent_proposal' : 'quick',
       requested_count: input.count,
       requested_topic_ids: wantedTopics(input),
       cohort: input.cohort,
@@ -259,8 +257,7 @@ function stage(
         admitted: distribution(output.drafts, geo),
         selected: distribution(selected, geo),
       },
-      // What drafting worked from: the narrow brief for quick generation,
-      // the business context for an Agent portfolio.
+      // What drafting worked from: the narrow generation brief.
       brand_context_hash: createHash('sha256')
         .update(JSON.stringify(output.reference))
         .digest('hex'),
@@ -269,14 +266,6 @@ function stage(
       demand_signal_ids: context.demand.map((row) => row.id),
       demand_signal_coverage: context.snapshot?.coverage ?? {},
       grounding: output.grounding,
-      ...(revision
-        ? {
-            agent_output_id: revision.output_id,
-            agent_revision_id: revision.id,
-            agent_run_id: revision.run_id,
-            source_refs: revision.source_refs,
-          }
-        : {}),
     };
     await trx
       .insertInto('prompt_generation_runs')
@@ -424,49 +413,45 @@ export async function generatePrompts(
   // spend a model call or write topics for a request that would fail anyway.
   if (cohortShares(input).comparison > 0) await requireCompetitor(db, workspaceId, setId);
   const meter = (dependencies.meter ?? meterFor)(db, workspaceId);
-  // Configured only once the set is authorized: an Agent portfolio drafts nothing.
+  // Configured only once the set is authorized.
   let metered: ModelGateway | undefined;
   const gatewayFor = () => {
-    if (input.agent_revision_id) return null;
     metered ??= meter.gateway(dependencies.gateway(), 'prompt_generation');
     return metered;
   };
   const deadline = (dependencies.deadline ?? draftDeadline)();
   try {
-    // Only a quick run over every topic proposes topics for a project that
-    // has none: an Agent portfolio files rows under existing topics, and a
-    // request naming topics needs them to exist already.
-    const recovery =
-      input.agent_revision_id || wantedTopics(input).length
-        ? null
-        : await recoverTopics(
-            db,
-            { workspaceId, setId },
-            {
-              gateway: gatewayFor,
-              deadline,
-              reserve: () =>
-                enforceWorkspaceRequest(
-                  db,
-                  workspaceId,
-                  agentCallLimit(policy.prompts.generation.topic_calls),
-                ),
-            },
-          );
+    // Only a run over every topic proposes topics for a project that has
+    // none: a request naming topics needs them to exist already.
+    const recovery = wantedTopics(input).length
+      ? null
+      : await recoverTopics(
+          db,
+          { workspaceId, setId },
+          {
+            gateway: gatewayFor,
+            deadline,
+            reserve: () =>
+              enforceWorkspaceRequest(
+                db,
+                workspaceId,
+                agentCallLimit(policy.prompts.generation.topic_calls),
+              ),
+          },
+        );
     const context = await generationContext(db, workspaceId, setId, input);
     if (cohortShares(input).comparison > 0 && !context.context.competitors.length)
       throw generationInvalid('Add a competitor before generating comparison prompts');
     const gateway = gatewayFor();
-    if (gateway)
-      await enforceWorkspaceRequest(
-        db,
-        workspaceId,
-        agentCallLimit(draftCallLimit(input) + policy.prompts.generation.map_calls),
-      );
+    await enforceWorkspaceRequest(
+      db,
+      workspaceId,
+      agentCallLimit(draftCallLimit(input) + policy.prompts.generation.map_calls),
+    );
     const output = await generateDrafts(context, input, gateway, deadline);
     const judge = dependencies.judge();
-    // Judge calls are platform-paid on both the drafting and the revision
-    // path, so each generation spends its bounded call count before judging.
+    // Judge calls are platform-paid, so each generation spends its bounded
+    // call count before judging.
     if (judge && output.drafts.length)
       await enforceWorkspaceRequest(
         db,

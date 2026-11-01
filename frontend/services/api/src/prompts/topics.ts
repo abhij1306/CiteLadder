@@ -16,8 +16,10 @@ import { z } from 'zod';
 import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
 import { isUniqueViolation } from '../db/errors.ts';
+import { record, strings } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
+import { topicLinks } from './generation-plan.ts';
 import { acquireProjectLock } from './locks.ts';
 import { topicView, type TopicRow, type TopicView } from './views.ts';
 
@@ -38,6 +40,33 @@ export const topicUpdate = z.object({
   description: description.nullish(),
   parent_id: z.uuid().nullish(),
 });
+const offeringName = z.string().trim().min(1).max(policy.brand_identity.profile_product_max_chars);
+/**
+ * The Prompt Builder's reviewed topic plan, applied at once: proposals and new
+ * topics to create (a proposal names the saved offerings it covers), existing
+ * topics to rename and existing topics to delete.
+ */
+export const topicConfirm = z.object({
+  create: z
+    .array(
+      z.object({
+        name,
+        offerings: z.array(offeringName).max(P.create_batch_max).default([]),
+      }),
+    )
+    .max(P.create_batch_max)
+    .default([]),
+  rename: z
+    .array(z.object({ id: z.uuid(), name }))
+    .max(P.create_batch_max)
+    // One final name per topic: a repeated id would apply only its first name.
+    .refine((items) => new Set(items.map((item) => item.id)).size === items.length, {
+      message: 'Rename each topic once',
+    })
+    .default([]),
+  delete: z.array(z.uuid()).max(P.create_batch_max).default([]),
+});
+export type TopicConfirm = z.infer<typeof topicConfirm>;
 
 async function requireProject(db: Kysely<DB>, workspaceId: string, projectId: string) {
   const project = await db
@@ -216,6 +245,123 @@ export async function deleteTopic(
     await acquireProjectLock(trx, topic.project_id);
     await trx.deleteFrom('topics').where('id', '=', topic.id).execute();
   });
+}
+
+/**
+ * Records which saved offerings each topic covers in
+ * `business_context.topic_offerings` (read by `topicOfferings`), and forgets
+ * the links of `removed` topics. Only offerings the profile still lists are
+ * kept, in its spelling. The caller holds the project lock.
+ */
+export async function linkTopicOfferings(
+  trx: Kysely<DB>,
+  scope: { workspaceId: string; projectId: string },
+  change: { links: readonly { id: string; offerings: readonly string[] }[]; removed?: string[] },
+  now: Date,
+) {
+  const profile = await trx
+    .selectFrom('brand_profiles')
+    .select(['id', 'business_context', 'products_services'])
+    .where('project_id', '=', scope.projectId)
+    .where('workspace_id', '=', scope.workspaceId)
+    .forUpdate()
+    .executeTakeFirst();
+  if (!profile) return;
+  const saved = new Map(
+    strings(profile.products_services).map((offering) => [offering.toLowerCase(), offering]),
+  );
+  const business = record(profile.business_context);
+  const links = topicLinks.parse(business.topic_offerings ?? {});
+  for (const id of change.removed ?? []) delete links[id];
+  for (const link of change.links) {
+    const offerings = [
+      ...new Set(link.offerings.flatMap((item) => saved.get(item.trim().toLowerCase()) ?? [])),
+    ];
+    if (offerings.length) links[link.id] = offerings;
+  }
+  await trx
+    .updateTable('brand_profiles')
+    .set({
+      business_context: JSON.stringify({ ...business, topic_offerings: links }),
+      updated_at: now,
+    })
+    .where('id', '=', profile.id)
+    .execute();
+}
+
+/**
+ * Apply a reviewed topic plan in one transaction under the project lock:
+ * delete, then rename, then create, so a name a deleted or renamed topic
+ * frees can be reused. A created proposal is `generated` and linked to the
+ * offerings it covers; a topic the person added is `manual`. Returns the
+ * project's topics afterwards.
+ */
+export async function confirmTopics(
+  db: Database,
+  workspaceId: string,
+  projectId: string,
+  input: TopicConfirm,
+): Promise<TopicView[]> {
+  await writing(() =>
+    inTransaction(db, async (trx) => {
+      await requireProject(trx, workspaceId, projectId);
+      await acquireProjectLock(trx, projectId);
+      const owned = new Set(
+        (
+          await trx.selectFrom('topics').select('id').where('project_id', '=', projectId).execute()
+        ).map((row) => row.id),
+      );
+      const named = [...input.delete, ...input.rename.map((item) => item.id)];
+      if (named.some((id) => !owned.has(id))) throw notFound('Topic');
+      const now = new Date();
+      if (input.delete.length)
+        await trx.deleteFrom('topics').where('id', 'in', input.delete).execute();
+      if (input.rename.length) {
+        // The unique name index is checked row by row, so a swap or a chain of
+        // renames would collide midway: park every renamed topic on its own id
+        // first, then apply the final names in one statement.
+        const ids = input.rename.map((item) => item.id);
+        await trx
+          .updateTable('topics')
+          .set({ name: sql<string>`id::text` })
+          .where('id', 'in', ids)
+          .execute();
+        const names = sql.join(
+          input.rename.map((item) => sql`WHEN ${item.id}::uuid THEN ${item.name}`),
+          sql` `,
+        );
+        await trx
+          .updateTable('topics')
+          .set({ name: sql<string>`CASE id ${names} END`, updated_at: now })
+          .where('id', 'in', ids)
+          .execute();
+      }
+      const created = input.create.map((item) => ({ ...item, id: randomUUID() }));
+      if (created.length)
+        await trx
+          .insertInto('topics')
+          .values(
+            created.map((item) => ({
+              id: item.id,
+              project_id: projectId,
+              parent_id: null,
+              name: item.name,
+              description: '',
+              origin: item.offerings.length ? P.origins.generated : P.topic_origin_manual,
+              created_at: now,
+              updated_at: now,
+            })),
+          )
+          .execute();
+      await linkTopicOfferings(
+        trx,
+        { workspaceId, projectId },
+        { links: created, removed: input.delete },
+        now,
+      );
+    }),
+  );
+  return listTopics(db, workspaceId, projectId);
 }
 
 /**

@@ -165,6 +165,39 @@ async function keywordResearchQueries(db: Database, scope: ObservedScope): Promi
   }));
 }
 
+/**
+ * The seed sources the project has persisted data for, in the order a request
+ * names them: a Search Console query snapshot, and a published Search
+ * Intelligence dataset of a grounding kind in the project language. A source
+ * listed here may still yield no usable query.
+ */
+export async function persistedSeedSources(
+  db: Database,
+  scope: Pick<ObservedScope, 'workspaceId' | 'projectId' | 'languageCode'>,
+): Promise<(keyof typeof SEED_SOURCES)[]> {
+  const workspace = new WorkspaceScope(scope.workspaceId);
+  const snapshot = await workspace
+    .selectFrom(db, 'query_evidence_snapshots')
+    .select('id')
+    .where('project_id', '=', scope.projectId)
+    .executeTakeFirst();
+  const language = baseLanguage(scope.languageCode);
+  const dataset = language
+    ? await workspace
+        .selectFrom(db, 'search_intelligence_datasets')
+        .select('id')
+        .where('project_id', '=', scope.projectId)
+        .where('status', '=', 'published')
+        .where('dataset_kind', 'in', O.si_dataset_kinds)
+        .where(sql<string>`split_part(lower(language_code), '-', 1)`, '=', language)
+        .executeTakeFirst()
+    : undefined;
+  return [
+    ...(snapshot ? (['search_console'] as const) : []),
+    ...(dataset ? (['search_intelligence'] as const) : []),
+  ];
+}
+
 // ICU word boundaries also split scripts written without spaces (Japanese, Chinese, Thai).
 const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' });
 

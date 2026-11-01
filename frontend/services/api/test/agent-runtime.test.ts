@@ -303,12 +303,12 @@ describe('Agent runtime on PostgreSQL', () => {
     });
   });
 
-  it('supplies a pinned packaged methodology in the opening message and saves its document as an outline', async () => {
+  it('supplies a pinned packaged methodology in the opening message and saves a short deliverable as a draft', async () => {
     const scope = await fixtures.scope();
     const packaged = await loadSkillCatalog(agentSettings({}).skillsDirectory);
     const run = await fixtures.store({ catalog: packaged }).enqueue(scope, {
       key: randomUUID(),
-      message: 'Build a portfolio of distinct buyer questions. Keep the existing topics.',
+      message: 'Plan our next prompt run. Keep the existing topics.',
       skillId: 'prompt_discovery',
     });
     const queue = new AgentQueue(db, 30);
@@ -319,7 +319,7 @@ describe('Agent runtime on PostgreSQL', () => {
       .runtime(
         scope,
         scripted(
-          [read(), save('draft', 'Coverage plan grounded in the current portfolio.')],
+          [read(), save('draft', 'Prompt plan grounded in the current topics.')],
           async (sent, ordinal) => {
             if (ordinal === 1) opening.push(...texts(sent));
           },
@@ -327,16 +327,14 @@ describe('Agent runtime on PostgreSQL', () => {
         { catalog: packaged },
       )
       .execute(lease);
-    expect(opening.at(-1)).toBe(
-      'Build a portfolio of distinct buyer questions. Keep the existing topics.',
-    );
+    expect(opening.at(-1)).toBe('Plan our next prompt run. Keep the existing topics.');
     expect(opening.some((block) => block.startsWith('Methodology: prompt_discovery'))).toBe(true);
     const detail = await readChat(db, scope, run.chat_id);
     expect(detail.latest_run?.status).toBe('succeeded');
     expect(detail.output).toMatchObject({
       skill_id: 'prompt_discovery',
-      kind: 'prompt_portfolio',
-      phase: 'outline',
+      kind: 'prompt_plan',
+      phase: 'draft',
       latest_revision: { source_refs: [`citeladder://project/${scope.projectId}`] },
     });
   });
@@ -1086,11 +1084,10 @@ describe('Agent runtime on PostgreSQL', () => {
       content: 'Source',
       evidence_refs: [],
     });
-    // A skill's fenced submission block keeps the IDs its schema needs.
-    // A fence line with an info string does not close the block.
-    const block = ['```json', '```not-a-close', `{"topic_id":"${sourceId}"}`, '```'].join('\n');
+    // A fenced block is scrubbed too: Copy and Export never carry an ID.
+    const block = ['```json', `{"topic_id":"${sourceId}"}`, '```'].join('\n');
     expect(scrubRecordRefs(`See [the run](citeladder://audit/${sourceId}).\n\n${block}`)).toBe(
-      `See the run.\n\n${block}`,
+      'See the run.\n\n```json\n{"topic_id":""}\n```',
     );
     // URI schemes are case-insensitive, and padding inside a link's parentheses is removed too.
     expect(

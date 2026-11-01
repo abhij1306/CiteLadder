@@ -160,7 +160,7 @@ export function CandidateReview({
   );
 }
 
-/** The review list for the Generate dialog, bound to the candidates hook. */
+/** The review list for the Prompt Builder, bound to the candidates hook. */
 export function CandidateReviewPanel({
   review,
   topics,
@@ -196,8 +196,8 @@ export function CandidateReviewPanel({
   if (!review.candidates.length && !review.notice)
     return (
       <Alert tone="info">
-        No pending suggestions remain. They may have expired or already been reviewed. Use Generate
-        more to create a new batch.
+        No pending suggestions remain. They may have expired or already been reviewed. Use Adjust
+        run to generate a new batch.
       </Alert>
     );
   return (
@@ -213,7 +213,7 @@ export function CandidateReviewPanel({
   );
 }
 
-/** Library prompt that suggestions are waiting, while the dialog is closed. */
+/** Library prompt that suggestions are waiting, while the Prompt Builder is closed. */
 export function PendingReviewNotice({
   count,
   hidden,

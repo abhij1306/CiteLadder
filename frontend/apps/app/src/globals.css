@@ -30,8 +30,8 @@
        background  — the ground behind the rail and around the sheet;
        sheet       — the workspace sheet and its page bands;
        panel       — a card, table or panel raised on the sheet;
-       panel-tonal — a nested surface inside a card: table header rows,
-                     tonal panels, the step a selected row sits on.
+       panel-tonal — a nested surface inside a card: tonal panels, boxed
+                     control rows. Table header rows stay on the card's paper.
      Light tints the sheet and nested steps against white cards; dark lifts
      each step lighter than the one below it. */
   --color-background: #eaedeb;
@@ -62,8 +62,8 @@
                  peers in a band, a menu separator, a chart gridline. Reads as
                  a fold in one sheet, not as an edge.
        border  — the EDGE of a bounded control, inset panel, ledger or page
-                 band. Cards, table wrappers and table header rows separate
-                 by fill and keep only a `subtle` edge.
+                 band. Cards and table wrappers separate by fill and keep
+                 only a `subtle` edge; a table header row keeps a `subtle` rule.
        strong  — a deliberate emphasis: a selected edge, a section the reader
                  is being pointed at.
        bold    — field boundaries and anything that must survive on a tinted

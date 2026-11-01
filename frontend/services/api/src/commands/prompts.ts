@@ -14,6 +14,7 @@ import * as candidates from '../prompts/candidates.ts';
 import type { GenerationInput } from '../prompts/generation-input.ts';
 import { generatePrompts } from '../prompts/generation.ts';
 import * as prompts from '../prompts/prompts.ts';
+import * as topicPreview from '../prompts/topic-preview.ts';
 import * as topics from '../prompts/topics.ts';
 
 const SCOPE = 'prompts:write';
@@ -113,6 +114,23 @@ export function updateTopic(
 export function deleteTopic(db: Database, actor: Actor, topicId: string) {
   authorize(actor);
   return topics.deleteTopic(db, actor.workspaceId, topicId);
+}
+
+/** The Prompt Builder's reviewed topic plan: deletes, renames and creates at once. */
+export function confirmTopics(
+  db: Database,
+  actor: Actor,
+  projectId: string,
+  input: z.infer<typeof topics.topicConfirm>,
+) {
+  authorize(actor);
+  return topics.confirmTopics(db, actor.workspaceId, projectId, input);
+}
+
+/** Proposing topics makes a metered model call, so it needs the run capability. */
+export function previewTopics(db: Database, actor: Actor, projectId: string) {
+  requireCapability(actor, 'run', SCOPE);
+  return topicPreview.previewTopics(db, actor.workspaceId, projectId);
 }
 
 /** A retried run with the same Idempotency-Key replays the staged run without provider I/O. */
