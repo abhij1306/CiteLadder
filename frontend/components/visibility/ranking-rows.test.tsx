@@ -1,7 +1,12 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render as renderUi, screen, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vite-plus/test';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import type { RankingRow } from '@/lib/api/types';
 import { RankingRowsTable } from './ranking-rows';
+
+// The app shell owns the TooltipProvider the column hints need.
+const render = (ui: ReactElement) => renderUi(ui, { wrapper: TooltipProvider });
 
 function row(overrides: Partial<RankingRow> = {}): RankingRow {
   return {

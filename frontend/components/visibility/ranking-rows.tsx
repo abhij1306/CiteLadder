@@ -9,6 +9,7 @@ import { BrandLogo } from '@/components/ui/brand-logo';
 import { Pressable } from '@/components/ui/pressable';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { RankingRow } from '@/lib/api/types';
+import { SHARE_OF_VOICE_HINT } from '@/lib/config/visibility';
 import {
   formatPosition,
   formatPositionExact,
@@ -285,7 +286,14 @@ function rankingColumns({
     ...(anyChange
       ? [{ key: 'change', label: 'Change', width: 'figure', numeric: true } as const]
       : []),
-    { key: 'sov', label: 'Share of voice', width: 'figure', numeric: true, desktopOnly: true },
+    {
+      key: 'sov',
+      label: 'S.O.V.',
+      hint: SHARE_OF_VOICE_HINT,
+      width: 'figure',
+      numeric: true,
+      desktopOnly: true,
+    },
     { key: 'citations', label: 'Citations', width: 'figure', numeric: true, desktopOnly: true },
   ];
 }
