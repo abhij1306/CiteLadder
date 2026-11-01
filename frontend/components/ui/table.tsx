@@ -289,7 +289,8 @@ const cellClasses = ({ numeric, desktopOnly }: CellOptions) =>
     // Row rule, dropped on the last row.
     'border-b [tr:last-child>&]:border-b-0',
     // A value never wraps: "Not measured" split over two lines read as two values.
-    numeric && 'whitespace-nowrap tabular-nums text-right',
+    // Its digits take the figure face, so a column lines up place by place.
+    numeric && 'whitespace-nowrap font-numeric text-right',
     desktopOnly && desktopOnlyClasses,
   );
 

@@ -55,7 +55,7 @@ export function ChartAxes({
           textAnchor="end"
           dominantBaseline="middle"
           fontSize={TICK_FONT_SIZE}
-          className="fill-muted"
+          className="fill-muted font-numeric"
         >
           {tick.text}
         </text>

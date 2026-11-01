@@ -252,7 +252,7 @@ const ARBITRARY_PX = String.raw`\[\d+(?:\.\d+)?px\]`;
 
 const RAW_TYPE_SCALE = classToken(`text-${oneOf(TYPE_SIZES)}`, String.raw`(?![\w-])`);
 const RAW_TYPE_METRICS =
-  /(?<![\w-])(?:[\w-]+:)*(?:leading-|tracking-|font-(?:display|sans)(?![\w-]))/;
+  /(?<![\w-])(?:[\w-]+:)*(?:leading-|tracking-|font-(?:display|sans|numeric)(?![\w-]))/;
 const OFF_GRID_SPACING = classToken(
   `-?${oneOf(SPACING_UTILITIES)}-(?:${oneOf(OFF_GRID_STEPS)}|${ARBITRARY_PX})`,
   String.raw`(?![\w.-])`,

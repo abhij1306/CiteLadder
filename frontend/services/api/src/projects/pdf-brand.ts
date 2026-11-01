@@ -1,9 +1,9 @@
 /**
  * CiteLadder's identity in PDF documents: the light design tokens read from
  * the app's token owner, the brand faces (Outfit display, Lexend Deca text,
- * both capped at weight 500) with Noto Sans behind them for scripts the brand
- * faces lack, and the logo drawn from the same outline data as the app's
- * `LogoMark`.
+ * a monospace figure face for digits, all capped at weight 500) with Noto Sans behind
+ * them for scripts the brand faces lack, and the logo drawn from the same
+ * outline data as the app's `LogoMark`.
  * Every face is an OFL-licensed npm package, which permits embedding the
  * subsets a document uses.
  */
@@ -45,39 +45,69 @@ const TOKENS = {
 export type Tone = keyof typeof TOKENS;
 export type Palette = Readonly<Record<Tone, string>>;
 
-/** `display` sets headings and figures in Outfit; `text` and `medium` set Lexend Deca. */
-export type Style = 'text' | 'medium' | 'display';
-type Family = 'display' | 'text' | 'fallback';
+/**
+ * `display` sets headings in Outfit; `text` and `medium` set Lexend Deca;
+ * `figure` (a figure cell) and `figureMedium` (a headline figure, a rank) set
+ * their digits in the figure face and everything else in Lexend Deca, as the app's
+ * figure roles do.
+ */
+export type Style = 'text' | 'medium' | 'display' | 'figure' | 'figureMedium';
+type Family = 'display' | 'text' | 'figure' | 'fallback';
 type Weight = 400 | 500;
 const STYLES: Record<Style, { families: readonly Family[]; weight: Weight }> = {
   display: { families: ['display', 'text', 'fallback'], weight: 500 },
   medium: { families: ['text', 'fallback'], weight: 500 },
   text: { families: ['text', 'fallback'], weight: 400 },
+  figure: { families: ['figure', 'text', 'fallback'], weight: 400 },
+  figureMedium: { families: ['figure', 'text', 'fallback'], weight: 500 },
 };
+
+/**
+ * What the figure face sets: digits and the marks inside a number
+ * (`. , : % + - −`), the same range as the web face's `unicode-range`
+ * (apps/app/index.html). Letters and spaces fall through to Lexend Deca.
+ */
+const FIGURE_CHARACTERS: ReadonlySet<number> = new Set(
+  [...'0123456789.,:%+-−'].map((character) => character.codePointAt(0) ?? 0),
+);
 
 const require = createRequire(import.meta.url);
 const fontDirectory = (packageJson: string) => join(dirname(packageJson), 'files');
-const SOURCES: readonly { family: Family; directory: string; prefix: string; weights: Weight[] }[] =
-  [
-    {
-      family: 'display',
-      directory: fontDirectory(require.resolve('@fontsource/outfit/package.json')),
-      prefix: 'outfit',
-      weights: [500],
-    },
-    {
-      family: 'text',
-      directory: fontDirectory(require.resolve('@fontsource/lexend-deca/package.json')),
-      prefix: 'lexend-deca',
-      weights: [400, 500],
-    },
-    {
-      family: 'fallback',
-      directory: fontDirectory(require.resolve('@fontsource/noto-sans/package.json')),
-      prefix: 'noto-sans',
-      weights: [400, 500],
-    },
-  ];
+type Source = {
+  family: Family;
+  directory: string;
+  prefix: string;
+  weights: Weight[];
+  /** A face that sets only these characters, from its Latin subset alone. */
+  only?: ReadonlySet<number>;
+};
+const SOURCES: readonly Source[] = [
+  {
+    family: 'display',
+    directory: fontDirectory(require.resolve('@fontsource/outfit/package.json')),
+    prefix: 'outfit',
+    weights: [500],
+  },
+  {
+    family: 'text',
+    directory: fontDirectory(require.resolve('@fontsource/lexend-deca/package.json')),
+    prefix: 'lexend-deca',
+    weights: [400, 500],
+  },
+  {
+    family: 'figure',
+    directory: fontDirectory(require.resolve('@fontsource/jetbrains-mono/package.json')),
+    prefix: 'jetbrains-mono',
+    weights: [400, 500],
+    only: FIGURE_CHARACTERS,
+  },
+  {
+    family: 'fallback',
+    directory: fontDirectory(require.resolve('@fontsource/noto-sans/package.json')),
+    prefix: 'noto-sans',
+    weights: [400, 500],
+  },
+];
 
 type FontFile = { family: Family; weight: Weight; bytes: Buffer; characters: ReadonlySet<number> };
 type Face = { name: string; characters: ReadonlySet<number> };
@@ -87,8 +117,9 @@ export type FaceChain = readonly [Face, ...Face[]];
 let fontFiles: Promise<FontFile[]> | undefined;
 let tokens: Promise<Palette> | undefined;
 
-async function sourceFiles(source: (typeof SOURCES)[number]): Promise<FontFile[]> {
-  const pattern = new RegExp(`^${source.prefix}-[a-z-]+-(400|500)-normal\\.woff$`, 'u');
+async function sourceFiles(source: Source): Promise<FontFile[]> {
+  const subset = source.only ? 'latin' : '[a-z-]+';
+  const pattern = new RegExp(`^${source.prefix}-${subset}-(400|500)-normal\\.woff$`, 'u');
   const names = (await readdir(source.directory))
     .filter((name) => pattern.test(name) && source.weights.some((w) => name.includes(`-${w}-`)))
     // Latin first, so the common case finds its glyphs in the first face.
@@ -105,7 +136,11 @@ async function sourceFiles(source: (typeof SOURCES)[number]): Promise<FontFile[]
         family: source.family,
         weight: name.includes('-500-') ? 500 : 400,
         bytes,
-        characters: new Set(parsed.characterSet),
+        characters: new Set(
+          source.only
+            ? parsed.characterSet.filter((code) => source.only?.has(code))
+            : parsed.characterSet,
+        ),
       };
     }),
   );
@@ -203,14 +238,21 @@ export async function registerFaces(
     if (!first) throw new Error(`No local font for the ${style} style`);
     return [first, ...rest];
   };
-  return { display: chain('display'), medium: chain('medium'), text: chain('text') };
+  return {
+    display: chain('display'),
+    medium: chain('medium'),
+    text: chain('text'),
+    figure: chain('figure'),
+    figureMedium: chain('figureMedium'),
+  };
 }
 
 /**
  * fontkit applies the faces' standard ligatures by default, and the text layer
  * then maps an fi, ff or fl glyph back to its first letter only, so copied or
- * searched text reads "frst". Tabular figures keep Outfit's numeric columns
- * aligned; Lexend Deca has no `tnum`, so its figures stay proportional.
+ * searched text reads "frst". Tabular figures keep any digit in a heading's
+ * Outfit aligned; figures in data roles use the `figure` styles,
+ * whose digits are one width already (Lexend Deca has no `tnum`).
  * @types/pdfkit types only the tag-list form; pdfkit hands the value to
  * fontkit, whose tag-to-boolean form is the only way to turn a default off.
  */

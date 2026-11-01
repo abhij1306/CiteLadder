@@ -159,14 +159,14 @@ export function DonutChart({
         >
           {highlighted ? (
             <div className="grid gap-0.5">
-              <span className={textRole('figure', 'tabular-nums')}>{highlighted.value}</span>
+              <span className={textRole('figure')}>{highlighted.value}</span>
               <span className={textRole('caption', 'text-secondary')}>
                 {shareText(highlighted.value, whole)}
               </span>
             </div>
           ) : (
             <div className="grid gap-0.5">
-              <span className={textRole('figure', 'tabular-nums')}>{formatCount(total)}</span>
+              <span className={textRole('figure')}>{formatCount(total)}</span>
               <span className={textRole('caption', 'text-secondary')}>{totalLabel}</span>
             </div>
           )}
@@ -188,7 +188,7 @@ export function DonutChart({
             >
               <LegendSwatch fillClass={slice.swatchClass} />
               <span className={textRole('caption', 'truncate')}>{slice.label}</span>
-              <span className={textRole('caption', 'text-secondary ml-auto shrink-0 tabular-nums')}>
+              <span className={textRole('caption', 'text-secondary font-numeric ml-auto shrink-0')}>
                 {shareText(slice.value, whole)}
               </span>
             </button>

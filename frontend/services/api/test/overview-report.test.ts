@@ -53,13 +53,16 @@ describe('Overview PDF', () => {
     });
     expect(response.status).toBe(200);
   }
-  async function reportText(tenant: Tenant) {
+  async function reportBytes(tenant: Tenant) {
     const response = await app.request(`/api/v1/projects/${tenant.projectId}/overview/report.pdf`, {
       headers: await headers(tenant),
     });
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('application/pdf');
-    return (await pdfText(new Uint8Array(await response.arrayBuffer()))).join(' ');
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  async function reportText(tenant: Tenant) {
+    return (await pdfText(await reportBytes(tenant))).join(' ');
   }
   async function consumerProject() {
     const tenant = await fixtures.tenant();
@@ -92,6 +95,16 @@ describe('Overview PDF', () => {
       headers: await headers(stranger),
     });
     expect(foreign.status).toBe(404);
+  });
+
+  it('sets headline figure digits in the figure face and the words in the text face', async () => {
+    const tenant = await consumerProject();
+    const auditId = await fixtures.audit(tenant, { completedAt: measuredAt });
+    await fixtures.metricSnapshot(tenant, auditId, { visibilityScore: 0, metrics: {} });
+    await saveLayout(tenant, ['project_state']);
+    const embedded = Buffer.from(await reportBytes(tenant)).toString('latin1');
+    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+JetBrainsMono-Medium/u);
+    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+LexendDeca-Regular/u);
   });
 
   it('reads a first run in plain words, naming engines, targets and competitors', async () => {

@@ -335,9 +335,9 @@ export class PdfReport {
         style: 'medium',
         tone: 'secondary',
       });
-      const figure = this.measure(stat.value, 24, 'display');
+      const figure = this.measure(stat.value, 24, 'figureMedium');
       const size = figure > width ? Math.max(12, (24 * width) / figure) : 24;
-      this.draw(stat.value, x, top + 50, { size, style: 'display', tone: 'brandInk' });
+      this.draw(stat.value, x, top + 50, { size, style: 'figureMedium', tone: 'brandInk' });
       notes[index]?.forEach((line, row) =>
         this.draw(line, x, top + 66 + row * 10.5, { size: 8, style: 'text', tone: 'muted' }),
       );
@@ -375,10 +375,15 @@ export class PdfReport {
     };
     const wrapped = rows.map((row) => {
       if (row.length !== layout.length) throw new Error('Invalid PDF row');
-      return layout.map((column, index) => ({
-        column,
-        lines: this.wrap(row[index] ?? '', 9, 'text', column.width - CELL_PAD * 2),
-      }));
+      return layout.map((column, index) => {
+        // A right-aligned column holds figures: their digits take the figure face.
+        const style: Style = column.align === 'right' ? 'figure' : 'text';
+        return {
+          column,
+          style,
+          lines: this.wrap(row[index] ?? '', 9, style, column.width - CELL_PAD * 2),
+        };
+      });
     });
     const capacity = Math.floor(
       (this.bottom - CONTINUATION_TOP - TABLE_HEADER - CELL_Y_PAD * 2) / TABLE_LINE,
@@ -402,19 +407,17 @@ export class PdfReport {
         const height = (end - start) * TABLE_LINE + CELL_Y_PAD * 2;
         if (rowIndex % 2 === 1)
           this.document.rect(MARGIN, this.y, this.width, height).fill(this.fill('backgroundAlt'));
-        for (const { column, lines } of cells)
-          lines.slice(start, end).forEach((line, offset) =>
-            this.draw(
-              line,
-              cellX(column, line, 9, 'text'),
-              this.y + CELL_Y_PAD + 9.5 + offset * TABLE_LINE,
-              {
-                size: 9,
-                style: 'text',
-                tone: 'foreground',
-              },
-            ),
-          );
+        for (const { column, style, lines } of cells)
+          lines
+            .slice(start, end)
+            .forEach((line, offset) =>
+              this.draw(
+                line,
+                cellX(column, line, 9, style),
+                this.y + CELL_Y_PAD + 9.5 + offset * TABLE_LINE,
+                { size: 9, style, tone: 'foreground' },
+              ),
+            );
         this.y += height;
         start = end;
       }
@@ -434,7 +437,11 @@ export class PdfReport {
       const height = 18 + titleLines.length * 13.5 + detailLines.length * 12;
       this.ensure(height);
       const top = this.y;
-      this.draw(item.rank, MARGIN, top + 20, { size: 12, style: 'display', tone: 'accentText' });
+      this.draw(item.rank, MARGIN, top + 20, {
+        size: 12,
+        style: 'figureMedium',
+        tone: 'accentText',
+      });
       titleLines.forEach((line, index) =>
         this.draw(line, textX, top + 20 + index * 13.5, {
           size: 10,

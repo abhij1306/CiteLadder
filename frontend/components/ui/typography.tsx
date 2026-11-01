@@ -31,11 +31,11 @@ const TEXT_ROLES = {
   label: 'type-label',
   /** Timestamps, counts, help, footnotes. 12/16, 400, muted. */
   caption: 'type-caption',
-  /** A metric value. 24/32, 500, −0.02em, foreground, tabular, text face. */
+  /** A metric value. 24/32, 500, −0.02em, foreground, figure-face digits. */
   figure: 'type-figure',
-  /** A value inside a dense row or cell. 16/24, 500, foreground, tabular. */
+  /** A value inside a dense row or cell. 16/24, 500, foreground, figure-face digits. */
   figureSm: 'type-figure-sm',
-  /** A change indicator. 12/16, 500, tabular; the caller supplies the tone. */
+  /** A change indicator. 12/16, 500, figure-face digits; the caller supplies the tone. */
   delta: 'type-delta',
   /** Badges, chips, segment labels, counts, key hints. 12/16, 500; the tone supplies the ink. */
   badge: 'type-badge',
@@ -82,7 +82,7 @@ export function CodeToken({ children }: Readonly<{ children: string }>) {
   );
 }
 
-/** Primary numeral with tabular figures — the `figure` role. */
+/** Primary numeral in the figure face — the `figure` role. */
 export function Metric({
   children,
   className,

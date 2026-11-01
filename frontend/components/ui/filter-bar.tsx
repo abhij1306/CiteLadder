@@ -164,7 +164,7 @@ export function FilterTrigger({
         <>
           <span
             aria-hidden
-            className="type-badge bg-neutral-bg text-foreground min-w-5 rounded-full px-2 tabular-nums"
+            className="type-badge font-numeric bg-neutral-bg text-foreground min-w-5 rounded-full px-2"
           >
             {count}
           </span>
