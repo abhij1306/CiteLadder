@@ -97,16 +97,6 @@ describe('Overview PDF', () => {
     expect(foreign.status).toBe(404);
   });
 
-  it('sets headline figure digits in the figure face and the words in the text face', async () => {
-    const tenant = await consumerProject();
-    const auditId = await fixtures.audit(tenant, { completedAt: measuredAt });
-    await fixtures.metricSnapshot(tenant, auditId, { visibilityScore: 0, metrics: {} });
-    await saveLayout(tenant, ['project_state']);
-    const embedded = Buffer.from(await reportBytes(tenant)).toString('latin1');
-    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+JetBrainsMono-Medium/u);
-    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+LexendDeca-Regular/u);
-  });
-
   it('reads a first run in plain words, naming engines, targets and competitors', async () => {
     const tenant = await consumerProject();
     await db
@@ -215,7 +205,13 @@ describe('Overview PDF', () => {
       ])
       .execute();
 
-    const text = await reportText(tenant);
+    const bytes = await reportBytes(tenant);
+    const text = (await pdfText(bytes)).join(' ');
+    // Headline figures (the rank, the shares) set their digits in the figure
+    // face; the words around them stay in the text face.
+    const embedded = Buffer.from(bytes).toString('latin1');
+    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+JetBrainsMono-Medium/u);
+    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+LexendDeca-Regular/u);
     expect(text).toContain('ChatGPT API and Claude API');
     expect(text).toContain(
       'No comparison yet: changes appear once a second run uses the same prompts and engines.',
