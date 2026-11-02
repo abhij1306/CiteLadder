@@ -234,23 +234,36 @@ it('links a missing keyword that became an Action', async () => {
   );
 });
 
-it('explains a paid empty scope', async () => {
-  const empty = {
-    ...dataset,
-    dataset_kind: 'referring_domains',
-    unique_rows_saved: 0,
-    provider_total: 0,
-  };
-  mswServer.use(
-    http.get(`/api/v1/projects/${project.id}/search-intelligence/datasets/${dataset.id}/rows`, () =>
-      HttpResponse.json({ dataset: empty, rows: [], next_cursor: null }),
-    ),
-  );
-  renderWithProviders(<SearchIntelligenceDatasetView dataset={empty} title="Referring domains" />, {
-    projectSelection: testProjectSelection({ activeProject: project, activeProjectId: project.id }),
-  });
-  expect(await screen.findByText(/provider returned no data/i)).toBeInTheDocument();
-});
+// `empty` is what acquisition records when the provider answered with no rows.
+it.each([
+  ['empty', 0, 'The provider returned no data for this saved scope.'],
+  ['complete', 0, 'The provider returned no data for this saved scope.'],
+  ['complete', 201, 'The provider returned results, but none were saved for this scope.'],
+  ['partial', 0, 'Provider evidence for this saved scope is incomplete, and no rows were saved.'],
+  ['unknown', 0, 'Provider evidence is unavailable for this saved scope.'],
+])(
+  'explains a paid scope with %s coverage, %i raw rows and no saved rows',
+  (coverage, raw, heading) => {
+    const empty = {
+      ...dataset,
+      dataset_kind: 'referring_domains',
+      coverage,
+      raw_rows_received: raw,
+      unique_rows_saved: 0,
+      provider_total: 0,
+    };
+    renderWithProviders(
+      <SearchIntelligenceDatasetView dataset={empty} title="Referring domains" />,
+      {
+        projectSelection: testProjectSelection({
+          activeProject: project,
+          activeProjectId: project.id,
+        }),
+      },
+    );
+    expect(screen.getByText(heading)).toBeInTheDocument();
+  },
+);
 
 it('uses shared pagination and resets its cursor when sorting or changing rows per page', async () => {
   const cursor = 'page+/=';
