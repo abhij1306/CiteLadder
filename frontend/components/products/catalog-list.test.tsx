@@ -22,7 +22,7 @@ const query = (overrides: Record<string, unknown> = {}) =>
           category_ids: [CATEGORY_ID],
         },
       ],
-      projection: { applies: true, in_flight: 0, failed: 0 },
+      projection: { applicability: 'applicable', in_flight: 0, failed: 0 },
     },
     ...overrides,
   }) as never;
@@ -135,7 +135,7 @@ describe('CatalogList', () => {
           data: {
             categories: [{ id: CATEGORY_ID, name: 'Empty category', product_count: 0 }],
             products: [],
-            projection: { applies: true, in_flight: 0, failed: 0 },
+            projection: { applicability: 'applicable', in_flight: 0, failed: 0 },
           },
         })}
         checkedKeys={new Set()}
@@ -175,17 +175,31 @@ describe('CatalogList', () => {
   });
 
   it('explains an empty catalog by whether a crawl can fill it', () => {
-    const empty = (applies: boolean) =>
+    const empty = (applicability: 'applicable' | 'not_applicable' | 'unknown') =>
       query({
-        data: { categories: [], products: [], projection: { applies, in_flight: 0, failed: 0 } },
+        data: {
+          categories: [],
+          products: [],
+          product_total: 0,
+          projection: { applicability, in_flight: 0, failed: 0 },
+        },
       });
     const props = { checkedKeys: new Set<string>(), onSelect: vi.fn(), onToggle: vi.fn() };
-    const { rerender } = renderWithProviders(<CatalogList query={empty(true)} {...props} />);
+    const { rerender } = renderWithProviders(
+      <CatalogList query={empty('applicable')} {...props} />,
+    );
     expect(screen.getByText('Run a Site Health crawl or import a CSV.')).toBeInTheDocument();
 
-    rerender(<CatalogList query={empty(false)} {...props} />);
+    rerender(<CatalogList query={empty('not_applicable')} {...props} />);
     expect(screen.queryByText('Run a Site Health crawl or import a CSV.')).not.toBeInTheDocument();
     expect(screen.getByText(/only for businesses that sell a product catalog/)).toBeInTheDocument();
+
+    // An unconfirmed business model is never reported as one that does not sell.
+    rerender(<CatalogList query={empty('unknown')} {...props} />);
+    expect(screen.getByText(/once your business model is confirmed/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/only for businesses that sell a product catalog/),
+    ).not.toBeInTheDocument();
   });
 
   it('reports a read failure instead of an empty list', () => {

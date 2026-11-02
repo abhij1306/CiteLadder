@@ -247,11 +247,26 @@ export function shelfLinks(facts: CatalogFacts, base: string): string[] {
 }
 
 const CATALOG_MODELS = new Set<string>(policy.discovery.constants.commerce_business_models);
+const KNOWN_MODELS = new Set<string>(policy.discovery.constants.business_models);
+
+/**
+ * Whether crawled pages project into the catalog for this brand: `applicable`
+ * when its confirmed business model, primary or secondary, sells a catalog;
+ * `not_applicable` when a recognized primary model does not; `unknown` when no
+ * recognized model is confirmed, which is never reported as not applicable.
+ */
+export function catalogApplicability(
+  businessContext: unknown,
+): 'applicable' | 'not_applicable' | 'unknown' {
+  const context = record(businessContext);
+  const models = [context.business_model, ...strings(context.secondary_business_models)];
+  if (models.some((model) => typeof model === 'string' && CATALOG_MODELS.has(model)))
+    return 'applicable';
+  const primary = context.business_model;
+  return typeof primary === 'string' && KNOWN_MODELS.has(primary) ? 'not_applicable' : 'unknown';
+}
 
 /** Whether a brand's confirmed business model, primary or secondary, sells a catalog. Unknown fails closed. */
 export function sellsCatalog(businessContext: unknown): boolean {
-  const context = record(businessContext);
-  return [context.business_model, ...strings(context.secondary_business_models)].some(
-    (model) => typeof model === 'string' && CATALOG_MODELS.has(model),
-  );
+  return catalogApplicability(businessContext) === 'applicable';
 }

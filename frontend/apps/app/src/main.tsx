@@ -5,10 +5,13 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 
 import './app.css';
 import { getAppQueryClient } from '@/lib/api/query-client';
+import { installClientErrorListeners } from '@/lib/client-errors';
 import { setUrlStateRouter } from '@/lib/navigation/url-state';
 
 import { appRoutes } from './router';
 
+// Before anything renders, so an error during the first paint is reported too.
+installClientErrorListeners();
 const queryClient = getAppQueryClient();
 const router = createBrowserRouter(appRoutes);
 // URL-owned filter state writes through the router rather than around it, so

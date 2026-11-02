@@ -15,8 +15,7 @@ import { Dot } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi } from '@/lib/api/runs';
+import { runsQueries } from '@/lib/api/runs';
 import type { Audit } from '@/lib/api/types';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useActiveProject } from '@/lib/project/project-context';
@@ -62,9 +61,7 @@ export function RunsScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const runsQuery = useQuery({
-    queryKey: queryKeys.runs.list({ project_id: projectId }),
-    queryFn: ({ signal }) =>
-      runsApi.listAudits({ project_id: projectId }, { signal, workspaceId: scope.workspaceId }),
+    ...runsQueries.list(scope.workspaceId, projectId),
     enabled: scope.enabled,
     refetchInterval: (query) => {
       const audits = query.state.data;

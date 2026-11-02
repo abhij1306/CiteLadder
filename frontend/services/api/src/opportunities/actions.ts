@@ -6,7 +6,7 @@ import {
   actionStatusSchema,
   measurementLegSchema,
 } from '@citeladder/contracts/actions';
-import { sql, type Selectable } from 'kysely';
+import { sql, type Selectable, type SqlBool } from 'kysely';
 
 import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
@@ -18,9 +18,8 @@ import {
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
 import { parseUuid } from '../http/uuid.ts';
-import { effectiveStatus, validateStatus } from './action-status.ts';
+import { refreshActionStatus, validateStatus } from './action-status.ts';
 import { OPPORTUNITY_COLUMNS, projectItem } from './projection.ts';
-import { requireProject } from '../projects/access.ts';
 import type { Scope } from './sources.ts';
 import { declarationView } from './declaration-view.ts';
 import { memberMeasurementLeg } from './declaration-checks.ts';
@@ -100,6 +99,8 @@ export async function attachOrCreateAction(
       created_at: now,
       updated_at: now,
       status: a.ACTION_STATUS_OPEN,
+      // A new Action has no output or declaration yet: its stored status is what it reads as.
+      effective_status: a.ACTION_STATUS_OPEN,
       target_prompt_id: null,
       priority_score: null,
       opportunity_snapshot_id: null,
@@ -120,7 +121,7 @@ const jsonList = (value: unknown): unknown[] => (Array.isArray(value) ? value : 
 const stringList = (value: unknown): string[] =>
   jsonList(value).filter((v): v is string => typeof v === 'string');
 
-function actionItem(row: ActionRow, status: string) {
+function actionItem(row: ActionRow) {
   return {
     id: row.id,
     project_id: row.project_id,
@@ -129,7 +130,7 @@ function actionItem(row: ActionRow, status: string) {
     target_url: row.target_url,
     target_prompt_id: row.target_prompt_id,
     origin: actionItemSchema.shape.origin.parse(row.origin),
-    status: actionStatusSchema.parse(status),
+    status: actionStatusSchema.parse(row.effective_status),
     priority_score: row.priority_score,
     families: stringList(row.families),
     approach: row.approach,
@@ -175,7 +176,6 @@ export async function listActions(
     cursor: string | null;
   },
 ) {
-  await requireProject(db, scope);
   if (filters.status !== null) validateStatus(filters.status);
   if (filters.target_kind !== null && !a.ACTION_TARGET_KINDS.includes(filters.target_kind))
     throw new ApiError(422, `Unknown target kind: ${filters.target_kind}`);
@@ -187,8 +187,7 @@ export async function listActions(
   };
   let query = listed(db, scope)
     .selectAll()
-    .select(effectiveStatus().as('current'))
-    .where(effectiveStatus(), 'in', filters.status ? [filters.status] : a.ACTION_ACTIVE_STATUSES);
+    .where('effective_status', 'in', filters.status ? [filters.status] : a.ACTION_ACTIVE_STATUSES);
   if (filters.target_kind) query = query.where('target_kind', '=', filters.target_kind);
   if (filters.cursor) {
     const { score, id } = cursorPosition(filters.cursor, fingerprint);
@@ -196,23 +195,21 @@ export async function listActions(
       eb.or([eb(priority, '<', score), eb.and([eb(priority, '=', score), eb('id', '>', id)])]),
     );
   }
-  const statuses = listed(db, scope).select(effectiveStatus().as('status')).as('listed');
   const [rows, counts] = await Promise.all([
     query
       .orderBy(priority, 'desc')
       .orderBy('id')
       .limit(filters.limit + 1)
       .execute(),
-    db
-      .selectFrom(statuses)
-      .select(['status', sql<number>`count(*)::int`.as('count')])
-      .groupBy('status')
+    listed(db, scope)
+      .select(['effective_status as status', sql<number>`count(*)::int`.as('count')])
+      .groupBy('effective_status')
       .execute(),
   ]);
   const page = rows.slice(0, filters.limit);
   const last = page.at(-1);
   return {
-    items: page.map((row) => actionItem(row, row.current)),
+    items: page.map(actionItem),
     next_cursor:
       rows.length > filters.limit && last
         ? encodeKeysetCursor('actions', fingerprint, [String(last.priority_score ?? -1), last.id])
@@ -241,17 +238,13 @@ export async function requireAction(
   return row;
 }
 
-/** The workspace's Action row with the effective status its readers see. */
-async function readAction(db: Database, workspaceId: string, actionId: string) {
-  const row = await db
-    .selectFrom('actions')
-    .selectAll()
-    .select(effectiveStatus().as('current'))
-    .where('workspace_id', '=', workspaceId)
-    .where('id', '=', actionId)
-    .executeTakeFirst();
-  if (!row) throw notFound('Action');
-  return row;
+/** The live opportunities among `ids`, in that order. */
+function inMemberOrder<T extends { id: string }>(ids: readonly string[], rows: readonly T[]) {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row ? [row] : [];
+  });
 }
 
 export async function actionMembers(db: Database, action: ActionRow) {
@@ -265,24 +258,42 @@ export async function actionMembers(db: Database, action: ActionRow) {
     .where('id', 'in', ids)
     .where('superseded_at', 'is', null)
     .execute();
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
+  return inMemberOrder(ids, rows);
+}
+
+/** `actionMembers` keyed by the Action id, so it runs beside the Action read. */
+function memberRows(db: Database, workspaceId: string, actionId: string) {
+  return db
+    .selectFrom('opportunities')
+    .select(OPPORTUNITY_COLUMNS)
+    .where('opportunities.workspace_id', '=', workspaceId)
+    .where(
+      sql<SqlBool>`(opportunities.project_id, opportunities.id) in (
+        select actions.project_id, member.id::uuid
+        from actions cross join jsonb_array_elements_text(actions.member_opportunity_ids) member(id)
+        where actions.workspace_id = ${workspaceId} and actions.id = ${actionId})`,
+    )
+    .where('opportunities.superseded_at', 'is', null)
+    .execute();
 }
 
 const measuredBy = measurementLegSchema.shape.leg.nullable();
 
 export async function getAction(db: Database, workspaceId: string, actionId: string) {
-  const action = await readAction(db, workspaceId, actionId);
-  const declaration = await db
-    .selectFrom('opportunity_implementation_events')
-    .selectAll()
-    .where('workspace_id', '=', workspaceId)
-    .where('project_id', '=', action.project_id)
-    .where('action_id', '=', actionId)
-    .executeTakeFirst();
-  const members = await actionMembers(db, action);
+  // The declaration and members key on the Action id, so all three run together.
+  const [action, declaration, rows] = await Promise.all([
+    requireAction(db, workspaceId, actionId),
+    db
+      .selectFrom('opportunity_implementation_events')
+      .selectAll()
+      .where('workspace_id', '=', workspaceId)
+      .where('action_id', '=', actionId)
+      .executeTakeFirst(),
+    memberRows(db, workspaceId, actionId),
+  ]);
+  const members = inMemberOrder(stringList(action.member_opportunity_ids), rows);
   return {
-    ...actionItem(action, action.current),
+    ...actionItem(action),
     diagnosis: actionDetailSchema.shape.diagnosis.parse(action.diagnosis),
     members: members.map((row) => ({ ...projectItem(row), remediation: row.remediation || '' })),
     // The earliest go-live a declaration accepts; new evidence measures it from there.
@@ -324,6 +335,7 @@ export async function recordStatus(
       created_at: now,
     })
     .execute();
+  await refreshActionStatus(db, action.workspace_id, action.id);
 }
 
 export async function updateActionStatus(
@@ -339,6 +351,5 @@ export async function updateActionStatus(
       throw new ApiError(422, 'A declared Action cannot be changed');
     await recordStatus(trx, action, status, userId);
   });
-  const row = await readAction(db, workspaceId, actionId);
-  return actionItem(row, row.current);
+  return actionItem(await requireAction(db, workspaceId, actionId));
 }

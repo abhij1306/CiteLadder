@@ -16,7 +16,6 @@ import {
 } from '../src/audits/reads.ts';
 import { auditPerformance } from '../src/audits/performance.ts';
 import { createRepairAudit, repairInput } from '../src/audits/repair.ts';
-import { record } from '../src/db/json.ts';
 
 const db = testDatabase(),
   fixtures = new VisibilityFixtures(db),
@@ -46,7 +45,7 @@ async function seed() {
   return { ...t, auditId, tasks };
 }
 describe('persisted audit reads and immutable repair', () => {
-  it('scopes reads and exposes frozen execution provenance while keeping unavailable metrics and timings distinct', async () => {
+  it('scopes reads, lists executions without their answers, and keeps unavailable metrics and timings distinct', async () => {
     const t = await seed(),
       foreign = await seed();
     await expect(readAudit(db, foreign.workspaceId, t.auditId)).rejects.toMatchObject({
@@ -66,22 +65,29 @@ describe('persisted audit reads and immutable repair', () => {
     await db
       .updateTable('audit_tasks')
       .set({
-        request_snapshot: JSON.stringify({
-          ...record(task.request_snapshot),
-          retrieval_enabled: false,
-        }),
         provider_metadata: JSON.stringify({ search_surface_outcome: 'aio_present_no_text' }),
+        answer_text: 'Acme is the plumber to call.',
         status: 'capacity_wait',
+        latency_ms: 812,
       })
       .where('id', '=', task.id)
       .execute();
     const executions = await listExecutions(db, t.workspaceId, t.auditId);
-    expect(executions[0]).toMatchObject({
-      retrieval_enabled: false,
-      search_surface_outcome: 'aio_present_no_text',
+    // The list carries the table's columns only: the answer, snapshots and
+    // provider metadata stay on the single-execution read.
+    expect(executions[0]).toEqual({
+      id: task.id,
+      prompt_index: task.prompt_index,
+      logical_engine: 'chatgpt',
+      transport_provider: task.transport_provider,
       status: 'capacity_wait',
+      prompt_text: task.prompt_text,
+      error_code: '',
+      latency_ms: 812,
     });
-    expect(executions[0]).not.toHaveProperty('provider_route_snapshot');
+    await expect(listExecutions(db, foreign.workspaceId, t.auditId)).rejects.toMatchObject({
+      status: 404,
+    });
     expect(await auditPerformance(db, t.workspaceId, t.auditId)).toMatchObject({
       queue_wait_ms: null,
       total_run_duration_ms: null,

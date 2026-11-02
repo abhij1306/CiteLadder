@@ -531,6 +531,49 @@ describe('PerformanceScreen table interactions', () => {
     expect(within(table).getAllByRole('row', { hidden: true })).toHaveLength(11);
   });
 
+  it('starts from the first page when the sorted metric is hidden', async () => {
+    const user = userEvent.setup();
+    const asked: string[] = [];
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measured())),
+      http.get(`/api/v1/projects/${PROJECT}/performance/table`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const dimension = params.get('dimension')!;
+        if (dimension !== 'query') return HttpResponse.json(tablePage(dimension));
+        const sort = params.get('sort');
+        const cursor = params.get('cursor');
+        asked.push(`${sort} ${cursor ?? 'first'}`);
+        // The server binds a cursor to the order it was cut from.
+        if (cursor && cursor !== `next:${sort}`)
+          return HttpResponse.json({ error: { message: 'Cursor mismatch' } }, { status: 400 });
+        return HttpResponse.json({
+          ...tablePage(dimension),
+          items: cursor ? tableRows('query', 11, 12) : tableRows('query', 1, 10),
+          next_cursor: cursor ? null : `next:${sort}`,
+          total_count: 12,
+          page_size: 10,
+        });
+      }),
+    );
+
+    renderWithProviders(<PerformanceScreen />);
+    const table = await screen.findByRole('table', { name: 'Top queries' });
+    expect(await within(table).findByText('query 1')).toBeVisible();
+    await user.click(within(table).getByRole('button', { name: 'impressions' }));
+    await user.click(await screen.findByRole('button', { name: 'Next page' }));
+    expect(await within(table).findByText('query 11')).toBeVisible();
+    const sortedBy = asked.at(-1)!.split(' ')[0];
+
+    // Hiding the sorted metric falls back to the default order.
+    await user.click(screen.getByRole('button', { name: 'Plot total impressions' }));
+
+    // The first page of the default order (already cached from the landing view).
+    expect(await within(table).findByText('query 1')).toBeVisible();
+    expect(sortedBy).toBe('-impressions');
+    expect(asked).not.toContain('-clicks next:-impressions');
+    expect(screen.queryByText('Cursor mismatch')).not.toBeInTheDocument();
+  });
+
   it('holds a newly opened tab at its measured footprint before its rows arrive', async () => {
     const user = userEvent.setup();
     let releasePages!: () => void;

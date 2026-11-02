@@ -5,6 +5,22 @@ import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import type { Chat, Json, Run, Scope } from './contracts.ts';
 
+/**
+ * A chat found by its workspace alone, which names its project: the one chat
+ * read a request under `/agent/chats/{chat_id}` makes. The session read
+ * already proved the membership, and every read after it filters by the
+ * chat's workspace and project.
+ */
+export async function workspaceChat(db: Database, workspaceId: string, id: string): Promise<Chat> {
+  const chat = await db
+    .selectFrom('agent_chats')
+    .selectAll()
+    .where('id', '=', id)
+    .where('workspace_id', '=', workspaceId)
+    .executeTakeFirst();
+  if (!chat) throw notFound('Chat');
+  return chat;
+}
 export async function getChat(db: Database, scope: Scope, id: string, lock = false): Promise<Chat> {
   let query = db
     .selectFrom('agent_chats')

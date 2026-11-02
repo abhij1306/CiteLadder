@@ -49,6 +49,13 @@ const STALL_REASON = {
 } as const;
 export const stallReasonLabel = (token: string) => label(STALL_REASON, token);
 
+/** Why the Overview has no tracked-citation figure for the window. */
+const CITATION_GAP = {
+  no_completed_run: 'No AI Visibility run completed in this window.',
+  not_computed: 'A run in this window has not been counted yet.',
+} as const;
+export const citationGapLabel = (token: string) => label(CITATION_GAP, token);
+
 /** Which subscription check failed, phrased as the fix. */
 const VERIFICATION_FAILURE = {
   label_mismatch: 'The subscription does not carry this source’s citeladder-source label.',

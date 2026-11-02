@@ -121,7 +121,7 @@ export function PromptLibrary({
   const invalidate = async () => {
     if (projectId) {
       await queryClient.invalidateQueries({
-        queryKey: queryKeys.prompts.sets(projectId),
+        queryKey: queryKeys.prompts.projectSets(projectId),
       });
       // Seed queries bind to topics, so a topic change refreshes them with the list.
       await queryClient.invalidateQueries({ queryKey: queryKeys.topics.all });

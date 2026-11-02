@@ -27,6 +27,7 @@ import { auditScheduleRoutes } from './audit-schedules.ts';
 import { auditRoutes } from './audits.ts';
 import { providerRoutes } from './providers.ts';
 import { agentRoutes } from './agent.ts';
+import { clientErrorRoutes } from './client-errors.ts';
 
 export const PRODUCT_ROUTES: readonly ProductRoute[] = [
   ...agentRoutes,
@@ -35,6 +36,7 @@ export const PRODUCT_ROUTES: readonly ProductRoute[] = [
   ...projectRoutes,
   ...brandDiscoveryRoutes,
   ...authRoutes,
+  ...clientErrorRoutes,
   ...workspaceRoutes,
   ...overviewRoutes,
   ...internalLinkRoutes,

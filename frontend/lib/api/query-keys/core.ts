@@ -38,7 +38,11 @@ export const projectKeys = {
 
 export const promptKeys = {
   all: ['prompts'] as const,
-  sets: (projectId: string) => ['prompts', 'sets', projectId] as const,
+  /** One workspace's read of a project's prompt sets. */
+  sets: (workspaceId: string | null, projectId: string) =>
+    ['prompts', 'sets', projectId, workspaceId] as const,
+  /** Every cached read of a project's prompt sets, for invalidation. */
+  projectSets: (projectId: string) => ['prompts', 'sets', projectId] as const,
   set: (promptSetId: string) => ['prompts', 'set', promptSetId] as const,
   list: (promptSetId: string) => ['prompts', 'list', promptSetId] as const,
   candidates: (promptSetId: string) => ['prompts', 'candidates', promptSetId] as const,

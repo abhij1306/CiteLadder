@@ -15,6 +15,7 @@ import { RUN_ACTIVE_POLL_MS } from '@/lib/config/runs';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useRunEvents } from '@/lib/runs/use-run-events';
+import { useRunExecutions } from '@/lib/runs/use-run-executions';
 import { shouldPollAudit } from '@/lib/runs/status';
 
 /** Poll interval (ms) while a run is active. Polling remains the baseline. */
@@ -44,12 +45,8 @@ export function RunDetailScreen() {
 
   const active = auditQuery.data ? shouldPollAudit(auditQuery.data.status) : false;
 
-  const executionsQuery = useQuery({
-    queryKey: queryKeys.runs.executions(runId),
-    queryFn: ({ signal }) => runsApi.listExecutions(runId, { signal, workspaceId }),
-    enabled: workspaceId !== null,
-    refetchInterval: active ? POLL_INTERVAL_MS : false,
-  });
+  // Only the audit row polls; the executions list follows its progress.
+  const executionsQuery = useRunExecutions(runId, auditQuery.data);
 
   // Stream is the accelerator; polling remains the reliable baseline.
   useRunEvents(runId, auditQuery.data?.project_id, active);

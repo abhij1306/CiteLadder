@@ -6,8 +6,10 @@
  * the window is resolved once, in the project's reporting timezone.
  */
 import type { z } from 'zod';
-import type { aiTrafficOverviewSchema } from '@citeladder/contracts/ai-traffic';
-import { sql } from 'kysely';
+import type {
+  aiTrafficOverviewSchema,
+  trackedCitationsSchema,
+} from '@citeladder/contracts/ai-traffic';
 
 import { AiReferralsQueryError, getAiReferrals } from '../analytics/ai-referrals.ts';
 import type { Database } from '../db/database.ts';
@@ -23,41 +25,58 @@ import type { CrawlScope } from './state.ts';
 
 const TRACKED_CITATIONS_LABEL = "Observed in CiteLadder's tracked answers";
 
+type TrackedCitations = z.input<typeof trackedCitationsSchema>;
+
 /**
- * Owned citations in each audit scope's newest completed audit inside the
- * window; `null` when no audit completed there, which is not zero.
+ * The owned-citation facts that audit finalization persisted on each audit
+ * scope's newest completed run inside the window, summed across scopes. The
+ * read never counts citation rows: a selected run without its fact is
+ * `not_computed`, and a window without a completed run is
+ * `no_completed_run`; neither becomes zero.
  */
 async function trackedCitations(
   db: Database,
   scope: CrawlScope,
   bounds: ReturnType<typeof windowBounds>,
-): Promise<number | null> {
-  const audits = await db
-    .selectFrom('audits')
-    .select('id')
-    .distinctOn('audit_scope')
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('status', '=', 'completed')
-    .where('created_at', '>=', bounds.from)
-    .where('created_at', '<', bounds.to)
-    .orderBy('audit_scope')
-    .orderBy('created_at', 'desc')
-    .orderBy('id', 'desc')
-    .execute();
-  if (!audits.length) return null;
-  const { count } = await db
-    .selectFrom('citations')
-    .select(sql<number>`count(*)::integer`.as('count'))
-    .where('workspace_id', '=', scope.workspaceId)
-    .where(
-      'audit_id',
-      'in',
-      audits.map((audit) => audit.id),
+): Promise<TrackedCitations> {
+  const runs = await db
+    .selectFrom('audits as a')
+    .leftJoin('metric_snapshots as m', (join) =>
+      join
+        .onRef('m.audit_id', '=', 'a.id')
+        .onRef('m.workspace_id', '=', 'a.workspace_id')
+        .onRef('m.project_id', '=', 'a.project_id'),
     )
-    .where('is_owned', '=', true)
-    .executeTakeFirstOrThrow();
-  return count;
+    .select(['a.id as audit_id', 'm.owned_citation_count', 'm.analyzer_version'])
+    .distinctOn('a.audit_scope')
+    .where('a.workspace_id', '=', scope.workspaceId)
+    .where('a.project_id', '=', scope.projectId)
+    .where('a.status', '=', 'completed')
+    .where('a.created_at', '>=', bounds.from)
+    .where('a.created_at', '<', bounds.to)
+    .orderBy('a.audit_scope')
+    .orderBy('a.created_at', 'desc')
+    .orderBy('a.id', 'desc')
+    .execute();
+  const base = { unit: 'tracked_citations', label: TRACKED_CITATIONS_LABEL } as const;
+  if (!runs.length)
+    return { ...base, state: 'not_available', reason: 'no_completed_run', count: null };
+  const sources: { audit_id: string; analyzer_version: string; count: number }[] = [];
+  for (const run of runs) {
+    if (run.owned_citation_count === null || run.analyzer_version === null)
+      return { ...base, state: 'not_available', reason: 'not_computed', count: null };
+    sources.push({
+      audit_id: run.audit_id,
+      analyzer_version: run.analyzer_version,
+      count: run.owned_citation_count,
+    });
+  }
+  return {
+    ...base,
+    state: 'measured',
+    count: sources.reduce((sum, source) => sum + source.count, 0),
+    sources: sources.map(({ audit_id, analyzer_version }) => ({ audit_id, analyzer_version })),
+  };
 }
 
 export async function aiTrafficOverview(
@@ -85,9 +104,5 @@ export async function aiTrafficOverview(
     }),
     trackedCitations(db, scope, windowBounds(window, options)),
   ]);
-  return {
-    crawl,
-    referrals,
-    citations: { unit: 'tracked_citations', count: citations, label: TRACKED_CITATIONS_LABEL },
-  };
+  return { crawl, referrals, citations };
 }

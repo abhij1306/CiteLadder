@@ -324,6 +324,8 @@ export function actionRow(
     id: randomUUID(),
     origin: 'evidence',
     status: 'open',
+    // Before any output or declaration, the stored status is the one readers see.
+    effective_status: values.status ?? 'open',
     families: '[]',
     approach: '',
     skill_id: '',

@@ -48,9 +48,11 @@ const catalogQuery = (overrides: Record<string, unknown> = {}) =>
     isError: false,
     refetch: vi.fn(),
     data: {
+      // The list is bounded; the count is every product.
       products: [{ id: 'p1' }, { id: 'p2' }],
+      product_total: 7,
       categories: [{ id: 'c1' }],
-      projection: { applies: true, in_flight: 0, failed: 0 },
+      projection: { applicability: 'applicable', in_flight: 0, failed: 0 },
     },
     ...overrides,
   }) as never;
@@ -63,8 +65,18 @@ const statValue = (label: string) => screen.getByText(label).closest('dt')?.next
  * grammar — so the test mounts a host that renders both, exactly as a screen
  * does, and keeps asserting on what the reader sees.
  */
-function CatalogHeaderHost(props: Parameters<typeof useCatalogHeader>[0]) {
-  const header = useCatalogHeader(props);
+function CatalogHeaderHost({
+  projection,
+  ...props
+}: Omit<Parameters<typeof useCatalogHeader>[0], 'projection'> & {
+  projection?: Parameters<typeof useCatalogHeader>[0]['projection'];
+}) {
+  // The screen passes the newest projection known; with no poll newer than
+  // the catalog, that is the catalog's own.
+  const header = useCatalogHeader({
+    ...props,
+    projection: projection ?? props.query.data?.projection,
+  });
   return (
     <>
       {header.stats}
@@ -89,46 +101,50 @@ describe('CatalogHeader', () => {
       />,
     );
 
-    expect(statValue('Products')).toHaveTextContent('2');
+    expect(statValue('Products')).toHaveTextContent('7');
     expect(statValue('Categories')).toHaveTextContent('1');
     await waitFor(() => expect(screen.getByText('49/50')).toBeInTheDocument());
   });
 
-  it('reports projection work in flight, then failures, and nothing once clean', async () => {
-    const withProjection = (in_flight: number, failed: number) =>
-      catalogQuery({
-        data: {
-          products: [],
-          categories: [],
-          projection: { applies: true, in_flight, failed },
-        },
-      });
-    const { rerender } = renderWithProviders(
+  it('reports the polled projection in flight, then failures, and nothing once clean', async () => {
+    // The cached catalog was read with three in flight; the header follows
+    // the newer projection poll rather than the catalog's own copy.
+    const query = catalogQuery({
+      data: {
+        products: [],
+        product_total: 0,
+        categories: [],
+        projection: { applicability: 'applicable', in_flight: 3, failed: 0 },
+      },
+    });
+    const host = (
+      in_flight: number,
+      failed: number,
+      applicability: 'applicable' | 'not_applicable' | 'unknown' = 'applicable',
+    ) => (
       <CatalogHeaderHost
         workspaceId={WORKSPACE_ID}
         projectId={PROJECT_ID}
-        query={withProjection(3, 1)}
-      />,
+        query={query}
+        projection={{ applicability, in_flight, failed }}
+      />
     );
-    expect(statValue('Projection')).toHaveTextContent('3 projecting');
+    const { rerender } = renderWithProviders(host(1, 1));
+    expect(statValue('Projection')).toHaveTextContent('1 projecting');
 
-    rerender(
-      <CatalogHeaderHost
-        workspaceId={WORKSPACE_ID}
-        projectId={PROJECT_ID}
-        query={withProjection(0, 2)}
-      />,
-    );
+    rerender(host(0, 2));
     expect(statValue('Projection')).toHaveTextContent('2 pages not projected');
 
-    rerender(
-      <CatalogHeaderHost
-        workspaceId={WORKSPACE_ID}
-        projectId={PROJECT_ID}
-        query={withProjection(0, 0)}
-      />,
-    );
+    rerender(host(0, 0));
     expect(screen.queryByText('Projection')).not.toBeInTheDocument();
+
+    // A business that does not sell a catalog, and one whose model is not yet
+    // confirmed, each say so rather than reading as a clean projection.
+    rerender(host(0, 0, 'not_applicable'));
+    expect(statValue('Projection')).toHaveTextContent('Not applicable');
+
+    rerender(host(0, 0, 'unknown'));
+    expect(statValue('Projection')).toHaveTextContent('Business model unconfirmed');
   });
 
   it('never prints a progress fraction that reads backwards', async () => {
@@ -152,8 +168,9 @@ describe('CatalogHeader', () => {
   it('reads the catalog once on arrival, and again only when the analyzed count moves', async () => {
     const readCatalog = vi.fn(async () => ({
       products: [{ id: 'p1' }],
+      product_total: 1,
       categories: [],
-      projection: { applies: true, in_flight: 0, failed: 0 },
+      projection: { applicability: 'applicable', in_flight: 0, failed: 0 },
     }));
     function LiveScreen() {
       const query = useQuery({

@@ -3,8 +3,16 @@ import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig, type ViteUserConfig, loadEnv } from 'vite-plus';
 
+import { RELEASE_META_NAME } from '../../lib/config/operational.ts';
+
 const appRoot = fileURLToPath(new URL('.', import.meta.url));
 const frontendRoot = fileURLToPath(new URL('../..', import.meta.url));
+
+/** The build's commit, when CI names one; the reporter treats absence as `development`. */
+function releaseId(): string {
+  const value = process.env.PUBLIC_APP_RELEASE || process.env.GITHUB_SHA || '';
+  return /^[\w.-]{1,64}$/u.test(value) ? value : '';
+}
 
 // Explicit return type: without it, tsc compares the inferred literal against
 // every defineConfig overload and dies with TS2321 "Excessive stack depth".
@@ -49,6 +57,24 @@ export default defineConfig(({ command, mode }): ViteUserConfig => {
             `[citeladder] Building with empty public values: ${emptyPublicValues.join(', ')}. ` +
               'They are baked in at build time, so this image will behave as if they are unset.',
           );
+        },
+      },
+      {
+        // The commit error reports name (lib/client-errors.ts), written into the
+        // unhashed index.html rather than a script chunk: a value in a chunk would
+        // change that chunk's hash, and the boot cache with it, on every deploy.
+        name: 'citeladder:release-meta',
+        transformIndexHtml() {
+          const release = releaseId();
+          return release
+            ? [
+                {
+                  tag: 'meta',
+                  attrs: { name: RELEASE_META_NAME, content: release },
+                  injectTo: 'head',
+                },
+              ]
+            : [];
         },
       },
     ],

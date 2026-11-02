@@ -442,12 +442,28 @@ export const crawlSummarySchema = z.object({
     }),
   ),
 });
+const trackedCitationsBase = { unit: z.literal('tracked_citations'), label: z.string() };
+/**
+ * Owned citations from each audit scope's newest completed run in the window,
+ * read from the runs' persisted citation facts. `not_available` is never a
+ * zero: no completed run in the window, or a run whose fact is not computed.
+ */
+export const trackedCitationsSchema = z.discriminatedUnion('state', [
+  z.object({
+    ...trackedCitationsBase,
+    state: z.literal('measured'),
+    count: z.number().int().nonnegative(),
+    sources: z.array(z.object({ audit_id: z.string(), analyzer_version: z.string() })).min(1),
+  }),
+  z.object({
+    ...trackedCitationsBase,
+    state: z.literal('not_available'),
+    reason: z.enum(['no_completed_run', 'not_computed']),
+    count: z.null(),
+  }),
+]);
 export const aiTrafficOverviewSchema = z.object({
   crawl: crawlSummarySchema,
   referrals: aiReferralsSchema,
-  citations: z.object({
-    unit: z.literal('tracked_citations'),
-    count: z.number().nullable(),
-    label: z.string(),
-  }),
+  citations: trackedCitationsSchema,
 });

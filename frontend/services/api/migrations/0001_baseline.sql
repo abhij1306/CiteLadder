@@ -34,6 +34,7 @@ CREATE TABLE public.actions (
     target_prompt_id uuid,
     origin character varying(16) NOT NULL,
     status character varying(16) NOT NULL,
+    effective_status character varying(16) NOT NULL,
     priority_score double precision,
     families jsonb NOT NULL,
     approach character varying(32) NOT NULL,
@@ -432,6 +433,21 @@ CREATE TABLE public.api_keys (
     revoked_at timestamp with time zone,
     revoke_reason character varying(32),
     CONSTRAINT ck_api_keys_revocation CHECK (((revoked_at IS NULL) = (revoke_reason IS NULL)))
+);
+
+CREATE TABLE public.audit_comparison_baselines (
+    id uuid NOT NULL,
+    workspace_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    audit_id uuid NOT NULL,
+    cohort character varying(32) NOT NULL,
+    logical_engine character varying(32),
+    status character varying(32) NOT NULL,
+    baseline_audit_id uuid,
+    skipped_runs integer NOT NULL,
+    analyzer_version character varying(32) NOT NULL,
+    scoring_rule_version character varying(32) NOT NULL,
+    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.audit_engine_snapshots (
@@ -1471,7 +1487,10 @@ CREATE TABLE public.metric_snapshots (
     metrics jsonb,
     source_analysis_ids jsonb,
     source_artifact_ids jsonb,
-    created_at timestamp with time zone NOT NULL
+    owned_citation_count integer NOT NULL,
+    owned_citation_ids jsonb NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_metric_snapshot_owned_citations CHECK (((jsonb_typeof(owned_citation_ids) = 'array'::text) AND (owned_citation_count = jsonb_array_length(owned_citation_ids))))
 );
 
 CREATE TABLE public.monitored_site_urls (
@@ -2308,6 +2327,7 @@ CREATE TABLE public.site_crawls (
     inventory_complete boolean NOT NULL,
     partial_reason character varying(48) NOT NULL,
     score_summary jsonb,
+    terminal_counters jsonb,
     site_facts jsonb,
     robots_snapshot_id uuid,
     robots_observed_at timestamp with time zone,
@@ -2493,6 +2513,20 @@ CREATE TABLE public.site_internal_link_runs (
     manifest jsonb NOT NULL,
     result jsonb,
     created_at timestamp with time zone NOT NULL
+);
+
+CREATE TABLE public.site_issue_catalogs (
+    workspace_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    crawl_id uuid NOT NULL,
+    finding_class character varying(16) NOT NULL,
+    items jsonb NOT NULL,
+    summary jsonb NOT NULL,
+    sources jsonb NOT NULL,
+    analyzer_version character varying(32) NOT NULL,
+    rule_catalog_version character varying(32) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.site_issues (
@@ -2996,6 +3030,12 @@ ALTER TABLE ONLY public.api_keys
 ALTER TABLE ONLY public.entity_sentiments
     ADD CONSTRAINT entity_sentiments_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.audit_comparison_baselines
+    ADD CONSTRAINT audit_comparison_baselines_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.audit_comparison_baselines
+    ADD CONSTRAINT uq_audit_comparison_baseline UNIQUE NULLS NOT DISTINCT (audit_id, cohort, logical_engine);
+
 ALTER TABLE ONLY public.audit_engine_snapshots
     ADD CONSTRAINT audit_engine_snapshots_pkey PRIMARY KEY (id);
 
@@ -3334,6 +3374,9 @@ ALTER TABLE ONLY public.site_internal_link_runs
 
 ALTER TABLE ONLY public.site_internal_link_runs
     ADD CONSTRAINT site_internal_link_runs_workspace_id_project_id_idempotency_key UNIQUE (workspace_id, project_id, idempotency_key);
+
+ALTER TABLE ONLY public.site_issue_catalogs
+    ADD CONSTRAINT site_issue_catalogs_pkey PRIMARY KEY (crawl_id, finding_class);
 
 ALTER TABLE ONLY public.site_issues
     ADD CONSTRAINT site_issues_pkey PRIMARY KEY (id);
@@ -3827,6 +3870,8 @@ CREATE INDEX ix_action_status_events_project_created ON public.action_status_eve
 
 CREATE INDEX ix_action_status_events_workspace_id ON public.action_status_events USING btree (workspace_id);
 
+CREATE INDEX ix_actions_effective_status ON public.actions USING btree (project_id, effective_status);
+
 CREATE INDEX ix_actions_list ON public.actions USING btree (project_id, priority_score, id);
 
 CREATE INDEX ix_actions_workspace_id ON public.actions USING btree (workspace_id);
@@ -3926,6 +3971,12 @@ CREATE INDEX ix_api_idempotency_created_at ON public.api_idempotency USING btree
 CREATE INDEX ix_api_keys_created_by_user_id ON public.api_keys USING btree (created_by_user_id);
 
 CREATE INDEX ix_entity_sentiments_workspace_id ON public.entity_sentiments USING btree (workspace_id);
+
+CREATE INDEX ix_audit_comparison_baselines_baseline_audit_id ON public.audit_comparison_baselines USING btree (baseline_audit_id);
+
+CREATE INDEX ix_audit_comparison_baselines_project_id ON public.audit_comparison_baselines USING btree (project_id);
+
+CREATE INDEX ix_audit_comparison_baselines_workspace_id ON public.audit_comparison_baselines USING btree (workspace_id);
 
 CREATE INDEX ix_audit_events_audit_id_created_at_id ON public.audit_events USING btree (audit_id, created_at, id);
 
@@ -4429,6 +4480,10 @@ CREATE INDEX ix_site_issues_current ON public.site_issues USING btree (crawl_id,
 
 CREATE INDEX ix_site_issues_filter ON public.site_issues USING btree (crawl_id, finding_class, severity, category, rule_id);
 
+CREATE INDEX ix_site_issue_catalogs_project_id ON public.site_issue_catalogs USING btree (project_id);
+
+CREATE INDEX ix_site_issue_catalogs_workspace_id ON public.site_issue_catalogs USING btree (workspace_id);
+
 CREATE INDEX ix_site_issues_project_id ON public.site_issues USING btree (project_id);
 
 CREATE INDEX ix_site_issues_url_created ON public.site_issues USING btree (site_url_id, created_at);
@@ -4776,6 +4831,18 @@ ALTER TABLE ONLY public.claim_verdicts
 
 ALTER TABLE ONLY public.claim_verdicts
     ADD CONSTRAINT claim_verdicts_workspace_id_claim_id_fkey FOREIGN KEY (workspace_id, claim_id) REFERENCES public.answer_claims(workspace_id, id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_comparison_baselines
+    ADD CONSTRAINT audit_comparison_baselines_audit_id_fkey FOREIGN KEY (audit_id) REFERENCES public.audits(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_comparison_baselines
+    ADD CONSTRAINT audit_comparison_baselines_baseline_audit_id_fkey FOREIGN KEY (baseline_audit_id) REFERENCES public.audits(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_comparison_baselines
+    ADD CONSTRAINT audit_comparison_baselines_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_comparison_baselines
+    ADD CONSTRAINT audit_comparison_baselines_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.audit_engine_snapshots
     ADD CONSTRAINT audit_engine_snapshots_audit_id_fkey FOREIGN KEY (audit_id) REFERENCES public.audits(id) ON DELETE CASCADE;
@@ -5703,6 +5770,15 @@ ALTER TABLE ONLY public.site_internal_link_events
 
 ALTER TABLE ONLY public.site_internal_link_runs
     ADD CONSTRAINT site_internal_link_runs_workspace_id_project_id_crawl_id_fkey FOREIGN KEY (workspace_id, project_id, crawl_id) REFERENCES public.site_crawls(workspace_id, project_id, id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.site_issue_catalogs
+    ADD CONSTRAINT site_issue_catalogs_crawl_id_fkey FOREIGN KEY (crawl_id) REFERENCES public.site_crawls(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.site_issue_catalogs
+    ADD CONSTRAINT site_issue_catalogs_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.site_issue_catalogs
+    ADD CONSTRAINT site_issue_catalogs_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.site_issues
     ADD CONSTRAINT site_issues_analysis_id_fkey FOREIGN KEY (analysis_id) REFERENCES public.site_page_analyses(id) ON DELETE CASCADE;

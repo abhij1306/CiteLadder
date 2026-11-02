@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import { promptsApi } from '@/lib/api/prompts';
+import { promptsApi, promptsQueries } from '@/lib/api/prompts';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { PromptSet } from '@/lib/api/types';
 import { useActiveProject, useActiveWorkspaceId } from '@/lib/project/project-context';
@@ -24,9 +24,8 @@ export function usePromptSet() {
   const queryClient = useQueryClient();
 
   const listQuery = useQuery({
-    queryKey: projectId ? queryKeys.prompts.sets(projectId) : ['prompts', 'sets', 'none'],
-    queryFn: ({ signal }) =>
-      promptsApi.listPromptSets(projectId as string, { signal, workspaceId }),
+    // Disabled until a project is active, so the empty id never reaches the API.
+    ...promptsQueries.sets(workspaceId, projectId ?? ''),
     enabled: Boolean(projectId && workspaceId),
     // Seed from the embedded prompt sets so the table can render immediately.
     initialData: project?.prompt_sets?.length ? project.prompt_sets : undefined,
@@ -42,8 +41,7 @@ export function usePromptSet() {
       // Resolve the list before interpreting an empty cache as an empty project.
       // fetchQuery also joins an initial read already in flight.
       const available = await queryClient.fetchQuery({
-        queryKey: queryKeys.prompts.sets(projectId),
-        queryFn: ({ signal }) => promptsApi.listPromptSets(projectId, { signal, workspaceId }),
+        ...promptsQueries.sets(workspaceId, projectId),
         staleTime: 0,
       });
       if (available[0]) return available[0];
@@ -54,10 +52,11 @@ export function usePromptSet() {
     },
     onSuccess: async (created) => {
       if (projectId) {
-        queryClient.setQueryData<PromptSet[]>(queryKeys.prompts.sets(projectId), (prev) =>
-          prev?.length ? prev : [created],
+        queryClient.setQueryData<PromptSet[]>(
+          queryKeys.prompts.sets(workspaceId, projectId),
+          (prev) => (prev?.length ? prev : [created]),
         );
-        await queryClient.invalidateQueries({ queryKey: queryKeys.prompts.sets(projectId) });
+        await queryClient.invalidateQueries({ queryKey: queryKeys.prompts.projectSets(projectId) });
       }
     },
   });

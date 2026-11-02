@@ -667,6 +667,49 @@ describe('crawl-control HTTP contracts', () => {
     ).toHaveLength(1);
   });
 
+  it('persists a stopped crawl’s counters with the stop and reads them, not its tasks, afterwards', async () => {
+    const seed = await fixtures.crawl('running');
+    await fixtures.page(seed, '/a', {});
+    const counters = async (tenant: Tenant = seed) => {
+      const response = await request(tenant, `/projects/${seed.projectId}/site-health`);
+      return {
+        status: response.status,
+        body: record(record(await response.json()).crawl).counters,
+      };
+    };
+    const stored = async () =>
+      (
+        await db
+          .selectFrom('site_crawls')
+          .select('terminal_counters')
+          .where('id', '=', seed.crawlId)
+          .executeTakeFirstOrThrow()
+      ).terminal_counters;
+    // While the crawl runs nothing is persisted and its tasks are counted live.
+    expect(await stored()).toBeNull();
+    await fixtures.page(seed, '/b', {});
+    expect(record((await counters()).body)).toMatchObject({
+      analyzed: 2,
+      by_page_kind: { product: 2 },
+    });
+    // The stop persists the counters in its own transaction.
+    expect((await request(seed, `/site-crawls/${seed.crawlId}/cancel`, 'POST')).status).toBe(200);
+    expect(record(await stored())).toMatchObject({
+      analyzed: 2,
+      activity: { state: 'terminal' },
+      by_page_kind: { product: 2 },
+    });
+    // A task row no terminal owner counted changes nothing the dashboard reads.
+    await fixtures.page(seed, '/late', {});
+    expect(record((await counters()).body)).toMatchObject({
+      analyzed: 2,
+      activity: { state: 'terminal', reason: 'terminal' },
+      by_page_kind: { product: 2 },
+    });
+    const outsider = await fixtures.crawl();
+    expect((await counters(outsider)).status).toBe(404);
+  });
+
   it('retries an actual PostgreSQL crawl lock timeout before cancelling', async () => {
     const seed = await fixtures.crawl('running');
     const impatient = testDatabase({

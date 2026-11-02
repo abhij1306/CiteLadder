@@ -14,11 +14,10 @@ import {
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { containsPattern } from '../db/like.ts';
-import { authorize } from './access.ts';
 import { agentPolicy, type Chat, type Run, type Scope } from './contracts.ts';
 import { currentOutput, revisionRefs } from './outputs.ts';
 import { active } from './queue.ts';
-import { getChat } from './messages.ts';
+import { workspaceChat } from './messages.ts';
 import { manifestSchema } from './context.ts';
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
@@ -143,9 +142,21 @@ export async function progress(db: Database, run: Run) {
       ),
   ]);
 }
-export async function readChat(db: Database, scope: Scope, chatId: string) {
-  await authorize(db, scope, false);
-  const chat = await getChat(db, scope, chatId);
+/**
+ * A chat in the workspace, with its project read from the chat itself. The
+ * caller has authorized the workspace (the request's session read), so the
+ * chat is read once and nothing re-checks the membership.
+ */
+async function chatIn(db: Database, workspace: Pick<Scope, 'workspaceId'>, chatId: string) {
+  const chat = await workspaceChat(db, workspace.workspaceId, chatId);
+  return { chat, scope: { workspaceId: chat.workspace_id, projectId: chat.project_id } };
+}
+export async function readChat(
+  db: Database,
+  workspace: Pick<Scope, 'workspaceId'>,
+  chatId: string,
+) {
+  const { chat, scope } = await chatIn(db, workspace, chatId);
   const messages = await db
     .selectFrom('agent_messages')
     .selectAll()
@@ -268,9 +279,12 @@ export async function readChat(db: Database, scope: Scope, chatId: string) {
   });
 }
 const cursorSchema = z.object({ at: z.iso.datetime({ offset: true }), id: z.uuid() });
-export async function listRevisions(db: Database, scope: Scope, chatId: string) {
-  await authorize(db, scope, false);
-  const chat = await getChat(db, scope, chatId);
+export async function listRevisions(
+  db: Database,
+  workspace: Pick<Scope, 'workspaceId'>,
+  chatId: string,
+) {
+  const { chat, scope } = await chatIn(db, workspace, chatId);
   const current = await currentOutput(db, chat);
   const revisions = current.output
     ? await db
@@ -294,12 +308,12 @@ export async function listRevisions(db: Database, scope: Scope, chatId: string) 
     ),
   });
 }
+/** The project's open chats; the caller has authorized the project (`authorize: 'active-project'`). */
 export async function listChats(
   db: Database,
-  scope: Scope,
+  scope: Pick<Scope, 'workspaceId' | 'projectId'>,
   options: { limit?: number; cursor?: string; actionId?: string; query?: string } = {},
 ) {
-  await authorize(db, scope, false);
   const limit = z
     .number()
     .int()

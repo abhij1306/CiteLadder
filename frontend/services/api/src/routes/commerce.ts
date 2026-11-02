@@ -3,6 +3,7 @@ import {
   buyerPromptSchema,
   catalogImportSchema,
   commerceCatalogSchema,
+  commerceProjectionSchema,
   competitorCandidateSchema,
   competitorDiscoveryTaskSchema,
   competitorDiscoverySchema,
@@ -21,7 +22,14 @@ import {
   manualBuyerPrompt,
 } from '../commerce/buyer-prompts.ts';
 import { importCatalog } from '../commerce/import.ts';
-import { buyerPrompts, candidates, catalog, discoveries, shelf } from '../commerce/reads.ts';
+import {
+  buyerPrompts,
+  candidates,
+  catalog,
+  catalogProjection,
+  discoveries,
+  shelf,
+} from '../commerce/reads.ts';
 import { policy } from '../config.ts';
 import type { AppEnv } from '../context.ts';
 import { ApiError } from '../errors.ts';
@@ -121,6 +129,15 @@ export const commerceRoutes = [
     response: commerceCatalogSchema,
     async handle({ c, db }, { path }) {
       return catalog(db, scopeOf(c, path.project_id));
+    },
+  }),
+  defineGetRoute({
+    ...family,
+    path: `${root}/catalog/projection`,
+    params: { path: projectPath, query: {} },
+    response: commerceProjectionSchema,
+    async handle({ c, db }, { path }) {
+      return catalogProjection(db, scopeOf(c, path.project_id));
     },
   }),
   definePostRoute({

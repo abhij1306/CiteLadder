@@ -13,7 +13,6 @@ import {
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
 import { parseUuid } from '../http/uuid.ts';
-import { requireProject } from '../projects/access.ts';
 import { opportunityStatusClause, validateStatus } from './action-status.ts';
 import {
   OPPORTUNITY_COLUMNS,
@@ -86,14 +85,13 @@ function cursorScore(text: string): number {
   return score;
 }
 
-/** Live-row catalog page, ordered by priority then UUID. */
+/** Live-row catalog page, ordered by priority then UUID; the caller has authorized the project. */
 export async function listOpportunities(
   db: Database,
   scope: Scope,
   filters: OpportunityFilters,
   page: { limit: number; cursor: string | null },
 ) {
-  await requireProject(db, scope);
   validateFilters(filters);
   const limit = Math.max(1, Math.min(page.limit, o.LIST_MAX_LIMIT));
   const fingerprint = cursorFilters(scope, filters);

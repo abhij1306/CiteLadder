@@ -103,7 +103,11 @@ export function ChartContainer({
     <div className={cn('w-full', className)} style={seriesVariables(config)}>
       <p className="sr-only">{description}</p>
       <div aria-hidden className={chartHeightClasses[size]}>
-        <LazyIsland failed={<IslandUnavailable message="Couldn't load chart." />}>
+        <LazyIsland
+          label="chart"
+          defects="surface"
+          failed={<IslandUnavailable message="Couldn't load chart." />}
+        >
           {children}
         </LazyIsland>
       </div>

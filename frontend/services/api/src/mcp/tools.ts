@@ -189,7 +189,7 @@ export const definitions = {
   get_project_business_context: tool({
     title: 'Get project overview',
     description:
-      "Read one overview of a project in a single call: its identity and markets (with the market ids other tools take), then a short summary per section: business profile with owned domains and tracked competitors, latest visibility, the top 10 Actions, active prompts, Site Health, AI crawler access, demand, search performance, AI referrals, crawler logs, connected data and keyword research. Use it first to orient yourself, then the matching read_* tool for depth or paging (each section is that tool's default read). Omit sections for all of them; pass a few to keep the response small. A section can be unavailable on its own, such as a project with no completed run.",
+      "Read one overview of a project in a single call: its identity and markets (with the market ids other tools take), then a short summary per section: business profile with owned domains and tracked competitors, latest visibility, the top 10 Actions, active prompts, Site Health, AI crawler access, demand, search performance, AI referrals, crawler logs, connected data and keyword research. Use it first to orient yourself, then the matching read_* tool for depth or paging (each section is that tool's default read). Omit sections for all of them; pass a few to keep the response small. A section can be unavailable on its own, such as visibility with no completed run (no_completed_run) or with the latest run's results still being written (metrics_pending, try again later).",
     schema: z.strictObject({
       ...project,
       sections: optional(
@@ -234,7 +234,7 @@ export const definitions = {
   read_visibility_overview: projectTool({
     title: 'Read AI visibility',
     description:
-      "Read the headline AI visibility of one run: how often answers mention the brand and cite its site, the visibility score, rankings of the brand against each competitor (mention rate, citation rate, share of voice, average position), a breakdown per engine, and the run's status and answer counts. It defaults to the latest completed run in the default market; pass baseline_id to compare two runs. Each market is measured separately: pass market_id for another market, and never pool markets. unavailable no_completed_run means no run has finished yet. Use read_visibility_trends for change over time, read_visibility_results for the answers themselves, and read_visibility_sources for what was cited.",
+      "Read the headline AI visibility of one run: how often answers mention the brand and cite its site, the visibility score, rankings of the brand against each competitor (mention rate, citation rate, share of voice, average position), a breakdown per engine, and the run's status and answer counts. It defaults to the latest completed run in the default market; pass baseline_id to compare two runs. Each market is measured separately: pass market_id for another market, and never pool markets. unavailable no_completed_run means no run has finished yet; unavailable metrics_pending means the latest run has finished but its results are still being written, so try again later rather than report that nothing was measured. Use read_visibility_trends for change over time, read_visibility_results for the answers themselves, and read_visibility_sources for what was cited.",
     schema: z.strictObject({
       ...project,
       market_id,

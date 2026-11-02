@@ -25,6 +25,8 @@ const evidence: ExecutionEvidence = {
   repetition: 1,
   prompt_class: 'unbranded',
   cohort: 'core',
+  answer_text: '',
+  search_surface_outcome: '',
   brand_mentioned: false,
   brand_first_offset: null,
   owned_domain_cited: false,
@@ -49,15 +51,18 @@ afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
 describe('Execution evidence drawer', () => {
-  it('opens on the answer and renders its markdown once the evidence arrives', async () => {
-    mswServer.use(http.get(`/api/v1/executions/${ID}`, () => HttpResponse.json(evidence)));
+  it('renders the answer the single-execution read returns, as markdown', async () => {
+    mswServer.use(
+      http.get(`/api/v1/executions/${ID}`, () =>
+        HttpResponse.json({
+          ...evidence,
+          answer_text: 'Try **Acme Plumbing** first.\n\n- Fast\n- Local',
+        }),
+      ),
+    );
     renderWithProviders(
       <ExecutionEvidenceDrawer
-        execution={{
-          id: ID,
-          prompt_index: 2,
-          answer_text: 'Try **Acme Plumbing** first.\n\n- Fast\n- Local',
-        }}
+        execution={{ id: ID, prompt_index: 2 }}
         open
         onOpenChange={() => {}}
       />,
@@ -73,5 +78,34 @@ describe('Execution evidence drawer', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual(['Fast', 'Local']);
+  }, 20_000);
+
+  it("reports a measured AI Overview absence from the read's persisted outcome", async () => {
+    mswServer.use(
+      http.get(`/api/v1/executions/${ID}`, () =>
+        HttpResponse.json({
+          ...evidence,
+          logical_engine: 'google_ai_overview',
+          answer_text: '',
+          search_surface_outcome: 'no_ai_overview',
+        }),
+      ),
+    );
+    renderWithProviders(
+      <ExecutionEvidenceDrawer
+        execution={{ id: ID, prompt_index: 0 }}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+
+    const drawer = await screen.findByRole('dialog', { name: 'Execution evidence' });
+    expect(
+      await within(drawer).findByText(
+        'No AI Overview was shown for this search.',
+        {},
+        { timeout: 15_000 },
+      ),
+    ).toBeInTheDocument();
   }, 20_000);
 });

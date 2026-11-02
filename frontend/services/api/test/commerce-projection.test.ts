@@ -61,6 +61,25 @@ afterAll(async () => {
   await db.destroy();
 });
 
+/** The projected rows' evidence, which the catalog list deliberately leaves out. */
+function storedProducts(scope: Omit<Seed, 'tasks'>) {
+  return db
+    .selectFrom('commerce_products')
+    .select(['id', 'name', 'price', 'canonical_url', 'field_sources'])
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
+    .orderBy('name')
+    .execute();
+}
+function storedCategory(scope: Omit<Seed, 'tasks'>, id: string) {
+  return db
+    .selectFrom('commerce_categories')
+    .select(['name', 'canonical_url'])
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('id', '=', id)
+    .executeTakeFirstOrThrow();
+}
+
 const context = { db, maxAttempts: 3, checkCancelled: async () => {} };
 async function execute(taskId: string) {
   const task = await db
@@ -111,9 +130,10 @@ describe('catalog projection PostgreSQL boundary', () => {
       expect(result.products).toHaveLength(1);
       expect(result.products[0]).toMatchObject({
         name: 'Widget',
-        price: 12.5,
         canonical_url: 'https://example.com/products/widget',
       });
+      const [stored] = await storedProducts(s);
+      expect(stored).toMatchObject({ name: 'Widget', price: '12.50' });
       const tools = result.categories.find((row) => row.name === 'Tools')!;
       expect(tools.product_count).toBe(1);
       expect(result.products[0]!.category_ids).toEqual([tools.id]);
@@ -127,7 +147,7 @@ describe('catalog projection PostgreSQL boundary', () => {
         source_analysis_id: s.analyses[1],
         projector_version: policy.commerce.projector_version,
       });
-      expect(result.products[0]!.field_sources.price).toMatchObject({
+      expect(record(stored!.field_sources).price).toMatchObject({
         source_id: s.analyses[1],
         artifact_id: evidence[0]!.source_artifact_id,
         evidence_path: 'structured_data.product.price',
@@ -156,7 +176,7 @@ describe('catalog projection PostgreSQL boundary', () => {
       }),
     ]);
     const result = await catalog(db, s);
-    expect(result.products[0]).toMatchObject({ name: 'Edited', price: 44 });
+    expect(await storedProducts(s)).toMatchObject([{ name: 'Edited', price: '44.00' }]);
     const tasks = await db
       .selectFrom('analytics_tasks')
       .selectAll()
@@ -216,7 +236,9 @@ describe('catalog projection PostgreSQL boundary', () => {
     for (const task of s.tasks) await execute(task);
     const result = await catalog(db, s);
     const tools = result.categories.find((row) => row.name === 'Tools')!;
-    expect(tools).toMatchObject({ canonical_url: 'https://example.com/collections/tools' });
+    expect(await storedCategory(s, tools.id)).toMatchObject({
+      canonical_url: 'https://example.com/collections/tools',
+    });
     expect(result.categories.find((row) => row.id === stale)!.name).toBe('Old tools');
     const widget = result.products.find((row) => row.name === 'Widget')!;
     expect(widget.category_ids).toEqual([tools.id]);
@@ -299,7 +321,11 @@ describe('catalog projection outcomes', () => {
   }, 20_000);
   it("reports live projections, then only the latest crawl's failures", async () => {
     const s = await seed();
-    expect((await catalog(db, s)).projection).toEqual({ applies: true, in_flight: 2, failed: 0 });
+    expect((await catalog(db, s)).projection).toEqual({
+      applicability: 'applicable',
+      in_flight: 2,
+      failed: 0,
+    });
     await db
       .updateTable('analytics_tasks')
       .set({ status: 'failed' })
@@ -310,9 +336,18 @@ describe('catalog projection outcomes', () => {
       .set({ status: 'succeeded' })
       .where('id', '=', s.tasks[1]!)
       .execute();
-    expect((await catalog(db, s)).projection).toEqual({ applies: true, in_flight: 0, failed: 1 });
+    expect((await catalog(db, s)).projection).toEqual({
+      applicability: 'applicable',
+      in_flight: 0,
+      failed: 1,
+    });
     await businessContext(s, { business_model: 'b2b_saas' });
-    expect((await catalog(db, s)).projection.applies).toBe(false);
+    expect((await catalog(db, s)).projection.applicability).toBe('not_applicable');
+    // No confirmed model, or one we do not recognize, is unknown, not "does not apply".
+    await businessContext(s, {});
+    expect((await catalog(db, s)).projection.applicability).toBe('unknown');
+    await businessContext(s, { business_model: 'subscription_box' });
+    expect((await catalog(db, s)).projection.applicability).toBe('unknown');
   }, 20_000);
 });
 

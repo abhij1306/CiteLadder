@@ -15,8 +15,9 @@ export const performanceKeys = {
   all: ['performance'] as const,
   dashboard: (projectId: string, filters: ListFilters = {}) =>
     ['performance', 'dashboard', projectId, filters] as const,
-  table: (projectId: string, filters: ListFilters = {}) =>
-    ['performance', 'table', projectId, filters] as const,
+  /** Holds the workspace too: a page turn keeps its rows only inside it. */
+  table: (projectId: string, workspaceId: string | null, filters: ListFilters = {}) =>
+    ['performance', 'table', projectId, workspaceId, filters] as const,
   rangeTask: (projectId: string, taskId: string) =>
     ['performance', 'range-task', projectId, taskId] as const,
   readiness: (projectId: string) => ['performance', 'readiness', projectId] as const,

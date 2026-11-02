@@ -245,6 +245,18 @@ export const projectQueries = {
       queryKey: queryKeys.projects.commandCenter(projectId),
       queryFn: ({ signal }) => projectsApi.getCommandCenter(projectId, { signal, workspaceId }),
     }),
+  /** The company facts and audience the Agent's Context screen edits. */
+  brandProfile: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.projects.brandProfile(projectId),
+      queryFn: ({ signal }) => projectsApi.getBrandProfile(projectId, { signal, workspaceId }),
+    }),
+  /** The brand facts and the fact-checking pilot gate that decides Context's tabs. */
+  brandFacts: (workspaceId: string | null, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.projects.brandFacts(projectId),
+      queryFn: ({ signal }) => projectsApi.getBrandFacts(projectId, { signal, workspaceId }),
+    }),
   /** Which widgets the project's Overview shows; independent of the command center. */
   overviewLayout: (workspaceId: string, projectId: string) =>
     queryOptions({

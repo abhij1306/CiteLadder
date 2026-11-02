@@ -31,15 +31,34 @@ const sourceSchema = z.object({
 });
 type Props = Readonly<{ state: AppState; controller: Controller }>;
 
+/** Visibility with nothing to show yet says why; neither reason is a failed read. */
+const notYetMeasured = z.object({
+  state: z.literal('unavailable'),
+  reason: z.enum(['no_completed_run', 'metrics_pending']),
+});
+const notYetMeasuredText = {
+  no_completed_run: 'No completed measurement. Run a measurement in CiteLadder, then return.',
+  metrics_pending:
+    'The latest measurement has finished and its results are still being prepared. Check back shortly.',
+} as const satisfies Record<z.infer<typeof notYetMeasured>['reason'], string>;
+
+/** The message for visibility evidence that is not measured yet, or null for any other evidence. */
+export function notYetMeasuredMessage(evidence: unknown): string | null {
+  const parsed = notYetMeasured.safeParse(evidence);
+  return parsed.success ? notYetMeasuredText[parsed.data.reason] : null;
+}
+
 export function SourcesView({ state, controller }: Props) {
   const selection = state.selection!;
   const parsed = sourceSchema.safeParse(state.result?.evidence);
-  if (!parsed.success)
+  if (!parsed.success) {
+    const missing = notYetMeasuredMessage(state.result?.evidence);
     return (
-      <p role="alert" className={textRole('body')}>
-        Source evidence is unavailable for the selected audit. Retry or reconnect.
+      <p role={missing ? undefined : 'alert'} className={textRole('body')}>
+        {missing ?? 'Source evidence is unavailable for the selected audit. Retry or reconnect.'}
       </p>
     );
+  }
   const data = parsed.data;
   return (
     <div className="space-y-4">

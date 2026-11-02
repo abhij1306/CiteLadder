@@ -32,6 +32,7 @@ export interface Actions {
   created_at: Timestamp;
   created_by_user_id: string | null;
   diagnosis: Json;
+  effective_status: string;
   evidence_cleared_at: Timestamp | null;
   families: Json;
   group_key: string;
@@ -443,6 +444,21 @@ export interface ApiKeys {
   revoked_at: Timestamp | null;
   scopes: string[];
   secret_hmac: Buffer;
+  workspace_id: string;
+}
+
+export interface AuditComparisonBaselines {
+  analyzer_version: string;
+  audit_id: string;
+  baseline_audit_id: string | null;
+  cohort: string;
+  created_at: Timestamp;
+  id: string;
+  logical_engine: string | null;
+  project_id: string;
+  scoring_rule_version: string;
+  skipped_runs: number;
+  status: string;
   workspace_id: string;
 }
 
@@ -1455,6 +1471,8 @@ export interface MetricSnapshots {
   created_at: Timestamp;
   id: string;
   metrics: Json | null;
+  owned_citation_count: number;
+  owned_citation_ids: Json;
   project_id: string;
   scoring_rule_version: string;
   source_analysis_ids: Json | null;
@@ -2268,6 +2286,7 @@ export interface SiteCrawls {
   site_facts: Json | null;
   started_at: Timestamp | null;
   status: string;
+  terminal_counters: Json | null;
   updated_at: Timestamp;
   workspace_id: string;
 }
@@ -2474,6 +2493,20 @@ export interface SiteInternalLinkRuns {
   project_id: string;
   result: Json | null;
   state: string;
+  workspace_id: string;
+}
+
+export interface SiteIssueCatalogs {
+  analyzer_version: string;
+  crawl_id: string;
+  created_at: Timestamp;
+  finding_class: string;
+  items: Json;
+  project_id: string;
+  rule_catalog_version: string;
+  sources: Json;
+  summary: Json;
+  updated_at: Timestamp;
   workspace_id: string;
 }
 
@@ -2907,6 +2940,7 @@ export interface DB {
   answer_perceptions: AnswerPerceptions;
   api_idempotency: ApiIdempotency;
   api_keys: ApiKeys;
+  audit_comparison_baselines: AuditComparisonBaselines;
   audit_engine_snapshots: AuditEngineSnapshots;
   audit_events: AuditEvents;
   audit_prompt_snapshots: AuditPromptSnapshots;
@@ -3017,6 +3051,7 @@ export interface DB {
   site_health_snapshots: SiteHealthSnapshots;
   site_internal_link_events: SiteInternalLinkEvents;
   site_internal_link_runs: SiteInternalLinkRuns;
+  site_issue_catalogs: SiteIssueCatalogs;
   site_issues: SiteIssues;
   site_observed_architectures: SiteObservedArchitectures;
   site_page_analyses: SitePageAnalyses;

@@ -110,6 +110,8 @@ export const commerce = {
     product_limit: 12,
     term_limit: 8,
   },
+  /** Products the catalog read lists, first by name; the rail is one unpaged list. */
+  catalog_product_limit: 5000,
   import_max_bytes: 2000000,
   import_max_rows: 10000,
   import_error_limit: 100,

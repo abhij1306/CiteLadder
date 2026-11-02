@@ -19,40 +19,27 @@ import { ExecutionsTable } from './executions-table';
 function execution(overrides: Partial<Execution> = {}): Execution {
   return {
     id: `11111111-1111-4111-8111-${String(1).padStart(12, '0')}`,
-    audit_id: '22222222-2222-4222-8222-222222222222',
     prompt_index: 0,
-    repetition: 0,
-    randomized_position: 0,
     logical_engine: 'gemini',
     transport_provider: 'google',
-    transport_model: 'gemini-2.5-pro',
-    retrieval_enabled: true,
     status: 'succeeded',
-    attempt_count: 1,
-    max_attempts: 3,
     prompt_text: 'Best trail running shoes',
-    answer_text: 'An answer',
-    search_used: true,
     error_code: '',
-    error_detail: '',
     latency_ms: 1200,
-    created_at: '2026-08-01T00:00:00Z',
-    completed_at: '2026-08-01T00:00:02Z',
     ...overrides,
-  } as Execution;
+  };
 }
 
 describe('ExecutionsTable', () => {
-  it('shows the frozen prompt text without a repetition label', () => {
+  it('shows the frozen prompt text', () => {
     render(
       <ExecutionsTable
-        executions={[execution({ prompt_text: 'Best trail shoes', repetition: 2 })]}
+        executions={[execution({ prompt_text: 'Best trail shoes' })]}
         onSelectEvidence={vi.fn()}
       />,
     );
 
     expect(screen.getByText('Best trail shoes')).toBeVisible();
-    expect(screen.queryByText(/rep 2/)).not.toBeInTheDocument();
   });
 
   it('falls back to the prompt ordinal when the snapshot text is empty', () => {
@@ -160,9 +147,9 @@ describe('ExecutionsTable', () => {
     render(
       <ExecutionsTable
         executions={[
-          execution({ id: 'a1111111-1111-4111-8111-111111111111', repetition: 0 }),
-          execution({ id: 'b1111111-1111-4111-8111-111111111111', repetition: 1 }),
-          execution({ id: 'c1111111-1111-4111-8111-111111111111', repetition: 2 }),
+          execution({ id: 'a1111111-1111-4111-8111-111111111111' }),
+          execution({ id: 'b1111111-1111-4111-8111-111111111111' }),
+          execution({ id: 'c1111111-1111-4111-8111-111111111111' }),
         ]}
         onSelectEvidence={vi.fn()}
       />,

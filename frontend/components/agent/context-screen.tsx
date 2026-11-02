@@ -27,7 +27,7 @@ import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
-import { projectsApi } from '@/lib/api/projects';
+import { projectQueries } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
 import { visibilityApi } from '@/lib/api/visibility';
 import type { BrandProfile, Project } from '@/lib/api/types';
@@ -94,10 +94,7 @@ function ContextWorkspace({
 }: Readonly<{ workspaceId: string; project: Project }>) {
   const queryClient = useQueryClient();
   const [requestedTab, setTab] = useUrlState('tab', CONTEXT_TAB_CODEC);
-  const profile = useQuery({
-    queryKey: queryKeys.projects.brandProfile(project.id),
-    queryFn: ({ signal }) => projectsApi.getBrandProfile(project.id, { signal, workspaceId }),
-  });
+  const profile = useQuery(projectQueries.brandProfile(workspaceId, project.id));
   // The pilot gate is known before the tabs render, so its tab never appears
   // late. Outside the pilot there is no tab; an unreadable gate shows its error there.
   const facts = useBrandFacts(project.id, workspaceId);

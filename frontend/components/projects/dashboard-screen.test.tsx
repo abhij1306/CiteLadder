@@ -100,6 +100,7 @@ const commandCenter = {
     benchmark_mode: 'consumer_like',
     logical_engines: ['chatgpt', 'gemini'],
     comparable_audit_id: '00000000-0000-4000-8000-000000000004',
+    comparison_status: 'comparable',
   },
   state: {
     visibility: { value: 72.5, delta: 4.2 },

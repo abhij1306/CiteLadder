@@ -15,6 +15,7 @@ import { round } from './round.ts';
 import { getLogger } from '../logging.ts';
 import { compareText } from '../text-order.ts';
 import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
+import { persistComparisonBaselines } from '../visibility/baselines.ts';
 
 type ScopedTask = Selectable<AuditTasks> & { cohort: string };
 function coverage(tasks: ScopedTask[], completed: number) {
@@ -259,6 +260,9 @@ export function finalizeAudit(
         )
       : 0;
     const versions = policy.audits.analysis;
+    // The run's owned-citation fact for AI Traffic: the exact citation rows,
+    // all cohorts, so readers select it and never count citations themselves.
+    const ownedCitationIds = citations.filter((c) => c.is_owned).map((c) => c.id);
     const metric = await trx
       .insertInto('metric_snapshots')
       .values({
@@ -274,6 +278,8 @@ export function finalizeAudit(
         metrics: JSON.stringify(metrics),
         source_analysis_ids: JSON.stringify(analyses.map((a) => a.id)),
         source_artifact_ids: JSON.stringify(analyses.map((a) => a.artifact_id)),
+        owned_citation_count: ownedCitationIds.length,
+        owned_citation_ids: JSON.stringify(ownedCitationIds),
         created_at: at,
       })
       .returningAll()
@@ -312,6 +318,10 @@ export function finalizeAudit(
     await transitionAudit(trx, workspaceId, auditId, 'reporting', at, 'aggregating metrics');
     const status = metric.total_failed ? 'partially_completed' : 'completed';
     await transitionAudit(trx, workspaceId, auditId, status, at, `audit ${status}`);
+    // The run's comparable baseline, by the one comparison rule, for every
+    // surface that reads it. It runs once the run reads as measured, so later
+    // runs it refreshes find it among their candidates.
+    await persistComparisonBaselines(trx, { workspaceId, auditId });
     await enqueueTrafficInsights(trx, { workspaceId, projectId: audit.project_id }, at);
     await auditEvent(
       trx,

@@ -6,7 +6,6 @@ export const projectReads = {
   /** The industry a project carries until someone names one; reports leave it out. */
   default_industry: 'General',
   default_repetitions: 1,
-  command_center_max_audits: 100,
   /** The Overview a project shows until someone edits it, and what Reset restores. */
   overview_default_layout: [
     { key: 'project_state', size: 'half' },

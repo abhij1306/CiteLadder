@@ -10,6 +10,7 @@ export const ROUTE_FAMILIES = [
   'auth',
   'brand-identity',
   'brand-discoveries',
+  'client-errors',
   'commerce',
   'demand',
   'executions',

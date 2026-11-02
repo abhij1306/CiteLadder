@@ -5,6 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { httpErrorStatus } from '@/lib/api/client';
+import { setReportingWorkspace } from '@/lib/client-errors';
 import { projectQueries, projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
@@ -190,6 +191,8 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
 
   useEffect(() => {
     writeStoredActiveWorkspaceId(activeWorkspaceId);
+    // Error reports scope themselves like every other request; the API still checks membership.
+    setReportingWorkspace(activeWorkspaceId);
   }, [activeWorkspaceId]);
 
   useEffect(() => {

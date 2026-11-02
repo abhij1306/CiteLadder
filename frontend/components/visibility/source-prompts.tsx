@@ -193,14 +193,11 @@ function PromptRow({
           onClick={() =>
             onOpenAnswer({
               // The visibility row names the execution as `task_id`; the drawer
-              // fetches the rest of the evidence from it, and the answer text
-              // from the audit that owns it — a source row summarises an answer
-              // without carrying one.
+              // reads the answer and its evidence from that one execution — a
+              // source row summarises an answer without carrying one.
               id: item.task_id,
-              audit_id: item.audit_id,
               prompt_text: item.prompt_text,
               prompt_index: item.prompt_index,
-              logical_engine: item.logical_engine,
             })
           }
         >

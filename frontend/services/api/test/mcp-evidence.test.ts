@@ -10,7 +10,7 @@ import { prompt, promptSet, topic } from './prompt-fixtures.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 import { actionFixture, type ActionSeed } from './action-support.ts';
-import { attachOrCreateAction } from '../src/opportunities/actions.ts';
+import { attachOrCreateAction, updateActionStatus } from '../src/opportunities/actions.ts';
 import { getVisibility } from '../src/visibility/dashboard.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 import { seedImport } from './referral-fixtures.ts';
@@ -631,11 +631,7 @@ it('lists only active Actions as the current work and reads a dismissed one only
       .execute((trx) => attachOrCreateAction(trx, scope, 'planned_page', topic, tenant.userId));
   const kept = await attach('Buyer guide');
   const dismissed = await attach('Old guide');
-  await db
-    .updateTable('actions')
-    .set({ status: 'dismissed' })
-    .where('id', '=', dismissed.id)
-    .execute();
+  await updateActionStatus(db, tenant.workspaceId, dismissed.id, 'dismissed', tenant.userId);
   const current = await read('read_actions');
   expect((current.items as { id: string }[]).map((item) => item.id)).toEqual([kept.id]);
   expect(current.status_counts).toMatchObject({ open: 1, dismissed: 1 });

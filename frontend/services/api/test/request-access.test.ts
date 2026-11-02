@@ -38,6 +38,8 @@ const app = createApp(config, db.withPlugin(recorder));
 
 let userId: string;
 let workspaceId: string;
+let projectId: string;
+let chatId: string;
 let cookie: string;
 
 async function sessionFor(user: string): Promise<string> {
@@ -47,11 +49,26 @@ async function sessionFor(user: string): Promise<string> {
 async function call(
   path: string,
   headers: Record<string, string> = { 'x-workspace-id': workspaceId },
+  method = 'GET',
 ) {
   executed.length = 0;
   pending.clear();
-  const response = await app.request(path, { headers: { cookie, ...headers } });
+  const write = method === 'GET' ? {} : { body: '{}' };
+  const response = await app.request(path, {
+    method,
+    headers: {
+      cookie,
+      ...(method === 'GET' ? {} : { 'content-type': 'application/json' }),
+      ...headers,
+    },
+    ...write,
+  });
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+}
+
+/** Statements whose first table is `table`. */
+function readsOf(statements: readonly string[], table: string): number {
+  return statements.filter((statement) => /\bfrom "(\w+)"/u.exec(statement)?.[1] === table).length;
 }
 
 async function insertProject(workspace: string): Promise<string> {
@@ -78,9 +95,31 @@ async function insertProject(workspace: string): Promise<string> {
   return id;
 }
 
+async function insertChat(workspace: string, project: string): Promise<string> {
+  const id = randomUUID();
+  const now = new Date();
+  await db
+    .insertInto('agent_chats')
+    .values({
+      id,
+      workspace_id: workspace,
+      project_id: project,
+      title: 'Access path',
+      context_refs: {},
+      turn_count: 0,
+      last_activity_at: now,
+      created_at: now,
+      updated_at: now,
+    })
+    .execute();
+  return id;
+}
+
 beforeAll(async () => {
   userId = await fixtures.user();
   workspaceId = await fixtures.ownedWorkspace(userId);
+  projectId = await insertProject(workspaceId);
+  chatId = await insertChat(workspaceId, projectId);
   cookie = await sessionFor(userId);
 });
 
@@ -95,6 +134,42 @@ describe('per-request access', () => {
     expect(status).toBe(200);
     const membershipReads = executed.filter((sql) => /\bfrom "workspace_members"/u.test(sql));
     expect(membershipReads).toHaveLength(1);
+  });
+
+  it('opens an Agent chat and its revisions reading the chat once, with no further access reads', async () => {
+    const answers = [];
+    for (const path of [
+      `/api/v1/agent/chats/${chatId}`,
+      `/api/v1/agent/chats/${chatId}/output/revisions`,
+    ]) {
+      const { status } = await call(path);
+      answers.push([
+        status,
+        readsOf(executed, 'workspace_members'),
+        readsOf(executed, 'users'),
+        readsOf(executed, 'agent_chats'),
+      ]);
+    }
+    expect(answers).toEqual([
+      [200, 1, 0, 1],
+      [200, 1, 0, 1],
+    ]);
+  });
+
+  it.each([
+    ['the Agent chat list', '/api/v1/projects/{project}/agent/chats'],
+    ['the Agent instructions', '/api/v1/projects/{project}/agent/instructions'],
+    ['the Overview layout', '/api/v1/projects/{project}/overview/layout'],
+    ['the opportunity catalog', '/api/v1/projects/{project}/opportunities'],
+    ['the topic list', '/api/v1/projects/{project}/topics'],
+  ])('opens %s on the membership read alone', async (_label, template) => {
+    const { status } = await call(template.replace('{project}', projectId));
+    expect([
+      status,
+      readsOf(executed, 'workspace_members'),
+      readsOf(executed, 'users'),
+      readsOf(executed, 'projects'),
+    ]).toEqual([200, 1, 0, 0]);
   });
 
   it('answers /auth/me without reading the password hash', async () => {
@@ -121,6 +196,90 @@ describe('per-request access', () => {
       404,
       expect.objectContaining({ message: 'Workspace not found' }),
     ]);
+  });
+});
+
+describe('routes that authorize the path project or chat', () => {
+  const PROJECT_READS = [
+    '/api/v1/projects/{project}/agent/chats',
+    '/api/v1/projects/{project}/agent/instructions',
+    '/api/v1/projects/{project}/overview/layout',
+    '/api/v1/projects/{project}/overview/report.pdf',
+    '/api/v1/projects/{project}/opportunities',
+    '/api/v1/projects/{project}/topics',
+    '/api/v1/projects/{project}/seed-queries',
+  ];
+  const PROJECT_WRITES: [string, string][] = [
+    ['POST', '/api/v1/projects/{project}/agent/chats'],
+    ['PUT', '/api/v1/projects/{project}/agent/instructions'],
+    ['PUT', '/api/v1/projects/{project}/overview/layout'],
+    ['PUT', '/api/v1/projects/{project}/opportunities/order'],
+    ['POST', '/api/v1/projects/{project}/topics'],
+    ['POST', '/api/v1/projects/{project}/topics/preview'],
+    ['POST', '/api/v1/projects/{project}/topics/confirm'],
+  ];
+  const CHAT_READS = ['/api/v1/agent/chats/{chat}', '/api/v1/agent/chats/{chat}/output/revisions'];
+
+  async function stranger() {
+    const member = await fixtures.user();
+    await fixtures.ownedWorkspace(member);
+    return sessionFor(member);
+  }
+
+  it('hides another workspace project, and a missing one, on every read and write', async () => {
+    const session = await stranger();
+    const missing = randomUUID();
+    const answers = [];
+    for (const [method, template] of [
+      ...PROJECT_READS.map((path) => ['GET', path] as const),
+      ...PROJECT_WRITES,
+    ]) {
+      const foreign = await call(
+        template.replace('{project}', projectId),
+        { cookie: session },
+        method,
+      );
+      const absent = await call(template.replace('{project}', missing), { cookie }, method);
+      answers.push([method, template, foreign.status, foreign.body.error, absent.status]);
+    }
+    const notFound = expect.objectContaining({ message: 'Project not found' });
+    expect(answers).toEqual(
+      [...PROJECT_READS.map((path) => ['GET', path] as const), ...PROJECT_WRITES].map(
+        ([method, template]) => [method, template, 404, notFound, 404],
+      ),
+    );
+  });
+
+  it('hides another workspace chat', async () => {
+    const session = await stranger();
+    const answers = [];
+    for (const template of CHAT_READS) {
+      const foreign = await call(template.replace('{chat}', chatId), { cookie: session });
+      answers.push([template, foreign.status, foreign.body.error]);
+    }
+    expect(answers).toEqual(
+      CHAT_READS.map((template) => [
+        template,
+        404,
+        expect.objectContaining({ message: 'Chat not found' }),
+      ]),
+    );
+  });
+
+  it('lets a viewer read the project but refuses its writes before reading the body', async () => {
+    const viewer = await fixtures.user();
+    await fixtures.member(workspaceId, viewer, 'viewer');
+    const headers = { cookie: await sessionFor(viewer), 'x-workspace-id': workspaceId };
+    const reads = [];
+    for (const template of ['/api/v1/projects/{project}/opportunities', ...CHAT_READS])
+      reads.push(
+        (await call(template.replace('{project}', projectId).replace('{chat}', chatId), headers))
+          .status,
+      );
+    const writes = [];
+    for (const [method, template] of PROJECT_WRITES)
+      writes.push((await call(template.replace('{project}', projectId), headers, method)).status);
+    expect([reads, writes]).toEqual([[200, 200, 200], PROJECT_WRITES.map(() => 403)]);
   });
 });
 

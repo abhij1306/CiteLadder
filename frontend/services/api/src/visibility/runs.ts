@@ -64,12 +64,22 @@ function instantOperand(value: Instant) {
  * first. `newest` bounds the read to that many most recent runs: a caller
  * walking back to the nearest match needs the recent end, not a project's
  * whole history on every dashboard load. `olderThan` continues such a walk
- * below the oldest run (an audit ID) of the previous page.
+ * below the oldest run (an audit ID) of the previous page. `newerThan` reads
+ * the runs after one run instead, oldest first, and `oldest` bounds that read.
  */
 export async function loadMeasuredRuns(
   db: Database,
   scope: RunScope,
-  window: { fromAt: Instant | null; toAt: Instant | null; newest?: number; olderThan?: string },
+  window: {
+    fromAt: Instant | null;
+    toAt: Instant | null;
+    newest?: number;
+    olderThan?: string;
+    newerThan?: string;
+    oldest?: number;
+    /** Only this run, still under every scope condition. */
+    auditId?: string;
+  },
 ): Promise<MeasuredRun[]> {
   let query = db
     .selectFrom('metric_snapshots as snapshot')
@@ -94,11 +104,16 @@ export async function loadMeasuredRuns(
     .where('audit.audit_scope', '=', visibility.brand_audit_scope)
     .where('audit.status', 'in', visibility.dashboard_audit_statuses)
     .where('audit.completed_at', 'is not', null);
+  if (window.auditId !== undefined) query = query.where('audit.id', '=', window.auditId);
   if (window.fromAt) query = query.where('audit.completed_at', '>=', instantOperand(window.fromAt));
   if (window.toAt) query = query.where('audit.completed_at', '<=', instantOperand(window.toAt));
   if (window.olderThan !== undefined)
     query = query.where(
       sql<boolean>`(audit.completed_at, audit.created_at, audit.id) < (select a.completed_at, a.created_at, a.id from audits a where a.id = ${window.olderThan} and a.workspace_id = ${scope.workspaceId})`,
+    );
+  if (window.newerThan !== undefined)
+    query = query.where(
+      sql<boolean>`(audit.completed_at, audit.created_at, audit.id) > (select a.completed_at, a.created_at, a.id from audits a where a.id = ${window.newerThan} and a.workspace_id = ${scope.workspaceId})`,
     );
   const newestFirst = window.newest !== undefined;
   const direction = newestFirst ? 'desc' : 'asc';
@@ -107,6 +122,7 @@ export async function loadMeasuredRuns(
     .orderBy('audit.created_at', direction)
     .orderBy('audit.id', direction);
   if (newestFirst) query = query.limit(window.newest!);
+  else if (window.oldest !== undefined) query = query.limit(window.oldest);
   const rows = await query.execute();
   if (newestFirst) rows.reverse();
   const routes = await engineSnapshots(

@@ -1,8 +1,22 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render as raw, screen, waitFor, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach } from 'vite-plus/test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  it,
+  vi,
+  beforeEach,
+} from 'vite-plus/test';
+
+import { runsQueries } from '@/lib/api/runs';
+import { mswServer } from '@/test/msw-server';
 
 // Hoisted so the mock factories below — which vitest lifts above these
 // statements — can reference the state safely rather than relying on the
@@ -18,6 +32,7 @@ const { setActiveProjectId, projectContext } = vi.hoisted(() => {
       ],
       activeProjectId: 'p1',
       activeWorkspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      activeProject: { id: 'p1', workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
       setActiveProjectId,
     },
   };
@@ -35,14 +50,22 @@ function LocationDisplay() {
   return <output data-testid="location">{pathname + search}</output>;
 }
 
+let queryClient = new QueryClient();
+
 function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <MemoryRouter initialEntries={['/projects?project=p1']}>
-      {children}
-      <LocationDisplay />
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={['/projects?project=p1']}>
+        {children}
+        <LocationDisplay />
+      </MemoryRouter>
+    </QueryClientProvider>
   );
 }
+
+beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
+afterEach(() => mswServer.resetHandlers());
+afterAll(() => mswServer.close());
 
 function renderPalette(ui: ReactElement) {
   return raw(ui, { wrapper: RouterTestWrapper });
@@ -69,6 +92,29 @@ async function open() {
 describe('CommandPalette', () => {
   beforeEach(() => {
     setActiveProjectId.mockClear();
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  });
+
+  it('warms a highlighted destination’s primary read, as a nav link does', async () => {
+    const asked: string[] = [];
+    mswServer.use(
+      http.get('/api/v1/audits', ({ request }) => {
+        asked.push(new URL(request.url).search);
+        return HttpResponse.json([]);
+      }),
+    );
+    const user = await open();
+
+    await user.hover(screen.getByRole('option', { name: /^Runs/ }));
+
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryData(
+          runsQueries.list('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'p1').queryKey,
+        ),
+      ).toEqual([]),
+    );
+    expect(asked).toEqual(['?project_id=p1']);
   });
   it('renders the trigger closed, advertising its shortcut', () => {
     renderPalette(<Palette />);

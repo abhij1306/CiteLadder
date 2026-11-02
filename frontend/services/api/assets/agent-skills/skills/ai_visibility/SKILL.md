@@ -16,7 +16,7 @@ Find where a relevant buyer question fails to produce a useful, accurate mention
 
 ## Read the right data
 
-1. `read_visibility_overview` for the latest completed run and its status. If it has no completed run, say there is no usable baseline.
+1. `read_visibility_overview` for the latest completed run and its status. If it has no completed run (`no_completed_run`), say there is no usable baseline. `metrics_pending` is different: the latest run finished and its results are still being written, so say they are being prepared and to try again shortly.
 2. `read_visibility_results` with that `audit_id` for the actual answers. Filter by `prompt_id`, `domain` or `url` to narrow. If a result only summarizes a record, open it with `fetch`.
 3. `read_visibility_sources` (the same `audit_id`; it defaults to the latest run) for cited domains (`level: domain`) or URLs (`level: url` with `domain`).
 4. As needed: `read_visibility_overview` for headline rates, `read_prompt_portfolio` for which prompts are tracked, `get_project_business_context` for offers and competitors.

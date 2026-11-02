@@ -11,7 +11,7 @@
  * these defaults do not replace or slow their timers. Mutations never
  * auto-retry.
  */
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type FetchQueryOptions, type QueryKey } from '@tanstack/react-query';
 
 import { ApiError, httpErrorStatus, isAbortError } from './errors';
 
@@ -40,6 +40,21 @@ export function warmQuery<TOptions extends { queryKey: readonly unknown[] }>(
     return;
   }
   void client.prefetchQuery(options as never);
+}
+
+/**
+ * Read a cache entry from intent and hand back its answer, for a prefetcher
+ * that files that answer somewhere else. Repeated intent joins the request in
+ * flight, or takes the fresh answer, instead of asking again. As with
+ * `warmQuery`, a key that already failed is left as it is; any failure
+ * answers `null`, because intent never surfaces an error.
+ */
+export function readFromIntent<TData, TKey extends QueryKey>(
+  client: QueryClient,
+  options: FetchQueryOptions<TData, Error, TData, TKey>,
+): Promise<TData | null> {
+  if (client.getQueryState(options.queryKey)?.status === 'error') return Promise.resolve(null);
+  return client.fetchQuery(options).catch(() => null);
 }
 
 export function shouldRetryQuery(failureCount: number, error: unknown) {

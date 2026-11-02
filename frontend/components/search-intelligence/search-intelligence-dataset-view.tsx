@@ -1,32 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { SearchX } from 'lucide-react';
 
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DataTable, type DataTableState } from '@/components/ui/data-table';
+import { DataTable } from '@/components/ui/data-table';
 import { Drawer } from '@/components/ui/drawer';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
-import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { agentHandoffHref, type HandoffInput } from '@/lib/agent/handoff';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';
-import { httpErrorStatus } from '@/lib/api/errors';
 import {
-  searchIntelligenceApi,
+  searchIntelligenceQueries,
   type SearchIntelligenceDataset,
   type SearchIntelligenceRow,
 } from '@/lib/api/search-intelligence';
-import { searchIntelligenceKeys } from '@/lib/api/query-keys/search-intelligence';
 import { useProjectContext } from '@/lib/project/project-context';
-import { cursorControls, pageRange, useCursorTable } from '@/lib/table/use-cursor-table';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { evidenceFields, searchNumber } from './search-intelligence-format';
@@ -44,41 +39,6 @@ import {
   searchIntelligenceColumns,
 } from './search-intelligence-rows-table';
 
-function useDatasetRows(
-  datasetId: string,
-  projectId: string | undefined,
-  workspaceId: string | undefined,
-  params: {
-    cursor?: string;
-    limit: number;
-    sort: string;
-    direction: 'asc' | 'desc';
-    search: string;
-    min_volume?: number;
-  },
-) {
-  const scope = searchIntelligenceKeys.dataset(workspaceId, projectId, datasetId);
-  const query = useQuery({
-    queryKey: [...scope, params],
-    queryFn: ({ signal }) =>
-      searchIntelligenceApi.rows(projectId!, datasetId, { signal, workspaceId }, params),
-    enabled: Boolean(projectId && workspaceId),
-    // A failed interactive sort/filter must settle promptly so the empty
-    // placeholder is replaced by the read error, not held through retries.
-    retry: false,
-    placeholderData: (previousPage, previousQuery) => {
-      if (!previousPage || !previousQuery) return undefined;
-      const previousScope = previousQuery.queryKey.slice(0, scope.length);
-      if (JSON.stringify(previousScope) !== JSON.stringify(scope)) return undefined;
-      return { dataset: previousPage.dataset, rows: [], next_cursor: null };
-    },
-  });
-  const accessFailure =
-    query.isError && [401, 403, 404].includes(httpErrorStatus(query.error) ?? 0);
-  const page = accessFailure ? undefined : query.data;
-  return { query, page };
-}
-
 export function SearchIntelligenceDatasetView({
   dataset,
   title = 'Ranking keywords',
@@ -93,46 +53,46 @@ export function SearchIntelligenceDatasetView({
     sort: 'id',
     direction: 'asc',
   });
-  const table = useCursorTable(
-    `${activeProject?.workspace_id}:${activeProject?.id}:${dataset.id}:${order.sort}:${order.direction}:${filter}:${minVolume}:${intent}`,
-  );
-  const params = {
-    cursor: table.cursor,
-    limit: table.pageSize,
+  const filters = {
     ...order,
     search: filter,
     intent,
     min_volume: minVolume === '' ? undefined : Number(minVolume),
   };
-  const { query, page } = useDatasetRows(
-    dataset.id,
-    activeProject?.id,
-    activeProject?.workspace_id,
-    params,
-  );
-  useRowsPanelSeed(dataset.id, selected, page?.rows, title);
-  const keywordDataset = KEYWORD_DATASET_KINDS.includes(dataset.dataset_kind);
-  if (query.isPending && !page) return <QueryState kind="loading" label="Loading saved rows…" />;
-  if (!page)
-    return <ReadError {...readErrorProps(query)} fallback="Dataset rows could not be loaded." />;
-  if (!dataset.unique_rows_saved && !page.rows.length)
-    return <EmptyDataset dataset={dataset} title={title} />;
-  const rows = page.rows;
-  const range = pageRange(table.page, table.pageSize, rows.length);
-  let state: DataTableState | undefined;
-  if (query.isError)
-    state = {
-      kind: 'error',
-      ...readErrorProps(query),
-      fallback: 'Saved rows could not be updated.',
-    };
-  else if (!rows.length)
-    state = {
+  const projectId = activeProject?.id ?? null;
+  const hasRows = dataset.unique_rows_saved > 0;
+  // A sort or filter edit restarts from the first page: the server binds the
+  // cursor to them. A page turn or a filter edit keeps the rows and the pager
+  // on screen until the next rows land; the first load, a failed read and an
+  // empty view draw inside the table at its full height.
+  const { query, page, table } = useCursorTableQuery({
+    workspaceId: activeProject?.workspace_id ?? null,
+    scopeId: dataset.id,
+    scope: filters,
+    query: (request) =>
+      searchIntelligenceQueries.datasetRows(
+        activeProject?.workspace_id ?? '',
+        projectId ?? '',
+        dataset.id,
+        { ...filters, ...request },
+      ),
+    noun: 'evidence rows',
+    loading: 'Loading saved rows…',
+    error: 'Saved rows could not be loaded.',
+    empty: () => ({
       kind: 'empty',
       icon: SearchX,
       heading: 'No saved rows match this view',
       headingLevel: 3,
-    };
+    }),
+    // A dataset that saved nothing has no rows to read.
+    enabled: hasRows,
+    total: (current) => (current ? filteredSavedCount(current.dataset) : undefined),
+  });
+  const rows = page?.items ?? [];
+  useRowsPanelSeed(dataset.id, selected, page?.items, title);
+  const keywordDataset = KEYWORD_DATASET_KINDS.includes(dataset.dataset_kind);
+  if (!hasRows) return <EmptyDataset dataset={dataset} title={title} />;
   return (
     <>
       <DataTable
@@ -158,7 +118,7 @@ export function SearchIntelligenceDatasetView({
           status: query.isFetching ? 'Updating saved rows…' : `${rows.length} rows shown`,
           actions: (
             <>
-              <SearchIntelligenceExport dataset={dataset} params={params} />
+              <SearchIntelligenceExport dataset={dataset} params={filters} />
               {rows.length > 0 ? (
                 <Button variant="secondary" asChild>
                   <ProjectLink href={agentHandoffHref(rowsHandoff(dataset.id, rows, title))}>
@@ -173,25 +133,14 @@ export function SearchIntelligenceDatasetView({
         columns={searchIntelligenceColumns({
           kind: dataset.dataset_kind,
           order,
-          onSort: (sort) => {
+          onSort: (sort) =>
             setOrder({
               sort,
               direction: order.sort === sort && order.direction === 'asc' ? 'desc' : 'asc',
-            });
-            table.reset();
-          },
+            }),
         })}
         minWidth={dataset.dataset_kind === 'ranking_keywords' ? 'xl' : 'lg'}
-        pageSize={table.pageSize}
-        rowCount={rows.length}
-        state={state}
-        busy={{ active: query.isFetching, label: 'Updating saved rows' }}
-        pager={{
-          range: { ...range, total: filteredSavedCount(page.dataset), noun: 'evidence rows' },
-          pageSize: { value: table.pageSize, onChange: table.setPageSize },
-          ...cursorControls(table, page.next_cursor),
-          busy: query.isFetching,
-        }}
+        {...table}
         footer={<DatasetSummary dataset={dataset} />}
       >
         <SearchIntelligenceRows kind={dataset.dataset_kind} rows={rows} onSelect={setSelected} />
@@ -301,11 +250,7 @@ function EmptyDataset({
       </CardHeader>
       <CardContent>
         <Stack gap="compact">
-          <p className={textRole('itemTitle')}>
-            {dataset.coverage === 'unknown'
-              ? 'Provider evidence is unavailable for this saved scope.'
-              : 'The provider returned no data for this saved scope.'}
-          </p>
+          <p className={textRole('itemTitle')}>{emptyDatasetHeading(dataset)}</p>
           <p className={textRole('body')}>
             Requests can incur charges even when no results are returned. Check the website and
             market before reviewing another analysis.
@@ -321,6 +266,27 @@ function EmptyDataset({
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * What a dataset that saved no rows means, by the coverage acquisition
+ * recorded: `empty` (the provider answered with no rows) is a measured
+ * "no data"; `complete` is "no data" only when no raw rows arrived either,
+ * otherwise rows arrived and none were saved; `unknown` is unavailable
+ * evidence; `partial` is incomplete evidence, never "no data".
+ */
+function emptyDatasetHeading({
+  coverage,
+  raw_rows_received,
+}: Pick<SearchIntelligenceDataset, 'coverage' | 'raw_rows_received'>) {
+  const noData = 'The provider returned no data for this saved scope.';
+  if (coverage === 'empty') return noData;
+  if (coverage === 'complete')
+    return raw_rows_received > 0
+      ? 'The provider returned results, but none were saved for this scope.'
+      : noData;
+  if (coverage === 'unknown') return 'Provider evidence is unavailable for this saved scope.';
+  return 'Provider evidence for this saved scope is incomplete, and no rows were saved.';
 }
 
 function KeywordFilters({

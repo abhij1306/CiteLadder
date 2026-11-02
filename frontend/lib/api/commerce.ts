@@ -9,6 +9,7 @@ import {
   buyerPromptSchema,
   catalogImportSchema,
   commerceCatalogSchema,
+  commerceProjectionSchema,
   competitorDiscoverySchema,
   competitorDiscoveryTaskSchema,
   competitorCandidateSchema,
@@ -24,6 +25,12 @@ export const commerceApi = {
       commerceCatalogSchema,
       await apiClient.get(path(projectId, 'catalog'), options),
       'commerce.catalog',
+    ),
+  catalogProjection: async (projectId: string, options?: ApiRequestOptions) =>
+    strictValidate(
+      commerceProjectionSchema,
+      await apiClient.get(path(projectId, 'catalog/projection'), options),
+      'commerce.catalogProjection',
     ),
   importCatalog: async (
     projectId: string,

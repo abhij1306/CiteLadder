@@ -2,7 +2,7 @@
  * Workspace-scoped crawl loading and the crawl projection every Site Health
  * read shares. A foreign or missing crawl is a 404; nothing here writes.
  */
-import type { crawlCountersSchema } from '@citeladder/contracts/site-health';
+import { crawlCountersSchema } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
@@ -351,12 +351,51 @@ export const ROW_TASK = sql`(t.task_kind = 'analyze'
 /** Which `ROW_TASK` row wins: the analysis, then the latest generation. */
 export const ROW_TASK_ORDER = sql`t.task_kind = 'analyze' desc, t.generation desc`;
 
-/** Live task counters for the dashboard's selected crawl. */
+/** What the crawl's tasks and analyses count: every counter except the live selection. */
+export type TaskCounters = Omit<Counters, 'selected'>;
+const terminalCountersSchema = crawlCountersSchema.omit({ selected: true });
+
+/** The project's active monitored selection: current configuration, read live. */
+async function selectedCount(db: Database, crawl: Crawl) {
+  const row = await db
+    .selectFrom('monitored_site_urls')
+    .select((eb) => eb.fn.countAll<string>().as('count'))
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('project_id', '=', crawl.project_id)
+    .where('active', '=', true)
+    .executeTakeFirstOrThrow();
+  return Number(row.count);
+}
+
+/**
+ * The dashboard counters. An active crawl counts its tasks live; a terminal
+ * one reads the counters its terminalization persisted
+ * (`site-health/terminal-counters.ts`), and without them the row's own
+ * persisted counts, never a scan of its tasks.
+ */
+export async function dashboardCounters(db: Database, crawl: Crawl): Promise<Counters> {
+  if (!isTerminal(crawl)) return crawlCounters(db, crawl);
+  const selected = await selectedCount(db, crawl);
+  if (crawl.terminal_counters === null)
+    return { ...rowCounters(crawl, scoreSummary(crawl)), selected };
+  return { ...terminalCountersSchema.parse(crawl.terminal_counters), selected };
+}
+
+/** Live task counters, with the live selection. */
 export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counters> {
+  const [counters, selected] = await Promise.all([
+    taskCounters(db, crawl),
+    selectedCount(db, crawl),
+  ]);
+  return { ...counters, selected };
+}
+
+/** Counters of the crawl's own tasks and analyses, scanned now. */
+export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCounters> {
   const blocking = reads.policy_blocking_error_codes;
   const nonErrors = reads.non_error_terminal_codes;
   const exclusions = reads.corpus_exclusion_error_codes;
-  const counts = await sql<{
+  const tasks = sql<{
     queued: number;
     running: number;
     analyzed: number;
@@ -399,15 +438,8 @@ export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counter
       count(*) filter (where status in ('leased','running') and lease_expires_at <= now())::int as expired,
       min(available_at) filter (where status in ('queued','retry_wait','capacity_wait') and available_at > now()) as next_available_at
     from latest`.execute(db);
-  const c = firstOf(counts.rows, 'the crawl task counters');
-  const [selected, kinds, excluded] = await Promise.all([
-    db
-      .selectFrom('monitored_site_urls')
-      .select((eb) => eb.fn.countAll<string>().as('count'))
-      .where('workspace_id', '=', crawl.workspace_id)
-      .where('project_id', '=', crawl.project_id)
-      .where('active', '=', true)
-      .executeTakeFirstOrThrow(),
+  const [counts, kinds, excluded] = await Promise.all([
+    tasks,
     sql<{ page_kind: string; count: number }>`
       select page_kind, count(*)::int as count from (
         select distinct on (site_url_id) coalesce(page_kind, 'other') as page_kind
@@ -423,6 +455,7 @@ export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counter
         and task_kind in ('discover','analyze') and status = 'failed'
         and error_code = any(${exclusions}::text[]) and url_hash <> ''`.execute(db),
   ]);
+  const c = firstOf(counts.rows, 'the crawl task counters');
   const terminal = isTerminal(crawl);
   let state: Counters['activity']['state'] = 'working';
   let reason: Counters['activity']['reason'] = 'active_work';
@@ -437,7 +470,6 @@ export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counter
           0,
         )
       : null,
-    selected: Number(selected.count),
     queued: c.queued,
     running: c.running,
     analyzed: c.analyzed,

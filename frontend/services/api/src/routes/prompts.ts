@@ -46,6 +46,8 @@ const noQuery = {} as const;
 const publicProject = `${policy.api.machine_prefix}/projects/{project_id}`;
 const publicSet = `${publicProject}/prompt-sets/{prompt_set_id}`;
 const publicWrite = { exposure: 'both', scope: 'prompts:write' } as const;
+/** A route under the project path resolves the project in the session read (or the key's path guard). */
+const inProject = { authorize: 'active-project' } as const;
 /** A retried request with the same key replays the staged run without provider I/O. */
 const generationHeaders = z.object({
   'Idempotency-Key': z.string().max(policy.prompts.generation.idempotency_key_max_chars).nullish(),
@@ -223,15 +225,16 @@ export const promptRoutes = [
   }),
   defineGetRoute({
     family,
+    ...inProject,
     exposure: 'both',
     path: `${api}/projects/{project_id}/topics`,
     params: { path: { project_id: uuid }, query: noQuery },
     response: z.array(topicSchema),
-    handle: ({ c, db }, { path }) =>
-      listTopics(db, c.get('workspace').workspaceId, path.project_id),
+    handle: ({ db }, { path }) => listTopics(db, path.project_id),
   }),
   definePostRoute({
     family,
+    ...inProject,
     ...publicWrite,
     path: `${api}/projects/{project_id}/topics`,
     capability: 'write',
@@ -246,6 +249,7 @@ export const promptRoutes = [
   }),
   definePostRoute({
     family: 'prompt-generation',
+    ...inProject,
     path: `${api}/projects/{project_id}/topics/preview`,
     capability: 'run',
     params: { path: { project_id: uuid }, query: noQuery },
@@ -254,6 +258,7 @@ export const promptRoutes = [
   }),
   definePostRoute({
     family,
+    ...inProject,
     path: `${api}/projects/{project_id}/topics/confirm`,
     capability: 'write',
     params: { path: { project_id: uuid }, query: noQuery },
@@ -266,6 +271,7 @@ export const promptRoutes = [
   }),
   defineGetRoute({
     family,
+    ...inProject,
     path: `${api}/projects/{project_id}/seed-queries`,
     params: { path: { project_id: uuid }, query: noQuery },
     response: seedQueriesResponseSchema,

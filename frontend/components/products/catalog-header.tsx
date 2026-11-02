@@ -19,7 +19,7 @@ import { pluralCount } from '@/lib/format';
 import { crawlPollInterval } from '@/lib/site-health/status';
 
 import type { SiteCrawl } from '@/lib/api/types';
-import type { CommerceCatalog } from '@citeladder/contracts/commerce-suite';
+import type { CommerceProjection } from '@citeladder/contracts/commerce-suite';
 
 import type { CommerceQueries } from './commerce-queries';
 
@@ -40,44 +40,49 @@ function analyzedLabel(crawl: SiteHealthCrawl): string | null {
   return `${crawl.analyzed_count}/${Math.max(known, crawl.analyzed_count)}`;
 }
 
-type Projection = CommerceCatalog['projection'];
-
 /** When the cached catalog was read, and the crawl's analyzed count it was read beside. */
 type CatalogReadCount = { readAt: number; count: number };
 
 /**
  * Pages still being turned into catalog rows, then pages of the latest crawl
- * that could not be. A finished, clean projection shows nothing.
+ * that could not be. When crawls do not project at all, it says whether the
+ * business does not sell a catalog or its model is not confirmed yet. A
+ * finished, clean projection shows nothing.
  */
-function projectionBadge(projection: Projection | undefined) {
-  if (projection?.in_flight)
+function projectionBadge(projection: CommerceProjection | undefined) {
+  if (!projection) return null;
+  if (projection.in_flight)
     return (
       <Badge variant="status" value="info">
         {projection.in_flight} projecting
       </Badge>
     );
-  if (projection?.failed)
+  if (projection.failed)
     return (
       <Badge variant="status" value="danger">
         {pluralCount(projection.failed, 'page')} not projected
       </Badge>
     );
+  if (projection.applicability === 'not_applicable') return <Badge>Not applicable</Badge>;
+  if (projection.applicability === 'unknown') return <Badge>Business model unconfirmed</Badge>;
   return null;
 }
 
 /** The catalog-wide metrics half of the toolbar: counts, crawl, queue. */
 function CatalogStats({
   counts,
+  projection,
   crawl,
 }: Readonly<{
   counts: CommerceQueries['catalog']['data'];
+  projection: CommerceProjection | undefined;
   crawl: SiteHealthCrawl;
 }>) {
   const items: StatSegment[] = [
     {
       key: 'products',
       label: 'Products',
-      value: counts ? `${counts.products.length}` : null,
+      value: counts ? `${counts.product_total}` : null,
     },
     {
       key: 'categories',
@@ -91,8 +96,8 @@ function CatalogStats({
       value: crawl ? <CrawlStatusBadge crawl={crawl} /> : <Badge>No crawl yet</Badge>,
     },
   ];
-  const projection = projectionBadge(counts?.projection);
-  if (projection) items.push({ key: 'projection', label: 'Projection', value: projection });
+  const badge = projectionBadge(projection);
+  if (badge) items.push({ key: 'projection', label: 'Projection', value: badge });
   // A strip on the card fill, like every other metric row in the app, rather
   // than bare figures on the page sheet.
   return (
@@ -119,10 +124,13 @@ export function useCatalogHeader({
   workspaceId,
   projectId,
   query,
+  projection,
 }: Readonly<{
   workspaceId: string;
   projectId: string;
   query: CommerceQueries['catalog'];
+  /** The newest projection progress known (`useCatalogProjection`). */
+  projection: CommerceProjection | undefined;
 }>) {
   const client = useQueryClient();
   const [result, setResult] = useState('');
@@ -190,7 +198,7 @@ export function useCatalogHeader({
         }
       />
     ),
-    stats: <CatalogStats counts={counts} crawl={crawl} />,
+    stats: <CatalogStats counts={counts} projection={projection} crawl={crawl} />,
     notices: (
       <CatalogNotices
         result={result}

@@ -4,7 +4,12 @@ import { Link } from 'react-router-dom';
 import type { z } from 'zod';
 import type { aiTrafficOverviewSchema, crawlSummarySchema } from '@citeladder/contracts/ai-traffic';
 import { formatPercent } from '@/lib/format';
-import { connectionLabel, coverageLabel, words } from '@/lib/ai-traffic/vocabulary';
+import {
+  citationGapLabel,
+  connectionLabel,
+  coverageLabel,
+  words,
+} from '@/lib/ai-traffic/vocabulary';
 import { projectDestination } from '@/lib/navigation/project-destination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -96,6 +101,7 @@ export function CitationSignal({
   return (
     <SignalCard
       title="Tracked citations"
+      status={data.state === 'measured' ? undefined : 'Not available yet'}
       action={
         <Button asChild variant="secondary">
           <Link to={projectDestination('/visibility', null, projectId)}>Open AI Visibility</Link>
@@ -104,7 +110,14 @@ export function CitationSignal({
     >
       <Stack gap="tight">
         <p className="type-label">{data.label}</p>
-        <MetricValue value={data.count === null ? null : String(data.count)} label="Unavailable" />
+        {data.state === 'measured' ? (
+          <MetricValue value={String(data.count)} label="Not available yet" />
+        ) : (
+          <>
+            <MetricValue value={null} label="Not available yet" />
+            <p className="type-caption">{citationGapLabel(data.reason)}</p>
+          </>
+        )}
       </Stack>
     </SignalCard>
   );

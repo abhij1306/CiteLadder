@@ -24,6 +24,9 @@ import { policy } from '../src/config.ts';
 import { issueGroupId } from '../src/site-health/reads/rules.ts';
 import { issueDetail } from '../src/site-health/reads/issues.ts';
 import { refreshIssueCurrency } from '../src/site-health/issue-currency.ts';
+import { loadCrawl } from '../src/site-health/reads/crawl.ts';
+import { record } from '../src/db/json.ts';
+import { compareText } from '../src/text-order.ts';
 import { encodeKeysetCursor } from '../src/http/keyset-cursor.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
@@ -124,7 +127,13 @@ async function page(seed: SiteSeed, path: string, options: { current?: boolean }
 }
 
 /** A failing evaluation of `ruleId` on the page's analysis, and its persisted issue. */
-async function issue(seed: SiteSeed, target: Page, ruleId: string, evidence: object = {}) {
+async function issue(
+  seed: SiteSeed,
+  target: Page,
+  ruleId: string,
+  evidence: object = {},
+  publish = true,
+) {
   const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === ruleId)!;
   const [analysis] = await db
     .selectFrom('site_page_analyses')
@@ -162,7 +171,7 @@ async function issue(seed: SiteSeed, target: Page, ruleId: string, evidence: obj
     })
     .execute();
   // What the terminal publication does after writing the analyses above.
-  await refreshIssueCurrency(db, { id: seed.crawlId, workspace_id: seed.workspaceId });
+  if (publish) await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
   return evaluationId;
 }
 
@@ -188,7 +197,7 @@ async function siteIssue(
       })
       .where('id', '=', other.analysisId)
       .execute();
-  await refreshIssueCurrency(db, { id: seed.crawlId, workspace_id: seed.workspaceId });
+  await refreshIssueCurrency(db, await loadCrawl(db, seed.workspaceId, seed.crawlId));
 }
 
 const byUrl = (items: { normalized_url: string; analysis_status: string; error_code: string }[]) =>
@@ -638,6 +647,93 @@ describe('issue catalog', () => {
     expect(searched.items.map((group: { rule_id: string }) => group.rule_id)).toEqual([
       'web.mobile_viewport',
     ]);
+  });
+
+  it('serves the unfiltered list and summary its writers persisted; filters still read the issues', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    const product = await page(seed, '/product');
+    const catalog = async () =>
+      db
+        .selectFrom('site_issue_catalogs')
+        .select(['finding_class', 'items', 'summary', 'sources'])
+        .where('crawl_id', '=', seed.crawlId)
+        .orderBy('finding_class')
+        .execute();
+    // Issues the publication has not refreshed yet: nothing is persisted, not a zero catalog.
+    const homeEvaluation = await issue(seed, home, 'technical.indexable', {}, false);
+    expect(await catalog()).toEqual([]);
+    // The currency refresh writes both classes' catalogs in its transaction.
+    const productEvaluation = await issue(seed, product, 'technical.indexable');
+    const evaluations = [homeEvaluation, productEvaluation].sort(compareText);
+    const issueIds = (
+      await db
+        .selectFrom('site_issues')
+        .select('id')
+        .where('evaluation_id', 'in', evaluations)
+        .execute()
+    )
+      .map((row) => row.id)
+      .sort(compareText);
+    // Each group keeps the exact issues and evaluations it folds.
+    expect(
+      Object.fromEntries((await catalog()).map((row) => [row.finding_class, row.sources])),
+    ).toEqual({
+      advisory: [],
+      defect: [
+        {
+          group_id: issueGroupId(seed.crawlId, 'technical.indexable', 'defect'),
+          issue_ids: issueIds,
+          evaluation_ids: evaluations,
+        },
+      ],
+    });
+    expect(
+      (await catalog()).map((row) => [
+        row.finding_class,
+        z
+          .array(z.object({ rule_id: z.string() }))
+          .parse(row.items)
+          .map((item) => item.rule_id),
+        record(row.summary).affected_url_count,
+      ]),
+    ).toEqual([
+      ['advisory', [], 0],
+      ['defect', ['technical.indexable'], 2],
+    ]);
+    // A current issue no writer refreshed changes no unfiltered read.
+    const late = await issue(seed, home, 'technical.title_present', {}, false);
+    await db
+      .updateTable('site_issues')
+      .set({ is_current: true })
+      .where('evaluation_id', '=', late)
+      .execute();
+    const unfiltered = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues`,
+      siteIssuesPageSchema,
+    );
+    expect(unfiltered.items.map((row) => [row.rule_id, row.affected_url_count])).toEqual([
+      ['technical.indexable', 2],
+    ]);
+    expect(unfiltered.summary).toMatchObject({ issue_count: 1, affected_url_count: 2 });
+    // A filtered read is computed from the issues as they stand.
+    const high = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?severity=high`,
+      siteIssuesPageSchema,
+    );
+    expect(high.items.map((row) => row.rule_id)).toEqual([
+      'technical.indexable',
+      'technical.title_present',
+    ]);
+    // The monitored count follows the live selection beside the persisted catalog.
+    await monitor(seed, product.id);
+    const monitored = await json(seed, `/site-crawls/${seed.crawlId}/issues`, siteIssuesPageSchema);
+    expect(monitored.summary.monitored_affected_url_count).toBe(1);
+    // Another workspace never reaches the persisted catalog.
+    const outsider = await fixtures.crawl();
+    expect((await get(outsider, `/site-crawls/${seed.crawlId}/issues`)).status).toBe(404);
   });
 });
 

@@ -13,7 +13,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { DisplayTime } from '@/components/ui/display-time';
-import { aiTrafficApi, type TrafficFilters } from '@/lib/api/ai-traffic';
+import { aiTrafficApi, aiTrafficQueries, type TrafficFilters } from '@/lib/api/ai-traffic';
 import { queryKeys } from '@/lib/api/query-keys';
 import { useProjectContext } from '@/lib/project/project-context';
 import { projectDestination } from '@/lib/navigation/project-destination';
@@ -83,8 +83,7 @@ export function UrlPanel({
     enabled: !!urlHash && !!workspaceId && !!projectId,
   });
   const catalog = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'catalog'),
-    queryFn: ({ signal }) => aiTrafficApi.catalog(projectId, { workspaceId, signal }),
+    ...aiTrafficQueries.catalog(workspaceId, projectId),
     enabled: !!urlHash && !!workspaceId && !!projectId,
   });
   const botLabel = (botId: string) =>

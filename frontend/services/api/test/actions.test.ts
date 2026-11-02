@@ -9,6 +9,7 @@ import {
   actionDeclarationSchema,
 } from '@citeladder/contracts/actions';
 import { searchConsoleState } from '../src/opportunities/measurement-legs.ts';
+import { refreshActionStatus } from '../src/opportunities/action-status.ts';
 import { actionFixture, type ActionSeed } from './action-support.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 
@@ -95,6 +96,51 @@ describe('Action routes', () => {
     await request(s, actionPath(s), 'PATCH', { status: 'open' });
     const detail = await detailBody(await request(s, actionPath(s)));
     expect(detail.members.map((member) => member.id)).toEqual([s.members[pageRule]]);
+  });
+
+  it('reads the status its writers persisted, not one re-derived from raw input rows', async () => {
+    const s = await seed();
+    const list = `/api/v1/projects/${s.project_id}/actions`;
+    const stored = async () =>
+      (
+        await db
+          .selectFrom('actions')
+          .select('effective_status')
+          .where('id', '=', actionId(s))
+          .executeTakeFirstOrThrow()
+      ).effective_status;
+    // The output writer's transaction persists in-progress.
+    await actionFixture<string>('revision', s.workspace_id, s.project_id, actionId(s), 'draft');
+    expect(await stored()).toBe('in_progress');
+    // A declaration persists implemented in its own transaction.
+    const declared = await declarationBody(await declare(s, 'persisted'));
+    expect(await stored()).toBe('implemented');
+    // A verification row no writer recorded leaves every read as persisted.
+    await db
+      .insertInto('opportunity_verification_events')
+      .values({
+        id: randomUUID(),
+        workspace_id: s.workspace_id,
+        project_id: s.project_id,
+        implementation_event_id: declared.id,
+        observation_kind: 'verified',
+        observed_at: new Date(),
+        created_at: new Date(),
+        crawl_id: s.crawl_id,
+        audit_id: null,
+        source_analysis_ids: '[]',
+        source_rule_evaluation_ids: '[]',
+        source_metric_ids: '[]',
+        result: '{}',
+        verifier_version: 'implementation-verifier-1',
+        limitations: '[]',
+        idempotency_key: randomUUID(),
+      })
+      .execute();
+    const page = await pageBody(await request(s, `${list}?status=implemented`));
+    expect(page.items.map((row) => [row.id, row.status])).toEqual([[actionId(s), 'implemented']]);
+    expect(page.status_counts).toMatchObject({ open: 2, implemented: 1, done: 0 });
+    expect((await detailBody(await request(s, actionPath(s)))).status).toBe('implemented');
   });
 
   it('rejects outsider, foreign and viewer writes without disclosing or mutating rows', async () => {
@@ -432,6 +478,8 @@ describe('Action routes', () => {
           idempotency_key: randomUUID(),
         })
         .execute();
+      // The verifier refreshes the Action in the transaction that appends its observation.
+      await refreshActionStatus(db, s.workspace_id, actionId(s));
       const detail = await detailBody(await request(s, actionPath(s)));
       expect(detail.status).toBe(index === 0 ? 'done' : 'measuring');
       expect(detail.declaration!.state).toBe(kind);

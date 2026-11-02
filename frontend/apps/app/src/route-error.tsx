@@ -1,4 +1,6 @@
 import { SearchX, TriangleAlert } from 'lucide-react';
+import { useEffect } from 'react';
+import { isRouteErrorResponse, useRouteError } from 'react-router-dom';
 
 import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
@@ -7,6 +9,20 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
+import { isChunkLoadError, reportClientError } from '@/lib/client-errors';
+
+/**
+ * Report what the boundary caught once it shows: a route chunk that could not
+ * download, an error response a loader threw, or `kind` for anything else.
+ */
+function useReportedRouteError(kind: 'render' | 'route') {
+  const caught = useRouteError();
+  useEffect(() => {
+    let error = caught;
+    if (isRouteErrorResponse(caught)) error = new Error(`${caught.status} ${caught.statusText}`);
+    reportClientError({ kind: isChunkLoadError(error) ? 'chunk_load' : kind, error });
+  }, [caught, kind]);
+}
 
 function OverviewLink({ variant }: Readonly<{ variant?: 'secondary' }>) {
   return (
@@ -22,6 +38,7 @@ function OverviewLink({ variant }: Readonly<{ variant?: 'secondary' }>) {
  * deployment.
  */
 export function ScreenError() {
+  useReportedRouteError('render');
   return (
     <ListScreen title="Something went wrong">
       <QueryState
@@ -57,6 +74,7 @@ export function NotFoundScreen() {
 
 /** A fresh document also recovers route chunks replaced by a deployment. */
 export function RouteError() {
+  useReportedRouteError('route');
   return (
     <ShellFallback>
       <main id="main" className="grid min-h-[60vh] place-items-center p-[var(--page-section-gap)]">

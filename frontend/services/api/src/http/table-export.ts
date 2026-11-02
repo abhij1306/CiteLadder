@@ -5,6 +5,15 @@
  * quoting follows RFC 4180, and Markdown escapes the pipes and line breaks
  * that would break a table. `null` renders as an empty cell.
  */
+import { ApiError } from '../errors.ts';
+
+/** An export's rows; one past the bound refuses the export rather than truncating it. */
+export function boundedExport<T>(rows: T[], max: number): T[] {
+  if (rows.length > max)
+    throw new ApiError(422, 'Export exceeds configured bound; narrow the filters');
+  return rows;
+}
+
 function cellText(value: unknown): string {
   if (value === null || value === undefined) return '';
   return typeof value === 'object' ? JSON.stringify(value) : String(value as string | number);

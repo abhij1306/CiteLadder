@@ -22,6 +22,7 @@ import { recordCrawlEvent } from './site-task.ts';
 import { persistCrawlSnapshot, refreshLiveScoreSummary } from './snapshot.ts';
 import type { Crawl } from './task-fence.ts';
 import { publishFinalPageAnalyses } from './terminal-analysis.ts';
+import { persistTerminalCounters } from './terminal-counters.ts';
 import { enqueueTerminalAnalyticsRefresh } from './terminal-handoff.ts';
 
 const logger = getLogger('app.workers.site_health.lifecycle');
@@ -250,6 +251,7 @@ async function terminalize(
     const failure = (await rootFailure(db, crawl)).summary;
     if (failure && !crawl.error_message) crawl.error_message = failure.message;
     await saveState(db, crawl);
+    await persistTerminalCounters(db, crawl);
     await recordCrawlEvent(db, crawl, 'crawl.failed', 'crawl failed', {
       status: crawl.status,
       failure,
@@ -261,6 +263,7 @@ async function terminalize(
   crawl.partial_reason = partialReason(discoveryPartial, analysisPartial);
   crawl.status = crawl.partial_reason ? 'partially_completed' : 'completed';
   await saveState(db, crawl);
+  await persistTerminalCounters(db, crawl);
   await recordCrawlEvent(db, crawl, 'crawl.completed', 'crawl completed', { status: crawl.status });
   if (summary.analyzeSucceeded > 0) await enqueueSuccessors(db, crawl);
   else await enqueueTerminalAnalyticsRefresh(db, crawl, null);
@@ -576,6 +579,7 @@ export async function publishCancelledCrawls(db: Database, batch: number) {
       const crawl = await lockCrawl(trx, target.workspace_id, target.id);
       if (crawl?.status !== 'cancelled') return false;
       await publishFinalPageAnalyses(trx, crawl);
+      await persistTerminalCounters(trx, crawl);
       if (await persistCrawlSnapshot(trx, crawl)) await enqueueSuccessors(trx, crawl);
       return true;
     }),

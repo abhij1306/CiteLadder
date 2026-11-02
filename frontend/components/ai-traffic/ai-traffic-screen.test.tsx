@@ -235,9 +235,18 @@ describe('AI Traffic state and navigation', () => {
     await user.upload(screen.getByLabelText('Log file'), new File(['{}'], 'requests.ndjson'));
     expect(screen.getByRole('button', { name: 'Upload recognized requests' })).toBeEnabled();
   });
-  it.each([null, 'Coverage is incomplete.'])(
-    'retains only meaningful empty insights (%s)',
-    async (notice) => {
+  it.each([
+    [null, 'complete', true, 'No patterns were observed in this window.'],
+    [
+      null,
+      'partial',
+      false,
+      'No patterns were observed in the data covered so far; coverage is incomplete.',
+    ],
+    ['Coverage is incomplete.', 'partial', false, 'Coverage is incomplete.'],
+  ])(
+    'keeps the insights card in place when nothing was observed (%s, %s crawl)',
+    async (notice, crawl, ga4Complete, shown) => {
       mswServer.use(
         http.get(root + '/ai-traffic/insights', () =>
           HttpResponse.json({
@@ -246,7 +255,7 @@ describe('AI Traffic state and navigation', () => {
             window_end: '2026-10-04',
             formula_version: '1',
             patterns: [],
-            coverage: { crawl: 'partial', ga4_complete: false, notice },
+            coverage: { crawl, ga4_complete: ga4Complete, notice },
           }),
         ),
       );
@@ -256,8 +265,9 @@ describe('AI Traffic state and navigation', () => {
       await waitFor(() =>
         expect(screen.queryByText('Loading persisted insights…')).not.toBeInTheDocument(),
       );
-      if (notice) expect(screen.getByText(notice)).toBeVisible();
-      else expect(screen.queryByText('Observed patterns')).not.toBeInTheDocument();
+      // The card holds its slot either way, so the Overview below never jumps up.
+      expect(screen.getByText('Observed patterns')).toBeVisible();
+      expect(screen.getByText(shown)).toBeVisible();
     },
   );
   it('creates an Amazon CloudFront source with its buffer interval and shows the Firehose endpoint', async () => {
@@ -578,7 +588,13 @@ describe('AI Traffic state and navigation', () => {
         HttpResponse.json({
           crawl,
           referrals,
-          citations: { unit: 'tracked_citations', count: null, label: 'Tracked answers' },
+          citations: {
+            unit: 'tracked_citations',
+            state: 'not_available',
+            reason: 'no_completed_run',
+            count: null,
+            label: 'Tracked answers',
+          },
         }),
       ),
       http.get(root + '/crawl-logs/sources', () => HttpResponse.json(sourceBody('available'))),
@@ -729,7 +745,13 @@ describe('AI Traffic state and navigation', () => {
         HttpResponse.json({
           crawl: { ...crawl, connection: 'not_connected' },
           referrals,
-          citations: { unit: 'tracked_citations', count: 4, label: 'Tracked answers' },
+          citations: {
+            unit: 'tracked_citations',
+            state: 'measured',
+            count: 4,
+            label: 'Tracked answers',
+            sources: [{ audit_id: '99999999-9999-4999-8999-999999999999', analyzer_version: '1' }],
+          },
         }),
       ),
       http.get(root + '/ai-traffic/insights', () =>

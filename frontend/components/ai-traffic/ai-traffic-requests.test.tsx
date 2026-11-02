@@ -44,7 +44,13 @@ const overview = {
     analyzer_version: '1',
     formula_version: '1',
   },
-  citations: { unit: 'tracked_citations', count: 4, label: 'Tracked answers' },
+  citations: {
+    unit: 'tracked_citations',
+    state: 'measured',
+    count: 4,
+    label: 'Tracked answers',
+    sources: [{ audit_id: '99999999-9999-4999-8999-999999999999', analyzer_version: '1' }],
+  },
 };
 const insights = {
   snapshot_id: null,

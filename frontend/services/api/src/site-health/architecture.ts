@@ -6,6 +6,7 @@ import { record } from '../db/json.ts';
 import { canonicalUrl } from './url-identity.ts';
 import { buildArchitecture, type ArchitecturePage } from './architecture-model.ts';
 import { architectureRules } from './architecture-rules.ts';
+import { persistIssueCatalog } from './issue-catalog.ts';
 import { addArchitectureIssues } from './snapshot.ts';
 import type { Crawl } from './task-fence.ts';
 
@@ -242,5 +243,7 @@ export async function persistArchitecture(db: Database, crawl: Crawl) {
   // The snapshot was published first (architecture reads its coverage); its
   // issue counts now take in the site-level findings.
   await addArchitectureIssues(db, crawl);
+  // The findings are written current, so the persisted catalog takes them in now.
+  await persistIssueCatalog(db, crawl);
   return 1;
 }
