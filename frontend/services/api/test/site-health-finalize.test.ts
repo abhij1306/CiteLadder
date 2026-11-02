@@ -169,7 +169,8 @@ describe('terminal checks from persisted evidence', () => {
   });
 
   it('keeps incomplete target coverage unknown and observed failures actionable', () => {
-    expect(entitySetEvaluation('technical.broken_internal_link', 2, 1, []).outcome).toBe('unknown');
+    const unchecked = entitySetEvaluation('technical.broken_internal_link', 2, 1, []);
+    expect([unchecked.outcome, unchecked.reason_code]).toEqual(['unknown', 'unchecked_targets']);
     expect(entitySetEvaluation('technical.broken_internal_link', 3, 2, ['/missing']).outcome).toBe(
       'partial',
     );

@@ -158,10 +158,7 @@ function rowCounters(crawl: Crawl, summary: ScoreSummary): Counters {
   return {
     discovered: countDisclosure(crawl) ? crawl.admitted_url_count : null,
     selected: summary?.selected_count ?? 0,
-    queued: Math.max(
-      crawl.analysis_requested_count - crawl.analyzed_url_count - crawl.failed_url_count,
-      0,
-    ),
+    queued: 0,
     running: 0,
     analyzed: crawl.analyzed_url_count,
     errors: crawl.failed_url_count,

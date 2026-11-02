@@ -69,6 +69,7 @@ export function entitySetEvaluation(
     });
   const outcome = entityOutcome(failures, checked, total);
   return finalizeEvaluation(ruleId, outcome, {
+    ...(outcome === 'unknown' ? { reason: 'unchecked_targets' } : {}),
     total_count: total,
     checked_count: checked,
     failure_count: failures,

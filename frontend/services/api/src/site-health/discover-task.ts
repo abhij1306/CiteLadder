@@ -403,19 +403,28 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
         await dispose(trx, crawl, task, page, outcome.facts);
       } else if (finalFailure(task, outcome.retryable)) {
         // Membership before the crawl and task, in the Site Health lock order.
-        await lockRuntime(trx, crawl.workspace_id);
-        await releaseNonPage(trx, crawl, task.url_hash, outcome);
+        const runtime = await lockRuntime(trx, crawl.workspace_id);
+        // The freed slot goes to the frontier's next best URL, or the crawl ends a
+        // page short. An exact URL list has no frontier to refill from.
+        const exact = record(crawl.configuration).input_mode === 'exact_urls';
+        const released = await releaseNonPage(trx, crawl, task.url_hash, outcome, {
+          record: true,
+        });
+        if (released && !exact)
+          ({ admitted, sampleCapped } = await admitCandidates(trx, crawl, [], runtime, {
+            releasing: 1,
+          }));
       }
       const locked = await lockRunningTask(trx, claimed, ctx.owner);
       if (!locked || !ACTIVE_CRAWL.has(locked.crawl.status)) throw new Abandoned();
       if (!artifactId && finalFailure(locked.task, outcome.retryable))
         await observeFailure(trx, locked.crawl, locked.task, outcome);
-      if (artifactId) {
+      if (artifactId || admitted) {
         await trx
           .updateTable('site_crawls')
           .set((eb) => ({
             admitted_url_count: eb('admitted_url_count', '+', admitted),
-            discovered_url_count: eb('discovered_url_count', '+', 1),
+            discovered_url_count: eb('discovered_url_count', '+', artifactId ? 1 : 0),
             updated_at: new Date(),
             ...(sampleCapped &&
             ['running', 'sample_completed'].includes(locked.crawl.discovery_status)
@@ -425,10 +434,11 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
           .where('id', '=', locked.crawl.id)
           .where('workspace_id', '=', locked.crawl.workspace_id)
           .execute();
-        await recordCrawlEvent(trx, locked.crawl, 'discovery.progress', 'discovery progress', {
-          admitted,
-          depth: task.depth,
-        });
+        if (artifactId)
+          await recordCrawlEvent(trx, locked.crawl, 'discovery.progress', 'discovery progress', {
+            admitted,
+            depth: task.depth,
+          });
       }
       await writeAttempts(
         trx,

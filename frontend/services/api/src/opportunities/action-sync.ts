@@ -204,6 +204,8 @@ export async function syncActions(
       .set({
         member_opportunity_ids: '[]',
         families: '[]',
+        // The diagnosis names the retired members, so it clears with them.
+        diagnosis: '{}',
         priority_score: null,
         opportunity_snapshot_id: snapshotId,
         evidence_cleared_at: sql<Date>`case

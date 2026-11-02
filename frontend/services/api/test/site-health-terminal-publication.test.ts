@@ -238,22 +238,36 @@ describe('terminal analysis publication', () => {
     const hiddenMenu = await fixtures.page(seed, '/menu', {
       links: { anchors: [], unrendered_anchors: [anchor('/pricing')] },
     });
+    const shell = await fixtures.page(seed, '/app-shell', {
+      links: { anchors: [] },
+      extraction: { state: 'unavailable', reason: 'client_rendering_required' },
+    });
     await finalize(seed);
     const brokenLinks = async (analysisId: string) => {
       const row = await db
         .selectFrom('site_rule_evaluations')
-        .select(['outcome', 'evidence'])
+        .select(['outcome', 'evidence', 'reason_code'])
         .where('analysis_id', '=', analysisId)
         .where('rule_id', '=', 'technical.broken_internal_link')
         .executeTakeFirstOrThrow();
       const evidence = row.evidence as { total_count: number };
-      return [row.outcome, evidence.total_count];
+      return [row.outcome, evidence.total_count, row.reason_code];
     };
-    expect(await brokenLinks(excludedOnly.analysisId)).toEqual(['satisfied', 0]);
+    expect(await brokenLinks(excludedOnly.analysisId)).toEqual(['satisfied', 0, '']);
+    // A client-rendered shell shows no links at all: nothing was checked, so nothing passes.
+    expect(await brokenLinks(shell.analysisId)).toEqual([
+      'unknown',
+      0,
+      'client_rendering_required',
+    ]);
     // A fetchable target that was never checked still leaves the check open.
-    expect(await brokenLinks(withPage.analysisId)).toEqual(['unknown', 1]);
+    expect(await brokenLinks(withPage.analysisId)).toEqual(['unknown', 1, 'insufficient_evidence']);
     // A link in a hidden menu is a link crawlers follow, so it is checked too.
-    expect(await brokenLinks(hiddenMenu.analysisId)).toEqual(['unknown', 1]);
+    expect(await brokenLinks(hiddenMenu.analysisId)).toEqual([
+      'unknown',
+      1,
+      'insufficient_evidence',
+    ]);
   });
 
   it('judges duplicate content and redirects from the persisted crawl evidence', async () => {

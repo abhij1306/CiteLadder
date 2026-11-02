@@ -311,7 +311,7 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
     }
     // The membership row is already locked above, before the crawl.
     if (finalFailure(task, outcome.retryable))
-      await releaseNonPage(trx, crawl, task.url_hash, outcome);
+      await releaseNonPage(trx, crawl, task.url_hash, outcome, { record: false });
     await settleTask(trx, ctx, task, {
       succeeded: false,
       retryable: outcome.retryable,

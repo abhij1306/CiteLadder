@@ -4,6 +4,7 @@ import { record } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
 import { onlyOf } from '../lists.ts';
 import { canonicalUrl as canonical } from './url-identity.ts';
+import { linkTargetUrl } from './discovery-links.ts';
 import { anchorDestinations, anchorDiagnostics } from './link-anchors.ts';
 
 export type LinkPage = {
@@ -97,7 +98,7 @@ function pageEdges(page: LinkPage, aliases: Map<string, string>, nodes: Map<stri
   for (const link of pageAnchors(page.facts)) {
     const { anchor } = link;
     if (anchor.is_internal !== true || typeof anchor.url !== 'string') continue;
-    const url = canonical(anchor.url, page.finalUrl);
+    const url = linkTargetUrl(anchor.url, page.finalUrl);
     if (!url) continue;
     const target = aliases.get(url) ?? null;
     const key = target ?? url;

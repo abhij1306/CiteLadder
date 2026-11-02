@@ -13,9 +13,12 @@ import { isNonEmpty } from '../lists.ts';
 
 export class FetchError extends Error {
   readonly code: string;
-  constructor(code: string) {
-    super(code);
+  /** The status of a response that arrived and was refused, so its attempt still records it. */
+  readonly status: number | null;
+  constructor(code: string, refused?: { status: number; contentType: string }) {
+    super(refused ? `${code}: ${refused.contentType || 'no content type'}` : code);
     this.code = code;
+    this.status = refused?.status ?? null;
   }
 }
 export type FetchOptions = {
@@ -209,7 +212,7 @@ export async function pinnedRequest(
         const acceptable =
           options.contentTypes.includes(type) || options.contentTypes.includes('*');
         if (status >= 200 && status < 300 && !acceptable) {
-          response.destroy(new FetchError('content_type'));
+          response.destroy(new FetchError('content_type', { status, contentType: type }));
           return;
         }
         const chunks: Buffer[] = [];
@@ -302,7 +305,7 @@ export function createWebsiteFetcher(
         } catch (error) {
           options.onCall?.({
             url: url.href,
-            status: null,
+            status: error instanceof FetchError ? error.status : null,
             error,
             wireBytes: null,
             decodedBytes: null,

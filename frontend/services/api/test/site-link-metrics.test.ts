@@ -48,6 +48,14 @@ it('collapses repeated destinations, retains off-crawl links and only follows el
   expect(rows.get('product')!.depth_from_home).toBeNull();
   expect(rows.get('product')!.nofollow_inbound_count).toBe(1);
 });
+it('links a page through an encoded tracking query, as discovery admitted it', () => {
+  const rows = graph([
+    page('home', '/', [anchor('https://example.test/swim%3Fintpromo=summer')]),
+    page('swim', '/swim'),
+  ]);
+  expect(rows.get('swim')!.inbound_count).toBe(1);
+  expect(rows.get('swim')!.depth_from_home).toBe(1);
+});
 it('exact nodes win redirect aliases and ambiguous aliases remain unobserved', () => {
   const pages = [
     page('home', '/', [anchor('/new'), anchor('/ambiguous'), anchor('/old-alias')]),

@@ -13,8 +13,9 @@ import {
   type DuplicateComparison,
   type Fingerprint,
 } from './analysis/duplicate-content.ts';
-import { hreflangConflict, sitemapOrphan } from './analysis/finalize.ts';
+import { finalizeEvaluation, hreflangConflict, sitemapOrphan } from './analysis/finalize.ts';
 import { crawlCoverage } from './coverage.ts';
+import { linkTargetUrl } from './discovery-links.ts';
 import { pageAnchors } from './link-graph.ts';
 import {
   canonicalResolution,
@@ -47,10 +48,22 @@ function internalTargets(finalUrl: string, facts: Facts) {
   const result = new Set<string>();
   for (const { anchor } of pageAnchors(facts)) {
     if (!anchor.is_internal) continue;
-    const url = canonicalUrl(scalarText(anchor.url), finalUrl);
+    const url = linkTargetUrl(scalarText(anchor.url), finalUrl);
     if (url && !hardExcluded(new URL(url))) result.add(url);
   }
   return sorted(result);
+}
+/**
+ * A page whose content was never observed (a client-rendered shell) shows no
+ * links, so its link checks have nothing to judge: unknown, never a pass.
+ */
+function unobservedLinks(facts: Facts, links: string[]) {
+  const extraction = record(facts.extraction);
+  if (links.length || extraction.state !== 'unavailable') return null;
+  const reason = scalarText(extraction.reason) || 'content_unobserved';
+  return ['technical.broken_internal_link', 'technical.internal_link_redirect'].map((rule) =>
+    finalizeEvaluation(rule, 'unknown', { reason, total_count: 0, checked_count: 0 }),
+  );
 }
 const alternatesOf = (facts: Facts) =>
   Array.isArray(facts.hreflang_alternates) ? facts.hreflang_alternates.map(record) : [];
@@ -311,8 +324,10 @@ export async function finalizeCrawlAnalyses(db: Database, crawl: Crawl) {
         resolutions,
         canonicalTargets,
       ),
-      resolutionSet(links, resolutions, { sitewide }),
-      linkRedirects(links, resolutions, sitewide),
+      ...(unobservedLinks(facts, links) ?? [
+        resolutionSet(links, resolutions, { sitewide }),
+        linkRedirects(links, resolutions, sitewide),
+      ]),
       duplicateContent(duplicates(url)),
     ];
     if (row.url_hash === rootHash)

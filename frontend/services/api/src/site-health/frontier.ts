@@ -17,6 +17,7 @@ import type { WorkspaceSiteHealthRuntime } from '../generated/db-schema.ts';
 import { compareText } from '../text-order.ts';
 import { classifyUrlAdmission, type Admission, type Scope } from './url-admission.ts';
 import { canonicalIdentity, hostTwinHash } from './url-identity.ts';
+import { expectedTaskFailure } from './coverage.ts';
 import { ACTIVE_CRAWL } from './site-task.ts';
 import type { Crawl } from './task-fence.ts';
 import {
@@ -516,8 +517,8 @@ async function addReferrers(trx: Database, crawl: Crawl, seen: Candidate[]) {
 }
 
 /** The next pending frontier rows under the remaining requested budget, rebuilt as candidates. */
-async function pendingFrontier(trx: Database, crawl: Crawl, settings: Settings) {
-  const remaining = Math.max(0, requestedTarget(crawl, settings) - crawl.admitted_url_count);
+async function pendingFrontier(trx: Database, crawl: Crawl, settings: Settings, target: number) {
+  const remaining = Math.max(0, target - crawl.admitted_url_count);
   if (!remaining) return [];
   const rows = await trx
     .selectFrom('site_discovery_frontier')
@@ -566,6 +567,8 @@ type AdmissionOptions = {
   enqueueChildren?: boolean;
   sourceArtifactId?: string;
   settings?: Settings;
+  /** URLs released in this transaction whose failed task is not settled yet. */
+  releasing?: number;
 };
 type Entry = { frontierId: string | null; item: Candidate };
 
@@ -575,6 +578,7 @@ async function admissionBatch(
   crawl: Crawl,
   candidates: Candidate[],
   settings: Settings,
+  target: number,
 ): Promise<Entry[]> {
   if (crawl.sample_mode)
     return orderedUnique(
@@ -584,7 +588,27 @@ async function admissionBatch(
       .slice(0, settings.batch)
       .map((item) => ({ frontierId: null, item }));
   await storeFrontier(trx, crawl, candidates, settings);
-  return pendingFrontier(trx, crawl, settings);
+  return pendingFrontier(trx, crawl, settings, target);
+}
+
+/**
+ * Admitted URLs of the crawl that proved to be no page (excluded, gone or not
+ * HTML). Their selection was released, so their slots go back to the frontier
+ * and the crawl still reaches its requested page count. The root never counts:
+ * its failure is the crawl's own.
+ */
+async function releasedCount(trx: Database, crawl: Crawl) {
+  const row = await trx
+    .selectFrom('site_crawl_tasks')
+    .select(sql<number>`count(distinct url_hash)::int`.as('count'))
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('crawl_id', '=', crawl.id)
+    .where('task_kind', 'in', ['discover', 'analyze'])
+    .where('status', '=', 'failed')
+    .where('url_hash', '!=', canonicalIdentity(crawl.root_url).hash)
+    .where(expectedTaskFailure)
+    .executeTakeFirstOrThrow();
+  return row.count;
 }
 
 /** One admitted URL and the writes its admission implies. */
@@ -765,8 +789,12 @@ export async function admitCandidates(
   const current = { ...crawl, admitted_url_count: live.admitted_url_count };
   const enqueueChildren = options.enqueueChildren ?? true;
   const remaining = await automaticRemaining(trx, current, runtime);
-  const ceiling = Math.min(requestedTarget(current, settings), frontierLimit(current, settings));
-  const batch = await admissionBatch(trx, current, candidates, settings);
+  const released = current.sample_mode
+    ? 0
+    : (await releasedCount(trx, current)) + (options.releasing ?? 0);
+  const target = requestedTarget(current, settings) + released;
+  const ceiling = Math.min(target, frontierLimit(current, settings));
+  const batch = await admissionBatch(trx, current, candidates, settings, target);
   const known = await readAdmissionState(
     trx,
     current,
@@ -861,25 +889,44 @@ export async function markInventoryDocument(trx: Database, crawl: Crawl, hash: s
  * A final fetch that shows the URL is no page to analyze (excluded, gone, or
  * not HTML) frees its system-managed selection, as a document does, so it is
  * never counted as a selected page left unanalyzed. The root keeps its slot:
- * its failure is the crawl's own. Callers hold the runtime lock and not yet
- * the crawl's, per the Site Health lock order.
+ * its failure is the crawl's own. Returns whether the URL was released.
+ *
+ * Discovery, holding the runtime lock and not yet the crawl's, also records
+ * why the URL left the corpus. Analysis already holds the crawl lock, which
+ * comes after URL writes in the Site Health lock order, so it only releases.
  */
 export async function releaseNonPage(
   trx: Database,
   crawl: Crawl,
   hash: string,
   failure: { errorCode: string; statusCode: number | null },
+  { record }: { record: boolean },
 ) {
-  if (canonicalIdentity(crawl.root_url).hash === hash) return;
-  if (!NOT_A_PAGE.has(failure.errorCode) && !GONE.has(failure.statusCode ?? 0)) return;
-  const url = await trx
-    .selectFrom('site_urls')
-    .select('id')
-    .where('workspace_id', '=', crawl.workspace_id)
-    .where('project_id', '=', crawl.project_id)
-    .where('url_hash', '=', hash)
-    .executeTakeFirst();
+  if (canonicalIdentity(crawl.root_url).hash === hash) return false;
+  const status = failure.statusCode ?? 0;
+  if (!NOT_A_PAGE.has(failure.errorCode) && !GONE.has(status)) return false;
+  const url = record
+    ? await trx
+        .updateTable('site_urls')
+        .set({
+          corpus_disposition: 'exclude',
+          disposition_reason: (failure.errorCode || `http_${String(status)}`).slice(0, 32),
+          disposition_version: crawlPolicy.disposition_version,
+        })
+        .where('workspace_id', '=', crawl.workspace_id)
+        .where('project_id', '=', crawl.project_id)
+        .where('url_hash', '=', hash)
+        .returning('id')
+        .executeTakeFirst()
+    : await trx
+        .selectFrom('site_urls')
+        .select('id')
+        .where('workspace_id', '=', crawl.workspace_id)
+        .where('project_id', '=', crawl.project_id)
+        .where('url_hash', '=', hash)
+        .executeTakeFirst();
   if (url) await deactivateSystemMemberships(trx, crawl, [url.id]);
+  return true;
 }
 
 export async function deactivateSystemMemberships(
@@ -888,12 +935,14 @@ export async function deactivateSystemMemberships(
   siteUrlIds: string[],
 ) {
   if (!siteUrlIds.length) return;
+  const now = new Date();
   await trx
     .updateTable('monitored_site_urls')
-    .set({ active: false, updated_at: new Date() })
+    .set({ active: false, deselected_at: now, updated_at: now })
     .where('workspace_id', '=', crawl.workspace_id)
     .where('project_id', '=', crawl.project_id)
     .where('site_url_id', 'in', siteUrlIds)
+    .where('active', '=', true)
     .where('selection_source', '!=', 'user')
     .execute();
 }
