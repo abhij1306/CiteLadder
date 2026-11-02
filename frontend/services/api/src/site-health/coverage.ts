@@ -141,15 +141,17 @@ export async function valueKindCoverage(db: Database, crawl: Crawl): Promise<Val
   );
 }
 
-const EXCLUDED_ERRORS = policy.site_health.reads.corpus_exclusion_error_codes;
+const EXCLUDED_ERRORS = [
+  ...policy.site_health.reads.corpus_exclusion_error_codes,
+  ...policy.site_health.reads.non_page_error_codes,
+];
 const GONE_STATUSES = policy.site_health.reads.corpus_exclusion_status_codes;
 
 /**
- * A failed `site_crawl_tasks` row whose failure is expected, as the snapshot's
- * eligibility reads it: the site's robots.txt or admission policy excluded the
- * URL, or the URL answered 404/410. A crawl that met only these still
- * explored everything it could, so they never make it partial or its
- * coverage unknown.
+ * A failed `site_crawl_tasks` row whose failure is expected: the site's
+ * robots.txt or admission policy excluded the URL, it answered 404/410, or it
+ * is not an HTML page. A crawl that met only these still explored everything
+ * it could, so they never make it partial or its coverage unknown.
  */
 export const expectedTaskFailure = sql<boolean>`(site_crawl_tasks.error_code = any(${EXCLUDED_ERRORS}::text[])
   or exists (select 1 from site_fetch_attempts a

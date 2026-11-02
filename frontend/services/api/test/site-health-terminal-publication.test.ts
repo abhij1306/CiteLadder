@@ -500,7 +500,7 @@ describe('crawl lifecycle', () => {
     });
   });
 
-  it('does not call discovery failed for robots exclusions and pages that are gone', async () => {
+  it('does not call discovery failed for robots exclusions, pages that are gone, or non-HTML links', async () => {
     const seed = await running();
     await monitoredPage(seed, '/');
     const failedDiscovery = async (
@@ -538,6 +538,7 @@ describe('crawl lifecycle', () => {
     };
     await failedDiscovery('/policies/privacy-policy', 'robots_denied', null);
     await failedDiscovery('/products/retired', 'http_4xx', 404);
+    await failedDiscovery('/size-chart', 'unsupported_content_type', null);
     await reconcileCrawl(db, seed.workspaceId, seed.crawlId);
     expect(await crawlRow(seed.crawlId)).toMatchObject({ status: 'completed', partial_reason: '' });
     const snapshot = await db

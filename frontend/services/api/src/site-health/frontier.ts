@@ -32,7 +32,7 @@ import {
 const crawlPolicy = policy.site_health.crawl;
 const NOT_A_PAGE = new Set([
   ...policy.site_health.reads.corpus_exclusion_error_codes,
-  policy.site_health.page_analysis.acquisition.error_codes.unsupported_content_type,
+  ...policy.site_health.reads.non_page_error_codes,
 ]);
 const GONE = new Set(policy.site_health.reads.corpus_exclusion_status_codes);
 type Runtime = Selectable<WorkspaceSiteHealthRuntime>;
