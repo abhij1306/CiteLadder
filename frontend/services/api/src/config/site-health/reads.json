@@ -100,6 +100,7 @@
     "coverage_formula_version": "sh-coverage-1",
     "classification_formula_version": "sh-classification-1",
     "overview_trend_point_limit": 12,
+    "overview_cohort_share_shift_points": 10,
     "web_fundamentals_areas": ["accessibility", "mobile", "security", "lab"],
     "eligibility_critical_checkpoints": [
       "acquisition.public_representation",

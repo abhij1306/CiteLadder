@@ -283,6 +283,55 @@ describe('OverviewPanel', () => {
     expect(screen.queryByRole('img', { name: /Crawl Coverage score/ })).not.toBeInTheDocument();
   });
 
+  it('explains a changed scored cohort once, beside the score changes', async () => {
+    const changedComposition = {
+      added_page_kinds: ['product'],
+      removed_page_kinds: [],
+      previous_page_count_by_kind: { homepage: 1 },
+      current_page_count_by_kind: { homepage: 1, product: 4 },
+    };
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
+        HttpResponse.json(
+          terminalOverview({
+            trend: {
+              state: 'measured',
+              reason: 'cohort_composition_changed',
+              metric: 'aeo_readiness_score',
+              series: [
+                { label: '2026-08-29', value: 70 },
+                { label: '2026-08-30', value: 72 },
+              ],
+              cohort_composition: changedComposition,
+            },
+            change_summary: {
+              state: 'measured',
+              reason: 'cohort_composition_changed',
+              metrics: [],
+              cohort_composition: changedComposition,
+            },
+          }),
+        ),
+      ),
+    );
+    renderWithProviders(
+      <OverviewPanel
+        projectId={PROJECT}
+        crawlId={CRAWL}
+        crawl={{ status: 'completed' } as never}
+        dashboard={undefined}
+      />,
+    );
+
+    expect(await screen.findByText('AEO Readiness trend')).toBeInTheDocument();
+    expect(screen.getAllByText('Scored cohort composition changed.')).toHaveLength(1);
+    expect(
+      screen.getByText(
+        'Added page kinds: Product. Score movement is not split into quality versus cohort effects.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('opens persisted HTTP Web Fundamentals evidence without browser-only checks', async () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>

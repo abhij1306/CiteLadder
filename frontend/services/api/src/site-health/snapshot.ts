@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { numberRecord } from '../db/json.ts';
+import { cohortComposition } from './cohort-composition.ts';
 import { crawlCoverage } from './coverage.ts';
 import {
   loadMeasurementProjection,
@@ -14,7 +15,6 @@ import { readinessDiagnostic, webDiagnostic } from './snapshot-diagnostics.ts';
 import { snapshotEligibility } from './snapshot-eligibility.ts';
 import { snapshotIssues } from './snapshot-issues.ts';
 import type { Crawl } from './task-fence.ts';
-import { compareText } from '../text-order.ts';
 
 const reads = policy.site_health.reads;
 const versions = reads.measurement_versions;
@@ -56,23 +56,15 @@ async function history(db: Database, crawl: Crawl, projection: MeasurementProjec
     .execute();
   rows.reverse();
   const previous = rows.at(-1);
-  const previousCounts = numberRecord(previous?.scored_page_count_by_kind);
-  const currentCounts = projection.classification.scored_page_count_by_kind;
-  const keys = [...new Set([...Object.keys(previousCounts), ...Object.keys(currentCounts)])];
-  const changed = keys.some((key) => previousCounts[key] !== currentCounts[key]);
+  const { changed, composition } = cohortComposition({
+    previous: numberRecord(previous?.scored_page_count_by_kind),
+    current: projection.classification.scored_page_count_by_kind,
+    shareShiftPoints: reads.overview_cohort_share_shift_points,
+  });
   const common = {
     state: previous ? 'measured' : 'unavailable',
     reason: comparisonReason(Boolean(previous), changed),
-    cohort_composition: {
-      added_page_kinds: Object.keys(currentCounts)
-        .filter((key) => !(key in previousCounts))
-        .toSorted(compareText),
-      removed_page_kinds: Object.keys(previousCounts)
-        .filter((key) => !(key in currentCounts))
-        .toSorted(compareText),
-      previous_page_count_by_kind: previousCounts,
-      current_page_count_by_kind: currentCounts,
-    },
+    cohort_composition: composition,
   };
   return {
     trend: {

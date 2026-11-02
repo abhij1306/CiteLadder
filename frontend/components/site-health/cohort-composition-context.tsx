@@ -14,28 +14,27 @@ export function CohortCompositionContext({
   composition: CohortComposition;
 }>) {
   if (reason !== 'cohort_composition_changed') return null;
-  const addedKinds =
-    composition.added_page_kinds.length === 0
-      ? 'None'
-      : composition.added_page_kinds.map(pageKindLabel).join(', ');
-  const removedKinds =
-    composition.removed_page_kinds.length === 0
-      ? 'None'
-      : composition.removed_page_kinds.map(pageKindLabel).join(', ');
+  const clauses = [
+    kindClause('Added page kinds', composition.added_page_kinds),
+    kindClause('Removed page kinds', composition.removed_page_kinds),
+    'Score movement is not split into quality versus cohort effects.',
+  ].filter((clause) => clause !== null);
 
   return (
     <Stack gap="item" className={panelClasses({ tone: 'tonal' }, 'type-caption')}>
       <p className={textRole('emphasis', 'text-foreground')}>Scored cohort composition changed.</p>
-      <p className="text-secondary">
-        Added page kinds: {addedKinds}. Removed page kinds: {removedKinds}. Score movement is not
-        split into quality versus cohort effects.
-      </p>
+      <p className="text-secondary">{clauses.join(' ')}</p>
       <Stack as="dl" gap="item">
         <CompositionRow label="Previous counts" counts={composition.previous_page_count_by_kind} />
         <CompositionRow label="Current counts" counts={composition.current_page_count_by_kind} />
       </Stack>
     </Stack>
   );
+}
+
+/** An empty kind list says nothing, so its clause is omitted rather than reading "None". */
+function kindClause(label: string, kinds: readonly string[]) {
+  return kinds.length === 0 ? null : `${label}: ${kinds.map(pageKindLabel).join(', ')}.`;
 }
 
 function CompositionRow({
