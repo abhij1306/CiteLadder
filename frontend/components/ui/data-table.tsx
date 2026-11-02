@@ -19,6 +19,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  TableTextLinesContext,
   type TableMinWidth,
 } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
@@ -117,7 +118,10 @@ export type DataTableSelection = Readonly<{
  *   rows   — `Table` laid out fixed from the columns' width roles, at the one
  *            36px row. A paged table passes `pageSize` and `rowCount`: while
  *            the rows run past one page, a short last page is padded with
- *            blank rows, so the pager never moves between pages. Rows of two
+ *            blank rows, so the pager never moves between pages. Every row
+ *            of a paged table is exactly `rowLines` tall: its text is cut to
+ *            that many lines (the rest in a tooltip), so a page of long
+ *            values is no taller than a page of short ones. Rows of two
  *            lines (`rowLines={2}`, cells on `TableCellLines`) are padded
  *            with two-line blanks. A fixed list with `pageSize` and no
  *            pager (top movers) always reserves its rows.
@@ -217,15 +221,17 @@ export function DataTable({
         className={cn(fit.cells, pinFirstColumn && PINNED_FIRST_COLUMN)}
       >
         <DataTableColumns columns={columns} selection={selection} />
-        <DataTableBody
-          colSpan={colSpan}
-          state={state}
-          pageSize={paging.pageSize}
-          rowCount={rowCount}
-          rowLines={rowLines}
-        >
-          {children}
-        </DataTableBody>
+        <TableTextLinesContext value={pager || pageSize !== undefined ? rowLines : 2}>
+          <DataTableBody
+            colSpan={colSpan}
+            state={state}
+            pageSize={paging.pageSize}
+            rowCount={rowCount}
+            rowLines={rowLines}
+          >
+            {children}
+          </DataTableBody>
+        </TableTextLinesContext>
       </Table>
       {paging.pager ? <Pager frame="table" className={fit.row} {...paging.pager} /> : null}
       {footer ? (
@@ -247,15 +253,18 @@ export function DataTable({
  * rows-per-page select) more rows than the smallest page holds, so a reader on
  * a bigger page can still step back down. A table that fits on one page shows
  * no pager and no blank rows (owner, 2026-10-21).
+ *
+ * A reader who picked a bigger page keeps the pager even when everything now
+ * fits on it and no exact total exists: the select they just used must not
+ * vanish from under the pointer and strand them on the bigger page.
  */
 function hasMorePages(pager: DataTablePager): boolean {
   if (pager.canPrev || pager.canNext) return true;
+  if (pager.pageSize === undefined) return false;
+  const smallest = Math.min(...TABLE_PAGE_SIZE_OPTIONS);
+  if (pager.pageSize.value > smallest) return true;
   const total = pager.range?.total;
-  return (
-    pager.pageSize !== undefined &&
-    total !== undefined &&
-    total > Math.min(...TABLE_PAGE_SIZE_OPTIONS)
-  );
+  return total !== undefined && total > smallest;
 }
 
 /**
@@ -380,8 +389,13 @@ function DataTableBody({
         <tr data-table-state="">
           <TableCell
             colSpan={colSpan}
-            className="h-[max(var(--query-state-height),calc(var(--data-table-rows)*var(--table-row-height)))] align-top"
-            style={{ '--data-table-rows': pageSize ?? 0 } as CSSProperties}
+            className="h-[max(var(--query-state-height),calc(var(--data-table-rows)*var(--data-table-row)))] align-top"
+            style={
+              {
+                '--data-table-rows': pageSize ?? 0,
+                '--data-table-row': ROW_HEIGHT[rowLines],
+              } as CSSProperties
+            }
           >
             <QueryState {...state} />
           </TableCell>
@@ -401,6 +415,16 @@ function DataTableBody({
     </TableBody>
   );
 }
+
+/**
+ * A row's height by its lines, so a state holds exactly a page of rows: one
+ * line sits on the row floor; two lines are a body line over a caption line
+ * between the cell's padding (`TableCellLines`).
+ */
+const ROW_HEIGHT = {
+  1: 'var(--table-row-height)',
+  2: 'calc(2*var(--table-cell-padding-y)+var(--text-sm--line-height)+var(--text-xs--line-height))',
+} as const;
 
 /** A non-breaking space: a blank line that still takes a line's height. */
 const BLANK = ' ';

@@ -18,6 +18,7 @@ import {
   targetKindLabel,
 } from '@/lib/agent/vocabulary';
 import { actionsQueries, type actionsApi, type Action, type ActionStatus } from '@/lib/api/actions';
+import { retainPreviousDataForScope } from '@/lib/api/query-client';
 import { actionStatusSchema } from '@citeladder/contracts/actions';
 import { queueCount, useActionStatusCounts } from '@/lib/agent/use-action-status-counts';
 import { ICONS } from '@/lib/icons';
@@ -114,20 +115,27 @@ function ActionsList({
   targetKind?: string;
 }>) {
   const pager = useCursorTable(JSON.stringify([workspaceId, projectId, status, targetKind]));
-  const query = useQuery(
-    actionsQueries.list(workspaceId, projectId, {
+  const query = useQuery({
+    ...actionsQueries.list(workspaceId, projectId, {
       status,
       target_kind: targetKind,
       cursor: pager.cursor,
       limit: pager.pageSize,
     }),
-  );
+    // A page turn or a filter keeps the rows (and the pager) on screen until
+    // the next page replaces them, instead of dropping to a loading state.
+    placeholderData: (previousData, previousQuery) =>
+      retainPreviousDataForScope(projectId, previousData, previousQuery),
+  });
 
   const page = query.data;
   return (
     <DataTable
       label="Actions"
       columns={COLUMNS}
+      // Every row stacks the target over its kind, so short pages pad with
+      // two-line blanks and the pager stays where a full page puts it.
+      rowLines={2}
       pageSize={pager.pageSize}
       rowCount={page?.items.length}
       state={actionsState(query)}

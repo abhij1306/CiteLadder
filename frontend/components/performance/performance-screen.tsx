@@ -419,6 +419,7 @@ export function PerformanceScreen() {
               onDimensionChange={setDimension}
               snapshotId={selectedWindow.snapshot_id}
               compareSnapshotId={comparisonWindow?.snapshot_id ?? null}
+              dimensionCounts={data.dimension_counts}
               unavailableDimensions={data.unavailable_dimensions}
               activeMetrics={activeMetrics}
               selectedLabel={selectedLabel}

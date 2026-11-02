@@ -135,6 +135,37 @@ describe('DataTable', () => {
     expect(container.querySelectorAll('tbody tr')).toHaveLength(10);
   });
 
+  it('keeps the pager for a reader who picked a bigger page, even when no total is known', () => {
+    const table = (pageSize: number) => (
+      <DataTable
+        label="Inventory"
+        columns={[{ key: 'url', label: 'URL' }]}
+        pageSize={pageSize}
+        rowCount={3}
+        pager={{
+          canPrev: false,
+          canNext: false,
+          onPrev: () => undefined,
+          onNext: () => undefined,
+          range: { from: 1, to: 3, noun: 'pages' },
+          pageSize: { value: pageSize, onChange: () => undefined },
+        }}
+      >
+        <TableRow>
+          <TableCell>/pricing</TableCell>
+        </TableRow>
+      </DataTable>
+    );
+    const { rerender } = render(table(10));
+    expect(screen.queryByRole('combobox', { name: 'Rows per page for pages' })).toBeNull();
+
+    rerender(table(25));
+    expect(screen.getByRole('combobox', { name: 'Rows per page for pages' })).toHaveTextContent(
+      '25',
+    );
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+  });
+
   it('keeps a row’s actions together in its trailing cell', () => {
     render(
       <DataTable

@@ -31,12 +31,11 @@ type QuickRange = (typeof QUICK_RANGE_OPTIONS)[number]['value'];
 
 function getMoreLabel(selection: RangeSelection, comparing: boolean): string {
   if (comparing) return 'Compare';
-  if (selection.range === '3_months') return '3 months';
-  if (selection.range === '6_months') return '6 months';
-  if (selection.range === 'last_synced') return 'Last synced';
-  if (selection.range === 'custom') return 'Custom';
-  return 'More';
+  return DIALOG_RANGE_OPTIONS.find((option) => option.value === selection.range)?.label ?? 'More';
 }
+
+/** Every label More can show, so it keeps the widest one's width. */
+const MORE_LABELS = ['More', 'Compare', ...DIALOG_RANGE_OPTIONS.map((option) => option.label)];
 
 /** True when the active range is one of the ones hiding behind More. */
 function isRangeBehindMore(selection: RangeSelection, comparing: boolean): boolean {
@@ -98,8 +97,9 @@ export function PerformanceToolbar({
             aria-haspopup="dialog"
             data-testid="compare-button"
             onClick={comparing ? onOpenCompare : onOpenRange}
+            label={moreLabel}
+            labels={MORE_LABELS}
           >
-            {moreLabel}
             <Icon icon={ChevronDown} className="opacity-70" />
           </SegmentedAction>
         }

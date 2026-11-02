@@ -1,9 +1,9 @@
 'use client';
 
 import { BingPanel } from './bing-panel';
-import { DimensionTable } from './dimension-table';
+import { DimensionTable, useWarmDimensionTable } from './dimension-table';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
-import type { PerformanceDimension } from '@/lib/api/performance';
+import type { PerformanceDashboard, PerformanceDimension } from '@/lib/api/performance';
 import {
   DIMENSION_TABS,
   type PerformanceMetricKey,
@@ -26,6 +26,7 @@ export function PerformanceBreakdowns({
   onDimensionChange,
   snapshotId,
   compareSnapshotId,
+  dimensionCounts,
   unavailableDimensions,
   activeMetrics,
   selectedLabel,
@@ -44,6 +45,8 @@ export function PerformanceBreakdowns({
   /** Null while the selected range has no persisted projection. */
   snapshotId: string | null;
   compareSnapshotId: string | null;
+  /** The snapshot's persisted row count per dimension. */
+  dimensionCounts: PerformanceDashboard['dimension_counts'];
   unavailableDimensions: readonly PerformanceDimension[];
   activeMetrics: ReadonlySet<PerformanceMetricKey>;
   selectedLabel: string;
@@ -53,6 +56,7 @@ export function PerformanceBreakdowns({
   /** Whether the project actually has a Bing connection at all. */
   hasBing: boolean;
 }>) {
+  const warm = useWarmDimensionTable(projectId);
   // A missing snapshot is a prerequisite or a range projection, not six empty
   // tables. The owner stays mounted above us to continue the projection task.
   if (!snapshotId || (!hasSearchConsole && !hasBing)) return null;
@@ -68,6 +72,10 @@ export function PerformanceBreakdowns({
           // The tab row heads the table card, so it spans the full width
           // rather than hugging six labels and leaving dead space to the right.
           fill
+          onIntent={(next) => {
+            if (!unavailableDimensions.includes(next))
+              warm({ snapshotId, compareSnapshotId }, next);
+          }}
         >
           {DIMENSION_TABS.map((tab) => (
             <TabPanel key={tab.value} value={tab.value} className="focus-ring">
@@ -77,6 +85,7 @@ export function PerformanceBreakdowns({
                   dimension={tab.value}
                   snapshotId={snapshotId}
                   compareSnapshotId={compareSnapshotId}
+                  measuredRows={dimensionCounts[tab.value]}
                   activeMetrics={activeMetrics}
                   unavailable={unavailableDimensions.includes(tab.value)}
                   selectedLabel={selectedLabel}
@@ -97,6 +106,7 @@ export function PerformanceBreakdowns({
           projectId={projectId}
           snapshotId={snapshotId}
           compareSnapshotId={compareSnapshotId}
+          dimensionCounts={dimensionCounts}
           selectedLabel={selectedLabel}
           compareLabel={compareLabel}
         />

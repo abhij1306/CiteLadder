@@ -9,7 +9,8 @@ import {
   it,
   vi,
 } from 'vite-plus/test';
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
@@ -460,5 +461,109 @@ describe('PerformanceScreen evidence states', () => {
 
     expect(await screen.findByTestId('metric-card-strip')).toBeVisible();
     expect(enqueueCount).toBe(1);
+  });
+});
+
+function tableRows(prefix: string, from: number, to: number) {
+  return Array.from({ length: to - from + 1 }, (_, index) => ({
+    dimension_key: `${prefix}-${from + index}`,
+    display_value: `${prefix} ${from + index}`,
+    metrics: { clicks: 1, impressions: 10, ctr: 0.1, position: 2 },
+    comparison_metrics: null,
+  }));
+}
+
+describe('PerformanceScreen table interactions', () => {
+  const measured = () =>
+    dashboard({
+      selected: measuredWindow({ ...emptyTotals, clicks: 12, impressions: 120 }),
+      dimension_counts: { ...dimensionCounts, query: 12, page: 30 },
+      coverage: { earliest_date: '2026-08-01', latest_date: '2026-08-28', covered_days: 28 },
+    });
+
+  it('keeps the current rows and the pager in place while the next page loads', async () => {
+    const user = userEvent.setup();
+    let releaseSecondPage!: () => void;
+    const secondPage = new Promise<void>((resolve) => {
+      releaseSecondPage = resolve;
+    });
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measured())),
+      http.get(`/api/v1/projects/${PROJECT}/performance/table`, async ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const dimension = params.get('dimension')!;
+        if (params.get('cursor') !== 'page-2')
+          return HttpResponse.json({
+            ...tablePage(dimension),
+            items: tableRows('query', 1, 10),
+            next_cursor: 'page-2',
+            total_count: 12,
+            page_size: 10,
+          });
+        await secondPage;
+        return HttpResponse.json({
+          ...tablePage(dimension),
+          items: tableRows('query', 11, 12),
+          total_count: 12,
+          page_size: 10,
+        });
+      }),
+    );
+
+    renderWithProviders(<PerformanceScreen />);
+    const table = await screen.findByRole('table', { name: 'Top queries' });
+    expect(await within(table).findByText('query 1')).toBeVisible();
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+
+    // The first page stays on screen, under the same pager, until the second lands.
+    expect(within(table).getByText('query 1')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+    expect(screen.getByText('11–12 of 12 queries')).toBeVisible();
+
+    await act(async () => releaseSecondPage());
+
+    expect(await within(table).findByText('query 11')).toBeVisible();
+    expect(within(table).queryByText('query 1')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
+    // Two rows of data, padded to the full page the first page took.
+    expect(within(table).getAllByRole('row', { hidden: true })).toHaveLength(11);
+  });
+
+  it('holds a newly opened tab at its measured footprint before its rows arrive', async () => {
+    const user = userEvent.setup();
+    let releasePages!: () => void;
+    const pages = new Promise<void>((resolve) => {
+      releasePages = resolve;
+    });
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(measured())),
+      http.get(`/api/v1/projects/${PROJECT}/performance/table`, async ({ request }) => {
+        const dimension = new URL(request.url).searchParams.get('dimension')!;
+        if (dimension === 'page') await pages;
+        return HttpResponse.json({
+          ...tablePage(dimension),
+          items: tableRows(dimension, 1, 10),
+          next_cursor: 'more',
+          total_count: dimension === 'page' ? 30 : 12,
+          page_size: 10,
+        });
+      }),
+    );
+
+    renderWithProviders(<PerformanceScreen />);
+    expect(await screen.findByText('query 1')).toBeVisible();
+
+    await user.click(screen.getByRole('tab', { name: 'PAGES' }));
+
+    // The pager is already where the loaded table puts it, naming the page to come.
+    expect(screen.getByText('1–10 of 30 pages')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
+
+    await act(async () => releasePages());
+
+    expect(await screen.findByText('page 1')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeEnabled();
   });
 });
