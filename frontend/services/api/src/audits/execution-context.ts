@@ -51,12 +51,12 @@ async function loadActiveConnection(db: Database, route: RouteSnapshot, task: Au
     .where('c.workspace_id', '=', task.workspace_id)
     .forShare('c')
     .executeTakeFirst();
-  if (
-    !connection?.active ||
-    connection.last_test_status !== 'ok' ||
-    (connection.paused_at && (!connection.pause_until || connection.pause_until > at))
-  )
-    throw unavailable();
+  const paused =
+    connection?.paused_at != null && (!connection.pause_until || connection.pause_until > at);
+  // A refused provider account stops its queued work before any provider call.
+  if (paused && connection.pause_reason === searchPolicy.constants.pause_reason_account)
+    throw new ProviderError(searchPolicy.constants.error_account_unavailable);
+  if (!connection?.active || connection.last_test_status !== 'ok' || paused) throw unavailable();
   return connection;
 }
 /** The execution secret exists only in this detached context, never in snapshots or logs. */
@@ -169,13 +169,43 @@ export function pauseExecutionCredential(
   runtime: AuditRuntime,
   at: Date,
 ) {
+  return pauseConnection(db, context, {
+    reason: 'auth',
+    until: new Date(at.getTime() + runtime.providers.keyGraceDays * 86400000),
+    at,
+  });
+}
+
+/**
+ * A provider account that refuses every request (paused, unfunded) pauses this
+ * revision briefly, so the rest of the queue fails fast and a restored account
+ * resumes on its own.
+ */
+export function pauseUnavailableAccount(
+  db: Database,
+  context: ExecutionContext,
+  runtime: AuditRuntime,
+  at: Date,
+) {
+  return pauseConnection(db, context, {
+    reason: searchPolicy.constants.pause_reason_account,
+    until: new Date(at.getTime() + runtime.search.accountPauseMinutes * 60000),
+    at,
+  });
+}
+
+function pauseConnection(
+  db: Database,
+  context: ExecutionContext,
+  pause: { reason: string; until: Date; at: Date },
+) {
   return db
     .updateTable('provider_connections')
     .set({
-      paused_at: at,
-      pause_until: new Date(at.getTime() + runtime.providers.keyGraceDays * 86400000),
-      pause_reason: 'auth',
-      updated_at: at,
+      paused_at: pause.at,
+      pause_until: pause.until,
+      pause_reason: pause.reason,
+      updated_at: pause.at,
     })
     .where('id', '=', context.connectionId)
     .where('workspace_id', '=', context.connectionWorkspaceId)

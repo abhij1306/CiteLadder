@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
@@ -12,6 +13,7 @@ import { finalizeAudit } from '../src/analysis/finalization.ts';
 import { createConnection } from '../src/providers/connections.ts';
 import { createConnectionInput } from '../src/providers/inputs.ts';
 import { probeConnection } from '../src/providers/probes.ts';
+import { dataforseoSecretIdentity } from '../src/providers/dataforseo-identity.ts';
 import { record } from '../src/db/json.ts';
 import { drainLanes } from '../src/workers/runner.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
@@ -22,7 +24,8 @@ const db = testDatabase(),
   base = auditRuntime({});
 const runtime = { ...base, audits: { ...base.audits, worker_concurrency: 1 } };
 const workspaces: string[] = [],
-  tasks: string[] = [];
+  tasks: string[] = [],
+  accountPools: string[] = [];
 afterEach(async () => {
   if (tasks.length) {
     await db.deleteFrom('execution_cost_projections').where('task_id', 'in', tasks).execute();
@@ -37,24 +40,36 @@ afterEach(async () => {
         db.selectFrom('provider_connections').select('id').where('workspace_id', 'in', workspaces),
       )
       .execute();
+  // A DataForSEO login's quota pool outlives its connection; each seed has its own login.
+  if (accountPools.length)
+    await db
+      .deleteFrom('provider_capacity_buckets')
+      .where('account_pool_identity', 'in', accountPools)
+      .execute();
   await fixtures.cleanup();
   tasks.length = 0;
   workspaces.length = 0;
+  accountPools.length = 0;
 });
 afterAll(async () => {
   await db.destroy();
 });
-async function seed(surface = false) {
+async function seed(surface = false, extraPrompts: string[] = []) {
   const t = await auditTenant(db, fixtures);
   workspaces.push(t.workspaceId);
+  for (const text of extraPrompts) await prompt(db, t.setId, text);
   if (surface) {
+    const login = `worker-${randomUUID()}@example.com`;
+    accountPools.push(
+      dataforseoSecretIdentity(JSON.stringify({ login, password: 'x' }), auditTestKey),
+    );
     const c = await createConnection(
       db,
       t.workspaceId,
       t.userId,
       createConnectionInput.parse({
         transport_provider: 'dataforseo',
-        api_login: 'worker@example.com',
+        api_login: login,
         api_password: 'test',
         routes: [{ logical_engine: 'chatgpt_search' }],
       }),
@@ -267,6 +282,42 @@ describe('leased audit worker phases', () => {
       .where('id', '=', t.auditId)
       .executeTakeFirstOrThrow();
     expect(audit).toEqual({ completed_count: 0, failed_count: 1 });
+  });
+  it('stops the remaining search-surface answers after the provider refuses the account', async () => {
+    const t = await seed(true, ['Which trail shoes grip on wet rock?']);
+    let calls = 0;
+    const w = worker(t, async () => {
+      calls++;
+      return Response.json({ status_code: 20000, tasks: [{ status_code: 40201 }] });
+    });
+    await w.runOnce();
+    const [next] = await db
+      .selectFrom('audit_tasks')
+      .select('id')
+      .where('audit_id', '=', t.auditId)
+      .where('id', '!=', t.task.id)
+      .execute();
+    await ready(next!.id);
+    await w.runOnce();
+
+    expect(calls).toBe(1);
+    expect(await stored(t.task.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'provider_account_unavailable',
+    });
+    expect(await stored(next!.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'provider_account_unavailable',
+      attempt_count: 0,
+    });
+    expect(
+      await db
+        .selectFrom('provider_connections')
+        .select('pause_reason')
+        .where('workspace_id', '=', t.workspaceId)
+        .where('transport_provider', '=', 'dataforseo')
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ pause_reason: 'provider_account' });
   });
   it('recovers an uncertain paid submission by exact tag and then GET, never repeating task_post', async () => {
     const t = await seed(true),

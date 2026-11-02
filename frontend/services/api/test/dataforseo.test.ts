@@ -92,10 +92,20 @@ describe('DataForSEO paid submission boundary', () => {
     });
     await expect(
       client(async () =>
-        Response.json({ status_code: 20000, tasks: [{ status_code: 40200 }] }),
+        Response.json({ status_code: 20000, tasks: [{ status_code: 40501 }] }),
       ).submit('google_ai_overview', request),
     ).rejects.toMatchObject({ code: 'client_error' });
   });
+  it.each([40200, 40201, 40204])(
+    'reports a refused account (%i) apart from a bad request',
+    async (status) => {
+      await expect(
+        client(async () =>
+          Response.json({ status_code: 20000, tasks: [{ status_code: status }] }),
+        ).submit('google_ai_overview', request),
+      ).rejects.toMatchObject({ code: 'provider_account_unavailable', retryable: false });
+    },
+  );
   it('retrieves for free using only the committed ID', async () => {
     let calls = 0;
     const result = await client(async (url, options) => {

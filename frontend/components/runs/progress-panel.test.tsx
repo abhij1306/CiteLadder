@@ -92,6 +92,12 @@ describe('ProgressPanel', () => {
     expect(screen.getByText('Cancelling…')).toBeVisible();
   });
 
+  it('counts failed answers as finished in the progress percentage', () => {
+    renderPanel({ status: 'running', requested_count: 60, completed_count: 40, failed_count: 19 });
+
+    expect(screen.getByText('98%')).toBeVisible();
+  });
+
   it('shows the updating indicator while reporting and hides it once completed', () => {
     const { unmount } = render(<ProgressPanel audit={{ ...BASE_AUDIT, status: 'reporting' }} />);
     expect(screen.getByText('Updating…')).toBeVisible();

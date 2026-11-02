@@ -28,6 +28,7 @@ import {
   frozenSurfaceRequest,
   loadExecutionContext,
   pauseExecutionCredential,
+  pauseUnavailableAccount,
   type ExecutionContext,
 } from '../audits/execution-context.ts';
 import { commitSubmissionIntent, surfaceRecoveryDeadline } from '../audits/submission-intent.ts';
@@ -57,6 +58,10 @@ type ProjectionOwners = {
 };
 
 type DataforseoClient = ReturnType<typeof createDataforseoClient>;
+const REFUSAL_PAUSES = new Map([
+  ['auth_failure', pauseExecutionCredential],
+  [searchPolicy.constants.error_account_unavailable, pauseUnavailableAccount],
+]);
 /** A scraper submission with no task id yet reconciles under the reconciliation pool, not the answer pool. */
 function reconciliationCapacity(claimed: AuditTask, context: ExecutionContext) {
   const capacity = { ...context.capacity };
@@ -306,7 +311,14 @@ export class AuditWorker {
           ? error
           : new ProviderError(auditPolicy.constants.error_no_connection);
       if (claimed.transport_provider === 'dataforseo')
-        await this.#failSurface(claimed, null, 'credential_unavailable_for_retrieval', false);
+        await this.#failSurface(
+          claimed,
+          null,
+          safe.code === searchPolicy.constants.error_account_unavailable
+            ? safe.code
+            : 'credential_unavailable_for_retrieval',
+          false,
+        );
       else
         await persistExecutionFailure(this.#db, claimed, this.owner, safe, this.#runtime, {
           preCall: true,
@@ -571,7 +583,7 @@ export class AuditWorker {
         error instanceof ProviderError
           ? error
           : new ProviderError('reconciliation_unavailable', true);
-      if (safe.code === 'auth_failure') await this.#pauseAuth(context);
+      await this.#pauseRefused(safe, context);
       await persistSurfaceExchange(
         this.#db,
         task,
@@ -582,10 +594,18 @@ export class AuditWorker {
       if (safe.code === 'rate_limit') throw safe;
     }
   }
-  #pauseAuth(context: ExecutionContext) {
-    return this.#db.transaction().execute(async (trx) => {
+  /** A rejected key or a refused provider account pauses the connection the task used. */
+  async #pauseRefused(error: ProviderError, context: ExecutionContext) {
+    const pause = REFUSAL_PAUSES.get(error.code);
+    if (!pause) return;
+    await this.#db.transaction().execute(async (trx) => {
       if (await ownedAuditTask(trx, context.task, this.owner))
-        await pauseExecutionCredential(trx, context, this.#runtime, this.#now());
+        await pause(trx, context, this.#runtime, this.#now());
+    });
+    logger.info('provider_connection_paused', {
+      task_id: context.task.id,
+      connection_id: context.connectionId,
+      error_code: error.code,
     });
   }
   async #failSurface(
@@ -596,7 +616,7 @@ export class AuditWorker {
     error?: ProviderError,
     paidSurface = false,
   ) {
-    if (error?.code === 'auth_failure' && context) await this.#pauseAuth(context);
+    if (error && context) await this.#pauseRefused(error, context);
     if (task.logical_engine === 'google_ai_overview') {
       const result =
         code === 'provider_error'

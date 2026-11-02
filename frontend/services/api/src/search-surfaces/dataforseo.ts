@@ -55,7 +55,10 @@ export function searchSettings(env: Record<string, string | undefined> = process
     throw new ConfigError(
       'DataForSEO recovery deadline must be positive and shorter than provider retention',
     );
-  return { timeoutSeconds, recoveryDeadlineHours };
+  const accountPauseMinutes = Number(
+    resolveSettingSpec(searchPolicy.settings.account_pause_minutes, env),
+  );
+  return { timeoutSeconds, recoveryDeadlineHours, accountPauseMinutes };
 }
 export function providerCharge(cost: unknown): number | null {
   if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) return null;
@@ -106,9 +109,12 @@ export function searchPayload(engine: SearchEngine, input: SearchRequest) {
     : { ...input.request_settings, ...market };
 }
 function rejectStatus(status: number) {
-  return new ProviderError(
-    status === searchPolicy.constants.status_unauthorized ? 'auth_failure' : 'client_error',
-  );
+  const c = searchPolicy.constants;
+  if (status === c.status_unauthorized) return new ProviderError('auth_failure');
+  // A paused, unfunded or unsubscribed account refuses every request until it is restored.
+  if (c.account_unavailable_status_codes.includes(status))
+    return new ProviderError(c.error_account_unavailable);
+  return new ProviderError('client_error');
 }
 function requireAccepted(envelope: Envelope) {
   if (!searchPolicy.constants.accepted_submission_status_codes.includes(envelope.status_code))

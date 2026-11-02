@@ -136,6 +136,8 @@ const FAILURE_REASONS: Record<string, string> = {
   credential_unavailable_for_retrieval:
     'The provider key used for this answer was removed or changed. Reconnect it in Settings.',
   auth_failure: 'The provider rejected the key. Check it in Settings.',
+  provider_account_unavailable:
+    'The provider account is paused or out of funds, so this engine was stopped for the run. Try again later.',
   connection_changed: 'The provider key changed during the run. Run it again.',
   rate_limit: 'The provider kept rate-limiting requests. Try again later.',
   timeout: 'The provider did not answer in time. Try again later.',
