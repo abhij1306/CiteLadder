@@ -109,6 +109,7 @@ function ActionDetailView({
       title={action.target_label}
       back={{ ...BACK, projectId: action.project_id }}
       actions={<ActionControls action={action} update={update} />}
+      lead={<ActionFacts action={action} />}
       aside={
         <>
           <TextList title="Avoid" items={action.diagnosis.donts ?? []} />
@@ -127,7 +128,6 @@ function ActionDetailView({
           onRetry={() => update.variables && update.mutate(update.variables)}
         />
       ) : null}
-      <ActionFacts action={action} />
       <Diagnosis action={action} onOpenEvidence={setEvidenceId} />
       <Implementation action={action} workspaceId={workspaceId} />
       <LinkedChats action={action} workspaceId={workspaceId} />

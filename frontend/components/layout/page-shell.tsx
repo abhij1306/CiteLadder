@@ -106,6 +106,7 @@ export function ListScreen<T extends string = string>({
  */
 export function DetailScreen<T extends string = string>({
   back,
+  lead,
   aside,
   split = 'main-aside',
   children,
@@ -113,12 +114,18 @@ export function DetailScreen<T extends string = string>({
 }: ScreenBands<T> &
   Readonly<{
     back: PageBack;
+    /**
+     * The record's summary (its URL, status line), full width above the split,
+     * so the main column and the aside begin on the same line.
+     */
+    lead?: ReactNode;
     /** Supporting context beside the main content. */
     aside?: ReactNode;
     split?: Extract<SplitPaneRole, 'main-aside' | 'list-detail'>;
   }>) {
   return (
     <PageShell {...bands} back={back} measure="analytical" fill={false}>
+      {lead}
       {aside ? (
         <div className={splitPaneClasses(split)}>
           <div className="grid min-w-0 content-start gap-[var(--page-section-gap)]">{children}</div>
