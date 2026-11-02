@@ -1,6 +1,6 @@
 /** Explicit crawl admission freezes policy and commits all initial work together. */
 import { randomUUID } from 'node:crypto';
-import { sql, type Selectable } from 'kysely';
+import type { Selectable } from 'kysely';
 import { policy } from '../config.ts';
 import { measuredTargetPages } from '../opportunities/enqueue.ts';
 import type { Database } from '../db/database.ts';
@@ -160,23 +160,36 @@ async function seedMonitored(db: Database, crawl: Crawl) {
     return declared.has(url.id) ? 1 : 2;
   };
   rows.sort((left, right) => rank(left) - rank(right));
-  const current = await db
-    .selectFrom('site_crawl_tasks')
-    .select(sql<number>`count(*)::int`.as('count'))
-    .where('workspace_id', '=', crawl.workspace_id)
-    .where('crawl_id', '=', crawl.id)
-    .executeTakeFirstOrThrow();
-  const budget = Math.max(
-    0,
-    Number(record(crawl.configuration).requested_page_limit) - current.count,
+  // The budget is in pages, not tasks: site setup is no page, and the root's
+  // discover already holds the root's slot, so its analysis spends nothing more.
+  const held = new Set(
+    (
+      await db
+        .selectFrom('site_crawl_tasks')
+        .select('url_hash')
+        .where('workspace_id', '=', crawl.workspace_id)
+        .where('crawl_id', '=', crawl.id)
+        .where('task_kind', 'in', ['discover', 'analyze'])
+        .execute()
+    ).map((task) => task.url_hash),
   );
-  const admitted = rows.filter(
-    (url) => classifyUrlAdmission(url.normalized_url, crawlScope(crawl)).accepted,
-  );
+  let free = Math.max(0, Number(record(crawl.configuration).requested_page_limit) - held.size);
+  const seeded: typeof rows = [];
+  let boundary: (typeof rows)[number] | undefined;
+  for (const url of rows) {
+    if (!classifyUrlAdmission(url.normalized_url, crawlScope(crawl)).accepted) continue;
+    if (held.has(url.url_hash)) seeded.push(url);
+    else if (free > 0) {
+      seeded.push(url);
+      free -= 1;
+    } else boundary ??= url;
+  }
   // Preserve the boundary observation even when no further task fits the budget.
-  await Promise.all(admitted.slice(0, budget + 1).map((url) => seedObservation(db, crawl, url)));
   await Promise.all(
-    admitted.slice(0, budget).map((url, position) =>
+    [...seeded, ...(boundary ? [boundary] : [])].map((url) => seedObservation(db, crawl, url)),
+  );
+  await Promise.all(
+    seeded.map((url, position) =>
       enqueueCrawlTask(db, crawl, {
         kind: 'analyze',
         url: url.normalized_url,
