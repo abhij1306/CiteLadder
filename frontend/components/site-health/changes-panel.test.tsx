@@ -1,5 +1,6 @@
-import { http, HttpResponse } from 'msw';
-import { screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { delay, http, HttpResponse } from 'msw';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
@@ -37,6 +38,29 @@ function response(state: 'available' | 'unavailable' | 'non_comparable') {
     summary: { counts_by_class: { 'critical-regression': 1 } },
     limitations: [],
     created_at: state === 'unavailable' ? null : '2026-08-15T00:00:00Z',
+  };
+}
+
+/** One persisted change of the A → B pair. */
+function change(id: string, url: string) {
+  return {
+    ...response('available'),
+    id,
+    site_url_id: SITE_URL,
+    normalized_url: url,
+    field: 'http_status',
+    change_class: 'critical-regression',
+    before_value: 200,
+    after_value: 503,
+    source_analysis_a_id: CRAWL_A,
+    source_analysis_b_id: CRAWL_B,
+    source_artifact_a_id: CRAWL_A,
+    source_artifact_b_id: CRAWL_B,
+    source_evaluation_a_id: null,
+    source_evaluation_b_id: null,
+    expected: false,
+    implementation_event_id: null,
+    created_at: '2026-08-15T00:00:00Z',
   };
 }
 
@@ -114,14 +138,102 @@ describe('Website Changes', () => {
     handlers('available');
     renderWithProviders(<ChangesPanel projectId={PROJECT} />);
 
-    expect(await screen.findByTestId('website-changes')).toHaveTextContent('Critical regression');
-    expect(screen.getByRole('link', { name: 'acme.test/guide' })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'acme.test/guide' })).toHaveAttribute(
       'href',
       `/site/crawls/${CRAWL_B}/pages/${SITE_URL}`,
     );
+    expect(screen.getByTestId('website-changes')).toHaveTextContent('Critical regression');
     await userEvent.click(screen.getByText('View evidence'));
     expect(screen.getByText(/Before:/).parentElement).toHaveTextContent('200');
     expect(screen.getByText(/After:/).parentElement).toHaveTextContent('503');
+  });
+
+  it('draws the first load inside the changes table, under its header', async () => {
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health/changes/summary`, async () => {
+        await delay('infinite');
+        return HttpResponse.json({});
+      }),
+    );
+    renderWithProviders(<ChangesPanel projectId={PROJECT} />);
+
+    const table = screen.getByRole('region', { name: 'Website changes' });
+    expect(within(table).getByRole('columnheader', { name: 'Field' })).toBeVisible();
+    expect(
+      await within(table).findByRole('status', { name: 'Loading persisted website changes…' }),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the rows and the pager on screen while the next page of changes loads', async () => {
+    const base = `/api/v1/projects/${PROJECT}/site-health/changes`;
+    mswServer.use(
+      http.get(`${base}/summary`, () => HttpResponse.json(response('available'))),
+      http.get(base, async ({ request }) => {
+        const next = new URL(request.url).searchParams.has('cursor');
+        if (next) await delay(300);
+        return HttpResponse.json({
+          ...response('available'),
+          items: [
+            next
+              ? change('77777777-7777-4777-8777-777777777777', 'https://acme.test/later')
+              : change('66666666-6666-4666-8666-666666666666', 'https://acme.test/first'),
+          ],
+          next_cursor: next ? null : 'page-2',
+        });
+      }),
+    );
+    renderWithProviders(<ChangesPanel projectId={PROJECT} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Next page' }));
+
+    expect(screen.getByRole('link', { name: 'acme.test/first' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Website changes' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'Previous page' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'acme.test/later' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'acme.test/first' })).not.toBeInTheDocument();
+  });
+
+  it('drops the previous pair’s rows when the summary names a different pair', async () => {
+    const base = `/api/v1/projects/${PROJECT}/site-health/changes`;
+    const CRAWL_C = '77777777-7777-4777-8777-777777777777';
+    let head = CRAWL_B;
+    mswServer.use(
+      http.get(`${base}/summary`, () =>
+        HttpResponse.json({ ...response('available'), crawl_b_id: head }),
+      ),
+      http.get(base, async ({ request }) => {
+        const pairHead = new URL(request.url).searchParams.get('crawl_b_id');
+        if (pairHead === CRAWL_C) await delay('infinite');
+        return HttpResponse.json({
+          ...response('available'),
+          items: [change('66666666-6666-4666-8666-666666666666', 'https://acme.test/old')],
+          next_cursor: null,
+        });
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    renderWithProviders(
+      <QueryClientProvider client={client}>
+        <ChangesPanel projectId={PROJECT} />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByRole('link', { name: 'acme.test/old' })).toHaveAttribute(
+      'href',
+      `/site/crawls/${CRAWL_B}/pages/${SITE_URL}`,
+    );
+
+    head = CRAWL_C;
+    await act(() => client.invalidateQueries({ queryKey: ['site-health', 'changes-summary'] }));
+
+    // The old pair's row would now link under the new head crawl: it must not stay.
+    const table = screen.getByRole('region', { name: 'Website changes' });
+    expect(
+      await within(table).findByRole('status', { name: 'Loading persisted website changes…' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'acme.test/old' })).not.toBeInTheDocument();
   });
 
   it('says when two crawls cannot be compared', async () => {

@@ -1,4 +1,4 @@
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse, type HttpResponseResolver } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -17,6 +17,37 @@ const TASK_ID = '66666666-6666-4666-8666-666666666666';
 const URL_ID = 'cccccccc-1111-4111-8111-111111111111';
 const ISSUE_H = 'aaaaaaaa-1111-4111-8111-111111111111';
 const ISSUE_L = 'bbbbbbbb-1111-4111-8111-111111111111';
+
+/** A resolved issue as the page's issue history lists it. */
+function resolvedIssue(id: string, title: string) {
+  return {
+    id,
+    crawl_id: CRAWL,
+    rule_id: 'technical.title_present',
+    dimension: 'technical',
+    category: 'metadata',
+    severity: 'medium',
+    finding_class: 'defect',
+    title,
+    description: 'The page has no title.',
+    remediation: 'Add a title.',
+    analyzer_version: 'a1',
+    rule_version: 'r1',
+    created_at: '2026-07-01T00:00:00Z',
+  };
+}
+
+/** Open the page's History drawer with the issue history answered by `history`. */
+async function openHistory(history: HttpResponseResolver) {
+  mswServer.use(
+    http.get(`/api/v1/site-crawls/${CRAWL}/pages/${URL_ID}`, () => HttpResponse.json(detail())),
+    http.get(`/api/v1/site-crawls/${CRAWL}/pages/${URL_ID}/issue-history`, history),
+  );
+  const user = userEvent.setup();
+  renderUrlDetail(<UrlDetail crawlId={CRAWL} siteUrlId={URL_ID} />);
+  await user.click(await screen.findByRole('button', { name: 'History' }));
+  return { user, drawer: await screen.findByRole('dialog', { name: 'Issue history' }) };
+}
 
 function LocationDisplay() {
   const { pathname, search } = useLocation();
@@ -254,23 +285,7 @@ describe('UrlDetail', () => {
       http.get(`/api/v1/site-crawls/${CRAWL}/pages/${URL_ID}/issue-history`, () => {
         historyReads += 1;
         return HttpResponse.json({
-          items: [
-            {
-              id: ISSUE_L,
-              crawl_id: CRAWL,
-              rule_id: 'technical.title_present',
-              dimension: 'technical',
-              category: 'metadata',
-              severity: 'medium',
-              finding_class: 'defect',
-              title: 'Page title is missing',
-              description: 'The page has no title.',
-              remediation: 'Add a title.',
-              analyzer_version: 'a1',
-              rule_version: 'r1',
-              created_at: '2026-07-01T00:00:00Z',
-            },
-          ],
+          items: [resolvedIssue(ISSUE_L, 'Page title is missing')],
           next_cursor: null,
           current_analysis_finalized: true,
         });
@@ -286,7 +301,40 @@ describe('UrlDetail', () => {
     await user.click(screen.getByRole('button', { name: 'History' }));
     const drawer = await screen.findByRole('dialog', { name: 'Issue history' });
     expect(await within(drawer).findByText('Page title is missing')).toBeInTheDocument();
-    expect(within(drawer).getByText(/^Last found/)).toBeInTheDocument();
+    expect(within(drawer).getByRole('columnheader', { name: 'Last found' })).toBeInTheDocument();
+  });
+
+  it('keeps the resolved issues and the pager in place while the next history page loads', async () => {
+    const { user, drawer } = await openHistory(async ({ request }) => {
+      const next = new URL(request.url).searchParams.has('cursor');
+      if (next) await delay(300);
+      return HttpResponse.json({
+        items: [
+          next ? resolvedIssue(ISSUE_H, 'Older issue') : resolvedIssue(ISSUE_L, 'Newer issue'),
+        ],
+        next_cursor: next ? null : 'page-2',
+        current_analysis_finalized: true,
+      });
+    });
+    const table = within(drawer).getByRole('region', { name: 'Resolved issues' });
+    await user.click(await within(drawer).findByRole('button', { name: 'Next page' }));
+    expect(within(drawer).getByText('Newer issue')).toBeInTheDocument();
+    expect(table).toHaveAttribute('aria-busy', 'true');
+    expect(within(drawer).getByRole('button', { name: 'Previous page' })).toBeInTheDocument();
+    expect(await within(drawer).findByText('Older issue')).toBeInTheDocument();
+    expect(within(drawer).queryByText('Newer issue')).not.toBeInTheDocument();
+  });
+
+  it('says inside the history table that resolved issues wait for the current analysis', async () => {
+    const { drawer } = await openHistory(() =>
+      HttpResponse.json({ items: [], next_cursor: null, current_analysis_finalized: false }),
+    );
+    const table = within(drawer).getByRole('region', { name: 'Resolved issues' });
+    expect(
+      await within(table).findByRole('heading', {
+        name: 'Resolved issues are known once this page’s current analysis finishes',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('renders scores, delivery metrics, and severity-ordered issues', async () => {

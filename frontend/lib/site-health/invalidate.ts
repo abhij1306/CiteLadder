@@ -42,8 +42,8 @@ export function invalidateCrawlViews(
 ): void {
   queryClient.invalidateQueries({ queryKey: queryKeys.siteHealth.crawl(crawlId) });
   for (const key of [
-    queryKeys.siteHealth.pages(crawlId),
-    queryKeys.siteHealth.inventory(crawlId),
+    queryKeys.siteHealth.crawlPages(crawlId),
+    queryKeys.siteHealth.crawlInventory(crawlId),
     queryKeys.siteHealth.issues(crawlId),
   ]) {
     queryClient.invalidateQueries({

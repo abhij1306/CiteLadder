@@ -5,10 +5,12 @@
  * passes through `strictValidate`.
  */
 import { z } from 'zod';
+import { queryOptions } from '@tanstack/react-query';
 
 import { PROMPT_GENERATION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 
 import { apiClient, type ApiRequestOptions } from './client';
+import { queryKeys } from './query-keys';
 import {
   promptCandidateReviewResponseSchema,
   promptCandidateSchema,
@@ -202,4 +204,13 @@ export const promptsApi = {
     );
     return strictValidate(promptSetSchema, res, 'prompts.bulkStatus');
   },
+};
+
+export const promptsQueries = {
+  /** The project's prompt sets: the Prompts screen, its create guard and the launch dialog. */
+  sets: (workspaceId: string | null, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.prompts.sets(workspaceId, projectId),
+      queryFn: ({ signal }) => promptsApi.listPromptSets(projectId, { signal, workspaceId }),
+    }),
 };

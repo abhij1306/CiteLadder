@@ -3,19 +3,18 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { GitCompare } from 'lucide-react';
 
-import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
-import { QueryState } from '@/components/ui/query-state';
+import { readErrorProps } from '@/components/ui/read-error';
 import { StatRow } from '@/components/ui/stat-row';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { treeBranchClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
-import type { ChangeObservation, ChangesPage, ChangeSummary } from '@/lib/api/types';
-import { cursorControls, pageRange, useCursorTable } from '@/lib/table/use-cursor-table';
+import type { ChangeObservation, ChangeSummary } from '@/lib/api/types';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { textRole } from '@/components/ui/typography';
 import {
   CHANGE_EVIDENCE_DEPTH_LIMIT,
@@ -201,110 +200,37 @@ export function ChangesPanel({
   const crawlAId = summary.data?.crawl_a_id ?? undefined;
   const crawlBId = summary.data?.crawl_b_id ?? undefined;
   const pairAvailable = summary.data?.state === 'available' && Boolean(crawlAId && crawlBId);
-  // The compared pair is part of the cursor's identity server-side, so a new
-  // pair must restart paging rather than replay a refused cursor.
-  const pager = useCursorTable(`changes|${projectId}|${crawlAId ?? ''}|${crawlBId ?? ''}`);
-  const changes = useQuery({
-    ...siteHealthQueries.changes(
-      workspaceId,
-      projectId,
-      crawlAId,
-      crawlBId,
-      pager.cursor,
-      pager.pageSize,
-    ),
+  // A page turn keeps the rows and the pager on screen until the next changes
+  // land. The compared pair is part of the cursor's identity server-side, so
+  // a new pair restarts paging rather than replaying a refused cursor. No
+  // exact total: no persisted count describes one pair's change set, so the
+  // range stands alone rather than paying for a COUNT(*) per navigation.
+  const { page, table } = useCursorTableQuery({
+    workspaceId,
+    // Rows carry over only within the same compared pair: a row of another
+    // pair would link to the wrong crawl's page.
+    scopeId: [projectId, crawlAId ?? 'unselected-a', crawlBId ?? 'unselected-b'],
+    scope: null,
+    query: (request) =>
+      siteHealthQueries.changes(workspaceId, projectId, { crawlAId, crawlBId, ...request }),
+    noun: 'changes',
+    loading: 'Loading persisted website changes…',
+    error: 'Could not load Website Changes.',
+    empty: () => ({
+      kind: 'empty',
+      icon: GitCompare,
+      headingLevel: 3,
+      heading: 'No changes were observed in this comparable pair',
+    }),
     enabled: pairAvailable,
   });
-
-  return (
-    <ChangesPanelContent
-      summary={summary}
-      changes={changes}
-      pairAvailable={pairAvailable}
-      pager={pager}
-    />
-  );
-}
-
-function ChangesPanelContent({
-  summary,
-  changes,
-  pairAvailable,
-  pager,
-}: Readonly<{
-  summary: UseQueryResult<ChangeSummary>;
-  changes: UseQueryResult<ChangesPage>;
-  pairAvailable: boolean;
-  pager: ReturnType<typeof useCursorTable>;
-}>) {
-  const state = changesState(summary, changes, pairAvailable);
-  return (
-    state ?? (
-      <ChangesTable
-        summary={summary.data!}
-        changes={changes.data!}
-        pager={pager}
-        isFetching={changes.isFetching}
-      />
-    )
-  );
-}
-
-function changesState(
-  summary: UseQueryResult<ChangeSummary>,
-  changes: UseQueryResult<ChangesPage>,
-  pairAvailable: boolean,
-) {
-  const loading = summary.isLoading || (pairAvailable && changes.isLoading);
-  if (loading) return <QueryState kind="loading" label="Loading persisted website changes…" />;
-  const failedRead = summary.isError ? summary : changes;
-  if (failedRead.isError)
-    return (
-      <QueryState
-        kind="error"
-        error={failedRead.error}
-        fallback="Could not load Website Changes."
-        onRetry={() => void failedRead.refetch()}
-        pending={failedRead.isFetching}
-      />
-    );
-  return comparisonState(summary.data, pairAvailable);
-}
-
-function comparisonState(summary: ChangeSummary | undefined, pairAvailable: boolean) {
-  if (!summary || summary.state === 'unavailable')
-    return (
-      <Alert tone="info">
-        Website Changes need two usable crawls with persisted page evidence.
-      </Alert>
-    );
-  if (summary.state === 'non_comparable')
-    return (
-      <Alert tone="warning">
-        These crawls are not comparable (
-        {summary.reason_code?.replaceAll('_', ' ') ?? 'scope or version mismatch'}). Recrawl to
-        compare the same scope and settings.
-      </Alert>
-    );
-  return pairAvailable ? null : (
-    <Alert tone="danger">This comparison is no longer available. Recrawl to compare again.</Alert>
-  );
-}
-
-function ChangesTable({
-  summary,
-  changes,
-  pager,
-  isFetching,
-}: Readonly<{
-  summary: ChangeSummary;
-  changes: ChangesPage;
-  pager: ReturnType<typeof useCursorTable>;
-  /** A page is in flight; navigating again would push a stale cursor. */
-  isFetching: boolean;
-}>) {
-  const rows = changes.items;
-  const counts = summary.summary.counts_by_class as Record<string, number> | undefined;
+  const counts =
+    summary.data?.state === 'available'
+      ? (summary.data.summary.counts_by_class as Record<string, number> | undefined)
+      : undefined;
+  // Until the summary says which pair to compare, and whenever no pair can
+  // be compared, that answer stands in the table's place at its full height.
+  const summaryState = comparisonState(summary, pairAvailable);
   return (
     <Stack gap="workspace" className="min-w-0" data-testid="website-changes">
       <Card>
@@ -320,7 +246,7 @@ function ChangesTable({
             segments={Object.entries(CLASS_LABELS).map(([key, label]) => ({
               key,
               label,
-              value: counts?.[key] ?? 0,
+              value: counts ? (counts[key] ?? 0) : null,
             }))}
           />
         </CardContent>
@@ -329,32 +255,16 @@ function ChangesTable({
         label="Website changes"
         columns={CHANGE_COLUMNS}
         minWidth="md"
-        state={
-          rows.length
-            ? undefined
-            : {
-                kind: 'empty',
-                icon: GitCompare,
-                headingLevel: 3,
-                heading: 'No changes were observed in this comparable pair',
-              }
-        }
-        pager={{
-          range: { ...pageRange(pager.page, pager.pageSize, rows.length), noun: 'changes' },
-          // No exact total: a change set is scoped to one compared crawl
-          // pair and no persisted count describes it, so the range stands
-          // alone rather than paying for a COUNT(*) per navigation.
-          pageSize: { value: pager.pageSize, onChange: pager.setPageSize },
-          ...cursorControls(pager, changes.next_cursor),
-          busy: isFetching,
-        }}
+        {...table}
+        state={summaryState ?? table.state}
+        pager={summaryState ? undefined : table.pager}
       >
-        {rows.map((row) => (
+        {page?.items.map((row) => (
           <TableRow key={row.id}>
             <TableCell>
               <TextLink
                 text="emphasis"
-                href={`/site/crawls/${summary.crawl_b_id}/pages/${row.site_url_id}`}
+                href={`/site/crawls/${summary.data?.crawl_b_id}/pages/${row.site_url_id}`}
               >
                 <ClampText>{displayPath(row.normalized_url)}</ClampText>
               </TextLink>
@@ -374,6 +284,44 @@ function ChangesTable({
       </DataTable>
     </Stack>
   );
+}
+
+/** What the table shows while the summary decides, or cannot name, a comparable pair. */
+function comparisonState(
+  summary: UseQueryResult<ChangeSummary>,
+  pairAvailable: boolean,
+): DataTableState | undefined {
+  if (summary.isPending) return { kind: 'loading', label: 'Loading persisted website changes…' };
+  if (summary.isError)
+    return {
+      kind: 'error',
+      ...readErrorProps(summary),
+      fallback: 'Could not load Website Changes.',
+    };
+  if (summary.data.state === 'unavailable')
+    return {
+      kind: 'empty',
+      icon: GitCompare,
+      headingLevel: 3,
+      heading: 'Website Changes need two usable crawls with persisted page evidence',
+    };
+  if (summary.data.state === 'non_comparable')
+    return {
+      kind: 'empty',
+      icon: GitCompare,
+      headingLevel: 3,
+      heading: 'These crawls are not comparable',
+      description: `Reason: ${summary.data.reason_code?.replaceAll('_', ' ') ?? 'scope or version mismatch'}. Recrawl to compare the same scope and settings.`,
+    };
+  if (!pairAvailable)
+    return {
+      kind: 'empty',
+      icon: GitCompare,
+      headingLevel: 3,
+      heading: 'This comparison is no longer available',
+      description: 'Recrawl to compare again.',
+    };
+  return undefined;
 }
 
 const CHANGE_COLUMNS: readonly DataTableColumn[] = [

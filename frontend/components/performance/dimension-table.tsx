@@ -1,12 +1,11 @@
 'use client';
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
-import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
-import { readErrorProps } from '@/components/ui/read-error';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import {
@@ -15,9 +14,9 @@ import {
   type PerformanceTableParams,
 } from '@/lib/api/performance';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { retainPreviousDataForScope, warmQuery } from '@/lib/api/query-client';
+import { warmQuery } from '@/lib/api/query-client';
 import { TABLE_DEFAULT_PAGE_SIZE } from '@/lib/config/tables';
-import { cursorControls, pageRange, useCursorTable } from '@/lib/table/use-cursor-table';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import {
   METRIC_CARDS,
   DIMENSION_SORT_KEY,
@@ -218,40 +217,52 @@ export function DimensionTable({
   const workspaceId = useActiveWorkspaceId();
   const tab = dimensionTab(dimension);
   const [sort, setSort] = useState(() => defaultSort(dimension));
-  // Every value the server binds the cursor to participates, so switching
-  // any of them drops the stack instead of replaying a refused cursor.
-  const table = useCursorTable(`${projectId}|${snapshotId}|${dimension}|${sort}`);
-  // NOTE: keyed on the raw `sort` so hiding a column drops the cursor stack
-  // too — the page it points at was ordered by the column just removed.
   const comparing = compareSnapshotId !== null;
   const displayedMetrics = METRIC_CARDS.filter((card) =>
     activeMetrics ? activeMetrics.has(card.key) : true,
   );
   const activeSort = orderableSort(sort, dimension, displayedMetrics);
 
-  const params = tableParams(
-    { snapshotId, compareSnapshotId },
-    { dimension, sort: activeSort, cursor: table.cursor, size: table.pageSize },
-  );
-  const query = useQuery({
-    ...performanceQueries.table(workspaceId, projectId, params),
-    enabled: !unavailable && workspaceId !== null,
-    // A page turn, a sort or a new range keeps the rows on screen until the
-    // next page replaces them, so the table never drops to a loading state.
-    placeholderData: (previousData, previousQuery) =>
-      retainPreviousDataForScope(projectId, previousData, previousQuery),
+  // Every value the server binds the cursor to participates in the scope, so
+  // switching any of them drops the stack instead of replaying a refused
+  // cursor. It holds the applied sort and the shown metrics, so hiding the
+  // sorted column drops the stack too — the page it points at was ordered by
+  // the column just removed, and the server refuses its cursor. A page
+  // turn, a sort or a new range keeps the rows on screen until the next page
+  // replaces them. The snapshot's persisted per-dimension count is the exact
+  // total, known before the first page lands, so a freshly opened tab
+  // reserves its pager and a full page from the first frame.
+  const { page, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: projectId,
+    scope: [
+      snapshotId,
+      compareSnapshotId,
+      dimension,
+      sort,
+      activeSort,
+      displayedMetrics.map((card) => card.key),
+    ],
+    query: (request) =>
+      performanceQueries.table(
+        workspaceId,
+        projectId,
+        tableParams(
+          { snapshotId, compareSnapshotId },
+          { dimension, sort: activeSort, cursor: request.cursor, size: request.limit },
+        ),
+      ),
+    noun: tab.noun,
+    loading: `Loading ${tab.noun}…`,
+    error: `Could not load ${tab.noun}. Check your connection and try again.`,
+    empty: () => ({
+      kind: 'empty',
+      icon: SearchX,
+      heading: `No ${tab.noun} measured for this range`,
+    }),
+    enabled: !unavailable,
+    total: (current) => current?.total_count ?? measuredRows,
   });
-
-  const rows = query.data?.items ?? [];
-  const nextCursor = query.data?.next_cursor ?? null;
-  const total = query.data?.total_count ?? measuredRows;
-  // Until this page's rows land (nothing yet, or the previous page retained),
-  // the range names the page that is coming rather than the rows on screen.
-  const shownRows =
-    query.data && !query.isPlaceholderData
-      ? rows.length
-      : Math.max(0, Math.min(table.pageSize, total - (table.page - 1) * table.pageSize));
-  const { from, to } = pageRange(table.page, table.pageSize, shownRows);
 
   if (unavailable) {
     // Distinct from an empty table: Search Console does not serve this
@@ -265,19 +276,6 @@ export function DimensionTable({
     );
   }
 
-  let state: DataTableState | undefined;
-  if (query.isError)
-    state = {
-      kind: 'error',
-      ...readErrorProps(query),
-      fallback: `Could not load ${tab.noun}. Check your connection and try again.`,
-    };
-  // Empty is a settled successful read; a pending, paused or disabled query
-  // has not measured anything yet.
-  else if (!query.isSuccess) state = { kind: 'loading', label: `Loading ${tab.noun}…` };
-  else if (rows.length === 0)
-    state = { kind: 'empty', icon: SearchX, heading: `No ${tab.noun} measured for this range` };
-
   return (
     <DataTable
       label={tab.header}
@@ -285,29 +283,16 @@ export function DimensionTable({
         header: tab.header,
         metrics: displayedMetrics,
         activeSort,
-        onSort: (key) => {
-          setSort(toggleSort(activeSort, key));
-          table.reset();
-        },
+        onSort: (key) => setSort(toggleSort(activeSort, key)),
         comparing,
         selectedLabel,
         compareLabel,
       })}
       minWidth={comparing ? 'md' : 'sm'}
       pinFirstColumn
-      state={state}
-      // The rows on screen belong to the previous page, order or range.
-      busy={{ active: query.isPlaceholderData, label: `Loading ${tab.noun}…` }}
-      pageSize={table.pageSize}
-      rowCount={rows.length}
-      pager={{
-        range: { from, to, total, noun: tab.noun },
-        pageSize: { value: table.pageSize, onChange: table.setPageSize },
-        ...cursorControls(table, nextCursor),
-        busy: query.isFetching,
-      }}
+      {...table}
     >
-      {rows.map((row) => (
+      {page?.items.map((row) => (
         <TableRow key={row.dimension_key}>
           <TableCell>
             <ClampText

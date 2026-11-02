@@ -3,16 +3,18 @@
 import { useRef, useState, type MutableRefObject } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { History } from 'lucide-react';
 
 import { Alert } from '@/components/ui/alert';
 import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
-import { Pager } from '@/components/ui/pager';
+import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { queryKeys } from '@/lib/api/query-keys';
 import { siteHealthMutations, siteHealthQueries } from '@/lib/api/site-health';
-import type { IssueHistoryPage, PageDetail } from '@/lib/api/types';
+import type { PageDetail } from '@/lib/api/types';
 import { ApiError } from '@/lib/api/errors';
 import { RERUN_MAX_PRE_ACTIVE_POLLS, RERUN_POLL_INTERVAL_MS } from '@/lib/config/site-health';
 import {
@@ -23,11 +25,9 @@ import {
 } from '@/lib/site-health/issues';
 import { formatAudited } from '@/lib/site-health/status';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { cursorControls, useCursorTable } from '@/lib/table/use-cursor-table';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 
 import { UrlDetailView } from './url-detail-view';
-import { Inline, Stack } from '@/components/ui/layout';
-import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { ListScreen } from '@/components/layout/page-shell';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -199,73 +199,56 @@ function IssueHistoryButton(target: HistoryTarget) {
 }
 
 function IssueHistory({ workspaceId, crawlId, siteUrlId }: HistoryTarget) {
-  const pager = useCursorTable(`${workspaceId}|${crawlId}|${siteUrlId}`);
-  const historyQuery = useQuery({
-    ...siteHealthQueries.issueHistory(workspaceId, crawlId, siteUrlId, {
-      cursor: pager.cursor,
-      limit: HISTORY_LIMIT,
-    }),
-    // Read fresh each time the drawer is first opened for an audit.
-    staleTime: 0,
-  });
-  const rows = historyQuery.isError ? [] : (historyQuery.data?.items ?? []);
-  const nextCursor = historyQuery.data?.next_cursor ?? null;
-
-  return (
-    <Stack>
-      {historyQuery.isError ? (
-        <QueryState
-          kind="error"
-          error={historyQuery.error}
-          fallback="Could not load issue history."
-          onRetry={() => void historyQuery.refetch()}
-          pending={historyQuery.isFetching}
-        />
-      ) : null}
-      {historyQuery.isLoading ? <QueryState kind="loading" label="Loading issue history" /> : null}
-      {historyQuery.data && !historyQuery.data.current_analysis_finalized ? (
-        <QueryState
-          kind="empty"
-          inline
-          message="Resolved issues are known once this page’s current analysis finishes."
-        />
-      ) : null}
-      {historyQuery.data?.current_analysis_finalized && rows.length === 0 ? (
-        <QueryState kind="empty" inline message="No resolved issues for this page." />
-      ) : null}
-      {rows.length > 0 ? <HistoryRows rows={rows} /> : null}
-      {rows.length > 0 ? <Pager {...cursorControls(pager, nextCursor)} /> : null}
-    </Stack>
-  );
-}
-
-function HistoryRows({ rows }: Readonly<{ rows: IssueHistoryPage['items'] }>) {
   const timeZone = useDisplayTimeZone();
+  // A page turn keeps the rows and the pager in place until the next page
+  // lands; the first load, a failed read and an empty history draw inside the
+  // table at the height of a full page.
+  const { page, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: crawlId,
+    scope: siteUrlId,
+    query: (request) => ({
+      ...siteHealthQueries.issueHistory(workspaceId, crawlId, siteUrlId, request),
+      // Read fresh each time the drawer is first opened for an audit.
+      staleTime: 0,
+    }),
+    noun: 'resolved issues',
+    loading: 'Loading issue history…',
+    error: 'Could not load issue history.',
+    empty: (current) => ({
+      kind: 'empty',
+      icon: History,
+      headingLevel: 3,
+      heading: current.current_analysis_finalized
+        ? 'No resolved issues for this page'
+        : 'Resolved issues are known once this page’s current analysis finishes',
+    }),
+    fixedPageSize: HISTORY_LIMIT,
+  });
+
   return (
-    <ul className={ledgerClasses()}>
-      {rows.map((row) => (
-        <Inline
-          as="li"
-          gap="compact"
-          key={row.id}
-          className={ledgerItemClasses('flex-wrap justify-between')}
-        >
-          <span className="flex min-w-0 flex-col">
-            <span className="type-body text-foreground [overflow-wrap:anywhere]">
-              {issueTitle(row)}
-            </span>
-            <span className="type-caption tabular-nums">
-              Last found {formatAudited(row.created_at, timeZone)}
-            </span>
-          </span>
-          <Inline as="span" className="shrink-0">
+    <DataTable label="Resolved issues" columns={HISTORY_COLUMNS} nested {...table}>
+      {page?.items.map((row) => (
+        <TableRow key={row.id}>
+          <TableCell>{issueTitle(row)}</TableCell>
+          <TableCell>
             <Badge>{dimensionLabel(row.dimension)}</Badge>
+          </TableCell>
+          <TableCell>
             <Badge variant="status" value={severityBadgeValue(row.severity)}>
               {severityLabel(row.severity)}
             </Badge>
-          </Inline>
-        </Inline>
+          </TableCell>
+          <TableCell numeric>{formatAudited(row.created_at, timeZone)}</TableCell>
+        </TableRow>
       ))}
-    </ul>
+    </DataTable>
   );
 }
+
+const HISTORY_COLUMNS: readonly DataTableColumn[] = [
+  { key: 'issue', label: 'Issue' },
+  { key: 'dimension', label: 'Dimension', width: 'name' },
+  { key: 'severity', label: 'Severity', width: 'status' },
+  { key: 'found', label: 'Last found', width: 'date', numeric: true },
+];

@@ -165,7 +165,7 @@ export const performanceQueries = {
   /** One page of one dimension table; tab intent warms the same key the table reads. */
   table: (workspaceId: string | null, projectId: string, params: PerformanceTableParams) =>
     queryOptions({
-      queryKey: queryKeys.performance.table(projectId, params),
+      queryKey: queryKeys.performance.table(projectId, workspaceId, params),
       queryFn: ({ signal }) => performanceApi.getTable(projectId, params, { signal, workspaceId }),
     }),
 };

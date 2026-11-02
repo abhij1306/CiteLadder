@@ -6,18 +6,18 @@ import { invalidateCrawlViews, invalidateMonitoredProjection } from './invalidat
 
 const CRAWL = '11111111-1111-4111-8111-111111111111';
 const PROJECT = '22222222-2222-4222-8222-222222222222';
+const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const FIRST_PAGE = queryKeys.siteHealth.pages(CRAWL, WORKSPACE, { cursor: null, monitored: true });
+const DEEP_PAGE = queryKeys.siteHealth.pages(CRAWL, WORKSPACE, { cursor: 'abc', monitored: true });
+const FIRST_INVENTORY = queryKeys.siteHealth.inventory(CRAWL, WORKSPACE, { cursor: null });
 
 function seeded() {
   const client = new QueryClient();
   // A first page and a deep cursor page of the same list, plus another filter
   // combination — all three exist simultaneously in the real screen.
-  client.setQueryData(queryKeys.siteHealth.pages(CRAWL, { cursor: null, monitored: true }), {
-    items: [],
-  });
-  client.setQueryData(queryKeys.siteHealth.pages(CRAWL, { cursor: 'abc', monitored: true }), {
-    items: [],
-  });
-  client.setQueryData(queryKeys.siteHealth.inventory(CRAWL, { cursor: null }), { items: [] });
+  client.setQueryData(FIRST_PAGE, { items: [] });
+  client.setQueryData(DEEP_PAGE, { items: [] });
+  client.setQueryData(FIRST_INVENTORY, { items: [] });
   client.setQueryData(queryKeys.siteHealth.dashboard(PROJECT), { crawl: null });
   client.setQueryData(queryKeys.siteHealth.monitored(PROJECT), { monitored_urls: [] });
   return client;
@@ -33,10 +33,8 @@ describe('invalidateCrawlViews', () => {
 
     invalidateCrawlViews(client, CRAWL);
 
-    expect(
-      invalidated(client, queryKeys.siteHealth.pages(CRAWL, { cursor: null, monitored: true })),
-    ).toBe(true);
-    expect(invalidated(client, queryKeys.siteHealth.inventory(CRAWL, { cursor: null }))).toBe(true);
+    expect(invalidated(client, FIRST_PAGE)).toBe(true);
+    expect(invalidated(client, FIRST_INVENTORY)).toBe(true);
   });
 
   it('leaves deeper cursor pages alone (the rows under review must not shift)', () => {
@@ -44,9 +42,7 @@ describe('invalidateCrawlViews', () => {
 
     invalidateCrawlViews(client, CRAWL);
 
-    expect(
-      invalidated(client, queryKeys.siteHealth.pages(CRAWL, { cursor: 'abc', monitored: true })),
-    ).toBe(false);
+    expect(invalidated(client, DEEP_PAGE)).toBe(false);
   });
 
   it('only touches the dashboard when a project is passed (it is the poll trigger)', () => {

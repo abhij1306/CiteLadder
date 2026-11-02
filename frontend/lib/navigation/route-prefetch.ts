@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { warmQuery } from '@/lib/api/query-client';
+import { readFromIntent, warmQuery } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
 import { preloadRouteChunk } from '@/lib/navigation/route-chunks';
 
@@ -13,7 +13,7 @@ type RoutePrefetcher = (client: QueryClient, scope: ProjectScope) => Promise<voi
  * warm the existing domain cache rather than creating a navigation cache.
  *
  * **Every prefetcher imports its API module dynamically, and that is load-bearing.**
- * This map reaches ten domains. `sidebar-nav` imports it, `app-shell` imports
+ * This map reaches a dozen domains. `sidebar-nav` imports it, `app-shell` imports
  * that, and the router imports the shell — so a static import here placed every
  * domain's client, and the Zod schema module behind each one, in the chunk the
  * browser must download before it can render anything at all. The whole point
@@ -42,25 +42,53 @@ const ROUTE_PREFETCHERS: Readonly<Record<string, RoutePrefetcher>> = {
       performanceQueries.dashboard(workspaceId, projectId, INITIAL_DASHBOARD_PARAMS),
     );
   },
+  '/search-intelligence': async (client, { projectId, workspaceId }) => {
+    // Readiness gates the whole screen: nothing below the tabs draws without it.
+    const { searchIntelligenceQueries } = await import('@/lib/api/search-intelligence');
+    warmQuery(client, searchIntelligenceQueries.readiness(workspaceId, projectId));
+  },
   '/products': async (client, { projectId, workspaceId }) => {
     const { commerceApi } = await import('@/lib/api/commerce');
+    // The screen always loads the catalog (its navigation), the competitors
+    // and the buyer prompts; the shelf waits for a selected target.
     warmQuery(client, {
       queryKey: queryKeys.commerce.catalog(projectId),
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         commerceApi.catalog(projectId, { signal, workspaceId }),
     });
+    warmQuery(client, {
+      queryKey: queryKeys.commerce.competitors(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        commerceApi.competitors(projectId, { signal, workspaceId }),
+    });
+    warmQuery(client, {
+      queryKey: queryKeys.commerce.buyerPrompts(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        commerceApi.buyerPrompts(projectId, { signal, workspaceId }),
+    });
+  },
+  // New chat: its recommended Actions are the screen's one project read.
+  '/agent': async (client, { projectId, workspaceId }) => {
+    const { actionsQueries } = await import('@/lib/api/actions');
+    warmQuery(client, actionsQueries.list(workspaceId, projectId));
   },
   '/agent/actions': async (client, { projectId, workspaceId }) => {
     const { actionsQueries } = await import('@/lib/api/actions');
     warmQuery(client, actionsQueries.list(workspaceId, projectId));
   },
+  '/agent/skills': async (client, { workspaceId }) => {
+    const { agentQueries } = await import('@/lib/api/agent');
+    warmQuery(client, agentQueries.skills(workspaceId));
+  },
+  '/agent/context': async (client, { projectId, workspaceId }) => {
+    // The profile fills the first tab; the brand-facts gate decides which tabs exist.
+    const { projectQueries } = await import('@/lib/api/projects');
+    warmQuery(client, projectQueries.brandProfile(workspaceId, projectId));
+    warmQuery(client, projectQueries.brandFacts(workspaceId, projectId));
+  },
   '/prompts': async (client, { projectId, workspaceId }) => {
-    const { promptsApi } = await import('@/lib/api/prompts');
-    warmQuery(client, {
-      queryKey: queryKeys.prompts.sets(projectId),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        promptsApi.listPromptSets(projectId, { signal, workspaceId }),
-    });
+    const { promptsQueries } = await import('@/lib/api/prompts');
+    warmQuery(client, promptsQueries.sets(workspaceId, projectId));
   },
   '/visibility': async (client, { projectId, workspaceId }) => {
     const [{ runsQueries }, { INITIAL_VISIBILITY_PARAMS }, { visibilityQueries }] =
@@ -125,7 +153,7 @@ async function prefetchOverview(client: QueryClient, { projectId, workspaceId }:
  * preview shows completed rows only, which is a different key.
  */
 async function prefetchSiteHealth(client: QueryClient, { projectId, workspaceId }: ProjectScope) {
-  const [{ siteHealthQueries }, { latestCrawlApi }, screen, { shouldPollCrawl }] =
+  const [{ siteHealthQueries }, { latestCrawlQueries }, screen, { shouldPollCrawl }] =
     await Promise.all([
       import('@/lib/api/site-health'),
       import('@/lib/api/site-health-latest-crawl'),
@@ -141,7 +169,10 @@ async function prefetchSiteHealth(client: QueryClient, { projectId, workspaceId 
     return;
   }
   const params = screen.monitoredPagePreviewParams(false);
-  const latest = await latestCrawlApi.pages(projectId, params, { workspaceId }).catch(() => null);
+  const latest = await readFromIntent(
+    client,
+    latestCrawlQueries.pages(workspaceId, projectId, params),
+  );
   if (!latest) return;
   const { crawl_id: crawlId, crawl_status: status, ...page } = latest;
   const key = siteHealthQueries.pages(workspaceId, crawlId, params).queryKey;
@@ -163,7 +194,7 @@ async function prefetchSiteHealth(client: QueryClient, { projectId, workspaceId 
  * a page they will not see.
  */
 async function prefetchIssues(client: QueryClient, { projectId, workspaceId }: ProjectScope) {
-  const [{ siteHealthQueries }, { latestCrawlApi }, { emptyIssueFilters, issueCatalogParams }] =
+  const [{ siteHealthQueries }, { latestCrawlQueries }, { emptyIssueFilters, issueCatalogParams }] =
     await Promise.all([
       import('@/lib/api/site-health'),
       import('@/lib/api/site-health-latest-crawl'),
@@ -179,7 +210,10 @@ async function prefetchIssues(client: QueryClient, { projectId, workspaceId }: P
     warmQuery(client, siteHealthQueries.issues(workspaceId, cachedCrawlId, params));
     return;
   }
-  const latest = await latestCrawlApi.issues(projectId, params, { workspaceId }).catch(() => null);
+  const latest = await readFromIntent(
+    client,
+    latestCrawlQueries.issues(workspaceId, projectId, params),
+  );
   if (!latest) return;
   const { crawl_id: crawlId, ...page } = latest;
   const key = siteHealthQueries.issues(workspaceId, crawlId, params).queryKey;

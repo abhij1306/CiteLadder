@@ -565,12 +565,20 @@ describe('siteIssueSchema + siteHealthErrorSchema', () => {
 
 describe('query key isolation (project / crawl / filter)', () => {
   it('isolates inventory by crawl', () => {
-    expect(queryKeys.siteHealth.inventory('c1')).not.toEqual(queryKeys.siteHealth.inventory('c2'));
+    expect(queryKeys.siteHealth.inventory('c1', 'ws-1')).not.toEqual(
+      queryKeys.siteHealth.inventory('c2', 'ws-1'),
+    );
+  });
+
+  it('isolates inventory by workspace', () => {
+    expect(queryKeys.siteHealth.inventory('c1', 'ws-1')).not.toEqual(
+      queryKeys.siteHealth.inventory('c1', 'ws-2'),
+    );
   });
 
   it('isolates inventory by filter', () => {
-    const a = queryKeys.siteHealth.inventory('c1', { query: 'foo' });
-    const b = queryKeys.siteHealth.inventory('c1', { query: 'bar' });
+    const a = queryKeys.siteHealth.inventory('c1', 'ws-1', { query: 'foo' });
+    const b = queryKeys.siteHealth.inventory('c1', 'ws-1', { query: 'bar' });
     expect(a).not.toEqual(b);
   });
 

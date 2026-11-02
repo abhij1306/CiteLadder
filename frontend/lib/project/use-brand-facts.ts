@@ -2,8 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
+import { projectQueries } from '@/lib/api/projects';
 
 /**
  * The project's brand facts and whether the workspace is in the fact-checking
@@ -11,8 +10,8 @@ import { queryKeys } from '@/lib/api/query-keys';
  */
 export function useBrandFacts(projectId: string | null, workspaceId: string | null) {
   return useQuery({
-    queryKey: queryKeys.projects.brandFacts(projectId ?? ''),
-    queryFn: ({ signal }) => projectsApi.getBrandFacts(projectId!, { signal, workspaceId }),
+    // Disabled until both are known, so the empty id never reaches the API.
+    ...projectQueries.brandFacts(workspaceId, projectId ?? ''),
     enabled: Boolean(projectId && workspaceId),
   });
 }

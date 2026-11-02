@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Settings2, Unplug } from 'lucide-react';
 
@@ -22,6 +22,7 @@ import { Stack } from '@/components/ui/layout';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import {
   searchIntelligenceApi,
+  searchIntelligenceQueries,
   type SearchIntelligenceDataset,
   type SearchIntelligenceRun,
 } from '@/lib/api/search-intelligence';
@@ -29,6 +30,7 @@ import { searchIntelligenceKeys } from '@/lib/api/query-keys/search-intelligence
 import { searchMarketLabel } from '@/lib/config/search-intelligence';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
+import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
 
 const PROVIDER_SETTINGS = '/settings?tab=providers';
 const TABS = [
@@ -43,6 +45,46 @@ const TAB_CODEC = stringUrlCodec(
   TABS.map(({ value }) => value),
   'overview' as Tab,
 );
+/**
+ * The research scopes and markets the saved datasets offer, the chosen ones
+ * (or the first offered), and the datasets they select. The server already
+ * answers only the newest dataset of each acquisition identity.
+ */
+function selectDatasets(
+  latestDatasets: readonly SearchIntelligenceDataset[],
+  scope: string,
+  market: string,
+) {
+  const scopes = [...new Set(latestDatasets.map((item) => item.research_scope ?? 'exact_host'))];
+  const activeScope = scopes.includes(scope as 'exact_host' | 'domain_subdomains')
+    ? scope
+    : scopes[0];
+  const markets = [
+    ...new Map(
+      latestDatasets
+        .filter(
+          (item) =>
+            (item.research_scope ?? 'exact_host') === activeScope && item.location_code !== null,
+        )
+        .map((item) => [
+          `${item.location_code}:${item.language_code}`,
+          {
+            value: `${item.location_code}:${item.language_code}`,
+            label: `${searchMarketLabel(item.location_code)} · ${item.language_code}`,
+          },
+        ]),
+    ).values(),
+  ];
+  const activeMarket = markets.find((item) => item.value === market)?.value ?? markets[0]?.value;
+  const datasets = latestDatasets.filter(
+    (item) =>
+      (item.research_scope ?? 'exact_host') === activeScope &&
+      (item.location_code === null ||
+        `${item.location_code}:${item.language_code}` === activeMarket),
+  );
+  return { scopes, activeScope, markets, activeMarket, datasets };
+}
+
 export function SearchIntelligencePage() {
   const { activeProject } = useProjectContext();
   const queryClient = useQueryClient();
@@ -55,14 +97,10 @@ export function SearchIntelligencePage() {
   const [market, setMarket] = useState('');
   const [scope, setScope] = useState('');
   const [action, setAction] = useState('analysis');
+  const requestScope = resolveActiveProjectRequestScope(activeProject);
   const readiness = useQuery({
-    queryKey: searchIntelligenceKeys.readiness(activeProject?.workspace_id, activeProject?.id),
-    queryFn: ({ signal }) =>
-      searchIntelligenceApi.readiness(activeProject!.id, {
-        signal,
-        workspaceId: activeProject!.workspace_id,
-      }),
-    enabled: Boolean(activeProject),
+    ...searchIntelligenceQueries.readiness(requestScope.workspaceId, requestScope.projectId),
+    enabled: requestScope.enabled,
     refetchInterval: (query) =>
       ['queued', 'running'].includes(query.state.data?.latest_run?.status ?? '') ? 5000 : false,
   });
@@ -111,48 +149,10 @@ export function SearchIntelligencePage() {
     setAction(nextAction);
     setDrawerOpen(true);
   };
-  const latestDatasets = useMemo(() => {
-    const result = new Map<string, SearchIntelligenceDataset>();
-    for (const dataset of readiness.data?.datasets ?? []) {
-      const key = JSON.stringify([
-        dataset.dataset_kind,
-        dataset.research_scope ?? 'exact_host',
-        dataset.acquisition,
-        dataset.target_origin,
-        dataset.comparison_origin,
-        dataset.location_code,
-        dataset.language_code,
-      ]);
-      if (!result.has(key)) result.set(key, dataset);
-    }
-    return [...result.values()];
-  }, [readiness.data?.datasets]);
-  const scopes = [...new Set(latestDatasets.map((item) => item.research_scope ?? 'exact_host'))];
-  const activeScope = scopes.includes(scope as 'exact_host' | 'domain_subdomains')
-    ? scope
-    : scopes[0];
-  const markets = [
-    ...new Map(
-      latestDatasets
-        .filter(
-          (item) =>
-            (item.research_scope ?? 'exact_host') === activeScope && item.location_code !== null,
-        )
-        .map((item) => [
-          `${item.location_code}:${item.language_code}`,
-          {
-            value: `${item.location_code}:${item.language_code}`,
-            label: `${searchMarketLabel(item.location_code)} · ${item.language_code}`,
-          },
-        ]),
-    ).values(),
-  ];
-  const activeMarket = markets.find((item) => item.value === market)?.value ?? markets[0]?.value;
-  const datasets = latestDatasets.filter(
-    (item) =>
-      (item.research_scope ?? 'exact_host') === activeScope &&
-      (item.location_code === null ||
-        `${item.location_code}:${item.language_code}` === activeMarket),
+  const { scopes, activeScope, markets, activeMarket, datasets } = selectDatasets(
+    readiness.data?.datasets ?? [],
+    scope,
+    market,
   );
   const openComparison = (dataset: SearchIntelligenceDataset) => {
     setComparison(dataset);

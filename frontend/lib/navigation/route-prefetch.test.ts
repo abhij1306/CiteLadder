@@ -13,6 +13,7 @@ import {
 
 import { siteHealthDashboardSchema } from '@citeladder/contracts/site-health';
 
+import { actionsQueries } from '@/lib/api/actions';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import { pendingOverviewHandlers, recordedProjectRead } from '@/test/fixtures/overview';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
@@ -136,6 +137,106 @@ describe('prefetchRoute', () => {
       'latest pages ?limit=10&monitored=true&sort=status',
     ]);
     dashboard.release();
+  });
+
+  it('asks for a cold Website preview once however often the reader hovers', async () => {
+    const asked: string[] = [];
+    const page = { items: [], next_cursor: null, root_errors: [] };
+    const latest = heldAnswer();
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT_ID}/site-health`, () => {
+        asked.push('dashboard');
+        // The dashboard fails, so every hover takes the cold path again.
+        return HttpResponse.json({ error: { message: 'down' } }, { status: 500 });
+      }),
+      http.get(`/api/v1/projects/${PROJECT_ID}/site-health/pages`, async () => {
+        asked.push('latest pages');
+        await latest.held;
+        return HttpResponse.json({ ...page, crawl_id: CRAWL_ID, crawl_status: 'completed' });
+      }),
+    );
+
+    // Hover, focus, hover again while the first answer is still on its way.
+    prefetchRoute(client, '/site', PROJECT);
+    prefetchRoute(client, '/site', PROJECT);
+    await vi.waitFor(() => expect(asked).toContain('latest pages'));
+    prefetchRoute(client, '/site', PROJECT);
+    latest.release();
+    await vi.waitFor(() => expect(client.getQueryData(previewKey)).toEqual(page));
+    // And once more after it was filed: the fresh answer is reused.
+    prefetchRoute(client, '/site', PROJECT);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(asked.filter((request) => request === 'latest pages')).toEqual(['latest pages']);
+  });
+
+  it('asks for a cold issue catalog once however often the reader hovers', async () => {
+    const asked: string[] = [];
+    mswServer.use(
+      // The dashboard fails, so every hover takes the cold path again.
+      http.get(`/api/v1/projects/${PROJECT_ID}/site-health`, () =>
+        HttpResponse.json({ error: { message: 'down' } }, { status: 500 }),
+      ),
+      http.get(`/api/v1/projects/${PROJECT_ID}/site-health/issues`, () => {
+        asked.push('latest issues');
+        return HttpResponse.json({ error: { message: 'not here' } }, { status: 404 });
+      }),
+    );
+
+    prefetchRoute(client, '/issues', PROJECT);
+    prefetchRoute(client, '/issues', PROJECT);
+    await vi.waitFor(() => expect(asked).toEqual(['latest issues']));
+    // A read that failed is not asked again from intent; the screen retries it.
+    prefetchRoute(client, '/issues', PROJECT);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(asked).toEqual(['latest issues']);
+  });
+
+  it.each([
+    [
+      '/search-intelligence',
+      [['search-intelligence', PROJECT.workspaceId, PROJECT_ID, 'readiness']],
+    ],
+    ['/agent', [actionsQueries.list(PROJECT.workspaceId, PROJECT_ID).queryKey]],
+    ['/agent/skills', [['agent', 'skills']]],
+    [
+      '/agent/context',
+      [
+        ['projects', 'brand-facts', PROJECT_ID],
+        ['projects', 'brand-profile', PROJECT_ID],
+      ],
+    ],
+    [
+      '/products',
+      [
+        ['commerce', PROJECT_ID, 'buyer-prompts'],
+        ['commerce', PROJECT_ID, 'catalog'],
+        ['commerce', PROJECT_ID, 'competitors'],
+      ],
+    ],
+  ])('warms %s under the exact keys its screen reads', async (href, keys) => {
+    const asked: string[] = [];
+    mswServer.use(
+      http.get('/api/v1/*', ({ request }) => {
+        asked.push(new URL(request.url).pathname);
+        return HttpResponse.json({ error: { message: 'not here' } }, { status: 404 });
+      }),
+    );
+
+    prefetchRoute(client, href, PROJECT);
+
+    await vi.waitFor(() => expect(asked).toHaveLength(keys.length));
+    const warmed = client
+      .getQueryCache()
+      .getAll()
+      .map((query) => JSON.stringify(query.queryKey))
+      .sort();
+    expect(warmed).toEqual(keys.map((key) => JSON.stringify(key)).sort());
   });
 
   it('files a cold issue catalog under the crawl the project read names, before the dashboard lands', async () => {
