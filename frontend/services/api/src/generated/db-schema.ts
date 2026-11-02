@@ -27,35 +27,6 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
-export interface AccountGrants {
-  billing_account_id: string;
-  bundle_id: Generated<string>;
-  bundle_role: Generated<string>;
-  catalog_revision: string;
-  created_at: Timestamp;
-  id: string;
-  idempotency_key: string;
-  key: string;
-  period_end: Timestamp | null;
-  period_start: Timestamp | null;
-  profile_key: Generated<string>;
-  profile_priority: Generated<number>;
-  source_kind: string;
-  source_ref: string;
-  valid_from: Timestamp;
-  valid_until: Timestamp | null;
-  value: number;
-}
-
-export interface AccountPolicyAcceptances {
-  accepted_at: Timestamp;
-  actor_id: string;
-  context: string;
-  id: string;
-  privacy_notice_revision: string;
-  terms_revision: string;
-}
-
 export interface Actions {
   approach: string;
   created_at: Timestamp;
@@ -521,7 +492,6 @@ export interface Audits {
   error_message: string;
   failed_count: number;
   funded_budget_period_start: Timestamp | null;
-  funding_account_id: string | null;
   id: string;
   launch_id: string | null;
   market_id: string | null;
@@ -614,146 +584,6 @@ export interface AuditTasks {
   transport_provider: string;
   updated_at: Timestamp;
   workspace_id: string;
-}
-
-export interface AuthChallenges {
-  consumed_at: Timestamp | null;
-  created_at: Timestamp;
-  email: string;
-  expires_at: Timestamp;
-  id: string;
-  purpose: string;
-  token_digest: string;
-  user_id: string;
-}
-
-export interface BillingAccounts {
-  billing_country: string;
-  billing_profile: Json | null;
-  country_verification: string;
-  created_at: Timestamp;
-  entitlement_lifecycle_version: Generated<number>;
-  id: string;
-  owner_user_id: string | null;
-  registration_cohort_at: Generated<Timestamp>;
-  registration_origin: string;
-  status: string;
-  updated_at: Timestamp;
-  workspace_id: string;
-}
-
-export interface BillingCatalogRevisions {
-  created_at: Timestamp;
-  created_by_user_id: string;
-  created_idempotency_key: string | null;
-  created_reason: string;
-  id: string;
-  payload: Json;
-  payload_sha256: string;
-  publication_state: string;
-  published_at: Timestamp | null;
-  published_by_user_id: string | null;
-  published_idempotency_key: string | null;
-  published_reason: string | null;
-  revision: string;
-}
-
-export interface BillingInvoiceCounters {
-  financial_year: string;
-  next_value: number;
-}
-
-export interface BillingInvoices {
-  billing_account_id: string;
-  created_at: Timestamp;
-  currency: string;
-  document_kind: string;
-  financial_year: string;
-  id: string;
-  invoice_date: Timestamp;
-  invoice_number: string;
-  paid_at: Timestamp;
-  payload: Json;
-  payload_sha256: string;
-  payment_id: string;
-  receipt_number: string;
-  tax_policy_version: number;
-  tax_treatment: string;
-  total_amount_minor: number;
-}
-
-export interface BillingPayments {
-  amount_minor: number;
-  billing_account_id: string;
-  created_at: Timestamp;
-  currency: string;
-  external_invoice_id: string | null;
-  external_order_id: string | null;
-  external_payment_id: string;
-  external_refund_id: string | null;
-  id: string;
-  paid_at: Timestamp | null;
-  parent_payment_id: string | null;
-  payment_method: string;
-  pending_activation_id: string | null;
-  period_end: Timestamp | null;
-  period_start: Timestamp | null;
-  provider: string;
-  provider_mode: string;
-  receipt_kind: string;
-  receipt_sha256: string;
-  status: string;
-  subscription_id: string | null;
-}
-
-export interface BillingSubscriptions {
-  billing_account_id: string;
-  cadence: string;
-  cancel_at_period_end: boolean;
-  cancellation_sent_at: Timestamp | null;
-  catalog_key: string;
-  catalog_revision: string;
-  created_at: Timestamp;
-  credential_mode: string;
-  currency: string;
-  current_period_end: Timestamp | null;
-  current_period_start: Timestamp | null;
-  ended_at: Timestamp | null;
-  external_price_id: string;
-  external_subscription_id: string;
-  frozen_terms: Json;
-  id: string;
-  is_current: boolean;
-  provider: string;
-  provider_mode: string;
-  provider_state_version: number;
-  quantity: Generated<number>;
-  reconciliation_lease_expires_at: Timestamp | null;
-  reconciliation_lease_token: string | null;
-  reconciliation_next_at: Timestamp | null;
-  scheduled_change: Json | null;
-  status: string;
-  subscription_kind: string;
-  updated_at: Timestamp;
-}
-
-export interface BillingWebhookEvents {
-  attempt_count: Generated<number>;
-  error_code: string;
-  event_type: string;
-  external_event_id: string;
-  id: string;
-  lease_expires_at: Timestamp | null;
-  lease_token: string | null;
-  next_attempt_at: Timestamp | null;
-  payload_sha256: string;
-  processed_at: Timestamp | null;
-  processing_state: string;
-  provider: string;
-  provider_mode: string;
-  received_at: Timestamp;
-  result_code: string;
-  safe_summary: Json | null;
 }
 
 export interface BotActivityDaily {
@@ -1221,31 +1051,6 @@ export interface Competitors {
   updated_at: Timestamp;
 }
 
-export interface ConsumableLedger {
-  agent_run_id: string | null;
-  allocation_order: number;
-  attempt: number | null;
-  audit_id: string | null;
-  billing_account_id: string;
-  capability_key: string;
-  created_at: Timestamp;
-  dispatch_key: string;
-  entry_kind: string;
-  grant_id: string;
-  id: string;
-  idempotency_key: string;
-  platform_call_id: string | null;
-  refund_of_id: string | null;
-  request_fingerprint: string;
-  reservation_id: string;
-  site_crawl_id: string | null;
-  subject_id: string;
-  subject_kind: string;
-  task_id: string | null;
-  units: number;
-  workspace_id: string;
-}
-
 export interface ContentDifferentiationCandidates {
   audit_id: string;
   audit_task_id: string;
@@ -1418,17 +1223,6 @@ export interface DemandSnapshots {
   workspace_id: string;
 }
 
-export interface EnterpriseAgreementReferences {
-  actor_id: string;
-  document_sha256: string;
-  id: string;
-  recorded_at: Timestamp;
-  reference: string;
-  signatory_id: string;
-  signed_at: Timestamp;
-  workspace_id: string;
-}
-
 export interface EntitySentiments {
   aspects: Json;
   confidence: number | null;
@@ -1485,31 +1279,6 @@ export interface FactVerifications {
   usage: Json | null;
   verify_template_version: string;
   workspace_id: string;
-}
-
-export interface GrantRevocations {
-  actor_kind: string;
-  actor_user_id: string | null;
-  created_at: Timestamp;
-  effective_from: Timestamp;
-  grant_id: string;
-  id: string;
-  idempotency_key: string;
-  reason: string;
-}
-
-export interface IdempotencyRecords {
-  billing_account_id: string;
-  created_at: Timestamp;
-  expires_at: Timestamp;
-  id: string;
-  idempotency_key: string;
-  operation: string;
-  request_fingerprint: string;
-  response_body: Json | null;
-  response_status: number | null;
-  state: string;
-  updated_at: Timestamp;
 }
 
 export interface IntegrationConnections {
@@ -1635,71 +1404,6 @@ export interface IntegrationSyncRuns {
   window_end: Timestamp;
   window_start: Timestamp;
   workspace_id: string;
-}
-
-export interface IntroductoryClaims {
-  billing_account_id: string;
-  campaign_id: string;
-  claimed_at: Timestamp;
-  consented_by_user_id: string;
-  created_at: Timestamp;
-  data_sharing_consent_version: string;
-  ended_at: Timestamp | null;
-  ended_by_user_id: string | null;
-  expires_at: Timestamp;
-  id: string;
-  idempotency_key: string;
-  introduction_kind: string;
-  operator_code_id: string | null;
-  primary_grant_id: string;
-  request_fingerprint: string;
-  terms_consent_version: string;
-  tier_key: string;
-}
-
-export interface IntroductoryOperatorCodes {
-  billing_account_id: string | null;
-  code_sha256: string;
-  created_at: Timestamp;
-  created_by_user_id: string;
-  email_normalized: string | null;
-  expires_at: Timestamp;
-  id: string;
-  reason: string;
-  redemption_count: number;
-  redemption_limit: number;
-  waiver_scope: string;
-}
-
-export interface McpAuthorizationCodes {
-  client_id: string;
-  code_challenge: string;
-  code_hash: string;
-  consumed_at: Timestamp | null;
-  created_at: Timestamp;
-  expires_at: Timestamp;
-  id: string;
-  redirect_uri: string;
-  redirect_uri_provided_explicitly: boolean;
-  resource: string;
-  scopes: Json;
-  user_id: string;
-  workspace_ids: Json;
-}
-
-export interface McpAuthorizationRequests {
-  client_id: string;
-  code_challenge: string;
-  consumed_at: Timestamp | null;
-  created_at: Timestamp;
-  expires_at: Timestamp;
-  id: string;
-  redirect_uri: string;
-  redirect_uri_provided_explicitly: boolean;
-  resource: string;
-  scopes: Json;
-  state: string;
-  transaction_hash: string;
 }
 
 export interface McpConfirmations {
@@ -1913,40 +1617,6 @@ export interface OwnedDomains {
   project_id: string;
 }
 
-export interface PendingActivations {
-  activated_at: Timestamp | null;
-  activation_kind: string;
-  billing_account_id: string;
-  catalog_key: string;
-  catalog_revision: string;
-  change_terms: Json | null;
-  country_code: string;
-  created_at: Timestamp;
-  credential_mode: string;
-  expires_at: Timestamp;
-  external_price_id: string | null;
-  external_reference: string | null;
-  failed_at: Timestamp | null;
-  failure_code: string | null;
-  id: string;
-  idempotency_key: string;
-  provider: string;
-  provider_mode: string;
-  quantity: number;
-  quote: Json | null;
-  reconciliation_attempts: Generated<number>;
-  reconciliation_lease_expires_at: Timestamp | null;
-  reconciliation_lease_token: string | null;
-  reconciliation_next_at: Timestamp | null;
-  region: string;
-  request_fingerprint: string;
-  settled_authority_id: string | null;
-  settled_by: string | null;
-  status: string;
-  tax_snapshot: Json | null;
-  updated_at: Timestamp;
-}
-
 export interface PerformanceDimensionStats {
   created_at: Timestamp;
   dimension: string;
@@ -1962,7 +1632,6 @@ export interface PerformanceDimensionStats {
 }
 
 export interface PlatformCalls {
-  billing_account_id: string | null;
   cached_input_tokens: number | null;
   charge: string;
   cost_microusd: Int8 | null;
@@ -1981,16 +1650,6 @@ export interface PlatformCalls {
   reserved_credits: number;
   settled_at: Timestamp | null;
   status: string;
-  workspace_id: string;
-}
-
-export interface PolicyAcceptances {
-  accepted_at: Timestamp;
-  actor_id: string;
-  context: string;
-  id: string;
-  privacy_notice_revision: string;
-  terms_revision: string;
   workspace_id: string;
 }
 
@@ -2135,7 +1794,6 @@ export interface ProviderAttempts {
 
 export interface ProviderCapacityBuckets {
   account_pool_identity: Generated<string>;
-  billing_account_id: string | null;
   blocked_until: Timestamp | null;
   capacity: Numeric;
   connection_id: string | null;
@@ -3193,21 +2851,6 @@ export interface WebAcquisitionControls {
   updated_at: Timestamp;
 }
 
-export interface WorkspaceInvitations {
-  accepted_at: Timestamp | null;
-  accepted_by_user_id: string | null;
-  created_at: Timestamp;
-  email_normalized: string;
-  expires_at: Timestamp;
-  id: string;
-  invited_by_user_id: string | null;
-  revoked_at: Timestamp | null;
-  role: string;
-  token_sha256: string;
-  updated_at: Timestamp;
-  workspace_id: string;
-}
-
 export interface WorkspaceMembers {
   created_at: Timestamp;
   id: string;
@@ -3241,8 +2884,6 @@ export interface WorkspaceSiteHealthRuntime {
 }
 
 export interface DB {
-  account_grants: AccountGrants;
-  account_policy_acceptances: AccountPolicyAcceptances;
   action_status_events: ActionStatusEvents;
   actions: Actions;
   agent_chats: AgentChats;
@@ -3271,14 +2912,6 @@ export interface DB {
   audit_schedules: AuditSchedules;
   audit_tasks: AuditTasks;
   audits: Audits;
-  auth_challenges: AuthChallenges;
-  billing_accounts: BillingAccounts;
-  billing_catalog_revisions: BillingCatalogRevisions;
-  billing_invoice_counters: BillingInvoiceCounters;
-  billing_invoices: BillingInvoices;
-  billing_payments: BillingPayments;
-  billing_subscriptions: BillingSubscriptions;
-  billing_webhook_events: BillingWebhookEvents;
   bot_activity_daily: BotActivityDaily;
   bot_ip_range_snapshots: BotIpRangeSnapshots;
   bot_requests: BotRequests;
@@ -3308,7 +2941,6 @@ export interface DB {
   commerce_shelf_snapshots: CommerceShelfSnapshots;
   competitor_mentions: CompetitorMentions;
   competitors: Competitors;
-  consumable_ledger: ConsumableLedger;
   content_differentiation_candidates: ContentDifferentiationCandidates;
   content_differentiation_reports: ContentDifferentiationReports;
   crawl_log_batches: CrawlLogBatches;
@@ -3318,12 +2950,9 @@ export interface DB {
   crawl_log_uploads: CrawlLogUploads;
   demand_signals: DemandSignals;
   demand_snapshots: DemandSnapshots;
-  enterprise_agreement_references: EnterpriseAgreementReferences;
   entity_sentiments: EntitySentiments;
   execution_cost_projections: ExecutionCostProjections;
   fact_verifications: FactVerifications;
-  grant_revocations: GrantRevocations;
-  idempotency_records: IdempotencyRecords;
   integration_connections: IntegrationConnections;
   integration_events: IntegrationEvents;
   integration_import_artifacts: IntegrationImportArtifacts;
@@ -3332,10 +2961,6 @@ export interface DB {
   integration_oauth_states: IntegrationOauthStates;
   integration_property_mappings: IntegrationPropertyMappings;
   integration_sync_runs: IntegrationSyncRuns;
-  introductory_claims: IntroductoryClaims;
-  introductory_operator_codes: IntroductoryOperatorCodes;
-  mcp_authorization_codes: McpAuthorizationCodes;
-  mcp_authorization_requests: McpAuthorizationRequests;
   mcp_confirmations: McpConfirmations;
   mcp_oauth_clients: McpOauthClients;
   mcp_oauth_grants: McpOauthGrants;
@@ -3349,10 +2974,8 @@ export interface DB {
   opportunity_verification_events: OpportunityVerificationEvents;
   overview_layouts: OverviewLayouts;
   owned_domains: OwnedDomains;
-  pending_activations: PendingActivations;
   performance_dimension_stats: PerformanceDimensionStats;
   platform_calls: PlatformCalls;
-  policy_acceptances: PolicyAcceptances;
   project_markets: ProjectMarkets;
   projects: Projects;
   prompt_candidates: PromptCandidates;
@@ -3413,7 +3036,6 @@ export interface DB {
   user_identities: UserIdentities;
   users: Users;
   web_acquisition_controls: WebAcquisitionControls;
-  workspace_invitations: WorkspaceInvitations;
   workspace_members: WorkspaceMembers;
   workspace_site_health_runtime: WorkspaceSiteHealthRuntime;
   workspaces: Workspaces;

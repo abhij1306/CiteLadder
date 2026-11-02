@@ -347,7 +347,6 @@ describe('provider credential custody', () => {
         .values({
           id: randomUUID(),
           connection_id: row.id,
-          billing_account_id: null,
           pool_kind: 'connection',
           transport_provider: 'openai',
           capacity: '1',

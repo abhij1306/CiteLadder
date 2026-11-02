@@ -1,47 +1,15 @@
 -- CiteLadder schema baseline. `src/cli/migrate.ts` applies each file in this
 -- directory once, in version order, and records its SHA-256 in
 -- schema_migrations. Applied files are frozen: change the schema with a new
--- numbered file (0002_*.sql, ...), never by editing this one.
+-- numbered file (0002_*.sql, ...), never by editing this one. The one exception
+-- is a pre-1.0 trim of hosted-only tables, which upgrades/ applies to databases
+-- migrated by an earlier release.
 
 CREATE TABLE public.schema_migrations (
     version character varying(64) NOT NULL,
     checksum character(64) NOT NULL,
     applied_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT schema_migrations_pkey PRIMARY KEY (version)
-);
-
-CREATE TABLE public.account_grants (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    source_kind character varying(16) NOT NULL,
-    source_ref character varying(255) NOT NULL,
-    bundle_role character varying(16) DEFAULT 'supplement'::character varying NOT NULL,
-    profile_key character varying(64) DEFAULT ''::character varying NOT NULL,
-    profile_priority integer DEFAULT 0 NOT NULL,
-    bundle_id character varying(255) DEFAULT ''::character varying NOT NULL,
-    key character varying(64) NOT NULL,
-    value integer NOT NULL,
-    period_start timestamp with time zone,
-    period_end timestamp with time zone,
-    valid_from timestamp with time zone NOT NULL,
-    valid_until timestamp with time zone,
-    catalog_revision character varying(64) NOT NULL,
-    idempotency_key character varying(255) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_account_grant_bundle_role CHECK (((bundle_role)::text = ANY ((ARRAY['primary'::character varying, 'supplement'::character varying])::text[]))),
-    CONSTRAINT ck_account_grant_period_ordered CHECK (((period_start IS NULL) OR (period_end IS NULL) OR (period_start < period_end))),
-    CONSTRAINT ck_account_grant_primary_bundle_identity CHECK ((((bundle_role)::text <> 'primary'::text) OR ((bundle_id)::text <> ''::text))),
-    CONSTRAINT ck_account_grant_valid_ordered CHECK (((valid_until IS NULL) OR (valid_until > valid_from))),
-    CONSTRAINT ck_account_grant_value_nonneg CHECK ((value >= 0))
-);
-
-CREATE TABLE public.account_policy_acceptances (
-    id uuid NOT NULL,
-    actor_id uuid NOT NULL,
-    terms_revision character varying(64) NOT NULL,
-    privacy_notice_revision character varying(64) NOT NULL,
-    context character varying(32) NOT NULL,
-    accepted_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.action_status_events (
@@ -587,7 +555,6 @@ CREATE TABLE public.audits (
     repair_key character varying(64),
     schedule_id uuid,
     scheduled_for timestamp with time zone,
-    funding_account_id uuid,
     funded_budget_period_start timestamp with time zone,
     system_instruction text NOT NULL,
     repetitions integer NOT NULL,
@@ -605,152 +572,6 @@ CREATE TABLE public.audits (
     completed_at timestamp with time zone,
     market_id uuid,
     launch_id uuid
-);
-
-CREATE TABLE public.auth_challenges (
-    id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    email character varying(255) NOT NULL,
-    purpose character varying(24) NOT NULL,
-    token_digest character varying(64) NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    consumed_at timestamp with time zone
-);
-
-CREATE TABLE public.billing_accounts (
-    id uuid NOT NULL,
-    registration_origin character varying(24) NOT NULL,
-    workspace_id uuid NOT NULL,
-    owner_user_id uuid,
-    status character varying(24) NOT NULL,
-    billing_country character varying(2) NOT NULL,
-    country_verification character varying(16) NOT NULL,
-    billing_profile jsonb,
-    entitlement_lifecycle_version integer DEFAULT 0 NOT NULL,
-    registration_cohort_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_billing_account_entitlement_version_nonneg CHECK ((entitlement_lifecycle_version >= 0)),
-    CONSTRAINT ck_billing_account_registration_origin CHECK (((registration_origin)::text = ANY ((ARRAY['public'::character varying, 'operator'::character varying])::text[])))
-);
-
-CREATE TABLE public.billing_catalog_revisions (
-    id uuid NOT NULL,
-    revision character varying(64) NOT NULL,
-    payload jsonb NOT NULL,
-    payload_sha256 character varying(64) NOT NULL,
-    publication_state character varying(16) NOT NULL,
-    created_by_user_id uuid NOT NULL,
-    created_reason character varying(255) NOT NULL,
-    created_idempotency_key character varying(255),
-    created_at timestamp with time zone NOT NULL,
-    published_by_user_id uuid,
-    published_reason character varying(255),
-    published_idempotency_key character varying(255),
-    published_at timestamp with time zone
-);
-
-CREATE TABLE public.billing_invoice_counters (
-    financial_year character varying(16) NOT NULL,
-    next_value integer NOT NULL,
-    CONSTRAINT ck_billing_invoice_counter_positive CHECK ((next_value > 0))
-);
-
-CREATE TABLE public.billing_invoices (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    payment_id uuid NOT NULL,
-    invoice_number character varying(40) NOT NULL,
-    receipt_number character varying(40) NOT NULL,
-    financial_year character varying(7) NOT NULL,
-    document_kind character varying(24) NOT NULL,
-    invoice_date date NOT NULL,
-    paid_at timestamp with time zone NOT NULL,
-    currency character varying(3) NOT NULL,
-    total_amount_minor integer NOT NULL,
-    tax_treatment character varying(24) NOT NULL,
-    tax_policy_version integer NOT NULL,
-    payload jsonb NOT NULL,
-    payload_sha256 character varying(64) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_billing_invoice_policy_v1 CHECK ((tax_policy_version = 1)),
-    CONSTRAINT ck_billing_invoice_total_nonneg CHECK ((total_amount_minor >= 0))
-);
-
-CREATE TABLE public.billing_payments (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    pending_activation_id uuid,
-    subscription_id uuid,
-    parent_payment_id uuid,
-    provider character varying(24) NOT NULL,
-    receipt_kind character varying(16) NOT NULL,
-    external_payment_id character varying(255) NOT NULL,
-    external_order_id character varying(255),
-    external_invoice_id character varying(255),
-    external_refund_id character varying(255),
-    amount_minor integer NOT NULL,
-    currency character varying(3) NOT NULL,
-    provider_mode character varying(8) NOT NULL,
-    payment_method character varying(24) NOT NULL,
-    status character varying(24) NOT NULL,
-    paid_at timestamp with time zone,
-    period_start timestamp with time zone,
-    period_end timestamp with time zone,
-    receipt_sha256 character varying(64) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_billing_payment_amount_nonneg CHECK ((amount_minor >= 0))
-);
-
-CREATE TABLE public.billing_subscriptions (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    provider character varying(24) NOT NULL,
-    provider_mode character varying(8) NOT NULL,
-    external_subscription_id character varying(255) NOT NULL,
-    external_price_id character varying(255) NOT NULL,
-    catalog_revision character varying(64) NOT NULL,
-    catalog_key character varying(64) NOT NULL,
-    subscription_kind character varying(16) NOT NULL,
-    cadence character varying(24) NOT NULL,
-    credential_mode character varying(16) NOT NULL,
-    frozen_terms jsonb NOT NULL,
-    scheduled_change jsonb,
-    quantity integer DEFAULT 1 NOT NULL,
-    currency character varying(3) NOT NULL,
-    status character varying(24) NOT NULL,
-    current_period_start timestamp with time zone,
-    current_period_end timestamp with time zone,
-    cancel_at_period_end boolean NOT NULL,
-    cancellation_sent_at timestamp with time zone,
-    ended_at timestamp with time zone,
-    provider_state_version integer NOT NULL,
-    is_current boolean NOT NULL,
-    reconciliation_next_at timestamp with time zone,
-    reconciliation_lease_token uuid,
-    reconciliation_lease_expires_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.billing_webhook_events (
-    id uuid NOT NULL,
-    provider character varying(24) NOT NULL,
-    provider_mode character varying(8) NOT NULL,
-    external_event_id character varying(255) NOT NULL,
-    event_type character varying(128) NOT NULL,
-    payload_sha256 character varying(64) NOT NULL,
-    safe_summary jsonb,
-    received_at timestamp with time zone NOT NULL,
-    processed_at timestamp with time zone,
-    result_code character varying(64) NOT NULL,
-    error_code character varying(64) NOT NULL,
-    processing_state character varying(16) NOT NULL,
-    attempt_count integer DEFAULT 0 NOT NULL,
-    next_attempt_at timestamp with time zone,
-    lease_token uuid,
-    lease_expires_at timestamp with time zone
 );
 
 CREATE TABLE public.bot_activity_daily (
@@ -1218,36 +1039,6 @@ CREATE TABLE public.competitors (
     updated_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.consumable_ledger (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    grant_id uuid NOT NULL,
-    capability_key character varying(64) NOT NULL,
-    entry_kind character varying(16) NOT NULL,
-    reservation_id uuid NOT NULL,
-    subject_kind character varying(16) NOT NULL,
-    subject_id uuid NOT NULL,
-    workspace_id uuid NOT NULL,
-    audit_id uuid,
-    task_id uuid,
-    agent_run_id uuid,
-    site_crawl_id uuid,
-    platform_call_id uuid,
-    dispatch_key character varying(128) NOT NULL,
-    request_fingerprint character varying(64) NOT NULL,
-    allocation_order integer NOT NULL,
-    refund_of_id uuid,
-    attempt integer,
-    units integer NOT NULL,
-    idempotency_key character varying(255) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_consumable_ledger_attempt_shape CHECK (((((entry_kind)::text = ANY ((ARRAY['debit'::character varying, 'refund'::character varying])::text[])) AND (attempt IS NOT NULL) AND (attempt > 0)) OR (((entry_kind)::text <> ALL ((ARRAY['debit'::character varying, 'refund'::character varying])::text[])) AND (attempt IS NULL)))),
-    CONSTRAINT ck_consumable_ledger_entry_kind CHECK (((entry_kind)::text = ANY ((ARRAY['reservation'::character varying, 'debit'::character varying, 'release'::character varying, 'refund'::character varying])::text[]))),
-    CONSTRAINT ck_consumable_ledger_refund_shape CHECK ((((entry_kind)::text = 'refund'::text) = (refund_of_id IS NOT NULL))),
-    CONSTRAINT ck_consumable_ledger_typed_subject CHECK (((((subject_kind)::text = 'audit'::text) AND (audit_id IS NOT NULL) AND (task_id IS NOT NULL) AND (agent_run_id IS NULL) AND (site_crawl_id IS NULL) AND (platform_call_id IS NULL)) OR (((subject_kind)::text = 'agent'::text) AND (audit_id IS NULL) AND (task_id IS NULL) AND (agent_run_id IS NOT NULL) AND (site_crawl_id IS NULL) AND (platform_call_id IS NULL)) OR (((subject_kind)::text = 'site_crawl'::text) AND (audit_id IS NULL) AND (task_id IS NULL) AND (agent_run_id IS NULL) AND (site_crawl_id IS NOT NULL) AND (platform_call_id IS NULL)) OR (((subject_kind)::text = 'platform_call'::text) AND (audit_id IS NULL) AND (task_id IS NULL) AND (agent_run_id IS NULL) AND (site_crawl_id IS NULL) AND (platform_call_id IS NOT NULL)))),
-    CONSTRAINT ck_consumable_ledger_units_positive CHECK ((units > 0))
-);
-
 CREATE TABLE public.content_differentiation_candidates (
     id uuid NOT NULL,
     workspace_id uuid NOT NULL,
@@ -1425,17 +1216,6 @@ CREATE TABLE public.demand_snapshots (
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.enterprise_agreement_references (
-    id uuid NOT NULL,
-    workspace_id uuid NOT NULL,
-    actor_id uuid NOT NULL,
-    signatory_id uuid NOT NULL,
-    reference character varying(128) NOT NULL,
-    document_sha256 character varying(64) NOT NULL,
-    signed_at timestamp with time zone NOT NULL,
-    recorded_at timestamp with time zone NOT NULL
-);
-
 CREATE TABLE public.entity_sentiments (
     id uuid NOT NULL,
     workspace_id uuid NOT NULL,
@@ -1507,31 +1287,6 @@ CREATE TABLE public.execution_cost_projections (
     provider_reported_cost_microusd bigint,
     projected_total_cost_microusd bigint,
     created_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.grant_revocations (
-    id uuid NOT NULL,
-    grant_id uuid NOT NULL,
-    effective_from timestamp with time zone NOT NULL,
-    reason character varying(255) NOT NULL,
-    actor_user_id uuid,
-    actor_kind character varying(24) NOT NULL,
-    idempotency_key character varying(255) NOT NULL,
-    created_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.idempotency_records (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    idempotency_key character varying(255) NOT NULL,
-    operation character varying(64) NOT NULL,
-    request_fingerprint character varying(64) NOT NULL,
-    state character varying(16) NOT NULL,
-    response_status integer,
-    response_body jsonb,
-    expires_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.integration_connections (
@@ -1657,73 +1412,6 @@ CREATE TABLE public.integration_sync_runs (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     completed_at timestamp with time zone
-);
-
-CREATE TABLE public.introductory_claims (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    campaign_id uuid NOT NULL,
-    introduction_kind character varying(32) NOT NULL,
-    tier_key character varying(64) NOT NULL,
-    primary_grant_id uuid NOT NULL,
-    idempotency_key character varying(255) NOT NULL,
-    request_fingerprint character varying(64) NOT NULL,
-    terms_consent_version character varying(64) NOT NULL,
-    data_sharing_consent_version character varying(64) NOT NULL,
-    consented_by_user_id uuid NOT NULL,
-    claimed_at timestamp with time zone NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    operator_code_id uuid,
-    ended_at timestamp with time zone,
-    ended_by_user_id uuid,
-    created_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.introductory_operator_codes (
-    id uuid NOT NULL,
-    code_sha256 character varying(64) NOT NULL,
-    billing_account_id uuid,
-    email_normalized character varying(255),
-    waiver_scope character varying(64) NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    redemption_limit integer NOT NULL,
-    redemption_count integer NOT NULL,
-    created_by_user_id uuid NOT NULL,
-    reason character varying(255) NOT NULL,
-    created_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_intro_code_count_nonnegative CHECK ((redemption_count >= 0)),
-    CONSTRAINT ck_intro_code_limit_positive CHECK ((redemption_limit > 0))
-);
-
-CREATE TABLE public.mcp_authorization_codes (
-    workspace_ids jsonb NOT NULL,
-    id uuid NOT NULL,
-    code_hash character varying(64) NOT NULL,
-    client_id character varying(36) NOT NULL,
-    user_id uuid NOT NULL,
-    scopes jsonb NOT NULL,
-    code_challenge character varying(128) NOT NULL,
-    redirect_uri text NOT NULL,
-    redirect_uri_provided_explicitly boolean NOT NULL,
-    resource text NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    consumed_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL
-);
-
-CREATE TABLE public.mcp_authorization_requests (
-    id uuid NOT NULL,
-    transaction_hash character varying(64) NOT NULL,
-    client_id character varying(36) NOT NULL,
-    state text NOT NULL,
-    scopes jsonb NOT NULL,
-    code_challenge character varying(128) NOT NULL,
-    redirect_uri text NOT NULL,
-    redirect_uri_provided_explicitly boolean NOT NULL,
-    resource text NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    consumed_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.mcp_confirmations (
@@ -1939,41 +1627,6 @@ CREATE TABLE public.owned_domains (
     created_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.pending_activations (
-    id uuid NOT NULL,
-    billing_account_id uuid NOT NULL,
-    activation_kind character varying(16) NOT NULL,
-    catalog_key character varying(64) NOT NULL,
-    quantity integer NOT NULL,
-    catalog_revision character varying(64) NOT NULL,
-    credential_mode character varying(16) NOT NULL,
-    status character varying(16) NOT NULL,
-    provider character varying(24) NOT NULL,
-    provider_mode character varying(8) NOT NULL,
-    external_reference character varying(255),
-    external_price_id character varying(255),
-    quote jsonb,
-    tax_snapshot jsonb,
-    change_terms jsonb,
-    country_code character varying(2) NOT NULL,
-    region character varying(16) NOT NULL,
-    settled_by character varying(24),
-    settled_authority_id character varying(255),
-    idempotency_key character varying(255) NOT NULL,
-    request_fingerprint character varying(64) NOT NULL,
-    expires_at timestamp with time zone NOT NULL,
-    activated_at timestamp with time zone,
-    failed_at timestamp with time zone,
-    failure_code character varying(64),
-    reconciliation_attempts integer DEFAULT 0 NOT NULL,
-    reconciliation_next_at timestamp with time zone,
-    reconciliation_lease_token uuid,
-    reconciliation_lease_expires_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_pending_activation_quantity_positive CHECK ((quantity > 0))
-);
-
 CREATE TABLE public.performance_dimension_stats (
     id uuid NOT NULL,
     workspace_id uuid NOT NULL,
@@ -1991,7 +1644,6 @@ CREATE TABLE public.performance_dimension_stats (
 CREATE TABLE public.platform_calls (
     id uuid NOT NULL,
     workspace_id uuid NOT NULL,
-    billing_account_id uuid,
     feature character varying(48) NOT NULL,
     provider character varying(32) NOT NULL,
     model character varying(255) NOT NULL,
@@ -2012,18 +1664,8 @@ CREATE TABLE public.platform_calls (
     CONSTRAINT ck_platform_calls_charge CHECK (((charge)::text = ANY ((ARRAY['credits'::character varying, 'included'::character varying, 'not_charged'::character varying])::text[]))),
     CONSTRAINT ck_platform_calls_status CHECK (((status)::text = ANY ((ARRAY['reserved'::character varying, 'settled'::character varying, 'failed'::character varying])::text[]))),
     CONSTRAINT ck_platform_calls_credits CHECK (((credits >= 0) AND (reserved_credits >= 0) AND (credits <= reserved_credits))),
-    CONSTRAINT ck_platform_calls_hold CHECK (((((charge)::text = 'credits'::text) AND (billing_account_id IS NOT NULL) AND (reserved_credits > 0)) OR (((charge)::text <> 'credits'::text) AND (reservation_id IS NULL) AND (reserved_credits = 0)))),
+    CONSTRAINT ck_platform_calls_hold CHECK (((((charge)::text = 'credits'::text) AND (reserved_credits > 0)) OR (((charge)::text <> 'credits'::text) AND (reservation_id IS NULL) AND (reserved_credits = 0)))),
     CONSTRAINT ck_platform_calls_settled CHECK ((((status)::text = 'reserved'::text) = (settled_at IS NULL)))
-);
-
-CREATE TABLE public.policy_acceptances (
-    id uuid NOT NULL,
-    actor_id uuid NOT NULL,
-    workspace_id uuid NOT NULL,
-    terms_revision character varying(64) NOT NULL,
-    privacy_notice_revision character varying(64) NOT NULL,
-    context character varying(32) NOT NULL,
-    accepted_at timestamp with time zone NOT NULL
 );
 
 CREATE TABLE public.project_markets (
@@ -2171,7 +1813,6 @@ CREATE TABLE public.provider_capacity_buckets (
     transport_provider character varying(32) NOT NULL,
     account_pool_identity character varying(64) DEFAULT ''::character varying NOT NULL,
     connection_id uuid,
-    billing_account_id uuid,
     capacity numeric(14,4) NOT NULL,
     tokens numeric(14,4) NOT NULL,
     refill_tokens_per_second numeric(14,4) NOT NULL,
@@ -3231,22 +2872,6 @@ CREATE TABLE public.web_acquisition_controls (
     updated_at timestamp with time zone NOT NULL
 );
 
-CREATE TABLE public.workspace_invitations (
-    id uuid NOT NULL,
-    workspace_id uuid NOT NULL,
-    email_normalized character varying(255) NOT NULL,
-    role character varying(20) NOT NULL,
-    token_sha256 character varying(64) NOT NULL,
-    invited_by_user_id uuid,
-    expires_at timestamp with time zone NOT NULL,
-    accepted_at timestamp with time zone,
-    accepted_by_user_id uuid,
-    revoked_at timestamp with time zone,
-    created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_workspace_invitation_role CHECK (((role)::text = ANY ((ARRAY['admin'::character varying, 'member'::character varying, 'viewer'::character varying])::text[])))
-);
-
 CREATE TABLE public.workspace_members (
     id uuid NOT NULL,
     workspace_id uuid NOT NULL,
@@ -3279,12 +2904,6 @@ CREATE TABLE public.workspaces (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
 );
-
-ALTER TABLE ONLY public.account_grants
-    ADD CONSTRAINT account_grants_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.account_policy_acceptances
-    ADD CONSTRAINT account_policy_acceptances_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.action_status_events
     ADD CONSTRAINT action_status_events_pkey PRIMARY KEY (id);
@@ -3394,54 +3013,6 @@ ALTER TABLE ONLY public.audit_tasks
 ALTER TABLE ONLY public.audits
     ADD CONSTRAINT audits_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.auth_challenges
-    ADD CONSTRAINT auth_challenges_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.auth_challenges
-    ADD CONSTRAINT auth_challenges_token_digest_key UNIQUE (token_digest);
-
-ALTER TABLE ONLY public.billing_accounts
-    ADD CONSTRAINT billing_accounts_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.billing_catalog_revisions
-    ADD CONSTRAINT billing_catalog_revisions_created_idempotency_key_key UNIQUE (created_idempotency_key);
-
-ALTER TABLE ONLY public.billing_catalog_revisions
-    ADD CONSTRAINT billing_catalog_revisions_payload_sha256_key UNIQUE (payload_sha256);
-
-ALTER TABLE ONLY public.billing_catalog_revisions
-    ADD CONSTRAINT billing_catalog_revisions_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.billing_catalog_revisions
-    ADD CONSTRAINT billing_catalog_revisions_published_idempotency_key_key UNIQUE (published_idempotency_key);
-
-ALTER TABLE ONLY public.billing_catalog_revisions
-    ADD CONSTRAINT billing_catalog_revisions_revision_key UNIQUE (revision);
-
-ALTER TABLE ONLY public.billing_invoice_counters
-    ADD CONSTRAINT billing_invoice_counters_pkey PRIMARY KEY (financial_year);
-
-ALTER TABLE ONLY public.billing_invoices
-    ADD CONSTRAINT billing_invoices_invoice_number_key UNIQUE (invoice_number);
-
-ALTER TABLE ONLY public.billing_invoices
-    ADD CONSTRAINT billing_invoices_payment_id_key UNIQUE (payment_id);
-
-ALTER TABLE ONLY public.billing_invoices
-    ADD CONSTRAINT billing_invoices_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.billing_invoices
-    ADD CONSTRAINT billing_invoices_receipt_number_key UNIQUE (receipt_number);
-
-ALTER TABLE ONLY public.billing_payments
-    ADD CONSTRAINT billing_payments_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.billing_subscriptions
-    ADD CONSTRAINT billing_subscriptions_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.billing_webhook_events
-    ADD CONSTRAINT billing_webhook_events_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.bot_activity_daily
     ADD CONSTRAINT bot_activity_daily_pkey PRIMARY KEY (id);
 
@@ -3523,9 +3094,6 @@ ALTER TABLE ONLY public.competitor_mentions
 ALTER TABLE ONLY public.competitors
     ADD CONSTRAINT competitors_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.consumable_ledger
-    ADD CONSTRAINT consumable_ledger_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.content_differentiation_candidates
     ADD CONSTRAINT content_differentiation_candidates_pkey PRIMARY KEY (id);
 
@@ -3553,17 +3121,8 @@ ALTER TABLE ONLY public.demand_signals
 ALTER TABLE ONLY public.demand_snapshots
     ADD CONSTRAINT demand_snapshots_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.enterprise_agreement_references
-    ADD CONSTRAINT enterprise_agreement_references_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.execution_cost_projections
     ADD CONSTRAINT execution_cost_projections_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.grant_revocations
-    ADD CONSTRAINT grant_revocations_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.idempotency_records
-    ADD CONSTRAINT idempotency_records_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.integration_connections
     ADD CONSTRAINT integration_connections_pkey PRIMARY KEY (id);
@@ -3591,21 +3150,6 @@ ALTER TABLE ONLY public.integration_property_mappings
 
 ALTER TABLE ONLY public.integration_sync_runs
     ADD CONSTRAINT integration_sync_runs_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.introductory_claims
-    ADD CONSTRAINT introductory_claims_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.introductory_operator_codes
-    ADD CONSTRAINT introductory_operator_codes_code_sha256_key UNIQUE (code_sha256);
-
-ALTER TABLE ONLY public.introductory_operator_codes
-    ADD CONSTRAINT introductory_operator_codes_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.mcp_authorization_codes
-    ADD CONSTRAINT mcp_authorization_codes_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.mcp_authorization_requests
-    ADD CONSTRAINT mcp_authorization_requests_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.mcp_confirmations
     ADD CONSTRAINT mcp_confirmations_pkey PRIMARY KEY (id);
@@ -3655,17 +3199,11 @@ ALTER TABLE ONLY public.project_markets
 ALTER TABLE ONLY public.project_markets
     ADD CONSTRAINT uq_project_markets_market UNIQUE (project_id, country_code, language_code);
 
-ALTER TABLE ONLY public.pending_activations
-    ADD CONSTRAINT pending_activations_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY public.performance_dimension_stats
     ADD CONSTRAINT performance_dimension_stats_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.platform_calls
     ADD CONSTRAINT platform_calls_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.policy_acceptances
-    ADD CONSTRAINT policy_acceptances_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.projects
     ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
@@ -3844,9 +3382,6 @@ ALTER TABLE ONLY public.traffic_snapshots
 ALTER TABLE ONLY public.unintended_domains
     ADD CONSTRAINT unintended_domains_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY public.account_grants
-    ADD CONSTRAINT uq_account_grant_bundle_key UNIQUE (billing_account_id, idempotency_key, key);
-
 ALTER TABLE ONLY public.actions
     ADD CONSTRAINT uq_actions_project_group UNIQUE (project_id, group_key);
 
@@ -3949,15 +3484,6 @@ ALTER TABLE ONLY public.audit_tasks
 ALTER TABLE ONLY public.audits
     ADD CONSTRAINT uq_audits_ws_project_id UNIQUE (workspace_id, project_id, id);
 
-ALTER TABLE ONLY public.auth_challenges
-    ADD CONSTRAINT uq_auth_challenge_purpose UNIQUE (user_id, purpose);
-
-ALTER TABLE ONLY public.billing_subscriptions
-    ADD CONSTRAINT uq_billing_subscription_external UNIQUE (provider, provider_mode, external_subscription_id);
-
-ALTER TABLE ONLY public.billing_webhook_events
-    ADD CONSTRAINT uq_billing_webhook_external UNIQUE (provider, provider_mode, external_event_id);
-
 ALTER TABLE ONLY public.bot_activity_daily
     ADD CONSTRAINT uq_bot_activity_daily_scope UNIQUE (workspace_id, project_id, id);
 
@@ -4018,9 +3544,6 @@ ALTER TABLE ONLY public.commerce_prompt_targets
 ALTER TABLE ONLY public.commerce_shelf_snapshots
     ADD CONSTRAINT uq_commerce_shelf_snapshot UNIQUE (audit_id, target_kind, target_id, formula_version);
 
-ALTER TABLE ONLY public.consumable_ledger
-    ADD CONSTRAINT uq_consumable_ledger_idempotency UNIQUE (billing_account_id, idempotency_key);
-
 ALTER TABLE ONLY public.content_differentiation_candidates
     ADD CONSTRAINT uq_content_diff_candidate_task_page UNIQUE (audit_task_id, source_page_id);
 
@@ -4057,17 +3580,8 @@ ALTER TABLE ONLY public.demand_signals
 ALTER TABLE ONLY public.demand_snapshots
     ADD CONSTRAINT uq_demand_snapshot_source_hash UNIQUE (project_id, source_hash);
 
-ALTER TABLE ONLY public.enterprise_agreement_references
-    ADD CONSTRAINT uq_enterprise_agreement_reference UNIQUE (workspace_id, reference);
-
 ALTER TABLE ONLY public.execution_cost_projections
     ADD CONSTRAINT uq_execution_cost_projection_version UNIQUE (raw_response_artifact_id, formula_version, pricing_version);
-
-ALTER TABLE ONLY public.grant_revocations
-    ADD CONSTRAINT uq_grant_revocation_idempotency UNIQUE (grant_id, idempotency_key);
-
-ALTER TABLE ONLY public.idempotency_records
-    ADD CONSTRAINT uq_idempotency_record_account_key UNIQUE (billing_account_id, idempotency_key);
 
 ALTER TABLE ONLY public.integration_connections
     ADD CONSTRAINT uq_integration_connection_grant_provider UNIQUE (grant_id, provider);
@@ -4126,17 +3640,8 @@ ALTER TABLE ONLY public.opportunity_verification_events
 ALTER TABLE ONLY public.overview_layouts
     ADD CONSTRAINT uq_overview_layouts_project UNIQUE (project_id);
 
-ALTER TABLE ONLY public.pending_activations
-    ADD CONSTRAINT uq_pending_activation_account_idempotency UNIQUE (billing_account_id, idempotency_key);
-
 ALTER TABLE ONLY public.performance_dimension_stats
     ADD CONSTRAINT uq_performance_dimension_stat_key UNIQUE (snapshot_id, dimension, dimension_key);
-
-ALTER TABLE ONLY public.policy_acceptances
-    ADD CONSTRAINT uq_policy_acceptance_revision UNIQUE (actor_id, workspace_id, terms_revision);
-
-ALTER TABLE ONLY public.account_policy_acceptances
-    ADD CONSTRAINT uq_account_policy_acceptance_revision UNIQUE (actor_id, terms_revision);
 
 ALTER TABLE ONLY public.projects
     ADD CONSTRAINT uq_projects_ws_id UNIQUE (workspace_id, id);
@@ -4148,7 +3653,7 @@ ALTER TABLE ONLY public.prompts
     ADD CONSTRAINT uq_prompt_set_normalized_text UNIQUE (prompt_set_id, normalized_text_hash);
 
 ALTER TABLE ONLY public.provider_capacity_buckets
-    ADD CONSTRAINT uq_provider_capacity_bucket_pool UNIQUE NULLS NOT DISTINCT (pool_kind, transport_provider, account_pool_identity, connection_id, billing_account_id);
+    ADD CONSTRAINT uq_provider_capacity_bucket_pool UNIQUE NULLS NOT DISTINCT (pool_kind, transport_provider, account_pool_identity, connection_id);
 
 ALTER TABLE ONLY public.query_evidence_snapshots
     ADD CONSTRAINT uq_query_evidence_snapshot_identity UNIQUE (workspace_id, project_id, window_start, window_end, source_hash, analyzer_version);
@@ -4306,12 +3811,6 @@ ALTER TABLE ONLY public.users
 ALTER TABLE ONLY public.web_acquisition_controls
     ADD CONSTRAINT web_acquisition_controls_pkey PRIMARY KEY (domain);
 
-ALTER TABLE ONLY public.workspace_invitations
-    ADD CONSTRAINT workspace_invitations_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.workspace_invitations
-    ADD CONSTRAINT workspace_invitations_token_sha256_key UNIQUE (token_sha256);
-
 ALTER TABLE ONLY public.workspace_members
     ADD CONSTRAINT workspace_members_pkey PRIMARY KEY (id);
 
@@ -4320,12 +3819,6 @@ ALTER TABLE ONLY public.workspace_site_health_runtime
 
 ALTER TABLE ONLY public.workspaces
     ADD CONSTRAINT workspaces_pkey PRIMARY KEY (id);
-
-CREATE INDEX ix_account_grant_account_key_valid ON public.account_grants USING btree (billing_account_id, key, valid_from);
-
-CREATE INDEX ix_account_grant_source ON public.account_grants USING btree (source_kind, source_ref);
-
-CREATE INDEX ix_account_grants_billing_account_id ON public.account_grants USING btree (billing_account_id);
 
 CREATE INDEX ix_action_status_events_action_id ON public.action_status_events USING btree (action_id);
 
@@ -4501,8 +3994,6 @@ CREATE INDEX ix_audit_tasks_status ON public.audit_tasks USING btree (status);
 
 CREATE INDEX ix_audit_tasks_workspace_id ON public.audit_tasks USING btree (workspace_id);
 
-CREATE INDEX ix_audits_funding_account_id ON public.audits USING btree (funding_account_id);
-
 CREATE INDEX ix_audits_parent_audit_id ON public.audits USING btree (parent_audit_id);
 
 CREATE INDEX ix_audits_project_id ON public.audits USING btree (project_id);
@@ -4518,20 +4009,6 @@ CREATE INDEX ix_audits_status ON public.audits USING btree (status);
 CREATE INDEX ix_audits_trigger ON public.audits USING btree (trigger);
 
 CREATE INDEX ix_audits_workspace_id ON public.audits USING btree (workspace_id);
-
-CREATE INDEX ix_billing_accounts_owner_user_id ON public.billing_accounts USING btree (owner_user_id);
-
-CREATE UNIQUE INDEX ix_billing_accounts_workspace_id ON public.billing_accounts USING btree (workspace_id);
-
-CREATE INDEX ix_billing_invoice_account_date ON public.billing_invoices USING btree (billing_account_id, invoice_date);
-
-CREATE INDEX ix_billing_invoices_billing_account_id ON public.billing_invoices USING btree (billing_account_id);
-
-CREATE INDEX ix_billing_payment_account_paid ON public.billing_payments USING btree (billing_account_id, paid_at);
-
-CREATE INDEX ix_billing_payments_billing_account_id ON public.billing_payments USING btree (billing_account_id);
-
-CREATE INDEX ix_billing_subscriptions_billing_account_id ON public.billing_subscriptions USING btree (billing_account_id);
 
 CREATE INDEX ix_bot_requests_activity ON public.bot_requests USING btree (workspace_id, project_id, occurred_at, id);
 
@@ -4671,14 +4148,6 @@ CREATE INDEX ix_competitors_logo_asset_id ON public.competitors USING btree (log
 
 CREATE INDEX ix_competitors_project_id ON public.competitors USING btree (project_id);
 
-CREATE INDEX ix_consumable_ledger_billing_account_id ON public.consumable_ledger USING btree (billing_account_id);
-
-CREATE INDEX ix_consumable_ledger_grant_key_created ON public.consumable_ledger USING btree (grant_id, capability_key, created_at);
-
-CREATE INDEX ix_consumable_ledger_reservation_kind ON public.consumable_ledger USING btree (reservation_id, entry_kind);
-
-CREATE INDEX ix_consumable_ledger_subject ON public.consumable_ledger USING btree (subject_kind, subject_id);
-
 CREATE INDEX ix_platform_calls_workspace_created ON public.platform_calls USING btree (workspace_id, created_at);
 
 CREATE INDEX ix_platform_calls_unsettled ON public.platform_calls USING btree (created_at) WHERE (((status)::text = 'reserved'::text) AND (NOT owner_settled));
@@ -4723,21 +4192,11 @@ CREATE INDEX ix_demand_snapshots_project_id ON public.demand_snapshots USING btr
 
 CREATE INDEX ix_demand_snapshots_workspace_id ON public.demand_snapshots USING btree (workspace_id);
 
-CREATE INDEX ix_enterprise_agreement_references_workspace_id ON public.enterprise_agreement_references USING btree (workspace_id);
-
 CREATE INDEX ix_execution_cost_projections_audit_id ON public.execution_cost_projections USING btree (audit_id);
 
 CREATE INDEX ix_execution_cost_projections_raw_response_artifact_id ON public.execution_cost_projections USING btree (raw_response_artifact_id);
 
 CREATE INDEX ix_execution_cost_projections_task_id ON public.execution_cost_projections USING btree (task_id);
-
-CREATE INDEX ix_grant_revocation_grant_effective ON public.grant_revocations USING btree (grant_id, effective_from);
-
-CREATE INDEX ix_grant_revocations_grant_id ON public.grant_revocations USING btree (grant_id);
-
-CREATE INDEX ix_idempotency_record_expiry ON public.idempotency_records USING btree (expires_at);
-
-CREATE INDEX ix_idempotency_records_billing_account_id ON public.idempotency_records USING btree (billing_account_id);
 
 CREATE INDEX ix_integration_connections_grant_id ON public.integration_connections USING btree (grant_id);
 
@@ -4798,22 +4257,6 @@ CREATE INDEX ix_integration_sync_runs_project_id ON public.integration_sync_runs
 CREATE INDEX ix_integration_sync_runs_status ON public.integration_sync_runs USING btree (status);
 
 CREATE INDEX ix_integration_sync_runs_workspace_id ON public.integration_sync_runs USING btree (workspace_id);
-
-CREATE UNIQUE INDEX ix_introductory_claims_billing_account_id ON public.introductory_claims USING btree (billing_account_id);
-
-CREATE INDEX ix_mcp_authorization_codes_client_id ON public.mcp_authorization_codes USING btree (client_id);
-
-CREATE UNIQUE INDEX ix_mcp_authorization_codes_code_hash ON public.mcp_authorization_codes USING btree (code_hash);
-
-CREATE INDEX ix_mcp_authorization_codes_expires_at ON public.mcp_authorization_codes USING btree (expires_at);
-
-CREATE INDEX ix_mcp_authorization_codes_user_id ON public.mcp_authorization_codes USING btree (user_id);
-
-CREATE INDEX ix_mcp_authorization_requests_client_id ON public.mcp_authorization_requests USING btree (client_id);
-
-CREATE INDEX ix_mcp_authorization_requests_expires_at ON public.mcp_authorization_requests USING btree (expires_at);
-
-CREATE UNIQUE INDEX ix_mcp_authorization_requests_transaction_hash ON public.mcp_authorization_requests USING btree (transaction_hash);
 
 CREATE INDEX ix_mcp_confirmations_expires_at ON public.mcp_confirmations USING btree (expires_at);
 
@@ -4903,10 +4346,6 @@ CREATE INDEX ix_overview_layouts_workspace_id ON public.overview_layouts USING b
 
 CREATE INDEX ix_owned_domains_project_id ON public.owned_domains USING btree (project_id);
 
-CREATE INDEX ix_pending_activation_status_created ON public.pending_activations USING btree (status, created_at);
-
-CREATE INDEX ix_pending_activations_billing_account_id ON public.pending_activations USING btree (billing_account_id);
-
 CREATE INDEX ix_performance_dimension_stats_dimension ON public.performance_dimension_stats USING btree (dimension);
 
 CREATE INDEX ix_performance_dimension_stats_project_id ON public.performance_dimension_stats USING btree (project_id);
@@ -4914,8 +4353,6 @@ CREATE INDEX ix_performance_dimension_stats_project_id ON public.performance_dim
 CREATE INDEX ix_performance_dimension_stats_snapshot_id ON public.performance_dimension_stats USING btree (snapshot_id);
 
 CREATE INDEX ix_performance_dimension_stats_workspace_id ON public.performance_dimension_stats USING btree (workspace_id);
-
-CREATE INDEX ix_policy_acceptances_workspace_id ON public.policy_acceptances USING btree (workspace_id);
 
 CREATE INDEX ix_projects_workspace_id ON public.projects USING btree (workspace_id);
 
@@ -5283,41 +4720,19 @@ CREATE INDEX ix_user_identities_user_id ON public.user_identities USING btree (u
 
 CREATE UNIQUE INDEX ix_users_email ON public.users USING btree (email);
 
-CREATE INDEX ix_workspace_invitation_workspace ON public.workspace_invitations USING btree (workspace_id, created_at);
-
 CREATE INDEX ix_workspace_members_user_id ON public.workspace_members USING btree (user_id);
 
 CREATE UNIQUE INDEX uq_workspace_member_owner ON public.workspace_members USING btree (workspace_id) WHERE ((role)::text = 'owner'::text);
 
 CREATE UNIQUE INDEX uq_workspace_member_owned_user ON public.workspace_members USING btree (user_id) WHERE ((role)::text = 'owner'::text);
 
-CREATE UNIQUE INDEX uq_billing_catalog_revision_published ON public.billing_catalog_revisions USING btree (publication_state) WHERE ((publication_state)::text = 'published'::text);
-
-CREATE UNIQUE INDEX uq_billing_payment_external ON public.billing_payments USING btree (provider, provider_mode, external_payment_id) WHERE ((receipt_kind)::text = 'payment'::text);
-
-CREATE UNIQUE INDEX uq_billing_refund_external ON public.billing_payments USING btree (provider, provider_mode, external_refund_id) WHERE (external_refund_id IS NOT NULL);
-
-CREATE UNIQUE INDEX uq_billing_subscription_one_current ON public.billing_subscriptions USING btree (billing_account_id) WHERE (is_current AND ((subscription_kind)::text = 'base'::text));
-
 CREATE UNIQUE INDEX uq_bot_request_line ON public.bot_requests USING btree (workspace_id, source_id, line_hash) WHERE (provider_request_id IS NULL);
 
 CREATE UNIQUE INDEX uq_bot_request_provider ON public.bot_requests USING btree (workspace_id, project_id, host, provider_request_id) WHERE (provider_request_id IS NOT NULL);
 
-CREATE UNIQUE INDEX uq_consumable_ledger_subject_dispatch_allocation_debit ON public.consumable_ledger USING btree (subject_kind, subject_id, dispatch_key, grant_id) WHERE ((entry_kind)::text = 'debit'::text);
-
-CREATE UNIQUE INDEX uq_consumable_ledger_task_attempt ON public.consumable_ledger USING btree (task_id, attempt, grant_id) WHERE ((entry_kind)::text = 'debit'::text);
-
 CREATE UNIQUE INDEX uq_crawl_log_live_host ON public.crawl_log_sources USING btree (workspace_id, project_id, host) WHERE (((status)::text = 'active'::text) AND ((kind)::text = ANY ((ARRAY['webhook'::character varying, 'pull'::character varying])::text[])));
 
 CREATE UNIQUE INDEX uq_opportunities_live_target ON public.opportunities USING btree (project_id, rule_id, target_key) WHERE (superseded_at IS NULL);
-
-CREATE UNIQUE INDEX uq_pending_activation_one_pending_addon ON public.pending_activations USING btree (billing_account_id, catalog_key) WHERE (((activation_kind)::text = 'addon'::text) AND ((status)::text = 'pending'::text));
-
-CREATE UNIQUE INDEX uq_pending_activation_one_pending_base ON public.pending_activations USING btree (billing_account_id) WHERE (((activation_kind)::text = 'base'::text) AND ((status)::text = 'pending'::text));
-
-CREATE UNIQUE INDEX uq_pending_activation_one_pending_upgrade ON public.pending_activations USING btree (billing_account_id) WHERE (((activation_kind)::text = 'upgrade'::text) AND ((status)::text = 'pending'::text));
-
-CREATE UNIQUE INDEX uq_pending_activation_provider_reference ON public.pending_activations USING btree (provider, provider_mode, external_reference) WHERE (external_reference IS NOT NULL);
 
 CREATE UNIQUE INDEX uq_prompt_candidate_pending_text ON public.prompt_candidates USING btree (prompt_set_id, normalized_text_hash) WHERE ((disposition)::text = 'pending'::text);
 
@@ -5331,12 +4746,7 @@ CREATE UNIQUE INDEX uq_site_page_analysis_current ON public.site_page_analyses U
 
 CREATE UNIQUE INDEX uq_topic_project_name ON public.topics USING btree (project_id, lower((name)::text));
 
-CREATE UNIQUE INDEX uq_workspace_invitation_pending_email ON public.workspace_invitations USING btree (workspace_id, email_normalized) WHERE ((accepted_at IS NULL) AND (revoked_at IS NULL));
-
 CREATE UNIQUE INDEX uq_workspaces_single_system ON public.workspaces USING btree (is_system) WHERE is_system;
-
-ALTER TABLE ONLY public.account_grants
-    ADD CONSTRAINT account_grants_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.action_status_events
     ADD CONSTRAINT action_status_events_action_id_fkey FOREIGN KEY (action_id) REFERENCES public.actions(id) ON DELETE CASCADE;
@@ -5621,49 +5031,10 @@ ALTER TABLE ONLY public.audit_tasks
     ADD CONSTRAINT audit_tasks_workspace_id_project_id_audit_id_fkey FOREIGN KEY (workspace_id, project_id, audit_id) REFERENCES public.audits(workspace_id, project_id, id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.audits
-    ADD CONSTRAINT audits_funding_account_id_fkey FOREIGN KEY (funding_account_id) REFERENCES public.billing_accounts(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.audits
     ADD CONSTRAINT audits_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.audits
     ADD CONSTRAINT audits_workspace_id_project_id_fkey FOREIGN KEY (workspace_id, project_id) REFERENCES public.projects(workspace_id, id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.auth_challenges
-    ADD CONSTRAINT auth_challenges_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.billing_accounts
-    ADD CONSTRAINT billing_accounts_owner_user_id_fkey FOREIGN KEY (owner_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.billing_accounts
-    ADD CONSTRAINT billing_accounts_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.billing_catalog_revisions
-    ADD CONSTRAINT billing_catalog_revisions_created_by_user_id_fkey FOREIGN KEY (created_by_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_catalog_revisions
-    ADD CONSTRAINT billing_catalog_revisions_published_by_user_id_fkey FOREIGN KEY (published_by_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_invoices
-    ADD CONSTRAINT billing_invoices_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_invoices
-    ADD CONSTRAINT billing_invoices_payment_id_fkey FOREIGN KEY (payment_id) REFERENCES public.billing_payments(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_payments
-    ADD CONSTRAINT billing_payments_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_payments
-    ADD CONSTRAINT billing_payments_parent_payment_id_fkey FOREIGN KEY (parent_payment_id) REFERENCES public.billing_payments(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_payments
-    ADD CONSTRAINT billing_payments_pending_activation_id_fkey FOREIGN KEY (pending_activation_id) REFERENCES public.pending_activations(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_payments
-    ADD CONSTRAINT billing_payments_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.billing_subscriptions(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.billing_subscriptions
-    ADD CONSTRAINT billing_subscriptions_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.bot_activity_daily
     ADD CONSTRAINT bot_activity_daily_workspace_id_project_id_fkey FOREIGN KEY (workspace_id, project_id) REFERENCES public.projects(workspace_id, id) ON DELETE CASCADE;
@@ -5878,23 +5249,8 @@ ALTER TABLE ONLY public.competitor_mentions
 ALTER TABLE ONLY public.competitors
     ADD CONSTRAINT competitors_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY public.consumable_ledger
-    ADD CONSTRAINT consumable_ledger_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.consumable_ledger
-    ADD CONSTRAINT consumable_ledger_grant_id_fkey FOREIGN KEY (grant_id) REFERENCES public.account_grants(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.consumable_ledger
-    ADD CONSTRAINT consumable_ledger_refund_of_id_fkey FOREIGN KEY (refund_of_id) REFERENCES public.consumable_ledger(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.consumable_ledger
-    ADD CONSTRAINT consumable_ledger_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
-
 ALTER TABLE ONLY public.platform_calls
     ADD CONSTRAINT platform_calls_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.platform_calls
-    ADD CONSTRAINT platform_calls_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.content_differentiation_candidates
     ADD CONSTRAINT content_differentiation_candidates_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
@@ -6091,15 +5447,6 @@ ALTER TABLE ONLY public.traffic_page_stats
 ALTER TABLE ONLY public.traffic_query_stats
     ADD CONSTRAINT fk_traffic_query_stat_snapshot_scoped FOREIGN KEY (workspace_id, snapshot_id) REFERENCES public.traffic_snapshots(workspace_id, id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY public.grant_revocations
-    ADD CONSTRAINT grant_revocations_actor_user_id_fkey FOREIGN KEY (actor_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.grant_revocations
-    ADD CONSTRAINT grant_revocations_grant_id_fkey FOREIGN KEY (grant_id) REFERENCES public.account_grants(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.idempotency_records
-    ADD CONSTRAINT idempotency_records_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY public.integration_connections
     ADD CONSTRAINT integration_connections_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
 
@@ -6141,36 +5488,6 @@ ALTER TABLE ONLY public.integration_sync_runs
 
 ALTER TABLE ONLY public.integration_sync_runs
     ADD CONSTRAINT integration_sync_runs_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.introductory_claims
-    ADD CONSTRAINT introductory_claims_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.introductory_claims
-    ADD CONSTRAINT introductory_claims_consented_by_user_id_fkey FOREIGN KEY (consented_by_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.introductory_claims
-    ADD CONSTRAINT introductory_claims_ended_by_user_id_fkey FOREIGN KEY (ended_by_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.introductory_claims
-    ADD CONSTRAINT introductory_claims_operator_code_id_fkey FOREIGN KEY (operator_code_id) REFERENCES public.introductory_operator_codes(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.introductory_claims
-    ADD CONSTRAINT introductory_claims_primary_grant_id_fkey FOREIGN KEY (primary_grant_id) REFERENCES public.account_grants(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.introductory_operator_codes
-    ADD CONSTRAINT introductory_operator_codes_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.introductory_operator_codes
-    ADD CONSTRAINT introductory_operator_codes_created_by_user_id_fkey FOREIGN KEY (created_by_user_id) REFERENCES public.users(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.mcp_authorization_codes
-    ADD CONSTRAINT mcp_authorization_codes_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.mcp_oauth_clients(client_id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.mcp_authorization_codes
-    ADD CONSTRAINT mcp_authorization_codes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.mcp_authorization_requests
-    ADD CONSTRAINT mcp_authorization_requests_client_id_fkey FOREIGN KEY (client_id) REFERENCES public.mcp_oauth_clients(client_id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.mcp_confirmations
     ADD CONSTRAINT mcp_confirmations_grant_id_fkey FOREIGN KEY (grant_id) REFERENCES public.mcp_oauth_grants(id) ON DELETE CASCADE;
@@ -6295,9 +5612,6 @@ ALTER TABLE ONLY public.owned_domains
 ALTER TABLE ONLY public.project_markets
     ADD CONSTRAINT project_markets_workspace_id_project_id_fkey FOREIGN KEY (workspace_id, project_id) REFERENCES public.projects(workspace_id, id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY public.pending_activations
-    ADD CONSTRAINT pending_activations_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY public.performance_dimension_stats
     ADD CONSTRAINT performance_dimension_stats_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
 
@@ -6360,9 +5674,6 @@ ALTER TABLE ONLY public.provider_attempts
 
 ALTER TABLE ONLY public.provider_attempts
     ADD CONSTRAINT provider_attempts_task_id_fkey FOREIGN KEY (task_id) REFERENCES public.audit_tasks(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.provider_capacity_buckets
-    ADD CONSTRAINT provider_capacity_buckets_billing_account_id_fkey FOREIGN KEY (billing_account_id) REFERENCES public.billing_accounts(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.provider_capacity_buckets
     ADD CONSTRAINT provider_capacity_buckets_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.provider_connections(id) ON DELETE SET NULL;
@@ -6762,15 +6073,6 @@ ALTER TABLE ONLY public.unintended_domains
 
 ALTER TABLE ONLY public.user_identities
     ADD CONSTRAINT user_identities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.workspace_invitations
-    ADD CONSTRAINT workspace_invitations_accepted_by_user_id_fkey FOREIGN KEY (accepted_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.workspace_invitations
-    ADD CONSTRAINT workspace_invitations_invited_by_user_id_fkey FOREIGN KEY (invited_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.workspace_invitations
-    ADD CONSTRAINT workspace_invitations_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.workspace_members
     ADD CONSTRAINT workspace_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;

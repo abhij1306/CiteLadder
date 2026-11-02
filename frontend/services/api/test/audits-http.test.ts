@@ -84,12 +84,6 @@ describe('audit HTTP family cutover', () => {
     });
     expect(created.status).toBe(201);
     const [run] = (await created.json()) as [{ id: string }];
-    const funding = await db
-      .selectFrom('audits')
-      .select('funding_account_id')
-      .where('id', '=', run.id)
-      .executeTakeFirstOrThrow();
-    expect(funding.funding_account_id).toBeNull();
     expect((await request(t.userId, t.workspaceId, `/${run.id}/cancel`, 'POST')).status).toBe(200);
     expect((await request(t.userId, t.workspaceId, `/${run.id}/cancel`, 'POST')).status).toBe(409);
   });
