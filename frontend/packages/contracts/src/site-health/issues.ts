@@ -101,3 +101,7 @@ export const siteIssuesPageSchema = cursorPageSchema(siteIssueSchema).extend({
   // a list-detail view can show its default selection without a second trip.
   first_issue: siteIssueDetailSchema.optional(),
 });
+
+// The same page for the project's newest crawl, named so a reader that did not
+// yet know the crawl can file the answer under it.
+export const latestCrawlIssuesPageSchema = siteIssuesPageSchema.extend({ crawl_id: uuid() });

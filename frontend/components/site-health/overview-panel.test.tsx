@@ -16,7 +16,6 @@ const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const CRAWL = '22222222-2222-4222-8222-222222222222';
 const SNAPSHOT = '33333333-3333-4333-8333-333333333333';
-const SOURCE = '44444444-4444-4444-8444-444444444444';
 
 function OverviewPanel(props: Omit<ComponentProps<typeof ScopedOverviewPanel>, 'workspaceId'>) {
   return <ScopedOverviewPanel workspaceId={WORKSPACE} {...props} />;
@@ -121,7 +120,6 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
             title: 'Images missing alt attributes',
             remediation: 'Add alt text to informative images.',
             affected_pages: 1,
-            source_evaluation_ids: [SOURCE],
           },
         ],
       },
@@ -144,9 +142,6 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
       inp: null,
       cls: null,
     },
-    source_analysis_ids: [SOURCE],
-    source_artifact_ids: [SOURCE],
-    source_evaluation_ids: [SOURCE],
     limitations: ['HTTP evidence only; browser layout was not measured.'],
   },
   trend: {

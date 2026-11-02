@@ -1,7 +1,8 @@
 /**
  * Append-only Site Health evidence for one analyzed page: the fetch artifact,
  * one attempt row per real network call, the page analysis, its rule
- * evaluations and the issues they raise. Callers own the transaction.
+ * evaluations and the issues they raise. Only the issues' derived currency flag
+ * changes later (`issue-currency.ts`). Callers own the transaction.
  */
 import { createHash, randomUUID } from 'node:crypto';
 
@@ -14,6 +15,7 @@ import type { SiteTask } from '../queue/task-queue.ts';
 import type { analyzePage } from './analysis/analyze-page.ts';
 import { createsIssue, type RuleEvaluation } from './analysis/rules.ts';
 import type { Facts } from './analysis/read-facts.ts';
+import { refreshIssueCurrency } from './issue-currency.ts';
 import type { Crawl } from './task-fence.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
@@ -343,13 +345,14 @@ export async function writePageAnalysis(
 ) {
   const siteUrlId = task.site_url_id;
   await refreshUrlState(db, crawl, siteUrlId, artifactId, facts);
-  await db
+  const superseded = await db
     .updateTable('site_page_analyses')
     .set({ is_current: false })
     .where('workspace_id', '=', crawl.workspace_id)
     .where('crawl_id', '=', crawl.id)
     .where('site_url_id', '=', siteUrlId)
     .where('is_current', '=', true)
+    .returning('finalized_at')
     .execute();
   const id = randomUUID();
   const scores = result.scores;
@@ -386,5 +389,8 @@ export async function writePageAnalysis(
     })
     .execute();
   await insertEvaluations(db, crawl, id, siteUrlId, artifactId, evaluations);
+  // A provisional analysis names no current evaluations, so its issues are
+  // written not current; only superseding a finalized analysis changes the set.
+  if (superseded.some((row) => row.finalized_at !== null)) await refreshIssueCurrency(db, crawl);
   return { id, pageKind: result.assessment.page_kind };
 }

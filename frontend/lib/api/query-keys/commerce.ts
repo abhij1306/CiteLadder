@@ -2,6 +2,8 @@
 export const commerceKeys = {
   all: ['commerce'] as const,
   catalog: (projectId: string) => ['commerce', projectId, 'catalog'] as const,
+  /** The crawl's analyzed count the cached catalog was read beside (client-only, no request). */
+  catalogReadCount: (projectId: string) => ['commerce', projectId, 'catalog-read-count'] as const,
   competitors: (projectId: string) => ['commerce', projectId, 'competitors'] as const,
   buyerPrompts: (projectId: string) => ['commerce', projectId, 'buyer-prompts'] as const,
   discoveryTasks: (projectId: string, taskIds: string[]) =>

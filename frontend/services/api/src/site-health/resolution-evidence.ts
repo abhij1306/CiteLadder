@@ -359,11 +359,14 @@ function sitewideFinding(
       page_kind: page.pageKind,
       artifact_id: page.artifactId,
     }));
+  // Every linking page of each kind, not the sample: the Issues page-kind filter counts by these.
+  const pageKindCounts: Record<string, number> = {};
+  for (const page of pages.values())
+    if (page.pageKind) pageKindCounts[page.pageKind] = (pageKindCounts[page.pageKind] ?? 0) + 1;
   return finalizeEvaluation(ruleId, 'missing', {
     count: pages.size,
-    linking_page_kinds: [...new Set([...pages.values()].map((page) => page.pageKind))]
-      .filter(Boolean)
-      .toSorted(compareText),
+    linking_page_kinds: Object.keys(pageKindCounts).toSorted(compareText),
+    page_kind_counts: pageKindCounts,
     targets: failing.slice(0, limit).map((url) => {
       const rows = linkers.get(url) ?? [];
       return {

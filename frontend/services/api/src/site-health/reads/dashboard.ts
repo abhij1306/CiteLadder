@@ -3,10 +3,9 @@ import { siteHealthDashboardSchema } from '@citeladder/contracts/site-health';
 
 import type { Database } from '../../db/database.ts';
 import { WorkspaceScope } from '../../db/workspace-scope.ts';
-import { notFound } from '../../errors.ts';
 import {
   crawlCounters,
-  loadProject,
+  dashboardCrawl,
   projectCrawl,
   rootFailure,
   scoreSummary,
@@ -54,16 +53,8 @@ export async function dashboard(
   projectId: string,
   crawlId: string | null,
 ) {
-  await loadProject(db, workspaceId, projectId);
+  const crawl = await dashboardCrawl(db, workspaceId, projectId, crawlId);
   const workspace = new WorkspaceScope(workspaceId);
-  let crawls = workspace
-    .selectFrom(db, 'site_crawls')
-    .selectAll()
-    .where('project_id', '=', projectId);
-  crawls = crawlId === null ? crawls : crawls.where('id', '=', crawlId);
-  const crawl =
-    (await crawls.orderBy('created_at', 'desc').orderBy('id', 'desc').executeTakeFirst()) ?? null;
-  if (crawl === null && crawlId !== null) throw notFound('Crawl');
   const [quota, projectMonitored, details, snapshot] = await Promise.all([
     monitoredQuota(db, workspaceId),
     workspace

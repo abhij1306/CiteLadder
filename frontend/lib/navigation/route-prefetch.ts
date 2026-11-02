@@ -114,56 +114,76 @@ async function prefetchOverview(client: QueryClient, { projectId, workspaceId }:
 }
 
 /**
- * Warm the Website screen's dashboard and, once it names the crawl, the page
- * preview the screen requests next — the same two-step shape as `/issues`.
+ * Warm the Website screen's dashboard and, beside it, the page preview the
+ * screen requests once the dashboard names its crawl.
+ *
+ * A cached dashboard already names the crawl, so the preview is warmed under
+ * it directly. Otherwise the project-scoped read answers for the newest crawl
+ * (the one the dashboard shows) and names it, and the answer is filed under
+ * that crawl's key — the preview no longer waits a round trip for the
+ * dashboard. Only a finished crawl's answer is filed: an active crawl's
+ * preview shows completed rows only, which is a different key.
  */
 async function prefetchSiteHealth(client: QueryClient, { projectId, workspaceId }: ProjectScope) {
-  const [{ siteHealthQueries }, { pagePreviewQuery }] = await Promise.all([
-    import('@/lib/api/site-health'),
-    import('@/lib/site-health/use-site-health-screen'),
-  ]);
+  const [{ siteHealthQueries }, { latestCrawlApi }, screen, { shouldPollCrawl }] =
+    await Promise.all([
+      import('@/lib/api/site-health'),
+      import('@/lib/api/site-health-latest-crawl'),
+      import('@/lib/site-health/use-site-health-screen'),
+      import('@/lib/site-health/status'),
+    ]);
   const dashboard = siteHealthQueries.dashboard(workspaceId, projectId);
+  const cached = client.getQueryData(dashboard.queryKey);
   warmQuery(client, dashboard);
-  const preview = pagePreviewQuery(
-    workspaceId,
-    await client.ensureQueryData(dashboard).catch(() => null),
-  );
-  if (preview) warmQuery(client, preview);
+  if (cached) {
+    const preview = screen.pagePreviewQuery(workspaceId, cached);
+    if (preview) warmQuery(client, preview);
+    return;
+  }
+  const params = screen.monitoredPagePreviewParams(false);
+  const latest = await latestCrawlApi.pages(projectId, params, { workspaceId }).catch(() => null);
+  if (!latest) return;
+  const { crawl_id: crawlId, crawl_status: status, ...page } = latest;
+  const key = siteHealthQueries.pages(workspaceId, crawlId, params).queryKey;
+  if (!shouldPollCrawl({ status }) && client.getQueryData(key) === undefined)
+    client.setQueryData(key, page);
 }
 
 /**
  * Warm the issues page itself, not only the dashboard above it.
  *
- * `/issues` needs two reads in sequence: the dashboard names the crawl, and
- * only then can the catalog ask that crawl for its issues. Warming the first
- * alone left the second — the one the screen actually blocks on — to start
- * cold on arrival, and the project context has usually warmed the dashboard
- * already anyway.
+ * The catalog asks one crawl for its issues, and only the dashboard names the
+ * crawl. A cached dashboard warms the catalog under its crawl directly;
+ * otherwise the project-scoped read answers for the newest crawl (the one the
+ * dashboard shows), beside the dashboard rather than after it, and its answer
+ * is filed under the crawl it names.
  *
  * Only the DEFAULT page is warmed. A reader arriving with filters in the
  * address wants a different key, and warming this one would spend a request on
  * a page they will not see.
  */
-async function prefetchIssues(client: QueryClient, scope: ProjectScope) {
-  const [{ siteHealthQueries }, { emptyIssueFilters, issueCatalogParams }] = await Promise.all([
-    import('@/lib/api/site-health'),
-    import('@/lib/site-health/issue-filters'),
-  ]);
-  const dashboard = siteHealthQueries.dashboard(scope.workspaceId, scope.projectId);
+async function prefetchIssues(client: QueryClient, { projectId, workspaceId }: ProjectScope) {
+  const [{ siteHealthQueries }, { latestCrawlApi }, { emptyIssueFilters, issueCatalogParams }] =
+    await Promise.all([
+      import('@/lib/api/site-health'),
+      import('@/lib/api/site-health-latest-crawl'),
+      import('@/lib/site-health/issue-filters'),
+    ]);
+  const dashboard = siteHealthQueries.dashboard(workspaceId, projectId);
+  const cachedCrawlId = client.getQueryData(dashboard.queryKey)?.crawl?.id;
   warmQuery(client, dashboard);
-
-  const crawlId = (await client.ensureQueryData(dashboard).catch(() => null))?.crawl?.id;
-  if (!crawlId) return;
-  warmQuery(
-    client,
-    siteHealthQueries.issues(
-      scope.workspaceId,
-      crawlId,
-      // The identical params `IssuesCatalog` builds for an unfiltered first
-      // page. Spelling them out differently here would warm a key nothing reads.
-      issueCatalogParams(emptyIssueFilters, null),
-    ),
-  );
+  // The identical params `IssuesCatalog` builds for an unfiltered first page.
+  // Spelling them out differently here would warm a key nothing reads.
+  const params = issueCatalogParams(emptyIssueFilters, null);
+  if (cachedCrawlId) {
+    warmQuery(client, siteHealthQueries.issues(workspaceId, cachedCrawlId, params));
+    return;
+  }
+  const latest = await latestCrawlApi.issues(projectId, params, { workspaceId }).catch(() => null);
+  if (!latest) return;
+  const { crawl_id: crawlId, ...page } = latest;
+  const key = siteHealthQueries.issues(workspaceId, crawlId, params).queryKey;
+  if (client.getQueryData(key) === undefined) client.setQueryData(key, page);
 }
 
 /** Warm a destination's route code and, with a project, its primary read. */

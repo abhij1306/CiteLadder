@@ -9,6 +9,7 @@ import { firstOf } from '../lists.ts';
 import type { SiteRuleEvaluations } from '../generated/db-schema.ts';
 import type { RuleEvaluation } from './analysis/rules.ts';
 import { appliedSiteChecks, crawlSiteChecks, scoreAnalysis } from './analysis/scoring.ts';
+import { refreshIssueCurrency } from './issue-currency.ts';
 import type { Crawl } from './task-fence.ts';
 
 export function persistedEvaluation(row: Selectable<SiteRuleEvaluations>): RuleEvaluation {
@@ -104,4 +105,6 @@ export async function publishFinalPageAnalyses(db: Database, crawl: Crawl) {
       .insertInto('site_page_analyses')
       .values(revisions.slice(offset, offset + chunk))
       .execute();
+  // The finalized revisions now name the crawl's current evaluations.
+  await refreshIssueCurrency(db, crawl);
 }

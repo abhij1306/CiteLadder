@@ -32,7 +32,7 @@ import {
 } from '@/lib/site-health/status';
 
 /** The page browser's first Monitored page at its default size and ordering. */
-function monitoredPagePreviewParams(active: boolean) {
+export function monitoredPagePreviewParams(active: boolean) {
   return {
     limit: TABLE_DEFAULT_PAGE_SIZE,
     monitored: true,

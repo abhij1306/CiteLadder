@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { pageAnalysisStatusSchema, pageKindSchema } from './crawl.ts';
+import { crawlOverallStatusSchema, pageAnalysisStatusSchema, pageKindSchema } from './crawl.ts';
 import { analysisSummaryFields } from './inventory.ts';
 import { responseObject, uuid } from './core.ts';
 import {
@@ -87,6 +87,13 @@ export const pagesPageSchema = cursorPageSchema(pageSummarySchema).extend({
   // REQUIRED (backend always serializes); empty unless the crawl's root fetch
   // failed terminally. Never enters the keyset pagination of `items`.
   root_errors: z.array(rootErrorSchema),
+});
+
+// The same page for the project's newest crawl, with the crawl it read and that
+// crawl's status, so a reader that did not yet know the crawl can file it.
+export const latestCrawlPagesPageSchema = pagesPageSchema.extend({
+  crawl_id: uuid(),
+  crawl_status: crawlOverallStatusSchema,
 });
 
 // One persisted rule evaluation on a page (all outcomes, current label).

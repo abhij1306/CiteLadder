@@ -54,6 +54,29 @@ export async function loadProject(db: Database, workspaceId: string, projectId: 
 }
 
 /**
+ * The named crawl or, without one, the project's newest crawl in any state:
+ * the crawl the dashboard shows. A foreign project or crawl is a 404; a
+ * project with no crawl is `null`.
+ */
+export async function dashboardCrawl(
+  db: Database,
+  workspaceId: string,
+  projectId: string,
+  crawlId: string | null,
+): Promise<Crawl | null> {
+  await loadProject(db, workspaceId, projectId);
+  let crawls = new WorkspaceScope(workspaceId)
+    .selectFrom(db, 'site_crawls')
+    .selectAll()
+    .where('project_id', '=', projectId);
+  crawls = crawlId === null ? crawls : crawls.where('id', '=', crawlId);
+  const crawl =
+    (await crawls.orderBy('created_at', 'desc').orderBy('id', 'desc').executeTakeFirst()) ?? null;
+  if (crawl === null && crawlId !== null) throw notFound('Crawl');
+  return crawl;
+}
+
+/**
  * The named crawl (404 when foreign) or the project's newest usable one. A
  * named crawl that has not reached a usable terminal state, or a project with
  * none, is `null`: the caller renders its own "nothing yet" state.
@@ -143,9 +166,7 @@ export function scoreSummary(crawl: Crawl) {
     classification_state: text(summary.classification_state, NOT_MEASURED),
     classification_reason_groups: record(summary.classification_reason_groups),
     classification_formula_version: text(summary.classification_formula_version, ''),
-    classification_source_analysis_ids: strings(summary.classification_source_analysis_ids),
-    classification_source_artifact_ids: strings(summary.classification_source_artifact_ids),
-    classification_source_task_ids: strings(summary.classification_source_task_ids),
+    // The stored summary keeps its classification source id lists; no reader renders them.
     scored_page_kind_set: strings(summary.scored_page_kind_set),
     scored_page_count_by_kind: record(summary.scored_page_count_by_kind),
     by_page_kind: Object.fromEntries(byKind),

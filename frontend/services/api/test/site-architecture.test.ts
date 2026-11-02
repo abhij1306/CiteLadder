@@ -395,6 +395,28 @@ it('complete coverage creates actionable root findings without borrowing foreign
     cursor: null,
   });
   expect(detail.affected_url_count).toBe(2);
+  // The page-kind filter files it under the kinds of the pages it names, not the homepage's.
+  const ofKind = async (pageKind: string) =>
+    (
+      await readIssues(
+        db,
+        seed.workspaceId,
+        seed.crawlId,
+        {
+          query: null,
+          severity: null,
+          category: null,
+          dimension: null,
+          rule: 'architecture.orphan_pages',
+          siteUrlId: null,
+          pageKind,
+          findingClass: 'defect',
+        },
+        { limit: 50, cursor: null },
+      )
+    ).items.map((item) => item.affected_url_count);
+  expect(await ofKind('product')).toEqual([2]);
+  expect(await ofKind('homepage')).toEqual([]);
   const snapshot = await db
     .selectFrom('site_health_snapshots')
     .select('top_issues')

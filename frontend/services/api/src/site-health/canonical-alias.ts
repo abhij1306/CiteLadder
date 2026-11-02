@@ -12,6 +12,7 @@ import { compareText, scalarText } from '../text-order.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { deactivateSystemMemberships } from './frontier.ts';
+import { refreshIssueCurrency } from './issue-currency.ts';
 import type { Crawl } from './task-fence.ts';
 import { inScope } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
@@ -93,7 +94,7 @@ export async function markDuplicates(trx: Database, crawl: Crawl, hashes: string
   if (!urls.length) return;
   const ids = urls.map((url) => url.id);
   await deactivateSystemMemberships(trx, crawl, ids);
-  await trx
+  const retired = await trx
     .updateTable('site_page_analyses')
     .set({ is_current: false })
     .where('workspace_id', '=', crawl.workspace_id)
@@ -101,7 +102,9 @@ export async function markDuplicates(trx: Database, crawl: Crawl, hashes: string
     .where('crawl_id', '=', crawl.id)
     .where('site_url_id', '=', sql<string>`any(${ids}::uuid[])`)
     .where('is_current', '=', true)
+    .returning('finalized_at')
     .execute();
+  if (retired.some((row) => row.finalized_at !== null)) await refreshIssueCurrency(trx, crawl);
 }
 
 /** Resolve whole-crawl chains and cycles before removing any representative. */

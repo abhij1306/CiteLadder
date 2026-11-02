@@ -6,6 +6,7 @@ import { readAgentContext } from '../src/agent/context-adapter.ts';
 import { selectContentFragments } from '../src/site-health/reads/content-fragments.ts';
 import { policy } from '../src/config.ts';
 import { issueGroupId } from '../src/site-health/reads/rules.ts';
+import { refreshIssueCurrency } from '../src/site-health/issue-currency.ts';
 
 describe('Agent persisted context binding', () => {
   const db = testDatabase(),
@@ -53,6 +54,8 @@ describe('Agent persisted context binding', () => {
       .set({ finalized_at: new Date() })
       .where('crawl_id', '=', seed.crawlId)
       .execute();
+    // What the terminal publication does after finalizing the analyses.
+    await refreshIssueCurrency(db, { id: seed.crawlId, workspace_id: seed.workspaceId });
     const ref = {
       crawl_id: seed.crawlId,
       group_id: issueGroupId(seed.crawlId, rule.rule_id, rule.finding_class),

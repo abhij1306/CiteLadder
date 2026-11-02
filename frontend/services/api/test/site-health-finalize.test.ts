@@ -354,6 +354,7 @@ describe('terminal checks from persisted evidence', () => {
     expect(redirectShared!.evidence).toMatchObject({
       count: 6,
       linking_page_kinds: ['homepage', 'product'],
+      page_kind_counts: { homepage: 1, product: 5 },
       resolution_source_ids: ['attempt-screens', 'task-screens'],
     });
     const [target] = redirectShared!.evidence.targets as Record<string, unknown>[];

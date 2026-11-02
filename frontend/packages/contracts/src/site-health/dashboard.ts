@@ -83,7 +83,6 @@ export const changeSummarySchema = responseObject({
   analyzer_version: z.string(),
   page_analyzer_version: z.string(),
   extractor_version: z.string(),
-  source_analysis_ids: z.array(uuid()),
   coverage: z.record(z.string(), z.unknown()),
   summary: z.record(z.string(), z.unknown()),
   limitations: z.array(z.string()),
@@ -206,7 +205,6 @@ export const aeoReadinessSchema = responseObject({
   scoring_version: z.string(),
   presentation_version: z.string(),
   analyzer_version: z.string(),
-  source_analysis_ids: z.array(uuid()),
   analysis_count: z.number().int(),
   affected_page_count: z.number().int(),
   dimensions: z.array(readinessDimensionSchema),
@@ -279,6 +277,9 @@ const cohortCompositionSchema = responseObject({
   current_page_count_by_kind: z.partialRecord(pageKindSchema, z.number().int().nonnegative()),
 });
 
+// The frozen snapshot keeps its provenance id lists (source evaluations,
+// analyses, artifacts and classification tasks); this response renders the
+// projection without them (owner, 2 Nov 2026).
 export const siteHealthOverviewSchema = responseObject({
   project_id: uuid(),
   crawl_id: uuid(),
@@ -342,7 +343,6 @@ export const siteHealthOverviewSchema = responseObject({
             title: z.string(),
             remediation: z.string(),
             affected_pages: z.number().int(),
-            source_evaluation_ids: z.array(uuid()),
           }),
         ),
       }),
@@ -354,9 +354,6 @@ export const siteHealthOverviewSchema = responseObject({
       inp: z.number().nullable(),
       cls: z.number().nullable(),
     }),
-    source_analysis_ids: z.array(uuid()),
-    source_artifact_ids: z.array(uuid()),
-    source_evaluation_ids: z.array(uuid()),
     limitations: z.array(z.string()),
   }),
   trend: responseObject({

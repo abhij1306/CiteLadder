@@ -2514,7 +2514,8 @@ CREATE TABLE public.site_issues (
     remediation text NOT NULL,
     analyzer_version character varying(32) NOT NULL,
     rule_version character varying(32) NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    is_current boolean DEFAULT false NOT NULL
 );
 
 CREATE TABLE public.site_observed_architectures (
@@ -4423,6 +4424,8 @@ CREATE INDEX ix_site_internal_link_events_workspace_id ON public.site_internal_l
 CREATE INDEX ix_site_internal_link_runs_project_id ON public.site_internal_link_runs USING btree (project_id);
 
 CREATE INDEX ix_site_issues_analysis_id ON public.site_issues USING btree (analysis_id);
+
+CREATE INDEX ix_site_issues_current ON public.site_issues USING btree (crawl_id, finding_class) WHERE is_current;
 
 CREATE INDEX ix_site_issues_filter ON public.site_issues USING btree (crawl_id, finding_class, severity, category, rule_id);
 
