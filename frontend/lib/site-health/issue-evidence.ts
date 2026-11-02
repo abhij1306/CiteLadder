@@ -270,7 +270,7 @@ function duplicateMetadataKinds(evidence: Evidence): string[] {
 }
 
 function offerFreshness(evidence: Evidence): string[] {
-  if (evidence.offer === false) return ['Offer'];
+  if (evidence.offer === false || evidence.reason === 'offer_not_structured') return ['Offer'];
   if (evidence.reason === 'offer_currency_missing') return ['priceCurrency'];
   const timestamp = text(evidence.timestamp);
   return timestamp

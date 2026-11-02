@@ -332,10 +332,10 @@ describe('OverviewPanel', () => {
     );
     const rows = within(table).getAllByRole('row');
     expect(rows.map((row) => row.textContent)).toEqual([
-      'ImpactIssuePagesEffect',
-      'HighMissing page title1Web',
-      'MediumVisible creator attribution incompleteAdvisory1AEO',
-      'LowMissing meta descriptionAdvisory1–Not measured',
+      'ImpactIssuePages',
+      'HighMissing page title1',
+      'MediumVisible creator attribution incompleteAdvisory1',
+      'LowMissing meta descriptionAdvisory1',
     ]);
   });
 

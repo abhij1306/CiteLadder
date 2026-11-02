@@ -16,7 +16,7 @@ import { record } from '../db/json.ts';
 import type { WorkspaceSiteHealthRuntime } from '../generated/db-schema.ts';
 import { compareText } from '../text-order.ts';
 import { classifyUrlAdmission, type Admission, type Scope } from './url-admission.ts';
-import { hostTwinHash } from './url-identity.ts';
+import { canonicalIdentity, hostTwinHash } from './url-identity.ts';
 import { ACTIVE_CRAWL } from './site-task.ts';
 import type { Crawl } from './task-fence.ts';
 import {
@@ -30,6 +30,11 @@ import {
 } from './admission-writes.ts';
 
 const crawlPolicy = policy.site_health.crawl;
+const NOT_A_PAGE = new Set([
+  ...policy.site_health.reads.corpus_exclusion_error_codes,
+  ...policy.site_health.reads.non_page_error_codes,
+]);
+const GONE = new Set(policy.site_health.reads.corpus_exclusion_status_codes);
 type Runtime = Selectable<WorkspaceSiteHealthRuntime>;
 
 function frontierSettings(env: Record<string, string | undefined> = process.env) {
@@ -848,6 +853,31 @@ export async function markInventoryDocument(trx: Database, crawl: Crawl, hash: s
     .where('project_id', '=', crawl.project_id)
     .where('url_hash', '=', hash)
     .returning('id')
+    .executeTakeFirst();
+  if (url) await deactivateSystemMemberships(trx, crawl, [url.id]);
+}
+
+/**
+ * A final fetch that shows the URL is no page to analyze (excluded, gone, or
+ * not HTML) frees its system-managed selection, as a document does, so it is
+ * never counted as a selected page left unanalyzed. The root keeps its slot:
+ * its failure is the crawl's own. Callers hold the runtime lock and not yet
+ * the crawl's, per the Site Health lock order.
+ */
+export async function releaseNonPage(
+  trx: Database,
+  crawl: Crawl,
+  hash: string,
+  failure: { errorCode: string; statusCode: number | null },
+) {
+  if (canonicalIdentity(crawl.root_url).hash === hash) return;
+  if (!NOT_A_PAGE.has(failure.errorCode) && !GONE.has(failure.statusCode ?? 0)) return;
+  const url = await trx
+    .selectFrom('site_urls')
+    .select('id')
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('project_id', '=', crawl.project_id)
+    .where('url_hash', '=', hash)
     .executeTakeFirst();
   if (url) await deactivateSystemMemberships(trx, crawl, [url.id]);
 }

@@ -131,7 +131,6 @@ const TOP_ISSUE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'impact', label: 'Impact', width: 'figure' },
   { key: 'issue', label: 'Issue' },
   { key: 'pages', label: 'Pages', width: 'figure', numeric: true },
-  { key: 'effect', label: 'Effect', width: 'figure' },
 ];
 
 function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues'] }>) {
@@ -146,7 +145,6 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
         ),
       }}
       columns={TOP_ISSUE_COLUMNS}
-      minWidth="md"
       state={
         issues.length === 0
           ? { kind: 'empty', icon: ICONS.issues, headingLevel: 3, heading: 'No persisted issues' }
@@ -173,9 +171,6 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
             </Inline>
           </TableCell>
           <TableCell numeric>{issue.affected_pages}</TableCell>
-          <TableCell className="whitespace-nowrap">
-            <ScoreEffect roles={issue.score_roles} />
-          </TableCell>
         </TableRow>
       ))}
     </DataTable>
@@ -293,30 +288,6 @@ function ChangeDelta({ metricKey, delta }: Readonly<{ metricKey: string; delta: 
       precision={0}
       unit={coverage ? ' pp' : ''}
     />
-  );
-}
-
-/**
- * Which site score a rule feeds. A rule can feed both scores, and a diagnostic
- * rule feeds neither. Short labels keep the column narrow next to the ledger.
- */
-const SCORE_ROLE_LABELS: Record<string, string> = {
-  web_fundamentals: 'Web',
-  aeo_readiness: 'AEO',
-};
-
-function ScoreEffect({ roles }: Readonly<{ roles: readonly string[] }>) {
-  const labels = roles.flatMap((role) => {
-    const label = SCORE_ROLE_LABELS[role];
-    return label ? [[role, label] as const] : [];
-  });
-  if (labels.length === 0) return <UnavailableValue state="not_measured" />;
-  return (
-    <Inline gap="tight">
-      {labels.map(([role, label]) => (
-        <Badge key={role}>{label}</Badge>
-      ))}
-    </Inline>
   );
 }
 

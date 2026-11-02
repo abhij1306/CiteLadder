@@ -109,6 +109,119 @@ describe('traffic projections and Performance', () => {
     ]);
   });
 
+  it('keeps lagging Search Console days not yet reported, flags only mapped providers, and nulls zeros per day', async () => {
+    const seed = await importSeed(db, t);
+    await metric(db, seed, { date: '2026-07-25', metrics: { impressions: 40, clicks: 0 } });
+    await metric(db, seed, {
+      dataset: 'gsc_query_daily',
+      date: '2026-07-25',
+      values: ['zero click', '2026-07-25'],
+      metrics: { impressions: 40, clicks: 0, position: 3 },
+    });
+    // The run covers July; the three June days before it have no partition.
+    const window: [string, string] = ['2026-06-28', WINDOW[1]];
+    await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh', window), context);
+    const snapshot = await db
+      .selectFrom('traffic_snapshots')
+      .select(['id', 'metrics', 'coverage'])
+      .where('project_id', '=', t.projectId)
+      .where('window_start', '=', sql<Date>`${window[0]}::date`)
+      .where('window_end', '=', sql<Date>`${window[1]}::date`)
+      .where('granularity', '=', 'day')
+      .executeTakeFirstOrThrow();
+    const metrics = snapshot.metrics as {
+      totals: Record<string, number | null>;
+      series: { clicks: { date: string; value: number | null }[] };
+    };
+    // Unreported and missing days leave the window partial, not null.
+    expect(metrics.totals).toMatchObject({ clicks: 0, impressions: 40 });
+    const clicks = new Map(metrics.series.clicks.map((point) => [point.date, point.value]));
+    expect(
+      ['2026-06-29', '2026-07-24', '2026-07-25', '2026-07-26', '2026-07-28'].map((d) =>
+        clicks.get(d),
+      ),
+    ).toEqual([null, 0, 0, null, null]);
+    const quality = (
+      snapshot.coverage as {
+        analytics_quality: Record<
+          string,
+          { day: string; flags: string[]; not_yet_reported: boolean }[]
+        >;
+      }
+    ).analytics_quality;
+    // Only Search Console is mapped, so no GA4 or Bing day is reported unavailable.
+    expect(Object.keys(quality).sort()).toEqual([
+      'gsc_country_daily',
+      'gsc_day_daily',
+      'gsc_device_daily',
+      'gsc_page_daily',
+      'gsc_query_daily',
+    ]);
+    const days = new Map(quality.gsc_day_daily!.map((q) => [q.day, q]));
+    expect(
+      ['2026-06-29', '2026-07-25', '2026-07-26'].map((d) => {
+        const q = days.get(d);
+        return [q?.flags, q?.not_yet_reported];
+      }),
+    ).toEqual([
+      [['unavailable'], false],
+      [[], false],
+      [[], true],
+    ]);
+    const table = await request(`performance/table?snapshot_id=${snapshot.id}&dimension=query`);
+    expect(table.body.items.map((r) => [r.dimension_key, r.metrics])).toEqual([
+      ['zero click', { clicks: 0, impressions: 40, ctr: 0, position: 3 }],
+    ]);
+  });
+
+  it('observes zeros through a fallback from a newer truncated run', async () => {
+    const seed = await importSeed(db, t);
+    await metric(db, seed, { metrics: { impressions: 0, clicks: 0 } });
+    await metric(db, seed, { revision: 1, metrics: { impressions: 500, clicks: 50 } });
+    await db
+      .updateTable('integration_import_artifacts')
+      .set({ extract_metadata: JSON.stringify({ truncated: true }) })
+      .where('sync_run_id', 'in', (q) =>
+        q
+          .selectFrom('integration_sync_runs')
+          .select('id')
+          .where('connection_id', '=', seed.connectionId)
+          .where('resync_seq', '=', 1),
+      )
+      .execute();
+    await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh'), context);
+    const { body } = await request(`performance?range=custom&from=${WINDOW[0]}&to=${WINDOW[1]}`);
+    expect(body.selected.totals).toMatchObject({ clicks: 0, impressions: 0 });
+    expect(body.coverage.analytics_quality.gsc_day_daily?.at(-1)).toEqual({
+      day: WINDOW[1],
+      revision: 0,
+      flags: ['partition_fallback'],
+    });
+  });
+
+  it('re-projects an earlier display range that a later refresh window overlaps', async () => {
+    const seed = await importSeed(db, t);
+    await metric(db, seed, {});
+    const display: [string, string] = ['2026-07-10', WINDOW[1]];
+    await projectPerformanceRange(
+      await task(db, t, 'performance_range_projection', display),
+      context,
+    );
+    const read = async () =>
+      (await request(`performance?range=custom&from=${display[0]}&to=${display[1]}`)).body.selected;
+    const before = await read();
+    expect(before.totals.clicks).toBe(1);
+    await metric(db, seed, { revision: 1, metrics: { clicks: 99, impressions: 100 } });
+    await refreshTrafficSnapshot(
+      await task(db, t, 'traffic_snapshot_refresh', ['2026-07-20', WINDOW[1]]),
+      context,
+    );
+    expect(await read()).toMatchObject({
+      snapshot_id: before.snapshot_id,
+      totals: { clicks: 99, impressions: 100 },
+    });
+  });
+
   it('keeps headers GSC-only, Bing separate, and unavailable different from measured zero', async () => {
     const seed = await importSeed(db, t);
     await metric(db, seed, { metrics: { impressions: 0, clicks: 0 } });

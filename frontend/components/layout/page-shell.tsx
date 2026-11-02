@@ -106,6 +106,7 @@ export function ListScreen<T extends string = string>({
  */
 export function DetailScreen<T extends string = string>({
   back,
+  lead,
   aside,
   split = 'main-aside',
   children,
@@ -113,12 +114,18 @@ export function DetailScreen<T extends string = string>({
 }: ScreenBands<T> &
   Readonly<{
     back: PageBack;
+    /**
+     * The record's summary (its URL, status line), full width above the split,
+     * so the main column and the aside begin on the same line.
+     */
+    lead?: ReactNode;
     /** Supporting context beside the main content. */
     aside?: ReactNode;
     split?: Extract<SplitPaneRole, 'main-aside' | 'list-detail'>;
   }>) {
   return (
     <PageShell {...bands} back={back} measure="analytical" fill={false}>
+      {lead}
       {aside ? (
         <div className={splitPaneClasses(split)}>
           <div className="grid min-w-0 content-start gap-[var(--page-section-gap)]">{children}</div>
@@ -272,9 +279,12 @@ function IdentityBand({
           ) : null}
           {/* The route H1 is the top of the type ladder: nothing on the page
               out-ranks it except a figure. It stays the one H1 per route. */}
-          {/* One row, always: a long title truncates rather than wrapping. */}
-          <h1 className={textRole('pageTitle', 'min-w-0 truncate sr-only desktop:not-sr-only')}>
-            {resolved}
+          {/* One row, always: a long title truncates rather than wrapping. The
+              span truncates because `not-sr-only` restores the H1's wrapping. */}
+          <h1 className={textRole('pageTitle', 'min-w-0 sr-only desktop:not-sr-only')}>
+            <span className="block truncate" title={resolved}>
+              {resolved}
+            </span>
           </h1>
         </div>
         {actions ? (

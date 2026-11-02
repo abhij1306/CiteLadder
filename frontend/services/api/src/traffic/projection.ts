@@ -6,6 +6,7 @@ import { Ga4Accum, GscAccum, provenance, sourceFields, type MetricRow } from './
 import { canonicalPage, hash, normalizeQuery } from './normalization.ts';
 import { compareText } from '../text-order.ts';
 import { landingPage } from '../integrations/host-scope.ts';
+import { observesZero, type DayQuality } from '../integrations/partitions.ts';
 import type { NonEmpty } from '../lists.ts';
 
 const p = policy.traffic;
@@ -83,10 +84,7 @@ export class TrafficProjectionBuilder {
   private readonly queries = new Map<string, GscAccum>();
   private readonly dimensions = new Map<string, Map<string, GscAccum>>();
   private excludedHostRows = 0;
-  private readonly qualities = new Map<
-    string,
-    { day: string; flags: string[]; revision: number | null }[]
-  >();
+  private readonly qualities = new Map<string, readonly DayQuality[]>();
 
   constructor(window: ProjectionWindow) {
     if (
@@ -110,39 +108,33 @@ export class TrafficProjectionBuilder {
       if (!previous || row.resync_seq > previous.resync_seq) this.pending.set(key, row);
     }
   }
-  partitionQuality(
-    dataset: string,
-    days: { day: string; flags: string[]; revision: number | null }[],
-  ) {
+  /** A dataset without quality (its provider is not mapped) keeps its values as folded. */
+  partitionQuality(dataset: string, days: readonly DayQuality[]) {
     this.qualities.set(dataset, days);
     if (dataset !== p.DATASET_GSC_DAY_DAILY) return;
     for (const q of days) {
       const day = q.day;
-      if (
-        q.flags.length ||
-        q.revision === null ||
-        day < this.window.windowStart ||
-        day > this.window.windowEnd
-      )
+      if (!observesZero(q) || day < this.window.windowStart || day > this.window.windowEnd)
         continue;
       this.totalsGsc.hasRows = true;
       this.buckets.get(bucketStart(day, this.window.granularity))!.gsc.hasRows = true;
     }
   }
+  /**
+   * Zero vs missing is decided per day: a range observes a zero when any of
+   * its days has a partition that can. Other days only make the range partial,
+   * which its persisted per-day quality records; they never null its zeros.
+   */
   private measures(
     value: Measures,
     datasets: string[],
     start = this.window.windowStart,
     end = this.window.windowEnd,
   ) {
-    const flagged = datasets.some((dataset) =>
-      this.qualities
-        .get(dataset)
-        ?.some(
-          (q) => q.day >= start && q.day <= end && (q.flags.length > 0 || q.revision === null),
-        ),
+    const days = datasets.flatMap((dataset) =>
+      (this.qualities.get(dataset) ?? []).filter((q) => q.day >= start && q.day <= end),
     );
-    return flagged
+    return days.length > 0 && !days.some(observesZero)
       ? Object.fromEntries(Object.entries(value).map(([key, v]) => [key, v === 0 ? null : v]))
       : value;
   }

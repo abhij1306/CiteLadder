@@ -138,12 +138,13 @@ function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: bo
 
 function ProgressBar({
   requested,
-  completed,
+  finished,
 }: Readonly<{
   requested: number;
-  completed: number;
+  /** Answers that reached an outcome, failed ones included: a failure is no longer pending. */
+  finished: number;
 }>) {
-  const percent = requested > 0 ? Math.min(100, Math.round((completed / requested) * 100)) : 0;
+  const percent = requested > 0 ? Math.min(100, Math.round((finished / requested) * 100)) : 0;
 
   return (
     <Stack gap="tight">
@@ -245,7 +246,10 @@ export function ProgressPanel({
           <ProgressStatus audit={audit} polling={polling} />
 
           {polling && audit.requested_count > 0 ? (
-            <ProgressBar requested={audit.requested_count} completed={audit.completed_count} />
+            <ProgressBar
+              requested={audit.requested_count}
+              finished={audit.completed_count + audit.failed_count}
+            />
           ) : null}
 
           <ProgressMetrics audit={audit} />

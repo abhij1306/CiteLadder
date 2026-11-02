@@ -32,7 +32,7 @@ import {
   parseAgentHandoff,
   withoutContext,
 } from '@/lib/agent/handoff';
-import { approachLabel, targetKindLabel } from '@/lib/agent/vocabulary';
+import { approachLabel, priorityBand, targetKindLabel } from '@/lib/agent/vocabulary';
 import { actionsQueries, type Action } from '@/lib/api/actions';
 import type { AgentWorkflow } from '@/lib/api/agent';
 import { AGENT_TOP_ACTIONS } from '@/lib/config/agent';
@@ -256,7 +256,12 @@ function TopActionRow({ action }: Readonly<{ action: Action }>) {
           {action.target_label}
         </TextLink>
         <span className={textRole('caption')}>
-          {[approachLabel(action.approach), `${action.families.length} evidence systems`]
+          {[
+            approachLabel(action.approach),
+            action.priority_score === null
+              ? null
+              : `${priorityBand(action.priority_score)} priority`,
+          ]
             .filter(Boolean)
             .join(' · ')}
         </span>

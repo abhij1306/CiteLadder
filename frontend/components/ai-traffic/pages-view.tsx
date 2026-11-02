@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import type { z } from 'zod';
 import type { aiTrafficPagesSchema } from '@citeladder/contracts/ai-traffic';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -8,8 +8,7 @@ import { Stack } from '@/components/ui/layout';
 import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { Pressable } from '@/components/ui/pressable';
 import { MISSING_MARK } from '@/lib/format';
-import { Button } from '@/components/ui/button';
-import { DisplayTime } from '@/components/ui/display-time';
+import { DisplayTime, TableTime } from '@/components/ui/display-time';
 import { UrlPanel, TrafficLeg, trafficLegExplanation } from './url-panel';
 import { TrafficNoResults } from './empty-state';
 import type { TrafficFilters } from '@/lib/api/ai-traffic';
@@ -29,26 +28,10 @@ export function TrafficPages({
   data,
   filters = {},
 }: Readonly<{ data: z.infer<typeof aiTrafficPagesSchema>; filters?: TrafficFilters }>) {
-  const [urlHash, setUrlHash] = useState<string | null>(null),
-    coverage = data.observed_crawl_coverage;
+  const [urlHash, setUrlHash] = useState<string | null>(null);
   return (
     <Stack gap="workspace">
-      <p className="type-caption">
-        {coverage.share === null
-          ? 'Crawl coverage unavailable'
-          : `${coverage.label}: ${(coverage.share * 100).toFixed(1)}%`}{' '}
-        · {coverage.known_pages} known pages. Inventory{' '}
-        <DisplayTime value={coverage.inventory_date} /> ·{' '}
-        {coverage.inventory_complete ? 'Complete inventory' : 'Limited inventory'}
-        {coverage.sample_mode ? ' · Sampled inventory' : ''}
-      </p>
-      <DisconnectedSources items={data.items} />
-      {data.items.length > 0 ? (
-        <p className="type-caption">
-          Unavailable metrics show a dash. Focus a value for its source, coverage, and availability
-          details. Known pages and open findings remain visible.
-        </p>
-      ) : null}
+      <CoverageLine data={data} />
       {data.items.length ? null : (
         <TrafficNoResults
           heading="No joinable paths were observed"
@@ -119,16 +102,17 @@ function TrafficPageRow({
   return (
     <TableRow>
       <TableCell>
-        <Button
-          variant="ghost"
+        {/* A ghost button centred a path wider than the column and cut its
+            start off; a plain pressable keeps the start and cuts the end. */}
+        <Pressable
           onClick={() => onOpen(r.url_hash)}
-          className="max-w-full"
+          className="hover:underline"
           aria-label={`View AI Traffic for ${r.canonical_url}`}
         >
           <ClampText lines={1} tooltip={r.canonical_url}>
             {r.display_path}
           </ClampText>
-        </Button>
+        </Pressable>
       </TableCell>
       <TableCell numeric>
         <TrafficLeg compact leg={r.crawl} unit="requests" />
@@ -154,7 +138,7 @@ function TrafficPageRow({
       </TableCell>
       <TableCell numeric>
         {r.last_crawl ? (
-          <DisplayTime value={r.last_crawl} />
+          <TableTime value={r.last_crawl} />
         ) : (
           <UnavailableTrafficValue
             label="Last crawl unavailable"
@@ -168,22 +152,55 @@ function TrafficPageRow({
     </TableRow>
   );
 }
-function DisconnectedSources({
-  items,
-}: Readonly<{ items: z.infer<typeof aiTrafficPagesSchema>['items'] }>) {
-  const sources = (
+/**
+ * The tab's one context line: which sources are not connected, crawl coverage
+ * and the inventory behind the rows. A dash in the table explains itself on
+ * focus, so the line does not repeat that.
+ */
+function CoverageLine({ data }: Readonly<{ data: z.infer<typeof aiTrafficPagesSchema> }>) {
+  const coverage = data.observed_crawl_coverage;
+  const disconnected = (
     [
       ['crawl', 'Crawler logs'],
       ['referrals', 'Referral analytics'],
       ['citations', 'Citation tracking'],
     ] as const
-  )
-    .filter(([key]) => items.length > 0 && items.every((row) => row[key].state === 'not_connected'))
-    .map(([, label]) => label);
-  if (sources.length === 0) return null;
+  ).filter(
+    ([key]) =>
+      data.items.length > 0 && data.items.every((row) => row[key].state === 'not_connected'),
+  );
+  // Unknown (logs connected, nothing to measure against) and unavailable stay
+  // distinct; disconnected crawler logs already say why coverage is missing.
+  let crawlCoverage: string | null =
+    coverage.state === 'unknown' ? 'Crawl coverage unknown' : 'Crawl coverage unavailable';
+  if (coverage.share !== null)
+    crawlCoverage = `${coverage.label}: ${(coverage.share * 100).toFixed(1)}%`;
+  else if (disconnected.some(([key]) => key === 'crawl')) crawlCoverage = null;
+  const segments: Array<[string, ReactNode]> = [];
+  if (disconnected.length)
+    segments.push([
+      'sources',
+      `${disconnected.map(([, label]) => label).join(', ')} not connected`,
+    ]);
+  if (crawlCoverage) segments.push(['coverage', crawlCoverage]);
+  segments.push(['pages', `${coverage.known_pages} known pages`]);
+  if (coverage.inventory_date)
+    segments.push([
+      'inventory',
+      <>
+        Inventory <DisplayTime value={coverage.inventory_date} dateOnly />
+      </>,
+    ]);
+  if (!coverage.inventory_complete) segments.push(['limited', 'Limited inventory']);
+  if (coverage.sample_mode) segments.push(['sampled', 'Sampled inventory']);
   return (
-    <p className="type-body">
-      {sources.join(', ')} not connected. Showing known pages and open findings.
+    <p className="type-caption">
+      {segments.map(([key, segment], index) => (
+        <Fragment key={key}>
+          {index ? ' · ' : null}
+          {segment}
+        </Fragment>
+      ))}
     </p>
   );
 }

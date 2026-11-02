@@ -11,7 +11,7 @@ import {
   type GrantFamily,
   type GrantModel,
 } from '@/components/settings/grant-model';
-import { useRefreshAfterMapping } from '@/components/integrations/data-sources';
+import { useRefreshImportedReads } from '@/components/integrations/data-sources';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Inline, Stack } from '@/components/ui/layout';
-import { MetaFooter } from '@/components/ui/workspace';
+import { ledgerClasses, MetaFooter } from '@/components/ui/workspace';
 import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { textRole } from '@/components/ui/typography';
@@ -156,7 +156,7 @@ function ConnectCard({
  */
 function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
   // Disconnecting stops imports into the same projections a new property feeds.
-  const refresh = useRefreshAfterMapping();
+  const refresh = useRefreshImportedReads();
   const [open, setOpen] = useState(false);
   const title = FAMILY_META[grant.family].title;
   const [connection] = grant.connections;
@@ -230,15 +230,11 @@ function ConnectedCard({
         <GrantHeader family={family} grant={grant} />
         <Stack as={CardContent} gap="compact">
           <GrantAlert family={family} status={grant.status} />
-          <p className={textRole('caption')}>
-            One OAuth grant shared by {grant.connections.length}{' '}
-            {grant.connections.length === 1 ? 'connection' : 'connections'}.
-          </p>
-          <Stack gap="compact">
+          <ul className={ledgerClasses('open')}>
             {grant.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} grant={grant} />
             ))}
-          </Stack>
+          </ul>
         </Stack>
       </div>
       <CardContent>

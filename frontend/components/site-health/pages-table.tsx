@@ -16,7 +16,6 @@ import type { PageSummary } from '@/lib/api/types';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import {
   PLACEHOLDER,
-  formatAudited,
   formatIssueCount,
   formatScore,
   pageDisplayTitle,
@@ -26,7 +25,7 @@ import {
 } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import { useProjectHref } from '@/lib/navigation/project-destination';
-import { useDisplayTimeZone } from '@/lib/display-timezone';
+import { TableTime } from '@/components/ui/display-time';
 
 /**
  * Analyzed-pages table (Slice 7, mockups 712 + 713).
@@ -140,7 +139,6 @@ export function PagesTable({
   busy?: ComponentProps<typeof DataTable>['busy'];
 }>) {
   const router = useNavigate();
-  const timeZone = useDisplayTimeZone();
   const projectHref = useProjectHref();
   const openPage = (siteUrlId: string) => {
     const page = pages.find((row) => row.site_url_id === siteUrlId);
@@ -243,8 +241,11 @@ export function PagesTable({
               formatIndexability(page.main_content_indexable)
             )}
           </TableCell>
-          <TableCell className="type-caption whitespace-nowrap">
-            <Measured value={formatAudited(page.last_audited, timeZone)} />
+          <TableCell>
+            <TableTime
+              value={page.last_audited}
+              fallback={<UnavailableValue state="not_measured" />}
+            />
           </TableCell>
           <TableCell>
             <TextLink

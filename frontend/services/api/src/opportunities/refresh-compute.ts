@@ -21,7 +21,6 @@ import { numberRecord, record } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
 
 const o = policy.opportunity.opportunities;
-const a = policy.opportunity.actions;
 const r = policy.opportunity.refresh;
 
 export type Scored = [DetectorHit, number];
@@ -237,25 +236,6 @@ export function snapshotIsCurrent(current: CurrentSnapshot | null, identity: Sou
     current.rule_version === o.RULE_VERSION &&
     current.formula_version === o.FORMULA_VERSION
   );
-}
-
-/** Which evidence families one refresh actually had a source for. */
-export function availableFamilies(has: {
-  audit: boolean;
-  demand: boolean;
-  crawl: boolean;
-  searchIntelligence: boolean;
-}) {
-  const families = new Set<string>();
-  if (has.audit)
-    [a.FAMILY_AI_VISIBILITY, a.FAMILY_SOURCES, a.FAMILY_COMMERCE].forEach((f) => families.add(f));
-  if (has.demand) families.add(a.FAMILY_SEARCH_CONSOLE);
-  if (has.searchIntelligence) families.add(a.FAMILY_SEARCH_INTELLIGENCE);
-  if (has.crawl)
-    [a.FAMILY_SITE_HEALTH, a.FAMILY_LINK_GRAPH, a.FAMILY_SITE_CHANGES].forEach((f) =>
-      families.add(f),
-    );
-  return [...families];
 }
 
 /** A persisted snapshot row, as its read projects it. */

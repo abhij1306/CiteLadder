@@ -148,9 +148,16 @@ describe('page checklist', () => {
       { from: 3, to: 5, text: 'Detail' },
     ]);
     const page = facts('<main><h1>Notes</h1></main>', 'https://example.test/blog/notes');
+    // Main content with no headings has no hierarchy to judge, so it never holds coverage down.
+    const headless = byRule(
+      analyzePage({ ...page, primary_heading_outline: [] }, context).evaluations,
+    ).get('aeo.heading_hierarchy')!;
+    expect([headless.outcome, headless.evidence.reason]).toEqual([
+      'not_applicable',
+      'no_section_headings',
+    ]);
     for (const outline of [
       undefined,
-      [],
       [{ text: 'Unknown level' }],
       [{ level: 0, text: 'Invalid level' }],
       [{ level: 7, text: 'Invalid level' }],
@@ -359,6 +366,26 @@ describe('page checklist', () => {
         reason,
       ]);
     }
+    // A price shown only as text lacks the whole machine-readable Offer, not just its currency.
+    const textOnly = byRule(
+      evaluatePageRules({
+        page_kind: 'product',
+        has_html: true,
+        commerce: { visible_price: '$9.00' },
+      }),
+    ).get('aeo.offer_freshness_signal')!;
+    expect([textOnly.outcome, textOnly.evidence.reason]).toEqual([
+      'missing',
+      'offer_not_structured',
+    ]);
+    const noCurrency = byRule(
+      evaluatePageRules({
+        page_kind: 'product',
+        has_html: true,
+        structured_data: { product: { price: ['9.00'] } },
+      }),
+    ).get('aeo.offer_freshness_signal')!;
+    expect(noCurrency.evidence.reason).toBe('offer_currency_missing');
   });
 
   it('needs an available answer region before a question counts as answered', () => {

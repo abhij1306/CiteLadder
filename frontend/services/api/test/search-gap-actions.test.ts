@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { plannedPageKey } from '../src/analysis/opportunities/actions.ts';
+import { groupMembers, plannedPageKey } from '../src/analysis/opportunities/actions.ts';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { WorkspaceScope } from '../src/db/workspace-scope.ts';
 import { attachOrCreateAction } from '../src/opportunities/actions.ts';
@@ -290,5 +290,27 @@ describe('keyword gaps become Actions', () => {
 
   it('plans a page for a keyword in any script', () => {
     expect(plannedPageKey('जूते खरीदें')).toBe('planned:जूते-खरीदें');
+  });
+
+  it('ranks a page by its strongest finding, with no bonus for a second source', () => {
+    const member = (rule_id: string, priority_score: number) => ({
+      opportunity_id: randomUUID(),
+      rule_id,
+      target_key: `${rule_id}:page`,
+      target_url: `${OWNED}/shoes`,
+      target_prompt_id: null,
+      target_theme: null,
+      label_hint: null,
+      title: rule_id,
+      priority_score,
+      source_analysis_ids: [],
+      source_issue_ids: [],
+      source_metric_ids: [],
+    });
+    const [page] = groupMembers([
+      member('missing_structured_data', 30),
+      member('striking_distance_query', 20),
+    ]);
+    expect([page?.priority_score, page?.families]).toEqual([30, ['search_console', 'site_health']]);
   });
 });

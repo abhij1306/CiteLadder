@@ -4,7 +4,8 @@
  * Each detector's rule, in the words its info hint shows. The thresholds
  * restate the API's demand policy (`services/api/src/config/demand.json`),
  * which the detectors read; change the two together. `tab` is the signal
- * filter that lists the detector's signals, where its status is shown.
+ * filter that lists the detector's signals, where its status is shown; a
+ * filter listing several detectors' signals shows their combined status.
  */
 import type { FilterTab } from '@/lib/demand/signals';
 
@@ -31,6 +32,12 @@ export const DEMAND_DETECTORS: readonly {
     tab: 'ctr_gap',
     label: 'CTR gap',
     rule: 'Queries with at least 100 impressions whose CTR is at least 25%, and 2 points, below the median at their position. A position needs 20 queries and 500 impressions to set that median.',
+  },
+  {
+    key: 'high_impression_low_ctr',
+    tab: 'ctr_gap',
+    label: 'Low CTR',
+    rule: 'Non-branded queries and pages with at least 10 impressions and a CTR of 2% or less; the 50 with the most impressions are listed.',
   },
   {
     key: 'query_trends',

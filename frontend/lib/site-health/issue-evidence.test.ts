@@ -322,6 +322,15 @@ describe('evidenceFacts', () => {
         reason: 'offer_state_missing',
       }),
     ).toEqual(['Offer']);
+    // A price shown only as text still lacks the Offer markup itself.
+    expect(
+      evidenceFacts('aeo.offer_freshness_signal', {
+        offer: true,
+        currency: [],
+        timestamp: '',
+        reason: 'offer_not_structured',
+      }),
+    ).toEqual(['Offer']);
     expect(
       evidenceFacts('aeo.offer_freshness_signal', {
         offer: true,

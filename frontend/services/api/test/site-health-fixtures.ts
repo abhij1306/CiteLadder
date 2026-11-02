@@ -627,11 +627,17 @@ export function recordedSite(
       const response = options.gate
         ? await options.gate(target, send, AbortSignal.timeout(5000))
         : await send();
+      const contentType = served?.contentType ?? 'text/html';
+      // Match the real transport: a 2xx of a media type the caller did not accept is refused.
+      const acceptable =
+        options.contentTypes.includes(contentType) || options.contentTypes.includes('*');
+      if (!response.redirect && response.status >= 200 && response.status < 300 && !acceptable)
+        throw new FetchError('content_type');
       if (!response.redirect)
         return {
           url: target.href,
           status: response.status,
-          contentType: served?.contentType ?? 'text/html',
+          contentType,
           headers: served?.headers,
           body: response.body,
         };

@@ -7,8 +7,8 @@ import { DateRangeDialog } from './date-range-dialog';
 import {
   GranularitySelect,
   PerformanceActions,
-  PerformanceNotices,
   PerformanceToolbar,
+  performanceNotices,
 } from './performance-chrome';
 import { Ga4SummaryRow, MetricCards } from './metric-cards';
 import { PerformanceBreakdowns } from './performance-breakdowns';
@@ -20,11 +20,12 @@ import { usePerformanceSync } from './use-performance-sync';
 import { useRangeProjection } from './use-range-projection';
 import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
-import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
+import { StatusLine } from '@/components/ui/status-line';
+import { formatCount, formatWindowDate } from '@/lib/format';
 import { ChartNoAxesColumn } from 'lucide-react';
 import { integrationsApi } from '@/lib/api/integrations';
 import { performanceQueries, type PerformanceDashboard } from '@/lib/api/performance';
@@ -120,15 +121,18 @@ function performanceCoverage(data: PerformanceDashboard, hasEvidence: boolean) {
   };
 }
 
-function AnalyticsQualityNotice({
-  quality,
-}: Readonly<{ quality: PerformanceDashboard['coverage']['analytics_quality'] }>) {
-  return Object.values(quality).some((days) => days.some((day) => day.flags.length > 0)) ? (
-    <Alert tone="info">
-      Some imported partitions are missing, flagged or using a prior complete revision. Zero-valued
-      observations are unavailable for those extracts.
-    </Alert>
-  ) : null;
+function hasQualityFlags(quality: PerformanceDashboard['coverage']['analytics_quality']) {
+  return Object.values(quality).some((days) => days.some((day) => day.flags.length > 0));
+}
+
+/** The status line at rest: the history the dashboard can draw from. */
+function coverageSummary(coverage: PerformanceDashboard['coverage']): string {
+  // The extent spans the imported metric rows, so no dates means no rows —
+  // which is not the same as no import having run.
+  if (!coverage.earliest_date || !coverage.latest_date) return 'No imported search rows yet.';
+  return `Imported history ${formatWindowDate(coverage.earliest_date)} – ${formatWindowDate(
+    coverage.latest_date,
+  )} · ${formatCount(coverage.covered_days)} days`;
 }
 
 function PerformanceEmptyState({
@@ -365,21 +369,20 @@ export function PerformanceScreen() {
           title="Connect Search Console"
           description="Performance reads this project's own search data. Connect Google and use the property for this site; Analytics and Bing are optional."
         />
-        {readiness.isError ? (
-          <Alert tone="warning">
-            Could not load data readiness. Check your connection and try again.
-          </Alert>
-        ) : (
-          <ReadinessLadder data={readiness.data} />
-        )}
+        {readiness.isError ? null : <ReadinessLadder data={readiness.data} />}
 
-        <PerformanceNotices
-          sync={sync}
-          projecting={projection.projecting}
-          selectedMissing={coverage.selectedMissing}
-          comparisonMissing={coverage.comparisonMissing}
+        <StatusLine
+          testId="performance-status"
+          resting={coverageSummary(data.coverage)}
+          messages={performanceNotices({
+            sync,
+            projecting: projection.projecting,
+            selectedMissing: coverage.selectedMissing,
+            comparisonMissing: coverage.comparisonMissing,
+            qualityFlagged: hasQualityFlags(data.coverage.analytics_quality),
+            readinessFailed: readiness.isError,
+          })}
         />
-        <AnalyticsQualityNotice quality={data.coverage.analytics_quality} />
 
         {!hasEvidence ? (
           <PerformanceEmptyState data={data} projecting={projection.projecting} />

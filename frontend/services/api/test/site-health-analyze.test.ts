@@ -433,6 +433,37 @@ describe('analyze failures', () => {
     },
   );
 
+  it('releases a system selection that answers 404, but keeps a user selection and a server error', async () => {
+    const seed = await running();
+    const gone = await fixtures.analyzable(seed, '/gone', { source: 'bootstrap' });
+    const chosen = await fixtures.analyzable(seed, '/chosen');
+    const broken = await fixtures.analyzable(seed, '/broken', { source: 'bootstrap' });
+    await db
+      .updateTable('site_crawl_tasks')
+      .set({ max_attempts: 1 })
+      .where('id', '=', broken.taskId)
+      .execute();
+    await analyze(
+      site({ '/gone': { status: 404 }, '/chosen': { status: 404 }, '/broken': { status: 503 } }),
+      gone.taskId,
+      chosen.taskId,
+      broken.taskId,
+    );
+    const active = async (siteUrlId: string) =>
+      (
+        await db
+          .selectFrom('monitored_site_urls')
+          .select('active')
+          .where('site_url_id', '=', siteUrlId)
+          .executeTakeFirstOrThrow()
+      ).active;
+    expect([
+      await active(gone.siteUrlId),
+      await active(chosen.siteUrlId),
+      await active(broken.siteUrlId),
+    ]).toEqual([false, true, true]);
+  });
+
   it('honors robots before any page request and records one diagnostic attempt', async () => {
     const seed = await running();
     const page = await fixtures.analyzable(seed, '/private');

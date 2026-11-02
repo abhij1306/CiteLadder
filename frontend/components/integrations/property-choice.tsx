@@ -18,7 +18,7 @@ import {
 
 import { PROVIDER_META } from '@/components/settings/grant-model';
 
-import { ownPropertiesFirst, useRefreshAfterMapping } from './data-sources';
+import { ownPropertiesFirst, useRefreshImportedReads } from './data-sources';
 
 const onlyItem = <T,>(items: readonly T[]) => (items.length === 1 ? items[0] : undefined);
 
@@ -50,7 +50,7 @@ export function PropertyChoice({
   autoStart: boolean;
 }>) {
   const source = PROVIDER_META[provider];
-  const refresh = useRefreshAfterMapping();
+  const refresh = useRefreshImportedReads();
   const [showAll, setShowAll] = useState(false);
   const discovery = useMutation({
     mutationFn: () =>

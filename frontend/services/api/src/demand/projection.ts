@@ -28,6 +28,8 @@ export type SearchInput = {
   target: string;
   impressions: number;
   clicks: number;
+  /** Impression-weighted average position, or null when none was reported. */
+  position: number | null;
 };
 export type QueryInput = {
   observed_date: string;
@@ -96,8 +98,32 @@ export type QueryClass = Pick<
  * Low-CTR targets with enough impressions. A query must classify as
  * non-branded (branded and ambiguous cohorts are never actionable); pages
  * carry no brand class. The highest-impression targets fill a bounded set.
+ * A query with no classification abstains (it can be neither admitted nor
+ * ruled branded), which makes the evaluation partial, like the detectors'.
  */
 export function detectSearchSignals(
+  rows: SearchInput[],
+  queryClass: (query: string) => QueryClass | undefined,
+): Evaluation {
+  const counts: Record<string, number> = { branded: 0, non_branded: 0, ambiguous: 0 };
+  let abstained = 0;
+  for (const row of rows) {
+    if (row.target_kind !== 'query') continue;
+    const classification = queryClass(row.target);
+    if (classification)
+      counts[classification.classification] = (counts[classification.classification] ?? 0) + 1;
+    else abstained++;
+  }
+  const limitations = rows.length ? [] : ['No Search Console query or page rows in this window.'];
+  if (abstained) limitations.push(`${abstained} queries abstained with no query classification.`);
+  return {
+    state: collectionState(abstained, rows.length),
+    candidates: lowCtrCandidates(rows, queryClass),
+    counts_by_classification: counts,
+    limitations,
+  };
+}
+function lowCtrCandidates(
   rows: SearchInput[],
   queryClass: (query: string) => QueryClass | undefined,
 ): Candidate[] {
@@ -143,7 +169,7 @@ export function detectSearchSignals(
             }
           : {}),
       },
-      metrics: { impressions: row.impressions, clicks: row.clicks, ctr },
+      metrics: { impressions: row.impressions, clicks: row.clicks, ctr, position: row.position },
       coverage: { search_demand: 'observed' },
       limitations: ['GSC detail rows may omit privacy-filtered queries.'],
       ...priority(row.impressions, ctr, p.DEMAND_SEARCH_GAP_WEIGHT),

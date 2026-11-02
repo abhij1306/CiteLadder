@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { ActionStatusBadge } from '@/components/agent/action-status-badge';
+import { ActionPriorityBadge, ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
@@ -10,7 +10,6 @@ import { readErrorProps } from '@/components/ui/read-error';
 import { Select } from '@/components/ui/select';
 import { TextLink } from '@/components/ui/text-link';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { MissingValue } from '@/components/ui/unavailable-value';
 import { textRole } from '@/components/ui/typography';
 import {
   ACTION_STATUS_LABEL,
@@ -46,18 +45,12 @@ function statusCount(value: StatusFilter, counts: StatusCounts) {
 function statusOptions(counts: StatusCounts | undefined) {
   return STATUS_FILTERS.map((value) => {
     const label = value === QUEUE ? 'Open and in progress' : ACTION_STATUS_LABEL[value];
-    return {
-      value,
-      label: counts ? `${label} (${statusCount(value, counts)})` : label,
-    };
+    return { value, label: counts ? `${label} (${statusCount(value, counts)})` : label };
   });
 }
 const TARGET_OPTIONS = [
   { value: ALL_TARGETS, label: 'All targets' },
-  ...ACTION_TARGET_KINDS.map((kind) => ({
-    value: kind,
-    label: targetKindLabel(kind) ?? kind,
-  })),
+  ...ACTION_TARGET_KINDS.map((kind) => ({ value: kind, label: targetKindLabel(kind) ?? kind })),
 ];
 
 /**
@@ -138,10 +131,7 @@ function ActionsList({
       pageSize={pager.pageSize}
       rowCount={page?.items.length}
       state={actionsState(query)}
-      busy={{
-        active: query.isFetching && !query.isPending,
-        label: 'Updating Actions…',
-      }}
+      busy={{ active: query.isFetching && !query.isPending, label: 'Updating Actions…' }}
       pager={
         page && page.items.length > 0
           ? {
@@ -166,13 +156,7 @@ function ActionsList({
 const COLUMNS: readonly DataTableColumn[] = [
   { key: 'target', label: 'Target' },
   { key: 'status', label: 'Status', width: 'status' },
-  { key: 'priority', label: 'Priority', width: 'figure', numeric: true },
-  {
-    key: 'families',
-    label: 'Evidence systems',
-    width: 'status',
-    numeric: true,
-  },
+  { key: 'priority', label: 'Priority', width: 'status' },
   { key: 'approach', label: 'Approach', width: 'name' },
 ];
 
@@ -182,11 +166,7 @@ function actionsState(
 ): DataTableState | undefined {
   if (query.isPending) return { kind: 'loading', label: 'Loading Actions…' };
   if (query.isError)
-    return {
-      kind: 'error',
-      ...readErrorProps(query),
-      fallback: 'Actions could not be loaded.',
-    };
+    return { kind: 'error', ...readErrorProps(query), fallback: 'Actions could not be loaded.' };
   if (query.data.items.length > 0) return undefined;
   const anyActions = Object.values(query.data.status_counts).some((count) => count > 0);
   return anyActions
@@ -230,14 +210,9 @@ function ActionRow({ action }: Readonly<{ action: Action }>) {
       <TableCell>
         <ActionStatusBadge status={action.status} />
       </TableCell>
-      <TableCell numeric>
-        {action.priority_score === null ? (
-          <MissingValue state="not_measured" reason="No evidence scores this target yet." />
-        ) : (
-          action.priority_score.toFixed(1)
-        )}
+      <TableCell className="whitespace-nowrap">
+        <ActionPriorityBadge score={action.priority_score} />
       </TableCell>
-      <TableCell numeric>{action.families.length}</TableCell>
       <TableCell>{approachLabel(action.approach) ?? ''}</TableCell>
     </TableRow>
   );

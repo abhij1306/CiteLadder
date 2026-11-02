@@ -53,6 +53,7 @@ export async function trafficSource(db: Database, scope: DemandScope) {
           target: r.target,
           impressions: Math.trunc(impressions),
           clicks: Math.trunc(clicks),
+          position: numberOrNull(metrics.position),
         });
     }
   }

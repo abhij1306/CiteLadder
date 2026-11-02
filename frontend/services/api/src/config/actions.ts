@@ -33,14 +33,6 @@ export const actions = {
   ACTION_STATUSES: ['open', 'in_progress', 'implemented', 'measuring', 'done', 'dismissed'],
   ACTION_USER_STATUSES: ['dismissed', 'open'],
   ACTION_ACTIVE_STATUSES: ['in_progress', 'open'],
-  FAMILY_AI_VISIBILITY: 'ai_visibility',
-  FAMILY_SOURCES: 'sources',
-  FAMILY_SEARCH_CONSOLE: 'search_console',
-  FAMILY_SITE_HEALTH: 'site_health',
-  FAMILY_LINK_GRAPH: 'link_graph',
-  FAMILY_SITE_CHANGES: 'site_changes',
-  FAMILY_COMMERCE: 'commerce',
-  FAMILY_SEARCH_INTELLIGENCE: 'search_intelligence',
   EVIDENCE_FAMILIES: [
     'ai_visibility',
     'sources',
@@ -81,8 +73,6 @@ export const actions = {
     cited_alternatives_without_uploaded_presence: 'commerce',
     catalog_fields_missing: 'commerce',
   },
-  CONVERGENCE_BONUS_PER_FAMILY: 0.15,
-  CONVERGENCE_MULTIPLIER_CAP: 1.6,
   ACTION_PRIORITY_ROUNDING_DECIMALS: 1,
   APPROACH_TREE: [
     {
@@ -193,15 +183,12 @@ export const actions = {
   LEG_STATE_SYNC_NEEDED: 'sync_needed',
   LEG_STATE_OBSERVED: 'observed',
   SEARCH_CONSOLE_FINALIZATION_LAG_DAYS: 3,
-  FAMILY_STATE_OBSERVED: 'observed',
-  FAMILY_STATE_NO_FINDING: 'no_finding',
-  FAMILY_STATE_UNAVAILABLE: 'unavailable',
   ACTION_LIST_DEFAULT_LIMIT: 50,
   ACTION_LIST_MAX_LIMIT: 200,
   ACTION_LABEL_MAX_CHARS: 255,
 };
 
-// Every detector must participate in convergence and diagnosis.
+// Every detector must name its evidence source, for diagnosis and measurement.
 const unmappedRules = Object.keys(opportunities.OPPORTUNITY_RULES_BY_ID).filter(
   (rule) => !Object.hasOwn(actions.RULE_EVIDENCE_FAMILY, rule),
 );

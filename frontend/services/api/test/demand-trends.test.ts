@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { policy } from '../src/config.ts';
-import { detectTrends } from '../src/demand/detectors.ts';
+import { detectCannibalization, detectTrends } from '../src/demand/detectors.ts';
 import { aggregate, detectSearchSignals, type QueryInput } from '../src/demand/projection.ts';
 import type { QueryClassification } from '../src/demand/classification.ts';
 import { addDays } from '../src/referrals/projection.ts';
@@ -51,9 +51,9 @@ describe('query trend detection', () => {
       [
         ...coverage,
         row('rising widgets', priorDay, 20),
-        row('rising widgets', recentDay, 60),
+        { ...row('rising widgets', recentDay, 60), position: 9 },
         // Older evidence is outside both windows, so it is not the candidate's source.
-        row('rising widgets', beforeWindows, 5),
+        { ...row('rising widgets', beforeWindows, 5), position: 50 },
         row('falling widgets', priorDay, 60),
         row('falling widgets', recentDay, 20),
         // Impressions before the prior window must not turn a flat query into a decline.
@@ -89,6 +89,8 @@ describe('query trend detection', () => {
       },
     ]);
     const rising = result.candidates.find((c) => c.topic_cluster === 'rising widgets')!;
+    // Weighted over the two comparison windows: (20 × 5 + 60 × 9) / 80.
+    expect(rising.metrics.position).toBe(8);
     expect(rising.evidence.source_metric_row_ids).toEqual([
       `rising widgets-${priorDay}`,
       `rising widgets-${recentDay}`,
@@ -132,6 +134,7 @@ describe('search signal detection', () => {
     target,
     impressions,
     clicks: 0,
+    position: 7.5,
   });
   const classes: Record<string, QueryClassification> = {
     'acme pricing': 'branded',
@@ -148,7 +151,7 @@ describe('search signal detection', () => {
     const generic = Array.from({ length: cap }, (_, i) =>
       search('query', `widget ${i}`, p.DEMAND_MIN_IMPRESSIONS + i + 1),
     );
-    const signals = detectSearchSignals(
+    const evaluation = detectSearchSignals(
       [
         search('query', 'acme pricing', 100_000),
         search('query', 'acme', 100_000),
@@ -157,7 +160,20 @@ describe('search signal detection', () => {
       ],
       queryClass,
     );
+    expect(evaluation.state).toBe('available');
+    expect(evaluation.counts_by_classification).toEqual({
+      branded: 1,
+      non_branded: cap,
+      ambiguous: 1,
+    });
+    const signals = evaluation.candidates;
     expect(signals).toHaveLength(cap);
+    expect(signals[0]?.metrics).toEqual({
+      impressions: 50_000,
+      clicks: 0,
+      ctr: 0,
+      position: 7.5,
+    });
     const targets = signals.map((s) => s.evidence.target);
     expect(targets).not.toContain('acme pricing');
     expect(targets).not.toContain('acme');
@@ -165,6 +181,46 @@ describe('search signal detection', () => {
     // The lowest-impression generic query is the one the cap drops.
     expect(targets).not.toContain('widget 0');
     expect(targets).toContain(`widget ${cap - 1}`);
+  });
+
+  it('reports partial and names the abstentions when a query has no classification', () => {
+    const evaluation = detectSearchSignals(
+      [
+        search('query', 'unclassified query', 5_000),
+        search('query', 'widget', p.DEMAND_MIN_IMPRESSIONS + 1),
+      ],
+      (query) => (query === 'unclassified query' ? undefined : queryClass(query)),
+    );
+    expect(evaluation.state).toBe('partial');
+    expect(evaluation.counts_by_classification).toEqual({
+      branded: 0,
+      non_branded: 1,
+      ambiguous: 0,
+    });
+    expect(evaluation.limitations).toEqual(['1 queries abstained with no query classification.']);
+    expect(evaluation.candidates.map((s) => s.evidence.target)).toEqual(['widget']);
+  });
+
+  it('reports the detector unavailable when the window has no rows to evaluate', () => {
+    expect(detectSearchSignals([], queryClass)).toMatchObject({
+      state: 'unavailable',
+      candidates: [],
+    });
+  });
+});
+
+describe('cannibalization detection', () => {
+  it('reports the query position weighted across its competing pages', () => {
+    const page = (url: string, impressions: number, position: number) => ({
+      ...row('widgets', windowEnd, impressions),
+      resolved_page_url: `https://example.com/${url}`,
+      source_metric_row_id: url,
+      position,
+    });
+    const result = detectCannibalization([page('a', 30, 4), page('b', 70, 6)]);
+    expect(result.candidates.map((c) => c.metrics)).toEqual([
+      { impressions: 100, position: 5.4, qualifying_page_count: 2 },
+    ]);
   });
 });
 

@@ -436,7 +436,7 @@ describe('A3 integration partition replacement', () => {
         .execute(),
     ).toEqual([]);
   });
-  it('falls back from failed and truncated partitions, flags missing evidence, and never publishes flagged zero', async () => {
+  it('keeps the selected partition clean while a newer run is in flight, failed or cancelled, and falls back from a truncated one', async () => {
     const first = await imported('ga4_source_medium_daily');
     await row(first, ['ordinary.example', 'referral', day], {
       sessions: 10,
@@ -444,33 +444,36 @@ describe('A3 integration partition replacement', () => {
       keyEvents: 0,
     });
     await classify(first);
-    const failed = await imported('ga4_source_medium_daily', first, 1);
-    await db
-      .updateTable('integration_sync_runs')
-      .set({ status: 'failed' })
-      .where('id', '=', failed.syncRunId)
-      .execute();
-    await row(failed, ['chatgpt.com', 'referral', day], { sessions: 100 });
-    expect(
-      (
-        await db
-          .selectFrom('integration_metric_rows')
-          .select('resync_seq')
-          .where('project_id', '=', t.projectId)
-          .where(selectedPartition())
-          .execute()
-      ).map((r) => r.resync_seq),
-    ).toEqual([0]);
-    const quality = await partitionQuality(
-      db,
-      { workspaceId: t.workspaceId, projectId: t.projectId, start: day, end: day },
-      first.dataset,
-    );
-    expect(quality[0]?.flags).toContain('partition_fallback');
+    const newer = await imported('ga4_source_medium_daily', first, 1);
+    await row(newer, ['chatgpt.com', 'referral', day], { sessions: 100 });
+    const scope = { workspaceId: t.workspaceId, projectId: t.projectId, start: day, end: day };
+    const quality = async () => {
+      const [only] = await partitionQuality(db, scope, first.dataset);
+      return { revision: only?.revision, flags: only?.flags };
+    };
+    for (const status of ['running', 'retry_wait', 'failed', 'cancelled']) {
+      await db
+        .updateTable('integration_sync_runs')
+        .set({ status })
+        .where('id', '=', newer.syncRunId)
+        .execute();
+      expect(
+        (
+          await db
+            .selectFrom('integration_metric_rows')
+            .select('resync_seq')
+            .where('project_id', '=', t.projectId)
+            .where(selectedPartition())
+            .execute()
+        ).map((r) => r.resync_seq),
+      ).toEqual([0]);
+      expect([status, await quality()]).toEqual([status, { revision: 0, flags: [] }]);
+    }
     await refreshAiReferralsSnapshot(
       await task(db, t, 'ai_referrals_snapshot_refresh', window),
       context,
     );
+    // Revision 0 observed no AI referral, and the cancelled run does not hide that.
     expect(
       (
         await getAiReferrals(db, {
@@ -482,7 +485,7 @@ describe('A3 integration partition replacement', () => {
           granularity: 'day',
         })
       ).referral_volume[0]?.value,
-    ).toBeNull();
+    ).toBe(0);
     const truncated = await imported(first.dataset, first, 2);
     await db
       .updateTable('integration_import_artifacts')
@@ -491,15 +494,7 @@ describe('A3 integration partition replacement', () => {
       })
       .where('id', '=', truncated.artifactId)
       .execute();
-    expect(
-      (
-        await partitionQuality(
-          db,
-          { workspaceId: t.workspaceId, projectId: t.projectId, start: day, end: day },
-          first.dataset,
-        )
-      )[0]?.revision,
-    ).toBe(0);
+    expect(await quality()).toEqual({ revision: 0, flags: ['partition_fallback'] });
   });
   it('classifies session-attributed landings, excludes other hosts and redacted paths, and scopes reads to the workspace', async () => {
     const landing = await imported('ga4_landing_daily');

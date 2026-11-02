@@ -5,6 +5,21 @@
  * structurally required), never as the raw backend identifier.
  */
 import type { ActionStatus } from '@/lib/api/actions';
+import { ACTION_PRIORITY_BANDS } from '@/lib/config/agent';
+
+export type PriorityBand = 'High' | 'Medium' | 'Low';
+
+/** An Action's priority score as the band a reader compares by; the score itself only ranks. */
+export function priorityBand(score: number): PriorityBand {
+  if (score >= ACTION_PRIORITY_BANDS.high) return 'High';
+  return score >= ACTION_PRIORITY_BANDS.medium ? 'Medium' : 'Low';
+}
+
+export const PRIORITY_BAND_TONE: Record<PriorityBand, 'danger' | 'warning' | 'info'> = {
+  High: 'danger',
+  Medium: 'warning',
+  Low: 'info',
+};
 
 export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
   open: 'Open',
@@ -56,12 +71,6 @@ const FAMILY_LABEL: Record<string, string> = {
 export function familyLabel(family: string): string | null {
   return FAMILY_LABEL[family] ?? null;
 }
-
-export const FAMILY_STATE_LABEL: Record<string, string> = {
-  observed: 'Observed',
-  no_finding: 'No finding',
-  unavailable: 'Unavailable',
-};
 
 const APPROACH_LABEL: Record<string, string> = {
   improve_existing: 'Improve the existing page',

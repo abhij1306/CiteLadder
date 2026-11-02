@@ -37,7 +37,7 @@ export function HintedTableHead({
 /** The header aligns with its column's values, as `TableHead` does. */
 const SORT_ALIGN = {
   start: { column: 'items-start', row: 'justify-start text-left' },
-  end: { column: 'items-end', row: 'justify-end text-right' },
+  center: { column: 'items-center', row: 'justify-center text-center' },
 } as const;
 
 /**
@@ -83,7 +83,7 @@ export function SortableTableHead({
     ariaSort = descending ? 'descending' : 'ascending';
     Icon = descending ? ArrowDown : ArrowUp;
   }
-  const align = numeric ? SORT_ALIGN.end : SORT_ALIGN.start;
+  const align = numeric ? SORT_ALIGN.center : SORT_ALIGN.start;
   const button = (
     <button
       type="button"

@@ -624,6 +624,7 @@
         "no_recommended_properties",
         "no_required_properties",
         "no_schema_names",
+        "no_section_headings",
         "no_sitemap",
         "no_sitemap_lastmod",
         "not_in_sitemap",

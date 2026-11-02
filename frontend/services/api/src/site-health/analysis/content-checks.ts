@@ -202,14 +202,16 @@ function headingHierarchy(facts: Facts): CheckResult {
   const sections = records(facts.primary_heading_outline)
     .filter((item) => text(item.text).trim())
     .map((item) => ({ level: count(item.level), text: text(item.text).slice(0, 256) }));
+  // No headings means no hierarchy that could skip a level: nothing to judge,
+  // rather than something left unresolved that would hold coverage down.
   if (!sections.length)
     return [
-      'unknown',
+      'not_applicable',
       {
         scope: 'primary_content',
         section_count: 0,
         sections: [],
-        reason: 'section_context_missing',
+        reason: 'no_section_headings',
       },
     ];
   const skips = sections.flatMap((section, index) => {
@@ -409,6 +411,10 @@ function offerFreshness(facts: Facts): CheckResult {
   };
   if (quoteLed(facts)) return ['not_applicable', { ...evidence, reason: 'quote_led_offer' }];
   if (!offer) return ['missing', { ...evidence, reason: 'offer_state_missing' }];
+  // A price shown only as page text: the whole machine-readable Offer is
+  // absent, not just its currency.
+  if (!list(schema.price).length && !currency.length)
+    return ['missing', { ...evidence, reason: 'offer_not_structured' }];
   if (!currency.length) return ['missing', { ...evidence, reason: 'offer_currency_missing' }];
   if (state === 'not_declared')
     return ['not_applicable', { ...evidence, reason: 'expiry_not_declared' }];

@@ -52,22 +52,23 @@ export const recomputeDemand: Executor = async (task, { db, maxAttempts, checkCa
     const query = await buildQueryEvidence(trx, scope);
     const traffic = await trafficSource(trx, scope);
     const inputs = await queryDetectorInputs(trx, scope, query.id);
-    const evaluations: Record<string, Evaluation> = {
-      striking_distance: detectStrikingDistance(inputs),
-      cannibalization: detectCannibalization(inputs),
-      property_relative_ctr_gap: detectCtrGap(inputs),
-      query_trends: detectTrends(inputs, scope.windowEnd),
-    };
     const searchClasses = await classifyProjectQueries(
       trx,
       scope.workspaceId,
       scope.projectId,
       traffic.inputs.filter((r) => r.target_kind === 'query').map((r) => r.target),
     );
-    const candidates = [
-      ...detectSearchSignals(traffic.inputs, (query) => searchClasses.get(normalizeQuery(query))),
-      ...Object.values(evaluations).flatMap((e) => e.candidates),
-    ];
+    // Keyed by detector; the low-CTR detector reads the traffic snapshot.
+    const evaluations: Record<string, Evaluation> = {
+      [p.DEMAND_SIGNAL_HIGH_IMPRESSION_LOW_CTR]: detectSearchSignals(traffic.inputs, (query) =>
+        searchClasses.get(normalizeQuery(query)),
+      ),
+      striking_distance: detectStrikingDistance(inputs),
+      cannibalization: detectCannibalization(inputs),
+      property_relative_ctr_gap: detectCtrGap(inputs),
+      query_trends: detectTrends(inputs, scope.windowEnd),
+    };
+    const candidates = Object.values(evaluations).flatMap((e) => e.candidates);
     const sourceHash = stableHash(
       await sourceMaterial(trx, scope, traffic, inputs, query.source_hash.slice(0, 24)),
     );

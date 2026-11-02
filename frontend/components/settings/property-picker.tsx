@@ -22,7 +22,7 @@ import {
   activeMappingFor,
   mappingsQuery,
   ownPropertiesFirst,
-  useRefreshAfterMapping,
+  useRefreshImportedReads,
 } from '@/components/integrations/data-sources';
 import { PROVIDER_META } from '@/components/settings/grant-model';
 
@@ -165,7 +165,7 @@ export function PropertyPicker({
   connection,
   disabled = false,
 }: Readonly<{ connection: IntegrationConnection; disabled?: boolean }>) {
-  const refreshAfterMapping = useRefreshAfterMapping();
+  const refreshImportedReads = useRefreshImportedReads();
   const { activeProject } = useProjectContext();
   const mayDiscover = useWorkspaceCapability('manage_credentials');
   const activeMapping = useActiveMapping(
@@ -199,7 +199,7 @@ export function PropertyPicker({
     onSuccess: async () => {
       setOpen(false);
       // account_ref moved with the mapping — refresh the connection list.
-      await refreshAfterMapping();
+      await refreshImportedReads();
     },
   });
 

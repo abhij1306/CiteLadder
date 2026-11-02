@@ -1,12 +1,16 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import { Calendar, RefreshCw, Search, Sparkles } from 'lucide-react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { MutationNotice } from '@/components/ui/mutation-notice';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { ListScreen } from '@/components/layout/page-shell';
 import { QueryState } from '@/components/ui/query-state';
@@ -14,10 +18,10 @@ import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
 import { DemandEvidenceDrawer } from '@/components/demand/demand-evidence-drawer';
 import { DemandLatentDemand } from '@/components/demand/demand-latent-demand';
-import { DemandSignalFilters } from '@/components/demand/demand-signal-filters';
+import { DemandDataCaveats, DemandSignalFilters } from '@/components/demand/demand-signal-filters';
 import { DemandSignalTable, SignalLegend } from '@/components/demand/demand-signal-table';
 import { demandApi, type DemandSignal, type DemandSnapshot } from '@/lib/api/demand';
-import { mutationNoticeForError } from '@/lib/api/mutation-notice';
+import { isTransientMutationError, mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { queryKeys } from '@/lib/api/query-keys';
 import { latestDemandSnapshotQuery } from '@/lib/demand/latest-snapshot';
 import {
@@ -39,6 +43,66 @@ const DEMAND_TAB_CODEC = stringUrlCodec(
   FILTER_TABS.map(({ tab }) => tab),
   'all' as FilterTab,
 );
+
+type RecomputeMutation = UseMutationResult<
+  Awaited<ReturnType<typeof demandApi.recompute>>,
+  Error,
+  void
+>;
+
+/**
+ * The header's one recompute button, which becomes the next step in place:
+ * once queued it checks for the new snapshot; after a transient failure it
+ * retries. The button keeps its slot, so the page never moves.
+ */
+function RecomputeAction({
+  mutation,
+  onCheck,
+}: Readonly<{ mutation: RecomputeMutation; onCheck: () => void }>) {
+  if (mutation.isSuccess)
+    return (
+      <Button variant="secondary" onClick={onCheck}>
+        <Icon icon={RefreshCw} />
+        Check for new snapshot
+      </Button>
+    );
+  const retry = mutation.isError && isTransientMutationError(mutation.error);
+  return (
+    <Button
+      variant="secondary"
+      onClick={() => mutation.mutate()}
+      pending={mutation.isPending}
+      pendingLabel="Queueing…"
+    >
+      <Icon icon={RefreshCw} />
+      {retry ? 'Try again' : 'Recompute signals'}
+    </Button>
+  );
+}
+
+/** Recompute's outcome as one more fact on the summary line. */
+function RecomputeStatus({ mutation }: Readonly<{ mutation: RecomputeMutation }>) {
+  if (mutation.isSuccess)
+    return (
+      <span className="type-caption text-info-text">
+        {mutation.data.status === 'already_queued'
+          ? 'A recompute for this window is already queued.'
+          : 'Recompute queued. Signals refresh once the job finishes.'}
+      </span>
+    );
+  if (mutation.isError) {
+    const notice = mutationNoticeForError(mutation.error, {
+      action: 'queue the search demand recompute',
+    });
+    const support = [notice.code, notice.requestId].filter(Boolean).join(' · ');
+    return (
+      <span role="alert" className="type-caption text-danger-text" title={support || undefined}>
+        {notice.message}
+      </span>
+    );
+  }
+  return null;
+}
 
 function SearchDemandView({
   snapshot,
@@ -164,22 +228,20 @@ function SearchDemandView({
   return (
     <ListScreen
       actions={
-        <Button
-          variant="secondary"
-          onClick={() => recomputeMutation.mutate()}
-          pending={recomputeMutation.isPending}
-          pendingLabel="Queueing…"
-        >
-          <Icon icon={RefreshCw} />
-          Recompute signals
-        </Button>
+        <RecomputeAction
+          mutation={recomputeMutation}
+          onCheck={() => {
+            recomputeMutation.reset();
+            void refreshSnapshot();
+          }}
+        />
       }
       controls={{
         search: (
           <SearchField
             value={searchQuery}
             onValueChange={setSearchQuery}
-            placeholder="Filter queries or pages…"
+            placeholder="Filter signals…"
             aria-label="Filter queries or pages"
           />
         ),
@@ -202,31 +264,9 @@ function SearchDemandView({
             pending={Boolean(retrying)}
           />
         ) : null}
-        {recomputeMutation.isError ? (
-          <MutationNotice
-            notice={mutationNoticeForError(recomputeMutation.error, {
-              action: 'queue the search demand recompute',
-            })}
-            onRetry={() => recomputeMutation.mutate()}
-          />
-        ) : null}
-
-        {recomputeMutation.isSuccess ? (
-          <Alert tone="info">
-            <Inline className="flex-wrap">
-              <span>
-                {recomputeMutation.data.status === 'already_queued'
-                  ? 'A recompute for this window is already queued.'
-                  : 'Recompute queued. Signals refresh once the job finishes.'}
-              </span>
-              <Button type="button" variant="ghost" onClick={() => refreshSnapshot()}>
-                Check for the new snapshot
-              </Button>
-            </Inline>
-          </Alert>
-        ) : null}
-
-        {/* The summary line, then the table the top strip's filters narrow. */}
+        {/* The summary line, then the table the top strip's filters narrow.
+            Recompute's outcome rides the summary line and the header button
+            rather than a banner above it, so the table never moves. */}
         <Stack>
           <Inline as="p" gap="meta">
             <span className="type-caption">
@@ -239,6 +279,8 @@ function SearchDemandView({
               {windowLabel}
             </Inline>
             <DemandLatentDemand snapshot={snapshot} />
+            <DemandDataCaveats snapshot={snapshot} />
+            <RecomputeStatus mutation={recomputeMutation} />
           </Inline>
           {signalsFeed}
         </Stack>

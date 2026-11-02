@@ -6,6 +6,7 @@ import { resolveOwnedPages } from '../src/demand/page-equivalence.ts';
 import { buildQueryEvidence } from '../src/demand/query-evidence.ts';
 import { recomputeDemand } from '../src/demand/snapshot.ts';
 import { hash } from '../src/traffic/normalization.ts';
+import { refreshTrafficSnapshot } from '../src/traffic/snapshot.ts';
 import { enqueue, seedProject } from './referral-fixtures.ts';
 import { Fixtures, testDatabase } from './support.ts';
 import {
@@ -187,6 +188,30 @@ describe('demand projections and admission', () => {
       .where('idempotency_key', 'like', `opportunity:site_crawl:${triggerId}:%`)
       .executeTakeFirst();
     expect(handoff?.payload).toEqual({ trigger_kind: 'site_crawl', trigger_id: triggerId });
+  });
+
+  it('reports the low-CTR detector and the position of its zero-click signal', async () => {
+    const seed = await importSeed(db, t);
+    await metric(db, seed, { date: '2026-07-25', metrics: { impressions: 40, clicks: 0 } });
+    await metric(db, seed, {
+      dataset: 'gsc_query_daily',
+      date: '2026-07-25',
+      values: ['zero click', '2026-07-25'],
+      metrics: { impressions: 40, clicks: 0, position: 6.5 },
+    });
+    await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh'), context);
+    // The Demand window ends at the latest reported Search Console day.
+    await demand(['2026-06-28', '2026-07-25']);
+    const latest = (await request('demand/latest')).body;
+    expect(
+      latest.signals
+        .filter((r) => r.signal_type === 'high_impression_low_ctr')
+        .map((r) => [r.topic_cluster, r.metrics]),
+    ).toEqual([['zero click', { impressions: 40, clicks: 0, ctr: 0, position: 6.5 }]]);
+    expect(
+      (latest.summary as { detectors: Record<string, { state: string }> }).detectors
+        .high_impression_low_ctr?.state,
+    ).toBe('available');
   });
 
   it('keeps unavailable and recorded zero distinct, and invalid source rows out of evidence', async () => {

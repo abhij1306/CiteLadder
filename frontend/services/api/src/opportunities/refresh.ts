@@ -37,7 +37,6 @@ import { taskProject, type Executor } from '../workers/executor.ts';
 import { syncActions } from './action-sync.ts';
 import { earnedPageHits } from './earned-page-hits.ts';
 import {
-  availableFamilies,
   buildSnapshot,
   newOpportunity,
   projectSnapshot,
@@ -303,18 +302,7 @@ async function writeRefresh(
       created_at: now,
     })
     .execute();
-  const actions = await syncActions(
-    trx,
-    scope,
-    rows,
-    snapshot.id,
-    availableFamilies({
-      audit: collected.audit !== null,
-      demand: collected.demand !== null,
-      crawl: crawl !== null,
-      searchIntelligence: sources.gaps !== null,
-    }),
-  );
+  const actions = await syncActions(trx, scope, rows, snapshot.id);
   await insertOpportunities(trx, scope, rows, actions, now);
   const links = live.flatMap((row) => {
     const successor = successors.get(JSON.stringify([row.rule_id, row.target_key]));
