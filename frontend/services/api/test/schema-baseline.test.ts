@@ -1,5 +1,5 @@
 /** The migrate CLI against real PostgreSQL: numbered migrations, each applied once. */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -79,6 +79,27 @@ describe('a fresh database', () => {
       ...migrations.map((m) => m.version),
       '9998_add_extra',
     ]);
+  }, 120000);
+
+  it('brings a database migrated by v0.1.0 to the trimmed baseline instead of refusing it', async () => {
+    const { client } = await freshDatabase();
+    clients.push(client);
+    await applyMigrations(client);
+    // What v0.1.0 recorded for its baseline, and one of the hosted tables it carried.
+    await client.query(
+      "update public.schema_migrations set checksum = 'a30e0a8b9cdb23005d969617b115e4806afd5803f3b5df2bb759d4048bf1c549' where version = '0001_baseline'",
+    );
+    await client.query('CREATE TABLE public.billing_accounts (id uuid PRIMARY KEY)');
+
+    expect(await applyMigrations(client)).toEqual([]);
+    expect(await publicTables(client)).not.toContain('billing_accounts');
+    const ledger = await client.query<{ checksum: string }>(
+      "select checksum from public.schema_migrations where version = '0001_baseline'",
+    );
+    expect(ledger.rows[0]!.checksum).toBe(
+      createHash('sha256').update(baseline.sql.replaceAll('\r\n', '\n')).digest('hex'),
+    );
+    expect(await applyMigrations(client)).toEqual([]);
   }, 120000);
 
   it('rolls back every pending migration when one fails', async () => {

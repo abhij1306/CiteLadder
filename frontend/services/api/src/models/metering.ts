@@ -54,7 +54,6 @@ async function record(
       .values({
         id: randomUUID(),
         workspace_id: context.workspaceId,
-        billing_account_id: null,
         feature: context.feature,
         provider: spec.provider,
         model: spec.model.slice(0, 255),

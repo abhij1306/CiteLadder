@@ -158,11 +158,6 @@ export class Fixtures {
 
   async cleanup(): Promise<void> {
     if (this.workspaces.length) {
-      // The append-only ledger does not cascade; every audit holds prompt runs.
-      await this.db
-        .deleteFrom('consumable_ledger')
-        .where('workspace_id', 'in', this.workspaces)
-        .execute();
       await this.db.deleteFrom('workspaces').where('id', 'in', this.workspaces).execute();
     }
     if (this.users.length) {

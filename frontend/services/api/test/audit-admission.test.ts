@@ -80,7 +80,6 @@ describe('atomic audit admission', () => {
       status: 'queued',
       requested_count: 3,
       random_seed: '42',
-      funding_account_id: null,
     });
     const tasks = await db
       .selectFrom('audit_tasks')

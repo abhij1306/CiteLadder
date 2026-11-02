@@ -538,7 +538,7 @@ export class PdfReport {
       this.document.switchToPage(index);
       if (index > pages.start) this.logo(MARGIN, 28, 11);
       this.rule(height - 44);
-      const right = `citeladder.com  ·  Page ${index - pages.start + 1} of ${pages.count}`;
+      const right = `Page ${index - pages.start + 1} of ${pages.count}`;
       const rightWidth = this.measure(right, 8, 'text');
       this.draw(right, MARGIN + this.width - rightWidth, height - 30, ink);
       const left = this.fit(this.footer, 8, 'text', this.width - rightWidth - 16);

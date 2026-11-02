@@ -6,7 +6,8 @@
  *
  * An applied file is frozen: a schema change is a new numbered file, never an
  * edit, and a database whose recorded checksums differ from the files is
- * refused rather than adapted in place.
+ * refused rather than adapted in place. The one exception is a listed pre-1.0
+ * trim (TRIMS), whose upgrade file brings an earlier release's database along.
  */
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -27,6 +28,21 @@ const LOCK_KEY = createHash('sha256')
   .readBigInt64BE(0);
 const RESET =
   'To start over with an empty database, run `pnpm --filter @citeladder/api reset:db` (this deletes all data).';
+
+/**
+ * Pre-1.0 trims of an applied file. A database whose ledger records `from` for
+ * `version` was migrated by an earlier release: `upgrade` (relative to
+ * `migrations/`) brings it to the file's current shape, in the same
+ * transaction, and the current checksum is recorded.
+ */
+const TRIMS: readonly { version: string; from: string; upgrade: string }[] = [
+  {
+    // v0.1.0 still carried the hosted billing, credit and invitation tables.
+    version: '0001_baseline',
+    from: 'a30e0a8b9cdb23005d969617b115e4806afd5803f3b5df2bb759d4048bf1c549',
+    upgrade: 'upgrades/0001_baseline-from-v0.1.0.sql',
+  },
+];
 
 /** The migration files, in version order. */
 export function readMigrations(dir: URL = MIGRATIONS_DIR): Migration[] {
@@ -70,6 +86,15 @@ async function pending(client: pg.ClientBase, migrations: readonly Migration[]) 
       throw new OperatorRefusal(
         `The database was migrated with ${version}, which this version of CiteLadder does not have. Run a CiteLadder release that includes it.`,
       );
+    const trim = TRIMS.find((entry) => entry.version === version && entry.from === checksum);
+    if (trim) {
+      await client.query(readFileSync(new URL(trim.upgrade, MIGRATIONS_DIR), 'utf8'));
+      await client.query('update public.schema_migrations set checksum = $1 where version = $2', [
+        checksumOf(file.sql),
+        version,
+      ]);
+      continue;
+    }
     if (checksumOf(file.sql) !== checksum)
       throw new OperatorRefusal(
         `Migration ${version} changed after this database applied it (recorded ${checksum.slice(0, 12)}, file ${checksumOf(file.sql).slice(0, 12)}). Applied migrations are frozen: restore the file and put the change in a new numbered migration. ${RESET}`,

@@ -30,7 +30,8 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
-import { ENGINE_ORDER, ENGINE_LABELS } from '@/lib/providers/catalog';
+import { ENGINE_LABELS } from '@/lib/providers/catalog';
+import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
 import { schedulePauseReason } from '@/lib/runs/status';
 
 const CADENCE_LABELS: Record<AuditScheduleCadence, string> = {
@@ -81,7 +82,12 @@ function WorkspaceSchedules({
   const [auditScope, setAuditScope] = useState<'brand' | 'commerce'>('brand');
   const [cadence, setCadence] = useState<AuditScheduleCadence>('weekly');
   const [intervalMinutes, setIntervalMinutes] = useState('60');
-  const [engines, setEngines] = useState<LogicalEngine[]>(['chatgpt']);
+  // Only engines with a tested connection can run; until someone picks, the first of them.
+  const { configuredEngines, enginesReady } = useConfiguredEngines(true, workspaceId);
+  const [picked, setPicked] = useState<LogicalEngine[] | null>(null);
+  const engines = (picked ?? configuredEngines.slice(0, 1)).filter((engine) =>
+    configuredEngines.includes(engine),
+  );
   const [marketIds, setMarketIds] = useState<(string | null)[]>([null]);
   const schedulesQuery = useAuditSchedules(projectId);
   const markets = useProjectMarkets(projectId, workspaceId);
@@ -201,22 +207,29 @@ function WorkspaceSchedules({
               ) : null}
               <Stack as="fieldset" gap="item" className="desktop:col-span-2">
                 <legend className={textRole('label')}>Engines</legend>
-                <Inline className="flex-wrap">
-                  {ENGINE_ORDER.map((engine) => (
-                    <Checkbox
-                      key={engine}
-                      label={ENGINE_LABELS[engine]}
-                      checked={engines.includes(engine)}
-                      onCheckedChange={() =>
-                        setEngines((current) =>
-                          current.includes(engine)
-                            ? current.filter((value) => value !== engine)
-                            : [...current, engine],
-                        )
-                      }
-                    />
-                  ))}
-                </Inline>
+                {enginesReady && configuredEngines.length === 0 ? (
+                  <p className="type-body">
+                    No configured engines. Connect a provider in Settings, Providers to schedule an
+                    audit.
+                  </p>
+                ) : (
+                  <Inline className="flex-wrap">
+                    {configuredEngines.map((engine) => (
+                      <Checkbox
+                        key={engine}
+                        label={ENGINE_LABELS[engine]}
+                        checked={engines.includes(engine)}
+                        onCheckedChange={() =>
+                          setPicked(
+                            engines.includes(engine)
+                              ? engines.filter((value) => value !== engine)
+                              : [...engines, engine],
+                          )
+                        }
+                      />
+                    ))}
+                  </Inline>
+                )}
               </Stack>
               <MarketChecklist markets={markets} marketIds={marketIds} onToggle={setMarketIds} />
               <div className="flex items-end">
@@ -315,7 +328,7 @@ function ScheduleRow({
       </span>
       {schedule.enabled ? (
         <span className="text-secondary">
-          {schedule.engines.join(', ')} · next{' '}
+          {schedule.engines.map((engine) => ENGINE_LABELS[engine] ?? engine).join(', ')} · next{' '}
           {schedule.next_run_at ? (
             <DisplayTime value={schedule.next_run_at} />
           ) : (

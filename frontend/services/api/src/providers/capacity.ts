@@ -64,7 +64,6 @@ function bucketQuery(db: Database, request: CapacityRequest, pool: Pool) {
     .where('transport_provider', '=', request.transport)
     .where('account_pool_identity', '=', pool.identity)
     .where('connection_id', pool.connectionId === null ? 'is' : '=', pool.connectionId)
-    .where('billing_account_id', 'is', null)
     .forUpdate();
 }
 async function lockBuckets(
@@ -86,7 +85,6 @@ async function lockBuckets(
           pool_kind: pool.kind,
           transport_provider: request.transport,
           connection_id: pool.connectionId,
-          billing_account_id: null,
           account_pool_identity: pool.identity,
           capacity: String(ceiling(route, runtime)),
           tokens: String(pool.kind === 'transport' ? (route.capacity ?? 0) : 0),
