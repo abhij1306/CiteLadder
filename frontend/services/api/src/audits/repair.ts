@@ -107,7 +107,6 @@ export function createRepairAudit(
         error_message: '',
         analyzer_version: '',
         summary: null,
-        funding_account_id: null,
         funded_budget_period_start: null,
         created_at: at,
         updated_at: at,

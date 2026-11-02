@@ -16,6 +16,7 @@ describe('McpConnections', () => {
         `claude mcp add --transport http citeladder ${endpoint} --header "Authorization: Bearer <MCP_TOKEN>"`,
       ),
     ).toBeVisible();
-    expect(screen.getAllByRole('button', { name: 'Copy' })).toHaveLength(2);
+    // The URL, the Claude Code command and the client configuration.
+    expect(screen.getAllByRole('button', { name: 'Copy' })).toHaveLength(3);
   });
 });

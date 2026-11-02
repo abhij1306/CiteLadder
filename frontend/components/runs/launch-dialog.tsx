@@ -5,11 +5,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { promptsApi } from '@/lib/api/prompts';
-import { providersApi } from '@/lib/api/providers';
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi } from '@/lib/api/runs';
 import type { Audit, LogicalEngine, PromptSet } from '@/lib/api/types';
-import { ENGINE_ORDER, isConfigured, isVerified, isConsumerEngine } from '@/lib/providers/catalog';
+import { isConsumerEngine } from '@/lib/providers/catalog';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import {
@@ -19,38 +18,9 @@ import {
   DEFAULT_REPETITIONS,
   promptBatches,
 } from '@/lib/runs/launch';
+import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
 
 import { LaunchDialogView } from './launch-dialog-view';
-
-function availableEngines(
-  connections: Awaited<ReturnType<typeof providersApi.listConnections>> | undefined,
-) {
-  const verified = new Set<LogicalEngine>();
-  const stored = new Set<LogicalEngine>();
-  for (const connection of connections ?? []) {
-    if (!connection.active) continue;
-    if (!isConfigured(connection)) continue;
-    const target = isVerified(connection) ? verified : stored;
-    for (const route of connection.routes ?? []) {
-      if (route.active !== false) target.add(route.logical_engine);
-    }
-  }
-  return {
-    configuredEngines: ENGINE_ORDER.filter((engine) => verified.has(engine)),
-    unverifiedEngines: ENGINE_ORDER.filter((engine) => stored.has(engine) && !verified.has(engine)),
-  };
-}
-
-/** The engines a launch can measure: the workspace's own provider routes. */
-function useLaunchEngines(open: boolean, workspaceId: string | null) {
-  const connectionsQuery = useQuery({
-    queryKey: queryKeys.providers.connections(workspaceId ?? 'unresolved'),
-    queryFn: ({ signal }) => providersApi.listConnections({ signal, workspaceId }),
-    enabled: open && workspaceId !== null,
-  });
-  const engines = useMemo(() => availableEngines(connectionsQuery.data), [connectionsQuery.data]);
-  return { ...engines, enginesReady: connectionsQuery.isSuccess };
-}
 
 function fixedPromptSelection(
   fixedPromptSetId: string | undefined,
@@ -114,7 +84,7 @@ export function LaunchDialog({
     queryFn: ({ signal }) => promptsApi.listPromptSets(projectId, { signal, workspaceId }),
     enabled: open && workspaceId !== null,
   });
-  const { configuredEngines, unverifiedEngines, enginesReady } = useLaunchEngines(
+  const { configuredEngines, unverifiedEngines, enginesReady } = useConfiguredEngines(
     open,
     workspaceId,
   );

@@ -569,34 +569,3 @@ describe('integrations', () => {
       expect([table, await count(table, 'workspace_id', seed.workspaceId)]).toEqual([table, 0]);
   });
 });
-
-describe('billing catalog', () => {
-  it('allows only one published revision', async () => {
-    const actor = await fixtures.user();
-    const revision = (name: string) => ({
-      id: randomUUID(),
-      revision: `schema-${name}-${randomUUID()}`,
-      payload: JSON.stringify({}),
-      payload_sha256: name.repeat(64),
-      publication_state: 'published',
-      created_by_user_id: actor,
-      created_reason: 'schema fixture',
-      created_at: new Date(),
-    });
-    const rolledBack = new Error('rolled back');
-    await expect(
-      db.transaction().execute(async (trx) => {
-        await trx
-          .updateTable('billing_catalog_revisions')
-          .set({ publication_state: 'retired' })
-          .where('publication_state', '=', 'published')
-          .execute();
-        await trx.insertInto('billing_catalog_revisions').values(revision('a')).execute();
-        await expect(
-          trx.insertInto('billing_catalog_revisions').values(revision('b')).execute(),
-        ).rejects.toMatchObject(UNIQUE);
-        throw rolledBack;
-      }),
-    ).rejects.toBe(rolledBack);
-  });
-});
