@@ -202,7 +202,7 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
     );
   });
 
-  it('defaults partial results to Overview and keeps the cancelled Pages view available', async () => {
+  it('opens partial results on Pages and keeps their Overview available', async () => {
     const user = userEvent.setup();
     const summary = {
       web_fundamentals_score: 80,
@@ -252,17 +252,11 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
 
     renderScreen();
 
-    await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      ),
-    );
-    expect((await screen.findAllByText('80')).length).toBeGreaterThan(0);
-    await user.click(screen.getByRole('tab', { name: 'Pages' }));
+    // Partial results open on Pages like every other run (owner, 2026-11-02).
     expect(
       await screen.findByText(/This run was cancelled — showing the pages analyzed so far/),
     ).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
     expect(
       screen.queryByRole('heading', { name: 'Classification completeness' }),
     ).not.toBeInTheDocument();
@@ -273,5 +267,8 @@ describe('SiteHealthScreen — terminal states on the canonical screen', () => {
     expect(
       screen.queryByText('This crawl was cancelled before it produced results.'),
     ).not.toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: 'Overview' }));
+    expect(await screen.findByTestId('site-health-overview')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
   });
 });

@@ -183,11 +183,18 @@ export const aiTrafficApi = {
   },
 };
 export type TrafficFilters = Record<string, string | number | undefined | null>;
+/** What a table view reads: its project and its filters, without cursor or limit. */
+export type TrafficTableScope = Readonly<{
+  workspaceId: string;
+  projectId: string;
+  filters: TrafficFilters;
+}>;
 
 /**
- * The reads the Overview tab opens with. The screen, its route prefetcher and
- * the shell's landing warm all build them here, so a warmed entry is the one
- * the screen reads.
+ * The screen's reads. The Overview tab's are also built by its route
+ * prefetcher and the shell's landing warm, so a warmed entry is the one the
+ * screen reads. Every key holds the project at index 2, so a table keeps its
+ * rows across a page turn only inside one project.
  */
 export const aiTrafficQueries = {
   /** Crawl log sources: which tabs the screen offers. */
@@ -207,7 +214,13 @@ export const aiTrafficQueries = {
       queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'insights', { range }),
       queryFn: ({ signal }) => aiTrafficApi.insights(projectId, { range }, { workspaceId, signal }),
     }),
-  /** One page of a table tab; the filters carry its cursor and page size. */
+  /** The crawler catalog: bot labels and purposes for the filters and rows. */
+  catalog: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'catalog'),
+      queryFn: ({ signal }) => aiTrafficApi.catalog(projectId, { workspaceId, signal }),
+    }),
+  /** One page of a table view; `filters` carries its cursor and limit. */
   crawlers: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
     queryOptions({
       queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'crawlers', filters),
@@ -223,11 +236,10 @@ export const aiTrafficQueries = {
       queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'pages', filters),
       queryFn: ({ signal }) => aiTrafficApi.pages(projectId, filters, { workspaceId, signal }),
     }),
-  /** The crawler catalog the table tabs label their rows with. */
-  catalog: (workspaceId: string, projectId: string) =>
+  coverage: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
     queryOptions({
-      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'catalog'),
-      queryFn: ({ signal }) => aiTrafficApi.catalog(projectId, { workspaceId, signal }),
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'coverage', filters),
+      queryFn: ({ signal }) => aiTrafficApi.coverage(projectId, filters, { workspaceId, signal }),
     }),
 };
 

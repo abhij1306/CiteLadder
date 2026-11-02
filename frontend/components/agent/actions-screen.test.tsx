@@ -72,18 +72,25 @@ describe('Actions', () => {
     expect(within(row.closest('tr')!).getByText('High')).toBeVisible();
     expect(screen.queryByText('82.5')).not.toBeInTheDocument();
 
+    // The counts sit in the menu beside each status; the trigger names the
+    // status alone, so loading or dropping the counts never resizes it.
     const status = screen.getByRole('combobox', { name: 'Status' });
-    expect(await within(status).findByText('Open and in progress (3)')).toBeVisible();
+    expect(status.textContent).toBe('Open and in progress');
     await user.click(status);
-    await user.click(await screen.findByRole('option', { name: 'Dismissed (0)' }));
+    expect(
+      await screen.findByRole('option', { name: 'Open and in progress', description: '3' }),
+    ).toBeVisible();
+    await user.click(screen.getByRole('option', { name: 'Dismissed', description: '0' }));
 
     expect(await screen.findByText('No Actions match these filters')).toBeVisible();
     expect(searches).toEqual(['queue:10', 'dismissed:10']);
+    expect(status.textContent).toBe('Dismissed');
 
     // Counts cover every target type, so a target filter drops them.
     await user.click(screen.getByRole('combobox', { name: 'Target type' }));
     await user.click(await screen.findByRole('option', { name: 'Page' }));
-    expect(await within(status).findByText('Dismissed')).toBeVisible();
+    await user.click(status);
+    expect(await screen.findByRole('option', { name: 'Dismissed', description: '' })).toBeVisible();
   });
 
   it('dismisses an Action from its detail and links Work on this to a new chat', async () => {

@@ -1,27 +1,7 @@
-import { BarChart3, SearchX } from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 
 import { DataSourceSetup } from '@/components/integrations/data-source-setup';
-import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
-import { CrawlLogConnections } from './crawl-log-connections';
-
-/**
- * A filtered AI Traffic table with no matching rows. It replaces the table
- * rather than drawing column headers over nothing, and says absence is an
- * observation within the available logs, not proof of no traffic.
- */
-export function TrafficNoResults({
-  heading,
-  description,
-  connectLogs = false,
-}: Readonly<{ heading: string; description: string; connectLogs?: boolean }>) {
-  return (
-    <Stack gap="workspace">
-      <QueryState kind="empty" icon={SearchX} heading={heading} description={description} />
-      {connectLogs ? <CrawlLogConnections /> : null}
-    </Stack>
-  );
-}
 
 /**
  * Empty state for the AI Traffic referrals view. Referral measurement begins

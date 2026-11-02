@@ -1,29 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
 import { Drawer } from '@/components/ui/drawer';
-import { Pager } from '@/components/ui/pager';
-import { QueryState } from '@/components/ui/query-state';
-import { readErrorProps } from '@/components/ui/read-error';
-import { aiTrafficApi, type TrafficFilters } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
-import { useProjectContext } from '@/lib/project/project-context';
-import { cursorControls, useCursorTable } from '@/lib/table/use-cursor-table';
+import type { TrafficTableScope } from '@/lib/api/ai-traffic';
 import { TrafficPages } from './pages-view';
 
+/**
+ * The paths one crawler requested, in a drawer over the Crawlers table. The
+ * table pages in place like every other cursor table: its rows and pager stay
+ * while the next page loads.
+ */
 export function CrawlerPages({
   botId,
   onClose,
-  filters = {},
-}: Readonly<{ botId: string | null; onClose: () => void; filters?: TrafficFilters }>) {
-  const { activeProject } = useProjectContext(),
-    workspaceId = activeProject?.workspace_id ?? '',
-    projectId = activeProject?.id ?? '';
-  const pager = useCursorTable(JSON.stringify([workspaceId, projectId, botId, filters]));
-  const selected = { ...filters, bot_id: botId, cursor: pager.cursor, limit: pager.pageSize };
-  const query = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'crawler-pages', selected),
-    queryFn: ({ signal }) => aiTrafficApi.pages(projectId, selected, { workspaceId, signal }),
-    enabled: !!botId && !!workspaceId && !!projectId,
-  });
+  workspaceId,
+  projectId,
+  filters,
+}: TrafficTableScope & Readonly<{ botId: string | null; onClose: () => void }>) {
   return (
     <Drawer
       open={!!botId}
@@ -33,23 +23,12 @@ export function CrawlerPages({
       title="Observed crawler pages"
       description="Joinable path observations for the selected crawler."
     >
-      {query.isLoading ? <QueryState kind="loading" label="Loading crawler paths…" /> : null}
-      {query.isError ? (
-        <QueryState
-          kind="error"
-          {...readErrorProps(query)}
-          fallback="Could not read crawler pages"
+      {botId ? (
+        <TrafficPages
+          workspaceId={workspaceId}
+          projectId={projectId}
+          filters={{ ...filters, bot_id: botId }}
         />
-      ) : null}
-      {query.data && !query.isError ? (
-        <>
-          <TrafficPages data={query.data} filters={filters} />
-          <Pager
-            hideWhenSinglePage
-            page={pager.page}
-            {...cursorControls(pager, query.data.next_cursor)}
-          />
-        </>
       ) : null}
     </Drawer>
   );

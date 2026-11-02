@@ -191,6 +191,36 @@ test('long segments stay on one row and keyboard focus reveals the selected opti
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
+test('choosing a filter option never resizes the filter or moves its neighbour', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 982, height: 900 });
+  await stubAuthedShell(page, [
+    [
+      `**/api/v1/projects/${FIXTURE_PROJECT.id}/actions?*`,
+      { items: [], next_cursor: null, status_counts: { open: 1, in_progress: 2 } },
+    ],
+  ]);
+  await page.goto(fixtureProjectPath('/agent/actions'));
+  const status = page.getByRole('combobox', { name: 'Status' });
+  const target = page.getByRole('combobox', { name: 'Target type' });
+  await expect(status).toHaveText('Open and in progress');
+  const boxes = async () => ({
+    status: Math.round((await status.boundingBox())!.width),
+    target: Math.round((await target.boundingBox())!.x),
+  });
+  const before = await boxes();
+  await status.click();
+  await page.getByRole('option', { name: 'Dismissed' }).click();
+  await expect(status).toHaveText('Dismissed');
+  expect(await boxes()).toEqual(before);
+  // Choosing a target type drops the status counts; the filters stay put.
+  await target.click();
+  await page.getByRole('option', { name: 'Page', exact: true }).click();
+  await expect(target).toHaveText('Page');
+  expect(await boxes()).toEqual(before);
+});
+
 test('invalid field edges survive keyboard focus in both themes', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await stubAuthedShell(page, [['**/api/v1/brand-discovery-catalog', catalog]], []);

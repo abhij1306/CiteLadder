@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, expect, it } from 'vite-plus/test';
 
@@ -32,6 +32,46 @@ const snapshot = (id: string, body: string) => ({
   body,
   truncated: false,
   status_code: 200,
+});
+
+it('keeps the observations and the pager on screen while the next page loads', async () => {
+  let releaseOlder!: () => void;
+  const olderHeld = new Promise<void>((resolve) => {
+    releaseOlder = resolve;
+  });
+  const asked: string[] = [];
+  mswServer.use(
+    http.get(`/api/v1/projects/${PROJECT}/site-health/robots-history`, async ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      asked.push(`${params.get('cursor') ?? 'first'}:${params.get('limit')}`);
+      if (params.get('cursor') !== 'older')
+        return HttpResponse.json({
+          items: [item(NEW, '2026-10-02T00:00:00Z')],
+          snapshots: [snapshot(NEW, 'User-agent: *')],
+          next_cursor: 'older',
+        });
+      await olderHeld;
+      return HttpResponse.json({
+        items: [item(OLD, '2026-10-01T00:00:00Z')],
+        snapshots: [snapshot(OLD, 'User-agent: *')],
+        next_cursor: null,
+      });
+    }),
+  );
+  const user = userEvent.setup();
+  renderWithProviders(<RobotsHistory workspaceId={WORKSPACE} projectId={PROJECT} />);
+  const table = await screen.findByRole('table', { name: 'robots.txt observation sequence' });
+  expect(await within(table).findByRole('cell', { name: NEW })).toBeVisible();
+
+  await user.click(screen.getByRole('button', { name: 'Next page' }));
+  await waitFor(() => expect(asked).toEqual(['first:5', 'older:5']));
+  expect(within(table).getByRole('cell', { name: NEW })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
+
+  releaseOlder();
+  expect(await within(table).findByRole('cell', { name: OLD })).toBeVisible();
+  expect(within(table).queryByRole('cell', { name: NEW })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
 });
 
 it('diffs two observations line by line across line-ending styles', async () => {

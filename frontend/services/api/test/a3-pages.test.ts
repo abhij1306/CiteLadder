@@ -260,6 +260,14 @@ describe('A3 persisted Pages join', () => {
         .execute();
     }
   });
+  it('narrows a path detail to one crawler when the drawer names it', async () => {
+    const detail = await urlRead(db, scope(), guide, {
+      ...filters,
+      bot_id: 'openai_oai_searchbot',
+    });
+    expect(detail.crawls.map((r) => [r.bot_id, r.requests])).toEqual([['openai_oai_searchbot', 3]]);
+    expect(detail.page?.crawl).toMatchObject({ state: 'value', value: 3 });
+  });
   it('aggregates bots, sources and citations independently, gates inventory coverage and preserves detail totals', async () => {
     const result = await pagesRead(db, scope(), filters),
       row = result.items.find((r) => r.url_hash === guide)!;

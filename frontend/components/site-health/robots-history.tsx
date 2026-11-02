@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import type { robotsHistoryPageSchema } from '@citeladder/contracts/site-health';
 import type { z } from 'zod';
 import { FileText } from 'lucide-react';
@@ -7,7 +6,6 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { TableTime } from '@/components/ui/display-time';
 import { Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
-import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
@@ -16,7 +14,8 @@ import { siteHealthQueries } from '@/lib/api/site-health';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayTimestamp } from '@/lib/format';
 import { crawlerPolicyLabels, robotsStatusLabels } from '@/lib/site-health/site-facts';
-import { cursorControls, useCursorTable } from '@/lib/table/use-cursor-table';
+import { ROBOTS_HISTORY_PAGE_SIZE } from '@/lib/config/site-health';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 
 type RobotsHistoryPage = z.infer<typeof robotsHistoryPageSchema>;
 
@@ -27,40 +26,28 @@ export function RobotsHistory({
   workspaceId: string;
   projectId: string;
 }>) {
-  const pager = useCursorTable(projectId);
-  const query = useQuery(siteHealthQueries.robotsHistory(workspaceId, projectId, pager.cursor));
-  if (query.isPending)
-    return <QueryState kind="loading" label="Loading robots.txt observations…" />;
-  if (query.isError)
-    return (
-      <QueryState
-        kind="error"
-        error={query.error}
-        fallback="robots.txt history is unavailable."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
-      />
-    );
-  const page = query.data;
+  // A page turn keeps the rows and the pager on screen until the next
+  // observations land; loading and errors draw inside the table.
+  const { page, cursor, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: projectId,
+    scope: null,
+    query: (request) => siteHealthQueries.robotsHistory(workspaceId, projectId, request),
+    noun: 'observations',
+    loading: 'Loading robots.txt observations…',
+    error: 'robots.txt history is unavailable.',
+    empty: () => ({
+      kind: 'empty',
+      icon: FileText,
+      headingLevel: 3,
+      heading: 'No robots.txt observations are available',
+    }),
+    fixedPageSize: ROBOTS_HISTORY_PAGE_SIZE,
+  });
   return (
     <Stack>
-      <DataTable
-        label="robots.txt observation sequence"
-        columns={COLUMNS}
-        minWidth="md"
-        state={
-          page.items.length === 0
-            ? {
-                kind: 'empty',
-                icon: FileText,
-                headingLevel: 3,
-                heading: 'No robots.txt observations are available',
-              }
-            : undefined
-        }
-        pager={cursorControls(pager, page.next_cursor)}
-      >
-        {page.items.map((item) => (
+      <DataTable label="robots.txt observation sequence" columns={COLUMNS} minWidth="md" {...table}>
+        {page?.items.map((item) => (
           <TableRow key={item.crawl_id}>
             <TableCell numeric>
               <TableTime value={item.robots.observed_at} />
@@ -76,7 +63,7 @@ export function RobotsHistory({
         ))}
       </DataTable>
       {/* A new page offers different observations, so the comparison starts over. */}
-      <RobotsCompare key={pager.cursor ?? 'first'} page={page} />
+      {page ? <RobotsCompare key={cursor.cursor ?? 'first'} page={page} /> : null}
     </Stack>
   );
 }

@@ -9,8 +9,6 @@ import { AiTrafficScreen } from './ai-traffic-screen';
 import { CrawlSignalPanel } from './overview-signals';
 import { InsightStrip } from './insight-strip';
 import { CrawlLogConnections } from './crawl-log-connections';
-import { TrafficCrawlers, TrafficActivity } from './traffic-views';
-import { TabsRoot } from '@/components/ui/tabs';
 const project = makeProject({
   id: '88888888-8888-4888-8888-888888888888',
   workspace_id: '11111111-1111-4111-8111-111111111111',
@@ -236,24 +234,6 @@ describe('AI Traffic state and navigation', () => {
     );
     await user.upload(screen.getByLabelText('Log file'), new File(['{}'], 'requests.ndjson'));
     expect(screen.getByRole('button', { name: 'Upload recognized requests' })).toBeEnabled();
-  });
-  it.each(['crawlers', 'activity'] as const)('offers crawl setup from empty %s', async (tab) => {
-    mswServer.use(
-      http.get(root + '/crawl-logs/sources', () => HttpResponse.json(sourceBody('available'))),
-    );
-    const user = userEvent.setup();
-    const data = { items: [], next_cursor: null };
-    renderWithProviders(
-      <TabsRoot value={tab} onValueChange={() => {}}>
-        {tab === 'crawlers' ? <TrafficCrawlers data={data} /> : <TrafficActivity data={data} />}
-      </TabsRoot>,
-    );
-    await user.click(screen.getByRole('button', { name: 'Connect crawl logs' }));
-    expect(
-      await within(screen.getByRole('dialog')).findByRole('radiogroup', {
-        name: 'Collection method',
-      }),
-    ).toBeVisible();
   });
   it.each([null, 'Coverage is incomplete.'])(
     'retains only meaningful empty insights (%s)',
@@ -682,11 +662,14 @@ describe('AI Traffic state and navigation', () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole('tab', { name: 'Activity' }));
     expect(new URLSearchParams(window.location.search).get('tab')).toBe('activity');
-    // No retained rows: one contextual empty state instead of headers over nothing.
-    expect(await screen.findByRole('heading', { name: 'No matching requests' })).toBeVisible();
+    // No retained rows: the table keeps its headers and footprint and says why
+    // inside its body.
+    const activityTable = await screen.findByRole('table', {
+      name: 'Retained automated request activity',
+    });
     expect(
-      screen.queryByRole('region', { name: 'Retained automated request activity' }),
-    ).not.toBeInTheDocument();
+      await within(activityTable).findByRole('heading', { name: 'No matching requests' }),
+    ).toBeVisible();
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Response status' }), {
       target: { value: '404' },
     });

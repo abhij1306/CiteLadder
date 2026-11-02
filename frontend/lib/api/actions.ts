@@ -94,7 +94,7 @@ export const actionsApi = {
 function actionListQuery(workspaceId: string, projectId: string, params?: ActionsParams) {
   const request = { ...params, limit: params?.limit ?? TABLE_DEFAULT_PAGE_SIZE };
   return queryOptions({
-    queryKey: queryKeys.actions.list(projectId, {
+    queryKey: queryKeys.actions.list(workspaceId, projectId, {
       status: request.status ?? null,
       targetKind: request.target_kind ?? null,
       cursor: request.cursor ?? null,
