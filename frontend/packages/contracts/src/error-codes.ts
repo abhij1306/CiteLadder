@@ -130,6 +130,8 @@ const API_ERROR_CODES = [
   'unsupported_scope',
   'unsupported_target',
   'validation_error',
+  'visibility_metrics_pending',
+  'visibility_not_measured',
   'workspace_role_forbidden',
 ] as const;
 

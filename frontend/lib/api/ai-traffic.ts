@@ -207,6 +207,28 @@ export const aiTrafficQueries = {
       queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'insights', { range }),
       queryFn: ({ signal }) => aiTrafficApi.insights(projectId, { range }, { workspaceId, signal }),
     }),
+  /** One page of a table tab; the filters carry its cursor and page size. */
+  crawlers: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'crawlers', filters),
+      queryFn: ({ signal }) => aiTrafficApi.crawlers(projectId, filters, { workspaceId, signal }),
+    }),
+  activity: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'activity', filters),
+      queryFn: ({ signal }) => aiTrafficApi.activity(projectId, filters, { workspaceId, signal }),
+    }),
+  pages: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'pages', filters),
+      queryFn: ({ signal }) => aiTrafficApi.pages(projectId, filters, { workspaceId, signal }),
+    }),
+  /** The crawler catalog the table tabs label their rows with. */
+  catalog: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'catalog'),
+      queryFn: ({ signal }) => aiTrafficApi.catalog(projectId, { workspaceId, signal }),
+    }),
 };
 
 async function read<T>(

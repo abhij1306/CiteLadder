@@ -11,6 +11,7 @@ import {
   vi,
 } from 'vite-plus/test';
 
+import { pendingOverviewHandlers, recordedProjectRead } from '@/test/fixtures/overview';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { mswServer } from '@/test/msw-server';
 import { prefetchRoute } from './route-prefetch';
@@ -88,6 +89,68 @@ describe('prefetchRoute', () => {
     await vi.waitFor(() =>
       expect(asked).toEqual(['dashboard', 'pages ?limit=10&monitored=true&sort=status']),
     );
+  });
+
+  it('warms the Overview layout beside the command center, then the reads its widgets make', async () => {
+    const asked: string[] = [];
+    const widgets = [
+      'project_state',
+      'missing_prompts',
+      'visibility_trend',
+      'ai_traffic',
+      'search_console',
+    ] as const;
+    mswServer.use(
+      // The command center never answers: everything else is asked beside it.
+      ...pendingOverviewHandlers(PROJECT_ID, widgets, asked),
+      recordedProjectRead(PROJECT_ID, 'visibility/prompts', 'prompts', asked, []),
+      recordedProjectRead(PROJECT_ID, 'visibility/trends', 'trends', asked, []),
+      recordedProjectRead(PROJECT_ID, 'ai-traffic/overview', 'traffic', asked, {}),
+      recordedProjectRead(PROJECT_ID, 'performance', 'performance', asked, {}),
+    );
+
+    prefetchRoute(client, '/projects', PROJECT);
+
+    await vi.waitFor(() =>
+      expect([...asked].sort()).toEqual([
+        'command-center',
+        'layout',
+        'performance?range=last_synced&granularity=day&compare=none',
+        'prompts',
+        'traffic?range=30d',
+        'trends?cohort=core',
+      ]),
+    );
+  });
+
+  it('does not ask for a widget read that needs a measured run when there is none', async () => {
+    const asked: string[] = [];
+    mswServer.use(
+      ...pendingOverviewHandlers(PROJECT_ID, ['perception'], asked),
+      http.get(`/api/v1/projects/${PROJECT_ID}/visibility`, () => {
+        asked.push('visibility');
+        return HttpResponse.json(
+          {
+            error: { code: 'visibility_not_measured', message: 'No completed audit for project' },
+          },
+          { status: 404 },
+        );
+      }),
+      recordedProjectRead(PROJECT_ID, 'visibility/perception', 'perception', asked, {}),
+    );
+
+    prefetchRoute(client, '/projects', PROJECT);
+
+    const latest = ['visibility', 'project', PROJECT_ID, 'latest'];
+    await vi.waitFor(() =>
+      expect(
+        client.getQueryData([...latest, { cohort: 'core', selection_mode: 'latest' }]),
+      ).toBeNull(),
+    );
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    expect([...asked].sort()).toEqual(['command-center', 'layout', 'visibility']);
   });
 
   it('leaves an already-failed query untouched so a settled error cannot flicker', async () => {

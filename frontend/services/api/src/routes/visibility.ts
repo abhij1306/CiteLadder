@@ -92,9 +92,19 @@ const BASELINE_RUNS = { scalar: { kind: 'uuid' }, list: true } as const;
 const MAX_URL_LENGTH = 8192;
 
 /**
+ * A selection with nothing measured yet and one whose metrics are still being
+ * written are their own answers, each with its own code, so a client never
+ * shows one as the other or as something that does not exist.
+ */
+const UNMEASURED_CODES = {
+  not_measured: 'visibility_not_measured',
+  metrics_pending: 'visibility_metrics_pending',
+} as const;
+
+/**
  * Translate the readers' selection errors: an unservable selection is a 404
- * (`Audit not found` unless the route names what is missing) and a malformed
- * one a 422 carrying the reader's message.
+ * (`Audit not found` unless the route names what is missing, or a code saying
+ * it is not measured yet) and a malformed one a 422 carrying the reader's message.
  */
 async function selectionErrors<T>(
   read: () => Promise<T>,
@@ -103,7 +113,10 @@ async function selectionErrors<T>(
   try {
     return await read();
   } catch (error) {
-    if (error instanceof AnalysisNotFoundError) throw missing();
+    if (error instanceof AnalysisNotFoundError) {
+      if (error.reason === 'not_found') throw missing();
+      throw new ApiError(404, error.message, { code: UNMEASURED_CODES[error.reason] });
+    }
     if (error instanceof TrendQueryError || error instanceof InvalidCursorError)
       throw new ApiError(422, error.message);
     throw error;
@@ -289,19 +302,17 @@ export const visibilityRoutes = [
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       await requireProject(db, workspace, path.project_id);
-      return selectionErrors(
-        () =>
-          getVisibility(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
-            auditId: query.audit_id,
-            logicalEngine: query.engine,
-            baselineId: query.baseline_id,
-            selectionMode: query.selection_mode,
-            fromAt: query.from_at,
-            toAt: query.to_at,
-            configurationKey: query.configuration_key,
-            cohort: query.cohort,
-          }),
-        () => new ApiError(404, 'No visibility metrics available for the selected measurement'),
+      return selectionErrors(() =>
+        getVisibility(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
+          auditId: query.audit_id,
+          logicalEngine: query.engine,
+          baselineId: query.baseline_id,
+          selectionMode: query.selection_mode,
+          fromAt: query.from_at,
+          toAt: query.to_at,
+          configurationKey: query.configuration_key,
+          cohort: query.cohort,
+        }),
       );
     },
   }),

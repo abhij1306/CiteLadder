@@ -279,13 +279,47 @@ describe('GET /visibility', () => {
     expect(body.comparison).toMatchObject({ status: 'comparable', deltas: { sov: 25 } });
   });
 
-  it('is a 404 with nothing measured, and a run selection needs its run', async () => {
+  it('answers nothing measured, metrics still being written and a missing run each with its own code', async () => {
+    const answer = async (who: Tenant, path: string, query: Record<string, string> = {}) => {
+      const { status, body } = await get(who, path, query);
+      return [status, record(body.error).code];
+    };
     const empty = await fixtures.tenant();
-    const missing = await get(empty, route(empty));
-    expect([missing.status, record(missing.body.error).message]).toEqual([
+    expect(await answer(empty, route(empty))).toEqual([404, 'visibility_not_measured']);
+    // A sibling read of the latest run folds the same case into the same code.
+    expect(await answer(empty, route(empty, '/perception'))).toEqual([
       404,
-      'No visibility metrics available for the selected measurement',
+      'visibility_not_measured',
     ]);
+    expect(
+      await answer(tenant, route(tenant), {
+        selection_mode: 'range',
+        from: '2020-01-01T00:00:00Z',
+        to: '2020-01-08T00:00:00Z',
+      }),
+    ).toEqual([404, 'visibility_not_measured']);
+
+    const pending = await fixtures.tenant();
+    const unwritten = await fixtures.audit(pending, {
+      completedAt: new Date('2026-03-10T00:00:00Z'),
+      configuration: frozen(),
+    });
+    expect(await answer(pending, route(pending))).toEqual([404, 'visibility_metrics_pending']);
+    expect(await answer(pending, route(pending), { audit_id: unwritten })).toEqual([
+      404,
+      'visibility_metrics_pending',
+    ]);
+
+    expect(await answer(tenant, route(tenant), { audit_id: randomUUID() })).toEqual([
+      404,
+      'not_found',
+    ]);
+    // Another workspace's unwritten run is not found, never "being prepared".
+    expect(await answer(empty, route(empty), { audit_id: unwritten })).toEqual([404, 'not_found']);
+    expect(await answer(empty, route(pending))).toEqual([404, 'not_found']);
+  });
+
+  it('rejects a malformed selection', async () => {
     expect((await get(tenant, route(tenant), { selection_mode: 'run' })).status).toBe(422);
     expect((await get(tenant, route(tenant), { engine: 'altavista' })).status).toBe(422);
   });

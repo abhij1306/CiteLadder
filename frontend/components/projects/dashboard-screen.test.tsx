@@ -121,6 +121,7 @@ const commandCenter = {
 };
 
 vi.mock('@tanstack/react-query', () => ({
+  queryOptions: <T,>(options: T) => options,
   useQuery: (options: { queryKey: readonly unknown[] }) => {
     if (options.queryKey[1] === 'overview-layout') return layoutResult;
     return options.queryKey[0] === 'visibility' ? promptsResult : queryResult;
@@ -148,6 +149,14 @@ vi.mock('@/lib/project/project-context', () => {
 });
 vi.mock('@/lib/api/projects', () => ({
   projectsApi: { getCommandCenter: vi.fn(), downloadOverviewReport },
+  projectQueries: {
+    commandCenter: (_workspaceId: string, projectId: string) => ({
+      queryKey: ['projects', 'command-center', projectId],
+    }),
+    overviewLayout: (_workspaceId: string, projectId: string) => ({
+      queryKey: ['projects', 'overview-layout', projectId],
+    }),
+  },
 }));
 vi.mock('@/lib/api/opportunities', () => ({
   opportunitiesApi: { updateOrder: vi.fn() },

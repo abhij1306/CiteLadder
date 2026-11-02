@@ -1,6 +1,13 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 
 import { SuggestionList } from '@/components/ui/chat-dock';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +21,12 @@ import {
 /** Inline `/` and `@` commands: the options for a token, and what a pick does. */
 export type ComposerCommands = {
   options: (token: CommandToken) => CommandOption[];
+  /**
+   * A trigger's token became active under the caret. Options are asked for
+   * during render, so a pool loaded only once someone reaches for it starts
+   * here instead.
+   */
+  onTrigger?: (trigger: CommandToken['trigger']) => void;
   onPick: (option: CommandOption, token: CommandToken) => void;
   /** Actions this message mentions, shown as removable chips. */
   mentions: readonly Mention[];
@@ -66,6 +79,12 @@ export function CommandField({
   const listId = `${id}-commands`;
   const state = menuState(commands, disabled ? null : tokenAt(value, caret), dismissed, active);
   const open = state.options.length > 0;
+  const trigger = state.token?.trigger ?? null;
+  const onTrigger = commands?.onTrigger;
+
+  useEffect(() => {
+    if (trigger) onTrigger?.(trigger);
+  }, [trigger, onTrigger]);
 
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return;

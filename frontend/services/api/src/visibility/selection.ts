@@ -17,8 +17,25 @@ import { chunked, groupBy } from '../lists.ts';
 
 const visibility = policy.visibility;
 
-/** A selection that cannot be served: the route answers 404. */
-export class AnalysisNotFoundError extends Error {}
+/**
+ * Why a selection cannot be served. They are different answers, and a reader
+ * must be able to tell them apart:
+ * - `not_found`: a named run, run set or analysis that does not exist here.
+ * - `not_measured`: nothing dashboard-ready to read yet (no completed run, or a
+ *   period that measured nothing).
+ * - `metrics_pending`: the run exists but its metric snapshot is not written.
+ */
+export type AnalysisMissing = 'not_found' | 'not_measured' | 'metrics_pending';
+
+/** A selection that cannot be served: the route answers 404 with a code per reason. */
+export class AnalysisNotFoundError extends Error {
+  readonly reason: AnalysisMissing;
+
+  constructor(message: string, reason: AnalysisMissing = 'not_found') {
+    super(message);
+    this.reason = reason;
+  }
+}
 
 /** A selection that is malformed: the route answers 422 with this message. */
 export class TrendQueryError extends Error {}

@@ -339,10 +339,11 @@ export const brandDiscoveryCompleteSchema = responseObject({
 });
 
 // Visibility → By market: each market's latest dashboard-ready run, measured
-// apart. `no_run` is a market never measured, never a zero.
+// apart. `no_run` is a market never measured, never a zero; `metrics_pending`
+// is a market whose latest run's results are still being written.
 export const visibilityMarketRowSchema = responseObject({
   market: projectMarketSchema,
-  state: z.enum(['measured', 'no_run']),
+  state: z.enum(['measured', 'no_run', 'metrics_pending']),
   audit_id: uuid().nullable(),
   measured_at: z.string().nullable(),
   mention_rate: z.number().nullable(),

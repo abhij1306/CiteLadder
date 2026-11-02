@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useProjectContext } from '@/lib/project/project-context';
 import { aiTrafficApi, aiTrafficQueries } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
 import { stringUrlCodec, optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useCursorTable } from '@/lib/table/use-cursor-table';
 import { saveBlob } from '@/lib/download';
@@ -117,23 +116,19 @@ export function useTrafficData(tab: TrafficDataTab) {
     enabled: enabled && tab === 'overview',
   });
   const crawlers = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'crawlers', tableFilters),
-    queryFn: ({ signal }) => aiTrafficApi.crawlers(projectId, tableFilters, { ...options, signal }),
+    ...aiTrafficQueries.crawlers(workspaceId, projectId, tableFilters),
     enabled: enabled && tab === 'crawlers',
   });
   const activity = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'activity', tableFilters),
-    queryFn: ({ signal }) => aiTrafficApi.activity(projectId, tableFilters, { ...options, signal }),
+    ...aiTrafficQueries.activity(workspaceId, projectId, tableFilters),
     enabled: enabled && tab === 'activity',
   });
   const pages = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'pages', tableFilters),
-    queryFn: ({ signal }) => aiTrafficApi.pages(projectId, tableFilters, { ...options, signal }),
+    ...aiTrafficQueries.pages(workspaceId, projectId, tableFilters),
     enabled: enabled && tab === 'pages',
   });
   const catalog = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'catalog'),
-    queryFn: ({ signal }) => aiTrafficApi.catalog(projectId, { ...options, signal }),
+    ...aiTrafficQueries.catalog(workspaceId, projectId),
     enabled: enabled && tab !== 'overview',
   });
   const exporting = useMutation({

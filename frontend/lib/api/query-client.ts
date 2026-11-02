@@ -58,14 +58,17 @@ export function shouldRetryQuery(failureCount: number, error: unknown) {
  * while changing the active project cannot temporarily relabel another
  * project's persisted evidence as the newly selected project.
  *
- * Domain query keys place their owning project or crawl id at index 2.
+ * The scope id is looked for among the key's top-level segments, not at one
+ * fixed position: namespaces disagree on where it sits (Site Health puts the
+ * workspace before the project in some keys, AI Traffic in all of them), and a
+ * positional check silently drops the placeholder for every such key.
  */
 export function retainPreviousDataForScope<TData>(
   scopeId: string,
   previousData: TData | undefined,
   previousQuery: { queryKey: readonly unknown[] } | undefined,
 ): TData | undefined {
-  return previousQuery?.queryKey[2] === scopeId ? previousData : undefined;
+  return previousQuery?.queryKey.includes(scopeId) ? previousData : undefined;
 }
 
 /**

@@ -36,6 +36,18 @@ const rows: VisibilityMarkets = {
       share_of_voice_delta: -2,
     },
     {
+      market: DE,
+      state: 'metrics_pending',
+      audit_id: null,
+      measured_at: null,
+      mention_rate: null,
+      share_of_voice: null,
+      net_sentiment: null,
+      comparison_status: null,
+      mention_rate_delta: null,
+      share_of_voice_delta: null,
+    },
+    {
       market: FR,
       state: 'no_run',
       audit_id: null,
@@ -52,7 +64,7 @@ const rows: VisibilityMarkets = {
 const loaded = { data: rows, isError: false } as UseQueryResult<VisibilityMarkets>;
 
 describe('Visibility by market', () => {
-  it("shows each market's figures and a never-run market as not run, not zero", () => {
+  it("shows each market's figures, a run still being written as such, and a never-run market as not run, not zero", () => {
     render(
       <VisibilityByMarket
         query={loaded}
@@ -61,12 +73,14 @@ describe('Visibility by market', () => {
         onSelectMarket={() => undefined}
       />,
     );
-    const [, us, fr] = screen.getAllByRole('row');
+    const [, us, de, fr] = screen.getAllByRole('row');
     expect(
       within(us!)
         .getAllByRole('cell')
         .map((cell) => cell.textContent),
     ).toEqual(['United States · English', '25%', '+5.0 pp', '50%', '−2.0 pp', '+40']);
+    expect(within(de!).getByText('Being prepared')).toBeInTheDocument();
+    expect(within(de!).queryByText('Not run')).not.toBeInTheDocument();
     expect(within(fr!).getByText('Not run')).toBeInTheDocument();
     expect(within(fr!).queryByText('0%')).not.toBeInTheDocument();
   });

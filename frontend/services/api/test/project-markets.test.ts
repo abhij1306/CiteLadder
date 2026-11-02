@@ -372,7 +372,7 @@ describe('admission per market', () => {
 });
 
 describe('visibility by market', () => {
-  it('reads each market apart and reports a never-measured market as no run', async () => {
+  it('reads each market apart, keeping a never-measured market apart from one still being written', async () => {
     const tenant = await fixtures.tenant();
     const germany = await addGermany(tenant);
     const metrics = {
@@ -405,6 +405,17 @@ describe('visibility by market', () => {
     const fallbackRun = await run(null, 1);
     const germanRun = await run(germany, 3);
     await request(tenant, '/markets', 'POST', { country_code: 'FR', language_code: 'fr' });
+    const added = await request(tenant, '/markets', 'POST', {
+      country_code: 'ES',
+      language_code: 'es',
+    });
+    // Spain's run finished, but its metrics are not written yet.
+    const spanishRun = await fixtures.audit(tenant, { completedAt: new Date() });
+    await db
+      .updateTable('audits')
+      .set({ market_id: added.body[3].id })
+      .where('id', '=', spanishRun)
+      .execute();
 
     expect((await request(tenant, '/visibility')).body.audit_id).toBe(fallbackRun);
     expect((await request(tenant, `/visibility?market=${germany}`)).body.audit_id).toBe(germanRun);
@@ -421,6 +432,7 @@ describe('visibility by market', () => {
       ['US', 'measured', fallbackRun, 0.25],
       ['DE', 'measured', germanRun, 0.75],
       ['FR', 'no_run', null, null],
+      ['ES', 'metrics_pending', null, null],
     ]);
 
     const outsider = await fixtures.tenant();

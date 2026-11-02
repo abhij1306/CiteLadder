@@ -9,6 +9,10 @@ export const runKeys = {
   execution: (executionId: string) => ['runs', 'execution', executionId] as const,
   schedules: (workspaceId: string | null, projectId: string) =>
     ['runs', 'schedules', workspaceId, projectId] as const,
+  // Its own root, not under `runs`: a launch invalidates `runs.all`, and the
+  // estimate for the launch just sent must not be re-asked as the dialog closes.
+  estimate: (workspaceId: string | null, input: Readonly<Record<string, unknown>> | null) =>
+    ['audit-estimate', workspaceId, input] as const,
 };
 
 export const visibilityKeys = {

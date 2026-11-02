@@ -234,10 +234,23 @@ export const projectsApi = {
 };
 
 /**
- * The shell's project reads, shared by the route loader and the project
- * context so both ask under one key with one bounded bootstrap timeout.
+ * Project read options: the shell's reads, shared by the route loader and the
+ * project context under one bounded bootstrap timeout, and the Overview's,
+ * shared by the screen and navigation intent.
  */
 export const projectQueries = {
+  /** The Overview's composed projection of the project's persisted state. */
+  commandCenter: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.projects.commandCenter(projectId),
+      queryFn: ({ signal }) => projectsApi.getCommandCenter(projectId, { signal, workspaceId }),
+    }),
+  /** Which widgets the project's Overview shows; independent of the command center. */
+  overviewLayout: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.projects.overviewLayout(projectId),
+      queryFn: ({ signal }) => projectsApi.getOverviewLayout(projectId, { signal, workspaceId }),
+    }),
   /**
    * One workspace's projects. Every listed project is the same authorized
    * object its detail read returns, so the list seeds those entries: opening

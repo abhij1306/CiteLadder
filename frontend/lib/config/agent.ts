@@ -26,5 +26,10 @@ export const AGENT_TOP_ACTIONS = 3;
 export const AGENT_CHAT_SEARCH_DEBOUNCE_MS = 250;
 /** Actions one message may @-mention (the server enforces the same bound). */
 export const AGENT_MENTIONS_MAX = 5;
+/**
+ * Actions the composer's `@` menu matches against, loaded when the menu first
+ * opens. The table's first page is too few to find an Action by name.
+ */
+export const AGENT_MENTION_POOL_SIZE = 50;
 /** Top open Actions a briefing mentions (within AGENT_MENTIONS_MAX). */
 export const AGENT_BRIEFING_ACTIONS = 5;

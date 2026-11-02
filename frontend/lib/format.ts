@@ -21,6 +21,7 @@ type BucketGranularity = z.infer<typeof snapshotGranularitySchema>;
 export type DataAvailabilityState =
   | 'not_measured'
   | 'not_run'
+  | 'pending'
   | 'not_set'
   | 'unavailable'
   | 'not_applicable'
@@ -29,6 +30,7 @@ export type DataAvailabilityState =
 const availabilityLabels: Readonly<Record<DataAvailabilityState, string>> = {
   not_measured: 'Not measured',
   not_run: 'Not run',
+  pending: 'Being prepared',
   not_set: 'Not set',
   unavailable: 'Unavailable',
   not_applicable: 'Not applicable',

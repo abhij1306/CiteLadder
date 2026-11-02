@@ -1,7 +1,11 @@
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { InvalidCursorError } from '../http/keyset-cursor.ts';
-import { AnalysisNotFoundError, TrendQueryError } from '../visibility/selection.ts';
+import {
+  AnalysisNotFoundError,
+  TrendQueryError,
+  type AnalysisMissing,
+} from '../visibility/selection.ts';
 
 export type McpPrincipal = {
   userId: string;
@@ -27,6 +31,13 @@ export type ProjectRead = { db: Database; scope: ReadScope; origin: string };
 /** A caller-caused argument problem the model can correct. */
 export class McpInputError extends Error {}
 
+/** A selection that cannot be served says which of its three reasons applies. */
+const SELECTION_MISSING: Readonly<Record<AnalysisMissing, string>> = {
+  not_found: 'Selected measurement is unavailable',
+  not_measured: 'Nothing has been measured for this selection yet',
+  metrics_pending: "The selected run's results are still being prepared",
+};
+
 /**
  * The message a caller can act on, or null for a server failure whose detail
  * stays in the log. Owners signal caller mistakes with their own 4xx errors.
@@ -38,7 +49,7 @@ export function callerMessage(error: unknown): string | null {
     error instanceof InvalidCursorError
   )
     return error.message;
-  if (error instanceof AnalysisNotFoundError) return 'Selected measurement is unavailable';
+  if (error instanceof AnalysisNotFoundError) return SELECTION_MISSING[error.reason];
   if (error instanceof ApiError && error.status === 429)
     return `${error.message}; retry in ${error.headers?.['retry-after'] ?? 'a few'} seconds`;
   if (error instanceof ApiError && error.status >= 400 && error.status < 500) return error.message;

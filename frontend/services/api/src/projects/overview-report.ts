@@ -291,9 +291,15 @@ export async function overviewReport(db: Database, scope: ProjectScope) {
     try {
       await sections[widget.key]?.(context);
     } catch (error) {
-      // Before the first completed run a widget's read has nothing to select.
+      // Before the first completed run a widget's read has nothing to select,
+      // and a run whose results are still being written is not that.
       if (!(error instanceof AnalysisNotFoundError)) throw error;
-      quiet(report, 'Not available until the first completed run.');
+      quiet(
+        report,
+        error.reason === 'metrics_pending'
+          ? 'Results for the latest run are still being prepared.'
+          : 'Not available until the first completed run.',
+      );
     }
   }
   guide(context, name);

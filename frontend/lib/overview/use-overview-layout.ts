@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { OverviewLayout, OverviewWidget } from '@citeladder/contracts/overview';
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
+import { projectQueries, projectsApi } from '@/lib/api/projects';
 import type { Project } from '@/lib/api/types';
 
 /**
@@ -12,12 +11,10 @@ import type { Project } from '@/lib/api/types';
  */
 export function useOverviewLayout(project: Project) {
   const queryClient = useQueryClient();
-  const queryKey = queryKeys.projects.overviewLayout(project.id);
+  const layoutQuery = projectQueries.overviewLayout(project.workspace_id, project.id);
+  const { queryKey } = layoutQuery;
   const options = { workspaceId: project.workspace_id };
-  const query = useQuery({
-    queryKey,
-    queryFn: ({ signal }) => projectsApi.getOverviewLayout(project.id, { ...options, signal }),
-  });
+  const query = useQuery(layoutQuery);
   const mutation = useMutation({
     mutationFn: ({ widgets, version }: { widgets: OverviewWidget[] | null; version: number }) =>
       projectsApi.updateOverviewLayout(project.id, { widgets, expected_version: version }, options),

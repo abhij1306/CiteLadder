@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import type { ProjectRequestScope } from '@/lib/project/request-scope';
 
 import type { PromptMeasurement } from './prompt-table';
@@ -12,11 +11,8 @@ import type { PromptMeasurement } from './prompt-table';
  * table and Overview, so both read the same cache entry the same way.
  */
 export function useLatestPromptMetrics(scope: ProjectRequestScope) {
-  const { workspaceId, projectId } = scope;
   return useQuery({
-    queryKey: queryKeys.visibility.prompts(projectId),
-    queryFn: ({ signal }) =>
-      visibilityApi.getPromptMetrics(projectId, undefined, { signal, workspaceId }),
+    ...visibilityQueries.latestPrompts(scope.workspaceId, scope.projectId),
     enabled: scope.enabled,
   });
 }

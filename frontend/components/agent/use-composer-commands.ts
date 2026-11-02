@@ -1,10 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 import type { ComposerCommands, Mention } from '@/components/agent/command-menu';
-import { matchOptions, type CommandOption } from '@/lib/agent/composer-commands';
+import { matchOptions, type CommandOption, type CommandToken } from '@/lib/agent/composer-commands';
 import { approachLabel } from '@/lib/agent/vocabulary';
 import { actionsQueries } from '@/lib/api/actions';
 import { AGENT_MENTIONS_MAX } from '@/lib/config/agent';
@@ -36,9 +36,14 @@ export function useComposerCommands({
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const removeCommand = useRef<(() => void) | null>(null);
   const restoreFocus = useRef<(() => void) | null>(null);
+  // Most messages mention nothing, so the pool loads only once `@` is typed.
+  const [poolWanted, setPoolWanted] = useState(false);
+  const onTrigger = useCallback((trigger: CommandToken['trigger']) => {
+    if (trigger === '@') setPoolWanted(true);
+  }, []);
   const actions = useQuery({
-    ...actionsQueries.list(workspaceId, projectId),
-    enabled: Boolean(workspaceId && projectId),
+    ...actionsQueries.mentionPool(workspaceId, projectId),
+    enabled: poolWanted && Boolean(workspaceId && projectId),
   });
 
   const mentioned = new Set(mentions.map((mention) => mention.id));
@@ -57,6 +62,7 @@ export function useComposerCommands({
       if (mentions.length >= AGENT_MENTIONS_MAX) return [];
       return matchOptions(actionOptions, token.query);
     },
+    onTrigger,
     onPick: (option) => {
       setMentions((current) => [
         ...current,
