@@ -4,11 +4,9 @@ import { ChevronDown, RefreshCw, RotateCcw } from 'lucide-react';
 
 import { INITIAL_SELECTION, type RangeSelection } from '@/lib/performance/performance';
 import type { usePerformanceSync } from './use-performance-sync';
-import { Alert } from '@/components/ui/alert';
-import { Spinner } from '@/components/ui/spinner';
 import { Icon } from '@/components/ui/icon';
-import { Inline } from '@/components/ui/layout';
 import { Button } from '@/components/ui/button';
+import type { StatusMessage } from '@/components/ui/status-line';
 import { FilterField } from '@/components/ui/filter-bar';
 import { SegmentedAction, SegmentedControl } from '@/components/ui/segmented-control';
 import { Select } from '@/components/ui/select';
@@ -206,47 +204,67 @@ function missingCoverageNotice(
   return null;
 }
 
-export function PerformanceNotices({
+/**
+ * The screen's notices, most important first, for its one `StatusLine`:
+ * they swap in place rather than stacking banners above the chart.
+ */
+export function performanceNotices({
   sync,
   projecting,
   selectedMissing,
   comparisonMissing,
+  qualityFlagged,
+  readinessFailed,
 }: Readonly<{
   sync: ReturnType<typeof usePerformanceSync>;
   projecting: boolean;
   selectedMissing: boolean;
   comparisonMissing: boolean;
-}>) {
-  const coverageNotice = missingCoverageNotice(selectedMissing, comparisonMissing);
-  return (
-    <>
-      {sync.syncing ? (
-        <Alert tone="info" hideIcon>
-          <Inline as="span" data-testid="sync-status-banner">
-            <Spinner />
-            <span>
-              Sync in progress — importing the dates not yet covered. Charts and tables update when
-              it completes.
-            </span>
-          </Inline>
-        </Alert>
-      ) : null}
-      {sync.notice ? <Alert tone="info">{sync.notice}</Alert> : null}
-      {sync.error ? <Alert tone="info">{sync.error}</Alert> : null}
-      {sync.outcome === 'failed' ? (
-        <Alert tone="warning">
-          Sync finished with errors — previously imported data is unchanged. Check Settings →
-          Integrations for details.
-        </Alert>
-      ) : null}
-      {projecting ? <Alert tone="info">Building this range from imported data…</Alert> : null}
-      {/* Coverage is ONE notice, not one per window. The selected and
-          comparison ranges are routinely both uncovered — a fresh connection
-          covers neither — and as two separate alerts that stacked into a wall
-          of blue saying the same thing twice. Which windows are affected is
-          the only part that actually differs, so that is the part the sentence
-          varies. */}
-      {!projecting && coverageNotice ? <Alert tone="info">{coverageNotice}</Alert> : null}
-    </>
-  );
+  /** Some imported GA4 partitions are missing, flagged or on a prior revision. */
+  qualityFlagged: boolean;
+  readinessFailed: boolean;
+}>): StatusMessage[] {
+  const messages: StatusMessage[] = [];
+  if (sync.error) messages.push({ key: 'sync-error', tone: 'warning', text: sync.error });
+  if (readinessFailed)
+    messages.push({
+      key: 'readiness',
+      tone: 'warning',
+      text: 'Could not load data readiness. Check your connection and try again.',
+    });
+  if (sync.outcome === 'failed')
+    messages.push({
+      key: 'sync-failed',
+      tone: 'warning',
+      text: 'Sync finished with errors — previously imported data is unchanged. Check Settings → Integrations for details.',
+    });
+  if (sync.syncing)
+    messages.push({
+      key: 'syncing',
+      tone: 'info',
+      busy: true,
+      text: 'Sync in progress — importing the dates not yet covered. Charts and tables update when it completes.',
+    });
+  if (sync.notice) messages.push({ key: 'sync-notice', tone: 'info', text: sync.notice });
+  if (projecting)
+    messages.push({
+      key: 'projecting',
+      tone: 'info',
+      busy: true,
+      text: 'Building this range from imported data…',
+    });
+  // Coverage is ONE notice, not one per window: the selected and comparison
+  // ranges are routinely both uncovered, and which windows are affected is
+  // the only part that differs, so that is the part the sentence varies.
+  const coverageNotice = projecting
+    ? null
+    : missingCoverageNotice(selectedMissing, comparisonMissing);
+  if (coverageNotice) messages.push({ key: 'coverage', tone: 'info', text: coverageNotice });
+  if (qualityFlagged)
+    messages.push({
+      key: 'quality',
+      tone: 'info',
+      text: 'Some imported partitions are missing, flagged or using a prior complete revision. Zero-valued observations are unavailable for those extracts.',
+    });
+  return messages;
 }

@@ -20,7 +20,7 @@ import {
   demandSignalHandoffHref,
   numericMetric,
   signalPage,
-  signalPageLine,
+  signalSubject,
   signalTarget,
   signalTypeMeta,
   type RankedSignal,
@@ -28,13 +28,15 @@ import {
 import { formatCount } from '@/lib/format';
 
 const COLUMNS: readonly DataTableColumn[] = [
-  { key: 'rank', label: 'Rank', width: 'index', numeric: true },
-  { key: 'target', label: 'Query and page' },
+  // The index role fits '#', not a word; the figure role fits 'Position' on
+  // one line where 'Avg. position' wrapped the header row to two.
+  { key: 'rank', label: '#', width: 'index', numeric: true },
+  { key: 'target', label: 'Query or page' },
   { key: 'signal', label: 'Signal', width: 'category' },
   { key: 'impressions', label: 'Impressions', width: 'figure', numeric: true },
   { key: 'clicks', label: 'Clicks', width: 'figure', numeric: true },
   { key: 'ctr', label: 'CTR', width: 'figure', numeric: true },
-  { key: 'position', label: 'Avg. position', width: 'figure', numeric: true },
+  { key: 'position', label: 'Position', width: 'figure', numeric: true },
   { key: 'actions', label: 'Actions', width: 'rowActions', hideLabel: true },
 ];
 
@@ -132,17 +134,19 @@ function SignalRow({
   onInspect,
 }: Readonly<{ signal: DemandSignal; rank: number; onInspect: (signal: DemandSignal) => void }>) {
   const target = signalTarget(signal);
+  const subject = signalSubject(signal);
   return (
     <TableRow>
       <TableCell numeric className={textRole('caption')}>
         {rank}
       </TableCell>
       <TableCell>
-        {/* Always two lines, even with no page, so every row is one height. */}
+        {/* Always two lines, so every row is one height, and the second
+            always says whether the row is about a query or a page. */}
         <TableCellLines
           title
-          primary={target}
-          secondary={signalPageLine(signal) ?? ' '}
+          primary={subject.primary}
+          secondary={subject.secondary}
           secondaryTooltip={signalPage(signal)}
         />
       </TableCell>
@@ -169,9 +173,11 @@ function SignalRow({
         >
           Inspect
         </Button>
-        {/* A signal promoted into an Action opens it; any other is asked about. */}
+        {/* A signal promoted into an Action opens it; any other is asked about.
+            Both are the same ghost button as Inspect, so every row's actions
+            read as one set whichever applies. */}
         {signal.action_id ? (
-          <Button variant="secondary" asChild>
+          <Button variant="ghost" asChild>
             <ProjectLink
               href={`/agent/actions/${signal.action_id}`}
               aria-label={`Open the Action for ${target}`}

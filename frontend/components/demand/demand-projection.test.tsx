@@ -219,8 +219,8 @@ describe('DemandProjection', () => {
 
     const table = signalTable();
     expect(signalRows().map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^1ai marketing tools\/ai-toolsStriking distance25012/),
-      expect.stringMatching(/^2school fees\/feesLow CTR10000\.0%12\.0/),
+      expect.stringMatching(/^1ai marketing toolsQuery · \/ai-toolsStriking distance25012/),
+      expect.stringMatching(/^2school feesQuery · \/feesLow CTR10000\.0%12\.0/),
     ]);
     expect(within(table).queryByText('https://example.com/ai-tools')).not.toBeInTheDocument();
     const legend = screen.getByRole('region', { name: 'Signal types' });

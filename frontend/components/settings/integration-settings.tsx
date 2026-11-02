@@ -9,7 +9,6 @@ import { CrawlLogConnections } from '@/components/ai-traffic/crawl-log-connectio
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import { GRANT_FAMILY, type GrantFamily, type GrantModel } from '@/components/settings/grant-model';
 import { IntegrationCardView } from '@/components/settings/integration-card-view';
 import { IntegrationsEmptyState } from '@/components/settings/integrations-empty-state';
@@ -172,7 +171,9 @@ export function IntegrationSettings() {
       ) : null}
 
       {!connectionsQuery.isLoading && !connectionsQuery.isError && connections.length > 0 ? (
-        <div className={splitPaneClasses('peers', 'items-stretch')}>
+        // One column, one card per grant: a Google card holds two connections
+        // and a Bing card one, so side by side they never share a height.
+        <Stack gap="workspace">
           {FAMILY_ORDER.map((family) => (
             <IntegrationCardView
               workspaceId={workspaceId}
@@ -181,7 +182,7 @@ export function IntegrationSettings() {
               grant={grants.find((grant) => grant.family === family) ?? null}
             />
           ))}
-        </div>
+        </Stack>
       ) : null}
       <CrawlLogConnections />
     </Stack>

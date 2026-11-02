@@ -32,8 +32,7 @@ function detectorStatus(state: string | undefined): string | null {
  * The filters in the signals table's control band. Each filter is a pressed-
  * state button carrying its signal count and, for a detector's filter, that
  * detector's status when it did not run in full; the hint beside it gives the
- * detector's rule. Data caveats shared by the signals sit in one hint at the
- * end.
+ * detector's rule.
  */
 export function DemandSignalFilters({
   snapshot,
@@ -47,9 +46,6 @@ export function DemandSignalFilters({
   tabCounts: ReadonlyMap<FilterTab, number>;
 }>) {
   const detectors = detectorStates(snapshot.summary);
-  const limitations = Array.from(
-    new Set(snapshot.signals.flatMap((signal) => signal.limitations).filter(Boolean)),
-  );
 
   return (
     <>
@@ -80,9 +76,20 @@ export function DemandSignalFilters({
           </Inline>
         );
       })}
-      {limitations.length > 0 ? (
-        <InfoHint label="Data caveats">{limitations.join(' ')}</InfoHint>
-      ) : null}
     </>
   );
+}
+
+/**
+ * Data caveats shared by the signals, behind one hint on the summary line:
+ * at the end of the filter strip it sat beside the last filter's own hint
+ * and read as a second hint for that filter.
+ */
+export function DemandDataCaveats({ snapshot }: Readonly<{ snapshot: DemandSnapshot }>) {
+  const limitations = Array.from(
+    new Set(snapshot.signals.flatMap((signal) => signal.limitations).filter(Boolean)),
+  );
+  return limitations.length > 0 ? (
+    <InfoHint label="Data caveats">{limitations.join(' ')}</InfoHint>
+  ) : null;
 }

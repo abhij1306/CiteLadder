@@ -243,6 +243,47 @@ describe('PerformanceScreen evidence states', () => {
     expect(await screen.findByTestId('readiness-ladder')).toBeVisible();
   });
 
+  it('says everything in one status line: the covered history at rest, a notice in its place', async () => {
+    const covered = {
+      earliest_date: '2026-08-01',
+      latest_date: '2026-08-28',
+      covered_days: 28,
+    };
+    let flagged = false;
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () =>
+        HttpResponse.json(
+          dashboard({
+            selected: measuredWindow({ ...emptyTotals, clicks: 4, impressions: 90 }),
+            coverage: {
+              ...covered,
+              analytics_quality: flagged
+                ? { sessions: [{ day: '2026-08-02', revision: 1, flags: ['missing'] }] }
+                : {},
+            },
+          }),
+        ),
+      ),
+      http.get(`/api/v1/projects/${PROJECT}/performance/table`, ({ request }) =>
+        HttpResponse.json(tablePage(new URL(request.url).searchParams.get('dimension')!)),
+      ),
+    );
+
+    const { unmount } = renderWithProviders(<PerformanceScreen />);
+    expect(await screen.findByTestId('performance-status')).toHaveTextContent(
+      'Imported history Aug 1, 2026 – Aug 28, 2026 · 28 days',
+    );
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+    unmount();
+
+    flagged = true;
+    renderWithProviders(<PerformanceScreen />);
+    expect(await screen.findByTestId('performance-status')).toHaveTextContent(
+      'Some imported partitions are missing, flagged or using a prior complete revision. Zero-valued observations are unavailable for those extracts.',
+    );
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+  });
+
   it('shows first-use guidance without metric or table scaffolding', async () => {
     let tableReads = 0;
     mswServer.use(

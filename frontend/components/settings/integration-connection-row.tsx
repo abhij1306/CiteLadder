@@ -4,12 +4,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-import { BackfillProgress } from '@/components/settings/backfill-progress';
+import { BackfillHistory } from '@/components/settings/backfill-progress';
 import { PROVIDER_META, type GrantModel } from '@/components/settings/grant-model';
 import { useRefreshAfterMapping } from '@/components/integrations/data-sources';
 import { useProjectContext } from '@/lib/project/project-context';
 import { PropertyPicker, useActiveMapping } from '@/components/settings/property-picker';
-import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
@@ -24,11 +23,11 @@ import {
   SYNC_RUN_POLL_MS,
 } from '@/lib/integrations/sync-runs';
 import { ControlRow } from '@/components/ui/control-row';
+import { FactList } from '@/components/ui/facts';
 import { IconTile } from '@/components/ui/icon';
-import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
-import { MetaFooter } from '@/components/ui/workspace';
+import { ledgerItemClasses } from '@/components/ui/workspace';
 
 type ConnectionMutation = {
   isPending: boolean;
@@ -146,11 +145,11 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
   const window = `window ${formatShortDate(run.window_start)}–${formatShortDate(run.window_end)}`;
   if (runActive)
     return (
-      <Inline>
+      <>
         <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
           {SYNC_RUN_LABEL[run.status]}
         </Badge>
-        <span className="type-caption whitespace-nowrap tabular-nums">
+        <span className="truncate">
           {run.status === 'running' ? (
             `${rows} · ${window}`
           ) : (
@@ -159,51 +158,80 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
             </>
           )}
         </span>
-      </Inline>
+      </>
     );
   if (run.processing)
     return (
-      <Inline>
+      <>
         <Badge variant="run-status" value="running">
           Processing
         </Badge>
-        <span className="type-caption whitespace-nowrap tabular-nums">
-          {`${rows} imported · updating reports`}
-        </span>
-      </Inline>
+        <span className="truncate">{`${rows} imported · updating reports`}</span>
+      </>
     );
+  const result =
+    run.status === 'succeeded' ? `${rows} imported · ${window}` : run.error_detail || window;
   return (
-    <Inline>
+    <>
       <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
         {SYNC_RUN_LABEL[run.status]}
       </Badge>
-      <span className="type-caption whitespace-nowrap tabular-nums">
-        {run.status === 'succeeded' ? `${rows} imported · ${window}` : run.error_detail || window}
+      <span className="truncate" title={result}>
+        {result}
       </span>
-    </Inline>
+    </>
   );
 }
 
-function ConnectionMetadata({
-  connection,
+/**
+ * The row's one status value. Every outcome — a failed action, a test
+ * result, the sync this card started — replaces it in place rather than
+ * adding a notice under the row, so nothing below moves (the newest action
+ * wins: starting a sync clears the test result).
+ */
+function ConnectionStatus({
+  actionError,
+  testState,
   activeRun,
   runActive,
+  grantConnected,
+  hasProperty,
 }: Readonly<{
-  connection: IntegrationConnection;
+  actionError: unknown;
+  testState: { ok: boolean; message: string } | null;
   activeRun: SyncRun | null;
   runActive: boolean;
+  grantConnected: boolean;
+  hasProperty: boolean;
 }>) {
-  return (
-    <MetaFooter trailing={activeRun ? <RunSummary run={activeRun} runActive={runActive} /> : null}>
-      <Inline>
-        <span className={textRole('label')}>Last synced</span>
-        <span className="type-caption tabular-nums">
-          <DisplayTime value={connection.last_synced_at} fallback="Never" />
+  if (actionError) {
+    const message = humanizeApiError(actionError).message;
+    return (
+      <>
+        <Badge variant="status" value="danger">
+          Failed
+        </Badge>
+        <span className="truncate" title={message}>
+          {message}
         </span>
-      </Inline>
-      <BackfillProgress workspaceId={connection.workspace_id} connectionId={connection.id} />
-    </MetaFooter>
-  );
+      </>
+    );
+  }
+  if (testState)
+    return (
+      <>
+        <Badge variant="status" value={testState.ok ? 'success' : 'danger'}>
+          {testState.ok ? 'Test passed' : 'Test failed'}
+        </Badge>
+        <span className="truncate" title={testState.message}>
+          {testState.message}
+        </span>
+      </>
+    );
+  if (activeRun) return <RunSummary run={activeRun} runActive={runActive} />;
+  if (!grantConnected) return <span className="text-muted">Reconnect to sync</span>;
+  if (!hasProperty) return <span className="text-muted">Select a property to import</span>;
+  return <span className="text-muted">Ready to sync</span>;
 }
 
 function ConnectionRowView({
@@ -232,11 +260,13 @@ function ConnectionRowView({
   hasProperty: boolean;
 }>) {
   const { label, Icon } = PROVIDER_META[connection.provider];
+  const actionError = syncMutation.error ?? removeMutation.error;
 
   return (
     <Stack
+      as="li"
       gap="compact"
-      className={panelClasses()}
+      className={ledgerItemClasses()}
       data-testid={`connection-row-${connection.provider}`}
     >
       <ConnectionActions
@@ -254,15 +284,39 @@ function ConnectionRowView({
         onSync={syncMutation.mutate}
         onRemove={removeMutation.mutate}
       />
-      <ConnectionMetadata connection={connection} activeRun={activeRun} runActive={runActive} />
-      {testState ? (
-        <Alert tone={testState.ok ? 'success' : 'danger'}>{testState.message}</Alert>
-      ) : null}
-      {syncMutation.isError || removeMutation.isError ? (
-        <Alert tone="danger">
-          {humanizeApiError(syncMutation.error ?? removeMutation.error).message}
-        </Alert>
-      ) : null}
+      <FactList
+        layout="columns"
+        label={`${label} sync status`}
+        facts={[
+          {
+            label: 'Last synced',
+            value: (
+              <span className="truncate">
+                <DisplayTime value={connection.last_synced_at} fallback="Never" />
+              </span>
+            ),
+          },
+          {
+            label: 'History',
+            value: (
+              <BackfillHistory workspaceId={connection.workspace_id} connectionId={connection.id} />
+            ),
+          },
+          {
+            label: 'Status',
+            value: (
+              <ConnectionStatus
+                actionError={actionError}
+                testState={testState}
+                activeRun={activeRun}
+                runActive={runActive}
+                grantConnected={grant.status === 'connected'}
+                hasProperty={hasProperty}
+              />
+            ),
+          },
+        ]}
+      />
     </Stack>
   );
 }
@@ -286,10 +340,12 @@ export function ConnectionRow({
   );
   const [activeSyncId, setActiveSyncId] = useState<string | null>(null);
   const testMutation = useMutation({
-    mutationFn: () =>
-      integrationsApi.test(connection.id, {
-        workspaceId: connection.workspace_id,
-      }),
+    mutationFn: () => integrationsApi.test(connection.id, { workspaceId: connection.workspace_id }),
+    // The newest action owns the status slot: an older failure must not mask this result.
+    onMutate: () => {
+      syncMutation.reset();
+      removeMutation.reset();
+    },
     onSuccess: (result) => {
       setTestState(
         result.status === 'ok'

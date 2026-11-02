@@ -26,15 +26,7 @@ export function BackfillProgress({
   workspaceId,
   connectionId,
 }: Readonly<{ workspaceId: string; connectionId: string }>) {
-  const progressQuery = useQuery({
-    queryKey: queryKeys.integrations.backfillProgress(connectionId),
-    queryFn: ({ signal }) =>
-      integrationsApi.getBackfillProgress(connectionId, { signal, workspaceId }),
-    // Poll only while windows are still draining; a settled import is static.
-    refetchInterval: (query) =>
-      query.state.data?.state === 'importing' ? SYNC_RUN_POLL_MS : false,
-  });
-  const progress = progressQuery.data ?? null;
+  const progress = useBackfillProgress(workspaceId, connectionId);
   if (!progress || progress.state === 'not_started') return null;
 
   return (
@@ -43,6 +35,38 @@ export function BackfillProgress({
       <span className="type-caption tabular-nums">{progressLabel(progress)}</span>
     </Inline>
   );
+}
+
+/**
+ * The same rollup as a bare value, for a status column that is always
+ * present: `not_started` reads "Not started" there, still distinct from a
+ * completed import that covered nothing ("No history imported").
+ */
+export function BackfillHistory({
+  workspaceId,
+  connectionId,
+}: Readonly<{ workspaceId: string; connectionId: string }>) {
+  const progressQuery = useBackfillProgressQuery(workspaceId, connectionId);
+  const progress = progressQuery.data;
+  if (progressQuery.isError) return <span className="text-muted">Unavailable</span>;
+  if (!progress) return <span className="text-muted">Loading…</span>;
+  if (progress.state === 'not_started') return <span className="text-muted">Not started</span>;
+  return <span className="truncate">{progressLabel(progress)}</span>;
+}
+
+function useBackfillProgress(workspaceId: string, connectionId: string) {
+  return useBackfillProgressQuery(workspaceId, connectionId).data ?? null;
+}
+
+function useBackfillProgressQuery(workspaceId: string, connectionId: string) {
+  return useQuery({
+    queryKey: queryKeys.integrations.backfillProgress(connectionId),
+    queryFn: ({ signal }) =>
+      integrationsApi.getBackfillProgress(connectionId, { signal, workspaceId }),
+    // Poll only while windows are still draining; a settled import is static.
+    refetchInterval: (query) =>
+      query.state.data?.state === 'importing' ? SYNC_RUN_POLL_MS : false,
+  });
 }
 
 function progressLabel(progress: IntegrationBackfillProgress): string {

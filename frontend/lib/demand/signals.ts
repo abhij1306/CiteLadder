@@ -244,6 +244,32 @@ export function signalPageLine(signal: DemandSignal): string | null {
   if (signalTargetKind(signal) === 'Page') return null;
   const page = signalPage(signal);
   if (!page) return null;
+  return pagePath(page);
+}
+
+/** A page on the project's own site by path; the stored value when not a safe URL. */
+function pagePath(page: string): string {
   const parsed = parseAbsoluteHttpUrl(page);
   return parsed ? `${parsed.pathname}${parsed.search}` : page;
+}
+
+/**
+ * A signal's subject as the table's two lines. The column mixes queries and
+ * pages, so the second line always names which one the row is about: a query
+ * over the path it landed on, a page by its path (the host repeats on every
+ * row) over the word "Page".
+ */
+export function signalSubject(signal: DemandSignal): { primary: string; secondary: string } {
+  if (signalTargetKind(signal) === 'Page') {
+    const page = signalPage(signal);
+    return { primary: page ? pagePath(page) : signalTarget(signal), secondary: 'Page' };
+  }
+  const landing = signalPageLine(signal);
+  // "Query" only when the evidence says so; a snapshot that never recorded
+  // the kind keeps that unknown visible rather than passing as a query.
+  const kind = signal.evidence.target_kind === 'query' ? 'Query' : 'Kind not reported';
+  return {
+    primary: signalTarget(signal),
+    secondary: landing ? `${kind} · ${landing}` : kind,
+  };
 }

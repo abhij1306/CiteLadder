@@ -17,13 +17,18 @@ export type Fact = Readonly<{ label: ReactNode; value: ReactNode; key?: string }
  *   `spread` — a short ledger read down the page, each label at the start and
  *              its value at the end (a quote's lines, an Action's evidence
  *              sources); `total` closes it under a rule.
+ *   `columns` — a record's live status: one equal column per fact, the label
+ *              over a one-line value at the badge height, so a value that
+ *              changes (a sync's progress, a test result) swaps in place and
+ *              never wraps or resizes the row. Long values truncate.
  */
-export type FactLayout = 'ruled' | 'inline' | 'spread';
+export type FactLayout = 'ruled' | 'inline' | 'spread' | 'columns';
 
 const LIST = {
   ruled: 'divide-border-subtle grid divide-y',
   inline: 'flex flex-wrap items-center gap-x-6 gap-y-3',
   spread: 'grid gap-2',
+  columns: 'grid gap-3 desktop:grid-flow-col desktop:auto-cols-fr',
 } as const;
 
 const ROW = {
@@ -32,12 +37,14 @@ const ROW = {
     'grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-baseline gap-4 py-2 first:pt-0 last:pb-0',
   inline: 'flex items-center gap-2',
   spread: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1',
+  columns: 'grid min-w-0 gap-1',
 } as const;
 
 const TERM = {
   ruled: textRole('label'),
   inline: textRole('label'),
   spread: textRole('body', 'text-muted'),
+  columns: textRole('label'),
 } as const;
 
 const DETAIL = {
@@ -46,6 +53,10 @@ const DETAIL = {
   // A spread row's value is a right-aligned amount or count (a quote line),
   // so its digits take the figure face and line up with the total under it.
   spread: textRole('body', 'text-foreground font-numeric'),
+  columns: textRole(
+    'caption',
+    'flex h-[var(--badge-height-sm)] min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap tabular-nums',
+  ),
 } as const;
 
 function factKey(fact: Fact, index: number) {

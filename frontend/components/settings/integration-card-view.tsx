@@ -24,7 +24,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Inline, Stack } from '@/components/ui/layout';
-import { MetaFooter } from '@/components/ui/workspace';
+import { ledgerClasses, MetaFooter } from '@/components/ui/workspace';
 import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { textRole } from '@/components/ui/typography';
@@ -230,15 +230,11 @@ function ConnectedCard({
         <GrantHeader family={family} grant={grant} />
         <Stack as={CardContent} gap="compact">
           <GrantAlert family={family} status={grant.status} />
-          <p className={textRole('caption')}>
-            One OAuth grant shared by {grant.connections.length}{' '}
-            {grant.connections.length === 1 ? 'connection' : 'connections'}.
-          </p>
-          <Stack gap="compact">
+          <ul className={ledgerClasses('open')}>
             {grant.connections.map((connection) => (
               <ConnectionRow key={connection.id} connection={connection} grant={grant} />
             ))}
-          </Stack>
+          </ul>
         </Stack>
       </div>
       <CardContent>
