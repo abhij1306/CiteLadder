@@ -15,6 +15,8 @@ const defaults = {
   crawl_create_window_seconds: 86400,
   brand_logo_refresh_limit: 10,
   brand_logo_refresh_window_seconds: 3600,
+  client_error_client_limit: 20,
+  client_error_window_seconds: 600,
   active_audits_per_workspace: 3,
   audit_tasks_per_workspace_daily: 1500,
   active_agent_runs_per_workspace: 5,

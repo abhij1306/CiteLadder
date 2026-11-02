@@ -1114,6 +1114,65 @@ describe('persisted analytics and coverage decisions', () => {
     expect(csv).toContain('/unverifiable');
     expect(csv).not.toContain('/verified');
     expect(csv).not.toContain('203.0.113.1');
+    const activityRows: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const next = await activityPage(db, scope(tenant), { limit: 1, cursor });
+      activityRows.push(
+        ...next.items.map((r) =>
+          [
+            r.occurred_at,
+            r.bot_id,
+            r.host,
+            r.display_path,
+            r.identity,
+            r.folder,
+            r.resource_class,
+            r.status_code,
+            r.verification,
+            r.verification_reason,
+            r.verification_basis,
+            r.batch_id,
+          ]
+            .map((v) => (v === null ? '' : String(v)))
+            .join(','),
+        ),
+      );
+      cursor = next.next_cursor;
+    } while (cursor);
+    expect(activityRows.length).toBeGreaterThan(1);
+    const all = await app.request(
+      '/api/v1/projects/' + tenant.projectId + '/ai-traffic/activity/export',
+      { headers: { cookie } },
+    );
+    expect(await all.text()).toBe(
+      [
+        'occurred_at,bot_id,host,display_path,identity,folder,resource_class,status_code,verification,verification_reason,verification_basis,batch_id',
+        ...activityRows,
+        '',
+      ].join('\r\n'),
+    );
+    crawlLogs.max_export_rows = activityRows.length - 1;
+    try {
+      const refused = await app.request(
+        '/api/v1/projects/' + tenant.projectId + '/ai-traffic/activity/export',
+        { headers: { cookie } },
+      );
+      expect(refused.status).toBe(422);
+    } finally {
+      crawlLogs.max_export_rows = original.max_export_rows;
+    }
+    const crawlerCsv = await app.request(
+      '/api/v1/projects/' + tenant.projectId + '/ai-traffic/crawlers/export',
+      { headers: { cookie } },
+    );
+    expect((await crawlerCsv.text()).split('\r\n')).toEqual([
+      'bot_id,label,purpose,requests,pages,last_seen,status_codes,verification,folders,resources',
+      expect.stringMatching(
+        /^openai_gptbot,GPTBot,ai_training,2,2,[^,]+Z,"\{""200"":1,""404"":1\}","\{""unverifiable"":1,""verified"":1\}","\{""\/unverifiable"":1,""\/verified"":1\}","\{""page"":2\}"$/u,
+      ),
+      '',
+    ]);
   });
 });
 

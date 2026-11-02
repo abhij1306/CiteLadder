@@ -16,9 +16,10 @@ import { z } from 'zod';
 import { aiTrafficOverview } from '../crawl-logs/overview.ts';
 import {
   crawlerPage,
+  crawlerExport,
   activityPage,
+  activityExport,
   coveragePage,
-  type CrawlReadOptions,
 } from '../crawl-logs/reads.ts';
 import { tableCsv } from '../http/table-export.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
@@ -111,26 +112,10 @@ export const aiTrafficRoutes = [
       response: z.string().meta({ format: 'binary' }),
       async handle({ c, db }, { path, query }) {
         const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
-        const items: Record<string, unknown>[] = [];
-        let cursor: string | null = null;
-        const options: CrawlReadOptions = {
-          ...query,
-          limit: crawlLogs.max_page_size,
-          cursor: null,
-        };
-        const pages = Math.ceil(crawlLogs.max_export_rows / crawlLogs.max_page_size);
-        for (let i = 0; i < pages; i++) {
-          const page:
-            | Awaited<ReturnType<typeof activityPage>>
-            | Awaited<ReturnType<typeof crawlerPage>> =
-            view === 'activity'
-              ? await activityPage(db, scope, { ...options, cursor })
-              : await crawlerPage(db, scope, { ...options, cursor });
-          items.push(...page.items);
-          cursor = page.next_cursor;
-          if (!cursor) break;
-        }
-        if (cursor) throw new ApiError(422, 'Export exceeds configured bound; narrow the filters');
+        const items: Record<string, unknown>[] =
+          view === 'activity'
+            ? await activityExport(db, scope, query)
+            : await crawlerExport(db, scope, query);
         const columns =
           view === 'activity'
             ? [

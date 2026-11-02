@@ -65,8 +65,9 @@ export function NavLink({
       />
       <span className="min-w-0 flex-1 truncate">{item.label}</span>
       {item.badge === 'open-actions' ? (
-        // A count that cannot load leaves the row as it was, never the shell.
-        <LazyIsland failed={null}>
+        // Chrome: a count that cannot load or render is reported and leaves the
+        // row as it was. It never takes the shell down, so defects are contained.
+        <LazyIsland failed={null} label="open-action-count" defects="contain">
           <OpenActionCount />
         </LazyIsland>
       ) : null}

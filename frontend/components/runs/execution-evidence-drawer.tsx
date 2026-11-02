@@ -122,6 +122,8 @@ export function ExecutionEvidenceDrawer({
   } else {
     evidenceBody = (
       <LazyIsland
+        label="execution-evidence"
+        defects="surface"
         loading={<EvidenceLoading />}
         failed={<IslandUnavailable message="Couldn't load evidence." />}
       >

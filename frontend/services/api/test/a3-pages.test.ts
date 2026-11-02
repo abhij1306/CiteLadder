@@ -333,6 +333,66 @@ describe('A3 persisted Pages join', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain('https://example.test/guide');
   });
+  it('exports in one bounded read exactly the CSV that walking every page cursor yields', async () => {
+    const paged: Awaited<ReturnType<typeof pagesRead>>['items'] = [];
+    let cursor: string | null = null,
+      pages = 0;
+    do {
+      const page = await pagesRead(db, scope(), { ...filters, limit: 1, cursor });
+      paged.push(...page.items);
+      cursor = page.next_cursor;
+      pages++;
+    } while (cursor);
+    expect(pages).toBeGreaterThan(1);
+    const header =
+      'canonical_url,url_hash,folder,resource_class,crawl_state,requests,last_crawl,errors_4xx,errors_5xx,referral_state,sessions,key_events,citation_state,tracked_citations,findings_state,open_findings';
+    const expected = [
+      header,
+      ...paged.map((r) =>
+        [
+          r.canonical_url,
+          r.url_hash,
+          r.folder,
+          r.resource_class,
+          r.crawl.state,
+          r.crawl.value,
+          r.last_crawl,
+          r.errors_4xx,
+          r.errors_5xx,
+          r.referrals.state,
+          r.referrals.value,
+          r.key_events,
+          r.citations.state,
+          r.citations.value,
+          r.findings.state,
+          r.findings.value,
+        ]
+          .map((v) => (v === null ? '' : String(v)))
+          .join(','),
+      ),
+    ].join('\r\n');
+    const config = testConfig();
+    const exportCsv = async () =>
+      createApp(config, db).request(
+        `/api/v1/projects/${seed.projectId}/ai-traffic/pages/export?start_date=${day}&end_date=${day}`,
+        {
+          headers: {
+            'x-workspace-id': seed.workspaceId,
+            cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: seed.userId, ver: 0 })}`,
+          },
+        },
+      );
+    const response = await exportCsv();
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(expected + '\r\n');
+    const bound = crawlLogs.max_export_rows;
+    crawlLogs.max_export_rows = pages - 1;
+    try {
+      expect((await exportCsv()).status).toBe(422);
+    } finally {
+      crawlLogs.max_export_rows = bound;
+    }
+  });
   it('keeps timezone mismatches non-comparable, flagged absence unavailable, and missing connections distinct', async () => {
     await db
       .updateTable('ai_referral_landing_daily')

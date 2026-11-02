@@ -18,6 +18,7 @@ import {
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
 import { isoDateText, utcTextOf, wireUtc } from '../db/timestamps.ts';
+import { boundedExport } from '../http/table-export.ts';
 import { sourceList } from './source-reads.ts';
 import { reportingDay, type CrawlScope } from './state.ts';
 import { addDays } from '../referrals/projection.ts';
@@ -146,9 +147,35 @@ export async function crawlerPage(db: Database, scope: CrawlScope, input: CrawlR
     limit = pageLimit(options);
   if (binding.keys.length && binding.keys.length !== 1)
     throw new ApiError(422, 'Invalid crawler cursor');
+  const rows = await crawlerRows(db, scope, options, binding.keys[0], limit + 1);
+  const selected = rows.slice(0, limit);
+  const last = selected.at(-1);
+  return botCrawlersResponseSchema.parse({
+    items: await crawlerItems(db, scope, options, selected),
+    next_cursor:
+      rows.length > limit && last
+        ? encodeKeysetCursor(binding.endpoint, binding.filters, [last.bot_id])
+        : null,
+  });
+}
+/** Every crawler row for one export: one bounded query, its breakdowns grouped once. */
+export async function crawlerExport(db: Database, scope: CrawlScope, input: CrawlReadOptions = {}) {
+  const options = await withReportingTimezone(db, scope, input);
+  const max = crawlLogs.max_export_rows;
+  const rows = boundedExport(await crawlerRows(db, scope, options, undefined, max + 1), max);
+  return botCrawlersResponseSchema.shape.items.parse(await crawlerItems(db, scope, options, rows));
+}
+/** Crawler totals in bot order after a bot id, at most `take` of them. */
+function crawlerRows(
+  db: Database,
+  scope: CrawlScope,
+  options: CrawlReadOptions,
+  after: string | undefined,
+  take: number,
+) {
   let query = rollups(db, scope, options);
-  if (binding.keys[0]) query = query.where('bot_id', '>', binding.keys[0]);
-  const rows = await query
+  if (after) query = query.where('bot_id', '>', after);
+  return query
     .select([
       'bot_id',
       sql<number>`sum(requests)::integer`.as('requests'),
@@ -157,18 +184,24 @@ export async function crawlerPage(db: Database, scope: CrawlScope, input: CrawlR
     ])
     .groupBy('bot_id')
     .orderBy('bot_id')
-    .limit(limit + 1)
+    .limit(take)
     .execute();
-  const selected = rows.slice(0, limit);
-  const breakdowns = selected.length
+}
+async function crawlerItems(
+  db: Database,
+  scope: CrawlScope,
+  options: CrawlReadOptions,
+  rows: Awaited<ReturnType<typeof crawlerRows>>,
+) {
+  const breakdowns = rows.length
     ? await crawlerBreakdowns(
         db,
         scope,
         options,
-        selected.map((row) => row.bot_id),
+        rows.map((row) => row.bot_id),
       )
     : null;
-  const items = selected.map((row) => {
+  return rows.map((row) => {
     const bot = crawlers.bots.find((b) => b.bot_id === row.bot_id);
     const of = (key: keyof NonNullable<typeof breakdowns>) =>
       breakdowns?.[key].get(row.bot_id) ?? {};
@@ -184,14 +217,6 @@ export async function crawlerPage(db: Database, scope: CrawlScope, input: CrawlR
       folders: of('folders'),
       resources: of('resources'),
     };
-  });
-  const last = selected.at(-1);
-  return botCrawlersResponseSchema.parse({
-    items,
-    next_cursor:
-      rows.length > limit && last
-        ? encodeKeysetCursor(binding.endpoint, binding.filters, [last.bot_id])
-        : null,
   });
 }
 /** One grouped query per breakdown for a whole crawler page, bucketed by bot. */
@@ -251,6 +276,47 @@ export async function activityPage(db: Database, scope: CrawlScope, input: Crawl
   const options = await withReportingTimezone(db, scope, input);
   const binding = cursorParts(scope, 'activity', options),
     limit = pageLimit(options);
+  let query = activityQuery(db, scope, options);
+  if (binding.keys.length) {
+    if (
+      binding.keys.length !== 2 ||
+      !z.iso.datetime({ offset: true }).safeParse(binding.keys[0]).success ||
+      !z.uuid().safeParse(binding.keys[1]).success
+    )
+      throw new ApiError(422, 'Invalid activity cursor');
+    query = query.where(
+      sql<boolean>`(occurred_at,id)<(${binding.keys[0]}::timestamptz,${binding.keys[1]}::uuid)`,
+    );
+  }
+  const rows = await query.limit(limit + 1).execute();
+  const items = rows.slice(0, limit).map(activityItem);
+  const last = items.at(-1);
+  return botActivityResponseSchema.parse({
+    items,
+    next_cursor:
+      rows.length > limit && last
+        ? encodeKeysetCursor(binding.endpoint, binding.filters, [last.occurred_at, last.id])
+        : null,
+  });
+}
+/** Every request row for one export, in the paged read's order, from one bounded query. */
+export async function activityExport(
+  db: Database,
+  scope: CrawlScope,
+  input: CrawlReadOptions = {},
+) {
+  const options = await withReportingTimezone(db, scope, input);
+  const max = crawlLogs.max_export_rows;
+  const rows = await activityQuery(db, scope, options)
+    .limit(max + 1)
+    .execute();
+  return botActivityResponseSchema.shape.items.parse(boundedExport(rows, max).map(activityItem));
+}
+function activityItem<T extends { occurred: string }>({ occurred, ...row }: T) {
+  return { ...row, occurred_at: wireUtc(occurred) };
+}
+/** Retained requests matching the filters, newest first. */
+function activityQuery(db: Database, scope: CrawlScope, options: CrawlReadOptions) {
   let query = db
     .selectFrom('bot_requests')
     .select([
@@ -288,33 +354,7 @@ export async function activityPage(db: Database, scope: CrawlScope, input: Crawl
     const { from, to } = windowBounds(crawlWindow(options), options);
     query = query.where('occurred_at', '>=', from).where('occurred_at', '<', to);
   }
-  if (binding.keys.length) {
-    if (
-      binding.keys.length !== 2 ||
-      !z.iso.datetime({ offset: true }).safeParse(binding.keys[0]).success ||
-      !z.uuid().safeParse(binding.keys[1]).success
-    )
-      throw new ApiError(422, 'Invalid activity cursor');
-    query = query.where(
-      sql<boolean>`(occurred_at,id)<(${binding.keys[0]}::timestamptz,${binding.keys[1]}::uuid)`,
-    );
-  }
-  const rows = await query
-    .orderBy('occurred_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(limit + 1)
-    .execute();
-  const items = rows
-    .slice(0, limit)
-    .map(({ occurred, ...row }) => ({ ...row, occurred_at: wireUtc(occurred) }));
-  const last = items.at(-1);
-  return botActivityResponseSchema.parse({
-    items,
-    next_cursor:
-      rows.length > limit && last
-        ? encodeKeysetCursor(binding.endpoint, binding.filters, [last.occurred_at, last.id])
-        : null,
-  });
+  return query.orderBy('occurred_at', 'desc').orderBy('id', 'desc');
 }
 export async function coveragePage(db: Database, scope: CrawlScope, input: CrawlReadOptions = {}) {
   const options = await withReportingTimezone(db, scope, input);

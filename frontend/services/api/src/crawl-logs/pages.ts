@@ -27,6 +27,8 @@ import {
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
 import { ApiError } from '../errors.ts';
+import { crawlLogs } from '../config/crawl-logs.ts';
+import { boundedExport } from '../http/table-export.ts';
 import { inventoryCrawlIds } from '../site-health/reads/crawl.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { compareText } from '../text-order.ts';
@@ -319,6 +321,31 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
       context.crawlComplete,
     ),
   });
+}
+/**
+ * Every Pages row for one export, in the paged read's order. The window,
+ * pattern and context resolve once, then one dataset query bounded one past
+ * the export cap; the cursor and page size of the request do not apply.
+ */
+export async function pagesExport(db: Database, scope: CrawlScope, input: PageOptions = {}) {
+  const { options, urlHashes } = await patternScope(
+    db,
+    scope,
+    await withReportingTimezone(db, scope, input),
+  );
+  // A preset is pinned to its dates once, so the rows and their context read
+  // the same window even if the reporting day rolls over between the reads.
+  const w = crawlWindow(options),
+    { cursor: _cursor, limit: _limit, ...rest } = options,
+    filters = { ...rest, range: null, start_date: w.start, end_date: w.end },
+    max = crawlLogs.max_export_rows;
+  const [data, context] = await Promise.all([
+    pageDataset(db, scope, { ...filters, url_hashes: urlHashes, dataset_limit: max + 1 }),
+    pageContext(db, scope, filters),
+  ]);
+  return aiTrafficPagesSchema.shape.items.parse(
+    boundedExport(data.rows, max).map((r) => pageRow(r, context, !!data.crawl)),
+  );
 }
 export async function urlRead(
   db: Database,

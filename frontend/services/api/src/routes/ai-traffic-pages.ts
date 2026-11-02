@@ -5,11 +5,10 @@ import {
   aiTrafficInsightsSchema,
 } from '@citeladder/contracts/ai-traffic';
 import { defineGetRoute } from './define.ts';
-import { pagesRead, urlRead } from '../crawl-logs/pages.ts';
+import { pagesExport, pagesRead, urlRead } from '../crawl-logs/pages.ts';
 import { insightsRead } from '../crawl-logs/insights.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { tableCsv } from '../http/table-export.ts';
-import { ApiError } from '../errors.ts';
 
 const root = '/api/v1/projects/{project_id}/ai-traffic';
 const path = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
@@ -48,28 +47,17 @@ export const trafficPageRoutes = [
     response: z.string().meta({ format: 'binary' }),
     async handle({ c, db }, { path, query }) {
       const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
-      const items: Record<string, unknown>[] = [],
-        limit = crawlLogs.max_page_size;
-      let cursor: string | null = null;
-      for (let i = 0; i < Math.ceil(crawlLogs.max_export_rows / limit); i++) {
-        const page = await pagesRead(db, scope, { ...query, cursor, limit });
-        items.push(
-          ...page.items.map((r) => ({
-            ...r,
-            crawl_state: r.crawl.state,
-            requests: r.crawl.value,
-            referral_state: r.referrals.state,
-            sessions: r.referrals.value,
-            citation_state: r.citations.state,
-            tracked_citations: r.citations.value,
-            findings_state: r.findings.state,
-            open_findings: r.findings.value,
-          })),
-        );
-        cursor = page.next_cursor;
-        if (!cursor) break;
-      }
-      if (cursor) throw new ApiError(422, 'Export exceeds configured bound; narrow the filters');
+      const items = (await pagesExport(db, scope, query)).map((r) => ({
+        ...r,
+        crawl_state: r.crawl.state,
+        requests: r.crawl.value,
+        referral_state: r.referrals.state,
+        sessions: r.referrals.value,
+        citation_state: r.citations.state,
+        tracked_citations: r.citations.value,
+        findings_state: r.findings.state,
+        open_findings: r.findings.value,
+      }));
       return new Response(
         tableCsv(
           [
