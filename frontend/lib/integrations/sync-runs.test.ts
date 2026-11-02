@@ -1,12 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { isActiveSyncRun, isSucceededSyncRun, SYNC_RUN_POLL_MS } from './sync-runs';
+import { isActiveSyncRun, isSucceededSyncRun } from './sync-runs';
 
 describe('sync-run polling idiom', () => {
-  it('polls at the shared 3s cadence', () => {
-    expect(SYNC_RUN_POLL_MS).toBe(3_000);
-  });
-
   it('treats queued/leased/running/retry_wait as non-terminal', () => {
     expect(isActiveSyncRun('queued')).toBe(true);
     expect(isActiveSyncRun('leased')).toBe(true);

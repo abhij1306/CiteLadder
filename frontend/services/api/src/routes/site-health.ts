@@ -28,7 +28,8 @@ import { ApiError } from '../errors.ts';
 import { InvalidCursorError } from '../http/keyset-cursor.ts';
 import { slottedEventStream } from '../http/stream-slots.ts';
 import { parseUuid } from '../http/uuid.ts';
-import { loadCrawl, projectCrawl, rootFailure } from '../site-health/reads/crawl.ts';
+import { revalidatable } from '../http/revalidate.ts';
+import { isTerminal, loadCrawl, projectCrawl, rootFailure } from '../site-health/reads/crawl.ts';
 import { dashboard } from '../site-health/reads/dashboard.ts';
 import { eventReplay, eventStream } from '../site-health/reads/events.ts';
 import {
@@ -242,11 +243,16 @@ export const siteHealthRoutes = [
       },
     },
     response: siteIssuesPageSchema,
-    handle: ({ c, db }, { path, query }) =>
-      withCursor(
+    async handle({ c, db }, { path, query }) {
+      const workspaceId = c.get('workspace').workspaceId;
+      // Read the status first: a crawl that was terminal before the page read
+      // has published its issues, so the page cannot hold pre-publication
+      // rows. One still running (or finalizing mid-read) is not revalidated.
+      const settled = isTerminal(await loadCrawl(db, workspaceId, path.crawl_id));
+      const page = await withCursor(
         issues(
           db,
-          c.get('workspace').workspaceId,
+          workspaceId,
           path.crawl_id,
           {
             query: query.query || null,
@@ -261,7 +267,9 @@ export const siteHealthRoutes = [
           query,
           query.detail_limit ?? null,
         ),
-      ),
+      );
+      return settled ? revalidatable(c, page) : page;
+    },
   }),
   defineGetRoute({
     family,
@@ -331,16 +339,28 @@ export const siteHealthRoutes = [
     path: `${projectRoot}/overview`,
     params: { path: projectPath, query: { crawl_id: optionalUuid } },
     response: siteHealthOverviewSchema,
-    handle: ({ c, db }, { path, query }) =>
-      overview(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
+    // Served only from a persisted snapshot (404 otherwise).
+    handle: async ({ c, db }, { path, query }) =>
+      revalidatable(
+        c,
+        await overview(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
+      ),
   }),
   defineGetRoute({
     family,
     path: `${projectRoot}/aeo-readiness`,
     params: { path: projectPath, query: { crawl_id: optionalUuid } },
     response: aeoReadinessSchema,
-    handle: ({ c, db }, { path, query }) =>
-      aeoReadiness(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
+    async handle({ c, db }, { path, query }) {
+      const readiness = await aeoReadiness(
+        db,
+        c.get('workspace').workspaceId,
+        path.project_id,
+        query.crawl_id,
+      );
+      // Until a snapshot carries the diagnostic, the next analysis replaces this answer.
+      return readiness.state === 'not_measured' ? readiness : revalidatable(c, readiness);
+    },
   }),
   defineGetRoute({
     family,

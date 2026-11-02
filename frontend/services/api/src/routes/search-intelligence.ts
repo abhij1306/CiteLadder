@@ -38,10 +38,12 @@ const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
 const runPath = { project_id: uuid, run_id: uuid } as const;
 
-const RUN_PAGE_DEFAULT = 25;
-const RUN_PAGE_MAX = 100;
-const ROW_PAGE_DEFAULT = 50;
-const ROW_PAGE_MAX = 200;
+const {
+  run_page_default_limit: RUN_PAGE_DEFAULT,
+  run_page_max_limit: RUN_PAGE_MAX,
+  row_page_default_limit: ROW_PAGE_DEFAULT,
+  row_page_max_limit: ROW_PAGE_MAX,
+} = policy.search_intelligence;
 
 const scopeOf = (c: Context<AppEnv>, projectId: string): Scope => ({
   workspace: c.get('workspace').scope,

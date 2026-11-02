@@ -102,6 +102,10 @@
     "referring_domains",
     "referring_pages"
   ],
+  "run_page_default_limit": 25,
+  "run_page_max_limit": 100,
+  "row_page_default_limit": 50,
+  "row_page_max_limit": 200,
   "parser_version": "1",
   "price_version": "dataforseo-standard-2026-09-20",
   "transport_provider": "dataforseo"

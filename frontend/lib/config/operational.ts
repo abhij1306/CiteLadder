@@ -2,8 +2,8 @@
  * Frontend operational configuration.
  *
  * This is the single owner for tunable client limits, request bounds, polling
- * cadences, and the same-origin API base. Feature modules may re-export values
- * for backwards compatibility, but must not redefine them.
+ * cadences, and the same-origin API base. Feature modules import values from
+ * here; they never re-export or redefine them.
  */
 
 // Same-origin API transport.

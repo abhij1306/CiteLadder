@@ -5,6 +5,7 @@
   "origin_signature_max_skew_seconds": 60,
   "service_port": 8100,
   "request_body_max_bytes": 2097152,
+  "response_compression_min_bytes": 1024,
   "settings": {
     "app_name": {
       "env": ["APP_NAME"],

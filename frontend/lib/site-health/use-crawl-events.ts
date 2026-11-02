@@ -3,7 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import { API_BASE_URL } from '@/lib/api/client';
+import { API_BASE_URL } from '@/lib/config/operational';
 import { queryKeys } from '@/lib/api/query-keys';
 import {
   SITE_HEALTH_STREAM_INVALIDATE_DEBOUNCE_MS,

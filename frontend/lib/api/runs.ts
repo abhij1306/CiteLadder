@@ -7,7 +7,8 @@
 import { z } from 'zod';
 import { queryOptions } from '@tanstack/react-query';
 
-import { API_BASE_URL, apiClient, type ApiRequestOptions } from './client';
+import { API_BASE_URL } from '@/lib/config/operational';
+import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
 import {
   auditEstimateSchema,

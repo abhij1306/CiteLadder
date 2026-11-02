@@ -12,16 +12,12 @@ import {
   botActivityResponseSchema,
   crawlCoverageResponseSchema,
 } from '@citeladder/contracts/ai-traffic';
-import { sql } from 'kysely';
 import { z } from 'zod';
+import { aiTrafficOverview } from '../crawl-logs/overview.ts';
 import {
-  crawlSummary,
-  crawlWindow,
   crawlerPage,
   activityPage,
   coveragePage,
-  windowBounds,
-  withReportingTimezone,
   type CrawlReadOptions,
 } from '../crawl-logs/reads.ts';
 import { tableCsv } from '../http/table-export.ts';
@@ -65,50 +61,11 @@ export const aiTrafficRoutes = [
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       await requireProject(db, workspace, path.project_id);
-      const scope = { workspaceId: workspace.workspaceId, projectId: path.project_id };
-      const options = await withReportingTimezone(db, scope, query);
-      const crawl = await crawlSummary(db, scope, options);
-      const referrals = await getAiReferrals(db, {
-        ...scope,
-        rangeToken: query.range,
-        fromDate: query.start_date,
-        toDate: query.end_date,
-        granularity: 'day',
-      }).catch((error: unknown) => {
-        if (error instanceof AiReferralsQueryError) throw new ApiError(422, error.message);
-        throw error;
-      });
-      let audits = db
-        .selectFrom('audits')
-        .select('id')
-        .distinctOn('audit_scope')
-        .where('workspace_id', '=', scope.workspaceId)
-        .where('project_id', '=', scope.projectId)
-        .where('status', '=', 'completed')
-        .orderBy('audit_scope')
-        .orderBy('created_at', 'desc')
-        .orderBy('id', 'desc');
-      const bounds = windowBounds(crawlWindow(options), options);
-      audits = audits.where('created_at', '>=', bounds.from).where('created_at', '<', bounds.to);
-      const ids = (await audits.execute()).map((a) => a.id);
-      const citations = ids.length
-        ? await db
-            .selectFrom('citations')
-            .select(sql<number>`count(*)::integer`.as('count'))
-            .where('workspace_id', '=', scope.workspaceId)
-            .where('audit_id', 'in', ids)
-            .where('is_owned', '=', true)
-            .executeTakeFirstOrThrow()
-        : null;
-      return {
-        crawl,
-        referrals,
-        citations: {
-          unit: 'tracked_citations' as const,
-          count: citations?.count ?? null,
-          label: "Observed in CiteLadder's tracked answers",
-        },
-      };
+      return aiTrafficOverview(
+        db,
+        { workspaceId: workspace.workspaceId, projectId: path.project_id },
+        query,
+      );
     },
   }),
   defineGetRoute({

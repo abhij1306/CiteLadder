@@ -36,11 +36,12 @@ afterAll(async () => {
   await db.destroy();
 });
 
-async function get(tenant: Tenant, path: string) {
+async function get(tenant: Tenant, path: string, headers: Record<string, string> = {}) {
   return app.request(`/api/v1${path}`, {
     headers: {
       cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: tenant.userId, ver: 0 })}`,
       'x-workspace-id': tenant.workspaceId,
+      ...headers,
     },
   });
 }
@@ -659,6 +660,62 @@ describe('crawl events', () => {
       await next.text(); // NOSONAR: each stream finishes before the next opens.
     }
     expect(statuses).toEqual([200, 200, 200, 200]);
+  });
+});
+
+describe('conditional snapshot reads', () => {
+  it('compress and tag a snapshot read, answering a matching If-None-Match with 304', async () => {
+    const seed = await fixtures.crawl();
+    const snapshot = await fixtures.snapshot(seed, 'complete');
+    await db
+      .updateTable('site_health_snapshots')
+      .set({
+        aeo_measurement_state: 'not_measured',
+        web_fundamentals_state: 'measured',
+        classification_state: 'complete',
+        search_eligibility: 'eligible',
+      })
+      .where('id', '=', snapshot)
+      .execute();
+    const path = `/projects/${seed.projectId}/site-health/overview`;
+
+    const first = await get(seed, path, { 'accept-encoding': 'gzip' });
+    expect(first.status).toBe(200);
+    expect(first.headers.get('content-encoding')).toBe('gzip');
+    expect(first.headers.get('cache-control')).toBe('private, no-cache');
+    const tag = first.headers.get('etag')!;
+    expect(tag).toMatch(/^W\/"[\w-]{43}"$/);
+    const unzipped = new Response(first.body!.pipeThrough(new DecompressionStream('gzip')));
+    expect(siteHealthOverviewSchema.parse(await unzipped.json()).snapshot_id).toBe(snapshot);
+
+    const unchanged = await get(seed, path, { 'if-none-match': tag });
+    expect([unchanged.status, await unchanged.text()]).toEqual([304, '']);
+    expect(unchanged.headers.get('etag')).toBe(tag);
+    expect(unchanged.headers.get('cache-control')).toBe('private, no-cache');
+
+    // The tag follows the payload: a changed projection is a full 200 again.
+    await db
+      .updateTable('site_health_snapshots')
+      .set({ web_fundamentals_score: 12 })
+      .where('id', '=', snapshot)
+      .execute();
+    const changed = await get(seed, path, { 'if-none-match': tag });
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get('etag')).toMatch(/^W\/"[\w-]{43}"$/);
+    expect(changed.headers.get('etag')).not.toBe(tag);
+    expect(siteHealthOverviewSchema.parse(await changed.json()).web_fundamentals_score).toBe(12);
+  });
+
+  it("tag a terminal crawl's issues, never a running crawl's", async () => {
+    const terminal = await fixtures.crawl();
+    const running = await fixtures.crawl('running');
+    const settled = await get(terminal, `/site-crawls/${terminal.crawlId}/issues`);
+    expect(settled.status).toBe(200);
+    expect(settled.headers.get('etag')).toMatch(/^W\/"[\w-]{43}"$/);
+    const growing = await get(running, `/site-crawls/${running.crawlId}/issues`);
+    expect(growing.status).toBe(200);
+    expect(growing.headers.get('etag')).toBeNull();
+    expect(growing.headers.get('cache-control')).toBe('private, no-store, max-age=0');
   });
 });
 

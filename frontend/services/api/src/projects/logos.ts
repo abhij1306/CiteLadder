@@ -8,9 +8,10 @@
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
+import { REVALIDATE_CACHE_CONTROL } from '../http/revalidate.ts';
 import type { ProjectScope } from './brand-profile.ts';
 
-const { status_ready: READY, cache_max_age_seconds: MAX_AGE } = policy.brand_logos;
+const { status_ready: READY } = policy.brand_logos;
 
 export function brandLogoUrl(projectId: string): string {
   return `${policy.api.prefix}/projects/${projectId}/logo`;
@@ -49,7 +50,8 @@ export async function logoResponse(
     throw notFound(competitorId === null ? 'Brand logo' : 'Competitor logo');
   const etag = `"${asset.sha256}"`;
   const headers = {
-    'cache-control': `private, max-age=${MAX_AGE}`,
+    // Revalidated on every use, so each display re-checks workspace access.
+    'cache-control': REVALIDATE_CACHE_CONTROL,
     'content-disposition': 'inline',
     'content-security-policy': "default-src 'none'; sandbox",
     etag,

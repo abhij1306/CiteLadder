@@ -5,8 +5,6 @@ import {
   POLL_INTERVAL_MS,
   canShowDiscoveredTotal,
   crawlDisplayStatus,
-  crawlFailureCopy,
-  dashboardRunNotice,
   discoveryProgressLabel,
   formatAudited,
   formatIssueCount,
@@ -23,6 +21,7 @@ import {
   shouldPollCrawl,
   statusLabel,
 } from './status';
+import { crawlFailureCopy, dashboardRunNotice } from './run-notice';
 
 describe('polling / cancel / terminal predicates', () => {
   it('polls while not terminal, stops when terminal', () => {

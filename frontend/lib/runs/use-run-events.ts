@@ -3,7 +3,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
 
-import { API_BASE_URL } from '@/lib/api/client';
+import { API_BASE_URL } from '@/lib/config/operational';
 import { invalidationsFor, parseAuditEvent, type RawSseFrame } from '@/lib/api/run-events';
 import { AUDIT_RESULT_QUERY_ROOTS, queryKeys } from '@/lib/api/query-keys';
 import {

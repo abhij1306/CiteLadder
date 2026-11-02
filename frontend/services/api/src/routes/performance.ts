@@ -11,6 +11,7 @@ import { configEnvironment, loadWorkerSettings, policy } from '../config.ts';
 import { AnalyticsWorker } from '../workers/analytics-worker.ts';
 import { projectPerformanceRange } from '../traffic/snapshot.ts';
 import { ApiError, notFound } from '../errors.ts';
+import { revalidatable } from '../http/revalidate.ts';
 import { requireProject } from '../projects/access.ts';
 import { enqueueTask, taskKey } from '../referrals/enqueue.ts';
 import {
@@ -134,11 +135,15 @@ export const performanceRoutes = [
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
       await requireProject(db, workspace, path.project_id);
-      return getPerformanceTable(db, {
-        workspaceId: workspace.workspaceId,
-        projectId: path.project_id,
-        ...query,
-      });
+      // Keyed by persisted snapshot IDs, so the browser revalidates instead of refetching.
+      return revalidatable(
+        c,
+        await getPerformanceTable(db, {
+          workspaceId: workspace.workspaceId,
+          projectId: path.project_id,
+          ...query,
+        }),
+      );
     },
   }),
   definePostRoute({

@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 import { TEST_SESSION_COOKIE, testConfig, testDatabase, sessionToken } from './support.ts';
 import { createApp } from '../src/app.ts';
+import { policy } from '../src/config.ts';
 import { seedImport } from './referral-fixtures.ts';
 import { task, requests } from './traffic-fixtures.ts';
 import { createSource } from '../src/crawl-logs/sources.ts';
@@ -197,6 +198,42 @@ describe('A3 persisted Pages join', () => {
     );
     expect(response.status).toBe(200);
     expect(((await response.json()) as { citations: { count: number } }).citations.count).toBe(3);
+  });
+  it('reads every Overview section over the explicit dates when a preset is also sent', async () => {
+    const id = randomUUID();
+    await db
+      .insertInto('ai_referrals_snapshots')
+      .values({
+        id,
+        workspace_id: seed.workspaceId,
+        project_id: seed.projectId,
+        window_start: new Date('2026-01-01T00:00:00Z'),
+        window_end: new Date('2026-01-07T00:00:00Z'),
+        granularity: 'day',
+        preset_window_days: null,
+        analyzer_version: policy.analytics.ai_referral_analyzer_version,
+        formula_version: policy.analytics.ai_referral_formula_version,
+        metrics: JSON.stringify({ referral_volume: [], referral_share: [], sources: [] }),
+        source_classification_ids: JSON.stringify([]),
+        created_at: new Date(),
+      })
+      .execute();
+    try {
+      const config = testConfig(),
+        app = createApp(config, db);
+      const cookie = TEST_SESSION_COOKIE + '=' + (await sessionToken({ sub: seed.userId, ver: 0 }));
+      const response = await app.request(
+        `/api/v1/projects/${seed.projectId}/ai-traffic/overview?range=30d&start_date=2026-01-01&end_date=2026-01-07`,
+        { headers: { cookie } },
+      );
+      expect(response.status).toBe(200);
+      const { referrals } = (await response.json()) as {
+        referrals: { window_start: string; window_end: string };
+      };
+      expect([referrals.window_start, referrals.window_end]).toEqual(['2026-01-01', '2026-01-07']);
+    } finally {
+      await db.deleteFrom('ai_referrals_snapshots').where('id', '=', id).execute();
+    }
   });
   it('selects the highest detail aggregates deterministically when capped, including ties', async () => {
     const originalCap = aiTraffic.max_timeline_items;

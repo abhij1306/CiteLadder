@@ -11,6 +11,7 @@
   "trend_granularities": ["day", "month", "run", "week"],
   "trend_default_granularity": "run",
   "trend_max_points": 100,
+  "trend_max_runs": 400,
   "logical_engines": [
     "chatgpt",
     "claude",

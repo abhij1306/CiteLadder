@@ -450,8 +450,3 @@ export function formatAudited(timestamp: string | null, timeZone = 'UTC'): strin
 function pluralize(n: number, word: string): string {
   return n === 1 ? word : `${word}s`;
 }
-
-// Run-outcome copy (failure reasons, partial reasons, the dashboard notice)
-// lives in its own module. It is re-exported here because every caller has
-// always reached it through `status`.
-export { crawlFailureCopy, dashboardRunNotice } from './run-notice';

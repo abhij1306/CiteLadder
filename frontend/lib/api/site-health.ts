@@ -12,10 +12,10 @@
  * backend redacts arrive `null`/absent and are validated as such.
  */
 import { mutationOptions, queryOptions } from '@tanstack/react-query';
-import { SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
+import { API_BASE_URL, SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 import { startInteractiveWork } from './interactive-work';
 
-import { API_BASE_URL, apiClient, type ApiRequestOptions } from './client';
+import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
 import { retainPreviousDataForScope } from './query-client';
 import {

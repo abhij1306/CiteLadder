@@ -196,19 +196,21 @@ export async function listActions(
       eb.or([eb(priority, '<', score), eb.and([eb(priority, '=', score), eb('id', '>', id)])]),
     );
   }
-  const rows = await query
-    .orderBy(priority, 'desc')
-    .orderBy('id')
-    .limit(filters.limit + 1)
-    .execute();
+  const statuses = listed(db, scope).select(effectiveStatus().as('status')).as('listed');
+  const [rows, counts] = await Promise.all([
+    query
+      .orderBy(priority, 'desc')
+      .orderBy('id')
+      .limit(filters.limit + 1)
+      .execute(),
+    db
+      .selectFrom(statuses)
+      .select(['status', sql<number>`count(*)::int`.as('count')])
+      .groupBy('status')
+      .execute(),
+  ]);
   const page = rows.slice(0, filters.limit);
   const last = page.at(-1);
-  const statuses = listed(db, scope).select(effectiveStatus().as('status')).as('listed');
-  const counts = await db
-    .selectFrom(statuses)
-    .select(['status', sql<number>`count(*)::int`.as('count')])
-    .groupBy('status')
-    .execute();
   return {
     items: page.map((row) => actionItem(row, row.current)),
     next_cursor:

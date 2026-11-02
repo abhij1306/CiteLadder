@@ -571,7 +571,7 @@ describe('logos', () => {
     const etag = `"${createHash('sha256').update(png).digest('hex')}"`;
     expect(Object.fromEntries(served.headers)).toMatchObject({
       'content-type': 'image/png',
-      'cache-control': 'private, max-age=86400',
+      'cache-control': 'private, no-cache',
       'content-security-policy': "default-src 'none'; sandbox",
       etag,
       'x-content-type-options': 'nosniff',

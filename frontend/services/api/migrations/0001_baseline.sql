@@ -3824,13 +3824,9 @@ CREATE INDEX ix_action_status_events_action_id ON public.action_status_events US
 
 CREATE INDEX ix_action_status_events_project_created ON public.action_status_events USING btree (project_id, created_at, id);
 
-CREATE INDEX ix_action_status_events_project_id ON public.action_status_events USING btree (project_id);
-
 CREATE INDEX ix_action_status_events_workspace_id ON public.action_status_events USING btree (workspace_id);
 
 CREATE INDEX ix_actions_list ON public.actions USING btree (project_id, priority_score, id);
-
-CREATE INDEX ix_actions_project_id ON public.actions USING btree (project_id);
 
 CREATE INDEX ix_actions_workspace_id ON public.actions USING btree (workspace_id);
 
@@ -3838,15 +3834,9 @@ CREATE INDEX ix_agent_chats_action_id ON public.agent_chats USING btree (action_
 
 CREATE INDEX ix_agent_chats_project_activity ON public.agent_chats USING btree (project_id, last_activity_at, id);
 
-CREATE INDEX ix_agent_chats_project_id ON public.agent_chats USING btree (project_id);
-
 CREATE INDEX ix_agent_chats_workspace_id ON public.agent_chats USING btree (workspace_id);
 
-CREATE INDEX ix_agent_instruction_revisions_project_id ON public.agent_instruction_revisions USING btree (project_id);
-
 CREATE INDEX ix_agent_instruction_revisions_workspace_id ON public.agent_instruction_revisions USING btree (workspace_id);
-
-CREATE INDEX ix_agent_messages_chat_id ON public.agent_messages USING btree (chat_id);
 
 CREATE INDEX ix_agent_messages_project_id ON public.agent_messages USING btree (project_id);
 
@@ -3854,11 +3844,7 @@ CREATE INDEX ix_agent_messages_workspace_id ON public.agent_messages USING btree
 
 CREATE INDEX ix_agent_model_attempts_project_id ON public.agent_model_attempts USING btree (project_id);
 
-CREATE INDEX ix_agent_model_attempts_run_id ON public.agent_model_attempts USING btree (run_id);
-
 CREATE INDEX ix_agent_model_attempts_workspace_id ON public.agent_model_attempts USING btree (workspace_id);
-
-CREATE INDEX ix_agent_output_revisions_output_id ON public.agent_output_revisions USING btree (output_id);
 
 CREATE INDEX ix_agent_output_revisions_project_id ON public.agent_output_revisions USING btree (project_id);
 
@@ -3874,17 +3860,11 @@ CREATE INDEX ix_agent_runs_available_at ON public.agent_runs USING btree (availa
 
 CREATE INDEX ix_agent_runs_chat_created ON public.agent_runs USING btree (chat_id, created_at, id);
 
-CREATE INDEX ix_agent_runs_chat_id ON public.agent_runs USING btree (chat_id);
-
 CREATE INDEX ix_agent_runs_project_id ON public.agent_runs USING btree (project_id);
 
 CREATE INDEX ix_agent_runs_status ON public.agent_runs USING btree (status);
 
-CREATE INDEX ix_agent_runs_workspace_id ON public.agent_runs USING btree (workspace_id);
-
 CREATE INDEX ix_agent_tool_attempts_project_id ON public.agent_tool_attempts USING btree (project_id);
-
-CREATE INDEX ix_agent_tool_attempts_run_id ON public.agent_tool_attempts USING btree (run_id);
 
 CREATE INDEX ix_agent_run_transcripts_chat_id ON public.agent_run_transcripts USING btree (chat_id);
 
@@ -3892,17 +3872,11 @@ CREATE INDEX ix_agent_run_transcripts_workspace_id ON public.agent_run_transcrip
 
 CREATE INDEX ix_agent_tool_attempts_workspace_id ON public.agent_tool_attempts USING btree (workspace_id);
 
-CREATE INDEX ix_ai_referrals_snapshots_project_id ON public.ai_referrals_snapshots USING btree (project_id);
-
 CREATE INDEX ix_ai_referrals_snapshots_workspace_id ON public.ai_referrals_snapshots USING btree (workspace_id);
 
 CREATE INDEX ix_aio_entity_links_domain ON public.aio_entity_links USING btree (observation_id, domain);
 
-CREATE INDEX ix_aio_entity_links_observation_id ON public.aio_entity_links USING btree (observation_id);
-
 CREATE INDEX ix_aio_entity_links_workspace_id ON public.aio_entity_links USING btree (workspace_id);
-
-CREATE INDEX ix_aio_observations_audit_id ON public.aio_observations USING btree (audit_id);
 
 CREATE INDEX ix_aio_observations_audit_outcome ON public.aio_observations USING btree (audit_id, outcome);
 
@@ -3918,8 +3892,6 @@ CREATE INDEX ix_analytics_tasks_lease ON public.analytics_tasks USING btree (sta
 
 CREATE INDEX ix_analytics_tasks_project_id ON public.analytics_tasks USING btree (project_id);
 
-CREATE INDEX ix_analytics_tasks_status ON public.analytics_tasks USING btree (status);
-
 CREATE INDEX ix_analytics_tasks_workspace_id ON public.analytics_tasks USING btree (workspace_id);
 
 CREATE INDEX ix_answer_ad_observations_audit_id ON public.answer_ad_observations USING btree (audit_id);
@@ -3931,8 +3903,6 @@ CREATE INDEX ix_answer_ad_observations_workspace_project ON public.answer_ad_obs
 CREATE INDEX ix_answer_perceptions_audit_id ON public.answer_perceptions USING btree (audit_id);
 
 CREATE INDEX ix_answer_perceptions_workspace_id_created_at ON public.answer_perceptions USING btree (workspace_id, created_at);
-
-CREATE INDEX ix_answer_claims_workspace_id ON public.answer_claims USING btree (workspace_id);
 
 CREATE INDEX ix_brand_facts_workspace_id_project_id ON public.brand_facts USING btree (workspace_id, project_id);
 
@@ -3956,21 +3926,13 @@ CREATE INDEX ix_api_keys_created_by_user_id ON public.api_keys USING btree (crea
 
 CREATE INDEX ix_entity_sentiments_workspace_id ON public.entity_sentiments USING btree (workspace_id);
 
-CREATE INDEX ix_audit_engine_snapshots_audit_id ON public.audit_engine_snapshots USING btree (audit_id);
-
-CREATE INDEX ix_audit_events_audit_id ON public.audit_events USING btree (audit_id);
-
 CREATE INDEX ix_audit_events_audit_id_created_at_id ON public.audit_events USING btree (audit_id, created_at, id);
 
 CREATE INDEX ix_audit_events_created_at ON public.audit_events USING btree (created_at);
 
-CREATE INDEX ix_audit_prompt_snapshots_audit_id ON public.audit_prompt_snapshots USING btree (audit_id);
-
 CREATE INDEX ix_audit_prompt_snapshots_cohort ON public.audit_prompt_snapshots USING btree (cohort);
 
 CREATE INDEX ix_audit_schedules_due ON public.audit_schedules USING btree (enabled, next_run_at);
-
-CREATE INDEX ix_audit_schedules_enabled ON public.audit_schedules USING btree (enabled);
 
 CREATE INDEX ix_audit_schedules_lease ON public.audit_schedules USING btree (lease_expires_at);
 
@@ -3982,8 +3944,6 @@ CREATE INDEX ix_audit_schedules_prompt_set_id ON public.audit_schedules USING bt
 
 CREATE INDEX ix_audit_schedules_workspace_id ON public.audit_schedules USING btree (workspace_id);
 
-CREATE INDEX ix_audit_tasks_audit_id ON public.audit_tasks USING btree (audit_id);
-
 CREATE INDEX ix_audit_tasks_available_at ON public.audit_tasks USING btree (available_at);
 
 CREATE INDEX ix_audit_tasks_project_id ON public.audit_tasks USING btree (project_id);
@@ -3991,10 +3951,6 @@ CREATE INDEX ix_audit_tasks_project_id ON public.audit_tasks USING btree (projec
 CREATE INDEX ix_audit_tasks_source_task_id ON public.audit_tasks USING btree (source_task_id);
 
 CREATE INDEX ix_audit_tasks_status ON public.audit_tasks USING btree (status);
-
-CREATE INDEX ix_audit_tasks_workspace_id ON public.audit_tasks USING btree (workspace_id);
-
-CREATE INDEX ix_audits_parent_audit_id ON public.audits USING btree (parent_audit_id);
 
 CREATE INDEX ix_audits_project_id ON public.audits USING btree (project_id);
 
@@ -4007,8 +3963,6 @@ CREATE UNIQUE INDEX uq_audit_schedule_slot ON public.audits USING btree (schedul
 CREATE INDEX ix_audits_status ON public.audits USING btree (status);
 
 CREATE INDEX ix_audits_trigger ON public.audits USING btree (trigger);
-
-CREATE INDEX ix_audits_workspace_id ON public.audits USING btree (workspace_id);
 
 CREATE INDEX ix_bot_requests_activity ON public.bot_requests USING btree (workspace_id, project_id, occurred_at, id);
 
@@ -4028,8 +3982,6 @@ CREATE INDEX ix_brand_discovery_tasks_claim ON public.brand_discovery_tasks USIN
 
 CREATE INDEX ix_brand_discovery_tasks_lease ON public.brand_discovery_tasks USING btree (status, lease_expires_at);
 
-CREATE INDEX ix_brand_discovery_tasks_status ON public.brand_discovery_tasks USING btree (status);
-
 CREATE INDEX ix_brand_mentions_analysis_id ON public.brand_mentions USING btree (analysis_id);
 
 CREATE INDEX ix_brand_mentions_audit_id ON public.brand_mentions USING btree (audit_id);
@@ -4040,15 +3992,11 @@ CREATE UNIQUE INDEX ix_brand_profiles_project_id ON public.brand_profiles USING 
 
 CREATE INDEX ix_brand_profiles_workspace_id ON public.brand_profiles USING btree (workspace_id);
 
-CREATE INDEX ix_brand_research_snapshots_discovery_id ON public.brand_research_snapshots USING btree (discovery_id);
-
 CREATE INDEX ix_brand_research_snapshots_workspace_id ON public.brand_research_snapshots USING btree (workspace_id);
 
 CREATE INDEX ix_branded_query_override_lookup ON public.branded_query_overrides USING btree (workspace_id, project_id, normalized_query, ordinal);
 
 CREATE INDEX ix_branded_query_overrides_project_id ON public.branded_query_overrides USING btree (project_id);
-
-CREATE INDEX ix_branded_query_overrides_workspace_id ON public.branded_query_overrides USING btree (workspace_id);
 
 CREATE INDEX ix_brands_logo_asset_id ON public.brands USING btree (logo_asset_id);
 
@@ -4056,11 +4004,7 @@ CREATE INDEX ix_citations_analysis_id ON public.citations USING btree (analysis_
 
 CREATE INDEX ix_citations_audit_id ON public.citations USING btree (audit_id);
 
-CREATE INDEX ix_citations_workspace_id ON public.citations USING btree (workspace_id);
-
 CREATE INDEX ix_citations_workspace_url_hash ON public.citations USING btree (workspace_id, url_hash);
-
-CREATE INDEX ix_commerce_categories_project_id ON public.commerce_categories USING btree (project_id);
 
 CREATE INDEX ix_commerce_categories_workspace_id ON public.commerce_categories USING btree (workspace_id);
 
@@ -4068,29 +4012,19 @@ CREATE INDEX ix_commerce_competitor_attempts_project_id ON public.commerce_compe
 
 CREATE INDEX ix_commerce_competitor_attempts_target_id ON public.commerce_competitor_attempts USING btree (target_id);
 
-CREATE INDEX ix_commerce_competitor_attempts_task_id ON public.commerce_competitor_attempts USING btree (task_id);
-
 CREATE INDEX ix_commerce_competitor_attempts_workspace_id ON public.commerce_competitor_attempts USING btree (workspace_id);
-
-CREATE INDEX ix_commerce_competitor_candidates_project_id ON public.commerce_competitor_candidates USING btree (project_id);
 
 CREATE INDEX ix_commerce_competitor_candidates_target_id ON public.commerce_competitor_candidates USING btree (target_id);
 
 CREATE INDEX ix_commerce_competitor_candidates_workspace_id ON public.commerce_competitor_candidates USING btree (workspace_id);
 
-CREATE INDEX ix_commerce_csv_imports_project_id ON public.commerce_csv_imports USING btree (project_id);
-
 CREATE INDEX ix_commerce_csv_imports_workspace_id ON public.commerce_csv_imports USING btree (workspace_id);
 
 CREATE INDEX ix_commerce_observation_citations_citation_id ON public.commerce_observation_citations USING btree (citation_id);
 
-CREATE INDEX ix_commerce_observation_citations_observation_id ON public.commerce_observation_citations USING btree (observation_id);
-
 CREATE INDEX ix_commerce_observations_audit_target ON public.commerce_recommendation_observations USING btree (audit_id, target_kind, target_id);
 
 CREATE INDEX ix_commerce_product_categories_category_id ON public.commerce_product_categories USING btree (category_id);
-
-CREATE INDEX ix_commerce_product_categories_product_id ON public.commerce_product_categories USING btree (product_id);
 
 CREATE INDEX ix_commerce_product_categories_project_id ON public.commerce_product_categories USING btree (project_id);
 
@@ -4102,23 +4036,17 @@ CREATE INDEX ix_commerce_product_observations_project_id ON public.commerce_prod
 
 CREATE INDEX ix_commerce_product_observations_workspace_id ON public.commerce_product_observations USING btree (workspace_id);
 
-CREATE INDEX ix_commerce_products_project_id ON public.commerce_products USING btree (project_id);
-
 CREATE INDEX ix_commerce_products_project_lifecycle ON public.commerce_products USING btree (project_id, lifecycle_state);
 
 CREATE INDEX ix_commerce_products_workspace_id ON public.commerce_products USING btree (workspace_id);
 
 CREATE INDEX ix_commerce_prompt_targets_project_id ON public.commerce_prompt_targets USING btree (project_id);
 
-CREATE INDEX ix_commerce_prompt_targets_prompt_id ON public.commerce_prompt_targets USING btree (prompt_id);
-
 CREATE INDEX ix_commerce_prompt_targets_target_id ON public.commerce_prompt_targets USING btree (target_id);
 
 CREATE INDEX ix_commerce_prompt_targets_workspace_id ON public.commerce_prompt_targets USING btree (workspace_id);
 
 CREATE INDEX ix_commerce_recommendation_observations_artifact_id ON public.commerce_recommendation_observations USING btree (artifact_id);
-
-CREATE INDEX ix_commerce_recommendation_observations_audit_id ON public.commerce_recommendation_observations USING btree (audit_id);
 
 CREATE INDEX ix_commerce_recommendation_observations_project_id ON public.commerce_recommendation_observations USING btree (project_id);
 
@@ -4129,10 +4057,6 @@ CREATE INDEX ix_commerce_recommendation_observations_task_id ON public.commerce_
 CREATE INDEX ix_commerce_recommendation_observations_workspace_id ON public.commerce_recommendation_observations USING btree (workspace_id);
 
 CREATE INDEX ix_commerce_shelf_project_created ON public.commerce_shelf_snapshots USING btree (project_id, created_at);
-
-CREATE INDEX ix_commerce_shelf_snapshots_audit_id ON public.commerce_shelf_snapshots USING btree (audit_id);
-
-CREATE INDEX ix_commerce_shelf_snapshots_project_id ON public.commerce_shelf_snapshots USING btree (project_id);
 
 CREATE INDEX ix_commerce_shelf_snapshots_target_id ON public.commerce_shelf_snapshots USING btree (target_id);
 
@@ -4154,8 +4078,6 @@ CREATE INDEX ix_platform_calls_unsettled ON public.platform_calls USING btree (c
 
 CREATE INDEX ix_content_differentiation_candidates_audit_id ON public.content_differentiation_candidates USING btree (audit_id);
 
-CREATE INDEX ix_content_differentiation_candidates_audit_task_id ON public.content_differentiation_candidates USING btree (audit_task_id);
-
 CREATE INDEX ix_content_differentiation_candidates_project_id ON public.content_differentiation_candidates USING btree (project_id);
 
 CREATE INDEX ix_content_differentiation_candidates_source_page_id ON public.content_differentiation_candidates USING btree (source_page_id);
@@ -4163,8 +4085,6 @@ CREATE INDEX ix_content_differentiation_candidates_source_page_id ON public.cont
 CREATE INDEX ix_content_differentiation_candidates_workspace_id ON public.content_differentiation_candidates USING btree (workspace_id);
 
 CREATE INDEX ix_content_differentiation_reports_audit_id ON public.content_differentiation_reports USING btree (audit_id);
-
-CREATE INDEX ix_content_differentiation_reports_audit_task_id ON public.content_differentiation_reports USING btree (audit_task_id);
 
 CREATE INDEX ix_content_differentiation_reports_project_id ON public.content_differentiation_reports USING btree (project_id);
 
@@ -4180,27 +4100,17 @@ CREATE INDEX ix_demand_signals_project_id ON public.demand_signals USING btree (
 
 CREATE INDEX ix_demand_signals_signal_type ON public.demand_signals USING btree (signal_type);
 
-CREATE INDEX ix_demand_signals_snapshot_id ON public.demand_signals USING btree (snapshot_id);
-
 CREATE INDEX ix_demand_signals_state ON public.demand_signals USING btree (state);
 
 CREATE INDEX ix_demand_signals_workspace_id ON public.demand_signals USING btree (workspace_id);
 
 CREATE INDEX ix_demand_snapshots_created_at ON public.demand_snapshots USING btree (created_at);
 
-CREATE INDEX ix_demand_snapshots_project_id ON public.demand_snapshots USING btree (project_id);
-
 CREATE INDEX ix_demand_snapshots_workspace_id ON public.demand_snapshots USING btree (workspace_id);
 
 CREATE INDEX ix_execution_cost_projections_audit_id ON public.execution_cost_projections USING btree (audit_id);
 
-CREATE INDEX ix_execution_cost_projections_raw_response_artifact_id ON public.execution_cost_projections USING btree (raw_response_artifact_id);
-
 CREATE INDEX ix_execution_cost_projections_task_id ON public.execution_cost_projections USING btree (task_id);
-
-CREATE INDEX ix_integration_connections_grant_id ON public.integration_connections USING btree (grant_id);
-
-CREATE INDEX ix_integration_connections_workspace_id ON public.integration_connections USING btree (workspace_id);
 
 CREATE INDEX ix_integration_events_connection_id ON public.integration_events USING btree (connection_id);
 
@@ -4214,19 +4124,13 @@ CREATE INDEX ix_integration_import_artifacts_payload_hash ON public.integration_
 
 CREATE INDEX ix_integration_import_artifacts_sync_run_id ON public.integration_import_artifacts USING btree (sync_run_id);
 
-CREATE INDEX ix_integration_import_artifacts_workspace_id ON public.integration_import_artifacts USING btree (workspace_id);
-
 CREATE INDEX ix_integration_metric_rows_project_date ON public.integration_metric_rows USING btree (project_id, date);
-
-CREATE INDEX ix_integration_metric_rows_project_id ON public.integration_metric_rows USING btree (project_id);
 
 CREATE INDEX ix_integration_metric_rows_source_artifact_id ON public.integration_metric_rows USING btree (source_artifact_id);
 
 CREATE INDEX ix_integration_metric_rows_workspace_id ON public.integration_metric_rows USING btree (workspace_id);
 
 CREATE INDEX ix_integration_oauth_grants_status ON public.integration_oauth_grants USING btree (status);
-
-CREATE INDEX ix_integration_oauth_grants_workspace_id ON public.integration_oauth_grants USING btree (workspace_id);
 
 CREATE INDEX ix_integration_oauth_states_user_id ON public.integration_oauth_states USING btree (user_id);
 
@@ -4246,17 +4150,11 @@ CREATE INDEX ix_integration_sync_runs_available_at ON public.integration_sync_ru
 
 CREATE INDEX ix_integration_sync_runs_claim ON public.integration_sync_runs USING btree (status, available_at);
 
-CREATE INDEX ix_integration_sync_runs_connection_id ON public.integration_sync_runs USING btree (connection_id);
-
 CREATE INDEX ix_integration_sync_runs_lease ON public.integration_sync_runs USING btree (status, lease_expires_at);
 
 CREATE INDEX ix_integration_sync_runs_mapping_id ON public.integration_sync_runs USING btree (mapping_id);
 
 CREATE INDEX ix_integration_sync_runs_project_id ON public.integration_sync_runs USING btree (project_id);
-
-CREATE INDEX ix_integration_sync_runs_status ON public.integration_sync_runs USING btree (status);
-
-CREATE INDEX ix_integration_sync_runs_workspace_id ON public.integration_sync_runs USING btree (workspace_id);
 
 CREATE INDEX ix_mcp_confirmations_expires_at ON public.mcp_confirmations USING btree (expires_at);
 
@@ -4290,15 +4188,9 @@ CREATE INDEX ix_metric_snapshots_workspace_id ON public.metric_snapshots USING b
 
 CREATE INDEX ix_monitored_site_urls_profile_id ON public.monitored_site_urls USING btree (profile_id);
 
-CREATE INDEX ix_monitored_site_urls_project_id ON public.monitored_site_urls USING btree (project_id);
-
 CREATE INDEX ix_monitored_site_urls_site_url_id ON public.monitored_site_urls USING btree (site_url_id);
 
-CREATE INDEX ix_monitored_site_urls_workspace_id ON public.monitored_site_urls USING btree (workspace_id);
-
 CREATE INDEX ix_monitored_site_urls_ws_active ON public.monitored_site_urls USING btree (workspace_id, active);
-
-CREATE INDEX ix_observed_entity_candidates_audit_id ON public.observed_entity_candidates USING btree (audit_id);
 
 CREATE INDEX ix_observed_entity_candidates_project_id ON public.observed_entity_candidates USING btree (project_id);
 
@@ -4312,17 +4204,11 @@ CREATE INDEX ix_opportunities_filter ON public.opportunities USING btree (projec
 
 CREATE INDEX ix_opportunities_list ON public.opportunities USING btree (project_id, priority_score, id);
 
-CREATE INDEX ix_opportunities_project_id ON public.opportunities USING btree (project_id);
-
 CREATE INDEX ix_opportunities_workspace_id ON public.opportunities USING btree (workspace_id);
 
 CREATE INDEX ix_opportunity_implementation_events_opportunity_snapshot_id ON public.opportunity_implementation_events USING btree (opportunity_snapshot_id);
 
 CREATE INDEX ix_opportunity_implementation_events_output_revision_id ON public.opportunity_implementation_events USING btree (output_revision_id);
-
-CREATE INDEX ix_opportunity_implementation_events_project_id ON public.opportunity_implementation_events USING btree (project_id);
-
-CREATE INDEX ix_opportunity_implementation_events_workspace_id ON public.opportunity_implementation_events USING btree (workspace_id);
 
 CREATE INDEX ix_opportunity_implementation_project_created ON public.opportunity_implementation_events USING btree (project_id, created_at, id);
 
@@ -4330,15 +4216,9 @@ CREATE INDEX ix_opportunity_orders_workspace_id ON public.opportunity_orders USI
 
 CREATE INDEX ix_opportunity_snapshots_project_created ON public.opportunity_snapshots USING btree (project_id, created_at, id);
 
-CREATE INDEX ix_opportunity_snapshots_project_id ON public.opportunity_snapshots USING btree (project_id);
-
 CREATE INDEX ix_opportunity_snapshots_workspace_id ON public.opportunity_snapshots USING btree (workspace_id);
 
-CREATE INDEX ix_opportunity_verification_events_implementation_event_id ON public.opportunity_verification_events USING btree (implementation_event_id);
-
 CREATE INDEX ix_opportunity_verification_events_project_id ON public.opportunity_verification_events USING btree (project_id);
-
-CREATE INDEX ix_opportunity_verification_events_workspace_id ON public.opportunity_verification_events USING btree (workspace_id);
 
 CREATE INDEX ix_opportunity_verification_implementation_created ON public.opportunity_verification_events USING btree (implementation_event_id, created_at, id);
 
@@ -4346,15 +4226,9 @@ CREATE INDEX ix_overview_layouts_workspace_id ON public.overview_layouts USING b
 
 CREATE INDEX ix_owned_domains_project_id ON public.owned_domains USING btree (project_id);
 
-CREATE INDEX ix_performance_dimension_stats_dimension ON public.performance_dimension_stats USING btree (dimension);
-
 CREATE INDEX ix_performance_dimension_stats_project_id ON public.performance_dimension_stats USING btree (project_id);
 
-CREATE INDEX ix_performance_dimension_stats_snapshot_id ON public.performance_dimension_stats USING btree (snapshot_id);
-
 CREATE INDEX ix_performance_dimension_stats_workspace_id ON public.performance_dimension_stats USING btree (workspace_id);
-
-CREATE INDEX ix_projects_workspace_id ON public.projects USING btree (workspace_id);
 
 CREATE INDEX ix_prompt_candidates_run_id ON public.prompt_candidates USING btree (run_id);
 
@@ -4370,15 +4244,11 @@ CREATE INDEX ix_prompt_generation_runs_workspace_id ON public.prompt_generation_
 
 CREATE INDEX ix_prompt_metric_history ON public.prompt_metric_snapshots USING btree (project_id, prompt_identity, created_at DESC);
 
-CREATE INDEX ix_prompt_metric_snapshots_audit_id ON public.prompt_metric_snapshots USING btree (audit_id);
-
 CREATE INDEX ix_prompt_metric_snapshots_cohort ON public.prompt_metric_snapshots USING btree (cohort);
 
 CREATE INDEX ix_prompt_metric_snapshots_created_at ON public.prompt_metric_snapshots USING btree (created_at);
 
 CREATE INDEX ix_prompt_metric_snapshots_decline_confirmed ON public.prompt_metric_snapshots USING btree (decline_confirmed);
-
-CREATE INDEX ix_prompt_metric_snapshots_project_id ON public.prompt_metric_snapshots USING btree (project_id);
 
 CREATE INDEX ix_prompt_metric_snapshots_prompt_id ON public.prompt_metric_snapshots USING btree (prompt_id);
 
@@ -4387,8 +4257,6 @@ CREATE INDEX ix_prompt_metric_snapshots_workspace_id ON public.prompt_metric_sna
 CREATE INDEX ix_prompt_sets_project_id ON public.prompt_sets USING btree (project_id);
 
 CREATE INDEX ix_prompts_cohort ON public.prompts USING btree (cohort);
-
-CREATE INDEX ix_prompts_prompt_set_id ON public.prompts USING btree (prompt_set_id);
 
 CREATE INDEX ix_prompts_topic_id ON public.prompts USING btree (topic_id);
 
@@ -4410,8 +4278,6 @@ CREATE INDEX ix_provider_connection_tests_connection_id ON public.provider_conne
 
 CREATE INDEX ix_provider_connection_tests_workspace_id ON public.provider_connection_tests USING btree (workspace_id);
 
-CREATE INDEX ix_provider_connections_workspace_id ON public.provider_connections USING btree (workspace_id);
-
 CREATE INDEX ix_provider_connections_workspace_source ON public.provider_connections USING btree (workspace_id, credential_source, transport_provider);
 
 CREATE INDEX ix_provider_routes_connection_id ON public.provider_routes USING btree (connection_id);
@@ -4428,15 +4294,9 @@ CREATE INDEX ix_query_evidence_rows_project_id ON public.query_evidence_rows USI
 
 CREATE INDEX ix_query_evidence_rows_resolution_outcome ON public.query_evidence_rows USING btree (resolution_outcome);
 
-CREATE INDEX ix_query_evidence_rows_snapshot_id ON public.query_evidence_rows USING btree (snapshot_id);
-
-CREATE INDEX ix_query_evidence_rows_workspace_id ON public.query_evidence_rows USING btree (workspace_id);
-
 CREATE INDEX ix_query_evidence_snapshots_created_at ON public.query_evidence_snapshots USING btree (created_at);
 
 CREATE INDEX ix_query_evidence_snapshots_project_id ON public.query_evidence_snapshots USING btree (project_id);
-
-CREATE INDEX ix_query_evidence_snapshots_workspace_id ON public.query_evidence_snapshots USING btree (workspace_id);
 
 CREATE INDEX ix_queue_workspace_turn_order ON public.queue_workspace_turns USING btree (queue_name, last_claimed_at);
 
@@ -4448,13 +4308,7 @@ CREATE INDEX ix_referral_classifications_project_id ON public.referral_classific
 
 CREATE INDEX ix_referral_classifications_workspace_id ON public.referral_classifications USING btree (workspace_id);
 
-CREATE INDEX ix_referral_events_import_id ON public.referral_events USING btree (import_id);
-
-CREATE INDEX ix_referral_events_project_id ON public.referral_events USING btree (project_id);
-
 CREATE INDEX ix_referral_events_project_occurred ON public.referral_events USING btree (project_id, occurred_at);
-
-CREATE INDEX ix_referral_events_workspace_id ON public.referral_events USING btree (workspace_id);
 
 CREATE INDEX ix_response_analyses_audit_id ON public.response_analyses USING btree (audit_id);
 
@@ -4472,10 +4326,6 @@ CREATE INDEX ix_search_intelligence_calls_dataset_id ON public.search_intelligen
 
 CREATE INDEX ix_search_intelligence_calls_project_id ON public.search_intelligence_calls USING btree (project_id);
 
-CREATE INDEX ix_search_intelligence_calls_run_id ON public.search_intelligence_calls USING btree (run_id);
-
-CREATE INDEX ix_search_intelligence_calls_workspace_id ON public.search_intelligence_calls USING btree (workspace_id);
-
 CREATE INDEX ix_search_intelligence_datasets_parent_dataset_id ON public.search_intelligence_datasets USING btree (parent_dataset_id);
 
 CREATE INDEX ix_search_intelligence_datasets_project_id ON public.search_intelligence_datasets USING btree (project_id);
@@ -4484,17 +4334,11 @@ CREATE INDEX ix_search_intelligence_datasets_run_id ON public.search_intelligenc
 
 CREATE INDEX ix_search_intelligence_datasets_scope_hash ON public.search_intelligence_datasets USING btree (scope_hash);
 
-CREATE INDEX ix_search_intelligence_datasets_workspace_id ON public.search_intelligence_datasets USING btree (workspace_id);
-
-CREATE INDEX ix_search_intelligence_dispatch_attempts_call_id ON public.search_intelligence_dispatch_attempts USING btree (call_id);
-
 CREATE INDEX ix_search_intelligence_dispatch_attempts_project_id ON public.search_intelligence_dispatch_attempts USING btree (project_id);
 
 CREATE INDEX ix_search_intelligence_dispatch_attempts_workspace_id ON public.search_intelligence_dispatch_attempts USING btree (workspace_id);
 
 CREATE INDEX ix_search_intelligence_rows_call_id ON public.search_intelligence_rows USING btree (call_id);
-
-CREATE INDEX ix_search_intelligence_rows_dataset_id ON public.search_intelligence_rows USING btree (dataset_id);
 
 CREATE INDEX ix_search_intelligence_rows_project_id ON public.search_intelligence_rows USING btree (project_id);
 
@@ -4505,8 +4349,6 @@ CREATE INDEX ix_search_intelligence_runs_connection_id ON public.search_intellig
 CREATE INDEX ix_search_intelligence_runs_platform_call_id ON public.search_intelligence_runs USING btree (platform_call_id) WHERE (platform_call_id IS NOT NULL);
 
 CREATE INDEX ix_search_intelligence_runs_project_id ON public.search_intelligence_runs USING btree (project_id);
-
-CREATE INDEX ix_search_intelligence_runs_workspace_id ON public.search_intelligence_runs USING btree (workspace_id);
 
 CREATE INDEX ix_security_events_occurred_at ON public.security_events USING btree (occurred_at);
 
@@ -4526,8 +4368,6 @@ CREATE INDEX ix_site_change_observations_change_class ON public.site_change_obse
 
 CREATE INDEX ix_site_change_observations_site_url_id ON public.site_change_observations USING btree (site_url_id);
 
-CREATE INDEX ix_site_change_observations_snapshot_id ON public.site_change_observations USING btree (snapshot_id);
-
 CREATE INDEX ix_site_change_observations_workspace_id ON public.site_change_observations USING btree (workspace_id);
 
 CREATE INDEX ix_site_change_snapshots_crawl_a_id ON public.site_change_snapshots USING btree (crawl_a_id);
@@ -4535,10 +4375,6 @@ CREATE INDEX ix_site_change_snapshots_crawl_a_id ON public.site_change_snapshots
 CREATE INDEX ix_site_change_snapshots_crawl_b_id ON public.site_change_snapshots USING btree (crawl_b_id);
 
 CREATE INDEX ix_site_change_snapshots_project_id ON public.site_change_snapshots USING btree (project_id);
-
-CREATE INDEX ix_site_change_snapshots_workspace_id ON public.site_change_snapshots USING btree (workspace_id);
-
-CREATE INDEX ix_site_crawl_events_crawl_id ON public.site_crawl_events USING btree (crawl_id);
 
 CREATE INDEX ix_site_crawl_events_crawl_id_created_at_id ON public.site_crawl_events USING btree (crawl_id, created_at, id);
 
@@ -4548,13 +4384,9 @@ CREATE INDEX ix_site_crawl_tasks_available_at ON public.site_crawl_tasks USING b
 
 CREATE INDEX ix_site_crawl_tasks_claim ON public.site_crawl_tasks USING btree (status, available_at);
 
-CREATE INDEX ix_site_crawl_tasks_crawl_id ON public.site_crawl_tasks USING btree (crawl_id);
-
 CREATE INDEX ix_site_crawl_tasks_lease ON public.site_crawl_tasks USING btree (status, lease_expires_at);
 
 CREATE INDEX ix_site_crawl_tasks_site_url_id ON public.site_crawl_tasks USING btree (site_url_id);
-
-CREATE INDEX ix_site_crawl_tasks_status ON public.site_crawl_tasks USING btree (status);
 
 CREATE INDEX ix_site_crawl_tasks_workspace_id ON public.site_crawl_tasks USING btree (workspace_id);
 
@@ -4566,10 +4398,6 @@ CREATE INDEX ix_site_crawls_robots_history ON public.site_crawls USING btree (wo
 
 CREATE INDEX ix_site_crawls_status ON public.site_crawls USING btree (status);
 
-CREATE INDEX ix_site_crawls_workspace_id ON public.site_crawls USING btree (workspace_id);
-
-CREATE INDEX ix_site_discovery_frontier_crawl_id ON public.site_discovery_frontier USING btree (crawl_id);
-
 CREATE INDEX ix_site_discovery_frontier_pending ON public.site_discovery_frontier USING btree (crawl_id, status, value_priority DESC, parent_position, link_ordinal, url_hash);
 
 CREATE INDEX ix_site_discovery_frontier_workspace_id ON public.site_discovery_frontier USING btree (workspace_id);
@@ -4579,8 +4407,6 @@ CREATE INDEX ix_site_fetch_artifacts_crawl_id ON public.site_fetch_artifacts USI
 CREATE INDEX ix_site_fetch_artifacts_workspace_id ON public.site_fetch_artifacts USING btree (workspace_id);
 
 CREATE INDEX ix_site_fetch_attempts_crawl_id ON public.site_fetch_attempts USING btree (crawl_id);
-
-CREATE INDEX ix_site_fetch_attempts_task_id ON public.site_fetch_attempts USING btree (task_id);
 
 CREATE INDEX ix_site_fetch_attempts_workspace_id ON public.site_fetch_attempts USING btree (workspace_id);
 
@@ -4596,23 +4422,15 @@ CREATE INDEX ix_site_internal_link_events_workspace_id ON public.site_internal_l
 
 CREATE INDEX ix_site_internal_link_runs_project_id ON public.site_internal_link_runs USING btree (project_id);
 
-CREATE INDEX ix_site_internal_link_runs_workspace_id ON public.site_internal_link_runs USING btree (workspace_id);
-
 CREATE INDEX ix_site_issues_analysis_id ON public.site_issues USING btree (analysis_id);
-
-CREATE INDEX ix_site_issues_crawl_id ON public.site_issues USING btree (crawl_id);
 
 CREATE INDEX ix_site_issues_filter ON public.site_issues USING btree (crawl_id, finding_class, severity, category, rule_id);
 
 CREATE INDEX ix_site_issues_project_id ON public.site_issues USING btree (project_id);
 
-CREATE INDEX ix_site_issues_site_url_id ON public.site_issues USING btree (site_url_id);
-
 CREATE INDEX ix_site_issues_url_created ON public.site_issues USING btree (site_url_id, created_at);
 
 CREATE INDEX ix_site_issues_workspace_id ON public.site_issues USING btree (workspace_id);
-
-CREATE INDEX ix_site_observed_architectures_crawl_id ON public.site_observed_architectures USING btree (crawl_id);
 
 CREATE INDEX ix_site_observed_architectures_project_id ON public.site_observed_architectures USING btree (project_id);
 
@@ -4630,15 +4448,11 @@ CREATE INDEX ix_site_page_analyses_supersedes_analysis_id ON public.site_page_an
 
 CREATE INDEX ix_site_page_analyses_workspace_id ON public.site_page_analyses USING btree (workspace_id);
 
-CREATE INDEX ix_site_page_link_metrics_crawl_id ON public.site_page_link_metrics USING btree (crawl_id);
-
 CREATE INDEX ix_site_page_link_metrics_project_id ON public.site_page_link_metrics USING btree (project_id);
 
 CREATE INDEX ix_site_page_link_metrics_site_url_id ON public.site_page_link_metrics USING btree (site_url_id);
 
 CREATE INDEX ix_site_page_link_metrics_workspace_id ON public.site_page_link_metrics USING btree (workspace_id);
-
-CREATE INDEX ix_site_rule_evaluations_analysis_id ON public.site_rule_evaluations USING btree (analysis_id);
 
 CREATE INDEX ix_site_rule_evaluations_source_architecture_id ON public.site_rule_evaluations USING btree (source_architecture_id);
 
@@ -4646,15 +4460,11 @@ CREATE INDEX ix_site_rule_evaluations_source_artifact_id ON public.site_rule_eva
 
 CREATE INDEX ix_site_rule_evaluations_workspace_id ON public.site_rule_evaluations USING btree (workspace_id);
 
-CREATE INDEX ix_site_url_observations_crawl_id ON public.site_url_observations USING btree (crawl_id);
-
 CREATE INDEX ix_site_url_observations_project_id ON public.site_url_observations USING btree (project_id);
 
 CREATE INDEX ix_site_url_observations_site_url_id ON public.site_url_observations USING btree (site_url_id);
 
 CREATE INDEX ix_site_url_observations_workspace_id ON public.site_url_observations USING btree (workspace_id);
-
-CREATE INDEX ix_site_urls_project_id ON public.site_urls USING btree (project_id);
 
 CREATE INDEX ix_site_urls_project_keyset ON public.site_urls USING btree (project_id, normalized_url, id);
 
@@ -4662,13 +4472,7 @@ CREATE INDEX ix_site_urls_workspace_id ON public.site_urls USING btree (workspac
 
 CREATE INDEX ix_source_page_entity_presences_project_id ON public.source_page_entity_presences USING btree (project_id);
 
-CREATE INDEX ix_source_page_entity_presences_snapshot_id ON public.source_page_entity_presences USING btree (snapshot_id);
-
-CREATE INDEX ix_source_page_entity_presences_source_page_id ON public.source_page_entity_presences USING btree (source_page_id);
-
 CREATE INDEX ix_source_page_entity_presences_workspace_id ON public.source_page_entity_presences USING btree (workspace_id);
-
-CREATE INDEX ix_source_page_inspection_spend_project_id ON public.source_page_inspection_spend USING btree (project_id);
 
 CREATE INDEX ix_source_page_inspection_spend_workspace_id ON public.source_page_inspection_spend USING btree (workspace_id);
 
@@ -4678,45 +4482,27 @@ CREATE INDEX ix_source_page_snapshots_page_time ON public.source_page_snapshots 
 
 CREATE INDEX ix_source_page_snapshots_project_id ON public.source_page_snapshots USING btree (project_id);
 
-CREATE INDEX ix_source_page_snapshots_source_page_id ON public.source_page_snapshots USING btree (source_page_id);
-
 CREATE INDEX ix_source_page_snapshots_workspace_id ON public.source_page_snapshots USING btree (workspace_id);
 
 CREATE INDEX ix_source_page_spend_project_time ON public.source_page_inspection_spend USING btree (project_id, created_at);
 
 CREATE INDEX ix_source_pages_project_domain ON public.source_pages USING btree (project_id, registrable_domain);
 
-CREATE INDEX ix_source_pages_project_id ON public.source_pages USING btree (project_id);
-
 CREATE INDEX ix_source_pages_project_state ON public.source_pages USING btree (project_id, inspection_state);
-
-CREATE INDEX ix_source_pages_workspace_id ON public.source_pages USING btree (workspace_id);
 
 CREATE INDEX ix_topics_parent_id ON public.topics USING btree (parent_id);
 
-CREATE INDEX ix_topics_project_id ON public.topics USING btree (project_id);
-
 CREATE INDEX ix_traffic_page_stats_project_id ON public.traffic_page_stats USING btree (project_id);
-
-CREATE INDEX ix_traffic_page_stats_snapshot_id ON public.traffic_page_stats USING btree (snapshot_id);
 
 CREATE INDEX ix_traffic_page_stats_workspace_id ON public.traffic_page_stats USING btree (workspace_id);
 
 CREATE INDEX ix_traffic_query_stats_project_id ON public.traffic_query_stats USING btree (project_id);
 
-CREATE INDEX ix_traffic_query_stats_snapshot_id ON public.traffic_query_stats USING btree (snapshot_id);
-
 CREATE INDEX ix_traffic_query_stats_workspace_id ON public.traffic_query_stats USING btree (workspace_id);
-
-CREATE INDEX ix_traffic_snapshots_project_id ON public.traffic_snapshots USING btree (project_id);
-
-CREATE INDEX ix_traffic_snapshots_workspace_id ON public.traffic_snapshots USING btree (workspace_id);
 
 CREATE INDEX ix_unintended_domains_project_id ON public.unintended_domains USING btree (project_id);
 
 CREATE INDEX ix_usage_windows_expires_at ON public.usage_windows USING btree (expires_at);
-
-CREATE INDEX ix_user_identities_user_id ON public.user_identities USING btree (user_id);
 
 CREATE UNIQUE INDEX ix_users_email ON public.users USING btree (email);
 

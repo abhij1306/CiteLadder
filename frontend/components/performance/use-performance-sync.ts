@@ -9,7 +9,8 @@ import { integrationsApi, type IntegrationSyncRun } from '@/lib/api/integrations
 import { performanceApi, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
 import { queryKeys } from '@/lib/api/query-keys';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { isSucceededSyncRun, isSyncInFlight, SYNC_RUN_POLL_MS } from '@/lib/integrations/sync-runs';
+import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
+import { isSucceededSyncRun, isSyncInFlight } from '@/lib/integrations/sync-runs';
 
 /**
  * "Sync now" for the Performance surface: enqueue one integrations run per
