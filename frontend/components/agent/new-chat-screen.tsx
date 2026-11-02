@@ -56,7 +56,7 @@ export function NewChatScreen() {
       searchParams={searchParams}
     />
   ) : (
-    <ListScreen measure="workflow">
+    <ListScreen>
       <ProjectRequiredState />
     </ListScreen>
   );
@@ -109,7 +109,6 @@ function NewChat({
 
   return (
     <ListScreen
-      measure="workflow"
       // Fill the viewport below the shell chrome so the composer sits at the
       // bottom of a short thread. Kept identical in chat- and new-chat-screen.
       fill

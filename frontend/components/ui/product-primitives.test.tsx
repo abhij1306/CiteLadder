@@ -340,6 +340,21 @@ describe('QueryState', () => {
     expect(onRetry).toHaveBeenCalledOnce();
   });
 
+  it('keeps a shown spinner when the next owner of the same wait takes over', async () => {
+    const { rerender } = render(<QueryState key="shell" kind="loading" label="Loading shell…" />);
+    expect(await screen.findByRole('status', { name: 'Loading shell…' })).toBeInTheDocument();
+
+    // A different owner's box (a fresh mount) continues the visible wait at once.
+    rerender(<QueryState key="page" kind="loading" label="Loading page…" />);
+    expect(screen.getByRole('status', { name: 'Loading page…' })).toBeInTheDocument();
+
+    // A wait that starts with nothing showing is still held back.
+    rerender(<p>Loaded</p>);
+    rerender(<QueryState key="section" kind="loading" label="Loading section…" />);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(await screen.findByRole('status', { name: 'Loading section…' })).toBeInTheDocument();
+  });
+
   it('states a first-use absence with its heading and one action', () => {
     render(
       <QueryState

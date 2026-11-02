@@ -1,6 +1,7 @@
-import { lazy, Suspense, type ComponentType } from 'react';
+import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
 import { redirect, type RouteObject } from 'react-router-dom';
 
+import { RouteLoadingScreen } from '@/components/layout/page-shell';
 import { ShellFallback } from '@/components/layout/shell-fallback';
 import { QueryState } from '@/components/ui/query-state';
 import { bootstrapPrivateRoutes } from '@/lib/project/bootstrap-loader';
@@ -11,11 +12,14 @@ import { ApplicationRouteLayout, PrivateRouteLayout } from './private-routes';
 /**
  * Begin the route download at matching time, alongside session bootstrap, or
  * earlier on navigation intent. The loader never waits for it; Suspense owns
- * only the route content pane.
+ * only the route content pane. Inside the application shell its fallback is
+ * the route's own loading frame (identity band + loading box), not a bare
+ * pane; the flow routes outside the shell (sign-in, setup) keep the box alone.
  */
 function productRoute(
   path: string,
   importRoute: () => Promise<{ default: ComponentType }>,
+  fallback: ReactNode = <QueryState kind="loading" />,
 ): RouteObject {
   let module: ReturnType<typeof importRoute> | undefined;
   const load = () => (module ??= importRoute());
@@ -29,116 +33,124 @@ function productRoute(
       return null;
     },
     element: (
-      <Suspense fallback={<QueryState kind="loading" />}>
+      <Suspense fallback={fallback}>
         <Screen />
       </Suspense>
     ),
   };
 }
 
+/** A route drawn inside the application shell, whose wait is its page's loading frame. */
+function screenRoute(
+  path: string,
+  importRoute: () => Promise<{ default: ComponentType }>,
+): RouteObject {
+  return productRoute(path, importRoute, <RouteLoadingScreen />);
+}
+
 /** Screens rendered inside the application shell. */
 const screenRoutes: RouteObject[] = [
-  productRoute('/projects', () =>
+  screenRoute('/projects', () =>
     import('@/components/projects/projects-screen').then(({ ProjectsScreen }) => ({
       default: ProjectsScreen,
     })),
   ),
-  productRoute('/site', () =>
+  screenRoute('/site', () =>
     import('./product-routes-site-issues').then(({ WebsiteRoute }) => ({
       default: WebsiteRoute,
     })),
   ),
-  productRoute('/site/crawls/:crawlId/pages/:siteUrlId', () =>
+  screenRoute('/site/crawls/:crawlId/pages/:siteUrlId', () =>
     import('./product-routes-site-issues').then(({ WebsitePageDetailRoute }) => ({
       default: WebsitePageDetailRoute,
     })),
   ),
-  productRoute('/issues', () =>
+  screenRoute('/issues', () =>
     import('./product-routes-site-issues').then(({ IssuesRoute }) => ({
       default: IssuesRoute,
     })),
   ),
-  productRoute('/demand', () =>
+  screenRoute('/demand', () =>
     import('./product-routes-demand-performance').then(({ DemandRoute }) => ({
       default: DemandRoute,
     })),
   ),
-  productRoute('/search-intelligence', () =>
+  screenRoute('/search-intelligence', () =>
     import('./product-routes-demand-performance').then(({ SearchIntelligenceRoute }) => ({
       default: SearchIntelligenceRoute,
     })),
   ),
-  productRoute('/performance', () =>
+  screenRoute('/performance', () =>
     import('./product-routes-demand-performance').then(({ PerformanceRoute }) => ({
       default: PerformanceRoute,
     })),
   ),
-  productRoute('/agent', () =>
+  screenRoute('/agent', () =>
     import('./product-routes-agent').then(({ NewChatRouteElement }) => ({
       default: NewChatRouteElement,
     })),
   ),
-  productRoute('/agent/chats/:chatId', () =>
+  screenRoute('/agent/chats/:chatId', () =>
     import('./product-routes-agent').then(({ ChatRouteElement }) => ({
       default: ChatRouteElement,
     })),
   ),
-  productRoute('/agent/actions', () =>
+  screenRoute('/agent/actions', () =>
     import('./product-routes-agent').then(({ ActionsRouteElement }) => ({
       default: ActionsRouteElement,
     })),
   ),
-  productRoute('/agent/actions/:actionId', () =>
+  screenRoute('/agent/actions/:actionId', () =>
     import('./product-routes-agent').then(({ ActionDetailRouteElement }) => ({
       default: ActionDetailRouteElement,
     })),
   ),
-  productRoute('/agent/skills', () =>
+  screenRoute('/agent/skills', () =>
     import('./product-routes-agent').then(({ SkillsRouteElement }) => ({
       default: SkillsRouteElement,
     })),
   ),
-  productRoute('/agent/context', () =>
+  screenRoute('/agent/context', () =>
     import('./product-routes-agent').then(({ ContextRouteElement }) => ({
       default: ContextRouteElement,
     })),
   ),
-  productRoute('/visibility', () =>
+  screenRoute('/visibility', () =>
     import('./product-routes-visibility-runs').then(({ VisibilityRouteElement }) => ({
       default: VisibilityRouteElement,
     })),
   ),
-  productRoute('/runs', () =>
+  screenRoute('/runs', () =>
     import('./product-routes-visibility-runs').then(({ RunsRouteElement }) => ({
       default: RunsRouteElement,
     })),
   ),
-  productRoute('/runs/:runId', () =>
+  screenRoute('/runs/:runId', () =>
     import('./product-routes-visibility-runs').then(({ RunDetailRouteElement }) => ({
       default: RunDetailRouteElement,
     })),
   ),
-  productRoute('/prompts', () =>
+  screenRoute('/prompts', () =>
     import('./product-routes-prompts-commerce-traffic').then(({ PromptsRouteElement }) => ({
       default: PromptsRouteElement,
     })),
   ),
-  productRoute('/prompts/:promptId', () =>
+  screenRoute('/prompts/:promptId', () =>
     import('./product-routes-prompts-commerce-traffic').then(({ PromptDetailRouteElement }) => ({
       default: PromptDetailRouteElement,
     })),
   ),
-  productRoute('/products', () =>
+  screenRoute('/products', () =>
     import('./product-routes-prompts-commerce-traffic').then(({ ProductsRouteElement }) => ({
       default: ProductsRouteElement,
     })),
   ),
-  productRoute('/ai-traffic', () =>
+  screenRoute('/ai-traffic', () =>
     import('./product-routes-prompts-commerce-traffic').then(({ AiTrafficRouteElement }) => ({
       default: AiTrafficRouteElement,
     })),
   ),
-  productRoute('/settings', () =>
+  screenRoute('/settings', () =>
     import('./product-routes-settings').then(({ SettingsRouteElement }) => ({
       default: SettingsRouteElement,
     })),

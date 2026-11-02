@@ -43,7 +43,7 @@ export function SkillsScreen() {
   else body = <SkillGroups skills={query.data.skills} />;
 
   return (
-    <ListScreen measure="workflow">
+    <ListScreen>
       <Stack gap="section">
         {/* The template has no description slot, so the route's intro is the body's first child. */}
         <p className={textRole('body', 'max-w-[72ch]')}>

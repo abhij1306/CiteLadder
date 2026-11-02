@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Settings2, Unplug } from 'lucide-react';
 
-import { ListScreen } from '@/components/layout/page-shell';
+import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { SearchIntelligenceCitationMatcher } from '@/components/search-intelligence/search-intelligence-citation-matcher';
 import { SearchIntelligenceCollection } from './search-intelligence-collection';
 import { SearchIntelligenceReviewDrawer } from '@/components/search-intelligence/search-intelligence-review-drawer';
@@ -38,6 +38,7 @@ const TABS = [
   { value: 'backlinks', label: 'Backlinks' },
 ] as const;
 type Tab = (typeof TABS)[number]['value'];
+const SEARCH_INTELLIGENCE_TABS = { items: TABS, ariaLabel: 'Search Intelligence views' };
 const TAB_CODEC = stringUrlCodec(
   TABS.map(({ value }) => value),
   'overview' as Tab,
@@ -157,11 +158,15 @@ export function SearchIntelligencePage() {
     setComparison(dataset);
     setTab('competitors');
   };
+  // The first load draws the tab row and the control band the loaded page
+  // has, so the work starts on the same line before and after.
   if (readiness.isPending)
     return (
-      <ListScreen>
-        <QueryState kind="loading" label="Loading Search Intelligence…" />
-      </ListScreen>
+      <TabsRoot value={tab} onValueChange={setTab}>
+        <ListScreen tabs={SEARCH_INTELLIGENCE_TABS} controls={RESERVED_CONTROLS}>
+          <QueryState kind="loading" label="Loading Search Intelligence…" />
+        </ListScreen>
+      </TabsRoot>
     );
   if (readiness.isError)
     return (
@@ -174,7 +179,7 @@ export function SearchIntelligencePage() {
       </ListScreen>
     );
   const data = readiness.data;
-  const tabs = { items: TABS, ariaLabel: 'Search Intelligence views' };
+  const tabs = SEARCH_INTELLIGENCE_TABS;
   if (!data.connected && !data.datasets.length)
     return (
       <TabsRoot value={tab} onValueChange={setTab}>

@@ -38,7 +38,7 @@ import type { PendingDelete } from './confirm-delete-dialog';
 import { PromptLibraryDialogs } from './prompt-library-dialogs';
 import { PromptTable } from './prompt-table';
 import { useLatestPromptMeasurements } from './use-latest-prompt-measurements';
-import { ListScreen } from '@/components/layout/page-shell';
+import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { ResizableSplitPane } from '@/components/ui/split-pane';
 
@@ -348,9 +348,11 @@ export function PromptLibrary({
     libraryBody = <PromptEmptyState onGenerate={() => openBuilder('business')} onAdd={openAdd} />;
   }
 
+  // The library's search and filters ride a control band once it loads; the
+  // first load holds that band so the table starts where the box stood.
   if (isLoading) {
     return (
-      <ListScreen>
+      <ListScreen controls={RESERVED_CONTROLS}>
         <QueryState kind="loading" />
       </ListScreen>
     );

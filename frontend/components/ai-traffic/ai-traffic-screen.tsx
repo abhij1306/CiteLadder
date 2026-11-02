@@ -8,7 +8,7 @@ import {
   useTrafficData,
   type TrafficDataTab,
 } from '@/lib/ai-traffic/use-traffic-data';
-import { ListScreen } from '@/components/layout/page-shell';
+import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { TabsRoot, TabPanel, type TabRowProps } from '@/components/ui/tabs';
@@ -59,12 +59,21 @@ export function AiTrafficScreen() {
     ariaLabel: 'AI Traffic views',
     items: crawlAvailable === false ? TRAFFIC_TABS.filter((t) => !t.crawlOnly) : TRAFFIC_TABS,
   };
-  // The default view waits for crawl availability; the tab band needs a selected tab.
+  // The default view waits for crawl availability. The wait still draws the
+  // tab row (nothing selected yet) and the control band, so the loaded view's
+  // bands do not push its work down when they arrive.
   if (tab === null)
     return (
-      <ListScreen>
-        <QueryState kind="loading" label="Loading AI Traffic…" />
-      </ListScreen>
+      <TabsRoot<TrafficTab | ''>
+        value=""
+        onValueChange={(next) => {
+          if (next) setTab(next);
+        }}
+      >
+        <ListScreen tabs={tabs} controls={RESERVED_CONTROLS}>
+          <QueryState kind="loading" label="Loading AI Traffic…" />
+        </ListScreen>
+      </TabsRoot>
     );
   return (
     <TabsRoot value={tab} onValueChange={setTab}>

@@ -95,8 +95,10 @@ describe('AI Traffic opening requests', () => {
     await waitFor(() =>
       expect(asked.sort()).toEqual(['insights ?range=30d', 'overview ?range=30d']),
     );
-    // The tabs themselves still wait for availability.
-    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument();
+    // The loading frame draws the tab row, but no view is selected until
+    // availability is known.
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.queryByText('Referral coverage is partial')).not.toBeInTheDocument();
 
     answerSources();
     expect(await screen.findByText('Referral coverage is partial')).toBeVisible();
