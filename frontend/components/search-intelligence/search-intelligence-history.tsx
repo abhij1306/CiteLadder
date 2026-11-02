@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Line, LineChart, XAxis, YAxis, Tooltip } from 'recharts';
-import { axisProps, ChartContainer, LegendSwatch } from '@/components/ui/chart';
+import { lazy } from 'react';
+import { ChartContainer, LegendSwatch } from '@/components/ui/chart';
 import { Inline, Stack } from '@/components/ui/layout';
 import { splitPaneClasses } from '@/components/ui/workspace';
 import { QueryState } from '@/components/ui/query-state';
@@ -13,6 +13,20 @@ import {
 } from '@/lib/api/search-intelligence';
 import { searchIntelligenceKeys } from '@/lib/api/query-keys/search-intelligence';
 import { useProjectContext } from '@/lib/project/project-context';
+import type { HistoryRow } from './search-intelligence-history-plot';
+
+// The drawings are fetched when the history is drawn; each plot's box renders
+// at once, so a plot arrives in a space already held.
+const BacklinkTotalPlot = lazy(() =>
+  import('./search-intelligence-history-plot').then(({ BacklinkTotalPlot }) => ({
+    default: BacklinkTotalPlot,
+  })),
+);
+const BacklinkChangesPlot = lazy(() =>
+  import('./search-intelligence-history-plot').then(({ BacklinkChangesPlot }) => ({
+    default: BacklinkChangesPlot,
+  })),
+);
 
 export function SearchIntelligenceHistory({
   dataset,
@@ -72,17 +86,7 @@ export function SearchIntelligenceHistory({
           config={{ backlinks: { label: 'Backlinks', color: 'var(--color-chart-1)' } }}
           description="Saved monthly backlink totals; missing observations break the line."
         >
-          <LineChart data={data}>
-            <XAxis {...axisProps} dataKey="date" tickFormatter={shortMonth} />
-            <YAxis {...axisProps} width={48} tickFormatter={compactCount} />
-            <Tooltip />
-            <Line
-              dataKey="backlinks"
-              stroke="var(--color-backlinks)"
-              connectNulls={false}
-              isAnimationActive={false}
-            />
-          </LineChart>
+          <BacklinkTotalPlot data={data} />
         </ChartContainer>
       </Stack>
       <Stack gap="compact" className="min-w-0 content-start">
@@ -106,38 +110,11 @@ export function SearchIntelligenceHistory({
           }}
           description="Saved monthly new and lost backlinks, shown as separate labelled lines."
         >
-          <LineChart data={data}>
-            <XAxis {...axisProps} dataKey="date" tickFormatter={shortMonth} />
-            <YAxis {...axisProps} width={48} tickFormatter={compactCount} />
-            <Tooltip />
-            <Line
-              name="New backlinks"
-              dataKey="new"
-              stroke="var(--color-new)"
-              connectNulls={false}
-              isAnimationActive={false}
-            />
-            <Line
-              name="Lost backlinks"
-              dataKey="lost"
-              stroke="var(--color-lost)"
-              strokeDasharray="5 3"
-              connectNulls={false}
-              isAnimationActive={false}
-            />
-          </LineChart>
+          <BacklinkChangesPlot data={data} />
         </ChartContainer>
       </Stack>
     </section>
   );
-}
-
-function shortMonth(date: string): string {
-  return `${date.slice(5, 7)}/${date.slice(2, 4)}`;
-}
-
-function compactCount(value: number): string {
-  return Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 0 }).format(value);
 }
 
 function numeric(value: unknown): number | null {
@@ -151,15 +128,11 @@ function validHistoryDate(date: string): boolean {
 }
 
 /** One row per month from the first date's month to the last's; missing months are gaps. */
-function fillMonths(
-  rows: { date: string; backlinks: number | null; new: number | null; lost: number | null }[],
-  firstDate: string,
-  lastDate: string,
-) {
+function fillMonths(rows: HistoryRow[], firstDate: string, lastDate: string): HistoryRow[] {
   const byMonth = new Map(rows.map((row) => [row.date.slice(0, 7), row]));
   const start = new Date(`${firstDate.slice(0, 7)}-01T00:00:00Z`);
   const end = lastDate.slice(0, 7);
-  const result = [];
+  const result: HistoryRow[] = [];
   while (start.toISOString().slice(0, 7) <= end) {
     const month = start.toISOString().slice(0, 7);
     result.push(byMonth.get(month) ?? { date: month, backlinks: null, new: null, lost: null });

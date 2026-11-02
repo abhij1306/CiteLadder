@@ -101,18 +101,40 @@ export default defineConfig(({ command, mode }): ViteUserConfig => {
       target: ['chrome111', 'edge111', 'firefox128', 'safari16.4'],
       rolldownOptions: {
         output: {
-          // Cache stability, not size. These three change on their own release
-          // schedule and nothing here changes them, but they were sharing a
-          // chunk with application code — so editing anything under `lib/api`
-          // invalidated React Router for every returning reader.
-          //
-          // Deliberately only three. More chunks means more requests on a cold
-          // SPA boot, which is the thing this is trying to protect.
-          advancedChunks: {
+          codeSplitting: {
             groups: [
-              { name: 'vendor-react', test: /node_modules\/(react|react-dom|scheduler)\// },
-              { name: 'vendor-router', test: /node_modules\/react-router/ },
-              { name: 'vendor-zod', test: /node_modules\/zod\// },
+              // Cache stability, not size. These three change on their own
+              // release schedule and nothing here changes them, but they were
+              // sharing a chunk with application code — so editing anything
+              // under `lib/api` invalidated React Router for every returning
+              // reader. Highest priority, so no group below can absorb them.
+              {
+                name: 'vendor-react',
+                test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/,
+                priority: 30,
+              },
+              { name: 'vendor-router', test: /node_modules[\\/]react-router/, priority: 30 },
+              { name: 'vendor-zod', test: /node_modules[\\/]zod[\\/]/, priority: 30 },
+              // Everything else the entry reaches statically, as one file. The
+              // boot path is paid in full on every cold load either way; left
+              // to automatic splitting it arrived as ~38 sub-5 KB requests.
+              { name: 'app-boot', tags: ['$initial'], priority: 20 },
+              // Shared atoms the routes reach lazily, grouped by the set of
+              // routes that use them so no route downloads another's atoms;
+              // only sub-2 KB slivers merge into a neighbour. A single `ui`
+              // chunk cut more files but added ~60 KB to every route, and
+              // `experimentalInlineCommonChunks` halved the files but forced
+              // strict execution order and grew boot and every route.
+              // `packages/contracts` stays ungrouped: one schema chunk would put
+              // every domain's schemas in every route.
+              {
+                name: 'ui',
+                test: /[\\/]components[\\/]ui[\\/]/,
+                minShareCount: 2,
+                priority: 10,
+                entriesAware: true,
+                entriesAwareMergeThreshold: 2 * 1024,
+              },
             ],
           },
         },

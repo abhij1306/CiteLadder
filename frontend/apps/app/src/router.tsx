@@ -70,19 +70,21 @@ const screenRoutes: RouteObject[] = [
       default: IssuesRoute,
     })),
   ),
+  // One download per screen: a shared module for unrelated screens made
+  // `/demand` fetch Performance and its chart library.
   screenRoute('/demand', () =>
-    import('./product-routes-demand-performance').then(({ DemandRoute }) => ({
-      default: DemandRoute,
+    import('@/components/demand/demand-projection').then(({ DemandProjection }) => ({
+      default: DemandProjection,
     })),
   ),
   screenRoute('/search-intelligence', () =>
-    import('./product-routes-demand-performance').then(({ SearchIntelligenceRoute }) => ({
-      default: SearchIntelligenceRoute,
-    })),
+    import('@/components/search-intelligence/search-intelligence-page').then(
+      ({ SearchIntelligencePage }) => ({ default: SearchIntelligencePage }),
+    ),
   ),
   screenRoute('/performance', () =>
-    import('./product-routes-demand-performance').then(({ PerformanceRoute }) => ({
-      default: PerformanceRoute,
+    import('@/components/performance/performance-screen').then(({ PerformanceScreen }) => ({
+      default: PerformanceScreen,
     })),
   ),
   screenRoute('/agent', () =>
@@ -134,24 +136,24 @@ const screenRoutes: RouteObject[] = [
     })),
   ),
   screenRoute('/prompts', () =>
-    import('./product-routes-prompts-commerce-traffic').then(({ PromptsRouteElement }) => ({
-      default: PromptsRouteElement,
+    import('@/components/prompts/prompts-route-content').then(({ PromptsRouteContent }) => ({
+      default: PromptsRouteContent,
     })),
   ),
   screenRoute('/prompts/:promptId', () =>
-    import('./product-routes-prompts-commerce-traffic').then(({ PromptDetailRouteElement }) => ({
-      default: PromptDetailRouteElement,
+    import('@/components/prompts/prompt-detail-screen').then(({ PromptDetailScreen }) => ({
+      default: PromptDetailScreen,
     })),
   ),
   screenRoute('/products', () =>
-    import('./product-routes-prompts-commerce-traffic').then(({ ProductsRouteElement }) => ({
-      default: ProductsRouteElement,
+    import('@/components/products/products-route-content').then(({ ProductsRouteContent }) => ({
+      default: ProductsRouteContent,
     })),
   ),
   screenRoute('/ai-traffic', () =>
-    import('./product-routes-prompts-commerce-traffic').then(({ AiTrafficRouteElement }) => ({
-      default: AiTrafficRouteElement,
-    })),
+    import('@/components/ai-traffic/ai-traffic-route-content').then(
+      ({ AiTrafficRouteContent }) => ({ default: AiTrafficRouteContent }),
+    ),
   ),
   screenRoute('/settings', () =>
     import('./product-routes-settings').then(({ SettingsRouteElement }) => ({
