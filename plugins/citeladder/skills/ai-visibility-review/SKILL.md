@@ -12,8 +12,11 @@ schedule monitoring, collect new data or save a deliverable.
    named; ask if several match. An ID never authorizes access by itself.
 2. Call `read_visibility_overview` for the project (with any requested engine
    or cohort). Resolve Latest once and reuse the returned `audit_id` in every
-   later read. If no audit exists, say so and point the user to CiteLadder's
-   Visibility screen; installing the plugin does not run an audit.
+   later read. If no audit exists (`no_completed_run`), say so and point the
+   user to CiteLadder's Visibility screen; installing the plugin does not run
+   an audit. `metrics_pending` is different: the latest audit finished and its
+   results are still being written, so say they are being prepared and to try
+   again shortly.
 3. Call `read_visibility_sources` for the same audit, engine and cohort; read at
    most two pages unless asked. For one source, use `level: url` with `domain`.
 4. Call `read_visibility_results` for the same audit, filtered by `domain`,

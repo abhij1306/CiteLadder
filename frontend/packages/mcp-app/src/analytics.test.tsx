@@ -16,7 +16,7 @@ const result = (project_id = project) => ({
   surface: 'citeladder_analytics',
   selection: { project_id, audit_id: audit, view: 'overview' },
   links,
-  evidence: { state: 'unavailable', reason: 'no_completed_measurement' },
+  evidence: { state: 'unavailable', reason: 'no_completed_run' },
 });
 const answerId = '44444444-4444-4444-8444-444444444444';
 const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-/u;
@@ -516,6 +516,31 @@ describe('CiteLadder MCP App', () => {
     } as never);
     await user.click(screen.getByRole('button', { name: 'Refresh connection' }));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+  it('tells results still being written apart from no run and from a failed read', () => {
+    const shown = (view: 'overview' | 'sources') => {
+      const controller = createController({
+        call: vi.fn(),
+        context: vi.fn(async () => undefined),
+      });
+      controller.receive({
+        ...result(),
+        // Sources without a resolved run carry the overview's reason.
+        selection: { project_id: project, view },
+        evidence: { state: 'unavailable', reason: 'metrics_pending' },
+      });
+      const { unmount } = render(<Analytics controller={controller} />);
+      const text = screen.getByText(/still being prepared/).textContent;
+      const alerted = screen.queryByRole('alert') !== null;
+      unmount();
+      return [text, alerted];
+    };
+    const pending =
+      'The latest measurement has finished and its results are still being prepared. Check back shortly.';
+    expect([shown('overview'), shown('sources')]).toEqual([
+      [pending, false],
+      [pending, false],
+    ]);
   });
   it('uses concrete source drill-down IDs and validates untrusted model selections', async () => {
     const call = vi.fn(async () => ({ items: [] }));

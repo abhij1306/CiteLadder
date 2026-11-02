@@ -1,5 +1,4 @@
 import { useState, useSyncExternalStore } from 'react';
-import { z } from 'zod';
 import { visibilitySchema } from '@citeladder/contracts/visibility';
 import { visibilityTrendListSchema } from '@citeladder/contracts/visibility-trends';
 import type { AnalyticsSelection } from '@citeladder/contracts/mcp-app';
@@ -21,7 +20,7 @@ import { Label, Metric, textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { appPolicy } from './config';
 import type { AppState, Controller } from './controller';
-import { SourcesView, SiteHealthView } from './evidence-views';
+import { notYetMeasuredMessage, SourcesView, SiteHealthView } from './evidence-views';
 import { day, moment, rate } from './format';
 
 const views = [
@@ -42,14 +41,10 @@ function Overview({
 }>) {
   const parsed = visibilitySchema.safeParse(data);
   if (!parsed.success) {
-    const unavailable = z
-      .object({ state: z.literal('unavailable'), reason: z.literal('no_completed_measurement') })
-      .safeParse(data);
+    const missing = notYetMeasuredMessage(data);
     return (
-      <p role={unavailable.success ? undefined : 'alert'} className={textRole('body')}>
-        {unavailable.success
-          ? 'No completed measurement. Run a measurement in CiteLadder, then return.'
-          : 'Visibility evidence is unavailable. Retry or reconnect.'}
+      <p role={missing ? undefined : 'alert'} className={textRole('body')}>
+        {missing ?? 'Visibility evidence is unavailable. Retry or reconnect.'}
       </p>
     );
   }
