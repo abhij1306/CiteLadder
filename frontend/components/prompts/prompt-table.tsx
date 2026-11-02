@@ -187,7 +187,7 @@ function promptColumns(measured: boolean): DataTableColumn[] {
     ...(measured ? MEASURED_COLUMNS : []),
     // A switch, and the "Not measured" badge beside it after a downgrade.
     { key: 'enabled', label: 'Enabled', width: 'category' },
-    { key: 'actions', label: 'Actions', width: 'action', numeric: true },
+    { key: 'actions', label: 'Actions', width: 'action', trailing: true },
   ];
 }
 

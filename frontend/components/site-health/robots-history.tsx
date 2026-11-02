@@ -4,7 +4,7 @@ import type { robotsHistoryPageSchema } from '@citeladder/contracts/site-health'
 import type { z } from 'zod';
 import { FileText } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { DisplayTime } from '@/components/ui/display-time';
+import { TableTime } from '@/components/ui/display-time';
 import { Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
 import { QueryState } from '@/components/ui/query-state';
@@ -63,7 +63,7 @@ export function RobotsHistory({
         {page.items.map((item) => (
           <TableRow key={item.crawl_id}>
             <TableCell numeric>
-              <DisplayTime value={item.robots.observed_at} />
+              <TableTime value={item.robots.observed_at} />
             </TableCell>
             <TableCell>{robotsStatusLabels[item.robots.status]}</TableCell>
             <TableCell>

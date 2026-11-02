@@ -82,5 +82,5 @@ it('keeps inventory, zero, partial values and distinct unavailable reasons reada
   expect(
     within(second).getByRole('button', { name: '5xx unavailable' }).closest('td'),
   ).toHaveTextContent('0 / –');
-  expect(screen.getByText(/Crawl coverage unavailable · 200 known pages/)).toBeVisible();
+  expect(screen.getByText(/Crawl coverage unknown · 200 known pages/)).toBeVisible();
 });

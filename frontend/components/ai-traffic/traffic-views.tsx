@@ -18,7 +18,7 @@ import { CalendarX } from 'lucide-react';
 import { TabPanel } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Stack } from '@/components/ui/layout';
-import { DisplayTime } from '@/components/ui/display-time';
+import { TableTime } from '@/components/ui/display-time';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TableRow, TableCell, TableCellLines } from '@/components/ui/table';
 import { CrawlLogConnections } from './crawl-log-connections';
@@ -126,7 +126,7 @@ export function TrafficCrawlers({
                 </Button>
               </TableCell>
               <TableCell numeric>
-                <DisplayTime value={b.last_seen} />
+                <TableTime value={b.last_seen} />
               </TableCell>
               <TableCell>
                 <CellLines
@@ -172,7 +172,7 @@ export function TrafficActivity({
           {data.items.map((r) => (
             <TableRow key={r.id}>
               <TableCell numeric>
-                <DisplayTime value={r.occurred_at} />
+                <TableTime value={r.occurred_at} />
               </TableCell>
               <TableCell>
                 {catalog?.bots.find((b) => b.bot_id === r.bot_id)?.label ?? r.bot_id}

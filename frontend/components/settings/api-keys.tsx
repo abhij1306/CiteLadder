@@ -9,7 +9,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DateField } from '@/components/ui/date-field';
 import { Dialog } from '@/components/ui/dialog';
-import { DisplayTime } from '@/components/ui/display-time';
+import { DisplayTime, TableTime } from '@/components/ui/display-time';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
@@ -19,7 +19,7 @@ import { TagGroup } from '@/components/ui/tag';
 import { textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { ClampText, TableActionsCell, TableCell, TableRow } from '@/components/ui/table';
 import type { ApiKey, ApiKeyCreated, ApiKeyScope } from '@citeladder/contracts/api-keys';
 import { apiKeysApi } from '@/lib/api/api-keys';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -91,15 +91,15 @@ function KeyRow({
         <ClampText lines={1}>{projects}</ClampText>
       </TableCell>
       <TableCell>
-        {apiKey.last_used_at ? <DisplayTime value={apiKey.last_used_at} /> : 'Not used yet'}
+        <TableTime value={apiKey.last_used_at} fallback="Not used yet" />
       </TableCell>
-      <TableCell numeric>
+      <TableActionsCell>
         {apiKey.state === 'active' ? (
           <Button variant="secondary" onClick={onRevoke}>
             Revoke
           </Button>
         ) : null}
-      </TableCell>
+      </TableActionsCell>
     </TableRow>
   );
 }
@@ -109,13 +109,7 @@ const KEY_COLUMNS: readonly DataTableColumn[] = [
   { key: 'scopes', label: 'Access', width: 'name' },
   { key: 'projects', label: 'Projects', width: 'status' },
   { key: 'used', label: 'Last used', width: 'date' },
-  {
-    key: 'revoke',
-    label: 'Revoke',
-    width: 'action',
-    numeric: true,
-    hideLabel: true,
-  },
+  { key: 'revoke', label: 'Revoke', width: 'action', trailing: true, hideLabel: true },
 ];
 
 function CreateKeyDialog({

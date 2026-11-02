@@ -67,8 +67,10 @@ export type DataTableColumn = Readonly<{
   key: string;
   label: string;
   width?: DataTableColumnWidth;
-  /** Right-aligned figures, digits in the figure face (or a trailing control), header included. */
+  /** Centred figures, digits in the figure face, header included. */
   numeric?: boolean;
+  /** Trailing row controls (`TableActionsCell`): the header ends on their edge. */
+  trailing?: boolean;
   /** Keep the header for assistive technology only (an actions column). */
   hideLabel?: boolean;
   /** A sortable column: the header becomes the sort button. */
@@ -443,6 +445,7 @@ function ColumnHead({ column }: Readonly<{ column: DataTableColumn }>) {
   return (
     <TableHead
       numeric={column.numeric}
+      trailing={column.trailing}
       desktopOnly={column.desktopOnly}
       className="whitespace-normal"
     >

@@ -27,9 +27,9 @@ import { cn } from '@/lib/utils';
  *    lines — `ClampText` cuts it there and moves the rest into a tooltip, so
  *    a row is either one line or two, never a three-line outlier
  *  - --text-sm cells, subtle ROW hairlines only
- *  - data columns are right-aligned and tabular, so digits line up place by
- *    place; text columns stay left. The header ends on its values' edge, so a
- *    column reads as one block rather than a label floating off its numbers
+ *  - data columns are centred and tabular, so digits line up place by place
+ *    under a header centred on the same axis (owner, 2026-11-01); text
+ *    columns stay left
  *  - hover uses the surface's hover tint; `highlight` uses the distinct
  *    selected tint for the user's own row
  * The wrapper is scroll-capable so the sticky header pins on vertical scroll;
@@ -181,9 +181,16 @@ export function TableHead({
   children,
   className,
   numeric,
+  trailing,
   desktopOnly,
   ...props
-}: Readonly<ThHTMLAttributes<HTMLTableCellElement> & CellOptions>) {
+}: Readonly<
+  ThHTMLAttributes<HTMLTableCellElement> &
+    CellOptions & {
+      /** Heads a `TableActionsCell` column: ends on the controls' edge. */
+      trailing?: boolean;
+    }
+>) {
   return (
     <th
       {...props}
@@ -194,7 +201,8 @@ export function TableHead({
         // tinted header matched the selected-row tint. Its rule separates it,
         // and the opaque fill keeps a sticky header over scrolled rows.
         'border-border-subtle bg-panel sticky top-0 z-10 h-[var(--table-header-height)] border-b px-[var(--table-cell-padding-x)] text-left align-middle',
-        numeric && 'tabular-nums text-right',
+        numeric && 'tabular-nums text-center',
+        trailing && 'text-right',
         desktopOnly && desktopOnlyClasses,
         className,
       )}
@@ -290,7 +298,7 @@ const cellClasses = ({ numeric, desktopOnly }: CellOptions) =>
     'border-b [tr:last-child>&]:border-b-0',
     // A value never wraps: "Not measured" split over two lines read as two values.
     // Its digits take the figure face, so a column lines up place by place.
-    numeric && 'whitespace-nowrap font-numeric text-right',
+    numeric && 'whitespace-nowrap font-numeric text-center',
     desktopOnly && desktopOnlyClasses,
   );
 

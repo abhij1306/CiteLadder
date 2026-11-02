@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Alert } from '@/components/ui/alert';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { IntegrationSettings } from '@/components/settings/integration-settings';
 import { McpConnections } from '@/components/settings/mcp-connections';
@@ -201,10 +202,17 @@ export function SettingsScreen() {
         }}
       >
         <TabPanel value="general" forceMount className="focus-ring data-[state=inactive]:hidden">
-          <SettingsSections>
-            <TimeZoneSetting />
-            <ProjectDeletionControls />
-          </SettingsSections>
+          {/* One ruled list on one card, as the Providers tab is: every
+              section names itself on the left and starts its controls at the
+              same edge on the right, so the page reads top to bottom without
+              the ragged gaps of two loose columns or text set on the bare
+              page. */}
+          <Card>
+            <SettingsSections>
+              <TimeZoneSetting />
+              <ProjectDeletionControls />
+            </SettingsSections>
+          </Card>
         </TabPanel>
 
         <TabPanel value="providers" forceMount className="focus-ring data-[state=inactive]:hidden">
