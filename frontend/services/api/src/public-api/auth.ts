@@ -67,7 +67,12 @@ export function apiKeyAuth(
       ),
     };
     requireCapability(actor, operation.capability, operation.scope);
-    const projectId = await pathProject(db, member, c.req.param('project_id'), key.project_ids);
+    const projectId = await pathProject(
+      db,
+      key.workspace_id,
+      c.req.param('project_id'),
+      key.project_ids,
+    );
     if (projectId !== null)
       await requirePathOwnership(db, key.workspace_id, projectId, c.req.param());
     c.set('actor', actor);
@@ -81,13 +86,13 @@ export function apiKeyAuth(
 /** The path's project, which must be in the key's workspace and allowlist (else 404). */
 async function pathProject(
   db: Database,
-  workspace: WorkspaceContext,
+  workspaceId: string,
   raw: string | undefined,
   allowlist: readonly string[] | null,
 ): Promise<string | null> {
   if (raw === undefined) return null;
   const projectId = pathUuid(raw, 'project_id');
   if (allowlist !== null && !allowlist.includes(projectId)) throw notFound('Project');
-  await requireProject(db, workspace, projectId);
+  await requireProject(db, { workspaceId, projectId });
   return projectId;
 }

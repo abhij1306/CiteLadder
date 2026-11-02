@@ -19,6 +19,7 @@ import { isUniqueViolation } from '../db/errors.ts';
 import { record, strings } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
+import { requireProject } from '../projects/access.ts';
 import { topicLinks } from './generation-plan.ts';
 import { acquireProjectLock } from './locks.ts';
 import { topicView, type TopicRow, type TopicView } from './views.ts';
@@ -67,16 +68,6 @@ export const topicConfirm = z.object({
   delete: z.array(z.uuid()).max(P.create_batch_max).default([]),
 });
 export type TopicConfirm = z.infer<typeof topicConfirm>;
-
-async function requireProject(db: Kysely<DB>, workspaceId: string, projectId: string) {
-  const project = await db
-    .selectFrom('projects')
-    .select('id')
-    .where('id', '=', projectId)
-    .where('workspace_id', '=', workspaceId)
-    .executeTakeFirst();
-  if (project === undefined) throw notFound('Project');
-}
 
 async function scopedTopic(
   db: Kysely<DB>,
@@ -156,7 +147,7 @@ export async function listTopics(
   workspaceId: string,
   projectId: string,
 ): Promise<TopicView[]> {
-  await requireProject(db, workspaceId, projectId);
+  await requireProject(db, { workspaceId, projectId });
   const [topics, counts] = await Promise.all([
     db
       .selectFrom('topics')
@@ -178,7 +169,7 @@ export async function createTopic(
 ): Promise<TopicView> {
   return writing(() =>
     inTransaction(db, async (trx) => {
-      await requireProject(trx, workspaceId, projectId);
+      await requireProject(trx, { workspaceId, projectId });
       await acquireProjectLock(trx, projectId);
       const parentId = input.parent_id ?? null;
       if (parentId !== null) await validateParent(trx, projectId, parentId, null);
@@ -304,7 +295,7 @@ export async function confirmTopics(
 ): Promise<TopicView[]> {
   await writing(() =>
     inTransaction(db, async (trx) => {
-      await requireProject(trx, workspaceId, projectId);
+      await requireProject(trx, { workspaceId, projectId });
       await acquireProjectLock(trx, projectId);
       const owned = new Set(
         (

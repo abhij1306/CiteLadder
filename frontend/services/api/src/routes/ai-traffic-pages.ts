@@ -8,7 +8,6 @@ import { defineGetRoute } from './define.ts';
 import { pagesRead, urlRead } from '../crawl-logs/pages.ts';
 import { insightsRead } from '../crawl-logs/insights.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
-import { requireProject } from '../projects/access.ts';
 import { tableCsv } from '../http/table-export.ts';
 import { ApiError } from '../errors.ts';
 
@@ -35,7 +34,6 @@ export const trafficPageRoutes = [
     path: root + '/pages',
     response: aiTrafficPagesSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return pagesRead(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -49,7 +47,6 @@ export const trafficPageRoutes = [
     raw: true,
     response: z.string().meta({ format: 'binary' }),
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
       const items: Record<string, unknown>[] = [],
         limit = crawlLogs.max_page_size;
@@ -114,7 +111,6 @@ export const trafficPageRoutes = [
     },
     response: aiTrafficUrlSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return urlRead(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -128,7 +124,6 @@ export const trafficPageRoutes = [
     path: root + '/insights',
     response: aiTrafficInsightsSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return insightsRead(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },

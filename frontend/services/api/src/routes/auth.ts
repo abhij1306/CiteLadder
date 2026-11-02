@@ -12,7 +12,8 @@ export const authRoutes = [
     async handle({ c, db }) {
       const user = await db
         .selectFrom('users')
-        .selectAll()
+        // Only what the view shows: the password hash never leaves the database.
+        .select(['id', 'email', 'role', 'is_active', 'created_at', 'updated_at'])
         .where('id', '=', c.get('user').id)
         .executeTakeFirstOrThrow();
       return {

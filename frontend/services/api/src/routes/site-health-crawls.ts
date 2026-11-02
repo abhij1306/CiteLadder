@@ -37,6 +37,8 @@ import {
 import { defineGetRoute, definePostRoute, definePutRoute } from './define.ts';
 
 const family = 'site-health-crawls';
+/** Monitored-URL routes act on the path project inside the active workspace (else 404). */
+const projectFamily = { family, authorize: 'active-project' } as const;
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid };
 const projectRoot = '/api/v1/projects/{project_id}/monitored-urls';
@@ -197,7 +199,7 @@ export const siteHealthCrawlRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: projectRoot,
     params: { path: projectPath, query: {} },
     response: monitoredUrlsResponseSchema,
@@ -205,7 +207,7 @@ export const siteHealthCrawlRoutes = [
       monitoredSet(db, c.get('workspace').workspaceId, path.project_id),
   }),
   definePutRoute({
-    family,
+    ...projectFamily,
     path: projectRoot,
     params: { path: projectPath, query: {} },
     body: replaceBody,
@@ -229,7 +231,7 @@ export const siteHealthCrawlRoutes = [
     },
   }),
   definePostRoute({
-    family,
+    ...projectFamily,
     path: `${projectRoot}/bulk-select`,
     params: { path: projectPath, query: {} },
     body: bulkBody,

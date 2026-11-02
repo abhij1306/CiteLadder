@@ -20,7 +20,7 @@ import {
 import { parseUuid } from '../http/uuid.ts';
 import { effectiveStatus, validateStatus } from './action-status.ts';
 import { OPPORTUNITY_COLUMNS, projectItem } from './projection.ts';
-import { requireProject } from './reads.ts';
+import { requireProject } from '../projects/access.ts';
 import type { Scope } from './sources.ts';
 import { declarationView } from './declaration-view.ts';
 import { memberMeasurementLeg } from './declaration-checks.ts';

@@ -13,7 +13,6 @@ import {
 } from '@citeladder/contracts/ai-traffic';
 import { defineGetRoute, definePostRoute } from './define.ts';
 import { readBody } from '../http/body.ts';
-import { requireProject } from '../projects/access.ts';
 import { crawlers } from '../config/crawlers.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { policy } from '../config.ts';
@@ -79,9 +78,8 @@ export const crawlLogRoutes = [
     path: root + '/catalog',
     params: { path, query: {} },
     response: crawlCatalogSchema,
-    async handle({ c, db }, { path }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
-      return {
+    handle: () =>
+      Promise.resolve({
         catalog_version: crawlers.catalog_version,
         bots: crawlers.bots,
         presets: crawlLogs.presets,
@@ -91,18 +89,15 @@ export const crawlLogRoutes = [
         max_line_bytes: crawlLogs.max_line_bytes,
         max_backdate_days: crawlLogs.max_backdate_days,
         worker_timeout_ms: crawlLogs.worker_timeout_ms,
-      };
-    },
+      }),
   }),
   defineGetRoute({
     ...base,
     path: root + '/sources',
     params: { path, query: {} },
     response: crawlSourceListSchema,
-    async handle({ c, db }, { path }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
-      return sourceList(db, scope(c.get('workspace').workspaceId, path.project_id));
-    },
+    handle: ({ c, db }, { path }) =>
+      sourceList(db, scope(c.get('workspace').workspaceId, path.project_id)),
   }),
   definePostRoute({
     ...writes,
@@ -256,7 +251,6 @@ export const crawlLogRoutes = [
     params: { path: uploadPath, query: {} },
     response: crawlUploadSchema,
     async handle({ c, db }, { path }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       const upload = await db
         .selectFrom('crawl_log_uploads')
         .selectAll()

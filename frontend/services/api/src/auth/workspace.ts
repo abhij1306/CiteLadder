@@ -6,7 +6,8 @@
  * A non-member cannot tell an existing workspace from a missing one: both 404.
  */
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
-import type { MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
+import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
 import type { AppEnv } from '../context.ts';
@@ -111,83 +112,151 @@ export function pathUuid(raw: string | undefined, name: string): string {
   return id;
 }
 
+/** The membership a request resolves, read from the request before any query. */
+export type MembershipTarget =
+  | { kind: 'project'; projectId: string }
+  /** `projectId`: the path project the resolved workspace must hold, if any. */
+  | { kind: 'workspace'; workspaceId: string; projectId: string | null }
+  | { kind: 'earliest'; projectId: string | null };
+
 /**
- * Authorize the path `:workspace_id` for the session user (mount after
- * `sessionUser`), optionally gated on one capability.
+ * The `X-Workspace-Id` the request sent: absent, or a UUID. Anything else,
+ * including an empty value, is a 400, never a fallback to the default workspace.
  */
-export function workspaceMember(
-  db: Database,
-  capability?: WorkspaceCapability,
-): MiddlewareHandler<AppEnv> {
-  return async (c, next) => {
-    const workspaceId = pathUuid(c.req.param('workspace_id'), 'workspace_id');
-    const workspace = await resolveWorkspaceMember(db, c.get('user').id, workspaceId);
-    if (capability !== undefined) workspace.require(capability);
-    c.set('workspace', workspace);
-    await next();
+function selectedWorkspace(c: Context<AppEnv>): string | null {
+  const selected = c.req.header('x-workspace-id');
+  if (selected === undefined) return null;
+  const workspaceId = parseUuid(selected);
+  if (workspaceId === null) throw new ApiError(400, 'Invalid X-Workspace-Id');
+  return workspaceId;
+}
+
+/**
+ * How a route resolves its workspace; `sessionUser` reads the membership in
+ * the same statement as the session's user. `target` may throw the request's
+ * 400 or 422, which the session's 401 precedes. `capability` is enforced as
+ * soon as membership resolves.
+ */
+export type MembershipRule = {
+  target: (c: Context<AppEnv>) => MembershipTarget;
+  capability: WorkspaceCapability | undefined;
+};
+
+/**
+ * Through the project in the path alone: the caller must belong to the
+ * project's workspace. A missing project and a foreign one are the same
+ * `Project not found`, and `X-Workspace-Id` is not read, so a link or an
+ * `<img>` opens a project in any workspace its caller belongs to. The route
+ * checks its capability after workspace access.
+ */
+export const projectMembership: MembershipRule = {
+  target: (c) => ({
+    kind: 'project',
+    projectId: pathUuid(c.req.param('project_id'), 'project_id'),
+  }),
+  capability: undefined,
+};
+
+/**
+ * The path project inside the active workspace (`activeWorkspaceMembership`):
+ * the workspace resolves and its capability is checked as for a flat route,
+ * and the context names the project only when that workspace holds it. The
+ * route refuses a project it does not name (`Project not found`) after the
+ * access gate and parameter validation, as a handler's own check would.
+ */
+export function activeProjectMembership(capability?: WorkspaceCapability): MembershipRule {
+  return {
+    target: (c) => {
+      const workspaceId = selectedWorkspace(c);
+      // An invalid path ID resolves no project; parameter validation refuses it.
+      const projectId = parseUuid(c.req.param('project_id') ?? '');
+      return workspaceId === null
+        ? { kind: 'earliest', projectId }
+        : { kind: 'workspace', workspaceId, projectId };
+    },
+    capability,
+  };
+}
+
+/** The path `:workspace_id`, optionally gated on one capability. */
+export function pathWorkspaceMembership(capability?: WorkspaceCapability): MembershipRule {
+  return {
+    target: (c) => ({
+      kind: 'workspace',
+      workspaceId: pathUuid(c.req.param('workspace_id'), 'workspace_id'),
+      projectId: null,
+    }),
+    capability,
   };
 }
 
 /**
- * Authorize through the project in the path (mount after `sessionUser`): the
- * caller must belong to the project's workspace. A missing project and a
- * foreign one are the same `Project not found`, and `X-Workspace-Id` is not read.
+ * The active workspace of a flat route: the `X-Workspace-Id` header when the
+ * client selects one, otherwise the caller's earliest tenant membership.
+ * Membership is verified either way, and a foreign workspace is a 404.
  */
-export function projectMember(db: Database): MiddlewareHandler<AppEnv> {
-  return async (c, next) => {
-    const projectId = pathUuid(c.req.param('project_id'), 'project_id');
-    const member = await db
-      .selectFrom('projects')
-      .innerJoin('workspaces', 'workspaces.id', 'projects.workspace_id')
-      .innerJoin('workspace_members', 'workspace_members.workspace_id', 'projects.workspace_id')
-      .select(['workspace_members.workspace_id', 'workspace_members.role'])
-      .where('projects.id', '=', projectId)
-      .where('workspace_members.user_id', '=', c.get('user').id)
-      .where('workspaces.is_system', '=', false)
-      .executeTakeFirst();
-    if (member === undefined) throw notFound('Project');
-    c.set('workspace', new WorkspaceContext(member.workspace_id, member.role, projectId));
-    await next();
+export function activeWorkspaceMembership(capability?: WorkspaceCapability): MembershipRule {
+  return {
+    target: (c) => {
+      const workspaceId = selectedWorkspace(c);
+      return workspaceId === null
+        ? { kind: 'earliest', projectId: null }
+        : { kind: 'workspace', workspaceId, projectId: null };
+    },
+    capability,
   };
 }
 
-/** The caller's earliest tenant membership, or 404. */
-async function defaultWorkspaceMember(db: Database, userId: string): Promise<WorkspaceContext> {
-  const member = await db
+/**
+ * The user's tenant membership `target` names, as one statement (at most one
+ * row), with whether that workspace holds the target's project.
+ */
+export function membershipQuery(db: Database, userId: string, target: MembershipTarget) {
+  const projectId = target.kind === 'project' ? null : target.projectId;
+  const holdsProject =
+    projectId === null
+      ? sql<boolean>`false`
+      : sql<boolean>`exists (select 1 from projects where projects.id = ${projectId} and projects.workspace_id = workspace_members.workspace_id)`;
+  const member = db
     .selectFrom('workspace_members')
     .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
     .select(['workspace_members.workspace_id', 'workspace_members.role'])
+    .select(holdsProject.as('holds_project'))
     .where('workspace_members.user_id', '=', userId)
-    .where('workspaces.is_system', '=', false)
-    .orderBy('workspace_members.created_at', 'asc')
-    .limit(1)
-    .executeTakeFirst();
-  if (member === undefined) throw notFound('Workspace');
-  return new WorkspaceContext(member.workspace_id, member.role);
+    .where('workspaces.is_system', '=', false);
+  switch (target.kind) {
+    case 'project':
+      return member.where(
+        'workspace_members.workspace_id',
+        '=',
+        db
+          .selectFrom('projects')
+          .select('projects.workspace_id')
+          .where('id', '=', target.projectId),
+      );
+    case 'workspace':
+      return member.where('workspace_members.workspace_id', '=', target.workspaceId);
+    case 'earliest':
+      // The membership ID breaks a timestamp tie, so the default never flips.
+      return member
+        .orderBy('workspace_members.created_at', 'asc')
+        .orderBy('workspace_members.id', 'asc')
+        .limit(1);
+    default: {
+      const exhaustive: never = target;
+      return exhaustive;
+    }
+  }
 }
 
-/**
- * Resolve the active workspace for a flat route (mount after `sessionUser`):
- * the `X-Workspace-Id` header when the client selects one, otherwise the
- * caller's earliest tenant membership. Membership is verified either way, and a
- * foreign workspace is a 404.
- */
-export function activeWorkspace(
-  db: Database,
-  capability?: WorkspaceCapability,
-): MiddlewareHandler<AppEnv> {
-  return async (c, next) => {
-    const selected = c.req.header('x-workspace-id');
-    let workspace: WorkspaceContext;
-    if (selected) {
-      const workspaceId = parseUuid(selected);
-      if (workspaceId === null) throw new ApiError(400, 'Invalid X-Workspace-Id');
-      workspace = await resolveWorkspaceMember(db, c.get('user').id, workspaceId);
-    } else {
-      workspace = await defaultWorkspaceMember(db, c.get('user').id);
-    }
-    if (capability !== undefined) workspace.require(capability);
-    c.set('workspace', workspace);
-    await next();
-  };
+/** The context a resolved membership authorizes, or the target's 404. */
+export function membershipContext(
+  target: MembershipTarget,
+  member: { workspace_id: string | null; role: string | null; holds_project: boolean | null },
+): WorkspaceContext {
+  if (member.workspace_id === null || member.role === null)
+    throw notFound(target.kind === 'project' ? 'Project' : 'Workspace');
+  // A project target resolved through its project; others name it only when held.
+  const named = target.kind === 'project' || member.holds_project === true;
+  return new WorkspaceContext(member.workspace_id, member.role, named ? target.projectId : null);
 }

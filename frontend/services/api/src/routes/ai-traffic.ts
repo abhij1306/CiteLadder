@@ -26,7 +26,6 @@ import { crawlLogs } from '../config/crawl-logs.ts';
 import { AiReferralsQueryError, getAiReferrals } from '../analytics/ai-referrals.ts';
 import { policy } from '../config.ts';
 import { ApiError } from '../errors.ts';
-import { requireProject } from '../projects/access.ts';
 import { defineGetRoute } from './define.ts';
 import { trafficPageRoutes } from './ai-traffic-pages.ts';
 
@@ -60,7 +59,6 @@ export const aiTrafficRoutes = [
     response: aiTrafficOverviewSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return aiTrafficOverview(
         db,
         { workspaceId: workspace.workspaceId, projectId: path.project_id },
@@ -73,7 +71,6 @@ export const aiTrafficRoutes = [
     path: root + '/crawlers',
     response: botCrawlersResponseSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return crawlerPage(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -86,7 +83,6 @@ export const aiTrafficRoutes = [
     path: root + '/activity',
     response: botActivityResponseSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return activityPage(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -100,7 +96,6 @@ export const aiTrafficRoutes = [
     path: root + '/coverage',
     response: crawlCoverageResponseSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return coveragePage(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -115,7 +110,6 @@ export const aiTrafficRoutes = [
       raw: true,
       response: z.string().meta({ format: 'binary' }),
       async handle({ c, db }, { path, query }) {
-        await requireProject(db, c.get('workspace'), path.project_id);
         const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
         const items: Record<string, unknown>[] = [];
         let cursor: string | null = null;
@@ -177,6 +171,7 @@ export const aiTrafficRoutes = [
   ),
   defineGetRoute({
     family: 'ai-traffic',
+    authorize: 'active-project',
     path: '/api/v1/projects/{project_id}/ai-traffic/referrals',
     params: {
       path: { project_id: { scalar: { kind: 'uuid' }, required: true } },
@@ -193,7 +188,6 @@ export const aiTrafficRoutes = [
     response: aiReferralsSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       try {
         return await getAiReferrals(db, {
           workspaceId: workspace.workspaceId,

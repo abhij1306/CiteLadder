@@ -12,7 +12,6 @@ import { AnalyticsWorker } from '../workers/analytics-worker.ts';
 import { projectPerformanceRange } from '../traffic/snapshot.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { revalidatable } from '../http/revalidate.ts';
-import { requireProject } from '../projects/access.ts';
 import { enqueueTask, taskKey } from '../referrals/enqueue.ts';
 import {
   clampedCustomWindow,
@@ -29,7 +28,8 @@ const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } }
 const date = { scalar: { kind: 'date' } } as const;
 const string = { scalar: { kind: 'str' } } as const;
 const uuid = { scalar: { kind: 'uuid' } } as const;
-const family = 'performance';
+/** Every route here reads the path project inside the active workspace. */
+const family = { family: 'performance', authorize: 'active-project' } as const;
 const { statuses } = policy.task_queue;
 /** Terminal range tasks that a new request may replace. */
 const retryable = new Set<string>([statuses.failed, statuses.cancelled]);
@@ -45,14 +45,13 @@ function taskResponse(task: { id: string; status: string; payload: unknown }) {
 
 export const performanceRoutes = [
   definePostRoute({
-    family,
+    ...family,
     path: `${root}/range/{task_id}/run`,
     capability: 'run',
     params: { path: { ...projectPath, task_id: { ...uuid, required: true } }, query: {} },
     response: performanceRangeTaskSchema,
     async handle({ c, db, config }, { path }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       const read = () =>
         db
           .selectFrom('analytics_tasks')
@@ -75,17 +74,17 @@ export const performanceRoutes = [
   }),
   defineGetRoute({
     family: 'readiness',
+    authorize: 'active-project',
     path: '/api/v1/projects/{project_id}/readiness',
     params: { path: projectPath, query: {} },
     response: projectReadinessSchema,
     async handle({ db, c }, { path }) {
       const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
-      await requireProject(db, c.get('workspace'), scope.projectId);
       return projectReadinessSchema.parse(await readProjectReadiness(db, scope));
     },
   }),
   defineGetRoute({
-    family,
+    ...family,
     exposure: 'both',
     path: root,
     params: {
@@ -108,7 +107,6 @@ export const performanceRoutes = [
     }),
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return getPerformance(db, {
         workspaceId: workspace.workspaceId,
         projectId: path.project_id,
@@ -117,7 +115,7 @@ export const performanceRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...family,
     exposure: 'both',
     path: `${root}/table`,
     params: {
@@ -134,7 +132,6 @@ export const performanceRoutes = [
     response: performanceTablePageSchema.extend({ dimension: z.string() }),
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       // Keyed by persisted snapshot IDs, so the browser revalidates instead of refetching.
       return revalidatable(
         c,
@@ -147,7 +144,7 @@ export const performanceRoutes = [
     },
   }),
   definePostRoute({
-    family,
+    ...family,
     path: `${root}/range`,
     status: 202,
     params: {
@@ -157,7 +154,6 @@ export const performanceRoutes = [
     response: performanceRangeTaskSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       const scope = { workspaceId: workspace.workspaceId, projectId: path.project_id };
       const { window, latest } = await clampedCustomWindow(db, scope, query.from, query.to);
       if (!window) throw new ApiError(422, "'from' and 'to' must be supplied together");
@@ -199,13 +195,12 @@ export const performanceRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...family,
     path: `${root}/range/{task_id}`,
     params: { path: { ...projectPath, task_id: { ...uuid, required: true } }, query: {} },
     response: performanceRangeTaskSchema,
     async handle({ c, db }, { path }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       const row = await workspace.scope
         .selectFrom(db, 'analytics_tasks')
         .select(['id', 'status', 'payload'])

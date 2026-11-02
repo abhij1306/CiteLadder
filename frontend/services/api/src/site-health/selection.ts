@@ -6,12 +6,12 @@ import type { Database } from '../db/database.ts';
 import { parseUuid } from '../http/uuid.ts';
 import { admissionRuntime, createPageRerunCrawl, enqueueCrawlTask } from './planner.ts';
 import { crawlError } from './planner-policy.ts';
-import { inventoryCrawlIds, loadProject } from './reads/crawl.ts';
+import { inventoryCrawlIds } from './reads/crawl.ts';
 import { monitoredQuota } from './reads/runtime.ts';
 import { ACTIVE_CRAWL } from './site-task.ts';
 
+/** The project's monitored set; its route authorizes the path project. */
 export async function monitoredSet(db: Database, workspaceId: string, projectId: string) {
-  await loadProject(db, workspaceId, projectId);
   const profile = await db
     .selectFrom('site_health_profiles')
     .select('selection_version')
@@ -258,7 +258,6 @@ export async function bulkMonitoredSet(
     expected_selection_version: number;
   },
 ) {
-  await loadProject(db, workspaceId, projectId);
   const crawl = await db
     .selectFrom('site_crawls')
     .selectAll()

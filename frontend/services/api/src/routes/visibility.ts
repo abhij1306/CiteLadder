@@ -42,7 +42,6 @@ import { policy } from '../config.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { ParamSpecs } from '../http/params.ts';
 import { InvalidCursorError } from '../http/keyset-cursor.ts';
-import { requireProject } from '../projects/access.ts';
 import { getAccuracy, getAccuracyClaims } from '../visibility/accuracy.ts';
 import { getAds } from '../visibility/ads.ts';
 import { getVisibility } from '../visibility/dashboard.ts';
@@ -161,9 +160,12 @@ const PERCEPTION_SELECTION = {
   ...WINDOW,
 } as const satisfies ParamSpecs;
 
+/** Every route here reads the path project inside the active workspace. */
+const family = { family: 'visibility', authorize: 'active-project' } as const;
+
 export const visibilityRoutes = [
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/ads',
     params: {
@@ -180,7 +182,6 @@ export const visibilityRoutes = [
     response: visibilityAdsResponseSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getAds(db, runSelection(workspace.workspaceId, path.project_id, query), {
           cursor: query.cursor,
@@ -190,21 +191,20 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/perception',
     params: { path: PROJECT_PATH, query: PERCEPTION_SELECTION },
     response: perceptionResponseSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getPerception(db, runSelection(workspace.workspaceId, path.project_id, query)),
       );
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/perception/quotes',
     params: {
       path: PROJECT_PATH,
@@ -223,7 +223,6 @@ export const visibilityRoutes = [
     response: perceptionQuotePageSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getPerceptionQuotes(db, runSelection(workspace.workspaceId, path.project_id, query), {
           entity: query.entity,
@@ -236,20 +235,19 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/accuracy',
     params: { path: PROJECT_PATH, query: PERCEPTION_SELECTION },
     response: accuracyResponseSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getAccuracy(db, runSelection(workspace.workspaceId, path.project_id, query)),
       );
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/accuracy/claims',
     params: {
       path: PROJECT_PATH,
@@ -267,7 +265,6 @@ export const visibilityRoutes = [
     response: accuracyClaimPageSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getAccuracyClaims(db, runSelection(workspace.workspaceId, path.project_id, query), {
           topic: query.topic,
@@ -279,7 +276,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility',
     params: {
@@ -301,7 +298,6 @@ export const visibilityRoutes = [
     response: visibilitySchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getVisibility(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
           auditId: query.audit_id,
@@ -317,7 +313,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/prompts',
     params: {
@@ -333,7 +329,6 @@ export const visibilityRoutes = [
     response: z.array(promptMetricItemSchema),
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getPromptMetrics(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
           auditId: query.audit_id,
@@ -347,7 +342,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/prompts/{prompt_id}/history',
     params: {
@@ -358,7 +353,6 @@ export const visibilityRoutes = [
     response: promptHistorySchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getPromptHistory(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
           promptId: path.prompt_id,
@@ -369,7 +363,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/trends',
     params: {
@@ -390,7 +384,6 @@ export const visibilityRoutes = [
     response: visibilityTrendListSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getVisibilityTrends(db, marketScope(workspace.workspaceId, path.project_id, query.market), {
           logicalEngine: query.engine,
@@ -405,7 +398,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/fanout',
     params: {
@@ -423,7 +416,6 @@ export const visibilityRoutes = [
     response: visibilityFanoutSummarySchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getVisibilityFanout(
           db,
@@ -438,7 +430,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/sources',
     params: {
@@ -461,7 +453,6 @@ export const visibilityRoutes = [
     response: visibilitySourcesSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getVisibilitySources(db, runSelection(workspace.workspaceId, path.project_id, query), {
           domain: query.domain,
@@ -477,7 +468,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/evidence',
     params: {
       path: PROJECT_PATH,
@@ -501,7 +492,6 @@ export const visibilityRoutes = [
     response: visibilityEvidenceResponseSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getVisibilityEvidence(db, runSelection(workspace.workspaceId, path.project_id, query), {
           cursor: query.cursor,
@@ -517,7 +507,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/sources/series',
     params: {
       path: PROJECT_PATH,
@@ -543,7 +533,6 @@ export const visibilityRoutes = [
     response: visibilitySourceSeriesSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getSourceSeries(db, runSelection(workspace.workspaceId, path.project_id, query), {
           dimension: query.dimension,
@@ -557,7 +546,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/sources/near-misses',
     params: {
       path: PROJECT_PATH,
@@ -572,7 +561,6 @@ export const visibilityRoutes = [
     response: visibilitySourceNearMissesSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getSourceNearMisses(db, runSelection(workspace.workspaceId, path.project_id, query), {
           asOf: new Date().toISOString(),
@@ -582,7 +570,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/sources/movers',
     params: {
       path: PROJECT_PATH,
@@ -602,7 +590,6 @@ export const visibilityRoutes = [
     response: visibilitySourceMoversSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getSourceMovers(db, runSelection(workspace.workspaceId, path.project_id, query), {
           dimension: query.dimension,
@@ -613,7 +600,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/sources/url',
     params: {
       path: PROJECT_PATH,
@@ -628,7 +615,6 @@ export const visibilityRoutes = [
     response: visibilitySourceUrlSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getSourceUrlDetail(
           db,
@@ -639,7 +625,7 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     path: '/api/v1/projects/{project_id}/visibility/surface-rates',
     params: {
       path: PROJECT_PATH,
@@ -652,7 +638,6 @@ export const visibilityRoutes = [
     response: surfaceRatesSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         surfaceRates(db, {
           workspaceId: workspace.workspaceId,
@@ -667,14 +652,13 @@ export const visibilityRoutes = [
     },
   }),
   defineGetRoute({
-    family: 'visibility',
+    ...family,
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/visibility/markets',
     params: { path: PROJECT_PATH, query: { cohort: COHORT } },
     response: visibilityMarketsSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       return selectionErrors(() =>
         getMarketVisibility(
           db,

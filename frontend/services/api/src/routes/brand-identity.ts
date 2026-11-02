@@ -11,7 +11,6 @@ import { z } from 'zod';
 import type { AppEnv } from '../context.ts';
 import type { Database } from '../db/database.ts';
 import { readBody } from '../http/body.ts';
-import { requireProject } from '../projects/access.ts';
 import {
   brandProfileUpdate,
   readBrandProfile,
@@ -33,14 +32,14 @@ import { defineGetRoute, definePatchRoute, definePostRoute, definePutRoute } fro
 import { fileResponse } from './opportunity-contracts.ts';
 
 const family = 'brand-identity';
+/** The path project inside the active workspace. */
+const activeProject = { family, authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
 
-async function scopeOf(db: Database, c: Context<AppEnv>, projectId: string) {
-  const workspace = c.get('workspace');
-  await requireProject(db, workspace, projectId);
-  return { workspaceId: workspace.workspaceId, projectId };
+function scopeOf(c: Context<AppEnv>, projectId: string) {
+  return { workspaceId: c.get('workspace').workspaceId, projectId };
 }
 
 /** Logo reads authorize through the path: an `<img>` sends no workspace header. */
@@ -56,92 +55,92 @@ function serveLogo(
 
 export const brandIdentityRoutes = [
   defineGetRoute({
-    family,
+    ...activeProject,
     path: `${root}/brand-profile`,
     params: { path: projectPath, query: {} },
     response: brandProfileSchema,
     async handle({ c, db }, { path }) {
-      return readBrandProfile(db, await scopeOf(db, c, path.project_id));
+      return readBrandProfile(db, scopeOf(c, path.project_id));
     },
   }),
   definePutRoute({
-    family,
+    ...activeProject,
     path: `${root}/brand-profile`,
     capability: 'write',
     params: { path: projectPath, query: {} },
     body: brandProfileUpdate,
     response: brandProfileSchema,
     async handle({ c, db }, { path }) {
-      const scope = await scopeOf(db, c, path.project_id);
+      const scope = scopeOf(c, path.project_id);
       const update = await readBody(c, brandProfileUpdate);
       return updateBrandProfile(db, scope, c.get('user').id, update);
     },
   }),
   defineGetRoute({
-    family,
+    ...activeProject,
     path: `${root}/brand-facts`,
     params: { path: projectPath, query: {} },
     response: brandFactListSchema,
     async handle({ c, db }, { path }) {
-      return listBrandFacts(db, await scopeOf(db, c, path.project_id));
+      return listBrandFacts(db, scopeOf(c, path.project_id));
     },
   }),
   definePostRoute({
-    family,
+    ...activeProject,
     path: `${root}/brand-facts`,
     capability: 'write',
     params: { path: projectPath, query: {} },
     body: brandFactCreate,
     response: brandFactSchema,
     async handle({ c, db }, { path }) {
-      const scope = await scopeOf(db, c, path.project_id);
+      const scope = scopeOf(c, path.project_id);
       return createBrandFact(db, scope, c.get('user').id, await readBody(c, brandFactCreate));
     },
   }),
   definePatchRoute({
-    family,
+    ...activeProject,
     path: `${root}/brand-facts/{fact_id}`,
     capability: 'write',
     params: { path: { ...projectPath, fact_id: uuid }, query: {} },
     body: brandFactUpdate,
     response: brandFactSchema,
     async handle({ c, db }, { path }) {
-      const scope = await scopeOf(db, c, path.project_id);
+      const scope = scopeOf(c, path.project_id);
       const update = await readBody(c, brandFactUpdate);
       return updateBrandFact(db, scope, c.get('user').id, path.fact_id, update);
     },
   }),
   defineGetRoute({
-    family,
+    ...activeProject,
     exposure: 'both',
     path: `${root}/business-map`,
     params: { path: projectPath, query: {} },
     response: businessMapSchema,
     async handle({ c, db }, { path }) {
-      return readBusinessMap(db, await scopeOf(db, c, path.project_id));
+      return readBusinessMap(db, scopeOf(c, path.project_id));
     },
   }),
   definePutRoute({
-    family,
+    ...activeProject,
     path: `${root}/business-map`,
     capability: 'write',
     params: { path: projectPath, query: {} },
     body: businessMapUpdate,
     response: businessMapSchema,
     async handle({ c, db }, { path }) {
-      const scope = await scopeOf(db, c, path.project_id);
+      const scope = scopeOf(c, path.project_id);
       const update = await readBody(c, businessMapUpdate);
       return updateBusinessMap(db, scope, c.get('user').id, update);
     },
   }),
   defineGetRoute({
-    family,
+    ...activeProject,
     exposure: 'both',
     path: `${root}/competitor-suggestions`,
     params: { path: projectPath, query: {} },
     response: z.array(observedCompetitorSchema),
     async handle({ c, db }, { path }) {
-      return listSuggestions(db, await scopeOf(db, c, path.project_id));
+      return listSuggestions(db, scopeOf(c, path.project_id));
     },
   }),
   definePostRoute({

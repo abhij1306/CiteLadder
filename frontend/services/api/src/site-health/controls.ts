@@ -11,7 +11,8 @@ import {
 } from '../http/keyset-cursor.ts';
 import { parseUuid } from '../http/uuid.ts';
 import { crawlSetting } from './planner-policy.ts';
-import { isTerminal, loadProject, projectCrawl } from './reads/crawl.ts';
+import { requireProject } from '../projects/access.ts';
+import { isTerminal, projectCrawl } from './reads/crawl.ts';
 import { recordCrawlEvent } from './site-task.ts';
 
 export async function listCrawls(
@@ -26,7 +27,7 @@ export async function listCrawls(
   const filters = { workspace_id: workspaceId, project_id: input.project_id };
   let query = db.selectFrom('site_crawls').selectAll().where('workspace_id', '=', workspaceId);
   if (input.project_id) {
-    await loadProject(db, workspaceId, input.project_id);
+    await requireProject(db, { workspaceId, projectId: input.project_id });
     query = query.where('project_id', '=', input.project_id);
   }
   if (input.cursor) {

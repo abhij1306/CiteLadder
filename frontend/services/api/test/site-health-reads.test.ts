@@ -1156,12 +1156,41 @@ describe('workspace authorization', () => {
       `/site-crawls/${seed.crawlId}/issues?detail_limit=5`,
       `/site-crawls/${seed.crawlId}/events`,
       `/site-crawls/${seed.crawlId}/export.csv`,
-      `/projects/${seed.projectId}/site-health`,
-      `/projects/${seed.projectId}/site-health/pages`,
-      `/projects/${seed.projectId}/site-health/issues`,
-      `/projects/${seed.projectId}/site-health/aeo-readiness`,
-      `/projects/${seed.projectId}/site-health/changes`,
     ])
       expect((await get(foreign, path)).status, path).toBe(404);
+    // Every project route refuses the path project itself, before any read.
+    const refusals = [];
+    for (const suffix of [
+      '',
+      '/pages',
+      '/issues',
+      '/overview',
+      '/aeo-readiness',
+      '/architecture',
+      '/changes',
+      '/changes/summary',
+      '/robots-history',
+    ]) {
+      const response = await get(foreign, `/projects/${seed.projectId}/site-health${suffix}`);
+      const body = (await response.json()) as { error: { message: string } };
+      refusals.push([suffix, response.status, body.error.message]);
+    }
+    const monitored = await get(foreign, `/projects/${seed.projectId}/monitored-urls`);
+    const monitoredBody = (await monitored.json()) as { error: { message: string } };
+    refusals.push(['monitored-urls', monitored.status, monitoredBody.error.message]);
+    expect(refusals).toEqual(
+      [
+        '',
+        '/pages',
+        '/issues',
+        '/overview',
+        '/aeo-readiness',
+        '/architecture',
+        '/changes',
+        '/changes/summary',
+        '/robots-history',
+        'monitored-urls',
+      ].map((suffix) => [suffix, 404, 'Project not found']),
+    );
   });
 });

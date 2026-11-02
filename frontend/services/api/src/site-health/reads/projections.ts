@@ -26,7 +26,7 @@ import {
 import { parseUuid } from '../../http/uuid.ts';
 import { scalarText } from '../../text-order.ts';
 import type { SiteChangeSnapshots } from '../../generated/db-schema.ts';
-import { loadCrawl, loadProject, resolveUsableCrawl, type Crawl } from './crawl.ts';
+import { loadCrawl, resolveUsableCrawl, type Crawl } from './crawl.ts';
 import { pageRerunSql } from '../page-rerun.ts';
 import { issueImpact, remediationRoute, ruleScoreRoles, ruleTitle } from './rules.ts';
 
@@ -405,14 +405,16 @@ const CHANGE_COLUMNS = [
 ] as const;
 type ChangeSnapshot = Pick<Selectable<SiteChangeSnapshots>, (typeof CHANGE_COLUMNS)[number]>;
 
-/** The newest change snapshot, or the exact pair's when both crawls are named. */
+/**
+ * The newest change snapshot, or the exact pair's when both crawls are named.
+ * The route authorizes the project before this read.
+ */
 async function changeSnapshot(
   db: Database,
   workspaceId: string,
   projectId: string,
   pair: { a: string | null; b: string | null },
 ): Promise<ChangeSnapshot | undefined> {
-  await loadProject(db, workspaceId, projectId);
   if ((pair.a === null) !== (pair.b === null))
     throw new ApiError(422, 'crawl_a_id and crawl_b_id must be supplied together', {
       code: 'validation_error',

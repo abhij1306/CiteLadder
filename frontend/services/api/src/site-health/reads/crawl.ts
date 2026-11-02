@@ -44,19 +44,10 @@ export async function loadCrawl(db: Database, workspaceId: string, crawlId: stri
   return crawl;
 }
 
-export async function loadProject(db: Database, workspaceId: string, projectId: string) {
-  const project = await new WorkspaceScope(workspaceId)
-    .selectFrom(db, 'projects')
-    .select('id')
-    .where('id', '=', projectId)
-    .executeTakeFirst();
-  if (project === undefined) throw notFound('Project');
-}
-
 /**
  * The named crawl or, without one, the project's newest crawl in any state:
- * the crawl the dashboard shows. A foreign project or crawl is a 404; a
- * project with no crawl is `null`.
+ * the crawl the dashboard shows. The caller's route has authorized the
+ * project; a crawl outside it is a 404 and a project with no crawl is `null`.
  */
 export async function dashboardCrawl(
   db: Database,
@@ -64,7 +55,6 @@ export async function dashboardCrawl(
   projectId: string,
   crawlId: string | null,
 ): Promise<Crawl | null> {
-  await loadProject(db, workspaceId, projectId);
   let crawls = new WorkspaceScope(workspaceId)
     .selectFrom(db, 'site_crawls')
     .selectAll()
@@ -79,7 +69,8 @@ export async function dashboardCrawl(
 /**
  * The named crawl (404 when foreign) or the project's newest usable one. A
  * named crawl that has not reached a usable terminal state, or a project with
- * none, is `null`: the caller renders its own "nothing yet" state.
+ * none, is `null`: the caller renders its own "nothing yet" state. The
+ * caller's route has authorized the project.
  */
 export async function resolveUsableCrawl(
   db: Database,
@@ -87,7 +78,6 @@ export async function resolveUsableCrawl(
   projectId: string,
   crawlId: string | null,
 ): Promise<Crawl | null> {
-  await loadProject(db, workspaceId, projectId);
   const crawls = new WorkspaceScope(workspaceId)
     .selectFrom(db, 'site_crawls')
     .selectAll()

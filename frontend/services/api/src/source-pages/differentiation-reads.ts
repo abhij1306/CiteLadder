@@ -3,7 +3,7 @@ import type { Database } from '../db/database.ts';
 import { wireUtc, utcTextOf } from '../db/timestamps.ts';
 import { sql } from 'kysely';
 import type { Scope } from '../opportunities/sources.ts';
-import { requireProject } from '../opportunities/reads.ts';
+import { requireProject } from '../projects/access.ts';
 
 /** The newest reports, without the workspace, task and formula bookkeeping. */
 export async function listDifferentiationReports(db: Database, scope: Scope, limit: number) {
