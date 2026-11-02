@@ -142,12 +142,8 @@ async function writing<T>(write: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function listTopics(
-  db: Database,
-  workspaceId: string,
-  projectId: string,
-): Promise<TopicView[]> {
-  await requireProject(db, { workspaceId, projectId });
+/** The project's topics; the caller (the route, MCP or a generation run) has authorized the project. */
+export async function listTopics(db: Database, projectId: string): Promise<TopicView[]> {
   const [topics, counts] = await Promise.all([
     db
       .selectFrom('topics')
@@ -352,7 +348,7 @@ export async function confirmTopics(
       );
     }),
   );
-  return listTopics(db, workspaceId, projectId);
+  return listTopics(db, projectId);
 }
 
 /**

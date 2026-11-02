@@ -7,13 +7,13 @@ import { readOverviewLayout, updateOverviewLayout } from '../projects/overview-l
 import { overviewReport } from '../projects/overview-report.ts';
 import { defineGetRoute, definePutRoute } from './define.ts';
 
-const family = 'overview';
+const family = { family: 'overview', authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/overview';
 const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 
 export const overviewRoutes = [
   defineGetRoute({
-    family,
+    ...family,
     path: `${root}/layout`,
     params: { path: projectPath, query: {} },
     response: overviewLayoutSchema,
@@ -24,7 +24,7 @@ export const overviewRoutes = [
       }),
   }),
   definePutRoute({
-    family,
+    ...family,
     path: `${root}/layout`,
     capability: 'write',
     params: { path: projectPath, query: {} },
@@ -40,7 +40,7 @@ export const overviewRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...family,
     path: `${root}/report.pdf`,
     params: { path: projectPath, query: {} },
     response: z.string().meta({ format: 'binary' }),

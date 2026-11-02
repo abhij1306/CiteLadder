@@ -26,18 +26,12 @@ function defaultOverviewLayout(): OverviewWidget[] {
   return policy.projects.overview_default_layout.map((widget) => ({ ...widget }));
 }
 
+/** The saved layout or the default; the caller has authorized the project. */
 export async function readOverviewLayout(
   db: Database,
   scope: ProjectScope,
 ): Promise<OverviewLayout> {
-  const workspace = new WorkspaceScope(scope.workspaceId);
-  const project = await workspace
-    .selectFrom(db, 'projects')
-    .select('id')
-    .where('id', '=', scope.projectId)
-    .executeTakeFirst();
-  if (!project) throw notFound('Project');
-  const row = await workspace
+  const row = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'overview_layouts')
     .select(['widgets', 'version', 'updated_at'])
     .where('project_id', '=', scope.projectId)
@@ -62,6 +56,8 @@ export async function updateOverviewLayout(
     throw new ApiError(422, 'each Overview widget can appear once');
   await db.transaction().execute(async (trx) => {
     const workspace = new WorkspaceScope(scope.workspaceId);
+    // The project row lock serializes a first save, which has no layout row to
+    // lock yet; a project deleted since the request authorized it is a 404.
     const project = await workspace
       .selectFrom(trx, 'projects')
       .select('id')

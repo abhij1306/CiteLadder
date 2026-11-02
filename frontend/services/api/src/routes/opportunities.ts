@@ -17,6 +17,8 @@ import {
 import { orderUpdate } from './opportunity-contracts.ts';
 
 const family = 'opportunities';
+// Routes under the project path resolve the project in the session read.
+const projectFamily = { family, authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/opportunities';
 const o = policy.opportunity.opportunities;
 const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
@@ -46,7 +48,7 @@ const filters = (query: FilterValues) => ({
 
 export const opportunityRoutes = [
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: root,
     params: {
       path: projectPath,
@@ -81,7 +83,7 @@ export const opportunityRoutes = [
     },
   }),
   definePutRoute({
-    family,
+    ...projectFamily,
     path: `${root}/order`,
     capability: 'write',
     params: { path: projectPath, query: {} },

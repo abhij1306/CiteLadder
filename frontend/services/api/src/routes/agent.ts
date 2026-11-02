@@ -22,12 +22,14 @@ import { agentBindings } from '../agent/bindings.ts';
 import { runAgentOnce } from '../agent/worker.ts';
 import type { TurnEvents } from '../agent/stream.ts';
 import { agentPolicy, AgentError, type Scope } from '../agent/contracts.ts';
-import { authorize } from '../agent/access.ts';
+import { workspaceChat } from '../agent/messages.ts';
 import { readChat, listChats, listRevisions, runView, revisionView } from '../agent/reads.ts';
 import { defineGetRoute, definePostRoute, definePutRoute, defineDeleteRoute } from './define.ts';
 
 const family = 'agent',
   body = agentRequestSchemas(agentPolicy);
+// A route under the project path resolves the project in the session read.
+const projectFamily = { family, authorize: 'active-project' } as const;
 const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const chatPath = { chat_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const revisionPath = {
@@ -46,17 +48,17 @@ function key(c: Context<AppEnv>) {
 function scope(c: Context<AppEnv>, projectId: string): Scope {
   return { workspaceId: c.get('workspace').workspaceId, userId: c.get('user').id, projectId };
 }
-async function chatScope(db: Database, c: Context<AppEnv>, id: string) {
-  const row = await db
-    .selectFrom('agent_chats')
-    .select('project_id')
-    .where('workspace_id', '=', c.get('workspace').workspaceId)
-    .where('id', '=', id)
-    .executeTakeFirst();
-  if (!row) throw notFound('Chat');
-  const value = scope(c, row.project_id);
-  await authorize(db, value, false);
-  return value;
+/**
+ * The scope of a chat in the active workspace, which the session read
+ * authorized: one chat read names its project. Turns, edits and other writes
+ * re-check access inside their own transaction (`agent/access.ts`).
+ */
+async function chatScope(db: Database, c: Context<AppEnv>, id: string): Promise<Scope> {
+  const chat = await workspaceChat(db, c.get('workspace').workspaceId, id);
+  return scope(c, chat.project_id);
+}
+function workspaceOf(c: Context<AppEnv>) {
+  return { workspaceId: c.get('workspace').workspaceId };
 }
 async function mapped<T>(action: () => Promise<T>) {
   try {
@@ -230,7 +232,7 @@ export const agentRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: '/api/v1/projects/{project_id}/agent/chats',
     params: {
       path: projectPath,
@@ -263,7 +265,7 @@ export const agentRoutes = [
     },
   }),
   definePostRoute({
-    family,
+    ...projectFamily,
     path: '/api/v1/projects/{project_id}/agent/chats',
     capability: 'run',
     params: { path: projectPath, query: {} },
@@ -300,7 +302,7 @@ export const agentRoutes = [
     params: { path: chatPath, query: {} },
     response: agentChatDetailSchema,
     async handle({ db, c }, { path }) {
-      return readChat(db, await chatScope(db, c, path.chat_id), path.chat_id);
+      return readChat(db, workspaceOf(c), path.chat_id);
     },
   }),
   definePostRoute({
@@ -368,7 +370,7 @@ export const agentRoutes = [
     params: { path: chatPath, query: {} },
     response: agentRevisionsPageSchema,
     async handle({ db, c }, { path }) {
-      return listRevisions(db, await chatScope(db, c, path.chat_id), path.chat_id);
+      return listRevisions(db, workspaceOf(c), path.chat_id);
     },
   }),
   definePostRoute({
@@ -425,13 +427,12 @@ export const agentRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: '/api/v1/projects/{project_id}/agent/instructions',
     params: { path: projectPath, query: {} },
     response: agentInstructionsSchema,
     async handle({ db, c }, { path }) {
       const value = scope(c, path.project_id);
-      await authorize(db, value, false);
       const row = await db
         .selectFrom('agent_instruction_revisions')
         .selectAll()
@@ -447,7 +448,7 @@ export const agentRoutes = [
     },
   }),
   definePutRoute({
-    family,
+    ...projectFamily,
     path: '/api/v1/projects/{project_id}/agent/instructions',
     capability: 'run',
     params: { path: projectPath, query: {} },

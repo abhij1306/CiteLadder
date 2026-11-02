@@ -393,7 +393,7 @@ const writeDefinitions = {
     run: async (context, args) => {
       const actor = await writeActor(context.db, context.principal, args.project_id);
       const preview = await previewTopics(context.db, actor, args.project_id);
-      const existing = await listTopics(context.db, actor.workspaceId, args.project_id);
+      const existing = await listTopics(context.db, args.project_id);
       return {
         state: 'proposed',
         existing_topics: existing.map(({ id, name }) => ({ id, name })),

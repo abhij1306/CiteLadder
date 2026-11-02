@@ -289,7 +289,7 @@ function stage(
       ? await trx.insertInto('prompt_candidates').values(rows).returningAll().execute()
       : [];
     await mergeMapSuggestions(trx, staging, set.project_id, output.maps);
-    return runResponse(trx, workspaceId, set.project_id, inserted, {
+    return runResponse(trx, set.project_id, inserted, {
       gate,
       drops,
       generated: output.drafts.length,
@@ -305,7 +305,6 @@ function stage(
  */
 async function runResponse(
   db: Database,
-  workspaceId: string,
   projectId: string,
   rows: CandidateRow[],
   run: {
@@ -320,7 +319,7 @@ async function runResponse(
   const touched = new Set(candidates.map((row) => row.topic_id));
   return {
     candidates: candidates.map((row) => candidateView(row, run.gate)),
-    topics: (await listTopics(db, workspaceId, projectId)).filter((topic) => touched.has(topic.id)),
+    topics: (await listTopics(db, projectId)).filter((topic) => touched.has(topic.id)),
     requested_count: run.requested,
     dropped_duplicates: run.drops.duplicate ?? 0,
     candidates_generated: run.generated,
@@ -373,7 +372,7 @@ async function replay(
     .where('disposition', 'in', ['pending', 'gate_rejected'])
     .where('expires_at', '>', new Date())
     .execute();
-  return runResponse(db, workspaceId, run.project_id, rows, {
+  return runResponse(db, run.project_id, rows, {
     gate: recorded.quality_gate.catch('off').parse(provenance.quality_gate),
     drops: recorded.admission_drops.catch({}).parse(provenance.admission_drops),
     generated: Number(provenance.candidates_generated) || 0,
