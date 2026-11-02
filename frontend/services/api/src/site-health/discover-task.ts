@@ -26,6 +26,7 @@ import {
   enqueueDiscoveredAnalysis,
   lockRuntime,
   markInventoryDocument,
+  releaseNonPage,
   type Candidate,
 } from './frontier.ts';
 import { isBotBlock } from './page-fetch.ts';
@@ -400,6 +401,10 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
         sampleCapped = admission.sampleCapped;
         await refreshFetchedUrl(trx, crawl, task, page, discovery);
         await dispose(trx, crawl, task, page, outcome.facts);
+      } else if (finalFailure(task, outcome.retryable)) {
+        // Membership before the crawl and task, in the Site Health lock order.
+        await lockRuntime(trx, crawl.workspace_id);
+        await releaseNonPage(trx, crawl, task.url_hash, outcome);
       }
       const locked = await lockRunningTask(trx, claimed, ctx.owner);
       if (!locked || !ACTIVE_CRAWL.has(locked.crawl.status)) throw new Abandoned();

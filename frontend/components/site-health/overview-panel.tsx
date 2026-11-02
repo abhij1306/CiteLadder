@@ -5,7 +5,6 @@ import type { ReactNode } from 'react';
 
 import { OverviewDetails } from './overview-details';
 import { OverviewMetricCards } from './overview-metrics';
-import { Alert } from '@/components/ui/alert';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { httpErrorStatus } from '@/lib/api/client';
@@ -62,29 +61,8 @@ export function OverviewPanel({
 
   return (
     <Stack gap="workspace" className="min-w-0" data-testid="site-health-overview">
-      {data ? (
-        <Alert tone={searchEligibilityTone(data.search_eligibility)}>
-          Audit finished: {data.audited_page_count} of {data.selected_page_count} selected pages
-          analyzed. {searchEligibilitySentence(data.search_eligibility)}
-        </Alert>
-      ) : null}
       <OverviewMetricCards overview={data} dashboard={dashboard} crawl={crawl} />
       {overviewBody}
     </Stack>
   );
-}
-
-function searchEligibilityTone(state: 'eligible' | 'blocked' | 'unknown' | 'excluded') {
-  if (state === 'eligible') return 'success' as const;
-  if (state === 'blocked') return 'danger' as const;
-  return 'warning' as const;
-}
-
-/** The sentence beside the tone, so the two cannot describe different states. */
-function searchEligibilitySentence(state: 'eligible' | 'blocked' | 'unknown' | 'excluded') {
-  if (state === 'blocked') {
-    return 'At least one selected page has a critical search eligibility blocker.';
-  }
-  if (state === 'eligible') return 'No observed blocker.';
-  return `Search access evidence: ${state}.`;
 }

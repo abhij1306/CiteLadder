@@ -21,10 +21,12 @@ import {
   pageAnalysisContext,
   type AttemptOutcome,
 } from './analysis-rows.ts';
+import { releaseNonPage } from './frontier.ts';
 import { isBotBlock } from './page-fetch.ts';
 import {
   ACTIVE_CRAWL,
   cancelTask,
+  finalFailure,
   httpError,
   loadScope,
   lockRunningTask,
@@ -307,6 +309,9 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
       await settleTask(trx, ctx, task, { succeeded: true, artifactId });
       return;
     }
+    // The membership row is already locked above, before the crawl.
+    if (finalFailure(task, outcome.retryable))
+      await releaseNonPage(trx, crawl, task.url_hash, outcome);
     await settleTask(trx, ctx, task, {
       succeeded: false,
       retryable: outcome.retryable,

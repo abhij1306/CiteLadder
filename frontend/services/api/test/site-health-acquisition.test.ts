@@ -354,6 +354,35 @@ describe('discover', () => {
     ]);
   });
 
+  it('releases the selection of a link that turns out to be no page, keeping a failing page selected', async () => {
+    const seed = await crawl({ config: { automatic_monitor_limit: 6 } });
+    const root = await queued(seed, 'discover');
+    const site = worker({
+      '/robots.txt': { body: 'User-agent: *\nDisallow: /private\n', contentType: 'text/plain' },
+      '/': { body: links('/a', '/gone', '/size-chart', '/private', '/flaky') },
+      '/a': { body: links() },
+      '/gone': { status: 404, body: 'missing' },
+      '/size-chart': { body: '{}', contentType: 'application/json' },
+      '/flaky': { status: 500 },
+    });
+    await run(site, root);
+    // A 500 retries until its attempts run out; the others settle on their first.
+    for (const child of (await tasks(seed, 'discover')).filter((row) => row.id !== root))
+      do await run(site, child.id);
+      while ((await task(child.id)).status === 'retry_wait');
+
+    expect(
+      (await memberships(seed)).map((row) => [row.normalized_url.slice(20), row.active]),
+    ).toEqual([
+      ['/', true],
+      ['/a', true],
+      ['/flaky', true],
+      ['/gone', false],
+      ['/private', false],
+      ['/size-chart', false],
+    ]);
+  });
+
   it('never resolves the crawl root as a canonical alias, so its site checks stay current', async () => {
     const seed = await crawl({ config: { automatic_monitor_limit: 5 } });
     const root = await queued(seed, 'discover');
