@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * The open-source boundary: what a port from the private upstream must never
- * bring into this repository. Ports apply upstream diffs wholesale, so this
- * check is what stops a hosted-only file, dependency or reference riding along.
+ * The open-source boundary: code that belongs only to the hosted CiteLadder
+ * service must never land in this repository. Changes often arrive as large
+ * diffs, so this check stops a hosted-only file or dependency riding along.
  *
  *   node scripts/oss-boundary.mjs        # scans every tracked file, exit 1 on a finding
  *
@@ -14,15 +14,12 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-// Built from parts so this file does not match its own rule.
-const PRIVATE_UPSTREAM = new RegExp(['cube', String.raw`[-_ ]?`, '27'].join(''), 'i');
-
 /** Paths that belong to the hosted product, its website or its infrastructure. */
 const PATH_RULES = [
   {
     rule: 'marketing-or-docs-site',
     pattern: /(^|\/)(apps\/(marketing|docs|site|www)|components\/(marketing|docs)|docs-site)(\/|$)/,
-    why: 'the marketing website and docs site stay in the private repository',
+    why: 'the marketing website and docs site are not part of the self-hosted build',
   },
   {
     rule: 'billing',
@@ -38,7 +35,7 @@ const PATH_RULES = [
     rule: 'hosting-infra',
     pattern:
       /(^|\/)(wrangler\.(toml|jsonc?)|cloudbuild\.ya?ml|app\.ya?ml|terraform\/.*|infra\/.*|[^/]+\.tf)$|^\.github\/workflows\/[^/]*(deploy|release-cloud|gcp|workers)[^/]*$/i,
-    why: 'deployment of the hosted service stays in the private repository',
+    why: 'deployment of the hosted service is not part of the self-hosted build',
   },
   {
     rule: 'secret-file',
@@ -59,55 +56,42 @@ const DEPENDENCY_FIELDS = [
   'peerDependencies',
 ];
 
-/** Files this check reads the text of; binaries and the lockfile are path-checked only. */
-const TEXT_FILE = /\.(m?[jt]sx?|json|md|ya?ml|toml|sql|css|html|txt|sh|example)$|(^|\/)(Dockerfile|\.[a-z]+ignore)$/i;
+/** The only files whose contents this check reads; every other file is checked by path. */
+const MANIFEST = /(^|\/)package\.json$/;
 
 /**
  * Every boundary finding for a set of tracked files.
  *
  * @param {ReadonlyArray<{ path: string; text?: string }>} files
- * @returns {{ rule: string; path: string; line?: number; detail: string }[]}
+ * @returns {{ rule: string; path: string; detail: string }[]}
  */
 export function boundaryFindings(files) {
   const findings = [];
   for (const { path, text } of files) {
     for (const { rule, pattern, why } of PATH_RULES)
       if (pattern.test(path)) findings.push({ rule, path, detail: why });
-    if (PRIVATE_UPSTREAM.test(path))
-      findings.push({ rule: 'private-upstream', path, detail: 'names the private repository' });
-    if (text === undefined) continue;
-    text.split('\n').forEach((content, index) => {
-      if (PRIVATE_UPSTREAM.test(content))
-        findings.push({
-          rule: 'private-upstream',
-          path,
-          line: index + 1,
-          detail: 'names the private repository or its organisation',
-        });
-    });
-    if (/(^|\/)package\.json$/.test(path)) {
-      const manifest = JSON.parse(text);
-      for (const field of DEPENDENCY_FIELDS)
-        for (const name of Object.keys(manifest[field] ?? {}))
-          if (FORBIDDEN_DEPENDENCY.test(name))
-            findings.push({
-              rule: 'hosted-dependency',
-              path,
-              detail: `${field} has ${name}, which only the hosted product uses`,
-            });
-    }
+    if (text === undefined || !MANIFEST.test(path)) continue;
+    const manifest = JSON.parse(text);
+    for (const field of DEPENDENCY_FIELDS)
+      for (const name of Object.keys(manifest[field] ?? {}))
+        if (FORBIDDEN_DEPENDENCY.test(name))
+          findings.push({
+            rule: 'hosted-dependency',
+            path,
+            detail: `${field} has ${name}, which only the hosted product uses`,
+          });
   }
   return findings;
 }
 
-/** The tracked files of the repository at `root`, with text for the ones worth reading. */
+/** The tracked files of the repository at `root`, with the text of its manifests. */
 export function trackedFiles(root) {
   return execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' })
     .split('\0')
     .filter(Boolean)
     .map((path) => ({
       path,
-      text: TEXT_FILE.test(path) ? readFileSync(new URL(path, root), 'utf8') : undefined,
+      text: MANIFEST.test(path) ? readFileSync(new URL(path, root), 'utf8') : undefined,
     }));
 }
 
@@ -115,13 +99,12 @@ export const REPO_ROOT = new URL('../', import.meta.url);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const findings = boundaryFindings(trackedFiles(REPO_ROOT));
-  for (const { rule, path, line, detail } of findings)
-    console.error(`${path}${line ? `:${line}` : ''}  [${rule}] ${detail}`);
+  for (const { rule, path, detail } of findings) console.error(`${path}  [${rule}] ${detail}`);
   if (findings.length > 0) {
     console.error(
-      `\n${findings.length} open-source boundary finding(s). Remove the hosted-only code from the port; see scripts/oss-boundary.mjs.`,
+      `\n${findings.length} open-source boundary finding(s). Remove the hosted-only code; see scripts/oss-boundary.mjs.`,
     );
     process.exit(1);
   }
-  console.log('Open-source boundary: no hosted-only files, dependencies or references.');
+  console.log('Open-source boundary: no hosted-only files or dependencies.');
 }

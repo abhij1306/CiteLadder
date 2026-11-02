@@ -132,8 +132,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # Ports from the private upstream must not bring the website, billing,
-      # login, hosting infra or the upstream's name along (scripts/oss-boundary.mjs).
+      # No hosted-only website, billing, login, hosting infra or keys (scripts/oss-boundary.mjs).
       - name: Open-source boundary
         run: node scripts/oss-boundary.mjs
       - name: gitleaks (working tree, reviewed allowlist in .gitleaks.toml)

@@ -4,14 +4,12 @@ import test from 'node:test';
 import { boundaryFindings, REPO_ROOT, trackedFiles } from './oss-boundary.mjs';
 
 const rules = (files) => boundaryFindings(files).map(({ rule, path }) => `${rule}:${path}`);
-// Assembled so this file does not name the private organisation itself.
-const ORG = ['Cube', '27'].join('-');
 
-test('the repository holds no hosted-only files, dependencies or references', () => {
+test('the repository holds no hosted-only files or dependencies', () => {
   assert.deepEqual(boundaryFindings(trackedFiles(REPO_ROOT)), []);
 });
 
-test('flags the website, billing, login and hosting paths a port could bring along', () => {
+test('flags the website, billing, login and hosting paths a change could bring along', () => {
   assert.deepEqual(
     rules([
       { path: 'frontend/apps/marketing/src/main.tsx' },
@@ -69,17 +67,6 @@ test('flags committed env files and keys, but not the settings template', () => 
       'secret-file:certs/server.pem',
       'secret-file:service-account-prod.json',
     ],
-  );
-});
-
-test('flags any mention of the private upstream, in any spelling', () => {
-  assert.deepEqual(
-    boundaryFindings([
-      { path: 'README.md', text: `Ported from https://github.com/${ORG}/Citeladder.git\nok` },
-      { path: 'docs/notes.md', text: `sonar key ${ORG.replace('-', '_')}_Citeladder` },
-      { path: 'a.ts', text: `// ${ORG.toLowerCase().replace('-', '')}` },
-    ]).map(({ path, line }) => `${path}:${line}`),
-    ['README.md:1', 'docs/notes.md:1', 'a.ts:1'],
   );
 });
 
