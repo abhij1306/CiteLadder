@@ -436,6 +436,46 @@ describe('issue catalog', () => {
     expect(first).toContain('"homepage, product"');
   });
 
+  it('embeds the first row’s detail only when asked, as the detail route serves it', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    const product = await page(seed, '/product');
+    for (const target of [home, product]) await issue(seed, target, 'technical.indexable');
+    await issue(seed, home, 'technical.title_present');
+    const groupId = issueGroupId(seed.crawlId, 'technical.indexable', 'defect');
+
+    const plain = await json(seed, `/site-crawls/${seed.crawlId}/issues`, siteIssuesPageSchema);
+    const embedded = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?detail_limit=1`,
+      siteIssuesPageSchema,
+    );
+
+    expect(plain.first_issue).toBeUndefined();
+    expect(embedded.first_issue).toMatchObject({
+      group_id: groupId,
+      rule_id: 'technical.indexable',
+      occurrence_count: 2,
+      affected_url_count: 2,
+    });
+    expect(embedded.first_issue?.occurrences).toHaveLength(1);
+    expect(embedded.first_issue).toEqual(
+      await json(
+        seed,
+        `/site-crawls/${seed.crawlId}/issues/${groupId}?limit=1`,
+        siteIssueDetailSchema,
+      ),
+    );
+    // A page with no rows has no first issue to carry.
+    const none = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?detail_limit=1&query=no-such-issue`,
+      siteIssuesPageSchema,
+    );
+    expect(none.items).toEqual([]);
+    expect(none.first_issue).toBeUndefined();
+  });
+
   it('ranks a severity tier by pages affected, pages it on that order, and searches titles', async () => {
     const seed = await fixtures.crawl();
     const home = await page(seed, '/');
@@ -825,6 +865,7 @@ describe('workspace authorization', () => {
       `/site-crawls/${seed.crawlId}`,
       `/site-crawls/${seed.crawlId}/pages`,
       `/site-crawls/${seed.crawlId}/issues`,
+      `/site-crawls/${seed.crawlId}/issues?detail_limit=5`,
       `/site-crawls/${seed.crawlId}/events`,
       `/site-crawls/${seed.crawlId}/export.csv`,
       `/projects/${seed.projectId}/site-health`,

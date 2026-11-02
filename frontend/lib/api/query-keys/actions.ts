@@ -11,7 +11,7 @@ export const actionKeys = {
       status: string | null;
       targetKind: string | null;
       cursor: string | null;
-      limit: number | null;
+      limit: number;
     },
   ) => ['actions', 'list', projectId, filters] as const,
   detail: (actionId: string) => ['actions', 'detail', actionId] as const,

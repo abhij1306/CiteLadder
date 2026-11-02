@@ -130,12 +130,10 @@ async function prefetchSiteHealth(client: QueryClient, { projectId, workspaceId 
  * a page they will not see.
  */
 async function prefetchIssues(client: QueryClient, scope: ProjectScope) {
-  const [{ siteHealthQueries }, { ISSUE_PAGE_LIMIT }, { emptyIssueFilters, toIssueParams }] =
-    await Promise.all([
-      import('@/lib/api/site-health'),
-      import('@/lib/config/site-health'),
-      import('@/lib/site-health/issue-filters'),
-    ]);
+  const [{ siteHealthQueries }, { emptyIssueFilters, issueCatalogParams }] = await Promise.all([
+    import('@/lib/api/site-health'),
+    import('@/lib/site-health/issue-filters'),
+  ]);
   const dashboard = siteHealthQueries.dashboard(scope.workspaceId, scope.projectId);
   warmQuery(client, dashboard);
 
@@ -148,7 +146,7 @@ async function prefetchIssues(client: QueryClient, scope: ProjectScope) {
       crawlId,
       // The identical params `IssuesCatalog` builds for an unfiltered first
       // page. Spelling them out differently here would warm a key nothing reads.
-      toIssueParams(emptyIssueFilters, null, ISSUE_PAGE_LIMIT),
+      issueCatalogParams(emptyIssueFilters, null),
     ),
   );
 }

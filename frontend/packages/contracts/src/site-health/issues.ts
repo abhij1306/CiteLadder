@@ -95,4 +95,9 @@ export const siteIssueDetailSchema = responseObject({
 // Grouped-issue catalog page — cursor page + API-owned summary (mockup 710).
 export const siteIssuesPageSchema = cursorPageSchema(siteIssueSchema).extend({
   summary: issuesSummarySchema,
+  // The first listed issue's detail (first occurrence page, under the list's
+  // page-kind filter), present only when the request named `detail_limit` and
+  // the page has a row. It is the exact read `/issues/{group_id}` returns, so
+  // a list-detail view can show its default selection without a second trip.
+  first_issue: siteIssueDetailSchema.optional(),
 });

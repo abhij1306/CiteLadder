@@ -83,7 +83,11 @@ describe('prefetchRoute', () => {
     );
     prefetchRoute(client, '/site', PROJECT);
 
-    await vi.waitFor(() => expect(asked).toEqual(['dashboard', 'pages ?limit=10&monitored=true']));
+    // The page browser's first page names its default sort, so the warmed
+    // preview must too or it fills an entry the browser never reads.
+    await vi.waitFor(() =>
+      expect(asked).toEqual(['dashboard', 'pages ?limit=10&monitored=true&sort=status']),
+    );
   });
 
   it('leaves an already-failed query untouched so a settled error cannot flicker', async () => {

@@ -20,6 +20,7 @@ import {
 } from '@citeladder/contracts/actions';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
+import { TABLE_DEFAULT_PAGE_SIZE } from '@/lib/config/tables';
 
 export type Action = z.infer<typeof actionItemSchema>;
 export type ActionDetail = z.infer<typeof actionDetailSchema>;
@@ -84,16 +85,24 @@ export const actionsApi = {
 };
 
 export const actionsQueries = {
-  list: (workspaceId: string, projectId: string, params?: ActionsParams) =>
-    queryOptions({
+  /**
+   * One page of Actions. Without a limit it is the Actions table's first page
+   * at its default size, so the navigation badge, the Agent's top Actions and
+   * the table share one request instead of asking for two page sizes of the
+   * same queue.
+   */
+  list: (workspaceId: string, projectId: string, params?: ActionsParams) => {
+    const request = { ...params, limit: params?.limit ?? TABLE_DEFAULT_PAGE_SIZE };
+    return queryOptions({
       queryKey: queryKeys.actions.list(projectId, {
-        status: params?.status ?? null,
-        targetKind: params?.target_kind ?? null,
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
+        status: request.status ?? null,
+        targetKind: request.target_kind ?? null,
+        cursor: request.cursor ?? null,
+        limit: request.limit,
       }),
-      queryFn: ({ signal }) => actionsApi.list(projectId, params, { signal, workspaceId }),
-    }),
+      queryFn: ({ signal }) => actionsApi.list(projectId, request, { signal, workspaceId }),
+    });
+  },
   detail: (workspaceId: string, actionId: string) =>
     queryOptions({
       queryKey: queryKeys.actions.detail(actionId),

@@ -74,6 +74,26 @@ describe('SiteHealthScreen — Website tab deep links', () => {
   });
 });
 
+describe('SiteHealthScreen — Pages tab reads', () => {
+  it('reads the first Monitored page once for the progress strip and the page browser', async () => {
+    setSearch('tab=pages');
+    mockRoutes();
+    const reads: string[] = [];
+    mswServer.use(
+      http.get(`/api/v1/site-crawls/${CRAWL}/pages`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        reads.push(`${params.get('monitored')}|${params.get('sort')}|${params.get('limit')}`);
+        return HttpResponse.json({ items: [], next_cursor: null, root_errors: [] });
+      }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText('No pages in this view')).toBeVisible();
+    expect(reads).toEqual(['true|status|10']);
+  });
+});
+
 describe('SiteHealthScreen — loading failures', () => {
   it('retries an initial dashboard read without starting a crawl', async () => {
     const user = userEvent.setup();

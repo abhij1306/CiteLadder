@@ -18,7 +18,7 @@ import { siteHealthQueries, type PagesParams, type PagesSort } from '@/lib/api/s
 import type { PagesPage, SiteCrawl } from '@/lib/api/types';
 import { Tabs } from '@/components/ui/tabs';
 import { cursorControls, pageRange, useCursorTable } from '@/lib/table/use-cursor-table';
-import { statusLabel, type InventoryMode } from '@/lib/site-health/status';
+import { DEFAULT_PAGES_SORT, statusLabel, type InventoryMode } from '@/lib/site-health/status';
 
 /**
  * Always-mounted inventory section of the canonical Site Health screen.
@@ -359,5 +359,5 @@ function initialPagesSort(value: string | null): PagesSort {
     'main_content_inbound',
     'depth',
   ];
-  return supported.includes(value as PagesSort) ? (value as PagesSort) : 'status';
+  return supported.includes(value as PagesSort) ? (value as PagesSort) : DEFAULT_PAGES_SORT;
 }

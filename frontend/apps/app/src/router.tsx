@@ -95,13 +95,16 @@ const screenRoutes: RouteObject[] = [
       default: ChatRouteElement,
     })),
   ),
+  // Actions are a table and a detail, not a conversation. Their own module
+  // keeps the chat screen's markdown renderer and the other Agent screens out
+  // of the Actions download.
   screenRoute('/agent/actions', () =>
-    import('./product-routes-agent').then(({ ActionsRouteElement }) => ({
+    import('./product-routes-actions').then(({ ActionsRouteElement }) => ({
       default: ActionsRouteElement,
     })),
   ),
   screenRoute('/agent/actions/:actionId', () =>
-    import('./product-routes-agent').then(({ ActionDetailRouteElement }) => ({
+    import('./product-routes-actions').then(({ ActionDetailRouteElement }) => ({
       default: ActionDetailRouteElement,
     })),
   ),

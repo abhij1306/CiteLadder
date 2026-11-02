@@ -49,8 +49,9 @@ describe('Actions', () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/actions`, ({ request }) => {
         const params = new URL(request.url).searchParams;
-        // The unpaged read is the project-wide status count, not the table.
-        if (params.has('limit')) searches.push(params.get('status') ?? 'queue');
+        // Every read is recorded: the status counts ride the table's own
+        // first page, so the default view is one request, not two.
+        searches.push(`${params.get('status') ?? 'queue'}:${params.get('limit')}`);
         const items = params.get('status') === 'dismissed' ? [] : [action];
         return HttpResponse.json({
           items,
@@ -77,7 +78,7 @@ describe('Actions', () => {
     await user.click(await screen.findByRole('option', { name: 'Dismissed (0)' }));
 
     expect(await screen.findByText('No Actions match these filters')).toBeVisible();
-    expect(searches).toEqual(['queue', 'dismissed']);
+    expect(searches).toEqual(['queue:10', 'dismissed:10']);
 
     // Counts cover every target type, so a target filter drops them.
     await user.click(screen.getByRole('combobox', { name: 'Target type' }));

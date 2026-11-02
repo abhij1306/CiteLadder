@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '@/lib/api/query-keys';
+import { TABLE_DEFAULT_PAGE_SIZE } from '@/lib/config/tables';
 import {
   siteHealthMutations,
   siteHealthQueries,
@@ -22,19 +23,21 @@ import { useCrawlEvents } from '@/lib/site-health/use-crawl-events';
 import {
   crawlPollInterval,
   crawlProgressVersion,
+  DEFAULT_PAGES_SORT,
   inventoryModeForPhase,
   isCrawlStalled,
-  PAGE_LIMIT,
   shouldPollCrawl,
   type InventoryMode,
   type SiteHealthPhase,
 } from '@/lib/site-health/status';
 
+/** The page browser's first Monitored page at its default size and ordering. */
 function monitoredPagePreviewParams(active: boolean) {
   return {
-    limit: PAGE_LIMIT,
+    limit: TABLE_DEFAULT_PAGE_SIZE,
     monitored: true,
     status: active ? 'completed' : undefined,
+    sort: DEFAULT_PAGES_SORT,
   };
 }
 

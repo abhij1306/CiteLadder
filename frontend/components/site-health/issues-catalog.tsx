@@ -18,14 +18,14 @@ import { SearchField } from '@/components/ui/search-field';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import { ICONS } from '@/lib/icons';
-import { ISSUE_OCCURRENCE_LIMIT, ISSUE_PAGE_LIMIT } from '@/lib/config/site-health';
+import { ISSUE_OCCURRENCE_LIMIT } from '@/lib/config/site-health';
 import type { IssuesSummary, SiteIssue } from '@/lib/api/types';
 import {
   findingClassChange,
   issueFilterClass,
   issueFilterClassChange,
   issueFilterClasses,
-  toIssueParams,
+  issueCatalogParams,
   useIssueFilters,
   type FindingClass,
   type IssueFilterClass,
@@ -57,7 +57,12 @@ function filterCount(filter: IssueFilterClass, summary: IssuesSummary, view: Fin
   return view === 'defect' ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
 }
 
-/** The issue page, then the occurrences of whichever issue the rail shows. */
+/**
+ * The issue page and the occurrences of whichever issue the rail shows, with
+ * no request waiting on another: a selection named in the address starts its
+ * detail alongside the list, and the default selection (the first row) rides
+ * the list response itself.
+ */
 function useIssuesCatalogQueries(
   workspaceId: string,
   crawlId: string,
@@ -66,19 +71,28 @@ function useIssuesCatalogQueries(
   selectedGroupId: string | null,
   occurrenceCursor: string | undefined,
 ) {
-  const params = useMemo(() => toIssueParams(filters, cursor, ISSUE_PAGE_LIMIT), [filters, cursor]);
+  const params = useMemo(() => issueCatalogParams(filters, cursor), [filters, cursor]);
   const issuesQuery = useQuery(siteHealthQueries.issues(workspaceId, crawlId, params));
   const summary = issuesQuery.data?.summary ?? null;
   const rows = issuesQuery.data?.items ?? [];
   const selected = rows.find((issue) => issue.group_id === selectedGroupId) ?? rows[0] ?? null;
+  // Until the list lands, the address names the issue to read. Once it has,
+  // the row actually selected does: an address issue missing from this page
+  // falls back to the first row, as the highlight does.
+  const detailGroupId = issuesQuery.data ? (selected?.group_id ?? null) : selectedGroupId;
+  const embedded = issuesQuery.data?.first_issue;
   const detailQuery = useQuery({
     // The rail lists the pages its row counted, so it takes the row's page-kind filter.
-    ...siteHealthQueries.issue(workspaceId, crawlId, selected?.group_id ?? '', {
+    ...siteHealthQueries.issue(workspaceId, crawlId, detailGroupId ?? '', {
       cursor: occurrenceCursor,
       limit: ISSUE_OCCURRENCE_LIMIT,
       page_kind: filters.page_kind || undefined,
     }),
-    enabled: selected !== null,
+    enabled: detailGroupId !== null,
+    // The list carried this exact first page of the first row's detail.
+    initialData: () =>
+      embedded && embedded.group_id === detailGroupId && !occurrenceCursor ? embedded : undefined,
+    initialDataUpdatedAt: issuesQuery.dataUpdatedAt,
   });
   // The rail describes ONE issue, so its header and its occurrences must come
   // from the same one. The detail lags the selection by a request and the

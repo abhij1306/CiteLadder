@@ -121,8 +121,8 @@ export type IssuesParams = {
   rule?: string;
   site_url_id?: string;
   finding_class?: 'defect' | 'advisory';
-  /** v2 P1: filter to issues affecting one classified page type. */
-  page_kind?: string;
+  page_kind?: string; // v2 P1: issues affecting one classified page type
+  detail_limit?: number; // embeds the first row's detail as `first_issue`
 };
 
 /** Keyset params for a grouped issue's affected-URL page and a URL's issue history. */
@@ -434,6 +434,7 @@ export const siteHealthQueries = {
         site_url_id: params?.site_url_id ?? null,
         finding_class: params?.finding_class ?? 'defect',
         page_kind: params?.page_kind ?? null,
+        detail_limit: params?.detail_limit ?? null,
       }),
       queryFn: ({ signal }) => siteHealthApi.getIssues(crawlId, params, { signal, workspaceId }),
       placeholderData: (previousData, previousQuery) =>

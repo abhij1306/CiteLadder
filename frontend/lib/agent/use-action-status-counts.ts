@@ -12,7 +12,8 @@ export function queueCount(counts: StatusCounts): number {
 
 /**
  * Project-wide Action counts by status, from the unfiltered first page that
- * the navigation badge and the Actions filter share. Undefined until loaded.
+ * the navigation badge, the Actions filter and the Actions table's default
+ * view share. Undefined until loaded.
  */
 export function useActionStatusCounts(): StatusCounts | undefined {
   const { activeProjectId, activeWorkspaceId } = useProjectContext();

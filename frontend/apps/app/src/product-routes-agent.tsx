@@ -1,5 +1,3 @@
-import { ActionDetailScreen } from '@/components/agent/action-detail-screen';
-import { ActionsScreen } from '@/components/agent/actions-screen';
 import { ChatScreen } from '@/components/agent/chat-screen';
 import { ContextScreen } from '@/components/agent/context-screen';
 import { NewChatScreen } from '@/components/agent/new-chat-screen';
@@ -13,16 +11,6 @@ export function NewChatRouteElement() {
 /** `/agent/chats/:chatId`: the conversation and its output pane. */
 export function ChatRouteElement() {
   return <ChatScreen />;
-}
-
-/** `/agent/actions`: Actions by deterministic priority, filterable. */
-export function ActionsRouteElement() {
-  return <ActionsScreen />;
-}
-
-/** `/agent/actions/:actionId`: diagnosis, members and linked chats. */
-export function ActionDetailRouteElement() {
-  return <ActionDetailScreen />;
 }
 
 /** `/agent/skills`: the read-only skill list. */

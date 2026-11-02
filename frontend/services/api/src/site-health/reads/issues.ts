@@ -249,6 +249,8 @@ export async function issues(
   crawlId: string,
   filters: IssueFilters,
   paging: Paging,
+  /** When set, also return the first row's detail with this many occurrences. */
+  detailLimit: number | null = null,
 ) {
   const crawl = await loadCrawl(db, workspaceId, crawlId);
   const fingerprint = {
@@ -268,7 +270,8 @@ export async function issues(
   const window = start < 0 ? [] : groups.slice(start, start + paging.limit + 1);
   const items = window.slice(0, paging.limit);
   const last = items.at(-1);
-  const [kinds, summary] = await Promise.all([
+  const first = items[0];
+  const [kinds, summary, firstIssue] = await Promise.all([
     pageKindsByRule(
       db,
       crawl,
@@ -276,6 +279,19 @@ export async function issues(
       filters.findingClass,
     ),
     issueSummary(db, crawl, filters),
+    // The same read the detail route serves for this row: first occurrence
+    // page, narrowed by the list's page-kind filter exactly as the rail asks.
+    detailLimit !== null && first !== undefined
+      ? issueDetail(
+          db,
+          workspaceId,
+          crawl.id,
+          first.group_id,
+          { limit: detailLimit, cursor: null },
+          undefined,
+          filters.pageKind,
+        )
+      : undefined,
   ]);
   return siteIssuesPageSchema.parse({
     items: items.map((group) => ({
@@ -302,6 +318,7 @@ export async function issues(
         ? encodeKeysetCursor('issues', fingerprint, groupKey(last).map(String))
         : null,
     summary,
+    ...(firstIssue ? { first_issue: firstIssue } : {}),
   });
 }
 
