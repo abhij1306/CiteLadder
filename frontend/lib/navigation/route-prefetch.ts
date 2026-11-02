@@ -85,28 +85,35 @@ const ROUTE_PREFETCHERS: Readonly<Record<string, RoutePrefetcher>> = {
     warmQuery(client, runsQueries.list(workspaceId, projectId));
   },
   '/ai-traffic': async (client, { projectId, workspaceId }) => {
-    const { aiTrafficApi } = await import('@/lib/api/ai-traffic');
-    const { TRAFFIC_RANGES } = await import('@/lib/config/crawl-logs');
-    const params = {
-      range: TRAFFIC_RANGES[0].value,
-      verification: undefined,
-      purpose: undefined,
-      bot_id: undefined,
-      status: undefined,
-      folder: undefined,
-      resource_class: undefined,
-    };
-    warmQuery(client, {
-      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'overview', params),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        aiTrafficApi.overview(projectId, params, { signal, workspaceId }),
-    });
+    const [{ aiTrafficQueries }, { TRAFFIC_RANGES }] = await Promise.all([
+      import('@/lib/api/ai-traffic'),
+      import('@/lib/config/crawl-logs'),
+    ]);
+    // The landing view's three reads, side by side: the sources that choose
+    // the default tab, and the Overview tab's summary and insights.
+    const range = TRAFFIC_RANGES[0].value;
+    warmQuery(client, aiTrafficQueries.sources(workspaceId, projectId));
+    warmQuery(client, aiTrafficQueries.overview(workspaceId, projectId, { range }));
+    warmQuery(client, aiTrafficQueries.insights(workspaceId, projectId, range));
   },
 };
 
+/**
+ * Warm the Website screen's dashboard and, once it names the crawl, the page
+ * preview the screen requests next — the same two-step shape as `/issues`.
+ */
 async function prefetchSiteHealth(client: QueryClient, { projectId, workspaceId }: ProjectScope) {
-  const { siteHealthQueries } = await import('@/lib/api/site-health');
-  warmQuery(client, siteHealthQueries.dashboard(workspaceId, projectId));
+  const [{ siteHealthQueries }, { pagePreviewQuery }] = await Promise.all([
+    import('@/lib/api/site-health'),
+    import('@/lib/site-health/use-site-health-screen'),
+  ]);
+  const dashboard = siteHealthQueries.dashboard(workspaceId, projectId);
+  warmQuery(client, dashboard);
+  const preview = pagePreviewQuery(
+    workspaceId,
+    await client.ensureQueryData(dashboard).catch(() => null),
+  );
+  if (preview) warmQuery(client, preview);
 }
 
 /**

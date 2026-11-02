@@ -3,7 +3,11 @@ import { CRAWL_ONLY_TABS, TRAFFIC_TABS } from '@/lib/config/crawl-logs';
 import { useUrlState, type UrlCodec } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
 import { crawlLogsAvailable, useCrawlSources } from '@/lib/ai-traffic/use-crawl-connections';
-import { useTrafficData, type TrafficDataTab } from '@/lib/ai-traffic/use-traffic-data';
+import {
+  useOverviewWarmup,
+  useTrafficData,
+  type TrafficDataTab,
+} from '@/lib/ai-traffic/use-traffic-data';
 import { ListScreen } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -34,6 +38,13 @@ function resolveTab(requested: TrafficTab | null, crawlAvailable: boolean | null
     return requested && !CRAWL_ONLY_TABS.has(requested) ? requested : 'referrals';
   return requested ?? (crawlAvailable === null ? null : 'overview');
 }
+/**
+ * Whether Overview is, or will be, the tab on screen. It is the default while
+ * availability is still being read, so its reads need not wait for that answer.
+ */
+function leadsWithOverview(requested: TrafficTab | null, crawlAvailable: boolean | null) {
+  return (requested === null || requested === 'overview') && crawlAvailable !== false;
+}
 export function AiTrafficScreen() {
   const { activeProject } = useProjectContext();
   const sources = useCrawlSources(activeProject?.id ?? '', activeProject?.workspace_id ?? '');
@@ -43,6 +54,7 @@ export function AiTrafficScreen() {
   if (sources.data) crawlAvailable = crawlLogsAvailable(sources.data);
   else if (sources.isError || !activeProject) crawlAvailable = true;
   const tab = resolveTab(requested, crawlAvailable);
+  useOverviewWarmup(leadsWithOverview(requested, crawlAvailable));
   const tabs: TabRowProps = {
     ariaLabel: 'AI Traffic views',
     items: crawlAvailable === false ? TRAFFIC_TABS.filter((t) => !t.crawlOnly) : TRAFFIC_TABS,

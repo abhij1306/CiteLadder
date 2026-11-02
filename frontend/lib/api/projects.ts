@@ -2,9 +2,12 @@
  * Projects + workspaces domain endpoints. Workspace-scoped; no `user_id`.
  * Every response passes through `strictValidate`.
  */
+import { queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
+import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import { apiClient, type ApiRequestOptions } from './client';
+import { queryKeys } from './query-keys';
 import { workspaceSchema } from '@citeladder/contracts/auth';
 import {
   brandFactListSchema,
@@ -228,4 +231,41 @@ export const projectsApi = {
     );
     return strictValidate(businessMapSchema, res, 'projects.updateBusinessMap');
   },
+};
+
+/**
+ * The shell's project reads, shared by the route loader and the project
+ * context so both ask under one key with one bounded bootstrap timeout.
+ */
+export const projectQueries = {
+  /**
+   * One workspace's projects. Every listed project is the same authorized
+   * object its detail read returns, so the list seeds those entries: opening
+   * or switching to a listed project does not fetch it a second time.
+   */
+  list: (workspaceId: string) =>
+    queryOptions({
+      queryKey: queryKeys.projects.list(workspaceId),
+      queryFn: async ({ client, signal }) => {
+        const projects = await projectsApi.listProjects({
+          signal,
+          workspaceId,
+          timeoutMs: getBootstrapReadTimeoutMs(),
+        });
+        for (const project of projects)
+          client.setQueryData(queryKeys.projects.detail(project.id), project);
+        return projects;
+      },
+    }),
+  /** An explicit project, authorized from its path before any workspace is known. */
+  detail: (projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.projects.detail(projectId),
+      queryFn: ({ signal }) =>
+        projectsApi.getProject(projectId, {
+          signal,
+          workspaceId: null,
+          timeoutMs: getBootstrapReadTimeoutMs(),
+        }),
+    }),
 };

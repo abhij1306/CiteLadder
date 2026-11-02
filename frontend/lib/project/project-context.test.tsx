@@ -197,6 +197,43 @@ describe('ProjectProvider', () => {
     expect(headers.every((header) => header === WORKSPACE_B)).toBe(true);
   });
 
+  it('opens a listed project from the list it read, and reads nothing for other screens', async () => {
+    mswServer.use(
+      http.get('/api/v1/projects', () =>
+        HttpResponse.json([project(PROJECT_1, 'Acme'), project(PROJECT_2, 'Globex')]),
+      ),
+      http.get('/api/v1/projects/:id', () => HttpResponse.json(project(PROJECT_2, 'Globex'))),
+    );
+    const paths: string[] = [];
+    const record = ({ request }: { request: Request }) => {
+      paths.push(new URL(request.url).pathname);
+    };
+    mswServer.events.on('request:start', record);
+
+    function OpenGlobex() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" onClick={() => navigate(`/projects?project=${PROJECT_2}`)}>
+          open Globex
+        </button>
+      );
+    }
+    renderWithProviders(
+      <ProjectProvider>
+        <Harness />
+        <OpenGlobex />
+      </ProjectProvider>,
+      { initialEntries: ['/projects'] },
+    );
+    await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Acme'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'open Globex' }));
+
+    await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('Globex'));
+    mswServer.events.removeListener('request:start', record);
+    expect(paths).toEqual(['/api/v1/workspaces', '/api/v1/projects']);
+  });
+
   it('changes the active project on selection and persists it', async () => {
     mswServer.use(
       http.get('/api/v1/projects', () =>

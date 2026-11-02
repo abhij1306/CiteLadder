@@ -7,6 +7,7 @@ import {
   pagesPageSchema,
   pageDetailSchema,
   siteCrawlEventSchema,
+  siteCrawlSchema,
   siteHealthDashboardSchema,
   siteHealthOverviewSchema,
   siteIssueDetailSchema,
@@ -523,6 +524,46 @@ describe('dashboard', () => {
     });
     expect(body.root_errors).toHaveLength(3);
     expect(await runtime()).toEqual(before);
+  });
+
+  it('carries the sitemap manifest size, not its URLs, while the stored facts keep them', async () => {
+    const seed = await fixtures.crawl();
+    const stored = {
+      robots: { fetched: true, status_code: 200 },
+      llms_txt: { fetched: true, present: false, url: 'https://example.test/llms.txt' },
+      sitemap: {
+        fetched: true,
+        files: ['https://example.test/sitemap.xml'],
+        urls: ['https://example.test/a', 'https://example.test/b', 'https://example.test/c'],
+        lastmod: { 'https://example.test/a': '2026-10-01' },
+      },
+    };
+    await db
+      .updateTable('site_crawls')
+      .set({ site_facts: JSON.stringify(stored) })
+      .where('id', '=', seed.crawlId)
+      .execute();
+    const projected = {
+      robots: { fetched: true, status_code: 200 },
+      llms_txt: { fetched: true, present: false, url: 'https://example.test/llms.txt' },
+      sitemap: { fetched: true, files: ['https://example.test/sitemap.xml'], url_count: 3 },
+    };
+
+    const dashboard = await json(
+      seed,
+      `/projects/${seed.projectId}/site-health`,
+      siteHealthDashboardSchema,
+    );
+    const crawl = await json(seed, `/site-crawls/${seed.crawlId}`, siteCrawlSchema);
+    const row = await db
+      .selectFrom('site_crawls')
+      .select('site_facts')
+      .where('id', '=', seed.crawlId)
+      .executeTakeFirstOrThrow();
+
+    expect(dashboard.crawl?.site_facts).toEqual(projected);
+    expect(crawl.site_facts).toEqual(projected);
+    expect(row.site_facts).toEqual(stored);
   });
 });
 

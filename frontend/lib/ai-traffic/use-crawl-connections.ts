@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { aiTrafficApi } from '@/lib/api/ai-traffic';
+import { aiTrafficApi, aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { queryKeys } from '@/lib/api/query-keys';
 import {
   CRAWL_LOG_SETUPS,
@@ -25,8 +25,7 @@ export function useCrawlSources(
   awaiting: Awaiting | null = null,
 ) {
   return useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'sources'),
-    queryFn: ({ signal }) => aiTrafficApi.sources(projectId, { workspaceId, signal }),
+    ...aiTrafficQueries.sources(workspaceId, projectId),
     enabled: !!projectId && !!workspaceId,
     refetchInterval: (query) =>
       awaiting && !uploadProcessed(query.state.data, awaiting) ? UPLOAD_PROCESSING_POLL_MS : false,

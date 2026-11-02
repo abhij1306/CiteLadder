@@ -1,7 +1,9 @@
 /** Strict client for the persisted AI-referral projection. */
+import { queryOptions } from '@tanstack/react-query';
 import type { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
+import { queryKeys } from './query-keys';
 import {
   aiReferralsSchema,
   aiSourceSchema,
@@ -181,6 +183,32 @@ export const aiTrafficApi = {
   },
 };
 export type TrafficFilters = Record<string, string | number | undefined | null>;
+
+/**
+ * The reads the Overview tab opens with. The screen, its route prefetcher and
+ * the shell's landing warm all build them here, so a warmed entry is the one
+ * the screen reads.
+ */
+export const aiTrafficQueries = {
+  /** Crawl log sources: which tabs the screen offers. */
+  sources: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'sources'),
+      queryFn: ({ signal }) => aiTrafficApi.sources(projectId, { workspaceId, signal }),
+    }),
+  overview: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'overview', filters),
+      queryFn: ({ signal }) => aiTrafficApi.overview(projectId, filters, { workspaceId, signal }),
+    }),
+  /** Persisted patterns for the range; independent of the overview response. */
+  insights: (workspaceId: string, projectId: string, range: string) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'insights', { range }),
+      queryFn: ({ signal }) => aiTrafficApi.insights(projectId, { range }, { workspaceId, signal }),
+    }),
+};
+
 async function read<T>(
   projectId: string,
   path: string,

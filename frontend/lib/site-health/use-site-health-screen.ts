@@ -9,7 +9,7 @@ import {
   siteHealthQueries,
   type StartCrawlInput,
 } from '@/lib/api/site-health';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
 import {
   downloadCrawlExport,
   type ExportFormat,
@@ -44,6 +44,22 @@ function canLoadPagePreview(
   phase: SiteHealthPhase,
 ): boolean {
   return scopeEnabled && Boolean(crawlId) && (phase === 'analyzing' || phase === 'dashboard');
+}
+
+/**
+ * The page preview the screen requests once its dashboard names a crawl in an
+ * analyzing or scored phase, or null before then. The route prefetcher warms
+ * it from the same answer, so the warmed entry is the one the screen reads.
+ */
+export function pagePreviewQuery(workspaceId: string, dashboard: SiteHealthDashboard | null) {
+  const crawl = dashboard?.crawl ?? null;
+  const phase: SiteHealthPhase = dashboard?.phase ?? 'resolving';
+  if (!crawl || !canLoadPagePreview(true, crawl.id, phase)) return null;
+  return siteHealthQueries.pages(
+    workspaceId,
+    crawl.id,
+    monitoredPagePreviewParams(shouldPollCrawl(crawl)),
+  );
 }
 
 /**

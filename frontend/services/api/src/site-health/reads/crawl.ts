@@ -186,6 +186,24 @@ const iso = (value: Date | null) => value?.toISOString() ?? null;
  * frozen with count disclosure. The inventory total is the larger of fetched
  * and admitted URLs: a sitemap crawl fetches the root once and admits many.
  */
+/**
+ * The persisted site facts without the sitemap URL manifest.
+ *
+ * `sitemap.urls` and `sitemap.lastmod` hold every admitted sitemap URL — up to
+ * `max_sitemap_admitted_urls` of them — and are the analysis-time authority for
+ * sitemap membership, which page detail already reports per page. Shipping them
+ * on every crawl read made the dashboard megabytes; the projection keeps their
+ * size as `sitemap.url_count` and leaves the stored facts untouched.
+ */
+function publicSiteFacts(facts: Record<string, unknown>) {
+  if (!('sitemap' in facts)) return facts;
+  const { urls, lastmod: _lastmod, ...sitemap } = record(facts.sitemap);
+  return {
+    ...facts,
+    sitemap: Array.isArray(urls) ? { ...sitemap, url_count: urls.length } : sitemap,
+  };
+}
+
 export function projectCrawl(
   crawl: Crawl,
   options: { failureSummary?: FailureSummary | null; counters?: Counters } = {},
@@ -217,7 +235,7 @@ export function projectCrawl(
     has_more_site_urls: disclose ? !crawl.inventory_complete : null,
     score_summary: summary,
     failure_summary: options.failureSummary ?? null,
-    site_facts: crawl.site_facts === null ? null : record(crawl.site_facts),
+    site_facts: crawl.site_facts === null ? null : publicSiteFacts(record(crawl.site_facts)),
     extractor_version: crawl.extractor_version,
     analyzer_version: crawl.analyzer_version,
     rule_version: crawl.rule_catalog_version,

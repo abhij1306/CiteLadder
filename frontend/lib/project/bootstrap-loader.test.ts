@@ -189,6 +189,85 @@ describe('bootstrapPrivateRoutes', () => {
     expect(await run('/projects')).toBeNull();
   });
 
+  describe('a reload of a project address', () => {
+    /** Every request path (with its query) the loader sends while `work` runs. */
+    function recordRequests() {
+      const paths: string[] = [];
+      const listener = ({ request }: { request: Request }) => {
+        const url = new URL(request.url);
+        paths.push(url.pathname + url.search);
+      };
+      mswServer.events.on('request:start', listener);
+      return { paths, stop: () => mswServer.events.removeListener('request:start', listener) };
+    }
+    const projectReads = (paths: string[]) =>
+      paths.filter((path) => path === '/api/v1/projects' || path === `/api/v1/projects/${PROJECT}`);
+
+    it('resolves the project from the remembered workspace list it needs anyway', async () => {
+      window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, WORKSPACE);
+      stub({ projects: [PROJECT_ROW] });
+      mswServer.use(http.get(`/api/v1/projects/${PROJECT}`, () => HttpResponse.json(PROJECT_ROW)));
+      const requests = recordRequests();
+
+      expect(await run(`/settings?project=${PROJECT}`)).toBeNull();
+      requests.stop();
+
+      expect(projectReads(requests.paths)).toEqual(['/api/v1/projects']);
+    });
+
+    it('asks for the project itself when the remembered workspace does not list it', async () => {
+      window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, WORKSPACE);
+      stub({ projects: [] });
+      mswServer.use(http.get(`/api/v1/projects/${PROJECT}`, () => HttpResponse.json(PROJECT_ROW)));
+      const requests = recordRequests();
+
+      expect(await run(`/settings?project=${PROJECT}`)).toBeNull();
+      requests.stop();
+
+      expect(projectReads(requests.paths)).toEqual([
+        '/api/v1/projects',
+        `/api/v1/projects/${PROJECT}`,
+      ]);
+    });
+
+    it('starts the landing screen’s reads while the profile read is still answering', async () => {
+      window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, WORKSPACE);
+      stub({ projects: [PROJECT_ROW] });
+      let answer!: (response: HttpResponse<DefaultBodyType>) => void;
+      const access = new Promise<HttpResponse<DefaultBodyType>>((resolve) => {
+        answer = resolve;
+      });
+      mswServer.use(
+        http.get('/api/v1/auth/me', () => access),
+        // What the screen reads answer is not this test's concern.
+        http.get(`/api/v1/projects/${PROJECT}/*`, () =>
+          HttpResponse.json({ error: { message: 'not here' } }, { status: 404 }),
+        ),
+      );
+      const requests = recordRequests();
+      let settled = false;
+
+      const pending = run(`/ai-traffic?project=${PROJECT}`).then((location) => {
+        settled = true;
+        return location;
+      });
+      const screenReads = () =>
+        requests.paths.filter((path) => path.startsWith(`/api/v1/projects/${PROJECT}/`)).sort();
+      await waitFor(() =>
+        expect(screenReads()).toEqual([
+          `/api/v1/projects/${PROJECT}/ai-traffic/insights?range=30d`,
+          `/api/v1/projects/${PROJECT}/ai-traffic/overview?range=30d`,
+          `/api/v1/projects/${PROJECT}/crawl-logs/sources`,
+        ]),
+      );
+      expect(settled).toBe(false);
+
+      answer(HttpResponse.json({ user: USER }));
+      expect(await pending).toBeNull();
+      requests.stop();
+    });
+  });
+
   it('keeps a stored workspace that the membership list still contains', async () => {
     window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, WORKSPACE);
     window.localStorage.setItem(ACTIVE_PROJECT_STORAGE_KEY, PROJECT);
