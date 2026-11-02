@@ -124,7 +124,8 @@ jobs:
         run: docker compose logs --no-color
 
   secrets:
-    name: Secrets and open-source boundary
+    # The job name is a required check in the main ruleset; keep it.
+    name: Secrets scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
