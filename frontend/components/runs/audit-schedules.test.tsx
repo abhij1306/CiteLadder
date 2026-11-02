@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { ApiError } from '@/lib/api/errors';
+import { providersApi } from '@/lib/api/providers';
 import { runsApi } from '@/lib/api/runs';
 import { renderWithProviders } from '@/test/render';
 
@@ -16,6 +17,19 @@ vi.mock('@/lib/api/runs', () => ({
   },
 }));
 
+vi.mock('@/lib/api/providers', () => ({ providersApi: { listConnections: vi.fn() } }));
+
+const listConnections = vi.mocked(providersApi.listConnections);
+/** A tested connection that routes these engines. */
+const tested = (...engines: string[]) =>
+  [
+    {
+      active: true,
+      api_key_set: true,
+      last_test_status: 'ok',
+      routes: engines.map((logical_engine) => ({ logical_engine })),
+    },
+  ] as never;
 const createSchedule = vi.mocked(runsApi.createSchedule);
 const listSchedules = vi.mocked(runsApi.listSchedules);
 const updateSchedule = vi.mocked(runsApi.updateSchedule);
@@ -34,6 +48,8 @@ describe('AuditSchedules', () => {
     updateSchedule.mockReset();
     listSchedules.mockResolvedValue([]);
     createSchedule.mockResolvedValue(null as never);
+    listConnections.mockReset();
+    listConnections.mockResolvedValue(tested('chatgpt', 'gemini'));
   });
 
   it('preserves the schedule payload while shared controls own its inputs', async () => {
@@ -49,7 +65,7 @@ describe('AuditSchedules', () => {
     await user.click(screen.getByRole('option', { name: 'Every N minutes' }));
     await user.clear(screen.getByLabelText('Minutes'));
     await user.type(screen.getByLabelText('Minutes'), '15');
-    await user.click(screen.getByRole('checkbox', { name: 'Gemini API' }));
+    await user.click(await screen.findByRole('checkbox', { name: 'Gemini API' }));
     await user.click(screen.getByRole('button', { name: 'Schedule audit' }));
 
     await waitFor(() =>
@@ -66,6 +82,24 @@ describe('AuditSchedules', () => {
       ),
     );
     await waitFor(() => expect(listSchedules).toHaveBeenCalledTimes(2));
+  });
+
+  it('offers no engine and schedules nothing while no provider is connected', async () => {
+    listConnections.mockResolvedValue([]);
+    renderWithProviders(
+      <AuditSchedules
+        projectId="11111111-1111-4111-8111-111111111111"
+        promptSets={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Core prompts' } as never]}
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        'No configured engines. Connect a provider in Settings, Providers to schedule an audit.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByRole('checkbox', { name: 'ChatGPT API' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Schedule audit' })).toBeDisabled();
   });
 
   it('reports a failed schedules read without calling the list empty', async () => {

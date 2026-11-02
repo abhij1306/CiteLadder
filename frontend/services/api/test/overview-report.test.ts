@@ -79,6 +79,9 @@ describe('Overview PDF', () => {
     const unmeasured = await reportText(tenant);
     expect(unmeasured).toContain('No completed measurement yet.');
     expect(unmeasured).toContain('Ranked actions');
+    // A self-hosted report carries its page count, not the hosted product's address.
+    expect(unmeasured).toContain('Page 1 of');
+    expect(unmeasured).not.toContain('citeladder.com');
 
     const auditId = await fixtures.audit(tenant, { completedAt: measuredAt });
     await fixtures.metricSnapshot(tenant, auditId, { visibilityScore: 0, metrics: {} });
