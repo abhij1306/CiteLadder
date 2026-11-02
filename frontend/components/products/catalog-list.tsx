@@ -13,7 +13,9 @@ import { SearchField } from '@/components/ui/search-field';
 import { Pressable } from '@/components/ui/pressable';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
-import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
+import type { CommerceProjection, CommerceTarget } from '@citeladder/contracts/commerce-suite';
+
+type CatalogApplicability = CommerceProjection['applicability'];
 import { targetKey } from '@/lib/products/use-commerce-target';
 import { cn } from '@/lib/utils';
 
@@ -265,12 +267,14 @@ function CatalogTree({
 
 /**
  * Crawled pages project into the catalog only for a business that sells one,
- * so a crawl is advice only there; any business can import a CSV.
+ * so a crawl is advice only there; any business can import a CSV. A business
+ * model not yet confirmed is said to be unconfirmed, never that it does not sell.
  */
-function emptyCatalogHint(crawlProjects: boolean | undefined): string {
-  return crawlProjects
-    ? 'Run a Site Health crawl or import a CSV.'
-    : 'Crawled pages become catalog products only for businesses that sell a product catalog. Import a CSV to add products.';
+function emptyCatalogHint(applicability: CatalogApplicability | undefined): string {
+  if (applicability === 'applicable') return 'Run a Site Health crawl or import a CSV.';
+  if (applicability === 'unknown')
+    return 'Crawled pages become catalog products once your business model is confirmed as one that sells a product catalog. Import a CSV to add products.';
+  return 'Crawled pages become catalog products only for businesses that sell a product catalog. Import a CSV to add products.';
 }
 
 function filteredCatalog(
@@ -349,7 +353,9 @@ export function CatalogList({
             icon={needle ? SearchX : PackageOpen}
             headingLevel={3}
             heading={needle ? `Nothing matches “${search.trim()}”` : 'Nothing projected yet'}
-            description={needle ? undefined : emptyCatalogHint(query.data?.projection.applies)}
+            description={
+              needle ? undefined : emptyCatalogHint(query.data?.projection.applicability)
+            }
           />
         ) : (
           <CatalogTree

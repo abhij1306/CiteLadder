@@ -15,7 +15,9 @@ import {
 import type { z } from 'zod';
 
 import type { Database } from '../db/database.ts';
+import { record } from '../db/json.ts';
 import { wireUtc, utcText } from '../db/timestamps.ts';
+import { scalarText } from '../text-order.ts';
 import { AnalysisNotFoundError } from './selection.ts';
 import { executionSurfaceEvidence } from './surface.ts';
 import { executionClaims } from './accuracy.ts';
@@ -71,13 +73,13 @@ export async function getExecutionEvidence(
     .where('workspace_id', '=', input.workspaceId)
     .orderBy('ordinal', 'asc')
     .execute();
-  // Frozen provenance from the task and audit parents.
-  // audit_tasks has no workspace column; it is scoped through its audit.
+  // Frozen provenance and the stored answer from the task and audit parents.
   const task = await db
     .selectFrom('audit_tasks')
-    .select(['request_snapshot', 'provider_route_snapshot'])
+    .select(['request_snapshot', 'provider_route_snapshot', 'answer_text', 'provider_metadata'])
     .where('id', '=', input.taskId)
     .where('audit_id', '=', analysis.audit_id)
+    .where('workspace_id', '=', input.workspaceId)
     .executeTakeFirst();
   const audit = await db
     .selectFrom('audits')
@@ -130,6 +132,10 @@ export async function getExecutionEvidence(
     repetition: analysis.repetition,
     prompt_class: analysis.prompt_class,
     cohort: analysis.cohort,
+    answer_text: task?.answer_text ?? '',
+    search_surface_outcome: scalarText(
+      record(task?.provider_metadata).search_surface_outcome ?? '',
+    ),
     brand_mentioned: analysis.brand_mentioned,
     brand_first_offset: analysis.brand_first_offset,
     owned_domain_cited: analysis.owned_domain_cited,

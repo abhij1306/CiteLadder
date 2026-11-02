@@ -91,6 +91,7 @@ export function CommerceWorkspace({ projectId }: Readonly<{ projectId: string }>
     workspaceId: workspaceId ?? '',
     projectId,
     query: queries.catalog,
+    projection: queries.projection,
   });
   const { categories, products } = catalogEntries(queries.catalog);
   const entries = [...categories, ...products];

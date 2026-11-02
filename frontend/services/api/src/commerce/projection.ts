@@ -1,6 +1,6 @@
 import { sql, type Updateable } from 'kysely';
 import { z } from 'zod';
-import { commerceCategorySchema } from '@citeladder/contracts/commerce-suite';
+import { commerceCategoryRoleSchema } from '@citeladder/contracts/commerce-suite';
 
 import { loadWorkerSettings, policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -95,7 +95,7 @@ async function projectCategory(
     artifact_id: source.artifact_id,
     version: policy.commerce.projector_version,
   };
-  const role = commerceCategorySchema.shape.role.safeParse(facts.commerce.category_role);
+  const role = commerceCategoryRoleSchema.safeParse(facts.commerce.category_role);
   await db
     .updateTable('commerce_categories')
     .set({

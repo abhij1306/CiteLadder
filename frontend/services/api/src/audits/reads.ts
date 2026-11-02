@@ -5,10 +5,9 @@ import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
 import { utcText, utcTextOf, wireUtc, wireUtcOrNull } from '../db/timestamps.ts';
 import { notFound } from '../errors.ts';
-import { modelProvenanceFor, executionFrozenProvenance } from '../analysis/provenance.ts';
+import { modelProvenanceFor } from '../analysis/provenance.ts';
 import { engineSnapshots } from '../visibility/runs.ts';
 import { firstOf } from '../lists.ts';
-import { scalarText } from '../text-order.ts';
 
 function auditQuery(db: Database, workspaceId: string) {
   return db
@@ -90,34 +89,33 @@ export async function listAudits(
     );
   return auditResponses(db, await query.execute());
 }
+/**
+ * A run's executions as its table renders them, in dispatch order.
+ *
+ * Only the table's columns: an active run re-reads this list, so the answer
+ * text, snapshots and provider metadata stay on the single-execution read
+ * (`GET /executions/{id}`). One row per task the run planned, so the list is
+ * bounded by the run's own planned size and is not paged.
+ */
 export async function listExecutions(db: Database, workspaceId: string, auditId: string) {
-  const audit = await authorizedAudit(db, workspaceId, auditId);
+  await authorizedAudit(db, workspaceId, auditId);
   const tasks = await db
     .selectFrom('audit_tasks')
-    .selectAll()
     .select([
-      utcTextOf(sql.ref('created_at')).as('created_text'),
-      utcText(sql.ref('completed_at')).as('completed_text'),
+      'id',
+      'prompt_index',
+      'logical_engine',
+      'transport_provider',
+      'status',
+      'prompt_text',
+      'error_code',
+      'latency_ms',
     ])
     .where('workspace_id', '=', workspaceId)
     .where('audit_id', '=', auditId)
     .orderBy('randomized_position')
     .execute();
-  return tasks.map((task) =>
-    executionSchema.parse({
-      ...task,
-      created_at: wireUtc(task.created_text),
-      completed_at: wireUtcOrNull(task.completed_text),
-      retrieval_enabled: executionFrozenProvenance({
-        requestSnapshot: task.request_snapshot,
-        routeSnapshot: task.provider_route_snapshot,
-        auditConfiguration: audit.configuration,
-      }),
-      search_surface_outcome: scalarText(
-        record(task.provider_metadata).search_surface_outcome ?? '',
-      ),
-    }),
-  );
+  return tasks.map((task) => executionSchema.parse(task));
 }
 export async function readAuditMetrics(db: Database, workspaceId: string, auditId: string) {
   await authorizedAudit(db, workspaceId, auditId);

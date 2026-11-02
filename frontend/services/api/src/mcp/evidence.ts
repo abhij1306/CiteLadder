@@ -103,8 +103,9 @@ export async function shelfRead(
     };
   if (args.target_kind || args.target_id)
     throw new McpInputError('target_kind and target_id are given together');
-  const { products, categories, projection } = await catalog(db, scope);
-  if (!projection.applies && !products.length) return unavailable('no_product_catalog');
+  const { products, product_total, categories, projection } = await catalog(db, scope);
+  if (projection.applicability !== 'applicable' && !product_total)
+    return unavailable('no_product_catalog');
   const shown = products.slice(0, mcpPolicy.max_list_limit);
   return {
     state: 'available',
@@ -116,7 +117,7 @@ export async function shelfRead(
       url: canonical_url,
       category_ids,
     })),
-    products_omitted: products.length - shown.length,
+    products_omitted: product_total - shown.length,
   };
 }
 

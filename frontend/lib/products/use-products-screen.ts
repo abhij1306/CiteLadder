@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { commerceApi } from '@/lib/api/commerce';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
-import { catalogPollingInterval } from './catalog-polling';
+import { useCatalogProjection } from './use-catalog-projection';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 /**
@@ -23,9 +23,10 @@ export function useCommerceQueries(projectId: string, target?: CommerceTarget) {
   const catalog = useQuery({
     queryKey: queryKeys.commerce.catalog(projectId),
     queryFn: ({ signal }) => commerceApi.catalog(projectId, { signal, workspaceId }),
+    // No interval: while projections run, only their state is polled.
     enabled: hasProject,
-    refetchInterval: (query) => catalogPollingInterval(query.state.data?.projection),
   });
+  const projection = useCatalogProjection(projectId, catalog);
   const competitors = useQuery({
     queryKey: queryKeys.commerce.competitors(projectId),
     queryFn: ({ signal }) => commerceApi.competitors(projectId, { signal, workspaceId }),
@@ -43,5 +44,5 @@ export function useCommerceQueries(projectId: string, target?: CommerceTarget) {
     queryFn: ({ signal }) => commerceApi.shelf(projectId, target!, { signal, workspaceId }),
     enabled: hasProject && Boolean(target),
   });
-  return { catalog, competitors, buyerPrompts, shelf };
+  return { catalog, projection, competitors, buyerPrompts, shelf };
 }

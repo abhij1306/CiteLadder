@@ -68,12 +68,14 @@ describe('GET /executions/{execution_id}', () => {
     outsider = await fixtures.tenant();
   });
 
-  it('serves the persisted analysis, ordered citations and frozen provenance', async () => {
+  it('serves the stored answer, the persisted analysis, ordered citations and frozen provenance', async () => {
     const auditId = await fixtures.audit(tenant, {
       configuration: { measurement_policy: { retrieval_enabled: true } },
     });
     const { taskId, analysisId } = await fixtures.execution(tenant, {
       auditId,
+      answerText: 'Acme Corp is the safest pick.',
+      providerMetadata: { search_surface_outcome: 'aio_present_no_text' },
       analysis: {
         brandMentioned: true,
         brandFirstOffset: 4,
@@ -95,6 +97,8 @@ describe('GET /executions/{execution_id}', () => {
       analysis_id: analysisId,
       audit_id: auditId,
       retrieval_enabled: true,
+      answer_text: 'Acme Corp is the safest pick.',
+      search_surface_outcome: 'aio_present_no_text',
       brand_mentioned: true,
       brand_first_offset: 4,
       competitors_mentioned: ['Globex'],

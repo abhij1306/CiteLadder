@@ -1,7 +1,7 @@
 import {
   buyerPromptSchema,
   commerceCatalogSchema,
-  commerceProductSchema,
+  commerceProjectionSchema,
   competitorCandidateSchema,
   competitorDiscoveryTaskSchema,
   shelfHolderSchema,
@@ -13,7 +13,7 @@ import { z } from 'zod';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
-import { sellsCatalog, UNCATEGORIZED_KEY } from './projection-facts.ts';
+import { catalogApplicability, UNCATEGORIZED_KEY } from './projection-facts.ts';
 import { holderIdentity, orderedRank } from './shelf-metrics.ts';
 import { ApiError } from '../errors.ts';
 
@@ -23,70 +23,75 @@ export function commerceMissing(message: string): never {
   throw new ApiError(404, message, { code: 'commerce_not_found' });
 }
 
-function numeric(value: string | null): number | null {
-  if (value === null) return null;
-  if (!value.trim()) throw new TypeError('Empty persisted numeric');
-  return z.number().parse(Number(value));
-}
-
+/**
+ * The catalog as navigation: product and category names, memberships and the
+ * projection's progress. Each row's evidence (attributes, variants, field
+ * sources) stays on the stored row. Products are bounded by configuration
+ * (first by name) with the full count beside them; category counts always
+ * cover every product. The reads are independent and run together.
+ */
 export async function catalog(db: Database, scope: CommerceScope) {
-  const projection = projectionState(db, scope);
-  const products = await db
+  const ownedProducts = db
     .selectFrom('commerce_products')
-    .selectAll()
     .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
+    .where('project_id', '=', scope.projectId);
+  // The listed products, first by name; memberships are read for these only.
+  const listed = ownedProducts
     .orderBy('name')
     .orderBy('canonical_url')
-    .execute();
-  // A row named "Uncategorized" (the platform default) is no category: its
-  // products read as uncategorized.
-  const categories = await db
-    .selectFrom('commerce_categories')
-    .selectAll()
+    .orderBy('id')
+    .limit(policy.commerce.catalog_product_limit);
+  const ownedMemberships = db
+    .selectFrom('commerce_product_categories')
     .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('normalized_name', '!=', UNCATEGORIZED_KEY)
-    .execute();
-  const shown = new Set(categories.map((row) => row.id));
-  const memberships = (
-    await db
-      .selectFrom('commerce_product_categories')
-      .select(['product_id', 'category_id'])
+    .where('project_id', '=', scope.projectId);
+  const [products, total, categories, memberships, categoryCounts, projection] = await Promise.all([
+    listed.select(['id', 'canonical_url', 'name', 'brand']).execute(),
+    ownedProducts.select(db.fn.countAll<string>().as('count')).executeTakeFirstOrThrow(),
+    // A row named "Uncategorized" (the platform default) is no category: its
+    // products read as uncategorized.
+    db
+      .selectFrom('commerce_categories')
+      .select(['id', 'name'])
       .where('workspace_id', '=', scope.workspaceId)
       .where('project_id', '=', scope.projectId)
-      .execute()
-  ).filter((row) => shown.has(row.category_id));
+      .where('normalized_name', '!=', UNCATEGORIZED_KEY)
+      .execute(),
+    ownedMemberships
+      .select(['product_id', 'category_id'])
+      .where('product_id', 'in', listed.select('id'))
+      .execute(),
+    // Category counts cover every product, listed or not.
+    ownedMemberships
+      .select((eb) => ['category_id', eb.fn.countAll<string>().as('count')])
+      .groupBy('category_id')
+      .execute(),
+    catalogProjection(db, scope),
+  ]);
+  const shown = new Set(categories.map((row) => row.id));
   const byProduct = new Map<string, string[]>();
-  const counts = new Map<string, number>();
   for (const row of memberships) {
-    byProduct.set(row.product_id, [...(byProduct.get(row.product_id) ?? []), row.category_id]);
-    counts.set(row.category_id, (counts.get(row.category_id) ?? 0) + 1);
+    if (!shown.has(row.category_id)) continue;
+    const ids = byProduct.get(row.product_id);
+    if (ids) ids.push(row.category_id);
+    else byProduct.set(row.product_id, [row.category_id]);
   }
+  const counts = new Map(categoryCounts.map((row) => [row.category_id, Number(row.count)]));
   return commerceCatalogSchema.parse({
-    products: products.map(({ workspace_id, project_id, ...row }) => ({
+    products: products.map((row) => ({
       ...row,
-      price: numeric(row.price),
-      attributes: jsonObject(row.attributes, 'commerce_products.attributes'),
-      field_sources: jsonObject(row.field_sources, 'commerce_products.field_sources'),
-      variants: commerceProductSchema.shape.variants.parse(row.variants),
       category_ids: (byProduct.get(row.id) ?? []).sort((a, b) => a.localeCompare(b)),
-      created_at: row.created_at.toISOString(),
-      updated_at: row.updated_at.toISOString(),
     })),
+    product_total: Number(total.count),
     categories: categories
-      .map(({ workspace_id, project_id, normalized_name, created_at, updated_at, ...row }) => ({
-        ...row,
-        product_count: counts.get(row.id) ?? 0,
-        field_sources: jsonObject(row.field_sources, 'commerce_categories.field_sources'),
-      }))
+      .map((row) => ({ ...row, product_count: counts.get(row.id) ?? 0 }))
       .sort(
         (a, b) =>
           b.product_count - a.product_count ||
           a.name.localeCompare(b.name) ||
           a.id.localeCompare(b.id),
       ),
-    projection: await projection,
+    projection,
   });
 }
 
@@ -95,34 +100,34 @@ const PROJECTION_TASK = 'commerce_catalog_projection';
 /**
  * Projection progress for the catalog header: live tasks, and the failures of
  * the latest projected crawl only, so one old failure is not reported forever.
+ * Served alone too, so a screen waiting on projections polls this, not the
+ * catalog.
  */
-async function projectionState(db: Database, scope: CommerceScope) {
+export async function catalogProjection(db: Database, scope: CommerceScope) {
   const terminal = [...policy.task_queue.terminal];
-  const profile = await db
-    .selectFrom('brand_profiles')
-    .select('business_context')
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .executeTakeFirst();
   const tasks = db
     .selectFrom('analytics_tasks as t')
     .where('t.workspace_id', '=', scope.workspaceId)
     .where('t.project_id', '=', scope.projectId)
     .where('t.task_kind', '=', PROJECTION_TASK);
-  const inFlight = tasks
-    .select(db.fn.countAll<string>().as('count'))
-    .where('t.status', 'not in', terminal)
-    .executeTakeFirstOrThrow();
   const sources = tasks
     .innerJoin('site_page_analyses as a', (join) =>
       join.on(sql`a.id::text`, '=', sql`t.payload->>'source_analysis_id'`),
     )
     .where('a.workspace_id', '=', scope.workspaceId);
-  const latest = await sources
-    .select('a.crawl_id')
-    .orderBy('t.created_at', 'desc')
-    .limit(1)
-    .executeTakeFirst();
+  const [profile, inFlight, latest] = await Promise.all([
+    db
+      .selectFrom('brand_profiles')
+      .select('business_context')
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
+      .executeTakeFirst(),
+    tasks
+      .select(db.fn.countAll<string>().as('count'))
+      .where('t.status', 'not in', terminal)
+      .executeTakeFirstOrThrow(),
+    sources.select('a.crawl_id').orderBy('t.created_at', 'desc').limit(1).executeTakeFirst(),
+  ]);
   const failed = latest
     ? await sources
         .select(db.fn.countAll<string>().as('count'))
@@ -130,11 +135,11 @@ async function projectionState(db: Database, scope: CommerceScope) {
         .where('t.status', 'in', ['failed', 'cancelled'])
         .executeTakeFirstOrThrow()
     : { count: '0' };
-  return {
-    applies: sellsCatalog(profile?.business_context),
-    in_flight: Number((await inFlight).count),
+  return commerceProjectionSchema.parse({
+    applicability: catalogApplicability(profile?.business_context),
+    in_flight: Number(inFlight.count),
     failed: Number(failed.count),
-  };
+  });
 }
 
 const candidateFields = [

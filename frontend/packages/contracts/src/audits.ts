@@ -235,37 +235,19 @@ export const executionStatusSchema = z.enum([
   'cancelled',
 ]);
 
-// One execution/queue row in the run's executions table (`AuditTaskResponse`).
-// `answer_text` / `error_detail` default to '' (never null); the classified
-// citation evidence lives on the single-execution evidence endpoint below.
+// One execution/queue row in the run's executions table: only what the table
+// renders, because an active run re-reads the whole list. The answer, its
+// search-surface outcome and the classified evidence live on the
+// single-execution read (`GET /executions/{id}`) below.
 export const executionSchema = responseObject({
   id: uuid(),
-  audit_id: uuid(),
   prompt_index: z.number().int(),
-  repetition: z.number().int(),
-  randomized_position: z.number().int(),
   logical_engine: z.string(),
   transport_provider: z.string(),
-  transport_model: z.string(),
-  // Execution surface: the provenance triple is SINGULAR (one execution = one
-  // exact model), projected from the frozen task snapshots only.
-  retrieval_enabled: z.boolean().nullable().default(null),
-  // The persisted search-surface outcome; '' for an LLM execution. Absence
-  // must be read from this and never inferred from an empty answer, because
-  // an AI Overview that was present but carried no extractable text looks
-  // identical from the outside.
-  search_surface_outcome: z.string().default(''),
   status: executionStatusSchema,
-  attempt_count: z.number().int(),
-  max_attempts: z.number().int(),
   prompt_text: z.string(),
-  answer_text: z.string(),
-  search_used: z.boolean(),
   error_code: z.string(),
-  error_detail: z.string(),
   latency_ms: z.number().nullable(),
-  created_at: z.string(),
-  completed_at: z.string().nullable(),
 });
 
 /**
@@ -379,6 +361,14 @@ export const executionEvidenceSchema = responseObject({
   repetition: z.number().int(),
   prompt_class: z.string(),
   cohort: z.string(),
+  // The answer this evidence analysed, as the execution stored it ('' when
+  // nothing was captured). Only this single read carries it, never the list.
+  answer_text: z.string(),
+  // The persisted search-surface outcome; '' for an LLM execution. Absence
+  // must be read from this and never inferred from an empty answer, because
+  // an AI Overview that was present but carried no extractable text looks
+  // identical from the outside.
+  search_surface_outcome: z.string(),
   brand_mentioned: z.boolean(),
   brand_first_offset: z.number().int().nullable(),
   owned_domain_cited: z.boolean(),

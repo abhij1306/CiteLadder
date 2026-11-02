@@ -59,6 +59,7 @@ function ShelfHarness({ target, label }: Readonly<{ target: CommerceTarget; labe
   });
   const queries: CommerceQueries = {
     catalog: emptyRowsQuery,
+    projection: undefined,
     competitors: emptyRowsQuery,
     buyerPrompts: emptyRowsQuery,
     shelf,

@@ -31,51 +31,16 @@ const EvidenceCard = lazy(() =>
  * execution as `task_id`. Both satisfy this shape, so neither has to fabricate
  * a full `Execution` to open the answer it already has a handle on.
  *
- * Everything past `id` is a display fallback the drawer shows while the fetch
- * is in flight; the fetched evidence is what it actually renders.
+ * Everything past `id` labels the drawer; the answer, its outcome and the
+ * analysis all come from the single-execution read (`/executions/{id}`), so
+ * neither caller has to hold an answer to open one.
  */
 export type EvidenceSubject = {
   /** The execution id. */
   id: string;
-  /**
-   * The audit that owns the execution. Required when `answer_text` is absent:
-   * `/executions/{id}` carries the ANALYSIS of an answer and not the answer
-   * itself, so the text has to come from the audit's execution rows. A caller
-   * that already holds the row passes `answer_text` instead and this is unused.
-   */
-  audit_id?: string;
-  answer_text?: string;
   prompt_text?: string;
   prompt_index?: number;
-  logical_engine?: string;
-  search_surface_outcome?: string;
 };
-
-/**
- * The answer itself, for a caller that could not supply it.
- *
- * `/executions/{id}` carries the ANALYSIS of an answer — mentions, citations,
- * scores — and not the answer's text, which lives on the audit's execution
- * rows. The run detail screen already holds those rows and passes the text
- * straight in, so this stays idle there; a source row in AI visibility
- * summarises an answer without carrying one, so it resolves the text here.
- */
-function useResolvedAnswer(execution: EvidenceSubject | null, open: boolean) {
-  const workspaceId = useActiveWorkspaceId();
-  const auditId = execution?.audit_id ?? '';
-  const pending = open && execution?.answer_text === undefined && auditId !== '';
-  const rows = useQuery({
-    queryKey: queryKeys.runs.executions(auditId),
-    queryFn: ({ signal }) => runsApi.listExecutions(auditId, { signal, workspaceId }),
-    enabled: pending && workspaceId !== null,
-  });
-  const row = pending ? rows.data?.find((candidate) => candidate.id === execution?.id) : undefined;
-  return {
-    loading: pending && rows.isLoading,
-    answerText: execution?.answer_text ?? row?.answer_text,
-    outcome: execution?.search_surface_outcome ?? row?.search_surface_outcome,
-  };
-}
 
 function EvidenceLoading() {
   return (
@@ -103,7 +68,6 @@ export function ExecutionEvidenceDrawer({
     queryFn: ({ signal }) => runsApi.getExecution(execution?.id ?? '', { signal, workspaceId }),
     enabled: open && execution !== null && workspaceId !== null,
   });
-  const answer = useResolvedAnswer(execution, open);
   // Start the card's download beside the evidence read rather than after it.
   useEffect(() => {
     if (open) void loadEvidenceCard().catch(() => {});
@@ -117,7 +81,7 @@ export function ExecutionEvidenceDrawer({
         fallback="Could not load this execution's evidence."
       />
     );
-  } else if (evidenceQuery.isLoading || !evidenceQuery.data || answer.loading) {
+  } else if (evidenceQuery.isLoading || !evidenceQuery.data) {
     evidenceBody = <EvidenceLoading />;
   } else {
     evidenceBody = (
@@ -129,11 +93,11 @@ export function ExecutionEvidenceDrawer({
       >
         <EvidenceCard
           evidence={evidenceQuery.data}
-          answerText={answer.answerText}
+          answerText={evidenceQuery.data.answer_text}
           promptText={execution?.prompt_text}
           promptIndex={execution?.prompt_index}
-          isSearchSurface={execution?.logical_engine === 'google_ai_overview'}
-          outcome={answer.outcome}
+          isSearchSurface={evidenceQuery.data.logical_engine === 'google_ai_overview'}
+          outcome={evidenceQuery.data.search_surface_outcome}
         />
       </LazyIsland>
     );

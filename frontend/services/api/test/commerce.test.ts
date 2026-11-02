@@ -78,6 +78,7 @@ const importCsv = (content = csv) =>
 describe('Commerce workspace boundaries', () => {
   const routes = [
     ['/catalog', 'GET', undefined],
+    ['/catalog/projection', 'GET', undefined],
     ['/catalog/import', 'POST', { content: csv }],
     ['/competitors', 'GET', undefined],
     ['/competitors/discoveries', 'GET', undefined],
@@ -213,12 +214,22 @@ describe('CSV evidence and catalog', () => {
     expect(one.status).toBe(201);
     expect(two).toEqual(one);
     const catalog = await call<CommerceCatalog>('/catalog');
-    expect(catalog.body.products[0]).toMatchObject({
-      name: 'One, large',
-      price: 19.25,
-      category_ids: [catalog.body.categories[0]!.id],
+    // The list is navigation: names and memberships, never the row's evidence.
+    expect(catalog.body).toEqual({
+      products: [
+        {
+          id: one.body.row_outcomes[0]!.product_id,
+          canonical_url: 'https://shop.example/products/one',
+          name: 'One, large',
+          brand: '',
+          category_ids: [catalog.body.categories[0]!.id],
+        },
+      ],
+      product_total: 1,
+      categories: [{ id: catalog.body.categories[0]!.id, name: 'Tools', product_count: 1 }],
+      // No brand profile confirms a business model yet.
+      projection: { applicability: 'unknown', in_flight: 0, failed: 0 },
     });
-    expect(catalog.body.categories[0]!.product_count).toBe(1);
     const artifacts = await db
       .selectFrom('commerce_csv_imports')
       .selectAll()
@@ -245,9 +256,51 @@ describe('CSV evidence and catalog', () => {
     ).toEqual([]);
     const update = await importCsv('sku,name\nA1,Updated\n');
     expect(update.body.updated).toBe(1);
-    expect(
-      (await call<CommerceCatalog>('/catalog')).body.products[0]!.field_sources.name,
-    ).toMatchObject({ kind: 'csv', source_id: update.body.import_id });
+    const stored = await db
+      .selectFrom('commerce_products')
+      .select(['name', 'price', 'field_sources'])
+      .where('project_id', '=', t.projectId)
+      .executeTakeFirstOrThrow();
+    expect(stored).toMatchObject({
+      name: 'Updated',
+      price: '19.25',
+      field_sources: { name: { kind: 'csv', source_id: update.body.import_id } },
+    });
+  });
+  it('bounds the listed products by name while counting every product and membership', async () => {
+    await importCsv(
+      'canonical_url,name,sku,category\nhttps://shop.example/c,Cedar,C1,Wood\nhttps://shop.example/a,Ash,A1,Wood\nhttps://shop.example/b,Birch,B1,Wood\n',
+    );
+    const limit = policy.commerce.catalog_product_limit;
+    policy.commerce.catalog_product_limit = 2;
+    try {
+      const { body } = await call<CommerceCatalog>('/catalog');
+      const wood = body.categories[0]!.id;
+      expect(body.products.map((row) => [row.name, row.category_ids])).toEqual([
+        ['Ash', [wood]],
+        ['Birch', [wood]],
+      ]);
+      expect(body.product_total).toBe(3);
+      expect(body.categories.map((row) => [row.name, row.product_count])).toEqual([['Wood', 3]]);
+    } finally {
+      policy.commerce.catalog_product_limit = limit;
+    }
+  });
+  it('serves the projection state alone, as the catalog reports it, inside its workspace', async () => {
+    await enqueue(db, {
+      workspaceId: t.workspaceId,
+      projectId: t.projectId,
+      kind: 'commerce_catalog_projection',
+      payload: { source_analysis_id: randomUUID() },
+    });
+    const projection = await call('/catalog/projection');
+    expect(projection).toEqual({
+      status: 200,
+      body: { applicability: 'unknown', in_flight: 1, failed: 0 },
+    });
+    expect((await call<CommerceCatalog>('/catalog')).body.projection).toEqual(projection.body);
+    const otherWorkspace = await fixtures.joinedWorkspace(t.userId);
+    expect((await call('/catalog/projection', { workspace: otherWorkspace })).status).toBe(404);
   });
   it('records invalid rows, rejects identity conflicts atomically, and orders categories by membership', async () => {
     const result = await importCsv(
@@ -284,13 +337,25 @@ describe('CSV evidence and catalog', () => {
     expect(
       (await importCsv('name\n' + 'a\n'.repeat(policy.commerce.import_max_rows + 1))).status,
     ).toBe(422);
-    await importCsv();
+    const imported = await importCsv();
     await db
       .updateTable('commerce_products')
       .set({ attributes: '[]' })
       .where('project_id', '=', t.projectId)
       .execute();
-    expect((await call('/catalog')).status).toBe(500);
+    // The catalog list never reads a row's evidence, so it stays readable; the
+    // discovery context that does read the attributes refuses the corrupt row.
+    expect((await call('/catalog')).status).toBe(200);
+    expect(
+      (
+        await call('/competitors/discover', {
+          method: 'POST',
+          body: {
+            targets: [{ kind: 'product', id: imported.body.row_outcomes[0]!.product_id }],
+          },
+        })
+      ).status,
+    ).toBe(500);
   });
 });
 

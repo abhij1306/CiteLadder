@@ -11,46 +11,42 @@ export const commerceTargetSchema = z.strictObject({
 });
 /** The targets one discovery or prompt-generation request names. */
 export const commerceTargetsSchema = z.array(commerceTargetSchema).min(1).max(COMMERCE_TARGETS_MAX);
+export const commerceCategoryRoleSchema = z.enum(['hub', 'leaf', 'unknown']);
+/**
+ * The catalog list is navigation: each row carries what the rail and the
+ * catalog-choice tool render, never the row's evidence (attributes, variants,
+ * field sources), which stays on the stored row and the frozen audit context.
+ */
 export const commerceCategorySchema = z.strictObject({
   id: uuid,
   name: z.string(),
-  role: z.enum(['hub', 'leaf', 'unknown']),
-  canonical_url: z.string(),
   product_count: z.number().int(),
-  field_sources: z.record(z.string(), z.unknown()),
-  source_analysis_id: uuid.nullable(),
-  projector_version: z.string(),
 });
 export const commerceProductSchema = z.strictObject({
   id: uuid,
   canonical_url: z.string(),
   name: z.string(),
-  description: z.string(),
   brand: z.string(),
-  price: z.number().nullable(),
-  currency: z.string(),
-  sku: z.string().nullable(),
-  gtin: z.string().nullable(),
-  mpn: z.string().nullable(),
-  observed_external_id: z.string(),
-  variants: z.array(z.unknown()),
-  attributes: z.record(z.string(), z.unknown()),
-  field_sources: z.record(z.string(), z.unknown()),
-  lifecycle_state: z.enum(['active', 'archived']),
   category_ids: z.array(uuid),
-  created_at: z.string(),
-  updated_at: z.string(),
+});
+/** Projection progress, read alone while projections are in flight. */
+export const commerceProjectionSchema = z.strictObject({
+  /**
+   * Whether crawled pages project into the catalog: only catalog-selling
+   * business models. `unknown` when no recognized model is confirmed yet;
+   * projection fails closed then, but the state is not "not applicable".
+   */
+  applicability: z.enum(['applicable', 'not_applicable', 'unknown']),
+  in_flight: z.number().int(),
+  /** Failed or cancelled projections of the latest projected crawl. */
+  failed: z.number().int(),
 });
 export const commerceCatalogSchema = z.strictObject({
+  /** The first configured number of products by name; `product_total` counts them all. */
   products: z.array(commerceProductSchema),
+  product_total: z.number().int(),
   categories: z.array(commerceCategorySchema),
-  projection: z.strictObject({
-    /** Whether crawled pages project into the catalog: only catalog-selling business models. */
-    applies: z.boolean(),
-    in_flight: z.number().int(),
-    /** Failed or cancelled projections of the latest projected crawl. */
-    failed: z.number().int(),
-  }),
+  projection: commerceProjectionSchema,
 });
 export const catalogImportSchema = z.strictObject({
   import_id: uuid,
@@ -136,6 +132,7 @@ export const shelfSchema = z.strictObject({
 
 export type CommerceTarget = z.infer<typeof commerceTargetSchema>;
 export type CommerceCatalog = z.infer<typeof commerceCatalogSchema>;
+export type CommerceProjection = z.infer<typeof commerceProjectionSchema>;
 export type CatalogImport = z.infer<typeof catalogImportSchema>;
 export type CompetitorCandidate = z.infer<typeof competitorCandidateSchema>;
 export type CompetitorDiscoveryTask = z.infer<typeof competitorDiscoveryTaskSchema>;

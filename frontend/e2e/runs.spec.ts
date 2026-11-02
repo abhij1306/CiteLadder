@@ -39,26 +39,17 @@ const audit = {
   completed_at: '2026-01-01T00:10:00Z',
 };
 
+// The list row carries the table's columns only; the answer comes with the
+// single-execution evidence read below.
 const execution = {
   id: EXEC_ID,
-  audit_id: AUDIT_ID,
   prompt_index: 0,
-  repetition: 1,
-  randomized_position: 0,
   logical_engine: 'gemini',
   transport_provider: 'google',
-  transport_model: 'gemini-flash-latest',
   status: 'succeeded',
-  attempt_count: 1,
-  max_attempts: 5,
   prompt_text: 'Which CRM is best for a growing team?',
-  answer_text: 'Acme is a leading CRM.',
-  search_used: true,
   error_code: '',
-  error_detail: '',
   latency_ms: 900,
-  created_at: '2026-01-01T00:00:00Z',
-  completed_at: '2026-01-01T00:00:03Z',
 };
 
 const evidence = {
@@ -76,6 +67,8 @@ const evidence = {
   repetition: 1,
   prompt_class: 'unbranded',
   cohort: 'core',
+  answer_text: 'Acme is a leading CRM.',
+  search_surface_outcome: '',
   brand_mentioned: true,
   brand_first_offset: 0,
   owned_domain_cited: true,
