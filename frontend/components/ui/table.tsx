@@ -1,4 +1,6 @@
 import {
+  createContext,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -222,6 +224,15 @@ function isPlainText(children: ReactNode) {
   );
 }
 
+/**
+ * How many lines a row's text may take before `ClampText` cuts it. Two by
+ * default; a paged `DataTable` of one-line rows sets one, because its blank
+ * rows and its pager's position assume every row is exactly one row tall — a
+ * page whose long queries wrapped to two lines was taller than the next page,
+ * so the pager and everything below it moved on every page turn.
+ */
+export const TableTextLinesContext = createContext<1 | 2>(2);
+
 function isCut(node: HTMLElement) {
   return node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1;
 }
@@ -239,15 +250,18 @@ function isCut(node: HTMLElement) {
  */
 export function ClampText({
   children,
-  lines = 2,
+  lines: requestedLines,
   tooltip,
   className,
 }: Readonly<{
   children: ReactNode;
+  /** Defaults to the table's text lines (`TableTextLinesContext`). */
   lines?: 1 | 2;
   tooltip?: ReactNode;
   className?: string;
 }>) {
+  const tableLines = useContext(TableTextLinesContext);
+  const lines = requestedLines ?? tableLines;
   // The full text as plain text: styled children (a title role, a caption)
   // would carry their own ink onto the inverse tooltip chip.
   const [fullText, setFullText] = useState<string | null>(null);

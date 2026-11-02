@@ -12,16 +12,12 @@ import {
   botActivityResponseSchema,
   crawlCoverageResponseSchema,
 } from '@citeladder/contracts/ai-traffic';
-import { sql } from 'kysely';
 import { z } from 'zod';
+import { aiTrafficOverview } from '../crawl-logs/overview.ts';
 import {
-  crawlSummary,
-  crawlWindow,
   crawlerPage,
   activityPage,
   coveragePage,
-  windowBounds,
-  withReportingTimezone,
   type CrawlReadOptions,
 } from '../crawl-logs/reads.ts';
 import { tableCsv } from '../http/table-export.ts';
@@ -30,7 +26,6 @@ import { crawlLogs } from '../config/crawl-logs.ts';
 import { AiReferralsQueryError, getAiReferrals } from '../analytics/ai-referrals.ts';
 import { policy } from '../config.ts';
 import { ApiError } from '../errors.ts';
-import { requireProject } from '../projects/access.ts';
 import { defineGetRoute } from './define.ts';
 import { trafficPageRoutes } from './ai-traffic-pages.ts';
 
@@ -64,51 +59,11 @@ export const aiTrafficRoutes = [
     response: aiTrafficOverviewSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
-      const scope = { workspaceId: workspace.workspaceId, projectId: path.project_id };
-      const options = await withReportingTimezone(db, scope, query);
-      const crawl = await crawlSummary(db, scope, options);
-      const referrals = await getAiReferrals(db, {
-        ...scope,
-        rangeToken: query.range,
-        fromDate: query.start_date,
-        toDate: query.end_date,
-        granularity: 'day',
-      }).catch((error: unknown) => {
-        if (error instanceof AiReferralsQueryError) throw new ApiError(422, error.message);
-        throw error;
-      });
-      let audits = db
-        .selectFrom('audits')
-        .select('id')
-        .distinctOn('audit_scope')
-        .where('workspace_id', '=', scope.workspaceId)
-        .where('project_id', '=', scope.projectId)
-        .where('status', '=', 'completed')
-        .orderBy('audit_scope')
-        .orderBy('created_at', 'desc')
-        .orderBy('id', 'desc');
-      const bounds = windowBounds(crawlWindow(options), options);
-      audits = audits.where('created_at', '>=', bounds.from).where('created_at', '<', bounds.to);
-      const ids = (await audits.execute()).map((a) => a.id);
-      const citations = ids.length
-        ? await db
-            .selectFrom('citations')
-            .select(sql<number>`count(*)::integer`.as('count'))
-            .where('workspace_id', '=', scope.workspaceId)
-            .where('audit_id', 'in', ids)
-            .where('is_owned', '=', true)
-            .executeTakeFirstOrThrow()
-        : null;
-      return {
-        crawl,
-        referrals,
-        citations: {
-          unit: 'tracked_citations' as const,
-          count: citations?.count ?? null,
-          label: "Observed in CiteLadder's tracked answers",
-        },
-      };
+      return aiTrafficOverview(
+        db,
+        { workspaceId: workspace.workspaceId, projectId: path.project_id },
+        query,
+      );
     },
   }),
   defineGetRoute({
@@ -116,7 +71,6 @@ export const aiTrafficRoutes = [
     path: root + '/crawlers',
     response: botCrawlersResponseSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return crawlerPage(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -129,7 +83,6 @@ export const aiTrafficRoutes = [
     path: root + '/activity',
     response: botActivityResponseSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return activityPage(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -143,7 +96,6 @@ export const aiTrafficRoutes = [
     path: root + '/coverage',
     response: crawlCoverageResponseSchema,
     async handle({ c, db }, { path, query }) {
-      await requireProject(db, c.get('workspace'), path.project_id);
       return coveragePage(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },
@@ -158,7 +110,6 @@ export const aiTrafficRoutes = [
       raw: true,
       response: z.string().meta({ format: 'binary' }),
       async handle({ c, db }, { path, query }) {
-        await requireProject(db, c.get('workspace'), path.project_id);
         const scope = { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id };
         const items: Record<string, unknown>[] = [];
         let cursor: string | null = null;
@@ -220,6 +171,7 @@ export const aiTrafficRoutes = [
   ),
   defineGetRoute({
     family: 'ai-traffic',
+    authorize: 'active-project',
     path: '/api/v1/projects/{project_id}/ai-traffic/referrals',
     params: {
       path: { project_id: { scalar: { kind: 'uuid' }, required: true } },
@@ -236,7 +188,6 @@ export const aiTrafficRoutes = [
     response: aiReferralsSchema,
     async handle({ c, db }, { path, query }) {
       const workspace = c.get('workspace');
-      await requireProject(db, workspace, path.project_id);
       try {
         return await getAiReferrals(db, {
           workspaceId: workspace.workspaceId,

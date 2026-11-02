@@ -3,8 +3,12 @@ import { CRAWL_ONLY_TABS, TRAFFIC_TABS } from '@/lib/config/crawl-logs';
 import { useUrlState, type UrlCodec } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
 import { crawlLogsAvailable, useCrawlSources } from '@/lib/ai-traffic/use-crawl-connections';
-import { useTrafficData, type TrafficDataTab } from '@/lib/ai-traffic/use-traffic-data';
-import { ListScreen } from '@/components/layout/page-shell';
+import {
+  useOverviewWarmup,
+  useTrafficData,
+  type TrafficDataTab,
+} from '@/lib/ai-traffic/use-traffic-data';
+import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { TabsRoot, TabPanel, type TabRowProps } from '@/components/ui/tabs';
@@ -14,8 +18,6 @@ import { readErrorProps } from '@/components/ui/read-error';
 import { AiReferralsScreen } from './referrals-screen';
 import { TrafficControls } from './traffic-controls';
 import { TrafficOverview, TrafficCrawlers, TrafficActivity } from './traffic-views';
-import { Pager } from '@/components/ui/pager';
-import { cursorControls } from '@/lib/table/use-cursor-table';
 import { TrafficPages } from './pages-view';
 import { CrawlLogAvailabilityNotice } from './crawl-log-availability';
 
@@ -34,6 +36,13 @@ function resolveTab(requested: TrafficTab | null, crawlAvailable: boolean | null
     return requested && !CRAWL_ONLY_TABS.has(requested) ? requested : 'referrals';
   return requested ?? (crawlAvailable === null ? null : 'overview');
 }
+/**
+ * Whether Overview is, or will be, the tab on screen. It is the default while
+ * availability is still being read, so its reads need not wait for that answer.
+ */
+function leadsWithOverview(requested: TrafficTab | null, crawlAvailable: boolean | null) {
+  return (requested === null || requested === 'overview') && crawlAvailable !== false;
+}
 export function AiTrafficScreen() {
   const { activeProject } = useProjectContext();
   const sources = useCrawlSources(activeProject?.id ?? '', activeProject?.workspace_id ?? '');
@@ -43,16 +52,26 @@ export function AiTrafficScreen() {
   if (sources.data) crawlAvailable = crawlLogsAvailable(sources.data);
   else if (sources.isError || !activeProject) crawlAvailable = true;
   const tab = resolveTab(requested, crawlAvailable);
+  useOverviewWarmup(leadsWithOverview(requested, crawlAvailable));
   const tabs: TabRowProps = {
     ariaLabel: 'AI Traffic views',
     items: crawlAvailable === false ? TRAFFIC_TABS.filter((t) => !t.crawlOnly) : TRAFFIC_TABS,
   };
-  // The default view waits for crawl availability; the tab band needs a selected tab.
+  // The default view waits for crawl availability. The wait still draws the
+  // tab row (nothing selected yet) and the control band, so the loaded view's
+  // bands do not push its work down when they arrive.
   if (tab === null)
     return (
-      <ListScreen>
-        <QueryState kind="loading" label="Loading AI Traffic…" />
-      </ListScreen>
+      <TabsRoot<TrafficTab | ''>
+        value=""
+        onValueChange={(next) => {
+          if (next) setTab(next);
+        }}
+      >
+        <ListScreen tabs={tabs} controls={RESERVED_CONTROLS}>
+          <QueryState kind="loading" label="Loading AI Traffic…" />
+        </ListScreen>
+      </TabsRoot>
     );
   return (
     <TabsRoot value={tab} onValueChange={setTab}>
@@ -77,10 +96,12 @@ function TrafficDataView({
   crawlAvailable,
 }: Readonly<{ tab: TrafficDataTab; tabs: TabRowProps; crawlAvailable: boolean }>) {
   const model = useTrafficData(tab);
-  const { projectId } = model;
+  const { projectId, summary } = model;
   const controls = { filters: <TrafficControls model={model} crawlAvailable={crawlAvailable} /> };
   // First load keeps the identity, tab and control bands; only the work waits.
-  if (model.isLoading || model.current.isLoading)
+  // The table tabs draw their own loading, error and empty states inside the
+  // table, in the footprint of a page of rows.
+  if (model.isLoading || (tab === 'overview' && summary.isLoading))
     return (
       <ListScreen tabs={tabs} controls={controls}>
         <QueryState kind="loading" label="Loading AI Traffic…" />
@@ -88,12 +109,12 @@ function TrafficDataView({
     );
   // A failed read with nothing to show is the region's state, in the same
   // footprint its loading state took.
-  if (model.current.isError && projectId)
+  if (tab === 'overview' && summary.isError && projectId)
     return (
       <ListScreen tabs={tabs} controls={controls}>
         <QueryState
           kind="error"
-          {...readErrorProps(model.current)}
+          {...readErrorProps(summary)}
           fallback="Could not read AI Traffic"
         />
       </ListScreen>
@@ -114,7 +135,8 @@ function TrafficTabContent({
   model: ReturnType<typeof useTrafficData>;
   crawlAvailable: boolean;
 }>) {
-  const { projectId, workspaceId, summary, crawlers, activity, catalog, pager, next } = model;
+  const { projectId, workspaceId, summary, filters } = model;
+  const scope = { workspaceId, projectId, filters };
   return (
     <Stack gap="workspace">
       <TrafficStatus model={model} />
@@ -127,39 +149,15 @@ function TrafficTabContent({
           crawlAvailable={crawlAvailable}
         />
       ) : null}
-      {tab === 'crawlers' && crawlers.data ? (
-        <TrafficCrawlers
-          data={crawlers.data}
-          filters={{
-            range: model.selection.range,
-            verification:
-              model.selection.verification === 'default' ? undefined : model.selection.verification,
-          }}
-        />
+      {/* Without a project there is nothing to page; the status says why. */}
+      {projectId && tab === 'crawlers' ? <TrafficCrawlers {...scope} /> : null}
+      {projectId && tab === 'activity' ? <TrafficActivity {...scope} /> : null}
+      {projectId && tab === 'pages' ? (
+        <TabPanel value="pages">
+          <TrafficPages {...scope} />
+        </TabPanel>
       ) : null}
-      {tab === 'activity' && activity.data ? (
-        <TrafficActivity data={activity.data} catalog={catalog.data} />
-      ) : null}
-      {tab === 'pages' ? <PagesPanel model={model} /> : null}
-      {tab === 'overview' ? null : (
-        <Pager hideWhenSinglePage page={pager.page} {...cursorControls(pager, next)} />
-      )}
     </Stack>
-  );
-}
-function PagesPanel({ model }: Readonly<{ model: ReturnType<typeof useTrafficData> }>) {
-  const { pages, selection } = model;
-  if (pages.isError || !pages.data) return null;
-  return (
-    <TabPanel value="pages">
-      <TrafficPages
-        data={pages.data}
-        filters={{
-          range: selection.range,
-          verification: selection.verification === 'default' ? undefined : selection.verification,
-        }}
-      />
-    </TabPanel>
   );
 }
 function TrafficStatus({ model }: Readonly<{ model: ReturnType<typeof useTrafficData> }>) {

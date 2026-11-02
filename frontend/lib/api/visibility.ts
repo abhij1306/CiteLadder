@@ -10,7 +10,6 @@
  * `VisibilityTrendPoint`s over persisted `MetricSnapshot` rows, filtered by
  * engine/date and bucketed by run/week/month. Same-origin `/api/v1` only.
  */
-import { queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 import {
   visibilityEvidenceResponseSchema,
@@ -23,7 +22,6 @@ import {
 } from '@citeladder/contracts/visibility-evidence';
 
 import { apiClient, type ApiRequestOptions } from './client';
-import { queryKeys } from './query-keys';
 import { competitorSchema } from '@citeladder/contracts/project';
 import { strictValidate } from '@citeladder/contracts/validation';
 import {
@@ -430,17 +428,4 @@ export const visibilityApi = {
     );
     return strictValidate(competitorSchema, res, 'visibility.acceptCompetitorSuggestion');
   },
-};
-
-/**
- * Project projection read options, so the screen and navigation intent request
- * the SAME key from one definition instead of each assembling its own.
- */
-export const visibilityQueries = {
-  project: (workspaceId: string, projectId: string, params: ProjectVisibilityParams) =>
-    queryOptions({
-      queryKey: queryKeys.visibility.project(projectId, params.audit_id, params),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        visibilityApi.getProjectVisibility(projectId, params, { signal, workspaceId }),
-    }),
 };

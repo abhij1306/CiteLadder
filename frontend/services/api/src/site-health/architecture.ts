@@ -178,6 +178,9 @@ async function persistRules(
         remediation: rule.remediation,
         analyzer_version: crawl.analyzer_version || versions.analyzer,
         rule_version: rule.rule_version,
+        // A finding of the crawl's own architecture is current by definition
+        // (`issue-currency.ts`).
+        is_current: true,
         created_at: now,
       })
       .execute();

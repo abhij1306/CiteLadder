@@ -222,7 +222,7 @@ describe('apiClient', () => {
     controller.abort();
     expect(init.signal?.aborted).toBe(true);
     expect(init.credentials).toBe('include');
-    expect(init.cache).toBe('no-store');
+    expect(init.cache).toBe('no-cache');
     expect(new Headers(init.headers).get('X-Request-ID')).toBe('req-test');
   });
 

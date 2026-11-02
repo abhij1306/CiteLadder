@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
+import { policy } from '../src/config.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Json, type Tenant } from './visibility-fixtures.ts';
 import { compareSelection } from '../src/visibility/comparison.ts';
@@ -278,13 +279,47 @@ describe('GET /visibility', () => {
     expect(body.comparison).toMatchObject({ status: 'comparable', deltas: { sov: 25 } });
   });
 
-  it('is a 404 with nothing measured, and a run selection needs its run', async () => {
+  it('answers nothing measured, metrics still being written and a missing run each with its own code', async () => {
+    const answer = async (who: Tenant, path: string, query: Record<string, string> = {}) => {
+      const { status, body } = await get(who, path, query);
+      return [status, record(body.error).code];
+    };
     const empty = await fixtures.tenant();
-    const missing = await get(empty, route(empty));
-    expect([missing.status, record(missing.body.error).message]).toEqual([
+    expect(await answer(empty, route(empty))).toEqual([404, 'visibility_not_measured']);
+    // A sibling read of the latest run folds the same case into the same code.
+    expect(await answer(empty, route(empty, '/perception'))).toEqual([
       404,
-      'No visibility metrics available for the selected measurement',
+      'visibility_not_measured',
     ]);
+    expect(
+      await answer(tenant, route(tenant), {
+        selection_mode: 'range',
+        from: '2020-01-01T00:00:00Z',
+        to: '2020-01-08T00:00:00Z',
+      }),
+    ).toEqual([404, 'visibility_not_measured']);
+
+    const pending = await fixtures.tenant();
+    const unwritten = await fixtures.audit(pending, {
+      completedAt: new Date('2026-03-10T00:00:00Z'),
+      configuration: frozen(),
+    });
+    expect(await answer(pending, route(pending))).toEqual([404, 'visibility_metrics_pending']);
+    expect(await answer(pending, route(pending), { audit_id: unwritten })).toEqual([
+      404,
+      'visibility_metrics_pending',
+    ]);
+
+    expect(await answer(tenant, route(tenant), { audit_id: randomUUID() })).toEqual([
+      404,
+      'not_found',
+    ]);
+    // Another workspace's unwritten run is not found, never "being prepared".
+    expect(await answer(empty, route(empty), { audit_id: unwritten })).toEqual([404, 'not_found']);
+    expect(await answer(empty, route(pending))).toEqual([404, 'not_found']);
+  });
+
+  it('rejects a malformed selection', async () => {
     expect((await get(tenant, route(tenant), { selection_mode: 'run' })).status).toBe(422);
     expect((await get(tenant, route(tenant), { engine: 'altavista' })).status).toBe(422);
   });
@@ -392,6 +427,55 @@ describe('GET /visibility/trends', () => {
     expect(weekly.body[1]!.sov).not.toHaveProperty('response');
     expect(weekly.body[1]!.sov).toHaveProperty('mention');
   }, 60_000);
+
+  it('reads the newest trend_max_runs runs and never folds part of a cut bucket', async () => {
+    const tenant = await fixtures.tenant();
+    const metrics = aggregate({ completed: 2, brand: 1 });
+    const ids: string[] = [];
+    for (const day of ['2026-03-02', '2026-03-10', '2026-03-11', '2026-03-16', '2026-03-17'])
+      ids.push(await measuredRun(tenant, `${day}T09:00:00Z`, metrics));
+    const bound = policy.visibility.trend_max_runs;
+    policy.visibility.trend_max_runs = 3;
+    try {
+      const raw = await get(tenant, route(tenant, '/trends'));
+      expect(raw.body.map((point) => point.audit_id)).toEqual(ids.slice(2));
+      // The run past the bound (03-10) cuts its week, so 03-11 leaves with it.
+      const weekly = await get(tenant, route(tenant, '/trends'), { granularity: 'week' });
+      expect(weekly.body.map((point) => [point.completed_at, point.source_audit_ids])).toEqual([
+        ['2026-03-16T00:00:00Z', ids.slice(3)],
+      ]);
+    } finally {
+      policy.visibility.trend_max_runs = bound;
+    }
+  });
+
+  it('applies the slice before the run bound, so a narrow slice reaches its older runs', async () => {
+    const tenant = await fixtures.tenant();
+    const metrics = aggregate({ completed: 2, brand: 1 });
+    const retrievalOff = frozen({
+      measurement_policy: {
+        retrieval_enabled: false,
+        max_output_tokens: 1000,
+        answer_instruction: '',
+      },
+    });
+    const off: string[] = [];
+    for (const day of ['2026-02-02', '2026-02-03'])
+      off.push(
+        await measuredRun(tenant, `${day}T09:00:00Z`, metrics, { configuration: retrievalOff }),
+      );
+    // More default runs than the bound, all newer than the slice's runs.
+    for (const day of ['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05'])
+      await measuredRun(tenant, `${day}T09:00:00Z`, metrics);
+    const bound = policy.visibility.trend_max_runs;
+    policy.visibility.trend_max_runs = 3;
+    try {
+      const { body } = await get(tenant, route(tenant, '/trends'), { retrieval_enabled: 'false' });
+      expect(body.map((point) => point.audit_id)).toEqual(off);
+    } finally {
+      policy.visibility.trend_max_runs = bound;
+    }
+  });
 
   it('folds each analyzer version into its own point, never one blend', async () => {
     const tenant = await fixtures.tenant();

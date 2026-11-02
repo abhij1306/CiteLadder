@@ -136,14 +136,28 @@ export function SegmentedControl<T extends string>({
  * value, so it takes `aria-haspopup` from the caller and never `aria-checked`.
  * `selected` is purely the visual state that says the active range is one of
  * the ones hiding behind it.
+ *
+ * Its label changes with what it stands for ("More", "3 months", "Compare"),
+ * so it holds the width of the widest label it can show: picking a range never
+ * resizes the button or moves whatever sits beside the track.
  */
 export function SegmentedAction({
   selected = false,
+  label,
+  labels,
   className,
   children,
   ...props
 }: Readonly<
-  ButtonHTMLAttributes<HTMLButtonElement> & { selected?: boolean; children: ReactNode }
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
+    selected?: boolean;
+    /** What the action shows now. */
+    label: string;
+    /** Every label it can show; the widest sets its width. */
+    labels: readonly string[];
+    /** A trailing glyph after the label. */
+    children?: ReactNode;
+  }
 >) {
   return (
     <button
@@ -151,6 +165,14 @@ export function SegmentedAction({
       type="button"
       className={cn(segmentedItemVariants({ selected }), 'gap-1', className)}
     >
+      <span className="inline-grid justify-items-center">
+        {labels.map((reserved) => (
+          <span key={reserved} aria-hidden="true" className="invisible col-start-1 row-start-1">
+            {reserved}
+          </span>
+        ))}
+        <span className="col-start-1 row-start-1">{label}</span>
+      </span>
       {children}
     </button>
   );

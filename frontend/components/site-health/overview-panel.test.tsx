@@ -16,7 +16,6 @@ const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const CRAWL = '22222222-2222-4222-8222-222222222222';
 const SNAPSHOT = '33333333-3333-4333-8333-333333333333';
-const SOURCE = '44444444-4444-4444-8444-444444444444';
 
 function OverviewPanel(props: Omit<ComponentProps<typeof ScopedOverviewPanel>, 'workspaceId'>) {
   return <ScopedOverviewPanel workspaceId={WORKSPACE} {...props} />;
@@ -121,7 +120,6 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
             title: 'Images missing alt attributes',
             remediation: 'Add alt text to informative images.',
             affected_pages: 1,
-            source_evaluation_ids: [SOURCE],
           },
         ],
       },
@@ -144,9 +142,6 @@ const terminalOverview = (overrides: Record<string, unknown> = {}) => ({
       inp: null,
       cls: null,
     },
-    source_analysis_ids: [SOURCE],
-    source_artifact_ids: [SOURCE],
-    source_evaluation_ids: [SOURCE],
     limitations: ['HTTP evidence only; browser layout was not measured.'],
   },
   trend: {
@@ -281,6 +276,55 @@ describe('OverviewPanel', () => {
 
     expect(await screen.findByRole('img', { name: /Web Fundamentals score/ })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /Crawl Coverage score/ })).not.toBeInTheDocument();
+  });
+
+  it('explains a changed scored cohort once, beside the score changes', async () => {
+    const changedComposition = {
+      added_page_kinds: ['product'],
+      removed_page_kinds: [],
+      previous_page_count_by_kind: { homepage: 1 },
+      current_page_count_by_kind: { homepage: 1, product: 4 },
+    };
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, () =>
+        HttpResponse.json(
+          terminalOverview({
+            trend: {
+              state: 'measured',
+              reason: 'cohort_composition_changed',
+              metric: 'aeo_readiness_score',
+              series: [
+                { label: '2026-08-29', value: 70 },
+                { label: '2026-08-30', value: 72 },
+              ],
+              cohort_composition: changedComposition,
+            },
+            change_summary: {
+              state: 'measured',
+              reason: 'cohort_composition_changed',
+              metrics: [],
+              cohort_composition: changedComposition,
+            },
+          }),
+        ),
+      ),
+    );
+    renderWithProviders(
+      <OverviewPanel
+        projectId={PROJECT}
+        crawlId={CRAWL}
+        crawl={{ status: 'completed' } as never}
+        dashboard={undefined}
+      />,
+    );
+
+    expect(await screen.findByText('AEO Readiness trend')).toBeInTheDocument();
+    expect(screen.getAllByText('Scored cohort composition changed.')).toHaveLength(1);
+    expect(
+      screen.getByText(
+        'Added page kinds: Product. Score movement is not split into quality versus cohort effects.',
+      ),
+    ).toBeInTheDocument();
   });
 
   it('opens persisted HTTP Web Fundamentals evidence without browser-only checks', async () => {

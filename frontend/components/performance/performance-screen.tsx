@@ -18,7 +18,7 @@ import { DataSourceSetup } from '@/components/integrations/data-source-setup';
 import { usePerformanceSelection } from './use-performance-selection';
 import { usePerformanceSync } from './use-performance-sync';
 import { useRangeProjection } from './use-range-projection';
-import { ListScreen } from '@/components/layout/page-shell';
+import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
@@ -240,6 +240,18 @@ function Ga4Workspace({
   );
 }
 
+/**
+ * The first load holds the control band the loaded page draws its range
+ * toolbar in, so the work starts on the same line before and after.
+ */
+function PerformanceLoading() {
+  return (
+    <ListScreen controls={RESERVED_CONTROLS}>
+      <QueryState kind="loading" label="Loading performance…" />
+    </ListScreen>
+  );
+}
+
 export function PerformanceScreen() {
   const { activeProject, isLoading } = useProjectContext();
   const scope = resolveActiveProjectRequestScope(activeProject);
@@ -283,13 +295,11 @@ export function PerformanceScreen() {
   // rule while loading is a different-looking page, and the work below it moves
   // when the real one arrives.
   if (!projectId)
-    return (
+    return isLoading ? (
+      <PerformanceLoading />
+    ) : (
       <ListScreen>
-        {isLoading ? (
-          <QueryState kind="loading" label="Loading performance…" />
-        ) : (
-          <ProjectRequiredState />
-        )}
+        <ProjectRequiredState />
       </ListScreen>
     );
   if (dashboard.isError)
@@ -307,12 +317,7 @@ export function PerformanceScreen() {
   // an already-drawn page, so a slow secondary read must not hold the whole
   // surface on the slowest of three independent requests. Retained previous
   // scope data (a placeholder) counts as paintable.
-  if (!dashboard.data)
-    return (
-      <ListScreen>
-        <QueryState kind="loading" label="Loading performance…" />
-      </ListScreen>
-    );
+  if (!dashboard.data) return <PerformanceLoading />;
 
   const data = dashboard.data as PerformanceDashboard;
   // The figures on screen belong to a DIFFERENT selection (retained while the
@@ -419,6 +424,7 @@ export function PerformanceScreen() {
               onDimensionChange={setDimension}
               snapshotId={selectedWindow.snapshot_id}
               compareSnapshotId={comparisonWindow?.snapshot_id ?? null}
+              dimensionCounts={data.dimension_counts}
               unavailableDimensions={data.unavailable_dimensions}
               activeMetrics={activeMetrics}
               selectedLabel={selectedLabel}

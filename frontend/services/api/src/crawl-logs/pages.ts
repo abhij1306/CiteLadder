@@ -338,6 +338,7 @@ export async function urlRead(
       to_char(max(last_seen_at) at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as last_seen,sum(requests)::integer as requests,jsonb_agg(id) as source_rollup_ids
       from bot_activity_daily where workspace_id=${scope.workspaceId}::uuid and project_id=${scope.projectId}::uuid and url_hash=${urlHash}
       and reporting_date between ${w.start}::date and ${w.end}::date and verification=any(${verificationFilter(options.verification)}::text[])
+      and ${options.bot_id ? sql`bot_id=${options.bot_id}` : sql`true`}
       group by bot_id order by sum(requests) desc,bot_id asc limit ${cap + 1}`.execute(db),
     sql`select ai_source,to_char(min(reporting_date),'YYYY-MM-DD') as first_referral,sum(sessions)::integer as sessions,
       (select jsonb_agg(distinct metric_id) from ai_referral_landing_daily q,jsonb_array_elements_text(q.source_metric_row_ids) metric_id

@@ -16,7 +16,9 @@
  *     an expiry surfaces as a RETRYABLE network-class `ApiError`
  *     (`code: 'request_timeout'`), never an endless spinner; a caller's own
  *     abort stays a plain abort (never retried).
- *   - `credentials: 'include'` (HttpOnly JWT cookie) and `cache: 'no-store'`.
+ *   - `credentials: 'include'` (HttpOnly JWT cookie) and `cache: 'no-cache'`: the
+ *     browser stores only what the API lets it (a snapshot read's
+ *     `private, no-cache`) and revalidates every use with `If-None-Match`.
  *   - bounded network-failure retry (max 2 attempts) for GET / idempotent calls
  *     only — never for ordinary mutations.
  *   - JSON enforcement: a 2xx response that is not JSON is a contract violation.
@@ -27,9 +29,6 @@ import {
   getApiRequestTimeoutMs,
 } from '@/lib/config/operational';
 import { ApiError, isAbortError, isTimeoutError } from './errors';
-
-/** Relative API base on the app origin. */
-export { API_BASE_URL } from '@/lib/config/operational';
 
 export type ApiRequestOptions = {
   signal?: AbortSignal;
@@ -118,7 +117,7 @@ async function fetchResponse(path: string, options: InternalRequestOptions, requ
     method: options.method,
     body: options.body,
     signal: attemptSignal(options.signal, options.timeoutMs),
-    cache: 'no-store',
+    cache: 'no-cache',
     credentials: 'include',
     headers: buildHeaders(options, requestId),
   });

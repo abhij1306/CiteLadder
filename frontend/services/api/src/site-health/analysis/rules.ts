@@ -287,10 +287,14 @@ function evaluateRule(rule: Rule, facts: Facts): RuleEvaluation {
       reason_code: reason,
     };
   }
+  const result = runCheck(rule, facts);
+  const scored = membership(rule.rule_id);
   return {
     ...base,
-    ...membership(rule.rule_id),
-    ...runCheck(rule, facts),
+    ...scored,
+    // A check that finds itself not applicable keeps its roles but never scores.
+    score_applicability: scored.score_applicability && result.outcome !== 'not_applicable',
+    ...result,
     display_applicability: true,
   };
 }

@@ -41,6 +41,19 @@ it.each(['https://[unclosed/page', `https://${'a'.repeat(70)}.example.test/`])(
     expect(send).not.toHaveBeenCalled();
   },
 );
+it('records the status and media type of a response it refuses', async () => {
+  const calls: { status: number | null }[] = [];
+  const fetcher = createWebsiteFetcher(
+    async () => [{ address: '93.184.216.34', family: 4 }],
+    async () => {
+      throw new FetchError('content_type', { status: 200, contentType: 'application/pdf' });
+    },
+  );
+  await expect(
+    fetcher('https://shop.example/size-chart', { ...options, onCall: (call) => calls.push(call) }),
+  ).rejects.toMatchObject({ code: 'content_type', message: 'content_type: application/pdf' });
+  expect(calls.map((call) => call.status)).toEqual([200]);
+});
 it.each(['https://first.test/private', 'https://second.test/private'])(
   'checks destination robots before downloading the redirected page %s',
   async (destination) => {

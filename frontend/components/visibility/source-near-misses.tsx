@@ -10,6 +10,7 @@ import { Pressable } from '@/components/ui/pressable';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { NumericCell, SourceName } from '@/components/visibility/source-cells';
 import type { SourceFilters } from '@/components/visibility/source-rows';
+import { retainPreviousDataForScope } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
 import { visibilityApi } from '@/lib/api/visibility';
 import { engineLabel } from '@/lib/providers/catalog';
@@ -26,6 +27,7 @@ export function useSourceNearMisses(
   input: { enabled: boolean; limit: number },
 ) {
   const params = { ...selectionParams(filters, queries), limit: input.limit };
+  const enabled = input.enabled && Boolean(queries.projectId && queries.activeRunId);
   return useQuery({
     queryKey: queryKeys.visibility.sourceNearMisses(queries.projectId ?? '', params),
     queryFn: ({ signal }) =>
@@ -33,7 +35,13 @@ export function useSourceNearMisses(
         signal,
         workspaceId: queries.workspaceId,
       }),
-    enabled: input.enabled && Boolean(queries.projectId && queries.activeRunId),
+    enabled,
+    // A filter or page-size change keeps the rows until the next ones land,
+    // so the table never drops to a loading state; a selection with no run
+    // has nothing to keep.
+    placeholderData: enabled
+      ? (data, previous) => retainPreviousDataForScope(queries.projectId!, data, previous)
+      : undefined,
   });
 }
 

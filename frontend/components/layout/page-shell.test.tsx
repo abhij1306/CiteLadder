@@ -2,7 +2,35 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vite-plus/test';
 
-import { DetailScreen } from './page-shell';
+import { DetailScreen, ListScreen, RouteLoadingScreen } from './page-shell';
+
+function measureAt(path: string, screenElement: React.ReactNode) {
+  const { container, unmount } = render(
+    <MemoryRouter initialEntries={[path]}>{screenElement}</MemoryRouter>,
+  );
+  const measure = container.querySelector('[data-page-measure]')?.getAttribute('data-page-measure');
+  unmount();
+  return measure;
+}
+
+describe('ListScreen measure', () => {
+  it("takes the route's measure, so a route's loading frame and its page share one width", () => {
+    expect(measureAt('/settings', <RouteLoadingScreen />)).toBe('workflow');
+    expect(measureAt('/settings', <ListScreen>Settings</ListScreen>)).toBe('workflow');
+    expect(measureAt('/agent/chats/abc', <RouteLoadingScreen />)).toBe('workflow');
+    expect(measureAt('/agent/actions', <RouteLoadingScreen />)).toBe('analytical');
+    expect(measureAt('/site', <ListScreen>Website</ListScreen>)).toBe('analytical');
+  });
+
+  it("names the route in the loading frame's identity band", () => {
+    render(
+      <MemoryRouter initialEntries={['/performance']}>
+        <RouteLoadingScreen label="Loading performance…" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('heading', { level: 1, name: 'Performance' })).toBeInTheDocument();
+  });
+});
 
 describe('DetailScreen', () => {
   it('puts a back button to the collection before the route title', () => {

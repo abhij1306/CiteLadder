@@ -16,12 +16,8 @@ import { queryKeys } from '@/lib/api/query-keys';
 import { humanizeApiError } from '@/lib/api/errors';
 import { formatCount, formatShortDate } from '@/lib/format';
 import { DisplayTime } from '@/components/ui/display-time';
-import {
-  isActiveSyncRun,
-  isSyncInFlight,
-  SYNC_RUN_BADGE,
-  SYNC_RUN_POLL_MS,
-} from '@/lib/integrations/sync-runs';
+import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
+import { isActiveSyncRun, isSyncInFlight, SYNC_RUN_BADGE } from '@/lib/integrations/sync-runs';
 import { ControlRow } from '@/components/ui/control-row';
 import { FactList } from '@/components/ui/facts';
 import { IconTile } from '@/components/ui/icon';

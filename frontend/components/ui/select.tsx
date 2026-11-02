@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -9,6 +9,30 @@ import { cn } from '@/lib/utils';
 
 const EMPTY_VALUE = '__citeladder_empty_value__';
 
+const SIZER = 'invisible col-start-1 row-start-1 h-0 overflow-hidden whitespace-nowrap';
+
+/**
+ * One choice's label, taking width but no height and no ink. A text label is
+ * drawn by CSS from an attribute, so it adds no text to the page: assistive
+ * technology and text queries see the selected value alone.
+ */
+function SizerLabel({ label }: Readonly<{ label: ReactNode }>) {
+  if (label === undefined || label === null || label === '') return null;
+  if (typeof label === 'string')
+    return (
+      <span
+        aria-hidden
+        data-select-sizer={label}
+        className={cn(SIZER, 'before:content-[attr(data-select-sizer)]')}
+      />
+    );
+  return (
+    <span aria-hidden className={SIZER}>
+      {label}
+    </span>
+  );
+}
+
 function radixValue(value: string | undefined): string | undefined {
   return value === '' ? EMPTY_VALUE : value;
 }
@@ -16,6 +40,11 @@ function radixValue(value: string | undefined): string | undefined {
 type SelectOption<T extends string> = {
   value: T;
   label: ReactNode;
+  /**
+   * A figure beside the label in the menu (a count). It never reaches the
+   * trigger, so a detail that loads late or changes does not resize it.
+   */
+  detail?: string;
   disabled?: boolean;
 };
 
@@ -52,6 +81,7 @@ export function Select<T extends string>({
   'aria-describedby': ariaDescribedBy,
   'aria-labelledby': ariaLabelledBy,
 }: Readonly<SelectProps<T>>) {
+  const detailId = useId();
   return (
     <SelectPrimitive.Root
       value={radixValue(value)}
@@ -71,7 +101,18 @@ export function Select<T extends string>({
           className,
         )}
       >
-        <SelectPrimitive.Value placeholder={placeholder} />
+        {/* The value shares one grid cell with every option label, drawn
+            invisibly, so the trigger is as wide as its widest choice and
+            choosing another never resizes it or moves its neighbours. */}
+        <span className="grid min-w-0 flex-1 text-start">
+          <span className="col-start-1 row-start-1 min-w-0 truncate">
+            <SelectPrimitive.Value placeholder={placeholder} />
+          </span>
+          <SizerLabel label={placeholder} />
+          {options.map((option) => (
+            <SizerLabel key={option.value} label={option.label} />
+          ))}
+        </span>
         <SelectPrimitive.Icon asChild>
           <ChevronDown className="text-muted size-4 shrink-0" aria-hidden />
         </SelectPrimitive.Icon>
@@ -90,14 +131,20 @@ export function Select<T extends string>({
             <ChevronUp className="size-4" aria-hidden />
           </SelectPrimitive.ScrollUpButton>
           <SelectPrimitive.Viewport>
-            {options.map((option) => (
+            {options.map((option, index) => (
               <SelectPrimitive.Item
                 key={option.value}
                 value={radixValue(option.value) ?? EMPTY_VALUE}
                 disabled={option.disabled}
+                aria-describedby={option.detail ? `${detailId}-${index}` : undefined}
                 className={cn(menuItemVariants(), 'cursor-default py-1 pr-8 pl-3 select-none')}
               >
                 <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                {option.detail ? (
+                  <span id={`${detailId}-${index}`} className="text-muted font-numeric ms-auto">
+                    {option.detail}
+                  </span>
+                ) : null}
                 <SelectPrimitive.ItemIndicator className="absolute right-2 inline-flex items-center">
                   <Check className="size-4" aria-hidden />
                 </SelectPrimitive.ItemIndicator>

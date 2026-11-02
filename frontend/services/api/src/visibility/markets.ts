@@ -2,7 +2,8 @@
  * Visibility → By market: every project market's latest dashboard-ready run,
  * each read on its own through the canonical dashboard and perception owners.
  * Markets are compared side by side, never pooled; a market without a run is
- * `no_run`, never zero.
+ * `no_run`, never zero, and one whose latest run is still being written is
+ * `metrics_pending`.
  */
 import type { VisibilityMarkets } from '@citeladder/contracts/visibility';
 
@@ -32,13 +33,14 @@ async function marketRow(
     configurationKey: null,
     cohort,
   }).catch((error: unknown) => {
-    if (error instanceof AnalysisNotFoundError) return null;
+    if (error instanceof AnalysisNotFoundError) return error.reason;
     throw error;
   });
-  if (view === null)
+  if (typeof view === 'string')
     return {
       market,
-      state: 'no_run',
+      // A run whose results are still being written is not a market never measured.
+      state: view === 'metrics_pending' ? 'metrics_pending' : 'no_run',
       audit_id: null,
       measured_at: null,
       mention_rate: null,

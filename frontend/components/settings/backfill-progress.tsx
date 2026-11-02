@@ -6,7 +6,7 @@ import { Inline } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
 import { integrationsApi, type IntegrationBackfillProgress } from '@/lib/api/integrations';
 import { queryKeys } from '@/lib/api/query-keys';
-import { SYNC_RUN_POLL_MS } from '@/lib/integrations/sync-runs';
+import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
 import { formatShortDate } from '@/lib/format';
 
 /**

@@ -5,14 +5,16 @@
 export const actionKeys = {
   all: ['actions'] as const,
   lists: (projectId: string) => ['actions', 'list', projectId] as const,
+  /** The project at index 2 and its workspace beside it, for retained pages. */
   list: (
+    workspaceId: string,
     projectId: string,
     filters: {
       status: string | null;
       targetKind: string | null;
       cursor: string | null;
-      limit: number | null;
+      limit: number;
     },
-  ) => ['actions', 'list', projectId, filters] as const,
+  ) => ['actions', 'list', projectId, workspaceId, filters] as const,
   detail: (actionId: string) => ['actions', 'detail', actionId] as const,
 };

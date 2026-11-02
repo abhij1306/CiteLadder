@@ -11,6 +11,8 @@ import {
   changeSummarySchema,
   inventoryPageSchema,
   issueHistoryPageSchema,
+  latestCrawlIssuesPageSchema,
+  latestCrawlPagesPageSchema,
   pageDetailSchema,
   pagesPageSchema,
   siteCrawlEventSchema,
@@ -24,11 +26,20 @@ import {
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import { ApiError } from '../errors.ts';
+import type { Database } from '../db/database.ts';
+import { ApiError, notFound } from '../errors.ts';
 import { InvalidCursorError } from '../http/keyset-cursor.ts';
+import type { RequestParams } from '../http/params.ts';
 import { slottedEventStream } from '../http/stream-slots.ts';
 import { parseUuid } from '../http/uuid.ts';
-import { loadCrawl, projectCrawl, rootFailure } from '../site-health/reads/crawl.ts';
+import { revalidatable } from '../http/revalidate.ts';
+import {
+  dashboardCrawl,
+  isTerminal,
+  loadCrawl,
+  projectCrawl,
+  rootFailure,
+} from '../site-health/reads/crawl.ts';
 import { dashboard } from '../site-health/reads/dashboard.ts';
 import { eventReplay, eventStream } from '../site-health/reads/events.ts';
 import {
@@ -51,6 +62,8 @@ import { robotsHistory } from '../site-health/reads/robots-history.ts';
 import { defineGetRoute } from './define.ts';
 
 const family = 'site-health';
+/** Project routes read the path project inside the active workspace (else 404). */
+const projectFamily = { family, authorize: 'active-project' } as const;
 const crawlRoot = '/api/v1/site-crawls/{crawl_id}';
 const projectRoot = '/api/v1/projects/{project_id}/site-health';
 const publicCrawlRoot = `${policy.api.machine_prefix}/projects/{project_id}/site-crawls/{crawl_id}`;
@@ -71,8 +84,76 @@ const pageFilters = {
   monitored: { scalar: { kind: 'bool' } },
   page_kind: text,
 } as const;
+const pagesQuery = {
+  ...paging,
+  ...pageFilters,
+  sort: { scalar: { kind: 'literal', values: PAGE_SORTS }, default: 'status' },
+} as const;
+const issuesQuery = {
+  ...paging,
+  query: text,
+  severity: text,
+  category: text,
+  dimension: text,
+  rule: text,
+  site_url_id: optionalUuid,
+  page_kind: text,
+  finding_class: {
+    scalar: { kind: 'literal', values: ['defect', 'advisory'] },
+    default: 'defect',
+  },
+  // Opt-in: embed the first row's detail (`first_issue`) with this many
+  // occurrences, so a list-detail reader's default selection needs no
+  // second request.
+  detail_limit: {
+    scalar: { kind: 'int', ge: 1, le: policy.site_health.reads.page_max_limit },
+  },
+} as const;
 const download = z.unknown();
 const changeLimit = policy.site_health.change_intel;
+
+type PagesQuery = RequestParams<typeof crawlPath, typeof pagesQuery>['query'];
+type IssuesQuery = RequestParams<typeof crawlPath, typeof issuesQuery>['query'];
+
+const readPages = (db: Database, workspaceId: string, crawlId: string, query: PagesQuery) =>
+  withCursor(
+    pages(
+      db,
+      workspaceId,
+      crawlId,
+      { status: query.status_filter, monitored: query.monitored, pageKind: query.page_kind },
+      query.sort,
+      query,
+    ),
+  );
+
+const readIssues = (db: Database, workspaceId: string, crawlId: string, query: IssuesQuery) =>
+  withCursor(
+    issues(
+      db,
+      workspaceId,
+      crawlId,
+      {
+        query: query.query || null,
+        severity: query.severity || null,
+        category: query.category || null,
+        dimension: query.dimension || null,
+        rule: query.rule || null,
+        siteUrlId: query.site_url_id,
+        pageKind: query.page_kind || null,
+        findingClass: query.finding_class,
+      },
+      query,
+      query.detail_limit ?? null,
+    ),
+  );
+
+/** The project's newest crawl, the one its dashboard shows, or 404 before any. */
+async function newestCrawl(db: Database, workspaceId: string, projectId: string) {
+  const crawl = await dashboardCrawl(db, workspaceId, projectId, null);
+  if (crawl === null) throw notFound('Crawl');
+  return crawl;
+}
 
 /** A cursor from another scope, filter set or tampering is a 400. */
 async function withCursor<T>(read: Promise<T>): Promise<T> {
@@ -116,7 +197,7 @@ function exportRoute(format: 'csv' | 'md') {
 
 export const siteHealthRoutes = [
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: `${projectRoot}/robots-history`,
     params: {
       path: projectPath,
@@ -174,26 +255,10 @@ export const siteHealthRoutes = [
     exposure: 'both',
     publicPath: `${publicCrawlRoot}/pages`,
     path: `${crawlRoot}/pages`,
-    params: {
-      path: crawlPath,
-      query: {
-        ...paging,
-        ...pageFilters,
-        sort: { scalar: { kind: 'literal', values: PAGE_SORTS }, default: 'status' },
-      },
-    },
+    params: { path: crawlPath, query: pagesQuery },
     response: pagesPageSchema,
     handle: ({ c, db }, { path, query }) =>
-      withCursor(
-        pages(
-          db,
-          c.get('workspace').workspaceId,
-          path.crawl_id,
-          { status: query.status_filter, monitored: query.monitored, pageKind: query.page_kind },
-          query.sort,
-          query,
-        ),
-      ),
+      readPages(db, c.get('workspace').workspaceId, path.crawl_id, query),
   }),
   defineGetRoute({
     family,
@@ -218,43 +283,17 @@ export const siteHealthRoutes = [
     exposure: 'both',
     publicPath: `${publicCrawlRoot}/issues`,
     path: `${crawlRoot}/issues`,
-    params: {
-      path: crawlPath,
-      query: {
-        ...paging,
-        query: text,
-        severity: text,
-        category: text,
-        dimension: text,
-        rule: text,
-        site_url_id: optionalUuid,
-        page_kind: text,
-        finding_class: {
-          scalar: { kind: 'literal', values: ['defect', 'advisory'] },
-          default: 'defect',
-        },
-      },
-    },
+    params: { path: crawlPath, query: issuesQuery },
     response: siteIssuesPageSchema,
-    handle: ({ c, db }, { path, query }) =>
-      withCursor(
-        issues(
-          db,
-          c.get('workspace').workspaceId,
-          path.crawl_id,
-          {
-            query: query.query || null,
-            severity: query.severity || null,
-            category: query.category || null,
-            dimension: query.dimension || null,
-            rule: query.rule || null,
-            siteUrlId: query.site_url_id,
-            pageKind: query.page_kind || null,
-            findingClass: query.finding_class,
-          },
-          query,
-        ),
-      ),
+    async handle({ c, db }, { path, query }) {
+      const workspaceId = c.get('workspace').workspaceId;
+      // Read the status first: a crawl that was terminal before the page read
+      // has published its issues, so the page cannot hold pre-publication
+      // rows. One still running (or finalizing mid-read) is not revalidated.
+      const settled = isTerminal(await loadCrawl(db, workspaceId, path.crawl_id));
+      const page = await readIssues(db, workspaceId, path.crawl_id, query);
+      return settled ? revalidatable(c, page) : page;
+    },
   }),
   defineGetRoute({
     family,
@@ -311,7 +350,7 @@ export const siteHealthRoutes = [
   exportRoute('csv'),
   exportRoute('md'),
   defineGetRoute({
-    family,
+    ...projectFamily,
     exposure: 'both',
     path: projectRoot,
     params: { path: projectPath, query: { crawl_id: optionalUuid } },
@@ -319,24 +358,68 @@ export const siteHealthRoutes = [
     handle: ({ c, db }, { path, query }) =>
       dashboard(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
   }),
+  // The dashboard crawl's pages and issues, for a reader that does not know the
+  // crawl yet: the route prefetchers start them beside the dashboard rather
+  // than after it.
   defineGetRoute({
-    family,
+    ...projectFamily,
+    path: `${projectRoot}/pages`,
+    params: { path: projectPath, query: pagesQuery },
+    response: latestCrawlPagesPageSchema,
+    async handle({ c, db }, { path, query }) {
+      const workspaceId = c.get('workspace').workspaceId;
+      const crawl = await newestCrawl(db, workspaceId, path.project_id);
+      const page = await readPages(db, workspaceId, crawl.id, query);
+      return latestCrawlPagesPageSchema.parse({
+        ...page,
+        crawl_id: crawl.id,
+        crawl_status: crawl.status,
+      });
+    },
+  }),
+  defineGetRoute({
+    ...projectFamily,
+    path: `${projectRoot}/issues`,
+    params: { path: projectPath, query: issuesQuery },
+    response: latestCrawlIssuesPageSchema,
+    async handle({ c, db }, { path, query }) {
+      const workspaceId = c.get('workspace').workspaceId;
+      // The crawl, and so its status, is read before the page, as the crawl's own route does.
+      const crawl = await newestCrawl(db, workspaceId, path.project_id);
+      const page = { ...(await readIssues(db, workspaceId, crawl.id, query)), crawl_id: crawl.id };
+      return isTerminal(crawl) ? revalidatable(c, page) : page;
+    },
+  }),
+  defineGetRoute({
+    ...projectFamily,
     path: `${projectRoot}/overview`,
     params: { path: projectPath, query: { crawl_id: optionalUuid } },
     response: siteHealthOverviewSchema,
-    handle: ({ c, db }, { path, query }) =>
-      overview(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
+    // Served only from a persisted snapshot (404 otherwise).
+    handle: async ({ c, db }, { path, query }) =>
+      revalidatable(
+        c,
+        await overview(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
+      ),
   }),
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: `${projectRoot}/aeo-readiness`,
     params: { path: projectPath, query: { crawl_id: optionalUuid } },
     response: aeoReadinessSchema,
-    handle: ({ c, db }, { path, query }) =>
-      aeoReadiness(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
+    async handle({ c, db }, { path, query }) {
+      const readiness = await aeoReadiness(
+        db,
+        c.get('workspace').workspaceId,
+        path.project_id,
+        query.crawl_id,
+      );
+      // Until a snapshot carries the diagnostic, the next analysis replaces this answer.
+      return readiness.state === 'not_measured' ? readiness : revalidatable(c, readiness);
+    },
   }),
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: `${projectRoot}/architecture`,
     params: { path: projectPath, query: { crawl_id: optionalUuid } },
     response: architectureSchema,
@@ -344,7 +427,7 @@ export const siteHealthRoutes = [
       architecture(db, c.get('workspace').workspaceId, path.project_id, query.crawl_id),
   }),
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: `${projectRoot}/changes/summary`,
     params: { path: projectPath, query: { crawl_a_id: optionalUuid, crawl_b_id: optionalUuid } },
     response: changeSummarySchema,
@@ -355,7 +438,7 @@ export const siteHealthRoutes = [
       }),
   }),
   defineGetRoute({
-    family,
+    ...projectFamily,
     path: `${projectRoot}/changes`,
     params: {
       path: projectPath,

@@ -65,11 +65,7 @@ export function VisibilityByMarket({
               {row.market.label}
             </Button>
           </TableCell>
-          {row.state === 'no_run' ? (
-            <TableCell numeric colSpan={5}>
-              <UnavailableValue state="not_run" />
-            </TableCell>
-          ) : (
+          {row.state === 'measured' ? (
             <>
               <TableCell numeric>
                 {measured(formatRate(row.mention_rate)) ?? <MissingValue />}
@@ -95,6 +91,10 @@ export function VisibilityByMarket({
                 {formatNet(row.net_sentiment) ?? <MissingValue reason="No classified mentions" />}
               </TableCell>
             </>
+          ) : (
+            <TableCell numeric colSpan={5}>
+              <UnavailableValue state={row.state === 'no_run' ? 'not_run' : 'pending'} />
+            </TableCell>
           )}
         </TableRow>
       ))}

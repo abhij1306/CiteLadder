@@ -20,6 +20,8 @@ import {
 } from '@citeladder/contracts/actions';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
+import { AGENT_MENTION_POOL_SIZE } from '@/lib/config/agent';
+import { TABLE_DEFAULT_PAGE_SIZE } from '@/lib/config/tables';
 
 export type Action = z.infer<typeof actionItemSchema>;
 export type ActionDetail = z.infer<typeof actionDetailSchema>;
@@ -83,17 +85,33 @@ export const actionsApi = {
     ),
 };
 
-export const actionsQueries = {
-  list: (workspaceId: string, projectId: string, params?: ActionsParams) =>
-    queryOptions({
-      queryKey: queryKeys.actions.list(projectId, {
-        status: params?.status ?? null,
-        targetKind: params?.target_kind ?? null,
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-      }),
-      queryFn: ({ signal }) => actionsApi.list(projectId, params, { signal, workspaceId }),
+/**
+ * One page of Actions. Without a limit it is the Actions table's first page
+ * at its default size, so the navigation badge, the Agent's top Actions and
+ * the table share one request instead of asking for two page sizes of the
+ * same queue.
+ */
+function actionListQuery(workspaceId: string, projectId: string, params?: ActionsParams) {
+  const request = { ...params, limit: params?.limit ?? TABLE_DEFAULT_PAGE_SIZE };
+  return queryOptions({
+    queryKey: queryKeys.actions.list(workspaceId, projectId, {
+      status: request.status ?? null,
+      targetKind: request.target_kind ?? null,
+      cursor: request.cursor ?? null,
+      limit: request.limit,
     }),
+    queryFn: ({ signal }) => actionsApi.list(projectId, request, { signal, workspaceId }),
+  });
+}
+
+export const actionsQueries = {
+  list: actionListQuery,
+  /**
+   * The Actions the Agent composer's `@` menu can mention: a wider page than
+   * the table's, so an Action past the first ten can still be found by name.
+   */
+  mentionPool: (workspaceId: string, projectId: string) =>
+    actionListQuery(workspaceId, projectId, { limit: AGENT_MENTION_POOL_SIZE }),
   detail: (workspaceId: string, actionId: string) =>
     queryOptions({
       queryKey: queryKeys.actions.detail(actionId),

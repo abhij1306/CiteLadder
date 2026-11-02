@@ -1041,7 +1041,7 @@ describe('Agent runtime on PostgreSQL', () => {
       {
         name: 'missing',
         description: 'Read missing evidence.',
-        arguments: z.object({}).strict(),
+        arguments: z.strictObject({}),
         read: async () => ({
           state: 'unavailable',
           data: 'x'.repeat(agentPolicy.tool_result_max_chars + 1),
@@ -1222,7 +1222,7 @@ describe('Agent runtime on PostgreSQL', () => {
         {
           name: 'read_evidence',
           description: 'Interrupted persisted read',
-          arguments: z.object({}).strict(),
+          arguments: z.strictObject({}),
           read: (_scope, _args, signal) => interrupt(signal),
         },
       ]);

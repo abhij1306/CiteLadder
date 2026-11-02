@@ -70,9 +70,12 @@ describe('application route recovery', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish session' }));
     const shell = screen.getByRole('region', { name: 'Application shell' });
+    // The wait is the route's own frame: its titled identity band and one box.
     expect(await screen.findByRole('status', { name: 'Loading…' })).toBeInTheDocument();
-    await act(async () => finish({ IssuesRoute: () => <h1>Issues</h1> }));
-    expect(await screen.findByRole('heading', { name: 'Issues' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Issues' })).toBeInTheDocument();
+    await act(async () => finish({ IssuesRoute: () => <p>Issue catalog</p> }));
+    expect(await screen.findByText('Issue catalog')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Application shell' })).toBe(shell);
     expect(bootstrap).toHaveBeenCalledTimes(1);
     expect(router.state.location.pathname).toBe('/issues');

@@ -1,18 +1,20 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 
+import type { OverviewWidget } from '@citeladder/contracts/overview';
 import { ListScreen } from '@/components/layout/page-shell';
 import { Alert } from '@/components/ui/alert';
 import { Stack } from '@/components/ui/layout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
+import { projectQueries } from '@/lib/api/projects';
 import type { CommandCenter, Project } from '@/lib/api/types';
 import { useOverviewLayout } from '@/lib/overview/use-overview-layout';
+import { warmOverviewWidgets } from '@/lib/overview/widget-queries';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
+import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
 
 import { DashboardActions, DashboardHeader } from './dashboard-sections';
 import { OverviewGrid } from './overview-grid';
@@ -25,15 +27,18 @@ export function DashboardScreen({
   onEditProject,
 }: Readonly<{ onEditProject?: (project: Project) => void }> = {}) {
   const context = useProjectContext();
+  const scope = resolveActiveProjectRequestScope(context.activeProject);
   const commandCenter = useQuery({
-    queryKey: queryKeys.projects.commandCenter(context.activeProject?.id ?? ''),
-    queryFn: ({ signal }) =>
-      projectsApi.getCommandCenter(context.activeProject!.id, {
-        signal,
-        workspaceId: context.activeProject!.workspace_id,
-      }),
-    enabled: Boolean(context.activeProject),
+    ...projectQueries.commandCenter(scope.workspaceId, scope.projectId),
+    enabled: scope.enabled,
   });
+  // The layout does not depend on the command center, so it is asked for
+  // beside it rather than once the command center has rendered.
+  const layout = useQuery({
+    ...projectQueries.overviewLayout(scope.workspaceId, scope.projectId),
+    enabled: scope.enabled,
+  });
+  useWarmWidgets(context.activeProject, layout.data?.widgets);
 
   if (context.isLoading || (context.activeProject && commandCenter.isLoading)) {
     return <DashboardLoading />;
@@ -65,6 +70,18 @@ export function DashboardScreen({
       onEditProject={onEditProject}
     />
   );
+}
+
+/**
+ * Start the widgets' reads as soon as the layout names them, instead of when
+ * they mount behind the command center. Best-effort: a widget still asks for
+ * its own read and reports its own failure.
+ */
+function useWarmWidgets(project: Project | null, widgets: readonly OverviewWidget[] | undefined) {
+  const client = useQueryClient();
+  useEffect(() => {
+    if (project && widgets) void warmOverviewWidgets(client, project, widgets).catch(() => {});
+  }, [client, project, widgets]);
 }
 
 function DashboardLoading() {

@@ -10,9 +10,6 @@ export const EMPTY_WEB_FUNDAMENTALS: SiteHealthOverview['web_fundamentals'] = {
     inp: null,
     cls: null,
   },
-  source_analysis_ids: [],
-  source_artifact_ids: [],
-  source_evaluation_ids: [],
   limitations: [],
 };
 
@@ -25,9 +22,6 @@ export const COMPLETE_CLASSIFICATION_PROJECTION = {
   classification_state: 'complete',
   classification_reason_groups: {},
   classification_formula_version: '1',
-  classification_source_analysis_ids: ['33333333-3333-4333-8333-333333333333'],
-  classification_source_artifact_ids: ['44444444-4444-4444-8444-444444444444'],
-  classification_source_task_ids: ['55555555-5555-4555-8555-555555555555'],
   scored_page_kind_set: ['homepage', 'article'],
   scored_page_count_by_kind: { homepage: 1, article: 3 },
 } satisfies Pick<
@@ -40,9 +34,6 @@ export const COMPLETE_CLASSIFICATION_PROJECTION = {
   | 'classification_state'
   | 'classification_reason_groups'
   | 'classification_formula_version'
-  | 'classification_source_analysis_ids'
-  | 'classification_source_artifact_ids'
-  | 'classification_source_task_ids'
   | 'scored_page_kind_set'
   | 'scored_page_count_by_kind'
 >;

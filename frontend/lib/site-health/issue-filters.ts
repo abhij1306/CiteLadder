@@ -19,6 +19,7 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import type { IssuesParams } from '@/lib/api/site-health';
+import { ISSUE_OCCURRENCE_LIMIT, ISSUE_PAGE_LIMIT } from '@/lib/config/site-health';
 import {
   optionalStringUrlCodec,
   setUrlParams,
@@ -143,6 +144,19 @@ export function toIssueParams(
     site_url_id: filters.site_url_id || undefined,
     finding_class: filters.finding_class,
     page_kind: filters.page_kind || undefined,
+  };
+}
+
+/**
+ * The catalog's list request: one issue page that also carries its first
+ * row's occurrence page, sized as the rail asks for it, so the default
+ * selection renders without waiting on a second request. The catalog and the
+ * route prefetch both build it here so they share one cache entry.
+ */
+export function issueCatalogParams(filters: IssueFilters, cursor: string | null): IssuesParams {
+  return {
+    ...toIssueParams(filters, cursor, ISSUE_PAGE_LIMIT),
+    detail_limit: ISSUE_OCCURRENCE_LIMIT,
   };
 }
 

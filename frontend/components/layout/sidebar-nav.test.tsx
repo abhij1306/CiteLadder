@@ -73,12 +73,12 @@ describe('station navigation', () => {
     );
   });
 
-  it('shows open and in-progress Actions as the Actions count in Dashboard mode', () => {
+  it('shows open and in-progress Actions as the Actions count in Dashboard mode', async () => {
     render(<SidebarNav />);
-    expect(screen.getByRole('link', { name: 'Actions, 5 open' })).toHaveAttribute(
-      'href',
-      '/agent/actions?project=11111111-1111-4111-8111-111111111111',
-    );
+    // The count's code loads after the shell, so it arrives a moment later.
+    expect(
+      await screen.findByRole('link', { name: 'Actions, 5 open' }, { timeout: 4_500 }),
+    ).toHaveAttribute('href', '/agent/actions?project=11111111-1111-4111-8111-111111111111');
   });
 
   it('keeps a screen current on every one of its tabs', () => {

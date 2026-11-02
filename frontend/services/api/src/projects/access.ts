@@ -1,24 +1,24 @@
 /**
- * Project authorization through the active workspace.
+ * The one project guard for a project ID the request path did not authorize:
+ * a body or query field, an API key's path, a worker or an MCP tool. Browser
+ * routes under `/projects/{project_id}` declare `authorize: 'project'` instead,
+ * which resolves membership and project in the session read.
  *
- * A project outside the caller's workspace is indistinguishable from a
- * missing one: both are `Project not found` (invariant: workspace-authorized
- * reads). A context already authorized through this project proved it.
+ * A project outside the workspace is indistinguishable from a missing one:
+ * both are `Project not found` (invariant: workspace-authorized reads).
  */
-import type { WorkspaceContext } from '../auth/workspace.ts';
 import type { Database } from '../db/database.ts';
+import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { notFound } from '../errors.ts';
 
 export async function requireProject(
   db: Database,
-  workspace: WorkspaceContext,
-  projectId: string,
+  scope: { workspaceId: string; projectId: string },
 ): Promise<void> {
-  if (workspace.projectId === projectId) return;
-  const project = await workspace.scope
+  const project = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'projects')
     .select('id')
-    .where('id', '=', projectId)
+    .where('id', '=', scope.projectId)
     .executeTakeFirst();
   if (project === undefined) throw notFound('Project');
 }

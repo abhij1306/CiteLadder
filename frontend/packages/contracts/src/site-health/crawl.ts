@@ -83,7 +83,9 @@ export const pageKindSchema = z.enum([
 // Classification completeness is independent of crawl and AEO evidence
 // coverage. `other` is a terminal classifier abstention and does not enter the
 // classification coverage numerator. It can still enter the scored cohort
-// when independently applicable Web or AEO checks produce a score.
+// when independently applicable Web or AEO checks produce a score. The
+// persisted projection keeps its source analysis, artifact and task ids; the
+// browser response does not carry them (owner, 2 Nov 2026).
 const classificationStateSchema = z.enum(['complete', 'partial', 'not_measured']);
 export const classificationProjectionFields = {
   classified_page_count: z.number().int().nonnegative(),
@@ -94,9 +96,6 @@ export const classificationProjectionFields = {
   classification_state: classificationStateSchema,
   classification_reason_groups: z.record(z.string(), z.number().int().nonnegative()),
   classification_formula_version: z.string(),
-  classification_source_analysis_ids: z.array(uuid()),
-  classification_source_artifact_ids: z.array(uuid()),
-  classification_source_task_ids: z.array(uuid()),
   scored_page_kind_set: z.array(pageKindSchema),
   scored_page_count_by_kind: z.partialRecord(pageKindSchema, z.number().int().nonnegative()),
 } as const;

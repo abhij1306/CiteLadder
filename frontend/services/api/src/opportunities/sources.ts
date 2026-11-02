@@ -35,7 +35,6 @@ function crawls(db: Database, scope: Scope) {
       'project_id',
       'status',
       'score_summary',
-      'analysis_requested_count',
       'analyzed_url_count',
       'failed_url_count',
       'analyzer_version',

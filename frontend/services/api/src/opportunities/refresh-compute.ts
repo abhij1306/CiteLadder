@@ -30,7 +30,6 @@ type Json = Record<string, unknown>;
 export type CoverageCrawl = {
   status: string;
   score_summary: unknown;
-  analysis_requested_count: number | null;
   analyzed_url_count: number | null;
   failed_url_count: number | null;
 };
@@ -42,9 +41,7 @@ const integer = (value: unknown): number => Math.trunc(Number(value) || 0);
 export function siteCoverage(crawl: CoverageCrawl | null): [Json, string[]] {
   if (crawl === null) return [{}, []];
   const summary = record(crawl.score_summary);
-  const selected = integer(
-    'selected_count' in summary ? summary.selected_count : crawl.analysis_requested_count || 0,
-  );
+  const selected = integer(summary.selected_count);
   const analyzed = integer(crawl.analyzed_url_count);
   const coverage = {
     crawl_status: crawl.status,

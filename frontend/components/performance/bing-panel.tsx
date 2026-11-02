@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 
-import { DimensionTable } from './dimension-table';
+import { DimensionTable, useWarmDimensionTable } from './dimension-table';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { Stack } from '@/components/ui/layout';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
-import type { PerformanceDimension } from '@/lib/api/performance';
+import type { PerformanceDashboard, PerformanceDimension } from '@/lib/api/performance';
 import { BING_DIMENSION_TABS } from '@/lib/performance/performance';
 
 /**
@@ -27,16 +27,20 @@ export function BingPanel({
   projectId,
   snapshotId,
   compareSnapshotId,
+  dimensionCounts,
   selectedLabel,
   compareLabel,
 }: Readonly<{
   projectId: string;
   snapshotId: string;
   compareSnapshotId: string | null;
+  /** The snapshot's persisted row count per dimension. */
+  dimensionCounts: PerformanceDashboard['dimension_counts'];
   selectedLabel: string;
   compareLabel: string;
 }>) {
   const [dimension, setDimension] = useState<PerformanceDimension>('bing_query');
+  const warm = useWarmDimensionTable(projectId);
 
   return (
     <Stack as="section" gap="compact" aria-label="Bing performance" data-testid="bing-panel">
@@ -51,6 +55,7 @@ export function BingPanel({
         ariaLabel="Bing breakdowns"
         spaced
         fill
+        onIntent={(next) => warm({ snapshotId, compareSnapshotId }, next)}
       >
         {BING_DIMENSION_TABS.map((tab) => (
           <TabPanel key={tab.value} value={tab.value} className="focus-ring">
@@ -60,6 +65,7 @@ export function BingPanel({
                 dimension={tab.value}
                 snapshotId={snapshotId}
                 compareSnapshotId={compareSnapshotId}
+                measuredRows={dimensionCounts[tab.value]}
                 selectedLabel={selectedLabel}
                 compareLabel={compareLabel}
               />

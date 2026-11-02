@@ -59,18 +59,73 @@ describe('SiteHealthScreen — Website tab deep links', () => {
     expect(await screen.findByText('Architecture is not available yet.')).toBeVisible();
   });
 
-  it('defaults to Overview after the crawl projection resolves', async () => {
+  it('opens on Pages for a finished crawl, from the loading frame onward', async () => {
     setSearch('tab=unknown');
+    const dashboard = held();
     mockRoutes();
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health`, async () => {
+        await dashboard.released;
+        return HttpResponse.json(finishedDashboard());
+      }),
+    );
 
     renderScreen();
 
-    await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      ),
+    // The loading frame already selects Pages, so the selection never moves.
+    expect(await screen.findByRole('tab', { name: 'Pages' })).toHaveAttribute(
+      'aria-selected',
+      'true',
     );
+    dashboard.release();
+    expect(await screen.findByTestId('site-health-canonical')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByTestId('site-health-overview')).not.toBeInTheDocument();
+  });
+
+  it('keeps a tab the reader picked while a new crawl starts', async () => {
+    const user = userEvent.setup();
+    const started: unknown[] = [];
+    mockRoutes();
+    mswServer.use(
+      http.post('/api/v1/site-crawls', async ({ request }) => {
+        started.push(await request.json());
+        return HttpResponse.json(crawl({ status: 'running', analysis_status: 'pending' }));
+      }),
+    );
+
+    renderScreen();
+    await user.click(await screen.findByRole('tab', { name: 'Overview' }));
+    expect(
+      await screen.findByRole('img', { name: 'Web Fundamentals score: 80' }),
+    ).toBeInTheDocument();
+
+    const start = screen.getByRole('button', { name: 'Run new crawl' });
+    await waitFor(() => expect(start).toBeEnabled());
+    await user.click(start);
+    await waitFor(() => expect(started).toEqual([{ project_id: PROJECT }]));
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    expect(new URLSearchParams(window.location.search).get('tab')).toBe('overview');
+  });
+});
+
+describe('SiteHealthScreen — Pages tab reads', () => {
+  it('reads the first Monitored page once for the progress strip and the page browser', async () => {
+    setSearch('tab=pages');
+    mockRoutes();
+    const reads: string[] = [];
+    mswServer.use(
+      http.get(`/api/v1/site-crawls/${CRAWL}/pages`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        reads.push(`${params.get('monitored')}|${params.get('sort')}|${params.get('limit')}`);
+        return HttpResponse.json({ items: [], next_cursor: null, root_errors: [] });
+      }),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByText('No pages in this view')).toBeVisible();
+    expect(reads).toEqual(['true|status|10']);
   });
 });
 
@@ -128,13 +183,111 @@ describe('SiteHealthScreen — loading failures', () => {
     );
 
     const { queryClient } = renderScreen();
-    expect(await screen.findByRole('tablist', { name: 'Website analysis' })).toBeVisible();
+    // The crawl's own controls mean the evidence has loaded; the tab row alone
+    // is already drawn by the loading frame.
+    expect(await screen.findByRole('button', { name: 'Recrawl' })).toBeVisible();
 
     available = false;
     void queryClient.invalidateQueries({ queryKey: queryKeys.siteHealth.dashboard(PROJECT) });
 
     expect(await screen.findByText('Dashboard refresh failed')).toBeVisible();
     expect(screen.getByRole('tablist', { name: 'Website analysis' })).toBeVisible();
+  });
+});
+
+/** A response the test releases when it chooses, so a loading frame can be inspected. */
+function held() {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { release, released };
+}
+
+function finishedDashboard() {
+  return {
+    project_id: PROJECT,
+    crawl: crawl(),
+    score_summary: null,
+    phase: 'dashboard',
+    snapshot_id: null,
+    quota: { used: 3, limit: 50 },
+    root_errors: [],
+  };
+}
+
+function loadingRegions() {
+  return document.querySelectorAll('[data-query-state="loading"]');
+}
+
+describe('SiteHealthScreen — loading frames', () => {
+  it('shows one loading box under the tab row until the Overview arrives, never a lone score row', async () => {
+    setSearch('tab=overview');
+    const dashboard = held();
+    const snapshot = held();
+    mockRoutes();
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health`, async () => {
+        await dashboard.released;
+        return HttpResponse.json(finishedDashboard());
+      }),
+      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, async () => {
+        await snapshot.released;
+        return HttpResponse.json(overview());
+      }),
+    );
+
+    renderScreen();
+
+    // The crawl is still being read: the loaded page's tab row, one box.
+    expect(await screen.findByRole('tablist', { name: 'Website analysis' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    expect(loadingRegions()).toHaveLength(1);
+    expect(screen.queryByTestId('overview-metrics')).not.toBeInTheDocument();
+
+    // The crawl is known but its Overview is not: still the one box, no scores.
+    dashboard.release();
+    expect(await screen.findByRole('button', { name: 'Recrawl' })).toBeVisible();
+    expect(loadingRegions()).toHaveLength(1);
+    expect(screen.queryByTestId('overview-metrics')).not.toBeInTheDocument();
+
+    snapshot.release();
+    expect(
+      await screen.findByRole('img', { name: 'Web Fundamentals score: 80' }),
+    ).toBeInTheDocument();
+    expect(loadingRegions()).toHaveLength(0);
+  });
+
+  it('keeps the loaded Overview on screen while a refresh is in flight', async () => {
+    setSearch('tab=overview');
+    let refresh: ReturnType<typeof held> | null = null;
+    mockRoutes();
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/site-health`, async () => {
+        await refresh?.released;
+        return HttpResponse.json(finishedDashboard());
+      }),
+      http.get(`/api/v1/projects/${PROJECT}/site-health/overview`, async () => {
+        await refresh?.released;
+        return HttpResponse.json(overview());
+      }),
+    );
+
+    const { queryClient } = renderScreen();
+    expect(
+      await screen.findByRole('img', { name: 'Web Fundamentals score: 80' }),
+    ).toBeInTheDocument();
+
+    refresh = held();
+    void queryClient.invalidateQueries({ queryKey: queryKeys.siteHealth.all });
+    await waitFor(() =>
+      expect(queryClient.isFetching({ queryKey: queryKeys.siteHealth.all })).toBeGreaterThan(0),
+    );
+
+    expect(screen.getByRole('img', { name: 'Web Fundamentals score: 80' })).toBeInTheDocument();
+    expect(screen.getByRole('tablist', { name: 'Website analysis' })).toBeVisible();
+    expect(loadingRegions()).toHaveLength(0);
+    refresh.release();
   });
 });
 
@@ -364,6 +517,7 @@ describe('SiteHealthScreen — canonical single-screen flow (regression)', () =>
     ).toBeInTheDocument();
     expect(screen.queryByLabelText('Monitor https://acme.com/pricing')).not.toBeInTheDocument();
     expect(screen.getByTestId('site-health-canonical')).toBe(canonical);
+    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
 
     serverCrawl = crawl({
       id: NEW_CRAWL,
@@ -380,7 +534,9 @@ describe('SiteHealthScreen — canonical single-screen flow (regression)', () =>
       screen.queryByText('Could not load Site Health. Please refresh.'),
     ).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Run new crawl' })).toBeInTheDocument();
-    expect(screen.getByTestId('site-health-overview')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
+    // Finishing the crawl never moves the reader off Pages (owner, 2026-11-02).
+    expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('site-health-canonical')).toBe(canonical);
+    expect(screen.queryByTestId('site-health-overview')).not.toBeInTheDocument();
   });
 });

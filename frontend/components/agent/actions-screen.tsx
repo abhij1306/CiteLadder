@@ -1,12 +1,10 @@
 'use client';
 
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ActionPriorityBadge, ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { QueryState } from '@/components/ui/query-state';
-import { readErrorProps } from '@/components/ui/read-error';
 import { Select } from '@/components/ui/select';
 import { TextLink } from '@/components/ui/text-link';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
@@ -20,10 +18,11 @@ import {
 import { actionsQueries, type actionsApi, type Action, type ActionStatus } from '@/lib/api/actions';
 import { actionStatusSchema } from '@citeladder/contracts/actions';
 import { queueCount, useActionStatusCounts } from '@/lib/agent/use-action-status-counts';
+import { formatCount } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
-import { cursorControls, pageRange, useCursorTable } from '@/lib/table/use-cursor-table';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 
 const QUEUE = 'queue';
 type StatusFilter = typeof QUEUE | ActionStatus;
@@ -39,14 +38,17 @@ function statusCount(value: StatusFilter, counts: StatusCounts) {
 }
 
 /**
- * Status choices, each with its project-wide count. The counts cover every
- * target type, so they are shown only while the target filter is unset.
+ * Status choices, each with its project-wide count in the menu. The counts
+ * cover every target type, so they are shown only while the target filter is
+ * unset. The labels themselves never change, so the filter keeps its width
+ * when the counts load or drop away.
  */
 function statusOptions(counts: StatusCounts | undefined) {
-  return STATUS_FILTERS.map((value) => {
-    const label = value === QUEUE ? 'Open and in progress' : ACTION_STATUS_LABEL[value];
-    return { value, label: counts ? `${label} (${statusCount(value, counts)})` : label };
-  });
+  return STATUS_FILTERS.map((value) => ({
+    value,
+    label: value === QUEUE ? 'Open and in progress' : ACTION_STATUS_LABEL[value],
+    detail: counts ? formatCount(statusCount(value, counts)) : undefined,
+  }));
 }
 const TARGET_OPTIONS = [
   { value: ALL_TARGETS, label: 'All targets' },
@@ -113,39 +115,21 @@ function ActionsList({
   status?: ActionStatus;
   targetKind?: string;
 }>) {
-  const pager = useCursorTable(JSON.stringify([workspaceId, projectId, status, targetKind]));
-  const query = useQuery(
-    actionsQueries.list(workspaceId, projectId, {
-      status,
-      target_kind: targetKind,
-      cursor: pager.cursor,
-      limit: pager.pageSize,
-    }),
-  );
-
-  const page = query.data;
+  const { page, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: projectId,
+    scope: [status, targetKind],
+    query: (request) =>
+      actionsQueries.list(workspaceId, projectId, { status, target_kind: targetKind, ...request }),
+    noun: 'Actions',
+    loading: 'Loading Actions…',
+    error: 'Actions could not be loaded.',
+    empty: emptyActions,
+  });
   return (
-    <DataTable
-      label="Actions"
-      columns={COLUMNS}
-      pageSize={pager.pageSize}
-      rowCount={page?.items.length}
-      state={actionsState(query)}
-      busy={{ active: query.isFetching && !query.isPending, label: 'Updating Actions…' }}
-      pager={
-        page && page.items.length > 0
-          ? {
-              range: {
-                ...pageRange(pager.page, pager.pageSize, page.items.length),
-                noun: 'Actions',
-              },
-              pageSize: { value: pager.pageSize, onChange: pager.setPageSize },
-              ...cursorControls(pager, page.next_cursor),
-              busy: query.isFetching,
-            }
-          : undefined
-      }
-    >
+    // Every row stacks the target over its kind, so short pages pad with
+    // two-line blanks and the pager stays where a full page puts it.
+    <DataTable label="Actions" columns={COLUMNS} rowLines={2} {...table}>
       {page?.items.map((action) => (
         <ActionRow key={action.id} action={action} />
       ))}
@@ -160,15 +144,9 @@ const COLUMNS: readonly DataTableColumn[] = [
   { key: 'approach', label: 'Approach', width: 'name' },
 ];
 
-/** What the table shows instead of rows: the read's loading, error or empty. */
-function actionsState(
-  query: UseQueryResult<Awaited<ReturnType<typeof actionsApi.list>>>,
-): DataTableState | undefined {
-  if (query.isPending) return { kind: 'loading', label: 'Loading Actions…' };
-  if (query.isError)
-    return { kind: 'error', ...readErrorProps(query), fallback: 'Actions could not be loaded.' };
-  if (query.data.items.length > 0) return undefined;
-  const anyActions = Object.values(query.data.status_counts).some((count) => count > 0);
+/** What a page with no Actions says: nothing matches, or nothing exists yet. */
+function emptyActions(page: Awaited<ReturnType<typeof actionsApi.list>>): DataTableState {
+  const anyActions = Object.values(page.status_counts).some((count) => count > 0);
   return anyActions
     ? {
         kind: 'empty',

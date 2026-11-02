@@ -74,7 +74,7 @@ export function ContextScreen() {
   const { activeProject, activeWorkspaceId } = useProjectContext();
   if (!activeProject || !activeWorkspaceId)
     return (
-      <ListScreen measure="workflow">
+      <ListScreen>
         <ProjectRequiredState />
       </ListScreen>
     );
@@ -120,7 +120,6 @@ function ContextWorkspace({
   return (
     <TabsRoot value={activeTab} onValueChange={setTab}>
       <ListScreen
-        measure="workflow"
         tabs={
           facts.isPending
             ? undefined

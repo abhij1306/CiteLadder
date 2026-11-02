@@ -1,9 +1,8 @@
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useProjectContext } from '@/lib/project/project-context';
-import { aiTrafficApi } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
+import { aiTrafficApi, aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { stringUrlCodec, optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { useCursorTable } from '@/lib/table/use-cursor-table';
 import { saveBlob } from '@/lib/download';
 import { TRAFFIC_RANGES, VERIFICATION_OPTIONS } from '@/lib/config/crawl-logs';
 export type TrafficDataTab = 'overview' | 'crawlers' | 'activity' | 'pages';
@@ -74,6 +73,33 @@ function viewFilters(tab: TrafficDataTab, selection: ReturnType<typeof useTraffi
   }
   return {};
 }
+/**
+ * Start the Overview tab's reads together, before the tab is chosen.
+ *
+ * The screen picks its default tab from crawl log availability, and the
+ * insights strip mounts only under a rendered overview, so left to the tree
+ * the three reads ran in series: sources, then overview, then insights. None
+ * needs another's answer. Warming overview and insights here, under the keys
+ * the tab reads, runs all three side by side.
+ */
+export function useOverviewWarmup(active: boolean) {
+  const client = useQueryClient();
+  const { activeProject } = useProjectContext();
+  const workspaceId = activeProject?.workspace_id ?? '',
+    projectId = activeProject?.id ?? '';
+  const { range, verification } = selectedFilters('overview', useTrafficSelection());
+  const ready = active && !!workspaceId && !!projectId;
+  useEffect(() => {
+    if (!ready) return;
+    // The overview's own filters: its folder and resource narrowing are unset,
+    // and an unset filter is absent from both the key and the request.
+    void client.prefetchQuery(
+      aiTrafficQueries.overview(workspaceId, projectId, { range, verification }),
+    );
+    void client.prefetchQuery(aiTrafficQueries.insights(workspaceId, projectId, range));
+  }, [client, ready, workspaceId, projectId, range, verification]);
+}
+
 export function useTrafficData(tab: TrafficDataTab) {
   const { activeProject, isLoading } = useProjectContext();
   const workspaceId = activeProject?.workspace_id ?? '',
@@ -82,31 +108,14 @@ export function useTrafficData(tab: TrafficDataTab) {
     enabled = !!workspaceId && !!projectId;
   const selection = useTrafficSelection(),
     filters = selectedFilters(tab, selection);
-  const pager = useCursorTable(JSON.stringify([workspaceId, projectId, tab, filters]));
-  const tableFilters = { ...filters, cursor: pager.cursor, limit: pager.pageSize };
   const summary = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'overview', filters),
-    queryFn: ({ signal }) => aiTrafficApi.overview(projectId, filters, { ...options, signal }),
+    ...aiTrafficQueries.overview(workspaceId, projectId, filters),
     enabled: enabled && tab === 'overview',
   });
-  const crawlers = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'crawlers', tableFilters),
-    queryFn: ({ signal }) => aiTrafficApi.crawlers(projectId, tableFilters, { ...options, signal }),
-    enabled: enabled && tab === 'crawlers',
-  });
-  const activity = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'activity', tableFilters),
-    queryFn: ({ signal }) => aiTrafficApi.activity(projectId, tableFilters, { ...options, signal }),
-    enabled: enabled && tab === 'activity',
-  });
-  const pages = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'pages', tableFilters),
-    queryFn: ({ signal }) => aiTrafficApi.pages(projectId, tableFilters, { ...options, signal }),
-    enabled: enabled && tab === 'pages',
-  });
+  // The table tabs read their own pages (`useCursorTableQuery`), so a page
+  // turn keeps the rows and the pager on screen.
   const catalog = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'catalog'),
-    queryFn: ({ signal }) => aiTrafficApi.catalog(projectId, { ...options, signal }),
+    ...aiTrafficQueries.catalog(workspaceId, projectId),
     enabled: enabled && tab !== 'overview',
   });
   const exporting = useMutation({
@@ -118,27 +127,15 @@ export function useTrafficData(tab: TrafficDataTab) {
       );
     },
   });
-  const current = { overview: summary, crawlers, activity, pages }[tab];
-  const next = {
-    overview: null,
-    crawlers: crawlers.data?.next_cursor,
-    activity: activity.data?.next_cursor,
-    pages: pages.data?.next_cursor,
-  }[tab];
   return {
     tab,
     isLoading,
     workspaceId,
     projectId,
     selection,
-    pager,
+    filters,
     summary,
-    crawlers,
-    activity,
-    pages,
     catalog,
     exporting,
-    current,
-    next,
   };
 }

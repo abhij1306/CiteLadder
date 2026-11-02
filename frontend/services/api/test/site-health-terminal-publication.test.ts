@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { Insertable } from 'kysely';
+import { sql, type Insertable } from 'kysely';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { SiteCrawls } from '../src/generated/db-schema.ts';
+import { analyzePage } from '../src/site-health/analysis/analyze-page.ts';
+import { extractPageFacts } from '../src/site-health/analysis/facts.ts';
+import { pageAnalysisContext, writePageAnalysis } from '../src/site-health/analysis-rows.ts';
 import { finalizeCrawlAnalyses } from '../src/site-health/lifecycle-finalize.ts';
 import { issues } from '../src/site-health/reads/issues.ts';
 import { addArchitectureIssues, persistCrawlSnapshot } from '../src/site-health/snapshot.ts';
@@ -238,22 +241,36 @@ describe('terminal analysis publication', () => {
     const hiddenMenu = await fixtures.page(seed, '/menu', {
       links: { anchors: [], unrendered_anchors: [anchor('/pricing')] },
     });
+    const shell = await fixtures.page(seed, '/app-shell', {
+      links: { anchors: [] },
+      extraction: { state: 'unavailable', reason: 'client_rendering_required' },
+    });
     await finalize(seed);
     const brokenLinks = async (analysisId: string) => {
       const row = await db
         .selectFrom('site_rule_evaluations')
-        .select(['outcome', 'evidence'])
+        .select(['outcome', 'evidence', 'reason_code'])
         .where('analysis_id', '=', analysisId)
         .where('rule_id', '=', 'technical.broken_internal_link')
         .executeTakeFirstOrThrow();
       const evidence = row.evidence as { total_count: number };
-      return [row.outcome, evidence.total_count];
+      return [row.outcome, evidence.total_count, row.reason_code];
     };
-    expect(await brokenLinks(excludedOnly.analysisId)).toEqual(['satisfied', 0]);
+    expect(await brokenLinks(excludedOnly.analysisId)).toEqual(['satisfied', 0, '']);
+    // A client-rendered shell shows no links at all: nothing was checked, so nothing passes.
+    expect(await brokenLinks(shell.analysisId)).toEqual([
+      'unknown',
+      0,
+      'client_rendering_required',
+    ]);
     // A fetchable target that was never checked still leaves the check open.
-    expect(await brokenLinks(withPage.analysisId)).toEqual(['unknown', 1]);
+    expect(await brokenLinks(withPage.analysisId)).toEqual(['unknown', 1, 'insufficient_evidence']);
     // A link in a hidden menu is a link crawlers follow, so it is checked too.
-    expect(await brokenLinks(hiddenMenu.analysisId)).toEqual(['unknown', 1]);
+    expect(await brokenLinks(hiddenMenu.analysisId)).toEqual([
+      'unknown',
+      1,
+      'insufficient_evidence',
+    ]);
   });
 
   it('judges duplicate content and redirects from the persisted crawl evidence', async () => {
@@ -358,6 +375,93 @@ describe('terminal analysis publication', () => {
     ]);
     // Two rows, but the summary's pages are at least the six the shared link is on.
     expect([catalog.summary.occurrence_count, catalog.summary.affected_url_count]).toEqual([2, 6]);
+  });
+
+  it('keeps the persisted issue currency equal to the current analyses’ evaluations across a re-analysis', async () => {
+    const seed = await fixtures.crawl('running');
+    const text = Array.from({ length: 80 }, (_, i) => `topic${i % 13} detail${i}`).join(' ');
+    const copy = {
+      has_html: true,
+      delivery: { status_code: 200 },
+      robots: { noindex: false },
+      primary_content_text: text,
+      links: { anchors: [] },
+    };
+    await fixtures.page(seed, '/', { has_html: true, links: { anchors: [] } });
+    const first = await fixtures.page(seed, '/a', copy);
+    const second = await fixtures.page(seed, '/b', copy);
+    // How the Issues reads derived currency before the flag existed: every
+    // evaluation a current, finalized analysis names, plus architecture findings.
+    const derived = async () => {
+      const { rows } = await sql<{ id: string }>`
+        select i.id from site_issues i
+        where i.workspace_id = ${seed.workspaceId} and i.crawl_id = ${seed.crawlId}
+          and i.evaluation_id in (
+            select unnest(a.source_evaluation_ids) from site_page_analyses a
+            where a.workspace_id = ${seed.workspaceId} and a.crawl_id = ${seed.crawlId}
+              and a.is_current and a.finalized_at is not null
+            union all
+            select e.id from site_rule_evaluations e
+            join site_observed_architectures o
+              on o.id = e.source_architecture_id and o.workspace_id = e.workspace_id
+            where o.workspace_id = ${seed.workspaceId} and o.crawl_id = ${seed.crawlId})
+        order by i.id`.execute(db);
+      return rows.map((row) => row.id);
+    };
+    const flagged = async () =>
+      (
+        await db
+          .selectFrom('site_issues')
+          .select('id')
+          .where('crawl_id', '=', seed.crawlId)
+          .where('is_current', '=', true)
+          .orderBy('id')
+          .execute()
+      ).map((row) => row.id);
+    const currentDuplicates = async () =>
+      (
+        await db
+          .selectFrom('site_issues')
+          .select('site_url_id')
+          .where('crawl_id', '=', seed.crawlId)
+          .where('rule_id', '=', 'technical.duplicate_content')
+          .where('is_current', '=', true)
+          .orderBy('site_url_id')
+          .execute()
+      ).map((row) => row.site_url_id);
+
+    await finalize(seed);
+    expect(await flagged()).toEqual(await derived());
+    expect(await currentDuplicates()).toEqual([first.id, second.id].toSorted());
+
+    // `/a` is analyzed again over its finalized analysis: its findings stop
+    // being current, and the new provisional analysis names none yet.
+    const crawl = await db
+      .selectFrom('site_crawls')
+      .selectAll()
+      .where('id', '=', seed.crawlId)
+      .executeTakeFirstOrThrow();
+    const task = await db
+      .selectFrom('site_crawl_tasks')
+      .selectAll()
+      .where('id', '=', first.taskId)
+      .executeTakeFirstOrThrow();
+    const facts = extractPageFacts(Buffer.from('<html><head><title>A</title></head></html>'), {
+      finalUrl: 'https://example.test/a',
+      contentType: 'text/html',
+      statusCode: 200,
+    });
+    const scope = { ...task, site_url_id: first.id };
+    await db.transaction().execute(async (trx) => {
+      const result = analyzePage(facts, await pageAnalysisContext(trx, crawl, scope));
+      await writePageAnalysis(trx, crawl, scope, first.artifactId, facts, result);
+    });
+    expect(await flagged()).toEqual(await derived());
+    expect(await currentDuplicates()).toEqual([second.id]);
+
+    await finalize(seed);
+    expect(await flagged()).toEqual(await derived());
+    expect(await currentDuplicates()).toEqual([second.id]);
   });
 
   it('does not publish another workspace through a mismatched crawl scope', async () => {

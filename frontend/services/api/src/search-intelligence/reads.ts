@@ -35,6 +35,36 @@ const savedDomains = z.array(z.string());
 
 export type Scope = { workspace: WorkspaceScope; projectId: string };
 
+/**
+ * The newest published dataset of each acquisition identity (kind, target,
+ * comparison, market and provider filters), newest first. A refresh replaces
+ * the dataset the screen and the Agent read; earlier ones stay readable by ID.
+ */
+function latestDatasets(db: Database, scope: Scope) {
+  const identity = [
+    'dataset_kind',
+    'target_origin',
+    'comparison_origin',
+    'location_code',
+    'language_code',
+    'provider_filters',
+  ] as const;
+  let newestFirst = scope.workspace
+    .selectFrom(db, 'search_intelligence_datasets')
+    .selectAll()
+    .distinctOn([...identity])
+    .where('project_id', '=', scope.projectId)
+    .where('status', '=', PUBLISHED);
+  for (const column of identity) newestFirst = newestFirst.orderBy(column);
+  const latest = newestFirst.orderBy('published_at', 'desc').orderBy('id', 'desc').as('latest');
+  return db
+    .selectFrom(latest)
+    .selectAll()
+    .orderBy('published_at', 'desc')
+    .orderBy('id', 'desc')
+    .execute();
+}
+
 /** A published dataset of the project; one still collecting is not evidence yet. */
 async function publishedDataset(db: Database, scope: Scope, datasetId: string) {
   const dataset = await scope.workspace
@@ -103,14 +133,7 @@ export async function readiness(
       .orderBy('id', 'desc')
       .limit(1)
       .executeTakeFirst(),
-    scope.workspace
-      .selectFrom(db, 'search_intelligence_datasets')
-      .selectAll()
-      .where('project_id', '=', scope.projectId)
-      .where('status', '=', PUBLISHED)
-      .orderBy('published_at', 'desc')
-      .orderBy('id', 'desc')
-      .execute(),
+    latestDatasets(db, scope),
   ]);
   const saved = preferencesBody.parse(project.search_intelligence_preferences);
   return {

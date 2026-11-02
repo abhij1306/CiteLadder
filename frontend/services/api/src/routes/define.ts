@@ -7,6 +7,10 @@
  * the project's membership:
  * the local user first, then the workspace or project (400/404), the
  * capability (403) and the parameters (422). Authorization precedes parameter validation.
+ * The acting user's membership is one statement kept on the request context.
+ * A route under `/projects/{project_id}` declares `authorize: 'active-project'`
+ * (or `'project'` when a link or an `<img>` must open it from any workspace);
+ * its handler never re-checks the project.
  */
 import type { ApiKeyScope } from '@citeladder/contracts/api-keys';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
@@ -14,12 +18,18 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { z } from 'zod';
 
 import { sessionUser } from '../auth/session.ts';
-import { activeWorkspace, projectMember, workspaceMember } from '../auth/workspace.ts';
-import type { WorkspaceCapability } from '../auth/workspace.ts';
+import {
+  activeProjectMembership,
+  activeWorkspaceMembership,
+  pathWorkspaceMembership,
+  projectMembership,
+  type MembershipRule,
+  type WorkspaceCapability,
+} from '../auth/workspace.ts';
 import { policy, type ServiceConfig } from '../config.ts';
 import type { AppEnv } from '../context.ts';
 import type { Database } from '../db/database.ts';
-import { ApiError } from '../errors.ts';
+import { ApiError, notFound } from '../errors.ts';
 import {
   validateParams,
   type ParamSpec,
@@ -65,8 +75,12 @@ type RouteSpec<Path extends ParamSpecs, Query extends ParamSpecs, Response exten
   body?: z.ZodType;
   headers?: z.ZodObject;
   capability?: WorkspaceCapability;
-  /** Resolve the workspace from the path's `project_id` instead of `X-Workspace-Id`. */
-  authorize?: 'workspace' | 'project' | 'workspace-path' | 'session' | 'public';
+  /**
+   * `project`: resolve the workspace from the path's `project_id` alone (links,
+   * `<img>`). `active-project`: the active workspace, as a flat route resolves
+   * it, must hold the path's `project_id`.
+   */
+  authorize?: 'workspace' | 'project' | 'active-project' | 'workspace-path' | 'session' | 'public';
   /**
    * Where the route is served: the browser API (default); the public API
    * under `/v1` for API keys (`public`, declared with its `/v1` path); or
@@ -159,10 +173,11 @@ export function defineRoute<
   const method = route.method ?? 'get';
   const status = route.status ?? 200;
   const byProject = route.authorize === 'project';
+  const activeProject = route.authorize === 'active-project';
   const publicRoute = route.authorize === 'public';
   const scoped = !publicRoute && route.authorize !== 'session';
   const workspaceHeaders =
-    route.authorize === undefined || route.authorize === 'workspace'
+    route.authorize === undefined || route.authorize === 'workspace' || activeProject
       ? ACTIVE_WORKSPACE_HEADERS
       : z.object({});
   const exposure = route.exposure ?? 'browser';
@@ -196,22 +211,24 @@ export function defineRoute<
         path: c.req.param() as Record<string, string>,
         search: new URL(c.req.url).search,
       });
+      // The session read named the path project only if the active workspace holds it.
+      if (activeProject && c.get('workspace').projectId === null) throw notFound('Project');
       if (route.raw) return route.handle({ c, db, config }, params);
       return c.json(await route.handle({ c, db, config }, params), status as ContentfulStatusCode);
     };
     if (publicSide) publicSide.register(app, config, db, respond);
     if (browser === null) return;
     const pattern = honoPath(route.path);
-    const authorize: MiddlewareHandler<AppEnv>[] = [];
-    if (byProject) authorize.push(projectMember(db));
-    else if (route.authorize === 'workspace-path') authorize.push(workspaceMember(db, capability));
-    else if (scoped) authorize.push(activeWorkspace(db, capability));
+    let membership: MembershipRule | undefined;
+    if (byProject) membership = projectMembership;
+    else if (activeProject) membership = activeProjectMembership(capability);
+    else if (route.authorize === 'workspace-path') membership = pathWorkspaceMembership(capability);
+    else if (scoped) membership = activeWorkspaceMembership(capability);
     app.on(
       [method.toUpperCase()],
       [pattern],
       ...(method === 'get' ? [] : [sameSiteWrite]),
-      ...(publicRoute ? [] : [sessionUser(config, db)]),
-      ...authorize,
+      ...(publicRoute ? [] : [sessionUser(config, db, membership)]),
       async (c) => {
         if (byProject && capability !== undefined) c.get('workspace').require(capability);
         return respond(c);

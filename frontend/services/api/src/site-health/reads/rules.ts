@@ -73,7 +73,7 @@ export function issueGroupId(crawlId: string, ruleId: string, findingClass: stri
 }
 
 /** Link problems judged once on the crawl root for every page that carries the link. */
-export const sitewideLinkRules: readonly string[] = [
+const sitewideLinkRules: readonly string[] = [
   'technical.sitewide_broken_link',
   'technical.sitewide_link_redirect',
 ];
@@ -85,8 +85,25 @@ const SITEWIDE_LINK_RULES = new Set(sitewideLinkRules);
  * its evidence. Its group counts and page kinds come from that evidence, not
  * from the one row, so "Pages buried too deeply" reads 11 pages rather than
  * the homepage. `null` for every per-page rule.
+ *
+ * Under the Issues page-kind filter it counts only the affected pages of that
+ * kind, from the per-kind counts the evidence records over every page.
  */
 export function siteLevelScope(
+  ruleId: string,
+  evidence: unknown,
+  pageKind: string | null = null,
+): { affected: number; pageKinds: string[] } | null {
+  const scope = wholeSiteScope(ruleId, evidence);
+  if (scope === null || pageKind === null) return scope;
+  const counted = record(record(evidence).page_kind_counts)[pageKind];
+  return { ...scope, affected: typeof counted === 'number' ? counted : 0 };
+}
+
+/** Rules whose finding is persisted once for the site (`siteLevelScope`), as SQL. */
+export const siteLevelRule = sql`(i.rule_id like 'architecture.%' or i.rule_id = any(${sitewideLinkRules}::text[]))`;
+
+function wholeSiteScope(
   ruleId: string,
   evidence: unknown,
 ): { affected: number; pageKinds: string[] } | null {

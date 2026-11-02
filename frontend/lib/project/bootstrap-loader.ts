@@ -21,12 +21,13 @@ import type { QueryClient } from '@tanstack/react-query';
 import { redirect } from 'react-router-dom';
 
 import { authApi } from '@/lib/api/auth';
-import { projectsApi } from '@/lib/api/projects';
+import { projectQueries, projectsApi } from '@/lib/api/projects';
 import { getAppQueryClient } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { Project, Workspace } from '@/lib/api/types';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import { projectDestination, workspaceDestination } from '@/lib/navigation/project-destination';
+import { prefetchRoute } from '@/lib/navigation/route-prefetch';
 import {
   readStoredActiveProjectId,
   readStoredActiveWorkspaceId,
@@ -79,9 +80,76 @@ type Scope = {
 };
 
 /**
+ * Start the landing screen's primary read as soon as its project is known.
+ *
+ * A cache warm under the screen's own query key, never a render: the session
+ * gate still decides whether anything mounts, and the backend authorizes every
+ * read. Only an address naming nothing but its scope is
+ * warmed — the prefetchers warm each screen's default view, and filters in the
+ * address ask for a different key.
+ */
+function warmScreen(client: QueryClient, url: URL, project: Project) {
+  const scopeOnly = [...url.searchParams.keys()].every(
+    (key) => key === 'project' || key === 'workspace',
+  );
+  if (!scopeOnly) return;
+  prefetchRoute(client, url.pathname, {
+    projectId: project.id,
+    workspaceId: project.workspace_id,
+  });
+}
+
+/**
+ * The explicitly requested project, in as few reads as possible.
+ *
+ * A returning reader's address names a project in the workspace they last
+ * used, and that workspace's list is a read the shell needs anyway. Asked
+ * first, it answers for the project too — the list's members are the same
+ * authorized objects the detail read returns — so the separate detail read
+ * runs only when the list cannot answer: no remembered workspace, a list the
+ * backend refused, or a project that is not in it (another workspace's, or one
+ * created after the list was read). The detail read still authorizes from the
+ * path, so a stale or foreign remembered workspace can never hide a project.
+ */
+async function findRequestedProject(
+  client: QueryClient,
+  projectId: string,
+  candidateWorkspaceId: string | null,
+): Promise<Project | null> {
+  if (candidateWorkspaceId) {
+    const listed = await settle(client.ensureQueryData(projectQueries.list(candidateWorkspaceId)));
+    const project = listed?.find((candidate) => candidate.id === projectId);
+    if (project) return project;
+  }
+  return settle(client.ensureQueryData(projectQueries.detail(projectId)));
+}
+
+/**
+ * Resolve the requested project and, once it names its workspace, start its
+ * screen's reads beside the gate reads rather than after the shell mounts. A
+ * project contradicting the address's workspace is rejected by the caller and
+ * warms nothing.
+ */
+async function requestedProject(
+  client: QueryClient,
+  url: URL,
+  projectId: string,
+  urlWorkspaceId: string | null,
+): Promise<Project | null> {
+  const project = await findRequestedProject(
+    client,
+    projectId,
+    urlWorkspaceId ?? readStoredActiveWorkspaceId(),
+  );
+  if (project && (!urlWorkspaceId || project.workspace_id === urlWorkspaceId))
+    warmScreen(client, url, project);
+  return project;
+}
+
+/**
  * Which workspace this address is in, and the project it named if it named one.
  *
- * The explicitly requested project is fetched alongside the membership list
+ * The explicitly requested project is resolved alongside the membership list
  * because it authorizes itself and identifies its own workspace — waiting for
  * a workspace to be guessed first is what made a freshly created project look
  * like it belonged somewhere else.
@@ -90,8 +158,8 @@ async function resolveScope(client: QueryClient, url: URL): Promise<Scope | null
   const requestedProjectId = url.searchParams.get('project') || null;
   const urlWorkspaceId = url.searchParams.get('workspace') || null;
 
-  // A membership list needs only the session cookie and a project detail only
-  // its id; neither depends on the other's answer. Sent together they cost one
+  // A membership list needs only the session cookie and the project only its
+  // id; neither depends on the other's answer. Sent together they cost one
   // round trip instead of two — and one place to stall instead of two.
   const workspacesPending = settle<Workspace[]>(
     client.ensureQueryData({
@@ -105,17 +173,7 @@ async function resolveScope(client: QueryClient, url: URL): Promise<Scope | null
     }),
   );
   const projectPending = requestedProjectId
-    ? settle<Project>(
-        client.ensureQueryData({
-          queryKey: queryKeys.projects.detail(requestedProjectId),
-          queryFn: ({ signal }) =>
-            projectsApi.getProject(requestedProjectId, {
-              signal,
-              workspaceId: null,
-              timeoutMs: getBootstrapReadTimeoutMs(),
-            }),
-        }),
-      )
+    ? requestedProject(client, url, requestedProjectId, urlWorkspaceId)
     : null;
   const workspaces = await workspacesPending;
   if (!workspaces) return null;
@@ -140,17 +198,7 @@ async function resolveScope(client: QueryClient, url: URL): Promise<Scope | null
 
 /** The workspace's projects. */
 function readProjects(client: QueryClient, workspaceId: string) {
-  return settle<Project[]>(
-    client.ensureQueryData({
-      queryKey: queryKeys.projects.list(workspaceId),
-      queryFn: ({ signal }) =>
-        projectsApi.listProjects({
-          signal,
-          workspaceId,
-          timeoutMs: getBootstrapReadTimeoutMs(),
-        }),
-    }),
-  );
+  return settle<Project[]>(client.ensureQueryData(projectQueries.list(workspaceId)));
 }
 
 /**

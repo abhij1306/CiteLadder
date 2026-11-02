@@ -230,7 +230,6 @@ function TrendCard({ data }: Readonly<{ data: SiteHealthOverview['trend'] }>) {
           {data.state === 'unavailable' ? (
             <p className="type-caption">Run a second comparable crawl to establish a trend.</p>
           ) : null}
-          <CohortCompositionContext reason={data.reason} composition={data.cohort_composition} />
         </Stack>
       </CardContent>
     </Card>

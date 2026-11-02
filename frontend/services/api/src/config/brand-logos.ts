@@ -11,7 +11,6 @@ export const brandLogos = {
   refresh_timeout_seconds: 10,
   success_cache_seconds: 604800,
   failure_cache_seconds: 86400,
-  cache_max_age_seconds: 86400,
   fallback_path: '/favicon.ico',
   image_content_types: [
     'image/gif',

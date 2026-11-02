@@ -13,6 +13,7 @@ import {
   InvalidCursorError,
 } from '../http/keyset-cursor.ts';
 import { parseUuid } from '../http/uuid.ts';
+import { requireProject } from '../projects/access.ts';
 import { opportunityStatusClause, validateStatus } from './action-status.ts';
 import {
   OPPORTUNITY_COLUMNS,
@@ -32,15 +33,6 @@ export type OpportunityFilters = {
   rule_id: string | null;
   min_priority: number | null;
 };
-
-export async function requireProject(db: Database, scope: Scope): Promise<void> {
-  const project = await new WorkspaceScope(scope.workspaceId)
-    .selectFrom(db, 'projects')
-    .select('id')
-    .where('id', '=', scope.projectId)
-    .executeTakeFirst();
-  if (!project) throw notFound('Project');
-}
 
 function invalid(message: string): never {
   throw new ApiError(422, message);

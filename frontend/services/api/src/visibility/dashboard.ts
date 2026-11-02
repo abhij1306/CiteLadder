@@ -148,7 +148,8 @@ async function latestDashboardRunId(db: Database, scope: RunScope): Promise<stri
     .orderBy('created_at', 'desc')
     .limit(1)
     .executeTakeFirst();
-  if (latest === undefined) throw new AnalysisNotFoundError('No completed audit for project');
+  if (latest === undefined)
+    throw new AnalysisNotFoundError('No completed audit for project', 'not_measured');
   return latest.id;
 }
 
@@ -193,7 +194,8 @@ async function selectedRun(
     .where('audit_id', '=', audit.id)
     .where('workspace_id', '=', scope.workspaceId)
     .executeTakeFirst();
-  if (snapshot === undefined) throw new AnalysisNotFoundError('Metrics not available for audit');
+  if (snapshot === undefined)
+    throw new AnalysisNotFoundError('Metrics not available for audit', 'metrics_pending');
   const routes = await engineSnapshots(db, [audit.id]);
   return {
     snapshotId: snapshot.id,
@@ -312,7 +314,8 @@ function rangeGroups(
       .filter((source) => source !== null),
     configurationGroup,
   );
-  if (groups.size === 0) throw new AnalysisNotFoundError('No measurements in the selected period');
+  if (groups.size === 0)
+    throw new AnalysisNotFoundError('No measurements in the selected period', 'not_measured');
   // The configuration measured most recently, unless the reader chose one.
   let key = query.configurationKey;
   if (key === null) {

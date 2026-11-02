@@ -5,9 +5,10 @@
  * `strictValidate`.
  */
 import { z } from 'zod';
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, skipToken } from '@tanstack/react-query';
 
-import { API_BASE_URL, apiClient, type ApiRequestOptions } from './client';
+import { API_BASE_URL } from '@/lib/config/operational';
+import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
 import {
   auditEstimateSchema,
@@ -161,6 +162,19 @@ export const runsApi = {
 
 /** Shared list options keep navigation, the app provider, and run screens on one cache identity. */
 export const runsQueries = {
+  /**
+   * The estimate for a launch the dialog would send. Keyed by the
+   * workspace and the exact payload; with either missing there is
+   * nothing to estimate yet, so the query skips.
+   */
+  estimate: (workspaceId: string | null, input: LaunchAuditInput | null) =>
+    queryOptions({
+      queryKey: queryKeys.runs.estimate(workspaceId, input),
+      queryFn:
+        workspaceId && input
+          ? ({ signal }) => runsApi.estimateAudit(input, { signal, workspaceId })
+          : skipToken,
+    }),
   list: (workspaceId: string, projectId: string) =>
     queryOptions({
       queryKey: queryKeys.runs.list({ project_id: projectId }),

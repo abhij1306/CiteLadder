@@ -5,9 +5,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { httpErrorStatus } from '@/lib/api/client';
-import { projectsApi } from '@/lib/api/projects';
+import { projectQueries, projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { Project } from '@/lib/api/types';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import {
   readStoredActiveProjectId,
@@ -48,9 +47,7 @@ function useRequestedScope() {
 /** One workspace's projects, keyed by AND requested for that workspace. */
 function useWorkspaceProjects(workspaceId: string | null, allowed: boolean) {
   return useQuery({
-    queryKey: queryKeys.projects.list(workspaceId ?? 'unresolved'),
-    queryFn: ({ signal }) =>
-      projectsApi.listProjects({ signal, workspaceId, timeoutMs: getBootstrapReadTimeoutMs() }),
+    ...projectQueries.list(workspaceId ?? 'unresolved'),
     enabled: workspaceId !== null && allowed,
   });
 }
@@ -91,13 +88,7 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
   // so it answers before any workspace is known and its `workspace_id` is
   // what establishes the workspace for everything that follows.
   const detailQuery = useQuery({
-    queryKey: queryKeys.projects.detail(requestedProjectId ?? 'none'),
-    queryFn: ({ signal }) =>
-      projectsApi.getProject(String(requestedProjectId), {
-        signal,
-        workspaceId: null,
-        timeoutMs: getBootstrapReadTimeoutMs(),
-      }),
+    ...projectQueries.detail(requestedProjectId ?? 'none'),
     enabled: requestedProjectId !== null,
   });
 
@@ -221,8 +212,6 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
     );
   }, [activeWorkspaceId]);
 
-  useProjectWarmup(activeProject, activeWorkspaceId);
-
   const value = useMemo<ProjectContextValue>(
     () => ({
       workspaces: workspaces ?? [],
@@ -256,42 +245,4 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
   );
 
   return <ProjectSelectionProvider value={value}>{children}</ProjectSelectionProvider>;
-}
-
-/**
- * Warm the shared run list and latest-crawl dashboard for the active project.
- *
- * Visibility/Runs and Website/Issues then reuse these exact cache entries
- * instead of starting cold per route.
- */
-function useProjectWarmup(activeProject: Project | null, workspaceId: string | null) {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    if (!activeProject || !workspaceId) return;
-    let cancelled = false;
-    // Imported here rather than at module scope, and this is the reason:
-    // `runs` and `site-health` each validate through their own schema module,
-    // and this provider mounts on EVERY authenticated route. A static import
-    // put both domains' Zod surface in the boot chunk to serve a prefetch that
-    // is, by definition, optional. The await costs one microtask on a path
-    // that was already speculative.
-    void (async () => {
-      const [{ runsQueries }, { siteHealthQueries }] = await Promise.all([
-        import('@/lib/api/runs'),
-        import('@/lib/api/site-health'),
-      ]);
-      if (cancelled) return;
-      void Promise.all([
-        queryClient.prefetchQuery(runsQueries.list(workspaceId, activeProject.id)),
-        queryClient.prefetchQuery(siteHealthQueries.dashboard(workspaceId, activeProject.id)),
-      ]);
-      // A chunk that will not load — a stale index after a deploy, a dropped
-      // connection — must not surface as an unhandled rejection from a warmup
-      // nothing is waiting on. The screens that need these modules import them
-      // again and report the failure where a reader can act on it.
-    })().catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [activeProject, workspaceId, queryClient]);
 }

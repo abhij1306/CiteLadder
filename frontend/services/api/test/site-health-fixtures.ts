@@ -632,7 +632,7 @@ export function recordedSite(
       const acceptable =
         options.contentTypes.includes(contentType) || options.contentTypes.includes('*');
       if (!response.redirect && response.status >= 200 && response.status < 300 && !acceptable)
-        throw new FetchError('content_type');
+        throw new FetchError('content_type', { status: response.status, contentType });
       if (!response.redirect)
         return {
           url: target.href,

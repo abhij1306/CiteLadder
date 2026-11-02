@@ -5,6 +5,7 @@ import { useLocation } from 'react-router-dom';
 
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { BackButton } from '@/components/ui/back-button';
+import { QueryState } from '@/components/ui/query-state';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
 import { splitPaneClasses, type SplitPaneRole } from '@/components/ui/workspace';
@@ -12,7 +13,7 @@ import { cn } from '@/lib/utils';
 
 import { CompactPageTitleContext } from './compact-page-title-context';
 import { navigationMode } from './nav-items';
-import { resolveTitle } from './page-titles';
+import { resolveMeasure, resolveTitle, type PageMeasure } from './page-titles';
 
 /**
  * A detail route's way back to the collection it was opened from. Rendered as
@@ -78,24 +79,49 @@ type ScreenBands<T extends string> = Readonly<{
  * identity band → optional `TabRow` → optional `FilterBar` → the content
  * stack, its sections 24 apart.
  *
- *   `measure="workflow"` — the narrower reading measure (Agent, Billing).
- *   `fill`               — the content is one column that fills the viewport
- *                          below the shell chrome, so a chat's composer sits
- *                          at the bottom of a short thread.
+ *   `fill` — the content is one column that fills the viewport below the
+ *            shell chrome, so a chat's composer sits at the bottom of a
+ *            short thread.
+ *
+ * The content measure is the route's (`resolveMeasure`): the narrower reading
+ * measure on Agent, Settings and Billing, analytical everywhere else. A page
+ * never picks it, so its loading frame and its loaded page cannot disagree.
  *
  * A page passes data, organisms and slots; the template owns every band and
  * every band-to-band gap.
  */
 export function ListScreen<T extends string = string>({
-  measure = 'analytical',
   fill = false,
   ...bands
-}: ScreenBands<T> &
-  Readonly<{
-    measure?: 'analytical' | 'workflow';
-    fill?: boolean;
-  }>) {
+}: ScreenBands<T> & Readonly<{ fill?: boolean }>) {
+  const measure = resolveMeasure(useLocation().pathname ?? '');
   return <PageShell {...bands} measure={measure} fill={fill} />;
+}
+
+/**
+ * The control band, held empty while the route's filters wait on their first
+ * read. A loading frame passes it as `controls` when the loaded page will have
+ * a control band, so the work below starts on the same line in both frames.
+ */
+export const RESERVED_CONTROLS: FilterBarProps = {};
+
+/**
+ * RouteLoadingScreen — the frame a route shows before its own page can draw:
+ * the route's identity band (its title comes from the path) and one loading
+ * box where the content begins.
+ *
+ * It is the one loading frame of a cold load. The shell's fallback, the route
+ * chunk's Suspense boundary and the project gate all draw it, and a page's own
+ * first read draws the same box in the same place, so the wait reads as one
+ * state from the first paint to the data instead of a blank pane, then a
+ * header, then a different box.
+ */
+export function RouteLoadingScreen({ label }: Readonly<{ label?: string }>) {
+  return (
+    <ListScreen>
+      <QueryState kind="loading" label={label} />
+    </ListScreen>
+  );
 }
 
 /**
@@ -152,7 +178,7 @@ function PageShell<T extends string>({
 }: ScreenBands<T> &
   Readonly<{
     back?: PageBack;
-    measure: 'analytical' | 'workflow';
+    measure: PageMeasure;
     fill: boolean;
   }>) {
   return (

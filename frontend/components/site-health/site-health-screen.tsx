@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Alert } from '@/components/ui/alert';
@@ -54,7 +54,6 @@ function SiteHealthContent({
   screen: ReturnType<typeof useSiteHealthScreen>;
 }>) {
   const {
-    phase,
     crawl,
     active,
     startPending,
@@ -65,20 +64,11 @@ function SiteHealthContent({
     runExport,
     exporting,
   } = screen;
-  const defaultTab: AnalysisTab = phase === 'dashboard' ? 'overview' : 'pages';
-  const tabCodec = useMemo(
-    () =>
-      stringUrlCodec(
-        ANALYSIS_TABS.map((item) => item.value),
-        defaultTab,
-      ),
-    [defaultTab],
-  );
-  const [tab, selectTab] = useUrlState('tab', tabCodec, {
+  const [tab, selectTab] = useUrlState('tab', TAB_CODEC, {
     clearKeys: ['cursor', 'sort'],
   });
-  const blockingState = projectBlockingState(projectId, projectLoading, screen);
-  const refreshFailures = !blockingState ? <SiteHealthRefreshFailures screen={screen} /> : null;
+  const blocking = projectBlockingState(projectId, projectLoading, screen);
+  const refreshFailures = !blocking ? <SiteHealthRefreshFailures screen={screen} /> : null;
   const headerActions = crawl ? (
     <CrawlActions
       active={active}
@@ -92,46 +82,56 @@ function SiteHealthContent({
     />
   ) : undefined;
   const prefetchTab = useSiteHealthTabPrefetch(workspaceId, projectId, crawl?.id, !active);
-  if (blockingState) {
+  if (blocking?.kind === 'state') {
     return (
       <ListScreen>
         <Stack gap="section" className="min-w-0">
-          {refreshFailures}
-          {blockingState}
+          {blocking.node}
         </Stack>
       </ListScreen>
     );
   }
+  // The first load draws the loaded page's bands — the tab row included — with
+  // one loading box where the panel will be, so the work arrives without the
+  // tabs pushing it down a band.
   return (
-    <TabsRoot value={tab as AnalysisTab} onValueChange={selectTab}>
+    <TabsRoot value={tab} onValueChange={selectTab}>
       <ListScreen
         actions={headerActions}
         tabs={{ items: ANALYSIS_TABS, ariaLabel: 'Website analysis', onIntent: prefetchTab }}
       >
-        <Stack gap="section" className="min-w-0">
-          <SiteHealthNotices screen={screen} />
-          {refreshFailures}
-          <AnalysisPanel
-            tab={tab}
-            crawlId={crawl?.id}
-            projectId={projectId!}
-            workspaceId={workspaceId!}
-            screen={screen}
-          />
-        </Stack>
+        {blocking ? (
+          <QueryState kind="loading" label={blocking.label} />
+        ) : (
+          <Stack gap="section" className="min-w-0">
+            <SiteHealthNotices screen={screen} />
+            {refreshFailures}
+            <AnalysisPanel
+              tab={tab}
+              crawlId={crawl?.id}
+              projectId={projectId!}
+              workspaceId={workspaceId!}
+              screen={screen}
+            />
+          </Stack>
+        )}
       </ListScreen>
     </TabsRoot>
   );
 }
 
+/** What stands in for the analysis: the one first-load wait, or a state that replaces the page. */
+type BlockingState =
+  | Readonly<{ kind: 'loading'; label: string }>
+  | Readonly<{ kind: 'state'; node: ReactNode }>;
+
 function projectBlockingState(
   projectId: string | null,
   projectLoading: boolean,
   screen: ReturnType<typeof useSiteHealthScreen>,
-) {
-  if (projectLoading)
-    return <QueryState kind="loading" label="Loading your Site Health project…" />;
-  if (!projectId) return <ProjectRequiredState />;
+): BlockingState | null {
+  if (projectLoading) return { kind: 'loading', label: 'Loading your Site Health project…' };
+  if (!projectId) return { kind: 'state', node: <ProjectRequiredState /> };
   return screenBlockingState({ dashboard: screen.dashboardQuery, phase: screen.phase });
 }
 
@@ -240,6 +240,16 @@ const ANALYSIS_TABS: ReadonlyArray<{ value: AnalysisTab; label: string }> = [
   { value: 'changes', label: 'Changes' },
 ];
 
+/**
+ * Site Health always opens on Pages and never changes tab by itself: not
+ * while the crawl resolves, starts, runs or finishes (owner, 2026-11-02). A
+ * tab the reader picks, or a `?tab=` link, stays as chosen.
+ */
+const TAB_CODEC = stringUrlCodec<AnalysisTab>(
+  ANALYSIS_TABS.map((item) => item.value),
+  'pages',
+);
+
 function AnalysisPanel({
   tab,
   crawlId,
@@ -290,19 +300,22 @@ function screenBlockingState({
 }: Readonly<{
   dashboard: ReturnType<typeof useSiteHealthScreen>['dashboardQuery'];
   phase: string;
-}>) {
+}>): BlockingState | null {
   if (dashboard.isError && (!dashboard.data || isAccessFailure(dashboard.error)))
-    return (
-      <QueryState
-        kind="error"
-        error={dashboard.error}
-        fallback="Could not load Site Health."
-        onRetry={() => void dashboard.refetch()}
-        pending={dashboard.isFetching}
-      />
-    );
+    return {
+      kind: 'state',
+      node: (
+        <QueryState
+          kind="error"
+          error={dashboard.error}
+          fallback="Could not load Site Health."
+          onRetry={() => void dashboard.refetch()}
+          pending={dashboard.isFetching}
+        />
+      ),
+    };
   if (dashboard.isLoading || phase === 'resolving')
-    return <QueryState kind="loading" label="Loading your latest Site Health crawl…" />;
+    return { kind: 'loading', label: 'Loading your latest Site Health crawl…' };
   return null;
 }
 

@@ -44,19 +44,33 @@ export async function loadCrawl(db: Database, workspaceId: string, crawlId: stri
   return crawl;
 }
 
-export async function loadProject(db: Database, workspaceId: string, projectId: string) {
-  const project = await new WorkspaceScope(workspaceId)
-    .selectFrom(db, 'projects')
-    .select('id')
-    .where('id', '=', projectId)
-    .executeTakeFirst();
-  if (project === undefined) throw notFound('Project');
+/**
+ * The named crawl or, without one, the project's newest crawl in any state:
+ * the crawl the dashboard shows. The caller's route has authorized the
+ * project; a crawl outside it is a 404 and a project with no crawl is `null`.
+ */
+export async function dashboardCrawl(
+  db: Database,
+  workspaceId: string,
+  projectId: string,
+  crawlId: string | null,
+): Promise<Crawl | null> {
+  let crawls = new WorkspaceScope(workspaceId)
+    .selectFrom(db, 'site_crawls')
+    .selectAll()
+    .where('project_id', '=', projectId);
+  crawls = crawlId === null ? crawls : crawls.where('id', '=', crawlId);
+  const crawl =
+    (await crawls.orderBy('created_at', 'desc').orderBy('id', 'desc').executeTakeFirst()) ?? null;
+  if (crawl === null && crawlId !== null) throw notFound('Crawl');
+  return crawl;
 }
 
 /**
  * The named crawl (404 when foreign) or the project's newest usable one. A
  * named crawl that has not reached a usable terminal state, or a project with
- * none, is `null`: the caller renders its own "nothing yet" state.
+ * none, is `null`: the caller renders its own "nothing yet" state. The
+ * caller's route has authorized the project.
  */
 export async function resolveUsableCrawl(
   db: Database,
@@ -64,7 +78,6 @@ export async function resolveUsableCrawl(
   projectId: string,
   crawlId: string | null,
 ): Promise<Crawl | null> {
-  await loadProject(db, workspaceId, projectId);
   const crawls = new WorkspaceScope(workspaceId)
     .selectFrom(db, 'site_crawls')
     .selectAll()
@@ -143,9 +156,7 @@ export function scoreSummary(crawl: Crawl) {
     classification_state: text(summary.classification_state, NOT_MEASURED),
     classification_reason_groups: record(summary.classification_reason_groups),
     classification_formula_version: text(summary.classification_formula_version, ''),
-    classification_source_analysis_ids: strings(summary.classification_source_analysis_ids),
-    classification_source_artifact_ids: strings(summary.classification_source_artifact_ids),
-    classification_source_task_ids: strings(summary.classification_source_task_ids),
+    // The stored summary keeps its classification source id lists; no reader renders them.
     scored_page_kind_set: strings(summary.scored_page_kind_set),
     scored_page_count_by_kind: record(summary.scored_page_count_by_kind),
     by_page_kind: Object.fromEntries(byKind),
@@ -158,10 +169,7 @@ function rowCounters(crawl: Crawl, summary: ScoreSummary): Counters {
   return {
     discovered: countDisclosure(crawl) ? crawl.admitted_url_count : null,
     selected: summary?.selected_count ?? 0,
-    queued: Math.max(
-      crawl.analysis_requested_count - crawl.analyzed_url_count - crawl.failed_url_count,
-      0,
-    ),
+    queued: 0,
     running: 0,
     analyzed: crawl.analyzed_url_count,
     errors: crawl.failed_url_count,
@@ -189,6 +197,24 @@ const iso = (value: Date | null) => value?.toISOString() ?? null;
  * frozen with count disclosure. The inventory total is the larger of fetched
  * and admitted URLs: a sitemap crawl fetches the root once and admits many.
  */
+/**
+ * The persisted site facts without the sitemap URL manifest.
+ *
+ * `sitemap.urls` and `sitemap.lastmod` hold every admitted sitemap URL — up to
+ * `max_sitemap_admitted_urls` of them — and are the analysis-time authority for
+ * sitemap membership, which page detail already reports per page. Shipping them
+ * on every crawl read made the dashboard megabytes; the projection keeps their
+ * size as `sitemap.url_count` and leaves the stored facts untouched.
+ */
+function publicSiteFacts(facts: Record<string, unknown>) {
+  if (!('sitemap' in facts)) return facts;
+  const { urls, lastmod: _lastmod, ...sitemap } = record(facts.sitemap);
+  return {
+    ...facts,
+    sitemap: Array.isArray(urls) ? { ...sitemap, url_count: urls.length } : sitemap,
+  };
+}
+
 export function projectCrawl(
   crawl: Crawl,
   options: { failureSummary?: FailureSummary | null; counters?: Counters } = {},
@@ -220,7 +246,7 @@ export function projectCrawl(
     has_more_site_urls: disclose ? !crawl.inventory_complete : null,
     score_summary: summary,
     failure_summary: options.failureSummary ?? null,
-    site_facts: crawl.site_facts === null ? null : record(crawl.site_facts),
+    site_facts: crawl.site_facts === null ? null : publicSiteFacts(record(crawl.site_facts)),
     extractor_version: crawl.extractor_version,
     analyzer_version: crawl.analyzer_version,
     rule_version: crawl.rule_catalog_version,

@@ -12,9 +12,6 @@
 import type { IntegrationSyncRun } from '@/lib/api/integrations';
 import type { RunStatusValue } from '@/components/ui/badge-variants';
 
-/** Compatibility export for existing feature consumers. */
-export { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
-
 type SyncRunStatus = IntegrationSyncRun['status'];
 
 /** Non-terminal queue statuses — an active run keeps polling + disables Sync now. */

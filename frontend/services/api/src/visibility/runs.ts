@@ -63,12 +63,13 @@ function instantOperand(value: Instant) {
  * The project's measured runs completed inside the inclusive window, oldest
  * first. `newest` bounds the read to that many most recent runs: a caller
  * walking back to the nearest match needs the recent end, not a project's
- * whole history on every dashboard load.
+ * whole history on every dashboard load. `olderThan` continues such a walk
+ * below the oldest run (an audit ID) of the previous page.
  */
 export async function loadMeasuredRuns(
   db: Database,
   scope: RunScope,
-  window: { fromAt: Instant | null; toAt: Instant | null; newest?: number },
+  window: { fromAt: Instant | null; toAt: Instant | null; newest?: number; olderThan?: string },
 ): Promise<MeasuredRun[]> {
   let query = db
     .selectFrom('metric_snapshots as snapshot')
@@ -95,6 +96,10 @@ export async function loadMeasuredRuns(
     .where('audit.completed_at', 'is not', null);
   if (window.fromAt) query = query.where('audit.completed_at', '>=', instantOperand(window.fromAt));
   if (window.toAt) query = query.where('audit.completed_at', '<=', instantOperand(window.toAt));
+  if (window.olderThan !== undefined)
+    query = query.where(
+      sql<boolean>`(audit.completed_at, audit.created_at, audit.id) < (select a.completed_at, a.created_at, a.id from audits a where a.id = ${window.olderThan} and a.workspace_id = ${scope.workspaceId})`,
+    );
   const newestFirst = window.newest !== undefined;
   const direction = newestFirst ? 'desc' : 'asc';
   query = query

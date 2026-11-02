@@ -383,6 +383,56 @@ describe('discover', () => {
     ]);
   });
 
+  it('gives a released link’s slot to the next frontier URL, so the crawl reaches its page limit', async () => {
+    const seed = await crawl({ config: { automatic_monitor_limit: 10, requested_page_limit: 3 } });
+    // The root holds one of the three slots, as its admission does in a real crawl.
+    await db
+      .updateTable('site_crawls')
+      .set({ admitted_url_count: 1 })
+      .where('id', '=', seed.crawlId)
+      .execute();
+    const root = await queued(seed, 'discover');
+    const json = { body: '{}', contentType: 'application/json' };
+    const site = worker({
+      '/': { body: links('/a', '/chart-1', '/chart-2', '/chart-3') },
+      '/a': { body: links() },
+      '/chart-1': json,
+      '/chart-2': json,
+      '/chart-3': json,
+    });
+    await run(site, root);
+    const waiting = async () =>
+      (await tasks(seed, 'discover')).filter((row) => row.status === 'queued').map((row) => row.id);
+    for (let ids = await waiting(); ids.length; ids = await waiting()) await run(site, ...ids);
+
+    // Two child slots, four links: whatever order they were admitted in, every
+    // released chart passed its slot on until the one page was reached.
+    expect(
+      (await memberships(seed)).map((row) => [row.normalized_url.slice(20), row.active]),
+    ).toEqual([
+      ['/', true],
+      ['/a', true],
+      ['/chart-1', false],
+      ['/chart-2', false],
+      ['/chart-3', false],
+    ]);
+    const released = await urlRow(seed, '/chart-1');
+    expect([released.corpus_disposition, released.disposition_reason]).toEqual([
+      'exclude',
+      codes.unsupported_content_type,
+    ]);
+    const attempt = await db
+      .selectFrom('site_fetch_attempts')
+      .select(['status_code', 'error_code'])
+      .where(
+        'task_id',
+        '=',
+        (await tasks(seed, 'discover')).find((row) => row.requested_url.endsWith('/chart-1'))!.id,
+      )
+      .executeTakeFirstOrThrow();
+    expect(attempt).toEqual({ status_code: 200, error_code: codes.unsupported_content_type });
+  });
+
   it('never resolves the crawl root as a canonical alias, so its site checks stay current', async () => {
     const seed = await crawl({ config: { automatic_monitor_limit: 5 } });
     const root = await queued(seed, 'discover');

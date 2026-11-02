@@ -12,10 +12,9 @@
  * backend redacts arrive `null`/absent and are validated as such.
  */
 import { mutationOptions, queryOptions } from '@tanstack/react-query';
-import { SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
+import { API_BASE_URL, SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 import { startInteractiveWork } from './interactive-work';
-
-import { API_BASE_URL, apiClient, type ApiRequestOptions } from './client';
+import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
 import { retainPreviousDataForScope } from './query-client';
 import {
@@ -121,18 +120,19 @@ export type IssuesParams = {
   rule?: string;
   site_url_id?: string;
   finding_class?: 'defect' | 'advisory';
-  /** v2 P1: filter to issues affecting one classified page type. */
-  page_kind?: string;
+  page_kind?: string; // v2 P1: issues affecting one classified page type
+  detail_limit?: number; // embeds the first row's detail as `first_issue`
 };
 
 /** Keyset params for a grouped issue's affected-URL page and a URL's issue history. */
 type IssueDetailParams = Pick<IssuesParams, 'cursor' | 'limit' | 'page_kind'>;
 type IssueHistoryParams = Pick<IssuesParams, 'cursor' | 'limit'>;
+type RobotsPage = Pick<IssuesParams, 'cursor' | 'limit'>;
 
 export const siteHealthApi = {
-  getRobotsHistory: async (projectId: string, cursor?: string, options?: ApiRequestOptions) => {
+  getRobotsHistory: async (projectId: string, page: RobotsPage, options?: ApiRequestOptions) => {
     const res = await apiClient.get(
-      withQuery(`/projects/${projectId}/site-health/robots-history`, definedQuery({ cursor })),
+      withQuery(`/projects/${projectId}/site-health/robots-history`, definedQuery(page)),
       options,
     );
     return strictValidate(robotsHistoryPageSchema, res, 'siteHealth.getRobotsHistory');
@@ -308,13 +308,13 @@ export const siteHealthApi = {
  * place. Every `queryFn` forwards the abort signal.
  */
 export const siteHealthQueries = {
-  robotsHistory: (workspaceId: string, projectId: string, cursor?: string) =>
+  robotsHistory: (workspaceId: string, projectId: string, page: RobotsPage) =>
     queryOptions({
-      queryKey: queryKeys.siteHealth.robotsHistory(workspaceId, projectId, cursor),
+      queryKey: queryKeys.siteHealth.robotsHistory(workspaceId, projectId, page),
       // Opening history refreshes the project's observation sequence, irrespective of selected crawl.
       refetchOnMount: 'always',
       queryFn: ({ signal }) =>
-        siteHealthApi.getRobotsHistory(projectId, cursor, { signal, workspaceId }),
+        siteHealthApi.getRobotsHistory(projectId, page, { signal, workspaceId }),
     }),
   dashboard: (workspaceId: string, projectId: string, crawlId?: string) =>
     queryOptions({
@@ -434,6 +434,7 @@ export const siteHealthQueries = {
         site_url_id: params?.site_url_id ?? null,
         finding_class: params?.finding_class ?? 'defect',
         page_kind: params?.page_kind ?? null,
+        detail_limit: params?.detail_limit ?? null,
       }),
       queryFn: ({ signal }) => siteHealthApi.getIssues(crawlId, params, { signal, workspaceId }),
       placeholderData: (previousData, previousQuery) =>

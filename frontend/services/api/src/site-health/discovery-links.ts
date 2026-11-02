@@ -8,7 +8,7 @@ import {
   type HtmlNode,
 } from '../web-evidence/html.ts';
 import { classifyUrlAdmission, type Admission, type Scope } from './url-admission.ts';
-import { canonicalIdentity } from './url-identity.ts';
+import { canonicalIdentity, canonicalUrl } from './url-identity.ts';
 
 const crawlPolicy = policy.site_health.crawl;
 const NON_NAVIGABLE = policy.site_health.page_analysis.facts.non_navigable_href_prefixes;
@@ -32,6 +32,14 @@ function rewriteHref(href: string) {
   const separator = query.indexOf('=');
   if (separator < 0 || !TRACKING.has(query.slice(0, separator).toLowerCase())) return null;
   return `${href.slice(0, match.index)}?${query}`;
+}
+
+/**
+ * The canonical page an anchor names, repaired as discovery repairs it, so the
+ * link graph and the broken-link check meet the page discovery admitted.
+ */
+export function linkTargetUrl(href: string, baseUrl: string) {
+  return canonicalUrl(rewriteHref(href) ?? href, baseUrl);
 }
 
 /** The page title and its bounded, canonical, in-scope links in document order. */

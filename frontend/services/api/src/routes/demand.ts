@@ -5,7 +5,6 @@ import { normalizeQuery } from '../demand/classification.ts';
 import { latestDemand, queryEvidencePage, queryEvidenceSummary } from '../demand/reads.ts';
 import { readBody } from '../http/body.ts';
 import { RequestValidationError } from '../http/params.ts';
-import { requireProject } from '../projects/access.ts';
 import { defineGetRoute, definePostRoute } from './define.ts';
 import {
   classificationResponse,
@@ -17,7 +16,8 @@ import {
   recomputeResponse,
 } from './demand-contracts.ts';
 
-const family = 'demand';
+/** Every route here reads the path project inside the active workspace. */
+const family = { family: 'demand', authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/demand';
 const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const windowQuery = {
@@ -26,18 +26,17 @@ const windowQuery = {
 } as const;
 export const demandRoutes = [
   defineGetRoute({
-    family,
+    ...family,
     path: `${root}/latest`,
     params: { path: projectPath, query: {} },
     response: demandSnapshot,
     async handle({ c, db }, { path }) {
       const w = c.get('workspace');
-      await requireProject(db, w, path.project_id);
       return latestDemand(db, w.workspaceId, path.project_id);
     },
   }),
   definePostRoute({
-    family,
+    ...family,
     path: `${root}/recompute`,
     status: 202,
     params: { path: projectPath, query: {} },
@@ -46,7 +45,6 @@ export const demandRoutes = [
     async handle({ c, db }, { path }) {
       const body = await readBody(c, recomputeBody),
         w = c.get('workspace');
-      await requireProject(db, w, path.project_id);
       const id = await db.transaction().execute((trx) =>
         enqueueManualDemand(trx, {
           workspaceId: w.workspaceId,
@@ -59,7 +57,7 @@ export const demandRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...family,
     path: `${root}/query-evidence`,
     params: {
       path: projectPath,
@@ -80,7 +78,6 @@ export const demandRoutes = [
     response: queryPageResponse,
     async handle({ c, db }, { path, query }) {
       const w = c.get('workspace');
-      await requireProject(db, w, path.project_id);
       return queryEvidencePage(
         db,
         {
@@ -94,13 +91,12 @@ export const demandRoutes = [
     },
   }),
   defineGetRoute({
-    family,
+    ...family,
     path: `${root}/query-evidence/summary`,
     params: { path: projectPath, query: windowQuery },
     response: querySummaryResponse,
     async handle({ c, db }, { path, query }) {
       const w = c.get('workspace');
-      await requireProject(db, w, path.project_id);
       return queryEvidenceSummary(db, {
         workspaceId: w.workspaceId,
         projectId: path.project_id,
@@ -110,7 +106,7 @@ export const demandRoutes = [
     },
   }),
   definePostRoute({
-    family,
+    ...family,
     path: `${root}/query-classification-overrides`,
     status: 201,
     capability: 'write',
@@ -120,7 +116,6 @@ export const demandRoutes = [
     async handle({ c, db }, { path }) {
       const body = await readBody(c, overrideBody),
         w = c.get('workspace');
-      await requireProject(db, w, path.project_id);
       const normalized = normalizeQuery(body.query);
       // Text with no searchable characters is a validation error, never a 500.
       if (!normalized)

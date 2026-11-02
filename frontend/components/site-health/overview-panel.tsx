@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { OverviewDetails } from './overview-details';
 import { OverviewMetricCards } from './overview-metrics';
@@ -35,6 +35,12 @@ export function OverviewPanel({
     enabled: terminal,
   });
   const data = overview.data;
+  if (useAwaitingFirstSnapshot(terminal && overview.isPending))
+    return (
+      <Stack gap="workspace" className="min-w-0" data-testid="site-health-overview">
+        <QueryState kind="loading" label="Loading Overview" />
+      </Stack>
+    );
   let overviewBody: ReactNode = null;
   // The snapshot is WRITTEN at terminalization, so before then the endpoint
   // answers 404 by design — an absence, not a failure. Two things used to turn
@@ -65,4 +71,17 @@ export function OverviewPanel({
       {overviewBody}
     </Stack>
   );
+}
+
+/**
+ * The panel's first paint waits for a finished crawl's snapshot as one loading
+ * box. Drawn early, the score row came up from the live dashboard with a
+ * loading box under it, and only then the details: a second loader between
+ * the page's first one and the data. Once the scores have been on screen they
+ * stay — a recrawl finishing loads its snapshot under them.
+ */
+function useAwaitingFirstSnapshot(snapshotPending: boolean): boolean {
+  const [scoresShown, setScoresShown] = useState(false);
+  if (!snapshotPending && !scoresShown) setScoresShown(true);
+  return snapshotPending && !scoresShown;
 }

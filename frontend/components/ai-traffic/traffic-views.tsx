@@ -1,20 +1,21 @@
 'use client';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { z } from 'zod';
 import type {
   aiTrafficOverviewSchema,
-  botCrawlersResponseSchema,
-  botActivityResponseSchema,
   crawlCatalogSchema,
   crawlCoverageResponseSchema,
 } from '@citeladder/contracts/ai-traffic';
-import { aiTrafficApi } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
-import { cursorControls, useCursorTable } from '@/lib/table/use-cursor-table';
+import {
+  aiTrafficQueries,
+  type TrafficFilters,
+  type TrafficTableScope,
+} from '@/lib/api/ai-traffic';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { coverageLabel, reasonLabel, words } from '@/lib/ai-traffic/vocabulary';
 import { MISSING_MARK } from '@/lib/format';
-import { CalendarX } from 'lucide-react';
+import { CalendarX, SearchX } from 'lucide-react';
 import { TabPanel } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Stack } from '@/components/ui/layout';
@@ -30,8 +31,6 @@ import {
   RequestsByPurpose,
 } from './overview-signals';
 import { CrawlerPages } from './crawler-pages';
-import { TrafficNoResults } from './empty-state';
-import type { TrafficFilters } from '@/lib/api/ai-traffic';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 
 const CRAWLER_COLUMNS: readonly DataTableColumn[] = [
@@ -102,16 +101,46 @@ export function TrafficOverview({
     </TabPanel>
   );
 }
-export function TrafficCrawlers({
-  data,
-  filters = {},
-}: Readonly<{ data: z.infer<typeof botCrawlersResponseSchema>; filters?: TrafficFilters }>) {
+/**
+ * Absence in a filtered table is an observation within the available logs,
+ * not proof of no traffic; with crawl logs connectable, the setup follows.
+ */
+function noMatches(heading: string, description: string): DataTableState {
+  return { kind: 'empty', icon: SearchX, heading, description };
+}
+/** A drawer opened from a row reads the table's window, not its narrowing. */
+function windowFilters(filters: TrafficFilters): TrafficFilters {
+  return { range: filters.range, verification: filters.verification };
+}
+export function TrafficCrawlers({ workspaceId, projectId, filters }: TrafficTableScope) {
   const [botId, setBotId] = useState<string | null>(null);
+  const { page, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: projectId,
+    scope: filters,
+    query: (request) =>
+      aiTrafficQueries.crawlers(workspaceId, projectId, { ...filters, ...request }),
+    noun: 'crawlers',
+    loading: 'Loading crawlers…',
+    error: 'Could not read crawlers',
+    empty: () =>
+      noMatches(
+        'No matching requests were observed',
+        'Check coverage on Overview before interpreting absence in the available logs.',
+      ),
+  });
   return (
     <TabPanel value="crawlers">
-      {data.items.length ? (
-        <DataTable label="Recognized crawlers" columns={CRAWLER_COLUMNS} minWidth="xl">
-          {data.items.map((b) => (
+      <Stack gap="workspace">
+        {/* Status and breakdown stack their qualifiers: two-line rows. */}
+        <DataTable
+          label="Recognized crawlers"
+          columns={CRAWLER_COLUMNS}
+          minWidth="xl"
+          rowLines={2}
+          {...table}
+        >
+          {page?.items.map((b) => (
             <TableRow key={b.bot_id}>
               <TableCell>{b.label}</TableCell>
               <TableCell>{words(b.purpose)}</TableCell>
@@ -143,39 +172,71 @@ export function TrafficCrawlers({
             </TableRow>
           ))}
         </DataTable>
-      ) : (
-        <TrafficNoResults
-          heading="No matching requests were observed"
-          connectLogs
-          description="Check coverage on Overview before interpreting absence in the available logs."
-        />
-      )}
-      <CrawlerPages botId={botId} onClose={() => setBotId(null)} filters={filters} />
+        {page?.items.length === 0 ? <CrawlLogConnections /> : null}
+      </Stack>
+      <CrawlerPages
+        botId={botId}
+        onClose={() => setBotId(null)}
+        workspaceId={workspaceId}
+        projectId={projectId}
+        filters={windowFilters(filters)}
+      />
     </TabPanel>
   );
 }
-export function TrafficActivity({
-  data,
-  catalog,
-}: Readonly<{
-  data: z.infer<typeof botActivityResponseSchema>;
-  catalog?: z.infer<typeof crawlCatalogSchema>;
-}>) {
+/**
+ * What the activity table shows while the crawler catalog cannot name its
+ * bots: rows of raw bot ids would read as findings, so the catalog's own
+ * loading or failure takes the table's place, in the same footprint.
+ */
+function catalogState(
+  catalog: UseQueryResult<z.infer<typeof crawlCatalogSchema>>,
+): DataTableState | undefined {
+  if (catalog.isError && !catalog.data)
+    return {
+      kind: 'error',
+      ...readErrorProps(catalog),
+      fallback: 'Could not read the crawler catalog, so bots cannot be named',
+    };
+  if (catalog.isPending) return { kind: 'loading', label: 'Loading the crawler catalog…' };
+  return undefined;
+}
+export function TrafficActivity({ workspaceId, projectId, filters }: TrafficTableScope) {
+  // The screen's controls read the same entry, so this adds no request.
+  const catalog = useQuery(aiTrafficQueries.catalog(workspaceId, projectId));
+  const { page, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: projectId,
+    scope: filters,
+    query: (request) =>
+      aiTrafficQueries.activity(workspaceId, projectId, { ...filters, ...request }),
+    noun: 'requests',
+    loading: 'Loading request activity…',
+    error: 'Could not read request activity',
+    empty: () =>
+      noMatches(
+        'No matching requests',
+        'Nothing in the available retained logs matches these filters.',
+      ),
+  });
   return (
     <TabPanel value="activity">
-      {data.items.length ? (
+      <Stack gap="workspace">
         <DataTable
           label="Retained automated request activity"
           columns={ACTIVITY_COLUMNS}
           minWidth="md"
+          rowLines={2}
+          {...table}
+          state={catalogState(catalog) ?? table.state}
         >
-          {data.items.map((r) => (
+          {page?.items.map((r) => (
             <TableRow key={r.id}>
               <TableCell numeric>
                 <TableTime value={r.occurred_at} />
               </TableCell>
               <TableCell>
-                {catalog?.bots.find((b) => b.bot_id === r.bot_id)?.label ?? r.bot_id}
+                {catalog.data?.bots.find((b) => b.bot_id === r.bot_id)?.label ?? r.bot_id}
               </TableCell>
               <TableCell>
                 <CellLines
@@ -203,13 +264,8 @@ export function TrafficActivity({
             </TableRow>
           ))}
         </DataTable>
-      ) : (
-        <TrafficNoResults
-          heading="No matching requests"
-          connectLogs
-          description="Nothing in the available retained logs matches these filters."
-        />
-      )}
+        {page?.items.length === 0 ? <CrawlLogConnections /> : null}
+      </Stack>
     </TabPanel>
   );
 }
@@ -243,29 +299,28 @@ function CoverageTable({
   workspaceId,
   range,
 }: Readonly<{ projectId: string; workspaceId: string; range: string }>) {
-  const pager = useCursorTable(JSON.stringify([projectId, workspaceId, range]));
-  const filters = { range, cursor: pager.cursor, limit: pager.pageSize };
-  const query = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'coverage', filters),
-    queryFn: ({ signal }) => aiTrafficApi.coverage(projectId, filters, { workspaceId, signal }),
+  const { page: data, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: projectId,
+    scope: range,
+    query: (request) => aiTrafficQueries.coverage(workspaceId, projectId, { range, ...request }),
+    noun: 'reporting days',
+    loading: 'Loading coverage…',
+    error: 'Could not read coverage',
+    empty: () => ({
+      kind: 'empty',
+      icon: CalendarX,
+      heading: 'No persisted coverage in this range',
+    }),
   });
-  const data = query.data;
-  let state: DataTableState | undefined;
-  if (query.isError)
-    state = { kind: 'error', ...readErrorProps(query), fallback: 'Could not read coverage' };
-  else if (!data) state = { kind: 'loading', label: 'Loading coverage…' };
-  else if (!data.items.length && !pager.canPrev)
-    state = { kind: 'empty', icon: CalendarX, heading: 'No persisted coverage in this range' };
-  const paged = Boolean(data?.next_cursor) || pager.canPrev;
   return (
     <DataTable
       title="Coverage by source and reporting day"
       columns={COVERAGE_COLUMNS}
       minWidth="md"
-      state={state}
-      pager={
-        data && paged ? { page: pager.page, ...cursorControls(pager, data.next_cursor) } : undefined
-      }
+      // Every row stacks a qualifier under its value.
+      rowLines={2}
+      {...table}
     >
       {data?.items.map((r) => (
         <TableRow key={r.source_id + r.reporting_date + r.reporting_timezone}>

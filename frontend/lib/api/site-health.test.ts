@@ -613,7 +613,6 @@ describe('AEO Readiness contract', () => {
         scoring_version: '1',
         presentation_version: 'sh-presentation-1',
         analyzer_version: 'page-v1',
-        source_analysis_ids: [UUID2],
         analysis_count: 1,
         affected_page_count: 0,
         dimensions: [

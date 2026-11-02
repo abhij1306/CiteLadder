@@ -356,10 +356,11 @@ describe('opportunity_refresh', () => {
     // Its prompt Action keeps its row with the evidence cleared.
     const cleared = await db
       .selectFrom('actions')
-      .select(['member_opportunity_ids', 'priority_score', 'evidence_cleared_at'])
+      .select(['member_opportunity_ids', 'priority_score', 'evidence_cleared_at', 'diagnosis'])
       .where('id', '=', byRule(first, 'brand_absent_high_value_prompt').action_id!)
       .executeTakeFirstOrThrow();
     expect(cleared.member_opportunity_ids).toEqual([]);
+    expect(cleared.diagnosis).toEqual({});
     expect(cleared.priority_score).toBeNull();
     expect(cleared.evidence_cleared_at).not.toBeNull();
   });

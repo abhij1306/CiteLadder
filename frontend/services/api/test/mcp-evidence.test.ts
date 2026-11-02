@@ -1030,6 +1030,18 @@ it('reports performance as not connected until a search source is connected, the
   });
 });
 
+it('keeps a latest run whose metrics are not written apart from no completed run', async () => {
+  expect(await read('read_visibility_overview')).toMatchObject({
+    state: 'unavailable',
+    reason: 'no_completed_run',
+  });
+  await fixtures.audit(tenant, { completedAt: new Date('2026-10-01T00:00:00Z') });
+  expect(await read('read_visibility_overview')).toMatchObject({
+    state: 'unavailable',
+    reason: 'metrics_pending',
+  });
+});
+
 it('reads cited sources for the latest run when no audit_id is named', async () => {
   expect(await read('read_visibility_sources')).toMatchObject({
     state: 'unavailable',

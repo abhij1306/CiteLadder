@@ -20,6 +20,7 @@ import type {
   PageAnalysisStatus,
   SiteCrawl,
 } from '@/lib/api/types';
+import type { PagesSort } from '@/lib/api/site-health';
 import type { RunStatusValue, StatusValue } from '@/components/ui/badge-variants';
 import type { InternalLinkAnalysis } from '@citeladder/contracts/site-health';
 import { availabilityLabel, formatCount, formatDisplayTimestamp } from '@/lib/format';
@@ -54,8 +55,12 @@ export function internalLinkStateNotice(analysis: InternalLinkAnalysis) {
 /** The not-yet-analysed / not-applicable placeholder (matches visibility UI). */
 export const PLACEHOLDER = availabilityLabel('not_measured');
 
-/** Rows per cursor page across the Site Health inventory/pages lists. */
-export const PAGE_LIMIT = 10;
+/**
+ * The page browser's default ordering, which is also the pages endpoint's
+ * default. Every first-page request names it, so the progress strip's preview
+ * and the browser share one cache entry instead of fetching the same rows.
+ */
+export const DEFAULT_PAGES_SORT: PagesSort = 'status';
 
 /** Poll cadence for the Site Health screen's active-crawl queries. */
 export const POLL_INTERVAL_MS = 4_000;
@@ -445,8 +450,3 @@ export function formatAudited(timestamp: string | null, timeZone = 'UTC'): strin
 function pluralize(n: number, word: string): string {
   return n === 1 ? word : `${word}s`;
 }
-
-// Run-outcome copy (failure reasons, partial reasons, the dashboard notice)
-// lives in its own module. It is re-exported here because every caller has
-// always reached it through `status`.
-export { crawlFailureCopy, dashboardRunNotice } from './run-notice';

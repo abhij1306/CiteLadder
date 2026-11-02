@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { aiTrafficApi } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
+import { aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { projectDestination } from '@/lib/navigation/project-destination';
 import { Alert } from '@/components/ui/alert';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
@@ -17,8 +16,7 @@ export function InsightStrip({
   range,
 }: Readonly<{ projectId: string; workspaceId: string; range: string }>) {
   const query = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'insights', { range }),
-    queryFn: ({ signal }) => aiTrafficApi.insights(projectId, { range }, { workspaceId, signal }),
+    ...aiTrafficQueries.insights(workspaceId, projectId, range),
     enabled: !!projectId && !!workspaceId,
   });
   const data = query.isError ? undefined : query.data;

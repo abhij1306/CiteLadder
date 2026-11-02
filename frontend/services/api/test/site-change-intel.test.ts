@@ -177,9 +177,10 @@ describe('content comparison', () => {
       shingles: ['short changed text'],
       coverage: 'complete',
     });
-    expect(contentRecord({ primary_content_text: 'Some text' }, 'v2').coverage_reason).toBe(
-      'legacy_completeness_unknown',
-    );
+    expect(contentRecord({ ...facts, primary_content_truncated: true }, 'v2')).toMatchObject({
+      coverage: 'partial',
+      coverage_reason: 'primary_content_truncated',
+    });
   });
 });
 

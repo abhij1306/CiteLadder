@@ -9,16 +9,17 @@ import {
   InvalidCursorError,
 } from '../../http/keyset-cursor.ts';
 import { parseUuid } from '../../http/uuid.ts';
-import { loadProject } from './crawl.ts';
 
-/** Observation order belongs to crawls; content-addressed bodies may recur. */
+/**
+ * Observation order belongs to crawls; content-addressed bodies may recur.
+ * The route authorizes the project before this read.
+ */
 export async function robotsHistory(
   db: Database,
   workspaceId: string,
   projectId: string,
   input: { limit: number; cursor: string | null },
 ) {
-  await loadProject(db, workspaceId, projectId);
   const workspace = new WorkspaceScope(workspaceId);
   const filters = { workspace_id: workspaceId, project_id: projectId };
   let query = workspace

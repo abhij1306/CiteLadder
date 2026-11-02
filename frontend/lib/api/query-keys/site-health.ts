@@ -6,8 +6,20 @@
 import type { ListFilters } from './shared';
 
 export const siteHealthKeys = {
-  robotsHistory: (workspaceId: string, projectId: string, cursor?: string) =>
-    ['site-health', 'robots-history', workspaceId, projectId, cursor ?? 'first'] as const,
+  /** The project at index 2, so a page turn keeps its rows only inside it. */
+  robotsHistory: (
+    workspaceId: string,
+    projectId: string,
+    page: Readonly<{ cursor?: string; limit?: number }>,
+  ) =>
+    [
+      'site-health',
+      'robots-history',
+      projectId,
+      workspaceId,
+      page.cursor ?? 'first',
+      page.limit ?? null,
+    ] as const,
   internalLinks: (workspaceId: string, projectId: string, analysisId?: string) =>
     ['site-health', 'internal-links', workspaceId, projectId, analysisId ?? 'latest'] as const,
   all: ['site-health'] as const,

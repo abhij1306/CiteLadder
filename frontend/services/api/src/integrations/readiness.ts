@@ -121,24 +121,26 @@ export async function readProjectReadiness(db: Database, scope: Scope) {
     covered.length && covered.every((value) => value !== null)
       ? (covered as string[]).sort(compareText)[0]
       : null;
-  const performance = await workspace
-    .selectFrom(db, 'traffic_snapshots')
-    .select('id')
-    .where('project_id', '=', scope.projectId)
-    .limit(1)
-    .executeTakeFirst();
-  const demand = await workspace
-    .selectFrom(db, 'demand_snapshots')
-    .select('id')
-    .where('project_id', '=', scope.projectId)
-    .limit(1)
-    .executeTakeFirst();
-  const opportunities = await workspace
-    .selectFrom(db, 'opportunities')
-    .select(sql<string>`count(*)`.as('count'))
-    .where('project_id', '=', scope.projectId)
-    .where('superseded_at', 'is', null)
-    .executeTakeFirstOrThrow();
+  const [performance, demand, opportunities] = await Promise.all([
+    workspace
+      .selectFrom(db, 'traffic_snapshots')
+      .select('id')
+      .where('project_id', '=', scope.projectId)
+      .limit(1)
+      .executeTakeFirst(),
+    workspace
+      .selectFrom(db, 'demand_snapshots')
+      .select('id')
+      .where('project_id', '=', scope.projectId)
+      .limit(1)
+      .executeTakeFirst(),
+    workspace
+      .selectFrom(db, 'opportunities')
+      .select(sql<string>`count(*)`.as('count'))
+      .where('project_id', '=', scope.projectId)
+      .where('superseded_at', 'is', null)
+      .executeTakeFirstOrThrow(),
+  ]);
   const stage = readinessStage(
     connectionIds.length > 0,
     backfill,

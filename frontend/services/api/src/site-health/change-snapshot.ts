@@ -173,8 +173,6 @@ async function evaluations(db: Database, workspaceId: string, rows: PageRow[]) {
 /** Whether the stored text is the whole primary content, by its extraction provenance. */
 function textCoverage(facts: Record<string, unknown>, content: string): [string, string | null] {
   if (!content.trim()) return ['unknown', 'no_usable_text'];
-  if (!('primary_content_truncated' in facts && 'primary_content_pre_truncation_length' in facts))
-    return ['unknown', 'legacy_completeness_unknown'];
   if (facts.primary_content_truncated) return ['partial', 'primary_content_truncated'];
   return ['complete', null];
 }

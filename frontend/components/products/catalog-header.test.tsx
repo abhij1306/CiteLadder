@@ -1,6 +1,8 @@
-import { screen, waitFor } from '@testing-library/react';
+import { useQuery } from '@tanstack/react-query';
+import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { queryKeys } from '@/lib/api/query-keys';
 import { renderWithProviders } from '@/test/render';
 
 import { useCatalogHeader } from './catalog-header';
@@ -145,6 +147,52 @@ describe('CatalogHeader', () => {
 
     await waitFor(() => expect(screen.getByText('49/49')).toBeInTheDocument());
     expect(screen.queryByText('49/1')).not.toBeInTheDocument();
+  });
+
+  it('reads the catalog once on arrival, and again only when the analyzed count moves', async () => {
+    const readCatalog = vi.fn(async () => ({
+      products: [{ id: 'p1' }],
+      categories: [],
+      projection: { applies: true, in_flight: 0, failed: 0 },
+    }));
+    function LiveScreen() {
+      const query = useQuery({
+        queryKey: queryKeys.commerce.catalog(PROJECT_ID),
+        queryFn: readCatalog,
+      });
+      return (
+        <CatalogHeaderHost
+          workspaceId={WORKSPACE_ID}
+          projectId={PROJECT_ID}
+          query={query as never}
+        />
+      );
+    }
+    const LiveHost = ({ mounted }: { mounted: boolean }) => (mounted ? <LiveScreen /> : null);
+    const { queryClient, rerender } = renderWithProviders(<LiveHost mounted />);
+
+    await waitFor(() => expect(screen.getByText('49/50')).toBeInTheDocument());
+    await act(async () => {});
+    expect(readCatalog).toHaveBeenCalledTimes(1);
+
+    getDashboard.mockResolvedValue(crawl({ analyzed_count: 50 }));
+    await act(() =>
+      queryClient.invalidateQueries({ queryKey: ['site-health', 'dashboard', PROJECT_ID] }),
+    );
+    await waitFor(() => expect(screen.getByText('50/50')).toBeInTheDocument());
+    await waitFor(() => expect(readCatalog).toHaveBeenCalledTimes(2));
+
+    // Away from Products the dashboard moves on while the catalog stays fresh
+    // in the cache; coming back re-reads the catalog for the newer count.
+    rerender(<LiveHost mounted={false} />);
+    getDashboard.mockResolvedValue(crawl({ analyzed_count: 51 }));
+    queryClient.setQueryData(
+      ['site-health', 'dashboard', PROJECT_ID],
+      crawl({ analyzed_count: 51 }),
+    );
+    rerender(<LiveHost mounted />);
+    expect(screen.getByText('51/51')).toBeInTheDocument();
+    await waitFor(() => expect(readCatalog).toHaveBeenCalledTimes(3));
   });
 
   it('offers the crawl as the primary action until one exists', async () => {

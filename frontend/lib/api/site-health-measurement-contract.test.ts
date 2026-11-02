@@ -2,11 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { siteCrawlSchema, siteHealthOverviewSchema } from '@citeladder/contracts/site-health';
 import { strictValidate } from '@citeladder/contracts/validation';
-import {
-  SITE_HEALTH_CRAWL as crawl,
-  SITE_HEALTH_UUID as UUID,
-  SITE_HEALTH_UUID_2 as UUID2,
-} from '@/test/site-health-api-fixtures';
+import { SITE_HEALTH_CRAWL as crawl } from '@/test/site-health-api-fixtures';
 
 describe('siteScoreSummarySchema by_page_kind (v2 P1)', () => {
   const scoreSummary = {
@@ -25,9 +21,6 @@ describe('siteScoreSummarySchema by_page_kind (v2 P1)', () => {
     classification_state: 'partial',
     classification_reason_groups: { no_signals: 1 },
     classification_formula_version: '1',
-    classification_source_analysis_ids: [UUID],
-    classification_source_artifact_ids: [UUID2],
-    classification_source_task_ids: [UUID],
     scored_page_kind_set: ['homepage', 'article', 'other'],
     scored_page_count_by_kind: { homepage: 1, article: 2, other: 1 },
     selected_count: 10,

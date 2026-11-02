@@ -33,7 +33,6 @@ function response(state: 'available' | 'unavailable' | 'non_comparable') {
     analyzer_version: 'site-change-v1',
     page_analyzer_version: 'page-v1',
     extractor_version: 'extract-v1',
-    source_analysis_ids: [],
     coverage: {},
     summary: { counts_by_class: { 'critical-regression': 1 } },
     limitations: [],

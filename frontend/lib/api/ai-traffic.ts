@@ -1,7 +1,9 @@
 /** Strict client for the persisted AI-referral projection. */
+import { queryOptions } from '@tanstack/react-query';
 import type { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
+import { queryKeys } from './query-keys';
 import {
   aiReferralsSchema,
   aiSourceSchema,
@@ -181,6 +183,66 @@ export const aiTrafficApi = {
   },
 };
 export type TrafficFilters = Record<string, string | number | undefined | null>;
+/** What a table view reads: its project and its filters, without cursor or limit. */
+export type TrafficTableScope = Readonly<{
+  workspaceId: string;
+  projectId: string;
+  filters: TrafficFilters;
+}>;
+
+/**
+ * The screen's reads. The Overview tab's are also built by its route
+ * prefetcher and the shell's landing warm, so a warmed entry is the one the
+ * screen reads. Every key holds the project at index 2, so a table keeps its
+ * rows across a page turn only inside one project.
+ */
+export const aiTrafficQueries = {
+  /** Crawl log sources: which tabs the screen offers. */
+  sources: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'sources'),
+      queryFn: ({ signal }) => aiTrafficApi.sources(projectId, { workspaceId, signal }),
+    }),
+  overview: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'overview', filters),
+      queryFn: ({ signal }) => aiTrafficApi.overview(projectId, filters, { workspaceId, signal }),
+    }),
+  /** Persisted patterns for the range; independent of the overview response. */
+  insights: (workspaceId: string, projectId: string, range: string) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'insights', { range }),
+      queryFn: ({ signal }) => aiTrafficApi.insights(projectId, { range }, { workspaceId, signal }),
+    }),
+  /** The crawler catalog: bot labels and purposes for the filters and rows. */
+  catalog: (workspaceId: string, projectId: string) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'catalog'),
+      queryFn: ({ signal }) => aiTrafficApi.catalog(projectId, { workspaceId, signal }),
+    }),
+  /** One page of a table view; `filters` carries its cursor and limit. */
+  crawlers: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'crawlers', filters),
+      queryFn: ({ signal }) => aiTrafficApi.crawlers(projectId, filters, { workspaceId, signal }),
+    }),
+  activity: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'activity', filters),
+      queryFn: ({ signal }) => aiTrafficApi.activity(projectId, filters, { workspaceId, signal }),
+    }),
+  pages: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'pages', filters),
+      queryFn: ({ signal }) => aiTrafficApi.pages(projectId, filters, { workspaceId, signal }),
+    }),
+  coverage: (workspaceId: string, projectId: string, filters: TrafficFilters) =>
+    queryOptions({
+      queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'coverage', filters),
+      queryFn: ({ signal }) => aiTrafficApi.coverage(projectId, filters, { workspaceId, signal }),
+    }),
+};
+
 async function read<T>(
   projectId: string,
   path: string,

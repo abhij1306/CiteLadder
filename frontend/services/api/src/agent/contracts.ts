@@ -44,16 +44,14 @@ export function admittedBudget(executionTimeoutSeconds: number) {
     execution_timeout_seconds: executionTimeoutSeconds,
   });
 }
-export const outputPayloadSchema = z
-  .object({
-    title: z.string().trim().min(1).max(agentPolicy.output_title_max_chars),
-    body: z.string().trim().min(1).max(agentPolicy.output_body_max_chars),
-    phase: z.enum(['outline', 'draft', 'final']),
-    target_kind: z.enum(['page', 'planned_page']).nullish(),
-    target: z.string().nullish(),
-    format_id: z.string().nullish(),
-  })
-  .strict();
+export const outputPayloadSchema = z.strictObject({
+  title: z.string().trim().min(1).max(agentPolicy.output_title_max_chars),
+  body: z.string().trim().min(1).max(agentPolicy.output_body_max_chars),
+  phase: z.enum(['outline', 'draft', 'final']),
+  target_kind: z.enum(['page', 'planned_page']).nullish(),
+  target: z.string().nullish(),
+  format_id: z.string().nullish(),
+});
 export type OutputBounds = Pick<
   typeof agentPolicy,
   'output_title_max_chars' | 'output_body_max_chars'

@@ -257,6 +257,28 @@ describe('crawl control admission', () => {
     expect(record(next.configuration).inventory_source_crawl_ids).toEqual([full.id, seed.crawlId]);
   });
 
+  it('analyzes a monitored set that exactly fills the page limit, the root counted once', async () => {
+    const seed = await fixtures.crawl();
+    allow(3);
+    const root = await fixtures.page(seed, '/', {});
+    const a = await fixtures.page(seed, '/a', {});
+    const z = await fixtures.page(seed, '/z', {});
+    await db
+      .transaction()
+      .execute((trx) =>
+        replaceMonitoredSet(trx, seed.workspaceId, seed.projectId, [root.id, a.id, z.id], 1),
+      );
+    const crawl = await create(seed, { requested_page_limit: 3 });
+    const analyzed = await db
+      .selectFrom('site_crawl_tasks')
+      .select('site_url_id')
+      .where('crawl_id', '=', crawl.id)
+      .where('task_kind', '=', 'analyze')
+      .execute();
+    // Site setup and the root's discover are no extra pages, so the last page keeps its slot.
+    expect(analyzed.map((task) => task.site_url_id).sort()).toEqual([root.id, a.id, z.id].sort());
+  });
+
   it('lets the dev seed invoke real TypeScript creation and bulk selection through its local CLI', async () => {
     const tenant = await fixtures.tenant({ websiteUrl: 'https://example.test/' });
     allow(2);

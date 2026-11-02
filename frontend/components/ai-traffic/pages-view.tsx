@@ -2,6 +2,7 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import type { z } from 'zod';
 import type { aiTrafficPagesSchema } from '@citeladder/contracts/ai-traffic';
+import { SearchX } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Stack } from '@/components/ui/layout';
@@ -9,9 +10,12 @@ import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
 import { Pressable } from '@/components/ui/pressable';
 import { MISSING_MARK } from '@/lib/format';
 import { DisplayTime, TableTime } from '@/components/ui/display-time';
+import { aiTrafficQueries, type TrafficTableScope } from '@/lib/api/ai-traffic';
+import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { UrlPanel, TrafficLeg, trafficLegExplanation } from './url-panel';
-import { TrafficNoResults } from './empty-state';
-import type { TrafficFilters } from '@/lib/api/ai-traffic';
+
+/** A non-breaking space: a blank line that still takes a line's height. */
+const BLANK_LINE = ' ';
 
 const PAGE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'path', label: 'Path' },
@@ -24,32 +28,51 @@ const PAGE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'errors', label: '4xx / 5xx', width: 'figure', numeric: true },
 ];
 
-export function TrafficPages({
-  data,
-  filters = {},
-}: Readonly<{ data: z.infer<typeof aiTrafficPagesSchema>; filters?: TrafficFilters }>) {
+/**
+ * Path-level AI Traffic: the coverage line over one cursor-paged table. A
+ * page turn or filter keeps the rows, the line and the pager on screen until
+ * the next page lands. The crawler drawer reads the same view for one bot.
+ */
+export function TrafficPages({ workspaceId, projectId, filters }: TrafficTableScope) {
   const [urlHash, setUrlHash] = useState<string | null>(null);
+  const { page, table } = useCursorTableQuery({
+    workspaceId,
+    scopeId: projectId,
+    scope: filters,
+    query: (request) => aiTrafficQueries.pages(workspaceId, projectId, { ...filters, ...request }),
+    noun: 'paths',
+    loading: 'Loading paths…',
+    error: 'Could not read path-level AI Traffic',
+    empty: () => ({
+      kind: 'empty',
+      icon: SearchX,
+      heading: 'No joinable paths were observed',
+      description: 'Check each signal’s coverage for this window before interpreting absence.',
+    }),
+  });
   return (
     <Stack gap="workspace">
-      <CoverageLine data={data} />
-      {data.items.length ? null : (
-        <TrafficNoResults
-          heading="No joinable paths were observed"
-          description="Check each signal’s coverage for this window before interpreting absence."
-        />
-      )}
-      {data.items.length ? (
-        <DataTable
-          label="Path-level AI Traffic with separate signal units"
-          columns={PAGE_COLUMNS}
-          minWidth="xl"
-        >
-          {data.items.map((r) => (
-            <TrafficPageRow key={r.url_hash} r={r} onOpen={setUrlHash} />
-          ))}
-        </DataTable>
-      ) : null}
-      <UrlPanel urlHash={urlHash} onClose={() => setUrlHash(null)} filters={filters} />
+      <CoverageLine data={page} />
+      <DataTable
+        label="Path-level AI Traffic with separate signal units"
+        columns={PAGE_COLUMNS}
+        minWidth="xl"
+        {...table}
+      >
+        {page?.items.map((r) => (
+          <TrafficPageRow key={r.url_hash} r={r} onOpen={setUrlHash} />
+        ))}
+      </DataTable>
+      <UrlPanel
+        urlHash={urlHash}
+        onClose={() => setUrlHash(null)}
+        // A path opened from the crawler drawer keeps that crawler's evidence.
+        filters={{
+          range: filters.range,
+          verification: filters.verification,
+          bot_id: filters.bot_id,
+        }}
+      />
     </Stack>
   );
 }
@@ -155,9 +178,13 @@ function TrafficPageRow({
 /**
  * The tab's one context line: which sources are not connected, crawl coverage
  * and the inventory behind the rows. A dash in the table explains itself on
- * focus, so the line does not repeat that.
+ * focus, so the line does not repeat that. Until the first page lands it is
+ * a blank line, so the table does not drop a line when it arrives.
  */
-function CoverageLine({ data }: Readonly<{ data: z.infer<typeof aiTrafficPagesSchema> }>) {
+function CoverageLine({
+  data,
+}: Readonly<{ data: z.infer<typeof aiTrafficPagesSchema> | undefined }>) {
+  if (!data) return <p className="type-caption">{BLANK_LINE}</p>;
   const coverage = data.observed_crawl_coverage;
   const disconnected = (
     [

@@ -4,12 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '@/lib/api/query-keys';
+import { TABLE_DEFAULT_PAGE_SIZE } from '@/lib/config/tables';
 import {
   siteHealthMutations,
   siteHealthQueries,
   type StartCrawlInput,
 } from '@/lib/api/site-health';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
 import {
   downloadCrawlExport,
   type ExportFormat,
@@ -22,19 +23,21 @@ import { useCrawlEvents } from '@/lib/site-health/use-crawl-events';
 import {
   crawlPollInterval,
   crawlProgressVersion,
+  DEFAULT_PAGES_SORT,
   inventoryModeForPhase,
   isCrawlStalled,
-  PAGE_LIMIT,
   shouldPollCrawl,
   type InventoryMode,
   type SiteHealthPhase,
 } from '@/lib/site-health/status';
 
-function monitoredPagePreviewParams(active: boolean) {
+/** The page browser's first Monitored page at its default size and ordering. */
+export function monitoredPagePreviewParams(active: boolean) {
   return {
-    limit: PAGE_LIMIT,
+    limit: TABLE_DEFAULT_PAGE_SIZE,
     monitored: true,
     status: active ? 'completed' : undefined,
+    sort: DEFAULT_PAGES_SORT,
   };
 }
 
@@ -44,6 +47,22 @@ function canLoadPagePreview(
   phase: SiteHealthPhase,
 ): boolean {
   return scopeEnabled && Boolean(crawlId) && (phase === 'analyzing' || phase === 'dashboard');
+}
+
+/**
+ * The page preview the screen requests once its dashboard names a crawl in an
+ * analyzing or scored phase, or null before then. The route prefetcher warms
+ * it from the same answer, so the warmed entry is the one the screen reads.
+ */
+export function pagePreviewQuery(workspaceId: string, dashboard: SiteHealthDashboard | null) {
+  const crawl = dashboard?.crawl ?? null;
+  const phase: SiteHealthPhase = dashboard?.phase ?? 'resolving';
+  if (!crawl || !canLoadPagePreview(true, crawl.id, phase)) return null;
+  return siteHealthQueries.pages(
+    workspaceId,
+    crawl.id,
+    monitoredPagePreviewParams(shouldPollCrawl(crawl)),
+  );
 }
 
 /**

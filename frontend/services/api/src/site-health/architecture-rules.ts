@@ -3,12 +3,28 @@ import { compareText } from '../text-order.ts';
 import type { ArchitecturePage, buildArchitecture } from './architecture-model.ts';
 
 const p = policy.site_health.architecture;
-function evaluation(
+
+/**
+ * The affected pages of each page kind, over every row rather than the bounded
+ * sample: the Issues page-kind filter counts a site-level finding by these.
+ */
+function pageKindCounts<Row extends { page_kind: string }>(
+  rows: readonly Row[],
+  pagesOf: (row: Row) => number = () => 1,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const row of rows)
+    if (row.page_kind) counts[row.page_kind] = (counts[row.page_kind] ?? 0) + pagesOf(row);
+  return counts;
+}
+
+function evaluation<Row extends { page_kind: string }>(
   id: string,
-  rows: unknown[],
+  rows: Row[],
   key: string,
   coverage: string,
   requiresComplete = false,
+  pagesOf?: (row: Row) => number,
 ) {
   const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === id);
   if (!rule) throw new Error(`Architecture rule '${id}' is absent from its catalog`);
@@ -24,6 +40,7 @@ function evaluation(
       : {
           count: rows.length,
           [key]: rows.slice(0, p.max_evidence_items),
+          page_kind_counts: pageKindCounts(rows, pagesOf),
           coverage_state: coverage,
         },
   };
@@ -131,6 +148,9 @@ export function architectureRules(
       ),
       'page_kinds',
       coverage,
+      false,
+      // The finding is the duplicated pages, as its group counts them.
+      (kind) => kind.duplicate_metadata_count,
     ),
     evaluation(
       'architecture.orphan_pages',
@@ -163,6 +183,7 @@ export function architectureRules(
       'page_kinds',
       coverage,
       true,
+      (kind) => kind.page_count,
     ),
   ];
 }

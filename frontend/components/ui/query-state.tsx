@@ -13,7 +13,8 @@ import { textRole } from './typography';
  * The states a read can show instead of its content, as one organism.
  *
  *   `loading` — the first load: a calm, centred spinner, held back for a beat
- *               so a fast read never flashes one.
+ *               so a fast read never flashes one; a wait handed from one
+ *               owner's box to the next keeps the spinner it already showed.
  *   `error`   — the read failed: what happened, Retry for exactly that read,
  *               and the support reference.
  *   `empty`   — nothing exists yet, and the one thing to do.
@@ -143,19 +144,40 @@ function BlockBody(props: Exclude<QueryStateProps, InlineEmpty>) {
 }
 
 /**
+ * Loading spinners on screen that have already been revealed.
+ *
+ * A cold load passes through several owners in turn — the shell's fallback,
+ * the route's chunk, the page's first read — and each draws its own loading
+ * box in the same place. Held back afresh every time, the spinner went
+ * visible → hidden → visible at each hand-over, so one wait read as three
+ * loaders. A loader that mounts while another is already showing is the same
+ * wait continuing, so it starts revealed. React renders the replacement
+ * before it removes the box it replaces, so the count still includes the
+ * outgoing one at that moment.
+ */
+let revealedLoaders = 0;
+
+/**
  * The spinner stays invisible for a beat (`loading-delayed`), and so does the
  * `status` announcement, so assistive technology never announces a loading
  * state nothing on screen shows yet. The box itself is there from the first
  * frame: the content that lands into it lands in a box that already existed.
  */
 function DelayedSpinner({ label }: Readonly<{ label: string }>) {
-  const [revealed, setRevealed] = useState(false);
+  const [continued] = useState(() => revealedLoaders > 0);
+  const [revealed, setRevealed] = useState(continued);
   useEffect(() => {
-    const timer = setTimeout(() => setRevealed(true), LOADING_INDICATOR_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!revealed) {
+      const timer = setTimeout(() => setRevealed(true), LOADING_INDICATOR_DELAY_MS);
+      return () => clearTimeout(timer);
+    }
+    revealedLoaders += 1;
+    return () => {
+      revealedLoaders -= 1;
+    };
+  }, [revealed]);
   return (
-    <span className="loading-delayed">
+    <span className={continued ? undefined : 'loading-delayed'}>
       <Spinner label={revealed ? label : undefined} className="text-muted" />
     </span>
   );

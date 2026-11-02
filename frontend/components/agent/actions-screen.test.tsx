@@ -49,8 +49,9 @@ describe('Actions', () => {
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/actions`, ({ request }) => {
         const params = new URL(request.url).searchParams;
-        // The unpaged read is the project-wide status count, not the table.
-        if (params.has('limit')) searches.push(params.get('status') ?? 'queue');
+        // Every read is recorded: the status counts ride the table's own
+        // first page, so the default view is one request, not two.
+        searches.push(`${params.get('status') ?? 'queue'}:${params.get('limit')}`);
         const items = params.get('status') === 'dismissed' ? [] : [action];
         return HttpResponse.json({
           items,
@@ -71,18 +72,25 @@ describe('Actions', () => {
     expect(within(row.closest('tr')!).getByText('High')).toBeVisible();
     expect(screen.queryByText('82.5')).not.toBeInTheDocument();
 
+    // The counts sit in the menu beside each status; the trigger names the
+    // status alone, so loading or dropping the counts never resizes it.
     const status = screen.getByRole('combobox', { name: 'Status' });
-    expect(await within(status).findByText('Open and in progress (3)')).toBeVisible();
+    expect(status.textContent).toBe('Open and in progress');
     await user.click(status);
-    await user.click(await screen.findByRole('option', { name: 'Dismissed (0)' }));
+    expect(
+      await screen.findByRole('option', { name: 'Open and in progress', description: '3' }),
+    ).toBeVisible();
+    await user.click(screen.getByRole('option', { name: 'Dismissed', description: '0' }));
 
     expect(await screen.findByText('No Actions match these filters')).toBeVisible();
-    expect(searches).toEqual(['queue', 'dismissed']);
+    expect(searches).toEqual(['queue:10', 'dismissed:10']);
+    expect(status.textContent).toBe('Dismissed');
 
     // Counts cover every target type, so a target filter drops them.
     await user.click(screen.getByRole('combobox', { name: 'Target type' }));
     await user.click(await screen.findByRole('option', { name: 'Page' }));
-    expect(await within(status).findByText('Dismissed')).toBeVisible();
+    await user.click(status);
+    expect(await screen.findByRole('option', { name: 'Dismissed', description: '' })).toBeVisible();
   });
 
   it('dismisses an Action from its detail and links Work on this to a new chat', async () => {

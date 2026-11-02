@@ -4,14 +4,18 @@ import {
   architectureSchema,
   changeSummarySchema,
   issueHistoryPageSchema,
+  latestCrawlIssuesPageSchema,
+  latestCrawlPagesPageSchema,
   pagesPageSchema,
   pageDetailSchema,
   siteCrawlEventSchema,
+  siteCrawlSchema,
   siteHealthDashboardSchema,
   siteHealthOverviewSchema,
   siteIssueDetailSchema,
   siteIssuesPageSchema,
 } from '@citeladder/contracts/site-health';
+import { sql } from 'kysely';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -19,6 +23,7 @@ import { createApp } from '../src/app.ts';
 import { policy } from '../src/config.ts';
 import { issueGroupId } from '../src/site-health/reads/rules.ts';
 import { issueDetail } from '../src/site-health/reads/issues.ts';
+import { refreshIssueCurrency } from '../src/site-health/issue-currency.ts';
 import { encodeKeysetCursor } from '../src/http/keyset-cursor.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
@@ -35,11 +40,12 @@ afterAll(async () => {
   await db.destroy();
 });
 
-async function get(tenant: Tenant, path: string) {
+async function get(tenant: Tenant, path: string, headers: Record<string, string> = {}) {
   return app.request(`/api/v1${path}`, {
     headers: {
       cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: tenant.userId, ver: 0 })}`,
       'x-workspace-id': tenant.workspaceId,
+      ...headers,
     },
   });
 }
@@ -118,7 +124,7 @@ async function page(seed: SiteSeed, path: string, options: { current?: boolean }
 }
 
 /** A failing evaluation of `ruleId` on the page's analysis, and its persisted issue. */
-async function issue(seed: SiteSeed, target: Page, ruleId: string) {
+async function issue(seed: SiteSeed, target: Page, ruleId: string, evidence: object = {}) {
   const rule = policy.site_health.rule_catalog.find((item) => item.rule_id === ruleId)!;
   const [analysis] = await db
     .selectFrom('site_page_analyses')
@@ -150,10 +156,39 @@ async function issue(seed: SiteSeed, target: Page, ruleId: string) {
       finding_class: rule.finding_class,
       description: rule.description,
       remediation: rule.remediation,
+      evidence: JSON.stringify(evidence),
       analyzer_version: policy.site_health.versions.analyzer,
       created_at: new Date(),
     })
     .execute();
+  // What the terminal publication does after writing the analyses above.
+  await refreshIssueCurrency(db, { id: seed.crawlId, workspace_id: seed.workspaceId });
+  return evaluationId;
+}
+
+/**
+ * A site check failing on the root, named by every page's finalized analysis
+ * as the terminal publication names it: each page scores the site's checks.
+ */
+async function siteIssue(
+  seed: SiteSeed,
+  root: Page,
+  pages: readonly Page[],
+  ruleId: string,
+  evidence: object = {},
+) {
+  const evaluationId = await issue(seed, root, ruleId, evidence);
+  for (const other of pages)
+    await db
+      .updateTable('site_page_analyses')
+      .set({
+        source_evaluation_ids: sql<
+          string[]
+        >`array_append(source_evaluation_ids, ${evaluationId}::uuid)`,
+      })
+      .where('id', '=', other.analysisId)
+      .execute();
+  await refreshIssueCurrency(db, { id: seed.crawlId, workspace_id: seed.workspaceId });
 }
 
 const byUrl = (items: { normalized_url: string; analysis_status: string; error_code: string }[]) =>
@@ -193,6 +228,27 @@ describe('page projections', () => {
       rows.at(-1)!.id,
       ...rows.slice(0, policy.site_health.reads.max_detail_evaluations - 1).map((row) => row.id),
     ]);
+  });
+
+  it('serve the newest crawl’s pages by project, named with that crawl and its status', async () => {
+    const empty = await fixtures.tenant({ websiteUrl: 'https://example.test/' });
+    expect((await get(empty, `/projects/${empty.projectId}/site-health/pages`)).status).toBe(404);
+    const seed = await fixtures.crawl('running');
+    await page(seed, '/');
+    const blocked = await page(seed, '/robots', { current: false });
+    await db
+      .updateTable('site_crawl_tasks')
+      .set({ status: 'failed', error_code: 'robots_denied' })
+      .where('id', '=', blocked.taskId)
+      .execute();
+
+    const body = await json(
+      seed,
+      `/projects/${seed.projectId}/site-health/pages?status=error_or_blocked`,
+      latestCrawlPagesPageSchema,
+    );
+    expect(body).toMatchObject({ crawl_id: seed.crawlId, crawl_status: 'running' });
+    expect(body.items.map((item) => new URL(item.normalized_url).pathname)).toEqual(['/robots']);
   });
 
   it('derive presentation status in SQL, so a status filter pages without gaps', async () => {
@@ -379,6 +435,64 @@ describe('issue catalog', () => {
     ).rejects.toThrow('cursor');
   });
 
+  it('files a site-level finding only under the page kinds it was found on, counting their pages', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    const product = await page(seed, '/product');
+    const other = await page(seed, '/product-2');
+    const all = [product, other];
+    await issue(seed, product, 'technical.indexable');
+    await issue(seed, other, 'technical.title_present');
+    // Site checks fail once, on the root, and every page's analysis names them.
+    await siteIssue(seed, home, all, 'technical.ai_crawler_access');
+    await siteIssue(seed, home, all, 'technical.sitewide_broken_link', {
+      count: 3,
+      linking_page_kinds: ['homepage', 'product'],
+      page_kind_counts: { homepage: 1, product: 2 },
+    });
+    await siteIssue(seed, home, all, 'technical.sitewide_link_redirect', {
+      count: 1,
+      linking_page_kinds: ['homepage'],
+      page_kind_counts: { homepage: 1 },
+    });
+    const ofKind = (pageKind: string) =>
+      json(seed, `/site-crawls/${seed.crawlId}/issues?page_kind=${pageKind}`, siteIssuesPageSchema);
+    const affected = async (pageKind: string) =>
+      Object.fromEntries(
+        (await ofKind(pageKind)).items.map((row) => [row.rule_id, row.affected_url_count]),
+      );
+
+    expect(await affected('product')).toEqual({
+      'technical.indexable': 1,
+      'technical.title_present': 1,
+      'technical.sitewide_broken_link': 2,
+    });
+    // The two product pages, never the homepage that carries the site-level rows.
+    expect((await ofKind('product')).summary.affected_url_count).toBe(2);
+    expect(await affected('homepage')).toEqual({
+      'technical.ai_crawler_access': 1,
+      'technical.sitewide_broken_link': 1,
+      'technical.sitewide_link_redirect': 1,
+    });
+    // The rail counts what its list row counted.
+    const rail = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues/${issueGroupId(seed.crawlId, 'technical.sitewide_broken_link', 'defect')}?page_kind=product`,
+      siteIssueDetailSchema,
+    );
+    expect(rail.affected_url_count).toBe(2);
+    // Unfiltered, a site-level finding counts every page it names.
+    const unfiltered = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues`,
+      siteIssuesPageSchema,
+    );
+    expect(
+      unfiltered.items.find((row) => row.rule_id === 'technical.sitewide_broken_link')
+        ?.affected_url_count,
+    ).toBe(3);
+  });
+
   it('groups current issues by rule and counts groups, folding critical into high', async () => {
     const seed = await fixtures.crawl();
     const home = await page(seed, '/');
@@ -433,6 +547,61 @@ describe('issue catalog', () => {
     const [header, first] = csv.split('\r\n');
     expect(header!.split(',')[0]).toBe('group_id');
     expect(first).toContain('"homepage, product"');
+  });
+
+  it('serves the newest crawl’s issue page by project, named with that crawl', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    await issue(seed, home, 'technical.indexable');
+
+    const body = await json(
+      seed,
+      `/projects/${seed.projectId}/site-health/issues?detail_limit=1`,
+      latestCrawlIssuesPageSchema,
+    );
+    expect(body.crawl_id).toBe(seed.crawlId);
+    expect(body.items.map((group) => group.rule_id)).toEqual(['technical.indexable']);
+    expect(body.first_issue?.occurrences.map((row) => row.site_url_id)).toEqual([home.id]);
+  });
+
+  it('embeds the first row’s detail only when asked, as the detail route serves it', async () => {
+    const seed = await fixtures.crawl();
+    const home = await page(seed, '/');
+    const product = await page(seed, '/product');
+    for (const target of [home, product]) await issue(seed, target, 'technical.indexable');
+    await issue(seed, home, 'technical.title_present');
+    const groupId = issueGroupId(seed.crawlId, 'technical.indexable', 'defect');
+
+    const plain = await json(seed, `/site-crawls/${seed.crawlId}/issues`, siteIssuesPageSchema);
+    const embedded = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?detail_limit=1`,
+      siteIssuesPageSchema,
+    );
+
+    expect(plain.first_issue).toBeUndefined();
+    expect(embedded.first_issue).toMatchObject({
+      group_id: groupId,
+      rule_id: 'technical.indexable',
+      occurrence_count: 2,
+      affected_url_count: 2,
+    });
+    expect(embedded.first_issue?.occurrences).toHaveLength(1);
+    expect(embedded.first_issue).toEqual(
+      await json(
+        seed,
+        `/site-crawls/${seed.crawlId}/issues/${groupId}?limit=1`,
+        siteIssueDetailSchema,
+      ),
+    );
+    // A page with no rows has no first issue to carry.
+    const none = await json(
+      seed,
+      `/site-crawls/${seed.crawlId}/issues?detail_limit=1&query=no-such-issue`,
+      siteIssuesPageSchema,
+    );
+    expect(none.items).toEqual([]);
+    expect(none.first_issue).toBeUndefined();
   });
 
   it('ranks a severity tier by pages affected, pages it on that order, and searches titles', async () => {
@@ -524,6 +693,46 @@ describe('dashboard', () => {
     expect(body.root_errors).toHaveLength(3);
     expect(await runtime()).toEqual(before);
   });
+
+  it('carries the sitemap manifest size, not its URLs, while the stored facts keep them', async () => {
+    const seed = await fixtures.crawl();
+    const stored = {
+      robots: { fetched: true, status_code: 200 },
+      llms_txt: { fetched: true, present: false, url: 'https://example.test/llms.txt' },
+      sitemap: {
+        fetched: true,
+        files: ['https://example.test/sitemap.xml'],
+        urls: ['https://example.test/a', 'https://example.test/b', 'https://example.test/c'],
+        lastmod: { 'https://example.test/a': '2026-10-01' },
+      },
+    };
+    await db
+      .updateTable('site_crawls')
+      .set({ site_facts: JSON.stringify(stored) })
+      .where('id', '=', seed.crawlId)
+      .execute();
+    const projected = {
+      robots: { fetched: true, status_code: 200 },
+      llms_txt: { fetched: true, present: false, url: 'https://example.test/llms.txt' },
+      sitemap: { fetched: true, files: ['https://example.test/sitemap.xml'], url_count: 3 },
+    };
+
+    const dashboard = await json(
+      seed,
+      `/projects/${seed.projectId}/site-health`,
+      siteHealthDashboardSchema,
+    );
+    const crawl = await json(seed, `/site-crawls/${seed.crawlId}`, siteCrawlSchema);
+    const row = await db
+      .selectFrom('site_crawls')
+      .select('site_facts')
+      .where('id', '=', seed.crawlId)
+      .executeTakeFirstOrThrow();
+
+    expect(dashboard.crawl?.site_facts).toEqual(projected);
+    expect(crawl.site_facts).toEqual(projected);
+    expect(row.site_facts).toEqual(stored);
+  });
 });
 
 describe('crawl events', () => {
@@ -578,6 +787,66 @@ describe('crawl events', () => {
       await next.text(); // NOSONAR: each stream finishes before the next opens.
     }
     expect(statuses).toEqual([200, 200, 200, 200]);
+  });
+});
+
+describe('conditional snapshot reads', () => {
+  it('compress and tag a snapshot read, answering a matching If-None-Match with 304', async () => {
+    const seed = await fixtures.crawl();
+    const snapshot = await fixtures.snapshot(seed, 'complete');
+    await db
+      .updateTable('site_health_snapshots')
+      .set({
+        aeo_measurement_state: 'not_measured',
+        web_fundamentals_state: 'measured',
+        classification_state: 'complete',
+        search_eligibility: 'eligible',
+      })
+      .where('id', '=', snapshot)
+      .execute();
+    const path = `/projects/${seed.projectId}/site-health/overview`;
+
+    const first = await get(seed, path, { 'accept-encoding': 'gzip' });
+    expect(first.status).toBe(200);
+    expect(first.headers.get('content-encoding')).toBe('gzip');
+    expect(first.headers.get('cache-control')).toBe('private, no-cache');
+    const tag = first.headers.get('etag')!;
+    expect(tag).toMatch(/^W\/"[\w-]{43}"$/);
+    const unzipped = new Response(first.body!.pipeThrough(new DecompressionStream('gzip')));
+    expect(siteHealthOverviewSchema.parse(await unzipped.json()).snapshot_id).toBe(snapshot);
+
+    const unchanged = await get(seed, path, { 'if-none-match': tag });
+    expect([unchanged.status, await unchanged.text()]).toEqual([304, '']);
+    expect(unchanged.headers.get('etag')).toBe(tag);
+    expect(unchanged.headers.get('cache-control')).toBe('private, no-cache');
+
+    // The tag follows the payload: a changed projection is a full 200 again.
+    await db
+      .updateTable('site_health_snapshots')
+      .set({ web_fundamentals_score: 12 })
+      .where('id', '=', snapshot)
+      .execute();
+    const changed = await get(seed, path, { 'if-none-match': tag });
+    expect(changed.status).toBe(200);
+    expect(changed.headers.get('etag')).toMatch(/^W\/"[\w-]{43}"$/);
+    expect(changed.headers.get('etag')).not.toBe(tag);
+    expect(siteHealthOverviewSchema.parse(await changed.json()).web_fundamentals_score).toBe(12);
+  });
+
+  it("tag a terminal crawl's issues, never a running crawl's", async () => {
+    const terminal = await fixtures.crawl();
+    const running = await fixtures.crawl('running');
+    const settled = await get(terminal, `/site-crawls/${terminal.crawlId}/issues`);
+    expect(settled.status).toBe(200);
+    expect(settled.headers.get('etag')).toMatch(/^W\/"[\w-]{43}"$/);
+    const growing = await get(running, `/site-crawls/${running.crawlId}/issues`);
+    expect(growing.status).toBe(200);
+    expect(growing.headers.get('etag')).toBeNull();
+    expect(growing.headers.get('cache-control')).toBe('private, no-store, max-age=0');
+    // The project's newest-crawl read follows the same rule.
+    const latest = (seed: SiteSeed) => get(seed, `/projects/${seed.projectId}/site-health/issues`);
+    expect((await latest(terminal)).headers.get('etag')).toMatch(/^W\/"[\w-]{43}"$/);
+    expect((await latest(running)).headers.get('etag')).toBeNull();
   });
 });
 
@@ -663,6 +932,106 @@ describe('snapshot projections', () => {
       aeoReadinessSchema,
     );
     expect(readiness).toMatchObject({ state: 'limited_evidence', score: 40 });
+  });
+
+  it('render the snapshot without its provenance id lists, which stay persisted', async () => {
+    const seed = await fixtures.crawl();
+    const snapshot = await fixtures.snapshot(seed, 'complete');
+    const ids = [randomUUID(), randomUUID()];
+    const finding = { rule_id: 'web.mobile_viewport', title: 'Viewport', remediation: 'Add one' };
+    const field = { state: 'unavailable', reason: 'provider_not_configured' };
+    await db
+      .updateTable('site_health_snapshots')
+      .set({
+        aeo_measurement_state: 'measured',
+        web_fundamentals_state: 'measured',
+        classification_state: 'complete',
+        search_eligibility: 'eligible',
+        source_evaluation_ids: ids,
+        classification_source_analysis_ids: ids,
+        classification_source_artifact_ids: ids,
+        classification_source_task_ids: ids,
+        web_fundamentals: JSON.stringify({
+          state: 'measured',
+          areas: [
+            {
+              key: 'mobile',
+              state: 'measured',
+              coverage: 1,
+              passed_count: 1,
+              missing_count: 1,
+              unknown_count: 0,
+              unavailable_count: 0,
+              unavailable_checks: [],
+              top_findings: [{ ...finding, affected_pages: 1, source_evaluation_ids: ids }],
+            },
+          ],
+          field_data: { ...field, lcp: null, inp: null, cls: null },
+          source_analysis_ids: ids,
+          source_artifact_ids: ids,
+          source_evaluation_ids: ids,
+          limitations: [],
+        }),
+        aeo_readiness_diagnostic: JSON.stringify({
+          state: 'measured',
+          crawl_id: seed.crawlId,
+          score: 80,
+          coverage: 1,
+          profile_version: 'p',
+          schema_contract_version: 's',
+          scoring_version: 'v',
+          presentation_version: 'r',
+          analyzer_version: 'a',
+          source_analysis_ids: ids,
+          analysis_count: 2,
+          affected_page_count: 0,
+          dimensions: [],
+          limitations: [],
+        }),
+      })
+      .where('id', '=', snapshot)
+      .execute();
+
+    const response = await get(seed, `/projects/${seed.projectId}/site-health/overview`);
+    expect(response.status, await response.clone().text()).toBe(200);
+    // The wire body as sent, not as a contract parse would strip it.
+    const body = z.record(z.string(), z.unknown());
+    const overview = body.parse(await response.json());
+    expect(overview.web_fundamentals).toEqual({
+      state: 'measured',
+      areas: [
+        {
+          key: 'mobile',
+          state: 'measured',
+          coverage: 1,
+          passed_count: 1,
+          missing_count: 1,
+          unknown_count: 0,
+          unavailable_count: 0,
+          unavailable_checks: [],
+          top_findings: [{ ...finding, affected_pages: 1 }],
+        },
+      ],
+      field_data: { ...field, lcp: null, inp: null, cls: null },
+      limitations: [],
+    });
+    expect(Object.keys(overview).filter((key) => key.includes('_ids'))).toEqual([]);
+    const readiness = body.parse(
+      await (await get(seed, `/projects/${seed.projectId}/site-health/aeo-readiness`)).json(),
+    );
+    expect(readiness).toMatchObject({ state: 'measured', score: 80, analysis_count: 2 });
+    expect('source_analysis_ids' in readiness).toBe(false);
+    // The frozen row keeps every list it was written with.
+    const stored = await db
+      .selectFrom('site_health_snapshots')
+      .select(['source_evaluation_ids', 'classification_source_task_ids', 'web_fundamentals'])
+      .where('id', '=', snapshot)
+      .executeTakeFirstOrThrow();
+    expect(stored).toMatchObject({
+      source_evaluation_ids: ids,
+      classification_source_task_ids: ids,
+      web_fundamentals: { source_evaluation_ids: ids },
+    });
   });
 
   it('require both crawls of an exact change pair', async () => {
@@ -784,12 +1153,44 @@ describe('workspace authorization', () => {
       `/site-crawls/${seed.crawlId}`,
       `/site-crawls/${seed.crawlId}/pages`,
       `/site-crawls/${seed.crawlId}/issues`,
+      `/site-crawls/${seed.crawlId}/issues?detail_limit=5`,
       `/site-crawls/${seed.crawlId}/events`,
       `/site-crawls/${seed.crawlId}/export.csv`,
-      `/projects/${seed.projectId}/site-health`,
-      `/projects/${seed.projectId}/site-health/aeo-readiness`,
-      `/projects/${seed.projectId}/site-health/changes`,
     ])
       expect((await get(foreign, path)).status, path).toBe(404);
+    // Every project route refuses the path project itself, before any read.
+    const refusals = [];
+    for (const suffix of [
+      '',
+      '/pages',
+      '/issues',
+      '/overview',
+      '/aeo-readiness',
+      '/architecture',
+      '/changes',
+      '/changes/summary',
+      '/robots-history',
+    ]) {
+      const response = await get(foreign, `/projects/${seed.projectId}/site-health${suffix}`);
+      const body = (await response.json()) as { error: { message: string } };
+      refusals.push([suffix, response.status, body.error.message]);
+    }
+    const monitored = await get(foreign, `/projects/${seed.projectId}/monitored-urls`);
+    const monitoredBody = (await monitored.json()) as { error: { message: string } };
+    refusals.push(['monitored-urls', monitored.status, monitoredBody.error.message]);
+    expect(refusals).toEqual(
+      [
+        '',
+        '/pages',
+        '/issues',
+        '/overview',
+        '/aeo-readiness',
+        '/architecture',
+        '/changes',
+        '/changes/summary',
+        '/robots-history',
+        'monitored-urls',
+      ].map((suffix) => [suffix, 404, 'Project not found']),
+    );
   });
 });

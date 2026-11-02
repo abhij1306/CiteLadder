@@ -162,4 +162,10 @@ export const performanceQueries = {
       queryFn: ({ signal }) =>
         performanceApi.getDashboard(projectId, params, { signal, workspaceId }),
     }),
+  /** One page of one dimension table; tab intent warms the same key the table reads. */
+  table: (workspaceId: string | null, projectId: string, params: PerformanceTableParams) =>
+    queryOptions({
+      queryKey: queryKeys.performance.table(projectId, params),
+      queryFn: ({ signal }) => performanceApi.getTable(projectId, params, { signal, workspaceId }),
+    }),
 };

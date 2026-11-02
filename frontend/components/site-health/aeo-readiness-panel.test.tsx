@@ -137,7 +137,6 @@ function stubReadiness(overrides: Record<string, unknown> = {}) {
         scoring_version: 'sh-score-1',
         presentation_version: 'site-health-presentation-1',
         analyzer_version: 'page-v1',
-        source_analysis_ids: [ANALYSIS],
         analysis_count: 5,
         affected_page_count: 2,
         dimensions: DIMENSIONS.map(([key, label], index) => dimension(key, label, index === 0)),

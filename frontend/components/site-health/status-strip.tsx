@@ -12,10 +12,9 @@ import type { PageSummary, SiteCrawl } from '@/lib/api/types';
 import { ICONS } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
+import { crawlFailureCopy, dashboardRunNotice } from '@/lib/site-health/run-notice';
 import {
   canShowDiscoveredTotal,
-  crawlFailureCopy,
-  dashboardRunNotice,
   discoveryProgressLabel,
   endSentence,
   isDiscoveryProvisional,

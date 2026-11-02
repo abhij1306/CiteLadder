@@ -135,7 +135,13 @@ async function review(
 async function dataset(
   tenant: Tenant,
   runId: string,
-  options: { kind?: string; status?: string; scope?: string; coverage?: string } = {},
+  options: {
+    kind?: string;
+    status?: string;
+    scope?: string;
+    coverage?: string;
+    publishedAt?: Date;
+  } = {},
 ) {
   const id = randomUUID();
   await db
@@ -161,7 +167,7 @@ async function dataset(
       summary: JSON.stringify({}),
       provider_filters: JSON.stringify(options.scope ? { research_scope: options.scope } : {}),
       parser_version: '1',
-      published_at: options.status === 'collecting' ? null : now(),
+      published_at: options.status === 'collecting' ? null : (options.publishedAt ?? now()),
       created_at: now(),
     })
     .execute();
@@ -321,6 +327,11 @@ describe('Search Intelligence readiness and preferences', () => {
     });
     // A newer unconfirmed cost review does not replace the acquisition being followed.
     await review(t, connectionId);
+    // An earlier acquisition of the same dataset, which the newer one replaces.
+    await dataset(t, older, {
+      scope: 'domain_subdomains',
+      publishedAt: new Date(Date.now() - 60_000),
+    });
     const published = await dataset(t, older, { scope: 'domain_subdomains' });
     const unscoped = await dataset(t, older);
     await dataset(t, older, { status: 'collecting' });

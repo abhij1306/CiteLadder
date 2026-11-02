@@ -25,6 +25,27 @@ describe('CohortCompositionContext', () => {
     expect(screen.getByText(/not split into quality versus cohort effects/)).toBeInTheDocument();
   });
 
+  it('omits the added and removed clauses when no kind joined or left', () => {
+    render(
+      <CohortCompositionContext
+        reason="cohort_composition_changed"
+        composition={{
+          added_page_kinds: [],
+          removed_page_kinds: [],
+          previous_page_count_by_kind: { category: 50, product: 50 },
+          current_page_count_by_kind: { category: 30, product: 70 },
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText('Score movement is not split into quality versus cohort effects.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Added page kinds|Removed page kinds|None/)).not.toBeInTheDocument();
+    expect(screen.getByText('Category 50 · Product 50')).toBeInTheDocument();
+    expect(screen.getByText('Category 30 · Product 70')).toBeInTheDocument();
+  });
+
   it('renders nothing for a comparable unchanged cohort', () => {
     const { container } = render(
       <CohortCompositionContext

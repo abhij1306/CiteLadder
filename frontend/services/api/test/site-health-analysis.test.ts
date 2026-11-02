@@ -152,10 +152,12 @@ describe('page checklist', () => {
     const headless = byRule(
       analyzePage({ ...page, primary_heading_outline: [] }, context).evaluations,
     ).get('aeo.heading_hierarchy')!;
-    expect([headless.outcome, headless.evidence.reason]).toEqual([
-      'not_applicable',
-      'no_section_headings',
-    ]);
+    expect([
+      headless.outcome,
+      headless.evidence.reason,
+      headless.score_applicability,
+      skipped.score_applicability,
+    ]).toEqual(['not_applicable', 'no_section_headings', false, true]);
     for (const outline of [
       undefined,
       [{ text: 'Unknown level' }],

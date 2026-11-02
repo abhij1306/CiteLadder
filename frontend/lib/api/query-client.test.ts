@@ -89,6 +89,16 @@ describe('retainPreviousDataForScope', () => {
       }),
     ).toBeUndefined();
   });
+
+  it('finds the scope in keys that put the workspace before the project', () => {
+    const key = ['ai-traffic', 'workspace-1', 'project-a', 'crawlers', { cursor: 'c2' }];
+    expect(retainPreviousDataForScope('project-a', previousData, { queryKey: key })).toBe(
+      previousData,
+    );
+    expect(
+      retainPreviousDataForScope('project-b', previousData, { queryKey: key }),
+    ).toBeUndefined();
+  });
 });
 
 describe('warmQuery', () => {

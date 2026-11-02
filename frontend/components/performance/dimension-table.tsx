@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 
@@ -9,10 +9,14 @@ import { DataTable, type DataTableColumn, type DataTableState } from '@/componen
 import { readErrorProps } from '@/components/ui/read-error';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { performanceApi, type PerformanceDimension } from '@/lib/api/performance';
+import {
+  performanceQueries,
+  type PerformanceDimension,
+  type PerformanceTableParams,
+} from '@/lib/api/performance';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { queryKeys } from '@/lib/api/query-keys';
-import { retainPreviousDataForScope } from '@/lib/api/query-client';
+import { retainPreviousDataForScope, warmQuery } from '@/lib/api/query-client';
+import { TABLE_DEFAULT_PAGE_SIZE } from '@/lib/config/tables';
 import { cursorControls, pageRange, useCursorTable } from '@/lib/table/use-cursor-table';
 import {
   METRIC_CARDS,
@@ -139,11 +143,56 @@ function dimensionColumns({
   ];
 }
 
+type TableSnapshot = Readonly<{ snapshotId: string; compareSnapshotId: string | null }>;
+
+function tableParams(
+  snapshot: TableSnapshot,
+  page: Readonly<{ dimension: PerformanceDimension; sort: string; cursor?: string; size: number }>,
+): PerformanceTableParams {
+  return {
+    snapshot_id: snapshot.snapshotId,
+    dimension: page.dimension,
+    sort: page.sort,
+    cursor: page.cursor,
+    page_size: page.size,
+    compare_snapshot_id: snapshot.compareSnapshotId ?? undefined,
+  };
+}
+
+/**
+ * Warm a tab's first page from intent (hover, focus), so clicking the tab
+ * swaps in rows already in the cache instead of a loading state. It asks for
+ * exactly the key a freshly opened table reads: the first page, the default
+ * order, the default page size.
+ */
+export function useWarmDimensionTable(
+  projectId: string,
+): (snapshot: TableSnapshot, dimension: PerformanceDimension) => void {
+  const queryClient = useQueryClient();
+  const workspaceId = useActiveWorkspaceId();
+  return (snapshot, dimension) => {
+    if (workspaceId === null) return;
+    warmQuery(
+      queryClient,
+      performanceQueries.table(
+        workspaceId,
+        projectId,
+        tableParams(snapshot, {
+          dimension,
+          sort: defaultSort(dimension),
+          size: TABLE_DEFAULT_PAGE_SIZE,
+        }),
+      ),
+    );
+  };
+}
+
 export function DimensionTable({
   projectId,
   dimension,
   snapshotId,
   compareSnapshotId,
+  measuredRows,
   selectedLabel,
   compareLabel,
   activeMetrics,
@@ -153,6 +202,13 @@ export function DimensionTable({
   dimension: PerformanceDimension;
   snapshotId: string;
   compareSnapshotId: string | null;
+  /**
+   * The snapshot's persisted row count for this dimension, from the
+   * dashboard. Known before the first page lands, so a freshly opened tab
+   * reserves its pager and a full page from the first frame instead of
+   * growing into them when the rows arrive.
+   */
+  measuredRows: number;
   selectedLabel: string;
   compareLabel: string;
   activeMetrics?: ReadonlySet<PerformanceMetricKey>;
@@ -173,26 +229,29 @@ export function DimensionTable({
   );
   const activeSort = orderableSort(sort, dimension, displayedMetrics);
 
-  const params = {
-    snapshot_id: snapshotId,
-    dimension,
-    sort: activeSort,
-    cursor: table.cursor,
-    page_size: table.pageSize,
-    compare_snapshot_id: compareSnapshotId ?? undefined,
-  };
+  const params = tableParams(
+    { snapshotId, compareSnapshotId },
+    { dimension, sort: activeSort, cursor: table.cursor, size: table.pageSize },
+  );
   const query = useQuery({
-    queryKey: queryKeys.performance.table(projectId, params),
-    queryFn: ({ signal }) => performanceApi.getTable(projectId, params, { signal, workspaceId }),
+    ...performanceQueries.table(workspaceId, projectId, params),
     enabled: !unavailable && workspaceId !== null,
+    // A page turn, a sort or a new range keeps the rows on screen until the
+    // next page replaces them, so the table never drops to a loading state.
     placeholderData: (previousData, previousQuery) =>
       retainPreviousDataForScope(projectId, previousData, previousQuery),
   });
 
   const rows = query.data?.items ?? [];
   const nextCursor = query.data?.next_cursor ?? null;
-  const total = query.data?.total_count;
-  const { from, to } = pageRange(table.page, table.pageSize, rows.length);
+  const total = query.data?.total_count ?? measuredRows;
+  // Until this page's rows land (nothing yet, or the previous page retained),
+  // the range names the page that is coming rather than the rows on screen.
+  const shownRows =
+    query.data && !query.isPlaceholderData
+      ? rows.length
+      : Math.max(0, Math.min(table.pageSize, total - (table.page - 1) * table.pageSize));
+  const { from, to } = pageRange(table.page, table.pageSize, shownRows);
 
   if (unavailable) {
     // Distinct from an empty table: Search Console does not serve this
@@ -237,6 +296,8 @@ export function DimensionTable({
       minWidth={comparing ? 'md' : 'sm'}
       pinFirstColumn
       state={state}
+      // The rows on screen belong to the previous page, order or range.
+      busy={{ active: query.isPlaceholderData, label: `Loading ${tab.noun}…` }}
       pageSize={table.pageSize}
       rowCount={rows.length}
       pager={{

@@ -26,7 +26,7 @@ import {
 import { parseUuid } from '../../http/uuid.ts';
 import { scalarText } from '../../text-order.ts';
 import type { SiteChangeSnapshots } from '../../generated/db-schema.ts';
-import { loadCrawl, loadProject, resolveUsableCrawl, type Crawl } from './crawl.ts';
+import { loadCrawl, resolveUsableCrawl, type Crawl } from './crawl.ts';
 import { pageRerunSql } from '../page-rerun.ts';
 import { issueImpact, remediationRoute, ruleScoreRoles, ruleTitle } from './rules.ts';
 
@@ -43,13 +43,87 @@ const NO_COMPARABLE = {
   current_page_count_by_kind: {},
 };
 
-function snapshotFor(db: Database, crawl: Crawl) {
+/**
+ * The crawl's snapshot row. Each reader selects only the columns it renders:
+ * the row also holds the provenance id lists (tens of thousands of ids on a
+ * large crawl), which stay persisted and never reach the browser.
+ */
+function snapshotOf(db: Database, crawl: Crawl) {
   return new WorkspaceScope(crawl.workspace_id)
     .selectFrom(db, 'site_health_snapshots')
-    .selectAll()
     .where('project_id', '=', crawl.project_id)
-    .where('crawl_id', '=', crawl.id)
+    .where('crawl_id', '=', crawl.id);
+}
+
+const OVERVIEW_COLUMNS = [
+  'id',
+  'search_eligibility',
+  'eligibility_totals',
+  'eligibility_reasons',
+  'web_fundamentals_score',
+  'web_fundamentals_coverage',
+  'web_fundamentals_state',
+  'aeo_readiness_score',
+  'aeo_measurement_coverage',
+  'aeo_measurement_state',
+  'classified_page_count',
+  'other_page_count',
+  'classification_error_page_count',
+  'classification_expected_page_count',
+  'classification_coverage',
+  'classification_state',
+  'classification_reason_groups',
+  'classification_formula_version',
+  'scored_page_kind_set',
+  'scored_page_count_by_kind',
+  'coverage_state',
+  'coverage_evidence',
+  'analyzed_url_count',
+  'selected_url_count',
+  'status_counts',
+  'issue_count',
+  'technical_defect_count',
+  'technical_defect_affected_page_count',
+  'aeo_readiness_gap_count',
+  'aeo_readiness_gap_affected_page_count',
+  'severity_counts',
+  'category_counts',
+  'readiness_dimensions',
+  'top_issues',
+  'trend',
+  'change_summary',
+] as const;
+
+/**
+ * The frozen Web Fundamentals without provenance id lists: neither its own
+ * nor each area finding's leave the database on an Overview read.
+ */
+const withoutOwnIds = sql`web_fundamentals - 'source_analysis_ids' - 'source_artifact_ids' - 'source_evaluation_ids'`;
+const webFundamentals = sql<unknown>`case when jsonb_typeof(web_fundamentals -> 'areas') = 'array'
+  then ${withoutOwnIds} || jsonb_build_object('areas', (
+    select coalesce(jsonb_agg(
+      case when jsonb_typeof(area -> 'top_findings') = 'array'
+        then jsonb_set(area, '{top_findings}', (
+          select coalesce(jsonb_agg(finding - 'source_evaluation_ids' order by f.n), '[]'::jsonb)
+          from jsonb_array_elements(area -> 'top_findings') with ordinality f(finding, n)))
+        else area end
+      order by a.n), '[]'::jsonb)
+    from jsonb_array_elements(web_fundamentals -> 'areas') with ordinality a(area, n)))
+  else ${withoutOwnIds} end`;
+
+function overviewSnapshot(db: Database, crawl: Crawl) {
+  return snapshotOf(db, crawl)
+    .select(OVERVIEW_COLUMNS)
+    .select(webFundamentals.as('web_fundamentals'))
     .executeTakeFirst();
+}
+
+/** The frozen readiness diagnostic without its source analysis id list. */
+async function readinessDiagnostic(db: Database, crawl: Crawl) {
+  const row = await snapshotOf(db, crawl)
+    .select(sql<unknown>`aeo_readiness_diagnostic - 'source_analysis_ids'`.as('diagnostic'))
+    .executeTakeFirst();
+  return record(row?.diagnostic);
 }
 
 export async function overview(
@@ -59,7 +133,7 @@ export async function overview(
   crawlId: string | null,
 ) {
   const crawl = await resolveUsableCrawl(db, workspaceId, projectId, crawlId);
-  const snapshot = crawl ? await snapshotFor(db, crawl) : undefined;
+  const snapshot = crawl ? await overviewSnapshot(db, crawl) : undefined;
   if (!crawl || !snapshot) throw new ApiError(404, OVERVIEW_UNAVAILABLE);
   const coverage = record(snapshot.coverage_evidence);
   const count = (key: string) =>
@@ -85,9 +159,6 @@ export async function overview(
     classification_state: snapshot.classification_state,
     classification_reason_groups: record(snapshot.classification_reason_groups),
     classification_formula_version: snapshot.classification_formula_version,
-    classification_source_analysis_ids: strings(snapshot.classification_source_analysis_ids),
-    classification_source_artifact_ids: strings(snapshot.classification_source_artifact_ids),
-    classification_source_task_ids: strings(snapshot.classification_source_task_ids),
     scored_page_kind_set: strings(snapshot.scored_page_kind_set),
     scored_page_count_by_kind: record(snapshot.scored_page_count_by_kind),
     crawl_coverage: {
@@ -150,9 +221,6 @@ export async function overview(
         inp: null,
         cls: null,
       },
-      source_analysis_ids: [],
-      source_artifact_ids: [],
-      source_evaluation_ids: [],
       limitations: [],
     },
     trend: snapshot.trend ?? {
@@ -179,7 +247,7 @@ export async function aeoReadiness(
   crawlId: string | null,
 ) {
   const crawl = await resolveUsableCrawl(db, workspaceId, projectId, crawlId);
-  const descriptor = crawl ? record((await snapshotFor(db, crawl))?.aeo_readiness_diagnostic) : {};
+  const descriptor = crawl ? await readinessDiagnostic(db, crawl) : {};
   if (!crawl || Object.keys(descriptor).length === 0) {
     const versions = reads.measurement_versions;
     return aeoReadinessSchema.parse({
@@ -192,7 +260,6 @@ export async function aeoReadiness(
       scoring_version: reads.scoring_version,
       presentation_version: versions.presentation,
       analyzer_version: '',
-      source_analysis_ids: [],
       analysis_count: 0,
       affected_page_count: 0,
       dimensions: [],
@@ -267,7 +334,7 @@ export async function architecture(
       .orderBy('created_at', 'desc')
       .orderBy('id', 'desc')
       .executeTakeFirst(),
-    snapshotFor(db, crawl),
+    snapshotOf(db, crawl).select('coverage_evidence').executeTakeFirst(),
   ]);
   if (!model)
     return unavailableArchitecture(
@@ -320,23 +387,41 @@ export async function architecture(
   });
 }
 
-type ChangeSnapshot = Selectable<SiteChangeSnapshots>;
+// Everything the summary renders; the source id lists stay persisted.
+const CHANGE_COLUMNS = [
+  'id',
+  'state',
+  'reason_code',
+  'crawl_a_id',
+  'crawl_b_id',
+  'complete_pair',
+  'analyzer_version',
+  'page_analyzer_version',
+  'extractor_version',
+  'coverage',
+  'summary',
+  'limitations',
+  'created_at',
+] as const;
+type ChangeSnapshot = Pick<Selectable<SiteChangeSnapshots>, (typeof CHANGE_COLUMNS)[number]>;
 
-/** The newest change snapshot, or the exact pair's when both crawls are named. */
+/**
+ * The newest change snapshot, or the exact pair's when both crawls are named.
+ * The route authorizes the project before this read.
+ */
 async function changeSnapshot(
   db: Database,
   workspaceId: string,
   projectId: string,
   pair: { a: string | null; b: string | null },
 ): Promise<ChangeSnapshot | undefined> {
-  await loadProject(db, workspaceId, projectId);
   if ((pair.a === null) !== (pair.b === null))
     throw new ApiError(422, 'crawl_a_id and crawl_b_id must be supplied together', {
       code: 'validation_error',
     });
   let query = new WorkspaceScope(workspaceId)
     .selectFrom(db, 'site_change_snapshots')
-    .selectAll()
+    .select(CHANGE_COLUMNS)
     .where('project_id', '=', projectId)
     // Snapshots written for page reruns before they stopped writing any.
     .where('crawl_b_id', 'not in', (eb) =>
@@ -367,7 +452,6 @@ function changeSummary(snapshot: ChangeSnapshot | undefined) {
       analyzer_version: policy.site_health.change_intel.analyzer_version,
       page_analyzer_version: '',
       extractor_version: '',
-      source_analysis_ids: [],
       coverage: {},
       summary: {},
       limitations: ['No persisted crawl comparison is available.'],
@@ -383,7 +467,6 @@ function changeSummary(snapshot: ChangeSnapshot | undefined) {
     analyzer_version: snapshot.analyzer_version,
     page_analyzer_version: snapshot.page_analyzer_version,
     extractor_version: snapshot.extractor_version,
-    source_analysis_ids: strings(snapshot.source_analysis_ids),
     coverage: record(snapshot.coverage),
     summary: record(snapshot.summary),
     limitations: strings(snapshot.limitations),

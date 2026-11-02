@@ -15,7 +15,8 @@ import { resolveProjectRequestScope, type ProjectRequestScope } from '@/lib/proj
 import { runsQueries } from '@/lib/api/runs';
 import { useMarketVisibility } from '@/lib/visibility/use-market-visibility';
 import { useSurfaceRates } from '@/lib/visibility/use-surface-rates';
-import { visibilityApi, visibilityQueries } from '@/lib/api/visibility';
+import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import {
   findActiveRun,
   isEvidenceTab,
@@ -215,6 +216,7 @@ function resolvedSelection(
         selection_mode?: string;
         source_audit_ids?: string[];
       }
+    | null
     | undefined,
 ) {
   return {
@@ -265,14 +267,11 @@ export function useVisibilityQueries(
     granularity: filters.granularity,
     cohort: filters.cohort,
   };
-  const trendOptions = {
-    queryKey: queryKeys.visibility.trends(projectId ?? '', trendParams),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      visibilityApi.getVisibilityTrends(requestScope.projectId, trendParams, {
-        signal,
-        workspaceId: requestScope.workspaceId,
-      }),
-  };
+  const trendOptions = visibilityQueries.trends(
+    requestScope.workspaceId,
+    requestScope.projectId,
+    trendParams,
+  );
   const trendQuery = useQuery({
     ...trendOptions,
     enabled: requestScope.enabled && filters.activeTab === 'trends',

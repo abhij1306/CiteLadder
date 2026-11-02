@@ -81,16 +81,20 @@ function NativeButton({
       disabled={props.disabled || pending}
       className={buttonClass(variant, size, opensPopup, cn('relative', className))}
     >
+      {/* Pending never resizes the button: the label keeps its box (hidden)
+          and the spinner takes its place inside it, so nothing beside the
+          button moves when it is pressed. The pending label is what
+          assistive technology hears. */}
       <span
         aria-hidden={pending || undefined}
-        className={cn('inline-flex items-center gap-2', pending && 'hidden')}
+        className={cn('inline-flex items-center gap-2', pending && 'invisible')}
       >
         {children}
       </span>
       {pending ? (
-        <span className="inline-flex items-center justify-center gap-2">
+        <span className="absolute inset-0 inline-flex items-center justify-center">
           <Spinner />
-          {pendingLabel ?? children}
+          <span className="sr-only">{pendingLabel ?? children}</span>
         </span>
       ) : null}
     </button>

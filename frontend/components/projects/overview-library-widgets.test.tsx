@@ -1,6 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { ApiError } from '@/lib/api/errors';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 
@@ -17,9 +18,7 @@ vi.mock('@/lib/overview/widget-queries', () => ({
   useLatestMovers: () => ({
     visibility: reads.visibility,
     movers: reads.movers,
-    comparable:
-      (reads.visibility.data as { comparison?: { status: string } } | undefined)?.comparison
-        ?.status === 'comparable',
+    comparison: (reads.visibility.data as { comparison?: unknown } | null | undefined)?.comparison,
   }),
   useLatestNearMisses: () => ({
     visibility: reads.visibility,
@@ -50,10 +49,18 @@ describe('Overview library widgets', () => {
   });
 
   it('says there is no run yet instead of loading perception forever', () => {
-    reads.visibility = { data: { audit_id: null }, isError: false };
+    // The latest projection is `null` when the project has no measured run.
+    reads.visibility = { data: null, isError: false };
     renderWithProviders(<PerceptionWidget project={project} />);
     const region = screen.getByRole('region', { name: 'Perception' });
-    expect(within(region).getByText('No completed runs yet.')).toBeVisible();
+    expect(within(region).getByText('No measured run yet.')).toBeVisible();
+  });
+
+  it('says there is no run yet instead of loading top movers forever', () => {
+    reads.visibility = { data: null, isError: false };
+    renderWithProviders(<TopMoversWidget project={project} />);
+    const region = screen.getByRole('region', { name: 'Top movers' });
+    expect(within(region).getByText('No measured run yet.')).toBeVisible();
   });
 
   it('shows the latest-run read failure the perception widget waits on', () => {
@@ -66,16 +73,80 @@ describe('Overview library widgets', () => {
     expect(within(region).getByRole('button', { name: /retry/i })).toBeVisible();
   });
 
-  it('says why top movers are empty before a comparable run', () => {
+  it.each([
+    ['Perception', PerceptionWidget],
+    ['Top movers', TopMoversWidget],
+    ['Share of voice', ShareOfVoiceWidget],
+    ['Retrieved versus cited', RetrievalWidget],
+  ])('says the %s results are still being prepared, not missing or failed', (name, Widget) => {
+    reads.visibility = Object.assign(
+      { data: undefined, isError: true },
+      {
+        error: new ApiError('Metrics not available for audit', 404, '', undefined, {
+          code: 'visibility_metrics_pending',
+        }),
+        refetch: vi.fn(),
+        isFetching: false,
+      },
+    );
+    renderWithProviders(<Widget project={project} />);
+    const region = screen.getByRole('region', { name });
+    expect(within(region).getByText('Results are still being prepared.')).toBeVisible();
+    expect(within(region).queryByText('No measured run yet.')).toBeNull();
+    expect(within(region).queryByRole('button', { name: /retry/i })).toBeNull();
+  });
+
+  it.each([
+    ['no_baseline', 0, 'No earlier run to compare with yet.'],
+    ['no_baseline', 2, 'No earlier run used the same settings and scoring to compare with.'],
+    ['changed_context', 0, 'The earlier run used different settings, so sources are not compared.'],
+    ['matched_subset', 0, 'The earlier run used different settings, so sources are not compared.'],
+    [
+      'partial_coverage',
+      0,
+      'The latest or earlier run did not finish every answer, so shares would mislead.',
+    ],
+    [
+      'coverage_unavailable',
+      0,
+      'The latest or earlier run has no expected-answer count, so its coverage cannot be checked.',
+    ],
+    ['no_observations', 0, 'The latest or earlier run recorded no answers to compare.'],
+    [
+      'identity_unavailable',
+      0,
+      "This run's settings could not be identified, so it is not compared.",
+    ],
+  ])('says why top movers are empty when the comparison is %s', (status, skipped, message) => {
     reads.visibility = {
       data: {
         audit_id: AUDIT,
-        comparison: { status: 'no_baseline', baseline_audit_ids: [] },
+        comparison: { status, baseline_audit_ids: [], skipped_runs: skipped },
       },
       isError: false,
     };
     renderWithProviders(<TopMoversWidget project={project} />);
-    expect(screen.getByText('No comparable earlier run to compare with yet.')).toBeVisible();
+    expect(screen.getByText(message)).toBeVisible();
+  });
+
+  it('says why the movers read could not compare the runs it was given', () => {
+    reads.visibility = {
+      data: { audit_id: AUDIT, comparison: { status: 'comparable', baseline_audit_ids: [AUDIT] } },
+      isError: false,
+    };
+    reads.movers = {
+      data: {
+        dimension: 'domain',
+        comparison_status: 'invalid_baseline',
+        risers: [],
+        fallers: [],
+      },
+      isError: false,
+    };
+    renderWithProviders(<TopMoversWidget project={project} />);
+    expect(
+      screen.getByText('The earlier run does not finish before the latest one starts.'),
+    ).toBeVisible();
   });
 
   it('lists risers and fallers by percentage-point change', () => {

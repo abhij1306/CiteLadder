@@ -6,7 +6,6 @@ import { FilterChoice } from '@/components/ui/filter-bar';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { httpErrorStatus } from '@/lib/api/errors';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LegendSwatch } from '@/components/ui/chart';
 import type { DataTone } from '@/components/ui/data-tone';
@@ -23,6 +22,7 @@ import { RankingRowsTable } from '@/components/visibility/ranking-rows';
 import { EngineComparison } from '@/components/visibility/engine-comparison';
 import { SurfaceRatesPanel } from '@/components/visibility/surface-rates';
 import type { SurfaceRates, Visibility, VisibilityTrendPoint } from '@/lib/api/types';
+import { isMetricsPending } from '@/lib/api/visibility-queries';
 import {
   formatPosition,
   formatPositionExact,
@@ -56,7 +56,8 @@ export function VisibilityTrends({
   onEvidence,
 }: Readonly<{
   query: UseQueryResult<VisibilityTrendPoint[], unknown>;
-  visibilityQuery: UseQueryResult<Visibility, unknown>;
+  /** `null` data: nothing measured for the selection (see `visibilityQueries.project`). */
+  visibilityQuery: UseQueryResult<Visibility | null, unknown>;
   engineFilter: VisibilityFilters['engine'];
   surfaceRatesQuery: UseQueryResult<SurfaceRates, unknown>;
   /** Non-null only while the surface filter names an observed surface. */
@@ -70,16 +71,19 @@ export function VisibilityTrends({
   // URL-held so a focused comparison survives a reload and can be linked to.
   const [focused, setFocused] = useUrlState('brand', optionalStringUrlCodec);
   const selected = visibilityQuery.data;
+  // Nothing measured, results still being written and a failed read are three
+  // different answers. Metrics not written yet is the normal state for the
+  // seconds after a run ends; reporting it as an error told readers their
+  // results were lost.
+  if (selected === null)
+    return <QueryState kind="empty" inline message="No measured run for this selection yet." />;
+  if (isMetricsPending(visibilityQuery.error))
+    return (
+      <Alert tone="info">
+        Results for this run are still being prepared. They appear here as soon as they are ready.
+      </Alert>
+    );
   if (visibilityQuery.isError) {
-    // A 404 here is not a failure: the run exists but its results have not been
-    // written yet, which is the normal state for the seconds after a run ends.
-    // Reporting that as an error told readers their results were lost.
-    if (httpErrorStatus(visibilityQuery.error) === 404)
-      return (
-        <Alert tone="info">
-          Results for this run are still being prepared. They appear here as soon as they are ready.
-        </Alert>
-      );
     return (
       <QueryState
         kind="error"
