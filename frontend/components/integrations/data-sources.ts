@@ -109,11 +109,12 @@ export function useDataSources(
 }
 
 /**
- * Everything a new property changes: its own mapping, readiness and the
- * projections it feeds. Refreshed at once rather than after the stale time, so
- * the page shows the import starting instead of the old empty state.
+ * Everything a property mapping or a settled import changes: mappings,
+ * readiness and every projection fed by imported rows. Refreshed at once
+ * rather than after the stale time, so a page shows the import starting, or
+ * its rebuilt reports, instead of the old state.
  */
-export function useRefreshAfterMapping() {
+export function useRefreshImportedReads() {
   const queryClient = useQueryClient();
   return useCallback(
     () =>
@@ -123,6 +124,7 @@ export function useRefreshAfterMapping() {
           queryKeys.performance.all,
           queryKeys.demand.all,
           queryKeys.aiTraffic.all,
+          queryKeys.searchIntelligence.all,
         ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
       ),
     [queryClient],

@@ -48,7 +48,11 @@ export function detectCannibalization(rows: QueryInput[]): Evaluation {
         p.DEMAND_SIGNAL_CANNIBALIZATION,
         query,
         first.url,
-        { impressions: total, qualifying_page_count: qualified.length },
+        {
+          impressions: total,
+          position: aggregate(group).position,
+          qualifying_page_count: qualified.length,
+        },
         {
           source_metric_row_ids: unique(qualified.flatMap((r) => r.source_metric_row_ids)),
           source_artifact_ids: unique(qualified.flatMap((r) => r.source_artifact_ids)),
@@ -286,7 +290,12 @@ export function detectTrends(rows: QueryInput[], windowEnd: string): Evaluation 
         type,
         query,
         onlyOf(pages) ?? '',
-        { impressions: prior + recent, prior_impressions: prior, recent_impressions: recent },
+        {
+          impressions: prior + recent,
+          position: a.position,
+          prior_impressions: prior,
+          recent_impressions: recent,
+        },
         a,
         {
           resolved_pages: pages,

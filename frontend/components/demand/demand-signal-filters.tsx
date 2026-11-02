@@ -29,10 +29,43 @@ function detectorStatus(state: string | undefined): string | null {
 }
 
 /**
+ * The status of a filter listing several detectors' signals: theirs when they
+ * agree, else partial, so the status always describes every signal counted.
+ */
+function filterStatus(states: readonly (string | undefined)[]): string | null {
+  const statuses = new Set(states.map(detectorStatus));
+  const [only] = statuses;
+  if (statuses.size === 1) return only ?? null;
+  return 'Partial';
+}
+
+type Detector = (typeof DEMAND_DETECTORS)[number];
+
+/** The hint for a filter: each detector's rule, then what limited it. */
+function DetectorHint({
+  detectors,
+  states,
+}: Readonly<{ detectors: readonly Detector[]; states: ReturnType<typeof detectorStates> }>) {
+  const several = detectors.length > 1;
+  const label = several
+    ? `How the ${detectors.map((detector) => detector.label).join(' and ')} detectors work`
+    : `How the ${detectors[0]?.label} detector works`;
+  const text = detectors
+    .map((detector) =>
+      [
+        several ? `${detector.label}: ${detector.rule}` : detector.rule,
+        ...(states[detector.key]?.limitations ?? []),
+      ].join(' '),
+    )
+    .join(' ');
+  return <InfoHint label={label}>{text}</InfoHint>;
+}
+
+/**
  * The filters in the signals table's control band. Each filter is a pressed-
- * state button carrying its signal count and, for a detector's filter, that
- * detector's status when it did not run in full; the hint beside it gives the
- * detector's rule.
+ * state button carrying its signal count and, for a detector's filter, the
+ * status of the detectors it counts when they did not run in full; the hint
+ * beside it gives each detector's rule.
  */
 export function DemandSignalFilters({
   snapshot,
@@ -54,9 +87,10 @@ export function DemandSignalFilters({
         // Branded stays hidden while empty, but a tab the user has already
         // selected must remain visible to switch away from.
         if (tab === 'branded' && count === 0 && activeTab !== tab) return null;
-        const detector = DEMAND_DETECTORS.find((entry) => entry.tab === tab);
-        const state = detector ? detectors[detector.key] : undefined;
-        const status = detector ? detectorStatus(state?.state) : null;
+        const counted = DEMAND_DETECTORS.filter((entry) => entry.tab === tab);
+        const status = counted.length
+          ? filterStatus(counted.map((entry) => detectors[entry.key]?.state))
+          : null;
         return (
           <Inline as="span" key={tab} gap="tight">
             <Button
@@ -68,11 +102,7 @@ export function DemandSignalFilters({
               {status ? <span className="text-muted">{` · ${status}`}</span> : null}
               <span className="text-muted tabular-nums">{count}</span>
             </Button>
-            {detector ? (
-              <InfoHint label={`How the ${detector.label} detector works`}>
-                {[detector.rule, ...(state?.limitations ?? [])].join(' ')}
-              </InfoHint>
-            ) : null}
+            {counted.length ? <DetectorHint detectors={counted} states={detectors} /> : null}
           </Inline>
         );
       })}

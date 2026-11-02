@@ -12,7 +12,12 @@ import { normalizeQuery } from './classification.ts';
 import { resolveOwnedPages } from './page-equivalence.ts';
 import { stableHash, unique } from './projection.ts';
 import { compareText } from '../text-order.ts';
-import { selectedPartition, partitionQuality, partitionEpoch } from '../integrations/partitions.ts';
+import {
+  observesZero,
+  selectedPartition,
+  partitionQuality,
+  partitionEpoch,
+} from '../integrations/partitions.ts';
 
 const p = policy.demand;
 export type DemandScope = {
@@ -161,11 +166,7 @@ export async function buildQueryEvidence(db: Database, scope: DemandScope) {
   ];
   let state = p.QUERY_EVIDENCE_STATE_UNAVAILABLE;
   if (selected.length) state = p.QUERY_EVIDENCE_STATE_AVAILABLE;
-  else if (
-    artifacts.length &&
-    rows.length === material.length &&
-    quality.every((q) => q.revision !== null && q.flags.length === 0)
-  )
+  else if (artifacts.length && rows.length === material.length && quality.every(observesZero))
     state = p.QUERY_EVIDENCE_STATE_OBSERVED_ZERO;
   const snapshot = await db
     .insertInto('query_evidence_snapshots')

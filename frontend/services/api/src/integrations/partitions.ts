@@ -90,15 +90,60 @@ export async function searchConsoleAnchor(db: Database, workspaceId: string, pro
   );
 }
 
+/** The providers with an active property mapping into the project. */
+export async function mappedProviders(
+  db: Database,
+  scope: Pick<PartitionScope, 'workspaceId' | 'projectId'>,
+): Promise<ReadonlySet<string>> {
+  const rows = await db
+    .selectFrom('integration_property_mappings')
+    .select('provider')
+    .distinct()
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
+    .where('status', '=', 'active')
+    .execute();
+  return new Set(rows.map((row) => row.provider));
+}
+
+/** The provider a dataset is imported from, by its name prefix. */
+export const datasetProvider = (dataset: string) => dataset.split('_')[0] ?? dataset;
+
+// Flags naming which revision was selected rather than describing the selected
+// partition: a fallback to an older complete revision still observes its zeros.
+const revisionNotes = new Set(['partition_fallback', 'extract_contract_mismatch']);
+
+export type DayQuality = {
+  day: string;
+  revision: number | null;
+  flags: readonly string[];
+  not_yet_reported: boolean;
+};
+
+/**
+ * Whether a day's selected partition can observe a zero: it exists, carries
+ * no evidence flag, and is not a trailing Search Console day still unreported.
+ */
+export function observesZero(quality: DayQuality) {
+  return (
+    quality.revision !== null &&
+    !quality.not_yet_reported &&
+    quality.flags.every((flag) => revisionNotes.has(flag))
+  );
+}
+
 export async function partitionQuality(db: Database, scope: PartitionScope, dataset: string) {
-  const provider = dataset.split('_')[0];
+  const provider = datasetProvider(dataset);
+  // Search Console imports final data only, so days after its latest reported
+  // row are not yet reported: a distinct state, not a missing partition.
   const lagging =
     provider === 'gsc'
-      ? sql<boolean>`d.day > (select day from search_console)`
+      ? sql<boolean>`coalesce(d.day > (select day from search_console),false)`
       : sql<boolean>`false`;
   const result = await sql<{
     day: string;
     revision: number | null;
+    not_yet_reported: boolean;
     flags: unknown;
     artifact_ids: unknown;
     reporting_timezone: string | null;
@@ -108,15 +153,18 @@ export async function partitionQuality(db: Database, scope: PartitionScope, data
     with days as (select d::date as day from generate_series(${scope.start}::date,${scope.end}::date,interval '1 day') d),
     search_console as (select ${provider === 'gsc' ? latestSearchConsoleRow(scope.workspaceId, scope.projectId) : sql`null::date`} as day),
     revisions as (select d.day,r.resync_seq,r.property_ref,a.id,a.extract_metadata,${complete} as complete,
-      ${incompatibleLanding('a')} as incompatible
+      ${incompatibleLanding('a')} as incompatible, r.status='succeeded' as succeeded
       from days d join integration_sync_runs r on d.day between r.window_start and r.window_end
       join integration_connections connection on connection.id=r.connection_id and connection.workspace_id=r.workspace_id
-      left join integration_import_artifacts a on a.workspace_id=r.workspace_id and a.sync_run_id=r.id and a.dataset=${dataset}
-      where r.workspace_id=${scope.workspaceId}::uuid and r.project_id=${scope.projectId}::uuid and connection.provider=${provider}
-        and (a.id is not null or r.status<>'succeeded')),
-    selected as (select day,property_ref,max(resync_seq) filter(where complete) as revision,max(resync_seq) as newest
+      join integration_import_artifacts a on a.workspace_id=r.workspace_id and a.sync_run_id=r.id and a.dataset=${dataset}
+      where r.workspace_id=${scope.workspaceId}::uuid and r.project_id=${scope.projectId}::uuid and connection.provider=${provider}),
+    -- A newer revision is one that completed this dataset, or a successful run
+    -- whose extract was unusable. A run still in flight, failed or cancelled
+    -- before completing the dataset does not supersede the selected partition.
+    selected as (select day,property_ref,max(resync_seq) filter(where complete) as revision,
+      max(resync_seq) filter(where complete or succeeded) as newest
       from revisions group by day,property_ref)
-    select to_char(d.day,'YYYY-MM-DD') as day,max(s.revision) as revision,
+    select to_char(d.day,'YYYY-MM-DD') as day,max(s.revision) as revision,${lagging} as not_yet_reported,
       coalesce(jsonb_agg(distinct f.flag) filter(where f.flag is not null),'[]')
         || case when count(distinct v.extract_metadata->>'timeZone')>1 then '["timezone_mismatch"]'::jsonb else '[]'::jsonb end
         || case when count(distinct v.extract_metadata->>'currencyCode')>1 then '["currency_mismatch"]'::jsonb else '[]'::jsonb end as flags,
@@ -131,7 +179,7 @@ export async function partitionQuality(db: Database, scope: PartitionScope, data
         union select 'partition_fallback' where s.newest>s.revision
         union select 'extract_contract_mismatch' where exists(select 1 from revisions old
           where old.day=d.day and old.property_ref=s.property_ref and old.resync_seq=s.newest and old.incompatible)
-        union select 'unavailable' where s.revision is null or coalesce(${lagging},false)) f on true
+        union select 'unavailable' where s.revision is null and not ${lagging}) f on true
     group by d.day order by d.day`.execute(db);
   return result.rows.map((r) => ({
     ...r,

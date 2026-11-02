@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries } from '@tanstack/react-query';
 
+import { useRefreshImportedReads } from '@/components/integrations/data-sources';
 import { humanizeApiError } from '@/lib/api/errors';
 import { integrationsApi, type IntegrationSyncRun } from '@/lib/api/integrations';
 import { performanceApi, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
@@ -85,12 +86,10 @@ export function usePerformanceSync(projectId: string | null) {
   };
 }
 
-/** Refetch the screen once, when the batch's reports have been rebuilt. */
+/** Refetch every imported read once, when the batch's reports have been rebuilt. */
 function useRefreshWhenSettled(settled: boolean) {
-  const queryClient = useQueryClient();
+  const refresh = useRefreshImportedReads();
   useEffect(() => {
-    if (!settled) return;
-    void queryClient.invalidateQueries({ queryKey: queryKeys.performance.all });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.integrations.all });
-  }, [settled, queryClient]);
+    if (settled) void refresh();
+  }, [settled, refresh]);
 }

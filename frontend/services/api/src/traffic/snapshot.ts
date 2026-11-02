@@ -25,6 +25,8 @@ import {
   partitionQuality,
   partitionEpoch,
   searchConsoleAnchor,
+  mappedProviders,
+  datasetProvider,
 } from '../integrations/partitions.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import { projectHosts } from '../integrations/host-scope.ts';
@@ -246,10 +248,14 @@ async function scan(
   }
 }
 
+type PersistedWindow = { start: string; end: string; granularity: string };
+
 /**
  * The snapshots one refresh writes: the trigger window (display ranges only
  * where a granularity is missing), the presets ending at the Search Console
- * anchor, and the Demand policy window ending there too.
+ * anchor, the Demand policy window ending there too, and every other
+ * persisted non-preset window overlapping the trigger window, so a revised
+ * day never leaves an earlier custom range stale.
  */
 function planTargets(input: {
   displayOnly: boolean;
@@ -257,6 +263,7 @@ function planTargets(input: {
   windowEnd: string;
   anchor: string | null;
   existing: readonly string[];
+  overlapping: readonly PersistedWindow[];
   projectOrigin: string | undefined;
   allowedHosts: ReadonlySet<string>;
 }) {
@@ -310,6 +317,10 @@ function planTargets(input: {
   );
   if (!input.displayOnly && !covered)
     add(...demandWindow, p.TRAFFIC_DEFAULT_GRANULARITY, null, false);
+  const planned = new Set(targets.map((t) => `${t.start}|${t.end}|${t.grain}`));
+  for (const window of input.overlapping)
+    if (!planned.has(`${window.start}|${window.end}|${window.granularity}`))
+      add(window.start, window.end, window.granularity, null, false);
   return { targets, demandWindow };
 }
 
@@ -335,6 +346,21 @@ function executor(displayOnly: boolean): Executor {
           .where('window_end', '=', sql<Date>`${windowEnd}::date`)
           .execute()
       : [];
+    // Earlier preset windows are never read again; every other window is.
+    const overlapping = displayOnly
+      ? []
+      : await scope
+          .selectFrom(db, 'traffic_snapshots')
+          .select([
+            isoDateText(sql.ref('window_start')).as('start'),
+            isoDateText(sql.ref('window_end')).as('end'),
+            'granularity',
+          ])
+          .where('project_id', '=', projectId)
+          .where('preset_window_days', 'is', null)
+          .where('window_start', '<=', sql<Date>`${windowEnd}::date`)
+          .where('window_end', '>=', sql<Date>`${windowStart}::date`)
+          .execute();
     const allowedHosts = await projectHosts(db, task.workspace_id, projectId);
     const { targets, demandWindow } = planTargets({
       displayOnly,
@@ -342,6 +368,7 @@ function executor(displayOnly: boolean): Executor {
       windowEnd,
       anchor,
       existing: existing.map((row) => row.granularity),
+      overlapping,
       projectOrigin: origin?.root_url,
       allowedHosts,
     });
@@ -366,14 +393,20 @@ function executor(displayOnly: boolean): Executor {
       const verifying: string[] = [];
       const allQuality: Record<string, Awaited<ReturnType<typeof partitionQuality>>> = {};
       const qualityScope = { workspaceId: task.workspace_id, projectId, ...textSpan(targets) };
+      // Quality is not applicable to a provider with no property mapped into
+      // the project: its datasets are omitted rather than reported unavailable.
+      const mapped = await mappedProviders(trx, partitionScope);
+      const datasets = p.TRAFFIC_PROJECTED_DATASETS.filter((dataset) =>
+        mapped.has(datasetProvider(dataset)),
+      );
       // Reads and writes share the snapshot transaction, so they run in order.
-      for (const dataset of p.TRAFFIC_PROJECTED_DATASETS)
+      for (const dataset of datasets)
         allQuality[dataset] = await partitionQuality(trx, qualityScope, dataset); // NOSONAR
       if ((await partitionEpoch(trx, partitionScope)) !== epoch)
         throw new Error('Integration partitions changed during Traffic projection; retry');
       for (const target of targets) {
         const quality: Record<string, Awaited<ReturnType<typeof partitionQuality>>> = {};
-        for (const dataset of p.TRAFFIC_PROJECTED_DATASETS) {
+        for (const dataset of datasets) {
           quality[dataset] = allQuality[dataset]!.filter(
             (q) => q.day >= target.start && q.day <= target.end,
           );

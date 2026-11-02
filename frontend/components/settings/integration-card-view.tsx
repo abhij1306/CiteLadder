@@ -11,7 +11,7 @@ import {
   type GrantFamily,
   type GrantModel,
 } from '@/components/settings/grant-model';
-import { useRefreshAfterMapping } from '@/components/integrations/data-sources';
+import { useRefreshImportedReads } from '@/components/integrations/data-sources';
 import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -156,7 +156,7 @@ function ConnectCard({
  */
 function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
   // Disconnecting stops imports into the same projections a new property feeds.
-  const refresh = useRefreshAfterMapping();
+  const refresh = useRefreshImportedReads();
   const [open, setOpen] = useState(false);
   const title = FAMILY_META[grant.family].title;
   const [connection] = grant.connections;

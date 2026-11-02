@@ -31,7 +31,7 @@ import { PropertyChoice } from './property-choice';
 import {
   oauthErrorMessage,
   useDataSources,
-  useRefreshAfterMapping,
+  useRefreshImportedReads,
   type SourceStep,
 } from './data-sources';
 
@@ -45,7 +45,7 @@ function useOAuthReturn() {
     connected: params.get('connected'),
     error: params.get('error'),
   }));
-  const refresh = useRefreshAfterMapping();
+  const refresh = useRefreshImportedReads();
   useEffect(() => {
     if (!result.connected && !result.error) return;
     if (result.connected) void refresh();

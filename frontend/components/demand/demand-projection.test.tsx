@@ -87,6 +87,7 @@ const snapshot = {
     detectors: {
       striking_distance: { state: 'available' },
       property_relative_ctr_gap: { state: 'unavailable' },
+      high_impression_low_ctr: { state: 'available' },
       query_trends: { state: 'insufficient_history' },
     },
   },
@@ -189,8 +190,9 @@ describe('DemandProjection', () => {
     // No section heading: the page title already names the page.
     expect(screen.queryByRole('heading', { name: 'Signals' })).not.toBeInTheDocument();
 
-    // Each filter carries its count once, and its detector's status when that
-    // detector did not run in full, including one the snapshot never reported.
+    // Each filter carries its count once, and its detectors' status when they
+    // did not run in full, including one the snapshot never reported. CTR gaps
+    // counts the low-CTR signal, whose detector ran, beside an unavailable one.
     const filters = screen
       .getAllByRole('button', { pressed: false })
       .concat(screen.getAllByRole('button', { pressed: true }))
@@ -199,11 +201,13 @@ describe('DemandProjection', () => {
       expect.arrayContaining([
         'Striking distance1',
         'Cannibalization · Not reported0',
-        'CTR gaps · Unavailable1',
+        'CTR gaps · Partial1',
         'Trends · Needs more history0',
       ]),
     );
-    expect(screen.getByRole('button', { name: 'How the CTR gap detector works' })).toBeVisible();
+    expect(
+      screen.getByRole('button', { name: 'How the CTR gap and Low CTR detectors work' }),
+    ).toBeVisible();
     // Caveats shared by the signals sit behind one hint, not a row.
     expect(screen.getByRole('button', { name: 'Data caveats' })).toBeVisible();
     expect(screen.queryByText('Privacy-filtered queries may be omitted.')).not.toBeInTheDocument();
@@ -374,6 +378,34 @@ describe('DemandProjection', () => {
     // The rule first, then the snapshot's own reason the detector is held back.
     expect((await screen.findByRole('tooltip')).textContent).toMatch(
       /last two 14-day windows\..* At least 28 days of coverage are required\.$/,
+    );
+  });
+
+  it('shows no CTR gaps status once both detectors it counts ran, naming each in its hint', async () => {
+    vi.mocked(demandApi.getLatest).mockResolvedValue({
+      ...snapshot,
+      summary: {
+        ...snapshot.summary,
+        detectors: {
+          ...snapshot.summary.detectors,
+          property_relative_ctr_gap: {
+            state: 'available',
+            limitations: ['No cohort reached 20 queries.'],
+          },
+        },
+      },
+    });
+    const user = userEvent.setup();
+    renderProjection();
+
+    expect((await screen.findByRole('button', { name: /^CTR gaps/ })).textContent).toBe(
+      'CTR gaps1',
+    );
+    await user.hover(
+      screen.getByRole('button', { name: 'How the CTR gap and Low CTR detectors work' }),
+    );
+    expect((await screen.findByRole('tooltip')).textContent).toMatch(
+      /^CTR gap: Queries with .* No cohort reached 20 queries\. Low CTR: Non-branded queries and pages /,
     );
   });
 
