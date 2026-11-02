@@ -8,7 +8,9 @@
  * in its own transaction: the terminal publication, an analysis appended over
  * a finalized one, a duplicate alias retiring analyses. Architecture findings
  * are written current. The Issues reads then filter one indexed flag instead of
- * unnesting every current analysis's evaluation list on every query.
+ * unnesting every current analysis's evaluation list on every query, and the
+ * same refresh rewrites the crawl's persisted Issues catalog
+ * (`issue-catalog.ts`).
  *
  * The flag is a derived projection: issues and evaluations stay as written, and
  * the analyses keep the exact evaluation ids the flag is computed from.
@@ -16,13 +18,11 @@
 import { sql } from 'kysely';
 
 import type { Database } from '../db/database.ts';
+import { persistIssueCatalog } from './issue-catalog.ts';
 import type { Crawl } from './task-fence.ts';
 
 /** Recompute the flag for every issue of the crawl, writing only the rows that change. */
-export async function refreshIssueCurrency(
-  db: Database,
-  crawl: Pick<Crawl, 'id' | 'workspace_id'>,
-): Promise<void> {
+export async function refreshIssueCurrency(db: Database, crawl: Crawl): Promise<void> {
   await sql`
     with current_evaluation as (
       select unnest(a.source_evaluation_ids) as id from site_page_analyses a
@@ -43,4 +43,5 @@ export async function refreshIssueCurrency(
     from currency c
     where i.id = c.id and i.workspace_id = ${crawl.workspace_id}
       and i.is_current is distinct from c.current`.execute(db);
+  await persistIssueCatalog(db, crawl);
 }

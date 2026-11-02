@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from '../src/db/database.ts';
+import { refreshActionStatus } from '../src/opportunities/action-status.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import {
@@ -186,6 +187,8 @@ function revision(db: Database, workspace: string, project: string, action: stri
         created_at: now,
       })
       .execute();
+    // As the output writer does in the transaction that links the output.
+    await refreshActionStatus(trx, workspace, action);
     return revisionId;
   });
 }

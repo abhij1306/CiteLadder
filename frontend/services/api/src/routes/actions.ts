@@ -23,6 +23,7 @@ const publicWrite = { exposure: 'both', scope: 'actions:write' } as const;
 export const actionRoutes = [
   defineGetRoute({
     family,
+    authorize: 'active-project',
     exposure: 'both',
     path: '/api/v1/projects/{project_id}/actions',
     params: {

@@ -12,7 +12,6 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
 import { enqueueTask } from '../referrals/enqueue.ts';
-import { effectiveStatus } from '../opportunities/action-status.ts';
 import { linkCandidates, linkRequests } from './internal-link-candidates.ts';
 import { loadLinkPages, type LinkScope } from './internal-link-pages.ts';
 
@@ -35,7 +34,7 @@ async function attachActions(db: Database, scope: LinkScope, analysis: InternalL
   if (!analysis.recommendations.length) return;
   const actions = await db
     .selectFrom('actions')
-    .select(['id', 'target_url', effectiveStatus().as('status')])
+    .select(['id', 'target_url', 'effective_status as status'])
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
     .where('target_url', 'in', [

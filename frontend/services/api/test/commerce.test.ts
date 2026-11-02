@@ -16,6 +16,7 @@ import { enqueue } from './referral-fixtures.ts';
 import { actionRow, opportunityRow } from './opportunity-fixtures.ts';
 import { prompt } from './prompt-fixtures.ts';
 import { commerceHits } from '../src/opportunities/refresh-hits.ts';
+import { updateActionStatus } from '../src/opportunities/actions.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
@@ -643,11 +644,7 @@ describe('decisions and persisted reads', () => {
       .insertInto('commerce_shelf_snapshots')
       .values(snapshot(later, new Date('2026-10-02T00:00:00Z'), 0))
       .execute();
-    await db
-      .updateTable('actions')
-      .set({ status: 'dismissed' })
-      .where('id', '=', action.id)
-      .execute();
+    await updateActionStatus(db, t.workspaceId, action.id, 'dismissed', t.userId);
     const failed = (await call<Shelf>(path)).body;
     expect(failed.snapshot).toMatchObject({
       product_visibility: null,

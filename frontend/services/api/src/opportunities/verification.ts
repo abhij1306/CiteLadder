@@ -19,6 +19,7 @@ import {
 } from './verification-decisions.ts';
 import { evidenceFor, SOURCE_CHECK_KINDS, type Source } from './verification-evidence.ts';
 import { buildVerificationResult, type Declaration } from './verification-result.ts';
+import { refreshActionStatus } from './action-status.ts';
 const p = policy.opportunity.opportunities;
 async function verificationSource(db: Database, task: QueueTask, project: string): Promise<Source> {
   const payload = record(task.payload);
@@ -198,6 +199,8 @@ async function recordVerification(
       })
       .onConflict((oc) => oc.columns(['workspace_id', 'idempotency_key']).doNothing())
       .execute();
+    // The newest observation decides whether the Action reads as measuring or done.
+    await refreshActionStatus(trx, task.workspace_id, declaration.action_id);
   });
 }
 

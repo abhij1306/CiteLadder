@@ -58,6 +58,7 @@ export type SourceQuery = {
 };
 
 type Scope = ReturnType<typeof scopeOf>;
+type ScopeQuery = ReturnType<typeof scopeQuery>;
 
 function sourcePosition(query: SourceQuery, filters: Record<string, unknown>) {
   if (query.asOf !== null && query.asOf.offsetSeconds === null)
@@ -84,7 +85,7 @@ function sourcePosition(query: SourceQuery, filters: Record<string, unknown>) {
 }
 
 /** Every answer in the selection up to `as_of`, with the prompt it answered. */
-function scopeOf(db: Database, selection: RunSelection, asOf: string) {
+function scopeQuery(db: Database, selection: RunSelection, asOf: string) {
   return evidenceScope(db, selection)
     .where('ra.created_at', '<=', sql<Date>`${asOf}::timestamptz`)
     .select([
@@ -92,9 +93,10 @@ function scopeOf(db: Database, selection: RunSelection, asOf: string) {
       // Coalesced to the frozen text: a deleted prompt's snapshot has no id.
       sql<string>`coalesce(snapshot.prompt_id::text, snapshot.text)`.as('prompt_key'),
       observedAt.as('observed_at'),
-    ])
-    .as('scope');
+    ]);
 }
+
+const scopeOf = (query: ScopeQuery) => query.as('scope');
 
 /**
  * The citations the rows count. A domain row is filtered by its publisher
@@ -183,16 +185,8 @@ export async function getVisibilitySources(
     baselineAuditIds: [...(query.baselineAuditIds ?? [])].sort(compareText),
   };
   const { position, asOf } = sourcePosition(query, filters);
-  const scope = scopeOf(db, selection, asOf);
-  const denominator = await db
-    .selectFrom(scope)
-    .select([
-      sql<string>`count(scope.analysis_id)`.as('responses'),
-      sql<string>`count(distinct scope.prompt_key)`.as('prompts'),
-    ])
-    .executeTakeFirstOrThrow();
-  const responses = Number(denominator.responses);
-  const prompts = Number(denominator.prompts);
+  const answers = scopeQuery(db, selection, asOf);
+  const scope = scopeOf(answers);
   const selected = citationSelection(db, scope, selection, query, pages);
   const base = db.with(
     (cte) => cte('selected').materialized(),
@@ -227,8 +221,12 @@ export async function getVisibilitySources(
         ? sql<boolean>`responses > ${Number(position[1])} or (responses = ${Number(position[1])} and key collate "C" < ${position[2]})`
         : sql<boolean>`responses < ${Number(position[1])} or (responses = ${Number(position[1])} and key collate "C" > ${position[2]})`,
     );
+  // One round trip: the rates' denominator, the totals and the page of rows.
   const summary = await grouped
     .selectNoFrom([
+      sql<{ responses: number; prompts: number }>`(select jsonb_build_object(
+        'responses', count(answer.analysis_id), 'prompts', count(distinct answer.prompt_key))
+        from (${answers}) answer)`.as('denominator'),
       sql<number>`(select count(*)::int from groups)`.as('total'),
       sql<number>`(select coalesce(sum(annotations), 0)::int from groups)`.as('citations'),
       sql<
@@ -242,6 +240,8 @@ export async function getVisibilitySources(
       >`(select coalesce(jsonb_agg(to_jsonb(page)), '[]'::jsonb) from (${page}) page)`.as('rows'),
     ])
     .executeTakeFirstOrThrow();
+  const responses = Number(summary.denominator.responses);
+  const prompts = Number(summary.denominator.prompts);
   const total = summary.total;
   const totalCitations = summary.citations;
   const rows = summary.rows.slice(0, query.limit);
@@ -287,9 +287,12 @@ export async function getVisibilitySources(
       brands: [],
     };
   });
-  await attachPageLinks(db, selection, items);
-  if (pages) await attachRowMentions(db, selection, scope, items);
-  const retrieval = await retrievalCoverage(db, selection, asOf);
+  // Each step fills its own fields of the loaded rows, so they run together.
+  const [, , retrieval] = await Promise.all([
+    attachPageLinks(db, selection, items),
+    pages ? attachRowMentions(db, selection, scope, items) : undefined,
+    retrievalCoverage(db, selection, asOf),
+  ]);
   await attachRetrieved(db, selection, { asOf, pages, coverage: retrieval, items });
   const hasPrevious = backwards ? summary.rows.length > query.limit : Boolean(position);
   const response: SourcesResponse = {
@@ -420,26 +423,29 @@ async function attachRowMentions(
     .innerJoin(scope, 'scope.analysis_id', 'citation.analysis_id')
     .where('citation.workspace_id', '=', selection.workspaceId)
     .where('citation.url', 'in', urls);
-  const brand = await cited
-    .innerJoin('brand_mentions as mention', 'mention.analysis_id', 'citation.analysis_id')
-    .where('mention.brand_name', '!=', '')
-    .select([
-      'citation.url',
-      'mention.brand_name as name',
-      sql<string>`count(distinct mention.analysis_id)`.as('responses'),
-    ])
-    .groupBy(['citation.url', 'mention.brand_name'])
-    .execute();
-  const competitor = await cited
-    .innerJoin('competitor_mentions as mention', 'mention.analysis_id', 'citation.analysis_id')
-    .where('mention.competitor_name', '!=', '')
-    .select([
-      'citation.url',
-      'mention.competitor_name as name',
-      sql<string>`count(distinct mention.analysis_id)`.as('responses'),
-    ])
-    .groupBy(['citation.url', 'mention.competitor_name'])
-    .execute();
+  const [brand, competitor, identities] = await Promise.all([
+    cited
+      .innerJoin('brand_mentions as mention', 'mention.analysis_id', 'citation.analysis_id')
+      .where('mention.brand_name', '!=', '')
+      .select([
+        'citation.url',
+        'mention.brand_name as name',
+        sql<string>`count(distinct mention.analysis_id)`.as('responses'),
+      ])
+      .groupBy(['citation.url', 'mention.brand_name'])
+      .execute(),
+    cited
+      .innerJoin('competitor_mentions as mention', 'mention.analysis_id', 'citation.analysis_id')
+      .where('mention.competitor_name', '!=', '')
+      .select([
+        'citation.url',
+        'mention.competitor_name as name',
+        sql<string>`count(distinct mention.analysis_id)`.as('responses'),
+      ])
+      .groupBy(['citation.url', 'mention.competitor_name'])
+      .execute(),
+    brandIdentities(db, selection.projectId),
+  ]);
   const found = new Map<
     string,
     { kind: 'brand' | 'competitor'; name: string; responses: number }[]
@@ -454,7 +460,6 @@ async function attachRowMentions(
       found.set(row.url, list);
     }
   }
-  const identities = await brandIdentities(db, selection.projectId);
   for (const row of items) {
     const named = found.get(row.key);
     if (!named?.length) continue;

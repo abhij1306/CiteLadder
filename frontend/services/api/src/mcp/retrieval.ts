@@ -6,7 +6,6 @@ import { jsonObject, strings } from '../db/json.ts';
 import { currentIssueFilter } from '../site-health/reads/page-rows.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { parseUuid } from '../http/uuid.ts';
-import { effectiveStatus } from '../opportunities/action-status.ts';
 import { getAction } from '../opportunities/actions.ts';
 import { getExecutionEvidence } from '../visibility/execution.ts';
 import { authorizedWorkspaceIds, authorizeProject } from './data.ts';
@@ -441,7 +440,7 @@ async function attachActionStatus(
   const status = row.action_id
     ? await db
         .selectFrom('actions')
-        .select(effectiveStatus().as('status'))
+        .select('effective_status as status')
         .where('id', '=', text(row.action_id))
         .where('workspace_id', '=', project.workspace_id)
         .where('project_id', '=', projectId)

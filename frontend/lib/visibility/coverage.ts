@@ -40,6 +40,7 @@ const NO_CHANGE: Record<string, string> = {
   no_observations: 'one of the measurements recorded no answers.',
   changed_context: 'the chosen earlier run used different settings.',
   identity_unavailable: "this run's settings could not be identified.",
+  baseline_pending: 'the comparison with an earlier run is still being prepared.',
 };
 
 type Comparison = NonNullable<Visibility['comparison']>;

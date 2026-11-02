@@ -73,11 +73,62 @@ const panelFreeKey = (configuration: unknown) =>
   frozenComparisonKey(configuration, null, false, false);
 
 /**
- * Walk back from the selected run to the first compatible baseline. The walk
- * stops at the first match, so only the recent end of the history is read;
- * an explicitly named baseline may be older and is always reachable.
+ * The selected run against its baseline. A reader-named baseline is compared
+ * directly; otherwise the baseline is the one audit finalization persisted for
+ * the run, cohort and engine (`baselines.ts`), so every surface that reads it
+ * (Visibility, Overview) names the same run, and no read walks the history.
+ * A finalized run with no persisted baseline reads as `baseline_pending`,
+ * never as having none.
  */
 export async function compareSelection(
+  db: Database,
+  scope: RunScope,
+  current: SelectedRun,
+  selector: Selector & { baselineId: string | null },
+): Promise<VisibilityComparison> {
+  if (selector.baselineId) return walkBaseline(db, scope, current, selector);
+  if (current.completedAt === null) return emptyComparison();
+  const persisted = await persistedBaseline(db, current, selector);
+  if (persisted === undefined) return emptyComparison({ status: 'baseline_pending' });
+  if (persisted.baseline_audit_id === null)
+    return emptyComparison({ status: persisted.status, skipped_runs: persisted.skipped_runs });
+  const key = frozenComparisonKey(current.configuration, selector.engine);
+  const [previous] = await loadMeasuredRuns(db, scope, {
+    fromAt: null,
+    toAt: null,
+    auditId: persisted.baseline_audit_id,
+  });
+  const comparison =
+    key !== null && previous !== undefined
+      ? await candidateComparison(db, current, previous, selector, key)
+      : null;
+  if (comparison === null) return emptyComparison({ status: 'baseline_pending' });
+  return { ...comparison, skipped_runs: persisted.skipped_runs };
+}
+
+/** The baseline audit finalization persisted for the run and selector, if any. */
+export function persistedBaseline(
+  db: Database,
+  current: Pick<SelectedRun, 'auditId' | 'workspaceId'>,
+  selector: Selector,
+) {
+  return db
+    .selectFrom('audit_comparison_baselines')
+    .select(['status', 'baseline_audit_id', 'skipped_runs'])
+    .where('workspace_id', '=', current.workspaceId)
+    .where('audit_id', '=', current.auditId)
+    .where('cohort', '=', selector.cohort)
+    .where('logical_engine', 'is not distinct from', selector.engine)
+    .executeTakeFirst();
+}
+
+/**
+ * Walk back from the selected run to the first compatible baseline: the one
+ * rule every comparison follows. The walk stops at the first match, so only
+ * the recent end of the history is read; an explicitly named baseline may be
+ * older and is always reachable. Audit finalization persists its result.
+ */
+async function walkBaseline(
   db: Database,
   scope: RunScope,
   current: SelectedRun,
@@ -90,8 +141,27 @@ export async function compareSelection(
   const candidates = await loadMeasuredRuns(db, scope, {
     fromAt: null,
     toAt: current.completedAt,
-    ...(selector.baselineId ? {} : { newest: policy.visibility.selection_max_runs }),
+    ...(selector.baselineId
+      ? { auditId: selector.baselineId }
+      : { newest: policy.visibility.selection_max_runs }),
   });
+  return nearestBaseline(db, { ...current, completedAt: current.completedAt }, selector, {
+    key,
+    candidates,
+  });
+}
+
+/**
+ * The walk over loaded earlier runs, oldest first, for a completed run whose
+ * frozen key is `key`: the first compatible candidate, newest first, is the
+ * baseline; each incompatible one passed over is counted as skipped.
+ */
+export async function nearestBaseline(
+  db: Database,
+  current: SelectedRun & { completedAt: string },
+  selector: Selector & { baselineId: string | null },
+  { key, candidates }: { key: string; candidates: readonly MeasuredRun[] },
+): Promise<VisibilityComparison> {
   let skipped = 0;
   for (const previous of candidates.toReversed()) {
     if (previous.auditId === current.auditId || previous.completedAt >= current.completedAt) {

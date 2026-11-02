@@ -365,14 +365,15 @@ async function targetActions(
   const rows = await db
     .selectFrom('opportunities as o')
     .innerJoin('actions as a', 'a.id', 'o.action_id')
-    .select(['a.id', 'a.status', 'o.title'])
+    .select(['a.id', 'a.effective_status as status', 'o.title'])
     .where('o.workspace_id', '=', scope.workspaceId)
     .where('o.project_id', '=', scope.projectId)
     .where('a.workspace_id', '=', scope.workspaceId)
     .where('o.opportunity_type', '=', 'commerce')
     .where('o.target_key', '=', `${target.kind}:${target.id}`)
     .where('o.superseded_at', 'is', null)
-    .where('a.status', 'not in', SETTLED_ACTION_STATUSES)
+    // The status readers see: `done` exists only there, never as a stored decision.
+    .where('a.effective_status', 'not in', SETTLED_ACTION_STATUSES)
     .orderBy('o.priority_score', 'desc')
     .orderBy('a.id')
     .execute();

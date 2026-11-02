@@ -179,6 +179,7 @@ export async function syncActions(
           target_kind: group.target.kind,
           origin: a.ACTION_ORIGIN_EVIDENCE,
           status: a.ACTION_STATUS_OPEN,
+          effective_status: a.ACTION_STATUS_OPEN,
           ...groupFields(group, snapshotId),
           created_by_user_id: null,
           created_at: now,

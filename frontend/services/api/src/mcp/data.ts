@@ -14,7 +14,6 @@ import {
 } from './types.ts';
 import { holdsWrite, mcpPolicy } from './config.ts';
 import { rolesWith } from '../auth/workspace.ts';
-import { effectiveStatus } from '../opportunities/action-status.ts';
 import { appLink, recordPath } from './links.ts';
 import { containsPattern } from '../db/like.ts';
 
@@ -266,7 +265,7 @@ async function searchActions({
     .selectFrom('actions')
     .select(['id', 'project_id', 'target_label', 'approach'])
     .where('workspace_id', 'in', workspaces)
-    .where(effectiveStatus(), 'in', policy.opportunity.actions.ACTION_ACTIVE_STATUSES)
+    .where('effective_status', 'in', policy.opportunity.actions.ACTION_ACTIVE_STATUSES)
     .where((eb) => eb.or([like('target_label'), like('approach'), like('target_url')]));
   if (projectId) actions = actions.where('project_id', '=', projectId);
   for (const row of await actions

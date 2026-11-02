@@ -89,6 +89,7 @@ async function promoted(targetKey: string, superseded: boolean) {
       target_label: 'AI software',
       origin: 'evidence',
       status: 'open',
+      effective_status: 'open',
       families: JSON.stringify([]),
       approach: '',
       skill_id: '',

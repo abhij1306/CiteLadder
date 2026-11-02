@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql, type Insertable } from 'kysely';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { SiteCrawls } from '../src/generated/db-schema.ts';
+import { record } from '../src/db/json.ts';
 import { analyzePage } from '../src/site-health/analysis/analyze-page.ts';
 import { extractPageFacts } from '../src/site-health/analysis/facts.ts';
 import { pageAnalysisContext, writePageAnalysis } from '../src/site-health/analysis-rows.ts';
@@ -430,9 +431,24 @@ describe('terminal analysis publication', () => {
           .execute()
       ).map((row) => row.site_url_id);
 
+    // The persisted catalog's duplicate group, as the unfiltered Issues read serves it.
+    const catalogDuplicates = async () => {
+      const rows = await db
+        .selectFrom('site_issue_catalogs')
+        .select('items')
+        .where('crawl_id', '=', seed.crawlId)
+        .execute();
+      const group = rows
+        .flatMap((row) => (Array.isArray(row.items) ? row.items : []))
+        .map((item) => record(item))
+        .find((item) => item.rule_id === 'technical.duplicate_content');
+      return group?.affected_url_count ?? null;
+    };
+
     await finalize(seed);
     expect(await flagged()).toEqual(await derived());
     expect(await currentDuplicates()).toEqual([first.id, second.id].toSorted());
+    expect(await catalogDuplicates()).toBe(2);
 
     // `/a` is analyzed again over its finalized analysis: its findings stop
     // being current, and the new provisional analysis names none yet.
@@ -458,6 +474,8 @@ describe('terminal analysis publication', () => {
     });
     expect(await flagged()).toEqual(await derived());
     expect(await currentDuplicates()).toEqual([second.id]);
+    // The re-analysis rewrote the catalog in its own transaction.
+    expect(await catalogDuplicates()).toBe(1);
 
     await finalize(seed);
     expect(await flagged()).toEqual(await derived());
@@ -560,6 +578,13 @@ describe('crawl lifecycle', () => {
       failed_url_count: 1,
     });
     expect(await snapshots(seed.crawlId)).toHaveLength(1);
+    // The terminalization transaction persisted what the dashboard counts from now on.
+    expect((await crawlRow(seed.crawlId)).terminal_counters).toMatchObject({
+      analyzed: 1,
+      errors: 1,
+      queued: 0,
+      activity: { state: 'terminal', reason: 'terminal' },
+    });
     expect(await events(seed.crawlId, 'crawl.completed')).toHaveLength(1);
     expect((await tasksOf(seed.crawlId, 'change_intel')).map((task) => task.status)).toEqual([
       'queued',

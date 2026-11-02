@@ -114,6 +114,7 @@ const NOT_COMPARED: Readonly<Record<string, string>> = {
     'The latest or earlier run has no expected-answer count, so its coverage cannot be checked.',
   no_observations: 'The latest or earlier run recorded no answers to compare.',
   invalid_baseline: 'The earlier run does not finish before the latest one starts.',
+  baseline_pending: 'The comparison with an earlier run is still being prepared.',
 };
 
 function notCompared(status: string, skippedRuns = 0) {

@@ -25,7 +25,6 @@ import type { Database } from '../db/database.ts';
 import { wireUtc, utcTextOf } from '../db/timestamps.ts';
 import { groupBy } from '../lists.ts';
 import { compareText } from '../text-order.ts';
-import { effectiveStatus } from '../opportunities/action-status.ts';
 import { scopedPrompt } from '../prompts/prompts.ts';
 import { ratio } from './metrics.ts';
 import { answerStates, getPromptMetrics, outcomeCounts } from './prompts.ts';
@@ -204,7 +203,7 @@ async function implementationMarkers(
       'ie.id',
       'ie.action_id',
       'actions.target_label',
-      effectiveStatus().as('status'),
+      'actions.effective_status as status',
       utcTextOf(sql.ref('ie.declared_implemented_at')).as('implemented_at'),
     ])
     .where('ie.workspace_id', '=', scope.workspaceId)

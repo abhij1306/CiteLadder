@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { fanoutProjection } from '../src/analysis/fanout.ts';
 
 import type { Database } from '../src/db/database.ts';
+import { persistComparisonBaselines } from '../src/visibility/baselines.ts';
 import { Fixtures } from './support.ts';
 
 const now = () => new Date();
@@ -536,6 +537,8 @@ export class VisibilityFixtures extends Fixtures {
         created_at: now(),
       })
       .execute();
+    // Finalization persists the run's comparable baselines once its snapshot exists.
+    await persistComparisonBaselines(this.database, { workspaceId: tenant.workspaceId, auditId });
     return id;
   }
 

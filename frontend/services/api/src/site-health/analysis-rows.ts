@@ -17,6 +17,7 @@ import { createsIssue, type RuleEvaluation } from './analysis/rules.ts';
 import type { Facts } from './analysis/read-facts.ts';
 import { refreshIssueCurrency } from './issue-currency.ts';
 import type { Crawl } from './task-fence.ts';
+import { refreshTerminalCounters } from './terminal-counters.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
 const pa = policy.site_health.page_analysis;
@@ -391,6 +392,9 @@ export async function writePageAnalysis(
   await insertEvaluations(db, crawl, id, siteUrlId, artifactId, evaluations);
   // A provisional analysis names no current evaluations, so its issues are
   // written not current; only superseding a finalized analysis changes the set.
-  if (superseded.some((row) => row.finalized_at !== null)) await refreshIssueCurrency(db, crawl);
+  if (superseded.some((row) => row.finalized_at !== null)) {
+    await refreshIssueCurrency(db, crawl);
+    await refreshTerminalCounters(db, crawl);
+  }
   return { id, pageKind: result.assessment.page_kind };
 }

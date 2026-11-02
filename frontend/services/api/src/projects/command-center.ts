@@ -3,12 +3,12 @@ import { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import { sql, type Selectable } from 'kysely';
 import type { z } from 'zod';
 
-import { frozenComparisonKey } from '../analysis/comparison.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import type { Audits } from '../generated/db-schema.ts';
 import { listOpportunities } from '../opportunities/reads.ts';
+import { persistedBaseline } from '../visibility/comparison.ts';
 import { getRunVisibility, type VisibilityResponse } from '../visibility/dashboard.ts';
 import { compareText } from '../text-order.ts';
 import type { ProjectScope } from './brand-profile.ts';
@@ -38,6 +38,13 @@ function state(
     limitations,
   };
 }
+/**
+ * The selected run and the baseline its changes compare with: the one audit
+ * finalization persisted for the run's core cohort across all engines
+ * (`visibility/baselines.ts`), the same run Visibility compares with. Whole-run
+ * changes are like for like only when that comparison is `comparable`; any
+ * other status keeps its own name and leaves the changes unset.
+ */
 async function comparableAudits(db: Database, scope: ProjectScope, auditId: string | null) {
   const query = db
     .selectFrom('audits')
@@ -58,58 +65,30 @@ async function comparableAudits(db: Database, scope: ProjectScope, auditId: stri
     if (auditId) throw notFound('Completed command-center measurement');
     return null;
   }
-  const audits = await query
-    .where('market_id', 'is not distinct from', selected.market_id)
-    .where(sql<boolean>`coalesce(completed_at, created_at) <= ${new Date(instant(selected))}`)
-    .limit(policy.projects.command_center_max_audits)
-    .execute();
-  if (!audits.some((audit) => audit.id === selected.id)) audits.push(selected);
-  const ids = audits.map((audit) => audit.id);
-  const engines = await db
-    .selectFrom('audit_engine_snapshots')
-    .select(['audit_id', 'logical_engine'])
-    .where('audit_id', 'in', ids)
-    .execute();
-  const prompts = await db
-    .selectFrom('audit_prompt_snapshots')
-    .select(['audit_id', 'prompt_id', 'text'])
-    .where('audit_id', 'in', ids)
-    .where('cohort', '=', 'core')
-    .execute();
-  const engineNames = (id: string) =>
-    [
-      ...new Set(engines.filter((row) => row.audit_id === id).map((row) => row.logical_engine)),
-    ].sort(compareText);
-  const identities = new Map<string, string>();
-  const identity = (audit: Audit) => {
-    const cached = identities.get(audit.id);
-    if (cached) return cached;
-    const key = JSON.stringify([
-      frozenComparisonKey(audit.configuration) || audit.id,
-      audit.analyzer_version,
-      audit.benchmark_mode,
-      engineNames(audit.id),
-      [
-        ...new Set(
-          prompts
-            .filter((row) => row.audit_id === audit.id)
-            .map((row) => row.prompt_id ?? `text:${row.text}`),
-        ),
-      ].sort(compareText),
-    ]);
-    identities.set(audit.id, key);
-    return key;
-  };
-  const key = identity(selected);
-  const previous =
-    audits.find(
-      (audit) =>
-        audit.id !== selected.id && instant(audit) < instant(selected) && identity(audit) === key,
-    ) ?? null;
+  const [engines, baseline] = await Promise.all([
+    db
+      .selectFrom('audit_engine_snapshots')
+      .select('logical_engine')
+      .distinct()
+      .where('audit_id', '=', selected.id)
+      .execute(),
+    persistedBaseline(
+      db,
+      { auditId: selected.id, workspaceId: scope.workspaceId },
+      { cohort: policy.visibility.core_cohort, engine: null },
+    ),
+  ]);
+  const comparisonStatus = baseline?.status ?? 'baseline_pending';
+  const previousId =
+    comparisonStatus === 'comparable' ? (baseline?.baseline_audit_id ?? null) : null;
+  const previous = previousId
+    ? ((await query.where('id', '=', previousId).executeTakeFirst()) ?? null)
+    : null;
   return {
     selected,
     previous,
-    engines: engineNames(selected.id),
+    comparisonStatus,
+    engines: engines.map((row) => row.logical_engine).sort(compareText),
     historical: selected.id !== latest?.id,
   };
 }
@@ -356,6 +335,7 @@ async function measurement(
     benchmark_mode: audits.selected.benchmark_mode,
     logical_engines: audits.engines,
     comparable_audit_id: audits.previous?.id ?? null,
+    comparison_status: audits.comparisonStatus,
     metric_snapshot_id: snapshot.id,
     analyzer_version: snapshot.analyzer_version,
     scoring_rule_version: snapshot.scoring_rule_version,
@@ -379,6 +359,8 @@ export async function commandCenter(
     { mapping, crawl, demand, implementation },
     counted,
     inFlight,
+    measured,
+    resolved,
   ] = await Promise.all([
     visibility(db, scope, audits?.selected ?? null),
     visibility(db, scope, audits?.previous ?? null),
@@ -424,6 +406,9 @@ export async function commandCenter(
           .orderBy('created_at', 'desc')
           .limit(1)
           .executeTakeFirst(),
+    // Both depend only on the selected run and its baseline.
+    measurement(db, scope, audits),
+    resolvedActions(db, scope, audits),
   ]);
   const count = Number(counted.count);
   const times = [crawl?.completed_at, demand?.created_at].filter((at): at is Date => at != null);
@@ -496,12 +481,12 @@ export async function commandCenter(
       observed_at: audits ? instant(audits.selected) : null,
       limitations: trackLimitations(audits, previous),
     },
-    measurement: await measurement(db, scope, audits),
+    measurement: measured,
     state: metrics(current, previous),
     movements: movements(current, previous),
     actions: opportunities.items,
     action_order_version: order?.version ?? 0,
-    resolved_actions: await resolvedActions(db, scope, audits),
+    resolved_actions: resolved,
     report_available: Boolean(audits),
     stale: audits?.historical ?? false,
   };

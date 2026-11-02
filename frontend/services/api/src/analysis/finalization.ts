@@ -15,6 +15,7 @@ import { round } from './round.ts';
 import { getLogger } from '../logging.ts';
 import { compareText } from '../text-order.ts';
 import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
+import { persistComparisonBaselines } from '../visibility/baselines.ts';
 
 type ScopedTask = Selectable<AuditTasks> & { cohort: string };
 function coverage(tasks: ScopedTask[], completed: number) {
@@ -317,6 +318,10 @@ export function finalizeAudit(
     await transitionAudit(trx, workspaceId, auditId, 'reporting', at, 'aggregating metrics');
     const status = metric.total_failed ? 'partially_completed' : 'completed';
     await transitionAudit(trx, workspaceId, auditId, status, at, `audit ${status}`);
+    // The run's comparable baseline, by the one comparison rule, for every
+    // surface that reads it. It runs once the run reads as measured, so later
+    // runs it refreshes find it among their candidates.
+    await persistComparisonBaselines(trx, { workspaceId, auditId });
     await enqueueTrafficInsights(trx, { workspaceId, projectId: audit.project_id }, at);
     await auditEvent(
       trx,
