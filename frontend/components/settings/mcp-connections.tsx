@@ -1,7 +1,7 @@
 import { CopyButton } from '@/components/ui/copy-button';
 import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
-import { textRole } from '@/components/ui/typography';
+import { CodeToken, textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { claudeCodeCommand, MCP_SERVER_URL, mcpServersJson } from '@/lib/config/mcp-clients';
 
@@ -20,7 +20,8 @@ function Snippet({ label, value }: Readonly<{ label: string; value: string }>) {
           'type-caption overflow-x-auto font-mono whitespace-pre',
         )}
       >
-        <code>{value}</code>
+        {/* Block, so the first line sits on the well's inset, not a line-height below it. */}
+        <code className="block">{value}</code>
       </pre>
     </Stack>
   );
@@ -40,11 +41,17 @@ export function McpConnections() {
           title="Connect an AI assistant"
           description="Read your CiteLadder data from Claude Code, Claude Desktop, Cursor or any MCP client that speaks streamable HTTP, and make the changes you confirm."
         />
+        <Inline>
+          <span className={textRole('label', 'shrink-0')}>MCP URL</span>
+          <CodeToken>{MCP_SERVER_URL}</CodeToken>
+          <CopyButton value={MCP_SERVER_URL} variant="ghost" copiedLabel="MCP URL copied">
+            Copy
+          </CopyButton>
+        </Inline>
         <p className={textRole('body')}>
-          The MCP endpoint is <code>{MCP_SERVER_URL}</code>. Clients authenticate with the bearer
-          token set in the server&apos;s <code>MCP_TOKEN</code> environment variable; replace{' '}
-          <code>&lt;MCP_TOKEN&gt;</code> below with that value. MCP is off while{' '}
-          <code>MCP_TOKEN</code> is unset.
+          Clients authenticate with the bearer token set in the server&apos;s <code>MCP_TOKEN</code>{' '}
+          environment variable; replace <code>&lt;MCP_TOKEN&gt;</code> below with that value. MCP is
+          off while <code>MCP_TOKEN</code> is unset.
         </p>
       </Stack>
       <Snippet label="Claude Code" value={claudeCodeCommand()} />

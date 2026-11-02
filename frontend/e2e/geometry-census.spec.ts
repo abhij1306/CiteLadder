@@ -39,7 +39,6 @@ const ROUTES = [
   '/settings?tab=integrations',
   '/settings?tab=providers',
   '/settings?tab=connections',
-  '/billing',
   '/agent/actions',
   '/agent/skills',
   '/agent/context',
@@ -406,6 +405,33 @@ const RUNS = [
   completed_at: '2026-01-01T00:10:00Z',
 }));
 
+/** A profile with business details, so Context's Business map draws its ruled fact list. */
+const NO_SOURCES = {
+  description: null,
+  positioning: null,
+  products_services: null,
+  target_audience: null,
+};
+const BRAND_PROFILE = {
+  id: '66666666-6666-4666-8666-666666666661',
+  workspace_id: FIXTURE_PROJECT.workspace_id,
+  project_id: FIXTURE_PROJECT.id,
+  brand_id: '66666666-6666-4666-8666-666666666662',
+  description: 'Analytics for growth teams.',
+  positioning: '',
+  products_services: [],
+  target_audience: '',
+  business_context: {
+    buyer_roles: ['Head of growth'],
+    category_terms: ['product analytics'],
+    jobs_to_be_done: ['Find where signups drop'],
+  },
+  sources: NO_SOURCES,
+  source_artifact_ids: NO_SOURCES,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
 /** A Search Console connection, so Settings draws its two integration cards. */
 const CONNECTIONS = [
   {
@@ -464,6 +490,18 @@ async function expectOneGeometry(page: Page) {
     ...(await census(page, '/settings?tab=integrations', {
       label: '/settings integrations (cards)',
     })),
+  );
+
+  // Context's Business map, so a ruled fact list (Business details) is measured.
+  await stubAuthedShell(page, [
+    [`**/api/v1/projects/${FIXTURE_PROJECT.id}/brand-profile`, BRAND_PROFILE],
+    [
+      `**/api/v1/projects/${FIXTURE_PROJECT.id}/business-map`,
+      { available_offerings: [], offerings: [] },
+    ],
+  ]);
+  records.push(
+    ...(await census(page, '/agent/context?tab=map', { label: '/agent/context (business map)' })),
   );
 
   // A search holding a value, so its end target (Clear search) is drawn.

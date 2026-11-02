@@ -131,18 +131,25 @@ for (const width of [1280, 390]) {
     await expect(page.getByRole('combobox')).toHaveCount(1);
     await reply.fill('Explain the first recommendation.');
     await reply.press('Enter');
-    const followUp = page.getByText('Explain the first recommendation.', { exact: true });
+    // The composer keeps its text while the turn is pending; assert the sent message.
+    const followUp = page
+      .getByRole('paragraph')
+      .filter({ hasText: /^Explain the first recommendation\.$/ });
     await expect(followUp).toBeVisible();
     const result = page.getByRole('region', { name: 'Pricing page edits' });
-    expect(
-      await result.evaluate((element) => {
-        const messages = element.closest('ol')!;
-        const followUp = messages.lastElementChild!;
-        return Boolean(
-          element.compareDocumentPosition(followUp) & Node.DOCUMENT_POSITION_FOLLOWING,
-        );
-      }),
-    ).toBe(true);
+    // Polled: the list can still be settling the refetched turn when the sent
+    // message first paints (about 1 run in 50 under parallel load).
+    await expect
+      .poll(() =>
+        result.evaluate((element) => {
+          const messages = element.closest('ol')!;
+          const followUp = messages.lastElementChild!;
+          return Boolean(
+            element.compareDocumentPosition(followUp) & Node.DOCUMENT_POSITION_FOLLOWING,
+          );
+        }),
+      )
+      .toBe(true);
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
     ).toBe(true);
