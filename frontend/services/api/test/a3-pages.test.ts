@@ -171,24 +171,9 @@ describe('A3 persisted Pages join', () => {
     await refreshInsightWindow(db, scope(), filters);
     expect((await pagesRead(db, scope(), options)).items).toEqual([]);
   });
-  it('counts only citations of owned pages on Overview', async () => {
-    const owned = await db
-      .selectFrom('citations')
-      .selectAll()
-      .where('workspace_id', '=', seed.workspaceId)
-      .where('url_hash', '=', guide)
-      .executeTakeFirstOrThrow();
-    await db
-      .insertInto('citations')
-      .values({
-        ...owned,
-        id: randomUUID(),
-        ordinal: owned.ordinal + 100,
-        is_owned: false,
-        url: 'https://competitor.test/guide',
-        domain: 'competitor.test',
-      })
-      .execute();
+  it('never counts citation rows on Overview when the run has no persisted citation fact', async () => {
+    // The fixture run is completed with three owned citations but was never
+    // finalized, so it has no fact: Overview says not computed, not 3 or 0.
     const config = testConfig(),
       app = createApp(config, db);
     const cookie = TEST_SESSION_COOKIE + '=' + (await sessionToken({ sub: seed.userId, ver: 0 }));
@@ -197,7 +182,13 @@ describe('A3 persisted Pages join', () => {
       { headers: { cookie } },
     );
     expect(response.status).toBe(200);
-    expect(((await response.json()) as { citations: { count: number } }).citations.count).toBe(3);
+    expect(((await response.json()) as { citations: unknown }).citations).toEqual({
+      unit: 'tracked_citations',
+      state: 'not_available',
+      reason: 'not_computed',
+      count: null,
+      label: "Observed in CiteLadder's tracked answers",
+    });
   });
   it('reads every Overview section over the explicit dates when a preset is also sent', async () => {
     const id = randomUUID();

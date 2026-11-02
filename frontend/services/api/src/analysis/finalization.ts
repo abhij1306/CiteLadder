@@ -259,6 +259,9 @@ export function finalizeAudit(
         )
       : 0;
     const versions = policy.audits.analysis;
+    // The run's owned-citation fact for AI Traffic: the exact citation rows,
+    // all cohorts, so readers select it and never count citations themselves.
+    const ownedCitationIds = citations.filter((c) => c.is_owned).map((c) => c.id);
     const metric = await trx
       .insertInto('metric_snapshots')
       .values({
@@ -274,6 +277,8 @@ export function finalizeAudit(
         metrics: JSON.stringify(metrics),
         source_analysis_ids: JSON.stringify(analyses.map((a) => a.id)),
         source_artifact_ids: JSON.stringify(analyses.map((a) => a.artifact_id)),
+        owned_citation_count: ownedCitationIds.length,
+        owned_citation_ids: JSON.stringify(ownedCitationIds),
         created_at: at,
       })
       .returningAll()

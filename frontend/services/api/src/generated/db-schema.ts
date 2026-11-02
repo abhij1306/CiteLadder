@@ -1455,6 +1455,8 @@ export interface MetricSnapshots {
   created_at: Timestamp;
   id: string;
   metrics: Json | null;
+  owned_citation_count: number;
+  owned_citation_ids: Json;
   project_id: string;
   scoring_rule_version: string;
   source_analysis_ids: Json | null;

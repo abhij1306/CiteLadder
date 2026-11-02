@@ -578,7 +578,13 @@ describe('AI Traffic state and navigation', () => {
         HttpResponse.json({
           crawl,
           referrals,
-          citations: { unit: 'tracked_citations', count: null, label: 'Tracked answers' },
+          citations: {
+            unit: 'tracked_citations',
+            state: 'not_available',
+            reason: 'no_completed_run',
+            count: null,
+            label: 'Tracked answers',
+          },
         }),
       ),
       http.get(root + '/crawl-logs/sources', () => HttpResponse.json(sourceBody('available'))),
@@ -729,7 +735,13 @@ describe('AI Traffic state and navigation', () => {
         HttpResponse.json({
           crawl: { ...crawl, connection: 'not_connected' },
           referrals,
-          citations: { unit: 'tracked_citations', count: 4, label: 'Tracked answers' },
+          citations: {
+            unit: 'tracked_citations',
+            state: 'measured',
+            count: 4,
+            label: 'Tracked answers',
+            sources: [{ audit_id: '99999999-9999-4999-8999-999999999999', analyzer_version: '1' }],
+          },
         }),
       ),
       http.get(root + '/ai-traffic/insights', () =>

@@ -1471,7 +1471,10 @@ CREATE TABLE public.metric_snapshots (
     metrics jsonb,
     source_analysis_ids jsonb,
     source_artifact_ids jsonb,
-    created_at timestamp with time zone NOT NULL
+    owned_citation_count integer NOT NULL,
+    owned_citation_ids jsonb NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_metric_snapshot_owned_citations CHECK (((jsonb_typeof(owned_citation_ids) = 'array'::text) AND (owned_citation_count = jsonb_array_length(owned_citation_ids))))
 );
 
 CREATE TABLE public.monitored_site_urls (
