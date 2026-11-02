@@ -220,44 +220,46 @@ function nextAction({
   return step('monitor', 'No open Action — watch the trend', '/visibility?tab=trends');
 }
 async function loopEvidence(db: Database, scope: ProjectScope) {
-  const mapping = await db
-    .selectFrom('integration_property_mappings')
-    .selectAll()
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('status', '=', 'active')
-    .orderBy('updated_at', 'desc')
-    .limit(1)
-    .executeTakeFirst();
-  const crawl = await db
-    .selectFrom('site_crawls')
-    .selectAll()
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('status', 'in', ['completed', 'partially_completed'])
-    .orderBy('completed_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(1)
-    .executeTakeFirst();
-  const demand = await db
-    .selectFrom('demand_snapshots')
-    .selectAll()
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .orderBy('window_end', 'desc')
-    .orderBy('created_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(1)
-    .executeTakeFirst();
-  const snapshot = await db
-    .selectFrom('opportunity_snapshots')
-    .select('id')
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .orderBy('created_at', 'desc')
-    .orderBy('id', 'desc')
-    .limit(1)
-    .executeTakeFirst();
+  const [mapping, crawl, demand, snapshot] = await Promise.all([
+    db
+      .selectFrom('integration_property_mappings')
+      .selectAll()
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
+      .where('status', '=', 'active')
+      .orderBy('updated_at', 'desc')
+      .limit(1)
+      .executeTakeFirst(),
+    db
+      .selectFrom('site_crawls')
+      .selectAll()
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
+      .where('status', 'in', ['completed', 'partially_completed'])
+      .orderBy('completed_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst(),
+    db
+      .selectFrom('demand_snapshots')
+      .selectAll()
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
+      .orderBy('window_end', 'desc')
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst(),
+    db
+      .selectFrom('opportunity_snapshots')
+      .select('id')
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
+      .orderBy('created_at', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst(),
+  ]);
   const implementation = snapshot
     ? await db
         .selectFrom('opportunity_implementation_events')

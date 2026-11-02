@@ -48,11 +48,9 @@ const candidateBody = z.object({
   decision: competitorCandidateSchema.shape.state.extract(['approved', 'rejected']),
 });
 const promptBody = z.object({ approved: z.boolean() });
-const executeDiscoveriesBody = z
-  .object({
-    task_ids: z.array(z.uuid()).min(1).max(COMMERCE_TARGETS_MAX),
-  })
-  .strict();
+const executeDiscoveriesBody = z.strictObject({
+  task_ids: z.array(z.uuid()).min(1).max(COMMERCE_TARGETS_MAX),
+});
 
 async function scopeOf(db: Database, c: Context<AppEnv>, projectId: string) {
   const workspace = c.get('workspace');

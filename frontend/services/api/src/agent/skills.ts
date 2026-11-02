@@ -10,17 +10,15 @@ import type { Skill, SkillCatalog } from './contracts.ts';
 import { parseWorkflows, type WorkflowCatalog } from './workflows.ts';
 
 const p = policy.agent_skills;
-const metadata = z
-  .object({
-    id: z.string().regex(/^[a-z_]+$/u),
-    label: z.string().trim().min(1),
-    group: z.enum(p.groups),
-    order: z.coerce.number().int().positive(),
-    version: z.coerce.number().int().positive(),
-    output_kind: z.enum(p.output_kinds),
-    description: z.string().trim().min(1).max(p.description_max_chars),
-  })
-  .strict();
+const metadata = z.strictObject({
+  id: z.string().regex(/^[a-z_]+$/u),
+  label: z.string().trim().min(1),
+  group: z.enum(p.groups),
+  order: z.coerce.number().int().positive(),
+  version: z.coerce.number().int().positive(),
+  output_kind: z.enum(p.output_kinds),
+  description: z.string().trim().min(1).max(p.description_max_chars),
+});
 type CatalogSkill = Skill & z.infer<typeof metadata>;
 export type PackagedCatalog = Omit<SkillCatalog, 'skills'> & {
   skills: ReadonlyMap<string, CatalogSkill>;

@@ -265,25 +265,19 @@ const agentSearchReferenceSchema = z.object({
     .max(100)
     .refine((ids) => new Set(ids).size === ids.length, 'Row IDs must be unique'),
 });
-export const agentContextRefsSchema = z
-  .object({
-    target_site_url_id: uuid().nullish(),
-    target_url: z.string().max(2048).nullish(),
-    opportunity_id: uuid().nullish(),
-    demand_signal_id: uuid().nullish(),
-    site_health_reference: agentSiteHealthReferenceSchema.nullish(),
-    issue_group_reference: z
-      .object({ crawl_id: uuid(), group_id: uuid(), site_url_id: uuid().optional() })
-      .strict()
-      .nullish(),
-    site_facts_reference: z.object({ crawl_id: uuid() }).strict().nullish(),
-    output_revision_reference: z
-      .object({ output_id: uuid(), revision_id: uuid() })
-      .strict()
-      .nullish(),
-    search_intelligence_reference: agentSearchReferenceSchema.nullish(),
-  })
-  .strict();
+export const agentContextRefsSchema = z.strictObject({
+  target_site_url_id: uuid().nullish(),
+  target_url: z.string().max(2048).nullish(),
+  opportunity_id: uuid().nullish(),
+  demand_signal_id: uuid().nullish(),
+  site_health_reference: agentSiteHealthReferenceSchema.nullish(),
+  issue_group_reference: z
+    .strictObject({ crawl_id: uuid(), group_id: uuid(), site_url_id: uuid().optional() })
+    .nullish(),
+  site_facts_reference: z.strictObject({ crawl_id: uuid() }).nullish(),
+  output_revision_reference: z.strictObject({ output_id: uuid(), revision_id: uuid() }).nullish(),
+  search_intelligence_reference: agentSearchReferenceSchema.nullish(),
+});
 
 /** Request bounds come from the policy owner; the shared wire shape lives here. */
 export function agentRequestSchemas(bounds: {
@@ -302,25 +296,21 @@ export function agentRequestSchemas(bounds: {
     .refine((ids) => new Set(ids).size === ids.length, 'Mentioned Actions must be unique')
     .default([]);
   return {
-    create: z
-      .object({
-        message,
-        skill_id: skill,
-        workflow_id: workflow,
-        action_id: uuid().nullish(),
-        context: agentContextRefsSchema.default({}),
-        mentions,
-      })
-      .strict(),
-    message: z.object({ message, skill_id: skill, mentions }).strict(),
-    edit: z
-      .object({
-        base_revision_id: uuid(),
-        title: z.string().max(bounds.output_title_max_chars).trim().min(1),
-        body: z.string().max(bounds.output_body_max_chars).trim().min(1),
-      })
-      .strict(),
-    approve: z.object({ revision_id: uuid() }).strict(),
-    instructions: z.object({ text: z.string().max(bounds.instructions_max_chars) }).strict(),
+    create: z.strictObject({
+      message,
+      skill_id: skill,
+      workflow_id: workflow,
+      action_id: uuid().nullish(),
+      context: agentContextRefsSchema.default({}),
+      mentions,
+    }),
+    message: z.strictObject({ message, skill_id: skill, mentions }),
+    edit: z.strictObject({
+      base_revision_id: uuid(),
+      title: z.string().max(bounds.output_title_max_chars).trim().min(1),
+      body: z.string().max(bounds.output_body_max_chars).trim().min(1),
+    }),
+    approve: z.strictObject({ revision_id: uuid() }),
+    instructions: z.strictObject({ text: z.string().max(bounds.instructions_max_chars) }),
   };
 }

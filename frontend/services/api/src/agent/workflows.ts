@@ -11,35 +11,29 @@ import type { Skill } from './contracts.ts';
 
 const id = z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u);
 const text = (max: number) => z.string().trim().min(1).max(max);
-const inputSchema = z.object({ key: id, label: text(60), required: z.boolean() }).strict();
-const workflowSchema = z
-  .object({
+const inputSchema = z.strictObject({ key: id, label: text(60), required: z.boolean() });
+const workflowSchema = z.strictObject({
+  id,
+  group: id,
+  label: text(60),
+  description: text(200),
+  skill_id: id,
+  format_id: id.optional(),
+  prompt: text(300),
+  inputs: z.array(inputSchema).max(4),
+});
+const fileSchema = z.strictObject({
+  groups: z.array(z.strictObject({ id, label: text(40) })).min(1),
+  workflows: z.array(workflowSchema).min(1),
+  kinds: z.record(
     id,
-    group: id,
-    label: text(60),
-    description: text(200),
-    skill_id: id,
-    format_id: id.optional(),
-    prompt: text(300),
-    inputs: z.array(inputSchema).max(4),
-  })
-  .strict();
-const fileSchema = z
-  .object({
-    groups: z.array(z.object({ id, label: text(40) }).strict()).min(1),
-    workflows: z.array(workflowSchema).min(1),
-    kinds: z.record(
-      id,
-      z
-        .object({
-          label: text(60),
-          refinements: z.array(text(80)).max(4),
-          next: z.array(z.object({ workflow: id, prompt: text(200) }).strict()).max(4),
-        })
-        .strict(),
-    ),
-  })
-  .strict();
+    z.strictObject({
+      label: text(60),
+      refinements: z.array(text(80)).max(4),
+      next: z.array(z.strictObject({ workflow: id, prompt: text(200) })).max(4),
+    }),
+  ),
+});
 
 type Workflow = z.infer<typeof workflowSchema>;
 export type WorkflowCatalog = z.infer<typeof fileSchema> & {

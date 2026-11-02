@@ -96,7 +96,9 @@ export function SearchIntelligenceReviewDrawer({
   const [grouping, setGrouping] = useState<'as_is' | 'one_per_domain'>('as_is');
   const [rankingOrder, setRankingOrder] = useState<DatasetSelection['order']>('volume');
   const [acquisitionVolume, setAcquisitionVolume] = useState('');
-  const [ownedTarget, setOwnedTarget] = useState(reviewOwnedTarget(readiness)?.identity ?? '');
+  const [ownedTarget, setOwnedTarget] = useState(
+    () => reviewOwnedTarget(readiness)?.identity ?? '',
+  );
   const [reuse, setReuse] = useState(
     () => !['refresh', 'increase_depth'].includes(action) && readiness.preferences.reuse_recent,
   );

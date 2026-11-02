@@ -21,21 +21,17 @@ export type SearchRequest = {
   provider_submission_ref: string;
   request_settings: Record<string, unknown>;
 };
-const providerTaskSchema = z
-  .object({
-    id: z.string().nullable().optional(),
-    status_code: z.number().int(),
-    cost: z.number().nonnegative().nullable().optional(),
-    result: z.array(z.unknown()).nullable().optional(),
-    data: z.record(z.string(), z.unknown()).optional(),
-  })
-  .passthrough();
-const envelopeSchema = z
-  .object({
-    status_code: z.number().int(),
-    tasks: z.array(providerTaskSchema).nullable().optional(),
-  })
-  .passthrough();
+const providerTaskSchema = z.looseObject({
+  id: z.string().nullable().optional(),
+  status_code: z.number().int(),
+  cost: z.number().nonnegative().nullable().optional(),
+  result: z.array(z.unknown()).nullable().optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
+});
+const envelopeSchema = z.looseObject({
+  status_code: z.number().int(),
+  tasks: z.array(providerTaskSchema).nullable().optional(),
+});
 export type Envelope = z.infer<typeof envelopeSchema>;
 export class SubmissionUncertain extends ProviderError {
   readonly submission: { taskId: string | null; chargeMicrousd: number | null } | undefined;
