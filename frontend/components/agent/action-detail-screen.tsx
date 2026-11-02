@@ -11,13 +11,12 @@ import {
 } from '@/components/agent/action-declaration';
 import { DeclarationStatus } from '@/components/agent/declaration-status';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
-import { ActionStatusBadge } from '@/components/agent/action-status-badge';
+import { ActionPriorityBadge, ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { DetailScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { EvidenceDrawer } from '@/components/opportunities/evidence-drawer';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Disclosure } from '@/components/ui/disclosure';
 import { Button } from '@/components/ui/button';
 import { FactList, type Fact } from '@/components/ui/facts';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -36,7 +35,6 @@ import { agentHandoffHref } from '@/lib/agent/handoff';
 import {
   approachLabel,
   familyLabel,
-  FAMILY_STATE_LABEL,
   measurementLegLabel,
   OUTPUT_PHASE_LABEL,
   targetKindLabel,
@@ -113,7 +111,6 @@ function ActionDetailView({
       actions={<ActionControls action={action} update={update} />}
       aside={
         <>
-          <ActionEvidence action={action} />
           <TextList title="Avoid" items={action.diagnosis.donts ?? []} />
           <TextList
             title="Measure with"
@@ -188,16 +185,11 @@ function ActionControls({
 function ActionFacts({ action }: Readonly<{ action: ActionDetail }>) {
   const facts: Fact[] = [
     { label: 'Status', value: <ActionStatusBadge status={action.status} /> },
-    {
-      label: 'Priority',
-      value: action.priority_score === null ? 'Not scored yet' : action.priority_score.toFixed(1),
-    },
-    {
-      label: 'Evidence',
-      value: `${action.families.length} ${action.families.length === 1 ? 'system' : 'systems'}`,
-    },
+    { label: 'Priority', value: <ActionPriorityBadge score={action.priority_score} /> },
     { label: 'Target', value: targetKindLabel(action.target_kind) ?? 'Target' },
   ];
+  const sources = action.families.map(familyLabel).filter(isText);
+  if (sources.length) facts.push({ label: 'Source', value: sources.join(', ') });
   return (
     <Stack as="section" aria-label="Summary">
       {action.target_url ? (
@@ -387,42 +379,5 @@ function LinkedChats({
         </Button>
       ) : null}
     </Stack>
-  );
-}
-
-function ActionEvidence({ action }: Readonly<{ action: ActionDetail }>) {
-  const families = Object.entries(action.diagnosis.families ?? {}).filter(([family]) =>
-    familyLabel(family),
-  );
-  const supporting = families.filter(([, state]) => state === 'observed');
-  const other = families.filter(([, state]) => state !== 'observed');
-  const sources = (rows: typeof families) => (
-    <FactList
-      layout="spread"
-      facts={rows.map(([family, state]) => ({
-        key: family,
-        label: (
-          <span className={textRole(state === 'observed' ? 'itemTitle' : 'body')}>
-            {familyLabel(family)}
-          </span>
-        ),
-        value: <span className={textRole('caption')}>{FAMILY_STATE_LABEL[state]}</span>,
-      }))}
-    />
-  );
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Evidence</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Stack>
-          {sources(supporting)}
-          {other.length > 0 ? (
-            <Disclosure title={`Other sources (${other.length})`}>{sources(other)}</Disclosure>
-          ) : null}
-        </Stack>
-      </CardContent>
-    </Card>
   );
 }

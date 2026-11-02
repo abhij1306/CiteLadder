@@ -14,6 +14,12 @@ export const AGENT_RUN_POLL_MAX_MS = 10_000;
 export const AGENT_CHAT_LIST_POLL_MS = 5_000;
 /** Distance from the end that still counts as following the conversation. */
 export const AGENT_FOLLOW_LATEST_GAP_PX = 96;
+/**
+ * Floors of an Action's priority bands. A crawl or catalog finding scores its
+ * severity × 10 (critical 40, high 30, medium 20, low 10), so these keep its
+ * band equal to its severity; a prompt gap's value and gap factors lift it.
+ */
+export const ACTION_PRIORITY_BANDS = { high: 30, medium: 20 } as const;
 /** New chat shows this many top Actions under "Work on this". */
 export const AGENT_TOP_ACTIONS = 3;
 /** Debounce for the sidebar chat search. */

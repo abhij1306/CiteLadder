@@ -67,7 +67,9 @@ describe('Actions', () => {
 
     const row = await screen.findByRole('link', { name: 'https://acme.test/pricing' });
     expect(row).toHaveAttribute('href', `/agent/actions/${ACTION}?project=${PROJECT}`);
-    expect(screen.getByText('82.5')).toBeVisible();
+    // The score ranks the queue; the reader sees its band, never the raw number.
+    expect(within(row.closest('tr')!).getByText('High')).toBeVisible();
+    expect(screen.queryByText('82.5')).not.toBeInTheDocument();
 
     const status = screen.getByRole('combobox', { name: 'Status' });
     expect(await within(status).findByText('Open and in progress (3)')).toBeVisible();
@@ -92,11 +94,6 @@ describe('Actions', () => {
           ...current,
           diagnosis: {
             approach: 'improve_existing',
-            families: {
-              site_health: 'observed',
-              search_console: 'unavailable',
-              ai_visibility: 'no_finding',
-            },
             donts: ['Do not create another URL for a target that already has a page.'],
             measure_with: ['next_crawl'],
           },
@@ -130,12 +127,9 @@ describe('Actions', () => {
     expect(
       screen.getByRole('link', { name: 'https://acme.test/pricing (opens in a new tab)' }),
     ).toBeVisible();
-    expect(screen.getByText('Observed')).toBeVisible();
-    expect(screen.getByText('Unavailable')).not.toBeVisible();
-    await user.click(screen.getByText('Other sources (2)'));
-    expect(screen.getByText('No finding')).toBeVisible();
-    const evidence = screen.getByText('Search Console').closest('div');
-    expect(within(evidence as HTMLElement).getByText('Unavailable')).toBeVisible();
+    const summary = screen.getByRole('region', { name: 'Summary' });
+    expect(within(summary).getByText('High')).toBeVisible();
+    expect(within(summary).getByText('Site Health, Search Console')).toBeVisible();
     expect(screen.getByText('The next crawl of this page')).toBeVisible();
     expect(screen.getByRole('link', { name: 'Work on this' })).toHaveAttribute(
       'href',

@@ -71,16 +71,6 @@ export function targetFor(member: ActionMember) {
     return target(`query:${member.target_theme.toLowerCase().trim()}`, p.TARGET_QUERY, member);
   return target(key, p.TARGET_QUERY, member);
 }
-function actionPriority(strongest: number, families: number): number {
-  return round(
-    strongest *
-      Math.min(
-        p.CONVERGENCE_MULTIPLIER_CAP,
-        1 + p.CONVERGENCE_BONUS_PER_FAMILY * Math.max(families - 1, 0),
-      ),
-    p.ACTION_PRIORITY_ROUNDING_DECIMALS,
-  );
-}
 export function selectApproach(ids: string[], kind: string) {
   return (
     p.APPROACH_TREE.find(
@@ -90,15 +80,7 @@ export function selectApproach(ids: string[], kind: string) {
     ) ?? p.DEFAULT_APPROACH
   );
 }
-function familyState(family: string, observed: string[], available: string[]) {
-  if (observed.includes(family)) return p.FAMILY_STATE_OBSERVED;
-  return available.includes(family) ? p.FAMILY_STATE_NO_FINDING : p.FAMILY_STATE_UNAVAILABLE;
-}
-function group(
-  t: ReturnType<typeof targetFor>,
-  members: NonEmpty<ActionMember>,
-  available: string[],
-) {
+function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>) {
   const ordered: [ActionMember, ...ActionMember[]] = [...members];
   ordered.sort(
     (a, b) =>
@@ -119,7 +101,9 @@ function group(
     target: t,
     members: ordered,
     families,
-    priority_score: actionPriority(ordered[0].priority_score, families.length),
+    // The strongest finding ranks the Action. Agreement is not rewarded: most
+    // findings on a page come from the one crawl, so a count would double it.
+    priority_score: round(ordered[0].priority_score, p.ACTION_PRIORITY_ROUNDING_DECIMALS),
     approach: branch.approach,
     skill_id: branch.skill_id,
     diagnosis: {
@@ -133,9 +117,6 @@ function group(
         source_issue_ids: [...m.source_issue_ids],
         source_metric_ids: [...m.source_metric_ids],
       })),
-      families: Object.fromEntries(
-        p.EVIDENCE_FAMILIES.map((f) => [f, familyState(f, families, available)]),
-      ),
       approach: branch.approach,
       skill_id: branch.skill_id,
       donts: [...branch.donts],
@@ -148,7 +129,7 @@ function group(
     },
   };
 }
-export function groupMembers(members: ActionMember[], available: string[]) {
+export function groupMembers(members: ActionMember[]) {
   const groups = new Map<
     string,
     { target: ReturnType<typeof targetFor>; members: [ActionMember, ...ActionMember[]] }
@@ -160,7 +141,7 @@ export function groupMembers(members: ActionMember[], available: string[]) {
     else groups.set(t.group_key, { target: t, members: [member] });
   }
   return [...groups.values()]
-    .map((g) => group(g.target, g.members, available))
+    .map((g) => group(g.target, g.members))
     .sort(
       (a, b) =>
         b.priority_score - a.priority_score || compareText(a.target.group_key, b.target.group_key),

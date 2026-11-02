@@ -136,9 +136,8 @@ export async function syncActions(
   scope: Scope,
   rows: NewOpportunity[],
   snapshotId: string,
-  families: string[],
 ): Promise<Map<string, string>> {
-  const groups = groupMembers(rows.map(actionMember), families);
+  const groups = groupMembers(rows.map(actionMember));
   const existing = new Map(
     (
       await trx

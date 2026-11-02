@@ -54,7 +54,6 @@ const diagnosisMemberSchema = responseObject({
 // with no evidence yet carries an empty object, so every field is optional.
 const actionDiagnosisSchema = responseObject({
   what_happened: z.array(diagnosisMemberSchema).optional(),
-  families: z.record(z.string(), z.enum(['observed', 'no_finding', 'unavailable'])).optional(),
   approach: z.string().optional(),
   skill_id: z.string().optional(),
   donts: z.array(z.string()).optional(),
