@@ -199,6 +199,7 @@ export class ModelCalls {
           // How this call used the prompt cache, for cost and cache analysis.
           response_id: result?.response_id.slice(0, 128) ?? '',
           cache_write_1h_input_tokens: usage('cache_write_1h_input_tokens'),
+          web_search_requests: usage('web_search_requests'),
           cache_miss_reason: result?.cache.reason ?? '',
           cache_missed_input_tokens:
             result && 'missed_input_tokens' in result.cache

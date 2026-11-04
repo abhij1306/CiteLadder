@@ -294,24 +294,13 @@ export class AgentStore {
     actionSkill: string | null,
   ) {
     const catalog = this.dependencies.catalog.skills;
-    let id =
+    // A chat holds documents of several kinds, so any skill may run in it.
+    const id =
       explicit ??
       (explicit === null ? null : chat.pinned_skill_id) ??
       (actionSkill && catalog.has(actionSkill) ? actionSkill : null);
-    let source = skillSource(explicit, chat.pinned_skill_id, id);
     if (id && !catalog.has(id)) throw new AgentError('agent_skill_unknown');
-    const output = await db
-      .selectFrom('agent_outputs')
-      .select(['kind', 'skill_id'])
-      .where('workspace_id', '=', chat.workspace_id)
-      .where('chat_id', '=', chat.id)
-      .executeTakeFirst();
-    if (output && id && catalog.get(id)?.outputKind !== output.kind) {
-      if (explicit) throw new AgentError('agent_skill_kind_conflict');
-      id = output.skill_id;
-      source = 'chat';
-    }
-    return { id, source };
+    return { id, source: skillSource(explicit, chat.pinned_skill_id, id) };
   }
   cancel(scope: Scope, chatId: string, runId: string) {
     return this.db.transaction().execute(async (trx) => {

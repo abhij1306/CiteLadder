@@ -9,6 +9,7 @@ import { OutputCanvas } from '@/components/agent/output-canvas';
 import { EvidenceChips } from '@/components/agent/evidence-chips';
 import { OutputEditor, type OutputDraft } from '@/components/agent/output-editor';
 import { OutputHistory } from '@/components/agent/output-history';
+import { WebSources } from '@/components/agent/web-sources';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,7 +25,7 @@ import { PROMPTS_GENERATE_HREF } from '@/lib/prompts/routes';
 type PaneTab = 'output' | 'sources' | 'history';
 
 /**
- * The chat's deliverable, shown inline in the thread. Edits and restores are refused by
+ * One of the chat's documents, shown inline in the thread after the reply that wrote it. Edits and restores are refused by
  * the server while a turn is queued or running, so the pane disables them
  * then rather than offering a control that will fail.
  */
@@ -52,12 +53,13 @@ export function OutputPane({
   // Held here, not in the editor, so switching tabs cannot discard it.
   const [draft, setDraft] = useState<OutputDraft | null>(null);
   const editing = draft !== null;
-  if (!revision) return null;
   const locked = runActive || !canEdit;
+  const target = { chatId, outputId: output.id, number: output.number };
+  const headingId = `document-${output.id}-title`;
   const document = (
     <OutputCanvas
       workspaceId={workspaceId}
-      chatId={chatId}
+      target={target}
       revision={revision}
       locked={locked}
       canSend={canSend}
@@ -65,17 +67,13 @@ export function OutputPane({
     />
   );
   return (
-    <Stack
-      as="section"
-      gap="compact"
-      aria-labelledby="output-title"
-      className="min-w-0 content-start"
-    >
+    <Stack as="section" gap="compact" aria-labelledby={headingId} className="min-w-0 content-start">
       <Stack as="header" gap="tight">
-        <h2 id="output-title" className={textRole('sectionTitle', 'min-w-0')}>
+        <h2 id={headingId} className={textRole('sectionTitle', 'min-w-0')}>
           {revision.title}
         </h2>
         <Inline className="flex-wrap">
+          <span className={textRole('caption')}>Document {output.number}</span>
           <Badge>{kindLabel(output.kind)}</Badge>
           <span className={textRole('caption')}>Revision {revision.number}</span>
           {output.target_label ? (
@@ -116,7 +114,7 @@ export function OutputPane({
           {draft ? (
             <OutputEditor
               workspaceId={workspaceId}
-              chatId={chatId}
+              target={target}
               revision={revision}
               draft={draft}
               onChange={setDraft}
@@ -127,17 +125,21 @@ export function OutputPane({
           )}
         </TabPanel>
         <TabPanel value="sources">
-          {revision.source_refs.length === 0 ? (
-            <p className={textRole('body')}>This revision cites no CiteLadder records.</p>
-          ) : (
-            <EvidenceChips refs={revision.source_refs} label="Sources" />
-          )}
+          <Stack gap="compact">
+            {revision.source_refs.length === 0 ? (
+              <p className={textRole('body')}>This revision cites no CiteLadder records.</p>
+            ) : (
+              <EvidenceChips refs={revision.source_refs} label="CiteLadder records" />
+            )}
+            <WebSources sources={revision.web_sources} />
+          </Stack>
         </TabPanel>
         <TabPanel value="history">
           {tab === 'history' ? (
             <OutputHistory
               workspaceId={workspaceId}
               chatId={chatId}
+              outputId={output.id}
               latestRevisionId={revision.id}
               canRestore={!locked}
             />

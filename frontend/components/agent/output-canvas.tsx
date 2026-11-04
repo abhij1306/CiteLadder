@@ -15,7 +15,7 @@ import { textRole } from '@/components/ui/typography';
 import { treeBranchClasses } from '@/components/ui/workspace';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { replaceSection, splitSections, type OutputSection } from '@/lib/agent/sections';
-import { agentMutations, type AgentRevision } from '@/lib/api/agent';
+import { agentMutations, type AgentDocumentRef, type AgentRevision } from '@/lib/api/agent';
 import { queryKeys } from '@/lib/api/query-keys';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
 
@@ -32,14 +32,14 @@ type SectionMode = { index: number; mode: 'revise' | 'edit' } | null;
  */
 export function OutputCanvas({
   workspaceId,
-  chatId,
+  target,
   revision,
   locked,
   canSend,
   onRevise,
 }: Readonly<{
   workspaceId: string;
-  chatId: string;
+  target: AgentDocumentRef;
   revision: AgentRevision;
   locked: boolean;
   canSend: boolean;
@@ -85,12 +85,12 @@ export function OutputCanvas({
           onMode={(mode) => setActive(mode ? { index, mode } : null)}
           onRevise={(instruction) => {
             setActive(null);
-            onRevise(reviseMessage(section, instruction));
+            onRevise(reviseMessage(target.number, section, instruction));
           }}
           editor={
             <SectionEditor
               workspaceId={workspaceId}
-              chatId={chatId}
+              target={target}
               revision={revision}
               index={index}
               initial={section.text}
@@ -111,9 +111,9 @@ function sectionName(section: OutputSection): string {
   return section.heading ?? 'Introduction';
 }
 
-function reviseMessage(section: OutputSection, instruction: string): string {
-  const target = section.heading === null ? 'the introduction' : `the section "${section.heading}"`;
-  return `Revise only ${target}: ${instruction.trim()} Keep every other section exactly as it is.`;
+function reviseMessage(number: number, section: OutputSection, instruction: string): string {
+  const part = section.heading === null ? 'the introduction' : `the section "${section.heading}"`;
+  return `In Document ${number}, revise only ${part}: ${instruction.trim()} Keep every other section exactly as it is.`;
 }
 
 function SectionBlock({
@@ -212,14 +212,14 @@ function ReviseForm({
  */
 function SectionEditor({
   workspaceId,
-  chatId,
+  target,
   revision,
   index,
   initial,
   onDone,
 }: Readonly<{
   workspaceId: string;
-  chatId: string;
+  target: AgentDocumentRef;
   revision: AgentRevision;
   index: number;
   initial: string;
@@ -231,12 +231,8 @@ function SectionEditor({
     ...agentMutations.editOutput(workspaceId),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agent.chat(chatId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agent.revisions(chatId),
-        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(target.chatId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agent.revisions(target.chatId) }),
       ]);
       onDone();
     },
@@ -250,7 +246,7 @@ function SectionEditor({
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
         save.mutate({
-          chatId,
+          ...target,
           baseRevisionId: revision.id,
           title: revision.title,
           body,

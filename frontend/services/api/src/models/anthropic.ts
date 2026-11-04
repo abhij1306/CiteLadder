@@ -3,6 +3,7 @@ import type {
   BetaMessage,
   BetaMessageParam,
   BetaUsage,
+  BetaWebSearchTool20250305,
 } from '@anthropic-ai/sdk/resources/beta/messages';
 
 import { getLogger } from '../logging.ts';
@@ -15,6 +16,7 @@ import {
   type ConversationStop,
   type Converse,
   type UsageIteration,
+  WEB_SEARCH,
 } from './conversation.ts';
 import type { GatewaySettings } from './gateway.ts';
 import {
@@ -141,7 +143,13 @@ const ANTHROPIC_STOPS: Record<string, ConversationStop> = {
   max_tokens: 'max_tokens',
   model_context_window_exceeded: 'context_window',
   refusal: 'refusal',
+  pause_turn: 'pause_turn',
 };
+
+/** Searches the provider ran for this call; it bills each beside the tokens. */
+function webSearchRequests(usage: BetaUsage) {
+  return usage.server_tool_use?.web_search_requests ?? 0;
+}
 
 /**
  * Prompt tokens by class. Input counts every prompt token, cached or not, as
@@ -161,7 +169,12 @@ function conversationUsage(usage: BetaUsage): Record<string, number | null> {
   const written = usage.cache_creation_input_tokens;
   // An omitted cache count is unknown, not zero; so is any total built from it.
   if (cached === null || written === null)
-    return { input_tokens: null, output_tokens: usage.output_tokens, cached_input_tokens: null };
+    return {
+      input_tokens: null,
+      output_tokens: usage.output_tokens,
+      cached_input_tokens: null,
+      web_search_requests: webSearchRequests(usage),
+    };
   const read = cached + sum((entry) => entry.cache_read_input_tokens);
   const write = written + sum((entry) => entry.cache_creation_input_tokens);
   const hourWrites =
@@ -179,6 +192,7 @@ function conversationUsage(usage: BetaUsage): Record<string, number | null> {
     cache_write_1h_input_tokens: Math.min(hourWrites, write),
     // Thinking is billed inside output; its share is recorded for the audit.
     reasoning_tokens: usage.output_tokens_details?.thinking_tokens ?? null,
+    web_search_requests: webSearchRequests(usage),
   };
 }
 
@@ -226,6 +240,11 @@ function cacheDiagnosis(
 
 const HOUR_CACHE = { type: 'ephemeral', ttl: '1h' } as const;
 
+/** Provider-hosted web search, at most `maxUses` searches in this call. */
+function webSearchTool(maxUses: number): BetaWebSearchTool20250305 {
+  return { type: 'web_search_20250305', name: WEB_SEARCH, max_uses: maxUses };
+}
+
 /**
  * The messages as sent: stored blocks unchanged, plus two cache breakpoints
  * (a marker is not part of the cached prefix, so adding one keeps the bytes
@@ -264,7 +283,9 @@ export function cachedMessages(messages: readonly ConversationMessage[]): BetaMe
  * exactly as stored, so a replayed transcript keeps its thinking blocks and
  * its cache; each call names the chat's previous response so the API reports
  * why any cache read fell short. Effort and thinking stay fixed per call shape,
- * since a change to either misses the message cache.
+ * since a change to either misses the message cache. A call with a web search
+ * allowance declares Anthropic's hosted search last, capped at that allowance;
+ * its blocks, including encrypted results, are stored and replayed unchanged.
  */
 export function anthropicConversation(
   settings: Settings,
@@ -282,12 +303,17 @@ export function anthropicConversation(
           max_tokens: settings.maxOutputTokens,
           betas: ['compact-2026-01-12'],
           system: [{ type: 'text', text: request.system, cache_control: HOUR_CACHE }],
-          tools: request.tools.map(({ name, description, input_schema, stream_input }) => ({
-            name,
-            description,
-            input_schema: { ...input_schema, type: 'object' as const },
-            ...(stream_input ? { eager_input_streaming: true } : {}),
-          })),
+          tools: [
+            ...request.tools.map(({ name, description, input_schema, stream_input }) => ({
+              name,
+              description,
+              input_schema: { ...input_schema, type: 'object' as const },
+              ...(stream_input ? { eager_input_streaming: true } : {}),
+            })),
+            // Last, so the client tools before it keep their cached bytes. The
+            // basic version runs on every model and adds no code-execution blocks.
+            ...(request.webSearches > 0 ? [webSearchTool(request.webSearches)] : []),
+          ],
           messages: cachedMessages(request.messages),
           thinking: { type: 'adaptive', display: 'summarized' },
           output_config: { effort: request.effort },
@@ -312,6 +338,19 @@ export function anthropicConversation(
             return;
           const block = snapshot.content[event.index];
           if (block?.type === 'tool_use') listener.toolInput?.(block.name, block.input);
+        });
+      if (listener?.serverTool)
+        stream.on('streamEvent', (event) => {
+          if (event.type !== 'content_block_start') return;
+          const block = event.content_block;
+          if (block.type === 'server_tool_use')
+            listener.serverTool?.({ id: block.id, name: block.name, status: 'started' });
+          else if (block.type === 'web_search_tool_result')
+            listener.serverTool?.({
+              id: block.tool_use_id,
+              name: WEB_SEARCH,
+              status: Array.isArray(block.content) ? 'completed' : 'failed',
+            });
         });
       message = await stream.finalMessage();
     } catch (error) {

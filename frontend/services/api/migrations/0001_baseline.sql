@@ -89,7 +89,8 @@ CREATE TABLE public.agent_messages (
     mentions jsonb NOT NULL,
     created_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
-    project_id uuid NOT NULL
+    project_id uuid NOT NULL,
+    web_sources jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 CREATE TABLE public.agent_model_attempts (
@@ -132,7 +133,8 @@ CREATE TABLE public.agent_model_attempts (
     cache_write_1h_input_tokens bigint,
     cache_miss_reason character varying(32) DEFAULT ''::character varying NOT NULL,
     cache_missed_input_tokens bigint,
-    usage_iterations jsonb DEFAULT '[]'::jsonb NOT NULL
+    usage_iterations jsonb DEFAULT '[]'::jsonb NOT NULL,
+    web_search_requests integer
 );
 
 CREATE TABLE public.agent_output_revisions (
@@ -149,7 +151,8 @@ CREATE TABLE public.agent_output_revisions (
     source_refs jsonb NOT NULL,
     created_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
-    project_id uuid NOT NULL
+    project_id uuid NOT NULL,
+    web_sources jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 CREATE TABLE public.agent_outputs (
@@ -164,7 +167,9 @@ CREATE TABLE public.agent_outputs (
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
-    project_id uuid NOT NULL
+    project_id uuid NOT NULL,
+    number integer NOT NULL,
+    CONSTRAINT ck_agent_output_number_positive CHECK ((number > 0))
 );
 
 CREATE TABLE public.agent_runs (
@@ -3491,7 +3496,7 @@ ALTER TABLE ONLY public.agent_model_attempts
     ADD CONSTRAINT uq_agent_model_attempt_slot UNIQUE (run_id, run_attempt, ordinal);
 
 ALTER TABLE ONLY public.agent_outputs
-    ADD CONSTRAINT uq_agent_output_chat UNIQUE (chat_id);
+    ADD CONSTRAINT uq_agent_output_chat_number UNIQUE (chat_id, number);
 
 ALTER TABLE ONLY public.agent_output_revisions
     ADD CONSTRAINT uq_agent_output_revision_number UNIQUE (output_id, number);

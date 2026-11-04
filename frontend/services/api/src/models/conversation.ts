@@ -37,6 +37,11 @@ export type ConversationRequest = {
    * first call: Anthropic compares the two prompts and reports why the cache missed.
    */
   previousResponseId: string | null;
+  /**
+   * How many provider-hosted web searches this call may run; 0 offers none.
+   * Anthropic only: chat completions have no hosted search and ignore it.
+   */
+  webSearches: number;
 };
 /**
  * Why the prompt cache could not reuse the previous call's prefix. `not_requested`
@@ -61,7 +66,8 @@ export type UsageIteration = {
 export type ToolCall = { id: string; name: string; input: Record<string, Json> };
 /**
  * How a response ended, the same whichever API produced it: `max_tokens` is the
- * output cap (thinking included), `context_window` the model's input limit.
+ * output cap (thinking included), `context_window` the model's input limit and
+ * `pause_turn` a provider-hosted tool loop that the next call continues.
  */
 export type ConversationStop =
   | 'end_turn'
@@ -69,6 +75,7 @@ export type ConversationStop =
   | 'max_tokens'
   | 'context_window'
   | 'refusal'
+  | 'pause_turn'
   | 'other';
 export type ConversationResult = {
   /** The assistant content exactly as returned, for append-only replay. */
@@ -97,6 +104,13 @@ export type ConversationListener = {
   thinking?: (delta: string) => void;
   /** A streamed tool input so far, partially parsed. */
   toolInput?: (name: string, input: unknown) => void;
+  /** A provider-hosted tool call started, or returned its result. */
+  serverTool?: (event: ServerToolEvent) => void;
+};
+export type ServerToolEvent = {
+  id: string;
+  name: string;
+  status: 'started' | 'completed' | 'failed';
 };
 export type Converse = (
   request: ConversationRequest,
@@ -135,6 +149,69 @@ export function blockToolCalls(blocks: readonly ConversationBlock[]): ToolCall[]
           },
         ]
       : [],
+  );
+}
+
+export const WEB_SEARCH = 'web_search';
+/** A web page a provider-hosted search returned: untrusted observation, never a fact. */
+export type WebSource = { url: string; title: string };
+type WebSearchCall = { id: string; query: string };
+type WebSearchResult = {
+  callId: string;
+  /** `null` when the search failed; an empty list is a search that matched nothing. */
+  sources: WebSource[] | null;
+};
+const searchCallSchema = z.object({
+  id: z.string(),
+  name: z.literal(WEB_SEARCH),
+  input: z.object({ query: z.string() }).catch({ query: '' }),
+});
+const searchResultSchema = z.object({
+  tool_use_id: z.string(),
+  content: z.union([
+    z.array(z.object({ url: z.string(), title: z.string().catch('') }).loose()),
+    z.object({ error_code: z.string() }).loose(),
+  ]),
+});
+/**
+ * The web searches in a block list: the calls the model made and the results
+ * that came back. With a read in the same response, a call's result arrives
+ * at the start of the next response instead, so the two are listed apart.
+ */
+export function webSearchBlocks(blocks: readonly ConversationBlock[]) {
+  const calls: WebSearchCall[] = [];
+  const results: WebSearchResult[] = [];
+  for (const block of blocks) {
+    if (block.type === 'server_tool_use') {
+      const call = searchCallSchema.safeParse(block);
+      if (call.success) calls.push({ id: call.data.id, query: call.data.input.query });
+    } else if (block.type === 'web_search_tool_result') {
+      const result = searchResultSchema.safeParse(block);
+      if (!result.success) continue;
+      const { content } = result.data;
+      results.push({
+        callId: result.data.tool_use_id,
+        sources: Array.isArray(content)
+          ? content.map(({ url, title }) => ({ url, title: title || url }))
+          : null,
+      });
+    }
+  }
+  return { calls, results };
+}
+
+/** A provider-hosted call in these blocks still waits for its result in the next call. */
+export function hasPendingServerTool(blocks: readonly ConversationBlock[]) {
+  const answered = new Set(
+    blocks.flatMap((block) =>
+      typeof block.tool_use_id === 'string' && block.type !== 'tool_result'
+        ? [block.tool_use_id]
+        : [],
+    ),
+  );
+  return blocks.some(
+    (block) =>
+      block.type === 'server_tool_use' && typeof block.id === 'string' && !answered.has(block.id),
   );
 }
 

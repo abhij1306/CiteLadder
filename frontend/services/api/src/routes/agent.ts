@@ -32,8 +32,12 @@ const family = 'agent',
 const projectFamily = { family, authorize: 'active-project' } as const;
 const projectPath = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const chatPath = { chat_id: { scalar: { kind: 'uuid' }, required: true } } as const;
-const revisionPath = {
+const outputPath = {
   ...chatPath,
+  output_id: { scalar: { kind: 'uuid' }, required: true },
+} as const;
+const revisionPath = {
+  ...outputPath,
   revision_id: { scalar: { kind: 'uuid' }, required: true },
 } as const;
 const headers = z.object({
@@ -366,18 +370,18 @@ export const agentRoutes = [
   }),
   defineGetRoute({
     family,
-    path: '/api/v1/agent/chats/{chat_id}/output/revisions',
-    params: { path: chatPath, query: {} },
+    path: '/api/v1/agent/chats/{chat_id}/outputs/{output_id}/revisions',
+    params: { path: outputPath, query: {} },
     response: agentRevisionsPageSchema,
     async handle({ db, c }, { path }) {
-      return listRevisions(db, workspaceOf(c), path.chat_id);
+      return listRevisions(db, workspaceOf(c), path.chat_id, path.output_id);
     },
   }),
   definePostRoute({
     family,
-    path: '/api/v1/agent/chats/{chat_id}/output/revisions',
+    path: '/api/v1/agent/chats/{chat_id}/outputs/{output_id}/revisions',
     capability: 'run',
-    params: { path: chatPath, query: {} },
+    params: { path: outputPath, query: {} },
     body: body.edit,
     response: agentRevisionSchema,
     status: 201,
@@ -387,14 +391,18 @@ export const agentRoutes = [
         { outputs } = await agentBindings(db);
       return revisionView(
         await mapped(() =>
-          outputs.edit(value, path.chat_id, input.base_revision_id, input.title, input.body),
+          outputs.edit(value, path.chat_id, path.output_id, {
+            baseId: input.base_revision_id,
+            title: input.title,
+            body: input.body,
+          }),
         ),
       );
     },
   }),
   definePostRoute({
     family,
-    path: '/api/v1/agent/chats/{chat_id}/output/revisions/{revision_id}/restore',
+    path: '/api/v1/agent/chats/{chat_id}/outputs/{output_id}/revisions/{revision_id}/restore',
     capability: 'run',
     params: { path: revisionPath, query: {} },
     response: agentRevisionSchema,
@@ -403,7 +411,7 @@ export const agentRoutes = [
       const value = await chatScope(db, c, path.chat_id),
         { outputs } = await agentBindings(db);
       return revisionView(
-        await mapped(() => outputs.restore(value, path.chat_id, path.revision_id)),
+        await mapped(() => outputs.restore(value, path.chat_id, path.output_id, path.revision_id)),
       );
     },
   }),

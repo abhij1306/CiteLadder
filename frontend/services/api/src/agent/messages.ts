@@ -44,6 +44,8 @@ export async function appendMessage(
     skillId?: string | null;
     skillSource?: string | null;
     evidence?: string[];
+    /** Web pages the turn's searches returned, kept apart from CiteLadder records. */
+    webSources?: { url: string; title: string }[];
     steps?: Json[];
     mentions?: Json[];
   },
@@ -69,6 +71,7 @@ export async function appendMessage(
       skill_id: input.skillId ?? null,
       skill_source: input.skillSource ?? null,
       evidence_refs: JSON.stringify(input.evidence ?? []),
+      web_sources: JSON.stringify(input.webSources ?? []),
       steps: JSON.stringify(input.steps ?? []),
       mentions: JSON.stringify(input.mentions ?? []),
       created_at: new Date(),

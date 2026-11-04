@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
+import { latestOutput } from '@/lib/agent/documents';
 import type { AgentChatDetail } from '@/lib/api/agent';
 import { AGENT_FOLLOW_LATEST_GAP_PX } from '@/lib/config/agent';
 
@@ -46,12 +47,13 @@ export function useFollowLatest(detail: AgentChatDetail) {
   }, []);
 
   const progress = detail.latest_run?.progress.at(-1);
+  const latestRevisionId = latestOutput(detail)?.latest_revision.id;
   useEffect(() => {
     if (following.current) endRef.current?.scrollIntoView?.({ block: 'end' });
   }, [
     detail.messages.length,
     detail.latest_run?.status,
-    detail.output?.latest_revision?.id,
+    latestRevisionId,
     progress?.ordinal,
     progress?.status,
   ]);

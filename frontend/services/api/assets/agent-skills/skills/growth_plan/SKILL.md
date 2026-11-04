@@ -56,5 +56,5 @@ One document with:
 - The main bottlenecks the data supports (no more than the evidence justifies).
 - A now / next / later table: target, the work, why (evidence in plain words), effort, dependency, how to check it worked. Usually no more than five "now" items.
 - A content map only when asked.
-- The next step: which skill to start in a new chat and a ready-to-paste request with the known pages and goals filled in.
+- The next step: which skill to use next and a ready-to-paste request with the known pages and goals filled in.
 - Measurement plan and the data gaps that block decisions.

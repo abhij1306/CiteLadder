@@ -124,9 +124,9 @@ describe('served Agent cutover on PostgreSQL', () => {
       await (await app.request(`/api/v1/agent/chats/${accepted.chat_id}`, { headers })).json(),
     );
     expect(detail.messages.at(-1)?.content).toBe(
-      `${long}\n\nDocument saved in Website page format.`,
+      `${long}\n\nDocument 1 saved in Website page format.`,
     );
-    expect(detail.output?.latest_revision?.body).toBe('Outline body');
+    expect(detail.outputs.map((output) => output.latest_revision.body)).toEqual(['Outline body']);
     // A second request for the finished turn never executes it again.
     const again = await app.request(
       `/api/v1/agent/chats/${accepted.chat_id}/runs/${accepted.run.id}/run`,
@@ -227,10 +227,12 @@ describe('served Agent cutover on PostgreSQL', () => {
     ).toBe(200);
     const detail = agentChatDetailSchema.parse(await (await app.request(chat, { headers })).json());
     expect(detail.latest_run?.status).toBe('succeeded');
-    expect(detail.output?.latest_revision?.body).toBe('Requested document');
-    const revisionId = detail.output!.latest_revision!.id;
+    const [output] = detail.outputs;
+    expect(output?.latest_revision.body).toBe('Requested document');
+    const revisionId = output!.latest_revision.id;
+    const revisions = `${chat}/outputs/${output!.id}/revisions`;
     const edit = { base_revision_id: revisionId, title: 'Revised title', body: 'Reviewed outline' };
-    const edited = await app.request(`${chat}/output/revisions`, {
+    const edited = await app.request(revisions, {
       method: 'POST',
       headers,
       body: JSON.stringify(edit),
@@ -238,7 +240,7 @@ describe('served Agent cutover on PostgreSQL', () => {
     expect(edited.status).toBe(201);
     expect(
       (
-        await app.request(`${chat}/output/revisions`, {
+        await app.request(revisions, {
           method: 'POST',
           headers,
           body: JSON.stringify(edit),
@@ -247,16 +249,15 @@ describe('served Agent cutover on PostgreSQL', () => {
     ).toBe(409);
     expect(
       (
-        await app.request(`${chat}/output/revisions/${revisionId}/restore`, {
+        await app.request(`${revisions}/${revisionId}/restore`, {
           method: 'POST',
           headers,
         })
       ).status,
     ).toBe(201);
     expect(
-      agentRevisionsPageSchema.parse(
-        await (await app.request(`${chat}/output/revisions`, { headers })).json(),
-      ).items,
+      agentRevisionsPageSchema.parse(await (await app.request(revisions, { headers })).json())
+        .items,
     ).toHaveLength(3);
     expect((await app.request(chat, { method: 'DELETE', headers })).status).toBe(204);
     const list = await app.request(`/api/v1/projects/${scope.projectId}/agent/chats`, { headers });

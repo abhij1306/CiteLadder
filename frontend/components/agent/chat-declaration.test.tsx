@@ -35,7 +35,7 @@ describe('ChatScreen implementation declaration', () => {
     const ACTION = '88888888-8888-4888-8888-888888888888';
     const attached = detail(revision(REV1, 1, 'agent', 'Body.'));
     attached.chat.action_id = ACTION as never;
-    attached.output.action_id = ACTION as never;
+    attached.outputs[0]!.action_id = ACTION;
     const declaration = {
       id: '99999999-9999-4999-8999-999999999999',
       action_id: ACTION,

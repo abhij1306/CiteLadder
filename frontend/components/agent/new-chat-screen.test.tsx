@@ -114,7 +114,7 @@ const WORKFLOW_CATALOG = {
 function baseHandlers(actions: ReturnType<typeof actionItem>[] = []) {
   return [
     http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-      HttpResponse.json({ ...detail(revision(REV1, 1, 'agent', '')), output: null }),
+      HttpResponse.json({ ...detail(revision(REV1, 1, 'agent', '')), outputs: [] }),
     ),
     http.get('/api/v1/agent/skills', () => HttpResponse.json({ skills: [GROWTH_SKILL] })),
     http.get(`/api/v1/projects/${PROJECT}/actions`, () =>
@@ -152,7 +152,7 @@ describe('NewChatScreen', () => {
       http.get(`/api/v1/agent/chats/${CHAT}`, async () => {
         reading = true;
         await ready;
-        return HttpResponse.json({ ...detail(revision(REV1, 1, 'agent', '')), output: null });
+        return HttpResponse.json({ ...detail(revision(REV1, 1, 'agent', '')), outputs: [] });
       }),
     );
     const user = userEvent.setup();

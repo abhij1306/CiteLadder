@@ -253,6 +253,17 @@ const BUILTIN_TOOL_LABEL: Record<string, Record<'started' | 'completed' | 'refus
     completed: 'Saved the document',
     refused: 'Document not saved',
   },
+  edit_document: {
+    started: 'Editing the document…',
+    completed: 'Edited the document',
+    refused: 'Document not edited',
+  },
+  // Provider-hosted; its results are outside pages, not CiteLadder data.
+  web_search: {
+    started: 'Searching the web…',
+    completed: 'Searched the web',
+    refused: 'Web search not run',
+  },
 };
 
 /** One tool call of a live turn; a model response's calls run together. */

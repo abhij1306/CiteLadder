@@ -164,6 +164,7 @@ function revision(db: Database, workspace: string, project: string, action: stri
         ...scope,
         id: outputId,
         chat_id: chatId,
+        number: 1,
         action_id: action,
         kind: 'page_edits',
         skill_id: 'gsc_optimize',

@@ -25,6 +25,8 @@ export const budgetSchema = z.object({
   max_model_calls: z.number().int().positive(),
   max_tool_calls: z.number().int().nonnegative(),
   max_parallel_tool_calls: z.number().int().positive(),
+  /** Provider-hosted web searches per turn, across all its model calls. */
+  max_web_searches: z.number().int().nonnegative(),
   limit_reminder_calls: z.number().int().nonnegative(),
   reasoning_effort: z.enum(['low', 'medium', 'high']),
   compaction_trigger_tokens: z.number().int().positive(),

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Textarea } from '@/components/ui/textarea';
 import { agentWriteFailure } from '@/lib/agent/errors';
-import { agentMutations, type AgentRevision } from '@/lib/api/agent';
+import { agentMutations, type AgentDocumentRef, type AgentRevision } from '@/lib/api/agent';
 import { queryKeys } from '@/lib/api/query-keys';
 
 /** An edit in progress, bound to the revision it started from. */
@@ -26,14 +26,14 @@ export type OutputDraft = {
  */
 export function OutputEditor({
   workspaceId,
-  chatId,
+  target,
   revision,
   draft,
   onChange,
   onDone,
 }: Readonly<{
   workspaceId: string;
-  chatId: string;
+  target: AgentDocumentRef;
   revision: AgentRevision;
   draft: OutputDraft;
   onChange: (draft: OutputDraft) => void;
@@ -45,45 +45,38 @@ export function OutputEditor({
     ...agentMutations.editOutput(workspaceId),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agent.chat(chatId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agent.revisions(chatId),
-        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(target.chatId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agent.revisions(target.chatId) }),
       ]);
       onDone();
     },
   });
   const unchanged = title === revision.title && body === revision.body;
   const blank = !title.trim() || !body.trim();
+  const titleId = `agent-output-title-${target.outputId}`,
+    bodyId = `agent-output-body-${target.outputId}`;
   return (
     <Stack
       as="form"
       gap="compact"
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
-        save.mutate({
-          chatId,
-          baseRevisionId: draft.baseRevisionId,
-          title,
-          body,
-        });
+        save.mutate({ ...target, baseRevisionId: draft.baseRevisionId, title, body });
       }}
     >
-      <label htmlFor="agent-output-title" className="sr-only">
+      <label htmlFor={titleId} className="sr-only">
         Output title
       </label>
       <Input
-        id="agent-output-title"
+        id={titleId}
         value={title}
         onChange={(event) => onChange({ ...draft, title: event.target.value })}
       />
-      <label htmlFor="agent-output-body" className="sr-only">
+      <label htmlFor={bodyId} className="sr-only">
         Output body (Markdown)
       </label>
       <Textarea
-        id="agent-output-body"
+        id={bodyId}
         value={body}
         rows={18}
         onChange={(event) => onChange({ ...draft, body: event.target.value })}

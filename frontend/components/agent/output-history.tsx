@@ -21,21 +21,23 @@ import { ContentMarkdown } from '@/lib/markdown/markdown';
 type View = { id: string; mode: 'view' | 'compare' } | null;
 
 /**
- * Every revision of the output, newest first. Any earlier revision can be
+ * Every revision of one document, newest first. Any earlier revision can be
  * viewed or restored; a restore appends a new revision rather than rewinding.
  */
 export function OutputHistory({
   workspaceId,
   chatId,
+  outputId,
   latestRevisionId,
   canRestore,
 }: Readonly<{
   workspaceId: string;
   chatId: string;
+  outputId: string;
   latestRevisionId: string;
   canRestore: boolean;
 }>) {
-  const query = useQuery(agentQueries.revisions(workspaceId, chatId, latestRevisionId));
+  const query = useQuery(agentQueries.revisions(workspaceId, chatId, outputId, latestRevisionId));
   const [viewing, setViewing] = useState<View>(null);
   const queryClient = useQueryClient();
   const restore = useMutation({
@@ -83,7 +85,7 @@ export function OutputHistory({
               onToggle={(mode) => toggle(revision.id, mode)}
               restoring={restore.isPending}
               canRestore={canRestore}
-              onRestore={() => restore.mutate({ chatId, revisionId: revision.id })}
+              onRestore={() => restore.mutate({ chatId, outputId, revisionId: revision.id })}
             />
           </Stack>
         ))}

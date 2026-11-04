@@ -5,6 +5,7 @@
   "max_model_calls": 40,
   "max_tool_calls": 60,
   "max_parallel_tool_calls": 10,
+  "max_web_searches": 5,
   "limit_reminder_calls": 2,
   "reasoning_effort": "medium",
   "compaction_trigger_tokens": 80000,

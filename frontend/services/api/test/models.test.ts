@@ -398,6 +398,7 @@ describe('configured model gateway', () => {
           effort: 'medium',
           compactAtTokens: 80_000,
           previousResponseId: 'msg_1',
+          webSearches: 0,
         },
         undefined,
         {
@@ -469,6 +470,130 @@ describe('configured model gateway', () => {
           { name: 'save_document', eager_input_streaming: true },
         ],
       });
+    }),
+  );
+
+  it(
+    'offers Anthropic web search within the call’s allowance and keeps its blocks as returned',
+    metered(async () => {
+      const result = {
+        type: 'web_search_tool_result',
+        tool_use_id: 'srvtoolu_1',
+        content: [
+          {
+            type: 'web_search_result',
+            url: 'https://example.com/uniforms',
+            title: 'School uniforms',
+            encrypted_content: 'enc-1',
+            page_age: 'May 1, 2026',
+          },
+        ],
+      };
+      const cited = {
+        type: 'text',
+        text: 'Uniform prices start at $10.',
+        citations: [
+          {
+            type: 'web_search_result_location',
+            url: 'https://example.com/uniforms',
+            title: 'School uniforms',
+            encrypted_index: 'idx-1',
+            cited_text: 'Polos from $10',
+          },
+        ],
+      };
+      const frames = [
+        {
+          type: 'message_start',
+          message: {
+            id: 'msg_3',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-haiku-5-5',
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: {
+              input_tokens: 10,
+              output_tokens: 1,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          },
+        },
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'server_tool_use',
+            id: 'srvtoolu_1',
+            name: 'web_search',
+            input: {},
+          },
+        },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: '{"query":"school uniform prices"}' },
+        },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 1, content_block: result },
+        { type: 'content_block_stop', index: 1 },
+        { type: 'content_block_start', index: 2, content_block: { ...cited, text: '' } },
+        {
+          type: 'content_block_delta',
+          index: 2,
+          delta: { type: 'text_delta', text: 'Uniform prices start at $10.' },
+        },
+        { type: 'content_block_stop', index: 2 },
+        {
+          type: 'message_delta',
+          delta: { stop_reason: 'pause_turn', stop_sequence: null },
+          usage: { output_tokens: 12, server_tool_use: { web_search_requests: 1 } },
+        },
+        { type: 'message_stop' },
+      ];
+      const sse = frames
+        .map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`)
+        .join('');
+      const io = transport([
+        new Response(sse, { headers: { 'content-type': 'text/event-stream' } }),
+      ]);
+      const gateway = createModelGateway(
+        { ...settings, baseUrl: 'https://api.anthropic.com/v1', attempts: 1 },
+        io,
+      );
+      const events: unknown[] = [];
+      const answer = await gateway.converse(
+        {
+          system: 'contract',
+          tools: [{ name: 'read_a', description: 'A.', input_schema: { type: 'object' } }],
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'Uniform prices?' }] }],
+          effort: 'medium',
+          compactAtTokens: 80_000,
+          previousResponseId: null,
+          webSearches: 3,
+        },
+        undefined,
+        { serverTool: (event) => events.push(event) },
+      );
+      expect(answer).toMatchObject({
+        stop: 'pause_turn',
+        toolCalls: [],
+        text: 'Uniform prices start at $10.',
+        usage: { input_tokens: 10, output_tokens: 12, web_search_requests: 1 },
+      });
+      // The result and citations replay byte for byte, encrypted content included.
+      expect(JSON.stringify(answer.blocks.slice(1))).toBe(JSON.stringify([result, cited]));
+      expect(events).toEqual([
+        { id: 'srvtoolu_1', name: 'web_search', status: 'started' },
+        { id: 'srvtoolu_1', name: 'web_search', status: 'completed' },
+      ]);
+      const [, init] = io.fetch.mock.calls[0]!;
+      expect(JSON.parse(String(init!.body)).tools).toEqual([
+        { name: 'read_a', description: 'A.', input_schema: { type: 'object' } },
+        { type: 'web_search_20250305', name: 'web_search', max_uses: 3 },
+      ]);
     }),
   );
 
@@ -613,6 +738,8 @@ describe('configured model gateway', () => {
           effort: 'low',
           compactAtTokens: 80_000,
           previousResponseId: null,
+          // Chat completions have no hosted search: the allowance offers nothing.
+          webSearches: 2,
         },
         undefined,
         { text: (delta) => deltas.push(delta) },

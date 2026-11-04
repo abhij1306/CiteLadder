@@ -1,6 +1,7 @@
 {
   "revision": "ai-pricing-v1",
   "gateway_default_price": "claude-haiku-5-5",
+  "web_search_microusd_per_request": 10000,
   "models": {
     "claude-haiku-5-5": {
       "input_microusd_per_million": 100000,

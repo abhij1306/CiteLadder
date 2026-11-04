@@ -104,6 +104,7 @@ export interface AgentMessages {
   skill_id: string | null;
   skill_source: string | null;
   steps: Json;
+  web_sources: Generated<Json>;
   workspace_id: string;
 }
 
@@ -147,6 +148,7 @@ export interface AgentModelAttempts {
   total_tokens: Int8 | null;
   usage_complete: boolean;
   usage_iterations: Generated<Json>;
+  web_search_requests: number | null;
   workspace_id: string;
 }
 
@@ -164,6 +166,7 @@ export interface AgentOutputRevisions {
   run_id: string | null;
   source_refs: Json;
   title: string;
+  web_sources: Generated<Json>;
   workspace_id: string;
 }
 
@@ -174,6 +177,7 @@ export interface AgentOutputs {
   format_id: string | null;
   id: string;
   kind: string;
+  number: number;
   project_id: string;
   skill_id: string;
   target_kind: string | null;

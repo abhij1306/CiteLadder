@@ -67,6 +67,7 @@ export const agentToolStatusSchema = z.enum([
  * - `document_delta`: the document being saved, so far (a snapshot).
  * - `thinking`: the next piece of that call's thinking summary.
  * - `tool`: one call's state, keyed by `call_id`; calls in one step run together.
+ *   A provider-hosted web search is the tool `web_search`.
  */
 export const agentTurnEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('step'), ordinal: z.number().int() }),
@@ -89,6 +90,9 @@ export const agentTurnEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), code: z.string() }),
 ]);
 
+/** A web page a search returned: an untrusted observation, apart from CiteLadder records. */
+export const agentWebSourceSchema = responseObject({ url: z.string(), title: z.string() });
+
 export const agentRevisionSchema = responseObject({
   id: uuid(),
   number: z.number().int(),
@@ -97,11 +101,14 @@ export const agentRevisionSchema = responseObject({
   title: z.string(),
   body: z.string(),
   source_refs: z.array(z.string()),
+  web_sources: z.array(agentWebSourceSchema),
   created_at: z.string(),
 });
 
+// One of a chat's documents; `number` is its label ("Document 2"), in creation order.
 export const agentOutputSchema = responseObject({
   id: uuid(),
+  number: z.number().int(),
   // Latest generating reply; user edits and restores keep this placement.
   message_id: uuid().nullish(),
   action_id: uuid().nullable(),
@@ -110,11 +117,13 @@ export const agentOutputSchema = responseObject({
   format_id: z.string().nullable(),
   target_kind: z.string().nullable(),
   target_label: z.string().nullable(),
-  latest_revision: agentRevisionSchema.nullable(),
+  // Every document has at least one revision.
+  latest_revision: agentRevisionSchema,
 });
 
 // A step summary is `{kind: 'model', ordinal}`, `{kind: 'skill', skill_id}`,
-// `{kind: 'document'}` or `{kind: 'tool', tool, status, call_id, ordinal}`.
+// `{kind: 'document'}`, `{kind: 'tool', tool, status, call_id, ordinal}` or
+// `{kind: 'search', query, status, call_id, ordinal}` (a web search).
 const agentStepSchema = responseObject({
   kind: z.string(),
   ordinal: z.number().int().optional(),
@@ -122,6 +131,7 @@ const agentStepSchema = responseObject({
   tool: z.string().optional(),
   status: z.string().optional(),
   call_id: z.string().optional(),
+  query: z.string().optional(),
 });
 
 export const agentMessageSchema = responseObject({
@@ -132,6 +142,7 @@ export const agentMessageSchema = responseObject({
   skill_id: z.string().nullable(),
   skill_source: z.string().nullable(),
   evidence_refs: z.array(z.string()),
+  web_sources: z.array(agentWebSourceSchema).default([]),
   steps: z.array(agentStepSchema),
   // Actions a user message @-mentioned, as resolved when it was sent.
   mentions: z
@@ -174,7 +185,8 @@ export const agentChatDetailSchema = responseObject({
   context: agentContextDisclosureSchema.partial(),
   messages: z.array(agentMessageSchema),
   latest_run: agentRunSchema.nullable(),
-  output: agentOutputSchema.nullable(),
+  // The chat's documents in number order.
+  outputs: z.array(agentOutputSchema),
 });
 
 export const agentTurnAcceptedSchema = responseObject({

@@ -2,7 +2,7 @@ import type { AgentMessage } from '@/lib/api/agent';
 
 export const PROJECT = '11111111-1111-4111-8111-111111111111';
 export const CHAT = '22222222-2222-4222-8222-222222222222';
-const OUTPUT = '33333333-3333-4333-8333-333333333333';
+export const OUTPUT = '33333333-3333-4333-8333-333333333333';
 export const REV1 = '44444444-4444-4444-8444-444444444441';
 export const REV2 = '44444444-4444-4444-8444-444444444442';
 export const RUN = '55555555-5555-4555-8555-555555555555';
@@ -17,6 +17,7 @@ export function revision(id: string, number: number, author: 'agent' | 'user', b
     title: 'Pricing page edits',
     body,
     source_refs: ['citeladder://opportunity/66666666-6666-4666-8666-666666666666'],
+    web_sources: [] as { url: string; title: string }[],
     created_at: NOW,
   };
 }
@@ -99,17 +100,20 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
         ...step,
       })),
     },
-    output: {
-      id: OUTPUT,
-      message_id: '77777777-7777-4777-8777-777777777772',
-      action_id: null,
-      kind: 'page_edits',
-      skill_id: 'gsc_optimize',
-      format_id: null,
-      target_kind: null,
-      target_label: null,
-      latest_revision: latest,
-    },
+    outputs: [
+      {
+        id: OUTPUT,
+        number: 1,
+        message_id: '77777777-7777-4777-8777-777777777772' as string | null,
+        action_id: null as string | null,
+        kind: 'page_edits',
+        skill_id: 'gsc_optimize',
+        format_id: null,
+        target_kind: null,
+        target_label: null,
+        latest_revision: latest,
+      },
+    ],
   };
 }
 

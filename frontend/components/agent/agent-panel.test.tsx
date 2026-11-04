@@ -80,7 +80,7 @@ const DETAIL = {
     },
   ],
   latest_run: RUN,
-  output: null,
+  outputs: [],
 };
 
 /** Lets a test change the screen's context, as a background refetch would. */

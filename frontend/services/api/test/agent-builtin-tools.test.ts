@@ -5,6 +5,7 @@ import {
   loadSkill,
   saveDocument,
   type DocumentState,
+  type SavedDocument,
 } from '../src/agent/builtin-tools.ts';
 import type { SkillCatalog } from '../src/agent/contracts.ts';
 import { ToolRegistry } from '../src/agent/tools.ts';
@@ -36,36 +37,39 @@ function state(overrides: Partial<DocumentState> = {}): DocumentState {
   return {
     skill: undefined,
     skillSource: null,
-    outputKind: null,
     formatId: null,
-    document: null,
-    staged: null,
+    documents: [],
+    staged: new Map(),
     ...overrides,
   };
 }
+const saved = (overrides: Partial<SavedDocument> = {}): SavedDocument => ({
+  number: 1,
+  kind: 'content',
+  skillId: 'content',
+  formatId: 'faq',
+  title: 'Kids shoes',
+  body: 'Intro.\n\nSizes run small.\n\nShop now.',
+  ...overrides,
+});
 const content = () => catalog.skills.get('content');
+const plan = () => catalog.skills.get('plan');
 
 describe('Agent built-in tools', () => {
-  it('switches methodology within a kind and keeps a chat to its deliverable kind', () => {
-    const turn = state();
+  it('loads any methodology, whatever kind the chat’s documents are', () => {
+    const turn = state({ documents: [saved()] });
     const loaded = loadSkill(catalog, turn, { skill_id: 'content' }, bounds);
     expect(loaded.ok).toBe(true);
     expect(loaded.text).toContain('Write requested content.');
-    expect(loadSkill(catalog, turn, { skill_id: 'refresh' }, bounds).ok).toBe(true);
-    expect(turn.skill?.id).toBe('refresh');
-    expect(
-      loadSkill(catalog, state({ outputKind: 'content' }), { skill_id: 'plan' }, bounds),
-    ).toEqual({
-      ok: false,
-      text: 'This chat’s document is of kind “content” and this methodology writes “plan”, so it cannot be used here. Answer in your reply instead, or offer to continue in a new chat.',
-    });
+    expect(loadSkill(catalog, turn, { skill_id: 'plan' }, bounds).ok).toBe(true);
+    expect(turn.skill?.id).toBe('plan');
     expect(loadSkill(catalog, state(), { skill: 'plan' }, bounds).text).toMatch(
       /^Invalid arguments: skill_id: /u,
     );
   });
 
-  it('stages any format as the document only after a methodology', () => {
-    const turn = state();
+  it('stages a new numbered document only after a methodology', () => {
+    const turn = state({ documents: [saved()] });
     const draft = { title: 'Guide', body: 'Body', format_id: 'article' };
     expect(saveDocument(catalog, turn, draft, bounds)).toEqual({
       ok: false,
@@ -74,9 +78,41 @@ describe('Agent built-in tools', () => {
     loadSkill(catalog, turn, { skill_id: 'content' }, bounds);
     expect(saveDocument(catalog, turn, draft, bounds)).toEqual({
       ok: true,
-      text: 'Staged the document in Article format; it is saved with your reply. Now reply briefly; do not repeat the document.',
+      document: 2,
+      text: 'Document 2: staged as a new document in Article format; it is saved with your reply. Now reply briefly; do not repeat the document.',
     });
-    expect(turn.staged).toEqual({ title: 'Guide', body: 'Body', format_id: 'article' });
+    expect(turn.staged.get(2)).toEqual({
+      kind: 'content',
+      skillId: 'content',
+      payload: { title: 'Guide', body: 'Body', format_id: 'article' },
+    });
+    // A second new document in the same turn takes the next number.
+    expect(saveDocument(catalog, turn, { ...draft, title: 'FAQ' }, bounds).document).toBe(3);
+  });
+
+  it('replaces a document of the loaded kind, once per step, and refuses another kind', () => {
+    const turn = state({ skill: content(), documents: [saved()] });
+    const replaced = saveDocument(catalog, turn, { document: 1, title: 'New', body: 'B' }, bounds);
+    expect(replaced).toMatchObject({ ok: true, document: 1 });
+    // The document's format applies when the save names none.
+    expect(turn.staged.get(1)?.payload).toMatchObject({ title: 'New', format_id: 'faq' });
+    expect(
+      saveDocument(catalog, turn, { document: 1, title: 'Again', body: 'B' }, bounds, new Set([1])),
+    ).toEqual({
+      ok: false,
+      text: 'Save Document 1 once per step. The first save in this step was kept.',
+    });
+    const planning = state({ skill: plan(), documents: [saved()] });
+    expect(saveDocument(catalog, planning, { document: 1, title: 'P', body: 'B' }, bounds)).toEqual(
+      {
+        ok: false,
+        text: 'Document 1 is a “content” document and this methodology writes “plan”. Omit document to save this as a new document, or load a “content” methodology to replace it.',
+      },
+    );
+    expect(saveDocument(catalog, planning, { document: 4, title: 'P', body: 'B' }, bounds)).toEqual(
+      { ok: false, text: 'This chat has no Document 4. Use one of: Document 1.' },
+    );
+    expect(planning.staged.size).toBe(0);
   });
 
   it('refuses a missing format and an oversized document with how to fix them', () => {
@@ -85,25 +121,22 @@ describe('Agent built-in tools', () => {
       ok: false,
       text: 'Set format_id to one of: article, faq.',
     });
-    // The chat's saved format applies when a save names none.
+    // The chat's pinned format applies when a new document names none.
     const continuing = state({ skill: content(), formatId: 'faq' });
     saveDocument(catalog, continuing, { title: 'T', body: 'B' }, bounds);
-    expect(continuing.staged).toMatchObject({ format_id: 'faq' });
+    expect(continuing.staged.get(1)?.payload).toMatchObject({ format_id: 'faq' });
     expect(
       saveDocument(catalog, turn, { title: 'T', body: 'x'.repeat(201), format_id: 'faq' }, bounds),
     ).toEqual({
       ok: false,
       text: 'Give a nonblank title of at most 20 characters and a nonblank body of at most 200 characters.',
     });
-    expect(turn.staged).toBeNull();
+    expect(turn.staged.size).toBe(0);
   });
 
-  it('edits the current document with exact, unique replacements, all or none', () => {
-    const turn = state({
-      skill: content(),
-      formatId: 'faq',
-      document: { title: 'Kids shoes', body: 'Intro.\n\nSizes run small.\n\nShop now.' },
-    });
+  it('edits the named document with exact, unique replacements, all or none', () => {
+    const turn = state({ documents: [saved()] });
+    // With one document the number may be left out, and no methodology is needed.
     expect(
       editDocument(
         catalog,
@@ -119,22 +152,40 @@ describe('Agent built-in tools', () => {
       ),
     ).toEqual({
       ok: true,
-      text: 'Applied 2 edits in FAQ format; it is saved with your reply. Now reply briefly; do not repeat the document.',
+      document: 1,
+      text: 'Document 1: applied 2 edits in FAQ format; it is saved with your reply. Now reply briefly; do not repeat the document.',
     });
-    expect(turn.staged).toEqual({
-      title: 'Kids school shoes',
-      body: 'Intro.\n\nSizes run true to size.',
-      format_id: 'faq',
-      target_kind: null,
-      target: null,
+    expect(turn.staged.get(1)).toEqual({
+      kind: 'content',
+      skillId: 'content',
+      payload: {
+        title: 'Kids school shoes',
+        body: 'Intro.\n\nSizes run true to size.',
+        format_id: 'faq',
+        target_kind: null,
+        target: null,
+      },
     });
     // A later edit in the same turn changes the staged text, not the saved one.
     editDocument(catalog, turn, { edits: [{ old_string: 'Intro.', new_string: 'Hi.' }] }, bounds);
-    expect(turn.staged?.body).toBe('Hi.\n\nSizes run true to size.');
+    expect(turn.staged.get(1)?.payload.body).toBe('Hi.\n\nSizes run true to size.');
 
-    const strict = state({ skill: content(), document: { title: 'T', body: 'a b a' } });
+    const two = state({
+      documents: [saved(), saved({ number: 2, kind: 'plan', skillId: 'plan', body: 'a b a' })],
+    });
     expect(
-      editDocument(catalog, strict, { edits: [{ old_string: 'a', new_string: 'c' }] }, bounds),
+      editDocument(catalog, two, { edits: [{ old_string: 'Intro.', new_string: 'x' }] }, bounds),
+    ).toEqual({
+      ok: false,
+      text: 'Set document to the number of the document to change: one of Document 1, Document 2.',
+    });
+    expect(
+      editDocument(
+        catalog,
+        two,
+        { document: 2, edits: [{ old_string: 'a', new_string: 'c' }] },
+        bounds,
+      ),
     ).toEqual({
       ok: false,
       text: 'old_string appears more than once. Include more surrounding text so it matches exactly once. No edits were applied.',
@@ -142,8 +193,9 @@ describe('Agent built-in tools', () => {
     expect(
       editDocument(
         catalog,
-        strict,
+        two,
         {
+          document: 2,
           edits: [
             { old_string: 'a b', new_string: 'x' },
             { old_string: 'missing', new_string: 'y' },
@@ -155,9 +207,9 @@ describe('Agent built-in tools', () => {
       ok: false,
       text: 'Edit 2: old_string is not in the current document. Copy it exactly, including whitespace and Markdown. No edits were applied.',
     });
-    expect(strict.staged).toBeNull();
-    expect(editDocument(catalog, state({ skill: content() }), { edits: [] }, bounds).text).toBe(
-      'This chat has no document yet. Write it with save_document.',
+    expect(two.staged.size).toBe(0);
+    expect(editDocument(catalog, state(), { edits: [] }, bounds).text).toBe(
+      'This chat has no documents yet. Write one with save_document.',
     );
   });
 

@@ -15,7 +15,7 @@ import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { containsPattern } from '../db/like.ts';
 import { agentPolicy, type Chat, type Run, type Scope } from './contracts.ts';
-import { currentOutput, revisionRefs } from './outputs.ts';
+import { chatDocuments, latestDocument, revisionRefs, revisionWebSources } from './outputs.ts';
 import { active } from './queue.ts';
 import { workspaceChat } from './messages.ts';
 import { manifestSchema } from './context.ts';
@@ -41,10 +41,15 @@ export function runView(run: Run, steps: z.input<typeof agentRunStepSchema>[] = 
     progress: steps,
   });
 }
-export function revisionView(revision: { created_at: Date; source_refs: unknown }) {
+export function revisionView(revision: {
+  created_at: Date;
+  source_refs: unknown;
+  web_sources: unknown;
+}) {
   return agentRevisionSchema.parse({
     ...revision,
     source_refs: revisionRefs(revision.source_refs),
+    web_sources: revisionWebSources(revision.web_sources),
     created_at: iso(revision.created_at),
   });
 }
@@ -159,19 +164,26 @@ export async function readChat(
     .orderBy('id', 'desc')
     .limit(1)
     .executeTakeFirst();
-  const current = await currentOutput(db, chat);
-  const generated = current.output
+  const documents = await chatDocuments(db, chat);
+  // Each document's latest generating reply, where the thread places it.
+  const generated = documents.length
     ? await db
         .selectFrom('agent_output_revisions')
-        .select('message_id')
+        .select(['output_id', 'message_id'])
+        .distinctOn('output_id')
         .where('workspace_id', '=', scope.workspaceId)
         .where('project_id', '=', scope.projectId)
-        .where('output_id', '=', current.output.id)
+        .where(
+          'output_id',
+          'in',
+          documents.map(({ output }) => output.id),
+        )
         .where('author', '=', 'agent')
+        .orderBy('output_id')
         .orderBy('number', 'desc')
-        .limit(1)
-        .executeTakeFirst()
-    : undefined;
+        .execute()
+    : [];
+  const generatedBy = new Map(generated.map((row) => [row.output_id, row.message_id]));
   const parsedManifest = run ? manifestSchema.safeParse(run.context_manifest) : null;
   const manifest = parsedManifest?.success ? parsedManifest.data : null;
   let limitations = manifest?.package.summary.omissions ?? [];
@@ -188,7 +200,7 @@ export async function readChat(
   return agentChatDetailSchema.parse({
     chat: summary(
       chat,
-      current.output?.kind ?? null,
+      latestDocument(documents)?.output.kind ?? null,
       action?.target_label ?? null,
       run ? active.includes(run.status) : false,
     ),
@@ -219,37 +231,43 @@ export async function readChat(
         ...message,
         created_at: iso(message.created_at),
         evidence_refs: revisionRefs(message.evidence_refs),
+        web_sources: revisionWebSources(message.web_sources),
       }),
     ),
     latest_run: run ? runView(run, await progress(db, run)) : null,
-    output: current.output
-      ? agentOutputSchema.parse({
-          ...current.output,
-          message_id: generated?.message_id ?? null,
-          latest_revision: current.revision ? revisionView(current.revision) : null,
-        })
-      : null,
+    outputs: documents.map(({ output, revision }) =>
+      agentOutputSchema.parse({
+        ...output,
+        message_id: generatedBy.get(output.id) ?? null,
+        latest_revision: revisionView(revision),
+      }),
+    ),
   });
 }
 const cursorSchema = z.object({ at: z.iso.datetime({ offset: true }), id: z.uuid() });
+/** One document's revisions, newest first; a document outside the chat has none. */
 export async function listRevisions(
   db: Database,
   workspace: Pick<Scope, 'workspaceId'>,
   chatId: string,
+  outputId: string,
 ) {
   const { chat, scope } = await chatIn(db, workspace, chatId);
-  const current = await currentOutput(db, chat);
-  const revisions = current.output
-    ? await db
-        .selectFrom('agent_output_revisions')
-        .selectAll()
-        .where('workspace_id', '=', scope.workspaceId)
-        .where('project_id', '=', scope.projectId)
-        .where('output_id', '=', current.output.id)
-        .orderBy('number', 'desc')
-        .limit(agentPolicy.revision_list_max)
-        .execute()
-    : [];
+  const revisions = await db
+    .selectFrom('agent_output_revisions as revision')
+    .innerJoin('agent_outputs as output', (join) =>
+      join
+        .onRef('output.id', '=', 'revision.output_id')
+        .onRef('output.workspace_id', '=', 'revision.workspace_id'),
+    )
+    .selectAll('revision')
+    .where('revision.workspace_id', '=', scope.workspaceId)
+    .where('revision.project_id', '=', scope.projectId)
+    .where('output.chat_id', '=', chat.id)
+    .where('output.id', '=', outputId)
+    .orderBy('revision.number', 'desc')
+    .limit(agentPolicy.revision_list_max)
+    .execute();
   return agentRevisionsPageSchema.parse({
     items: revisions.map((revision) => revisionView(revision)),
   });
@@ -268,11 +286,6 @@ export async function listChats(
     .parse(options.limit ?? agentPolicy.list_default_limit);
   let query = db
     .selectFrom('agent_chats as chat')
-    .leftJoin('agent_outputs as output', (join) =>
-      join
-        .onRef('output.chat_id', '=', 'chat.id')
-        .onRef('output.workspace_id', '=', 'chat.workspace_id'),
-    )
     .leftJoin('actions as action', (join) =>
       join
         .onRef('action.id', '=', 'chat.action_id')
@@ -280,7 +293,19 @@ export async function listChats(
         .onRef('action.project_id', '=', 'chat.project_id'),
     )
     .selectAll('chat')
-    .select(['output.kind as output_kind', 'action.target_label'])
+    .select('action.target_label')
+    // The kind of the document the chat most recently changed.
+    .select((eb) =>
+      eb
+        .selectFrom('agent_outputs as output')
+        .select('output.kind')
+        .whereRef('output.workspace_id', '=', 'chat.workspace_id')
+        .whereRef('output.chat_id', '=', 'chat.id')
+        .orderBy('output.updated_at', 'desc')
+        .orderBy('output.number', 'desc')
+        .limit(1)
+        .as('output_kind'),
+    )
     .select((eb) =>
       eb
         .exists(

@@ -9,10 +9,11 @@ import { useCancelRun, useFollowUp, type FollowUp } from '@/components/agent/use
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { latestOutput } from '@/lib/agent/documents';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { isRunActive } from '@/lib/agent/run-state';
 import { useAgentAccess } from '@/lib/agent/use-agent-access';
-import type { AgentChatDetail } from '@/lib/api/agent';
+import type { AgentChatDetail, AgentOutput } from '@/lib/api/agent';
 
 /**
  * One chat's conversation and reply composer, shared by the full Agent screen
@@ -36,14 +37,18 @@ type ChatThread = ReturnType<typeof useChatThread>;
 export function ChatConversation({
   thread,
   detail,
-  output,
-}: Readonly<{ thread: ChatThread; detail: AgentChatDetail; output: ReactNode }>) {
+  renderOutput,
+}: Readonly<{
+  thread: ChatThread;
+  detail: AgentChatDetail;
+  renderOutput: (output: AgentOutput) => ReactNode;
+}>) {
   const { turn, access, runActive } = thread;
   return (
     <>
       <Conversation
         detail={detail}
-        output={output}
+        renderOutput={renderOutput}
         onRefine={turn.suggest}
         onRecover={turn.recover}
         onRetry={turn.resend}
@@ -84,9 +89,10 @@ export function ReplyComposer({
           {...turn.commands.skillPicker}
           value={turn.skillId}
           onChange={turn.setSkillId}
-          outputKind={detail.output?.kind}
+          hasDocument={detail.outputs.length > 0}
           inheritedSkillId={
-            detail.pinned_skill_id ?? (!detail.chat.action_id ? detail.output?.skill_id : null)
+            detail.pinned_skill_id ??
+            (!detail.chat.action_id ? latestOutput(detail)?.skill_id : null)
           }
           hasAction={Boolean(detail.chat.action_id)}
           disabled={!access.canSend || runActive}

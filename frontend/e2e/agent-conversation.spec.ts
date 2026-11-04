@@ -43,7 +43,7 @@ function chatDetail(): AgentChatDetail {
         max_chars: 90000,
       },
     },
-    output: null,
+    outputs: [],
     messages: Array.from({ length: 24 }, (_, index) => ({
       id: `77777777-7777-4777-8777-${String(index + 1).padStart(12, '0')}`,
       sequence: index + 1,
@@ -55,6 +55,7 @@ function chatDetail(): AgentChatDetail {
       skill_id: 'growth_plan',
       skill_source: 'chat',
       evidence_refs: [],
+      web_sources: [],
       steps: [],
       mentions: [],
       created_at: NOW,

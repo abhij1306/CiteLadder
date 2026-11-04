@@ -46,6 +46,8 @@ export type TokenUsage = {
   cache_write_input_tokens?: number | null;
   cache_write_1h_input_tokens?: number | null;
   output_tokens?: number | null;
+  /** Provider-hosted web searches, billed per search beside the tokens; absent is none. */
+  web_search_requests?: number | null;
 };
 
 /** A reported token count, or `null` unless it is a non-negative safe integer. */
@@ -53,13 +55,17 @@ export function tokenCount(value: unknown) {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
-/** `written` counts every cache write; `writtenHour` the part of it kept for an hour. */
+/**
+ * `written` counts every cache write; `writtenHour` the part of it kept for an
+ * hour; `searches` the provider-hosted web searches the call ran.
+ */
 type Tokens = {
   input: number;
   cached: number;
   written: number;
   writtenHour: number;
   output: number;
+  searches: number;
 };
 
 /** Exact token counts from reported usage; `null` when the usage cannot be read. */
@@ -68,35 +74,38 @@ function readUsage(usage: TokenUsage): Tokens | null {
     cached = tokenCount(usage.cached_input_tokens ?? 0),
     written = tokenCount(usage.cache_write_input_tokens ?? 0),
     writtenHour = tokenCount(usage.cache_write_1h_input_tokens ?? 0),
-    output = tokenCount(usage.output_tokens);
+    output = tokenCount(usage.output_tokens),
+    searches = tokenCount(usage.web_search_requests ?? 0);
   if (
     input === null ||
     cached === null ||
     written === null ||
     writtenHour === null ||
-    output === null
+    output === null ||
+    searches === null
   )
     return null;
   if (cached + written > input || writtenHour > written) return null;
-  return { input, cached, written, writtenHour, output };
+  return { input, cached, written, writtenHour, output, searches };
 }
 
 /**
- * The tokens' cost in micro-USD at the provider's published rates, multiplied
- * by a million to stay exact: cache reads at the cached rate, five-minute and
+ * The cost in micro-USD at the provider's published rates, multiplied by a
+ * million to stay exact: cache reads at the cached rate, five-minute and
  * one-hour cache writes at their write rates, the rest of the input at the
- * base rate.
+ * base rate, and each web search at its per-search rate.
  */
 function microusdTimesMillion(
   price: ModelPrice,
-  { input, cached, written, writtenHour, output }: Tokens,
+  { input, cached, written, writtenHour, output, searches }: Tokens,
 ) {
   return (
     BigInt(input - cached - written) * BigInt(price.input_microusd_per_million) +
     BigInt(cached) * BigInt(price.cached_input_microusd_per_million) +
     BigInt(written - writtenHour) * BigInt(price.cache_write_input_microusd_per_million) +
     BigInt(writtenHour) * BigInt(price.cache_write_1h_input_microusd_per_million) +
-    BigInt(output) * BigInt(price.output_microusd_per_million)
+    BigInt(output) * BigInt(price.output_microusd_per_million) +
+    BigInt(searches) * BigInt(usage.web_search_microusd_per_request) * 1_000_000n
   );
 }
 

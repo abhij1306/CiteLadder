@@ -70,9 +70,10 @@ export const loadSkill = (skillId: string): Response => [
 export const save = (body = 'Requested document', extra: Record<string, Json> = {}): Response => [
   toolUse('save_document', { title: 'Document', body, ...extra }),
 ];
-export const edit = (edits: { old_string: string; new_string: string }[]): Response => [
-  toolUse('edit_document', { edits }),
-];
+export const edit = (
+  edits: { old_string: string; new_string: string }[],
+  extra: Record<string, Json> = {},
+): Response => [toolUse('edit_document', { edits, ...extra })];
 /** A request for a dispatch that never reaches a model. */
 export const request: ModelRequest = {
   system: 'test',
@@ -81,6 +82,7 @@ export const request: ModelRequest = {
   effort: 'medium',
   compactAtTokens: 80_000,
   previousResponseId: null,
+  webSearches: 0,
 };
 export function result(blocks: Response, overrides: Partial<ModelResult> = {}): ModelResult {
   const toolCalls = blockToolCalls(blocks);
