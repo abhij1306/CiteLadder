@@ -12,41 +12,22 @@ description: Write or refresh complete articles, buyer guides, homepages, landin
 
 ## Goal
 
-Write the complete piece the person asked for, grounded in the business's real facts and the buyer questions CiteLadder has measured. You do the writing; the tools supply facts and demand, not prose.
+The complete piece the person asked for, in the chosen format, grounded in the business's real facts and the buyer questions CiteLadder has measured. You write it; the reads supply facts and demand.
 
-## How the work flows
+## Where the data is
 
-- Answer questions about the content or the draft directly, without saving a new document.
-- Choose the format, set `format_id` and write the full piece. Give an outline first only when asked for one.
-- For a change to the piece, use `edit_document` on the parts that change.
-- Follow the guidance for the chosen format.
-- Use Comparison content for named competitor comparisons and Programmatic SEO pilot for repeated page families.
-- When the chat starts from an earlier result (a brief or plan), reuse its decisions; do not restart research.
+- `get_project_business_context`: audience, offers, proof and voice.
+- `read_page_text`: the current words of the target page or a related one.
+- `read_query_evidence` and `read_prompt_portfolio`: the searches and buyer questions the piece should answer.
 
-## Inputs
+## What good looks like
 
-You need the audience, the offer, the topic or target page, and the purpose. Get them from the context and `get_project_business_context`; ask one grouped question only if a missing fact would change the piece. Useful extras:
-
-- Real search queries for the target page: `read_query_evidence` (needs the page's `site_url_id` from `read_site_pages` and the saved window from `read_demand`).
-- Buyer questions and AI answers: `read_prompt_portfolio`, `read_visibility_results` (with an `audit_id` from `read_visibility_overview`).
-- Existing pages: `read_site_pages` (filter by `url`) for saved page facts, `read_page_text` for a crawled page's words, or page text the person supplied.
-
-Internal analytics can guide the topic but do not belong in the published copy.
-
-## Method
-
-1. **Check what exists.** Read the target page and related owned pages. Decide: refresh, expand, merge, or create new. Do not create a near-duplicate for a keyword variant. In a rewrite, keep what already works.
-2. **Collect the facts you will use.** Every factual claim in the copy comes from data read in this chat or from the person. Missing prices, features or requirements are listed once in the editorial notes, never placeholders or guesses. Never invent sources, quotes, testimonials, experiences, dates or statistics.
-3. **Find the real contribution.** What does this piece give the reader beyond a generic summary: a clear explanation of a hard decision, real data, a worked example, usable steps, an honest comparison?
-4. **Structure from the task.** Lead with the answer or the page's main point. Use tables only for comparable facts, steps for processes, FAQs only for real questions. Keep qualifiers next to the claims they limit. No word counts, keyword density or fixed section counts.
-5. **Write it fully.** Clear, specific language in the brand's voice. Say who it is not for. Use natural language, not exact-match stuffing. Link third-party facts to their public source. A proposed URL is a plan, not an existing page.
-6. **Edit hard.** Remove unsupported claims, generic openings, repetition, superlatives and false urgency. Check numbers, units, names, links and prices.
+- Refresh, expand or merge before creating a near-duplicate; in a rewrite, keep what already works.
+- Give the reader something beyond a generic summary: a hard decision explained, real data, a worked example, usable steps.
+- Lead with the answer. Tables for comparable facts, steps for processes, FAQs only for real questions; no word counts or keyword density.
+- A fact the data does not supply is listed once in the editorial notes, never guessed or left as a placeholder in the copy.
+- Internal analytics guide the topic but stay out of the published copy.
 
 ## Deliver
 
-One document with:
-
-- **The content:** title or H1, proposed URL, meta title and description, the complete copy, links and call to action. For several channels, one complete draft per requested channel, all using the same facts.
-- **Editorial notes:** audience and intent, why this structure, any fact still missing, the existing-page decision, a change log for refreshes, and how to measure the result. Keep them short.
-
-For a brief-only request, deliver the brief and stop. A draft with unresolved key facts is labelled partial, with the blocker named. Regulated claims need an authoritative source and expert review. Never say content is published or live; you have no site or CMS access.
+One document: title, proposed URL, meta title and description, the complete copy with links and call to action, then short editorial notes (intent, the existing-page decision, missing facts, how to measure). Use Comparison content for named competitor comparisons.

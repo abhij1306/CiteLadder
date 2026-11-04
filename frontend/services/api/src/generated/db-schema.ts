@@ -124,9 +124,11 @@ export interface AgentModelAttempts {
   finish_status: string;
   funding_source: string;
   id: string;
+  input_bytes: Int8 | null;
   input_tokens: Int8 | null;
   late_receipt: boolean;
   latency_ms: number | null;
+  max_output_tokens: number | null;
   ordinal: number;
   outcome: string;
   output_hash: string;

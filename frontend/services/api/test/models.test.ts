@@ -573,6 +573,8 @@ describe('configured model gateway', () => {
           compactAtTokens: 80_000,
           previousResponseId: null,
           webSearches: 3,
+          // A call held for less than the route's cap is sent with its own.
+          maxOutputTokens: 5_000,
         },
         undefined,
         { serverTool: (event) => events.push(event) },
@@ -590,10 +592,12 @@ describe('configured model gateway', () => {
         { id: 'srvtoolu_1', name: 'web_search', status: 'completed' },
       ]);
       const [, init] = io.fetch.mock.calls[0]!;
-      expect(JSON.parse(String(init!.body)).tools).toEqual([
+      const body = JSON.parse(String(init!.body));
+      expect(body.tools).toEqual([
         { name: 'read_a', description: 'A.', input_schema: { type: 'object' } },
         { type: 'web_search_20250305', name: 'web_search', max_uses: 3 },
       ]);
+      expect(body.max_tokens).toBe(5_000);
     }),
   );
 

@@ -12,26 +12,21 @@ description: Plan the next prompt run for the Prompt Builder from CiteLadder bus
 
 ## Goal
 
-Help the person set up the Prompt Builder in Prompts so its next run generates the buyer prompts worth tracking. Follow the builder's four steps. You never write prompt wording and never add, generate or activate prompts: the person applies the plan in the Prompt Builder, which generates the prompts, then reviews them in Prompts. Only a prompt the person accepts there is tracked.
+Help the person set up the Prompt Builder in Prompts so its next run generates buyer prompts worth tracking. You never write prompt wording or add prompts: the person applies the plan in the builder, which generates them, and accepts or rejects each in Prompts.
 
-## Read
+## Where the data is
 
-- `get_project_business_context` for what the business sells, who buys it, its market scope and service areas.
-- `read_prompt_portfolio` for the topics (including empty ones) and the tracked prompts. Page through it before calling a topic empty or covered.
-- `read_seed_queries` for the searches each connected source would ground the run on, by topic.
-- Optional: `read_visibility_overview` for where the brand is missing from answers.
+- `get_project_business_context`: what is sold, who buys it, the market and service areas.
+- `read_prompt_portfolio`: the topics, including empty ones, and the tracked prompts.
+- `read_seed_queries`: the searches each connected source would ground the run on.
 
-## Follow the builder's steps
+## What good looks like
 
-1. **About your business.** Check what is sold, who buys it, the buying situations and constraints, and service areas (only for a local or regional business). Name what is missing or looks wrong. Never invent a fact; ask the person instead.
-2. **Topics.** A topic is a category a buyer asks about ("golf nets"), never a product line, model, size or the brand. Keep the existing topics; suggest renames, merges or deletions only with a reason, and new topics only for gaps. The builder also proposes topics, and nothing changes until the person confirms them there.
-3. **Mix and search data.** The builder starts from a mix that suits most businesses. Recommend a change (branded share, competitor alternatives, intent mix, personas, number of prompts) only when the data supports it. For search data, say which source to use and quote any query to untick and why. A query steers wording only; never present its impressions as AI prompt volume.
-4. **Generate and review.** The person generates in the builder, then accepts or rejects each suggestion in Prompts.
+- A topic is a category a buyer asks about ("golf nets"), never a product line, model, size or the brand.
+- Keep existing topics; suggest a rename, merge or deletion only with a reason, and new topics only for gaps.
+- Change the builder's default mix (branded share, competitors, intents, personas, count) only when the data supports it.
+- A search query steers wording only; its impressions are never AI prompt volume.
 
 ## Deliver
 
-Answer questions about prompts or coverage directly, without saving a document.
-
-For a plan, save one short document with a section per step: the facts to fix, the topics to keep, change or add, the mix and search data to set, and one closing line that the person applies the plan in the Prompt Builder and reviews the prompts it generates in Prompts. Say "hypothesis" where no data supports a choice. No prompt wording, IDs or metric tables.
-
-Suggest AI visibility diagnosis once the new prompts have been measured.
+Answer questions directly. For a plan, one short document with a section per builder step (business facts to fix, topics, mix and search data, generate and review), "hypothesis" where no data supports a choice, and no prompt wording or metric tables.

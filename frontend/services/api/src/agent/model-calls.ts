@@ -1,10 +1,11 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
-import type {
-  ConversationListener,
-  ConversationRequest,
-  ConversationResult,
+import {
+  conversationInputBytes,
+  type ConversationListener,
+  type ConversationRequest,
+  type ConversationResult,
 } from '../models/conversation.ts';
 import { authorize } from './access.ts';
 import { abortable } from './async.ts';
@@ -24,7 +25,13 @@ export type AgentModel = {
     listener?: ConversationListener,
   ) => Promise<ModelResult>;
 };
-type Hold = { reservationId: string | null; credits: number; pricingRevision: string };
+type Hold = {
+  reservationId: string | null;
+  credits: number;
+  pricingRevision: string;
+  /** The output cap the call is sent with. Omitted: the route's cap. */
+  outputTokens?: number;
+};
 /**
  * The dispatch seam: `reserve` rechecks the frozen model and configuration
  * before a call, `settle` records its receipt. Self-hosted calls hold and
@@ -47,6 +54,16 @@ export type Funding = {
   refund: (db: Database, run: Run) => Promise<void>;
 };
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
+/**
+ * A dispatch refused for funding before anything was reserved, recorded or
+ * sent: the turn may still end with work it already staged. A funding
+ * failure later in a call (at settlement) is a plain `funding_unavailable`.
+ */
+export class RefusedDispatch extends AgentError {
+  constructor() {
+    super('funding_unavailable');
+  }
+}
 export class ModelCalls {
   readonly db: Database;
   readonly funding: Funding;
@@ -78,8 +95,9 @@ export class ModelCalls {
       if (existing) throw new AgentError('lease');
       const dispatchId = randomUUID();
       const hold = await this.funding.reserve(trx, run, dispatchId, model, request);
-      // Self-hosted calls reserve nothing; a hold is only the dispatch recheck.
-      if (hold.reservationId !== null || hold.credits !== 0)
+      // Self-hosted calls reserve nothing and keep the route's output cap; a
+      // hold is only the dispatch recheck.
+      if (hold.reservationId !== null || hold.credits !== 0 || hold.outputTokens !== undefined)
         throw new AgentError('funding_unavailable');
       const now = new Date();
       const attempt = await trx
@@ -100,6 +118,9 @@ export class ModelCalls {
           pricing_revision: hold.pricingRevision,
           reservation_id: hold.reservationId,
           reserved_credits: hold.credits,
+          // The size of what the provider read, and the output cap sent (null: the route's).
+          input_bytes: conversationInputBytes(request),
+          max_output_tokens: hold.outputTokens ?? null,
           debited_credits: 0,
           input_tokens: null,
           cached_input_tokens: null,
@@ -223,14 +244,24 @@ export class ModelCalls {
     listener?: ConversationListener,
   ) {
     executionSignal?.throwIfAborted();
-    const attempt = await this.dispatch(lease, ordinal, model, request);
+    const attempt = await this.dispatch(lease, ordinal, model, request).catch((error: unknown) => {
+      // The dispatch transaction rolled back: no hold, attempt or request exists.
+      if (error instanceof AgentError && error.code === 'funding_unavailable')
+        throw new RefusedDispatch();
+      throw error;
+    });
+    // A call the balance covers only in part is sent with the output cap it was held for.
+    const sent =
+      attempt.max_output_tokens === null
+        ? request
+        : { ...request, maxOutputTokens: attempt.max_output_tokens };
     let result: ModelResult;
     try {
       const remaining = attempt.deadline_at.getTime() - Date.now();
       if (remaining <= 0) throw new AgentError('provider_error');
       const deadline = AbortSignal.timeout(remaining);
       const signal = executionSignal ? AbortSignal.any([deadline, executionSignal]) : deadline;
-      result = await abortable(() => model.converse(request, signal, listener), signal);
+      result = await abortable(() => model.converse(sent, signal, listener), signal);
     } catch {
       await this.receipt(lease.workspaceId, attempt.id, null);
       throw new AgentError('provider_error');

@@ -10,6 +10,7 @@ import { getLogger } from '../logging.ts';
 import {
   blockText,
   blockToolCalls,
+  outputCap,
   parseBlocks,
   type CacheDiagnosis,
   type ConversationMessage,
@@ -300,7 +301,7 @@ export function anthropicConversation(
       const stream = client.beta.messages.stream(
         {
           model: settings.model,
-          max_tokens: settings.maxOutputTokens,
+          max_tokens: outputCap(request, settings.maxOutputTokens),
           betas: ['compact-2026-01-12'],
           system: [{ type: 'text', text: request.system, cache_control: HOUR_CACHE }],
           tools: [

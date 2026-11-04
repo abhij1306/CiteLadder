@@ -10,6 +10,7 @@ import { getLogger } from '../logging.ts';
 import {
   blockText,
   blockToolCalls,
+  outputCap,
   parseBlocks,
   toolInput,
   type ConversationBlock,
@@ -250,7 +251,7 @@ export function openAIConversation(
         })),
         parallel_tool_calls: true,
         reasoning_effort: request.effort,
-        max_completion_tokens: settings.maxOutputTokens,
+        max_completion_tokens: outputCap(request, settings.maxOutputTokens),
         // One key for the shared prefix improves cache routing.
         prompt_cache_key: 'citeladder-agent',
         stream: true,

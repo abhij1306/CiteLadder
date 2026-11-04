@@ -6,7 +6,7 @@ import { policy } from '../config.ts';
 import { definitions, dispatchTool, presentationTools } from '../mcp/tools.ts';
 import { parseRecordId } from '../mcp/retrieval.ts';
 import { ToolRegistry, toolDefinitions, type ReadTool } from './tools.ts';
-import { type Json, type Scope } from './contracts.ts';
+import { agentPolicy, type Json, type Scope } from './contracts.ts';
 
 const reference = z.object({ id: z.string(), record_uri: z.string().nullish() }).catchall(z.json());
 const availability = z.enum([
@@ -52,6 +52,27 @@ export function smallerLimit(schema: z.ZodType, from: number) {
   }
   return fallback;
 }
+/**
+ * The Agent's page size for a shared read whose `limit` accepts every size up
+ * to the Agent's maximum and has no default of its own: smaller pages than an
+ * MCP client's, so a representative sample is the first thing the model sees
+ * and more is one cursor away. Other limits (fixed sizes, own defaults) stay.
+ */
+function agentPage(schema: z.ZodType | undefined) {
+  const { read_default_limit: fallback, read_max_limit: max } = agentPolicy;
+  if (!schema || schema.safeParse(undefined).data !== undefined) return null;
+  for (let size = 1; size <= max; size++) if (!schema.safeParse(size).success) return null;
+  return {
+    fallback,
+    schema: z
+      .number()
+      .int()
+      .min(1)
+      .max(max)
+      .nullish()
+      .describe(`How many rows to return, at most ${max}; omit for ${fallback}.`),
+  };
+}
 // The chat's project is fixed, and MCP App views render nothing in a chat.
 const NOT_FOR_AGENT = new Set(['list_projects', ...presentationTools]);
 function sharedTools(db: Database): ReadTool[] {
@@ -62,13 +83,17 @@ function sharedTools(db: Database): ReadTool[] {
         string,
         z.ZodType
       >;
+      const page = agentPage(fields.limit);
       return {
         name,
         description: definition.description,
-        arguments: z.strictObject(fields) as z.ZodType<Record<string, Json>>,
+        arguments: z.strictObject(page ? { ...fields, limit: page.schema } : fields) as z.ZodType<
+          Record<string, Json>
+        >,
         read: async (scope: Scope, args: Record<string, Json>, _signal, maxChars) => {
           const input: Record<string, Json> = {
             ...args,
+            ...(page ? { limit: args.limit ?? page.fallback } : {}),
             ...(_project ? { project_id: scope.projectId } : {}),
           };
           const dispatch = () =>

@@ -134,7 +134,11 @@ CREATE TABLE public.agent_model_attempts (
     cache_miss_reason character varying(32) DEFAULT ''::character varying NOT NULL,
     cache_missed_input_tokens bigint,
     usage_iterations jsonb DEFAULT '[]'::jsonb NOT NULL,
-    web_search_requests integer
+    web_search_requests integer,
+    input_bytes bigint,
+    max_output_tokens integer,
+    CONSTRAINT ck_agent_model_attempt_input_bytes CHECK (((input_bytes IS NULL) OR (input_bytes >= 0))),
+    CONSTRAINT ck_agent_model_attempt_max_output_tokens CHECK (((max_output_tokens IS NULL) OR (max_output_tokens > 0)))
 );
 
 CREATE TABLE public.agent_output_revisions (

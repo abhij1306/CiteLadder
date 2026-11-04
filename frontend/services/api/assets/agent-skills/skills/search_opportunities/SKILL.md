@@ -12,42 +12,22 @@ description: Find commercially relevant keyword, topic and competitor gaps using
 
 ## Goal
 
-Decide which buyer needs to serve, on which existing or new pages, and why.
+Which buyer needs to serve, on which existing or new pages, and why. Start from audience → offer → buyer task → topic, not a generic keyword universe.
 
-## Inputs
+## Where the data is
 
-- `get_project_business_context` for offers, audience, markets and conversion pages.
-- `read_demand` for demand clusters.
-- `read_performance` with `dimension` `query` or `page` for Search Console queries and pages (separate tables; they do not say which query belongs to which page).
-- `read_search_intelligence` to list keyword, SERP and competitor datasets, then `read_search_dataset` to page through one.
-- `read_visibility_results` (with an `audit_id` from `read_visibility_overview`) and `read_visibility_sources` for AI answer gaps.
-- `read_site_pages` for existing pages.
+- `read_demand` and `read_performance`: demand clusters and the queries and pages the site already earns.
+- `read_search_intelligence`, then `read_search_dataset`: keyword, SERP and competitor datasets.
+- `read_visibility_results`: buyer questions AI answers leave the brand out of.
+- `read_site_pages`: existing pages, checked before proposing a new one.
 
-A quantitative gap claim needs the dataset behind it. Without demand data, label the work a hypothesis.
+## What good looks like
 
-## Pick the mode
-
-- **Named competitor:** study that domain first; do not turn it into a market survey.
-- **Landscape:** a representative set of queries; classify recurring domains; call a small set directional.
-- **Clustering:** deliver a page map (primary query, related intents, existing or proposed page, evidence needed, decision), not a list of keyword groups.
-
-## Method
-
-1. **Start from the business:** audience → offer → buyer task → topic. Do not expand into a generic keyword universe.
-2. **Inventory what works.** Existing useful pages, current queries and visibility gaps. Check existing pages before proposing a new one; mark a page "proposed" if you did not inspect the inventory.
-3. **Type the competitors:** direct business alternatives, search-result competitors, AI-answer competitors, cited publishers. A directory can compete for attention without selling the same thing. Keep the person's chosen competitors and label any additions.
-4. **Ground each opportunity** in the query data and any matching dataset, with its market, device and date. Do not describe search result pages you have not read, and never invent ranks, volumes or difficulty.
-5. **Cluster by the same buyer job**, not just similar words. Split when the decision, offer or format differs. Zero estimated volume does not prove no need.
-6. **Compare coverage** against what was inspected only: missing questions, outdated facts, weak proof, wrong format. "Absent from five inspected pages" is not "unique on the internet".
-7. **One action per opportunity:** keep, refresh, expand, create, merge-review, reposition or defer. Two pages sharing a query is not cannibalization unless intent or performance shows harm. Never recommend automatic deletion.
-8. **Prioritize** by business fit, existing demand, achievable differentiation, effort and dependencies. A low-volume, high-fit topic can lead. Difficulty scores are provider estimates, not a verdict.
+- Cluster by the same buyer job, not similar words; split when the decision, offer or format differs.
+- A quantitative gap needs the dataset behind it; without demand data, call the opportunity a hypothesis.
+- Type competitors: business alternatives, search-result rivals, AI-answer rivals and cited publishers are different.
+- Two pages sharing a query is not cannibalization unless intent or performance shows harm.
 
 ## Deliver
 
-One document with:
-
-- A short competitor map.
-- A prioritized opportunity table: buyer task, topic, query group, market and language, intent, provider metrics with source and date, existing page, recommended action, proposed page, format, what makes it different, proof needed, effort, how to check success.
-- A brief for each accepted topic: reader, the exact question to answer, relevant product facts, page decision, evidence to add, format, internal link targets and conversion.
-
-No filler content calendars. Suggest Create content for accepted briefs, Comparison content for named comparisons, Programmatic SEO pilot for repeatable patterns, and Earned authority for source gaps.
+One document: a short competitor map, a prioritized opportunity table (buyer task, query group, evidence with source and date, existing page, action: keep, refresh, expand, create or defer), and a brief for each accepted topic.

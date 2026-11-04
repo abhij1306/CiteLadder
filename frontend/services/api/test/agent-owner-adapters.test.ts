@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
 import * as sharedTools from '../src/mcp/tools.ts';
 import { AgentFixtures, reply, save, scripted, toolUse, type Response } from './agent-support.ts';
 import { testDatabase } from './support.ts';
@@ -61,7 +62,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
           db,
           scope,
           'read_site_pages',
-          { crawl_id: scope.crawlId, limit: 100, cursor },
+          { crawl_id: scope.crawlId, limit: 50, cursor },
           signal(),
           5000,
         );
@@ -73,6 +74,33 @@ describe('Agent bindings to the evidence and Action owners', () => {
         cursor = page.pagination.next_cursor;
       } while (cursor && seen.length <= expected.length);
       expect(seen.sort()).toEqual(expected.sort());
+    } finally {
+      await site.cleanup();
+    }
+  });
+  it('reads pages 20 at a time for the Agent, up to 50, while MCP clients keep larger pages', async () => {
+    const site = new SiteFixtures(db);
+    try {
+      const scope = await site.crawl();
+      for (let index = 0; index < 23; index++)
+        await site.page(scope, `/page-${index}`, {}, { observed: true });
+      const tools = agentTools(db);
+      const read = (args: Record<string, string | number>) =>
+        tools.execute(db, scope, 'read_site_pages', args, signal(), 40_000);
+      const first = JSON.parse((await read({ crawl_id: scope.crawlId })).text);
+      expect(first.items).toHaveLength(20);
+      const rest = JSON.parse(
+        (await read({ crawl_id: scope.crawlId, cursor: first.pagination.next_cursor })).text,
+      );
+      expect(rest.items).toHaveLength(3);
+      expect(await read({ crawl_id: scope.crawlId, limit: 51 })).toMatchObject({
+        status: 'refused',
+        error: 'invalid_arguments',
+      });
+      const mcpLimit = (
+        sharedTools.definitions.read_site_pages.schema.shape as Record<string, z.ZodType>
+      ).limit!;
+      expect(mcpLimit.safeParse(200).success).toBe(true);
     } finally {
       await site.cleanup();
     }

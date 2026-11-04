@@ -36,7 +36,7 @@ import {
   type SkillCatalog,
 } from './contracts.ts';
 import { contextCitations, manifestSchema, suppliedManifest } from './context.ts';
-import { ModelCalls, type AgentModel, type ModelRequest } from './model-calls.ts';
+import { ModelCalls, RefusedDispatch, type AgentModel, type ModelRequest } from './model-calls.ts';
 import {
   chatDocuments,
   latestDocument,
@@ -121,14 +121,16 @@ function savedNotice(number: number, formatLabel: string | null) {
   return `${documentLabel(number)} saved${format}.`;
 }
 /**
- * The web searches the next call may run: what is left of the turn's budget.
- * A search the previous response left waiting (beside a read, or paused) runs
+ * The web searches the next call may run, and is held for: what is left of the
+ * turn's budget, at most the per-call cap. None left offers no search tool. A
+ * search the previous response left waiting (beside a read, or paused) runs
  * in the next call, which must offer the tool, so at least one is offered then.
  * The last call starts no new search: one left waiting there could never run.
  */
 function searchAllowance(budget: Budget, used: number, waiting: boolean, last: boolean) {
   const left = last ? 0 : Math.max(0, budget.max_web_searches - used);
-  return waiting ? Math.max(1, left) : left;
+  const allowed = Math.min(left, budget.max_web_searches_per_call);
+  return waiting ? Math.max(1, allowed) : allowed;
 }
 /**
  * Thinking shares the output cap, so a cut-off call is discarded and asked
@@ -147,6 +149,8 @@ function noReply(reads: number) {
     ? `I completed ${read} but reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request to one page, prompt or date range and ask again.`
     : 'I reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request and ask again.';
 }
+const UNFUNDED_REPLY = 'The Agent model connection changed before I could write a summary.';
+const unfunded = (error: unknown) => error instanceof RefusedDispatch;
 /** Appended after a step's tool results, never deleted, so the cached history stays exact. */
 function reminder(
   budget: Budget,
@@ -305,7 +309,15 @@ export class AgentRuntime {
           ? searchAllowance(budget, state.searches, waiting, ordinal === budget.max_model_calls)
           : 0,
       };
-      const response = await this.callModel(lease, ordinal, model, request, signal, events);
+      let response;
+      try {
+        response = await this.callModel(lease, ordinal, model, request, signal, events);
+      } catch (error) {
+        // Finished work is kept: a document already staged commits with a fixed reply.
+        if (unfunded(error) && state.staged.size && !waiting)
+          return this.finish(lease, turn, model, state, UNFUNDED_REPLY, latest.summary, true);
+        throw error;
+      }
       previousResponseId = response.response_id || previousResponseId;
       // A discarded response's searches were still run and billed.
       const reported = response.usage.web_search_requests;
@@ -579,7 +591,11 @@ export class AgentRuntime {
         .execute();
     });
   }
-  /** The reply, the staged document and the transcript commit together, or not at all. */
+  /**
+   * The reply, the staged document and the transcript commit together, or not
+   * at all. A `closing` reply is one the model did not write; it ends the
+   * transcript as its answer, so a later turn replays a well-formed chat.
+   */
   private finish(
     lease: Lease,
     turn: Turn,
@@ -587,7 +603,9 @@ export class AgentRuntime {
     state: TurnState,
     text: string,
     summary: PromptSummary | undefined,
+    closing = false,
   ) {
+    if (closing) state.messages.push({ role: 'assistant', content: [{ type: 'text', text }] });
     const { skill, skillSource: source, read, steps } = state;
     const { budget } = turn;
     const reads = steps.filter((step) => step.kind === 'tool' && step.status === 'completed');
