@@ -25,11 +25,12 @@
     var(--font-figure), var(--font-text), -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
 
-  /* One palette for every surface (owner decision, 2026-10-07): a quiet
-     green-tinted neutral ground with white paper, near-black green ink and
-     hairlines, so onboarding and the product read as one system. Every
-     neutral below keeps that tint: green carries slightly more than red and
-     blue in each rung.
+  /* One palette for every surface (owner decision, 2026-10-07): a calm pure
+     neutral ground with white paper, near-black ink and hairlines, so
+     onboarding and the product read as one system. The neutrals
+     carry no tint (owner, 2026-11-03); green is the accent alone. At most
+     three levels show on any screen: canvas, card, one inset. A box inside an
+     inset is a border or a divider, never another fill.
 
      The product's surface ladder is four fills, each a visible step from the
      one it sits on, so the hierarchy reads without its hairlines:
@@ -40,23 +41,24 @@
                      control rows. Table header rows stay on the card's paper.
      Light tints the sheet and nested steps against white cards; dark lifts
      each step lighter than the one below it. */
-  --color-background: #eaedeb;
-  --color-background-alt: #f6f7f6;
-  --color-sheet: #f2f4f3;
+  --color-background: #f5f5f5;
+  --color-sheet: #fafafa;
   --color-panel: #ffffff;
-  --color-panel-tonal: #edf0ee;
+  /* Hover, a selected row, a segmented track, a progress track. */
+  --color-panel-tonal: #f2f2f2;
+  --color-background-alt: var(--color-panel-tonal);
+  /* Menus, popovers, tooltips and dialogs, lifted by `--shadow-overlay`. */
   --color-elevated: #ffffff;
-  --color-well: #eff1f0;
-  /* Interaction tints mix a green-tinted ink into the surface that receives
-     them, so hover, selected and pressed stay in the neutral family instead
-     of resolving to pure grey. */
-  --color-state-ink: #1c3d2c;
+  /* Inset areas: code, "how to fix" boxes, empty chart areas. */
+  --color-well: #f7f7f7;
+  /* Interaction tints mix the ink into the surface that receives them. */
+  --color-state-ink: var(--color-foreground);
   --color-hover: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 4%);
   --color-selected: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 8%);
   --color-active: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 12%);
   --color-disabled: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 3%);
   /* Recessed selection track; state tints follow their enclosing surface. */
-  --color-track: #e6e9e7;
+  --color-track: var(--color-panel-tonal);
   --color-input: #ffffff;
   --color-surface-inverse: var(--color-brand-ink);
 
@@ -74,60 +76,62 @@
                  is being pointed at.
        bold    — field boundaries and anything that must survive on a tinted
                  fill. */
-  --color-border: #e1e4e2;
-  --color-border-subtle: #eceeed;
-  --color-border-strong: #cfd4d1;
-  --color-border-bold: #858d88;
+  --color-border: #e5e5e5;
+  --color-border-subtle: #efefef;
+  --color-border-strong: #d4d4d4;
+  --color-border-bold: #939393;
 
   /* Three reading inks and nothing else (owner decision, 2026-10-09):
      foreground is a softened ~80% black for titles, values and anything that
      must lead; secondary is a very dark grey for sentences and labels; muted
      is the light grey for captions and metadata, the lightest step that still
-     holds 4.5:1 on every surface. Faint is decorative only and never text.
+     holds 4.5:1 on every surface. Faint is placeholder and disabled ink only.
      The focused flow prints darker inks (below). */
-  --color-ink-faint: #8e9690;
-  --color-foreground: #2f3431;
-  --color-secondary: #4e5551;
-  --color-muted: #616964;
+  --color-ink-faint: #a3a3a3;
+  --color-foreground: #171717;
+  --color-secondary: #525252;
+  --color-muted: #636363;
   --color-on-inverse: #ffffff;
-  /* The logo's ink and the inverse surface keep full strength: softening the
-     reading inks is a type decision, not a brand or material one. */
+  /* The logo's ink and the inverse surface keep full strength; the logo's
+     drawing (public/citeladder-logo.svg) carries this exact value. */
   --color-brand-ink: #0b0f0d;
 
   /* Signal green is the one action and brand colour (owner decision,
      2026-10-21): selection markers, tracks and the bars of the mark, holding
-     3:1 on white; links and focus take the deeper `accent-text` (5.7:1). It
-     never means success. Anything that carries ink on green (buttons, the
-     selected day, a checked mark) fills with the deeper `accent-fill` and
-     white ink (4.6:1, owner decision 2026-10-30). */
+     3:1 on white; links and focus take the deeper `accent-text`. Success is
+     the same green family (owner, 2026-11-03). Accent marks only the primary
+     action, the active tab, focus, links, toggles and a selection bar.
+     Anything that carries ink on green (buttons, the selected day, a checked
+     mark) fills with the deeper `accent-fill` and white ink. */
   --color-accent: #00a650;
   --color-accent-hover: #00b85a;
   --color-accent-active: #009447;
-  --color-accent-fill: #00873f;
-  --color-accent-fill-hover: #007a39;
-  --color-accent-fill-active: #006d33;
+  --color-accent-fill: #15803d;
+  --color-accent-fill-hover: #166534;
+  --color-accent-fill-active: #14532d;
   --color-accent-fg: #ffffff;
   --color-accent-subtle: #d3f6df;
-  --color-accent-soft: #edfbf2;
+  --color-accent-soft: #ecf8f0;
   --color-accent-border: #7fdca7;
-  --color-accent-text: #08773b;
+  --color-accent-text: #067a3c;
   --color-selection: #b5efca;
   --color-selection-fg: var(--color-foreground);
 
   /* The outcome scale. Five families carry every state in the product: run
      status, score bands, sentiment, alerts and badges all resolve here. Each
      family is a mark (dots, rings, icons), a text ink that passes 4.5:1 on its
-     background and on paper, and a quiet background.
+     background and on paper, and a quiet background. Colour means state only:
+     status badges, up/down deltas and issue severity. A score, count or KPI
+     keeps the foreground ink; the delta beside it carries the colour.
 
-     The marks are separated by lightness, not hue alone, so red–green colour
-     vision still tells them apart: bad is dark, good is mid teal, mixed is
-     light amber, and neutral is the palest. Teal keeps success clear of the
-     forest action colour. Colour is never the only cue — every mark ships
-     with a label or an icon. */
-  --color-success: #0d9488;
-  --color-success-bg: #ecf8f5;
-  --color-success-text: #0f766e;
-  --color-warning: #e0900f;
+     Success is the accent's green family (owner, 2026-11-03): one green.
+     Colour is never the only cue — every mark ships with a label or an icon. */
+  /* The marks stay apart by lightness for red–green colour vision: good is
+     the accent's own mid green, mixed is light amber, bad is dark red. */
+  --color-success: var(--color-accent);
+  --color-success-bg: var(--color-accent-soft);
+  --color-success-text: var(--color-accent-text);
+  --color-warning: #f2b33d;
   --color-warning-bg: #fff5db;
   --color-warning-text: #8a4600;
   --color-danger: #b42332;
@@ -140,8 +144,8 @@
   --color-info: #2f6fdb;
   --color-info-bg: #eef4fd;
   --color-info-text: #1d4fae;
-  --color-neutral: #aab2ad;
-  --color-neutral-bg: var(--color-well);
+  --color-neutral: var(--color-ink-faint);
+  --color-neutral-bg: var(--color-panel-tonal);
 
   /* The categorical chart ladder: series identity only, never a state or an
      action. Each step holds 3:1 on paper, and each neighbour stays apart
@@ -153,14 +157,14 @@
   --color-chart-5: #0891b2;
   --color-chart-6: #7c3aed;
   --color-chart-7: #ea580c;
-  --color-chart-8: #6b746f;
+  --color-chart-8: #737373;
 
   /* Citation classes are series, so they take chart identities and mean the
      same thing in both themes: you, the competitor, everyone else. */
   --color-citation-owned: var(--color-chart-1);
   --color-citation-competitor: var(--color-chart-2);
   --color-citation-third-party: var(--color-chart-8);
-  --color-overlay-scrim: rgb(11 15 13 / 32%);
+  --color-overlay-scrim: rgb(10 10 10 / 32%);
 
   /* Tailwind's default radius scale is cleared so the ladder cannot be
      side-stepped by reaching for a size name. The whole ladder, on every
@@ -177,11 +181,10 @@
   /* The menu and frame shadows: a hairline ring, a close contact
      shadow and one long soft ambient layer. */
   --shadow-overlay:
-    0 0 0 1px rgb(11 15 13 / 7%), 0 4px 8px -2px rgb(11 15 13 / 6%),
-    0 16px 40px -8px rgb(11 15 13 / 14%);
+    0 0 0 1px rgb(10 10 10 / 7%), 0 4px 16px rgb(0 0 0 / 6%);
   --shadow-modal:
-    0 0 0 1px rgb(11 15 13 / 7%), 0 1px 2px rgb(11 15 13 / 4%),
-    0 12px 32px -8px rgb(11 15 13 / 12%), 0 40px 80px -24px rgb(11 15 13 / 20%);
+    0 0 0 1px rgb(10 10 10 / 7%), 0 1px 2px rgb(10 10 10 / 4%),
+    0 12px 32px -8px rgb(10 10 10 / 12%), 0 40px 80px -24px rgb(10 10 10 / 20%);
 
   /* One type scale for every surface (owner decision, 2026-10-09), on the
      4px rhythm the large design systems share (Atlassian, Primer, Carbon):
@@ -244,9 +247,11 @@
   --tag-yellow-bg: #faf6dd;
   --tag-yellow-border: #e3daa4;
   --tag-yellow-text: #685914;
-  --tag-neutral-bg: #eff1f0;
-  --tag-neutral-border: #dce0dd;
-  --tag-neutral-text: #3b423e;
+  /* Neutral tags (Homepage, Other, FAQ) sit on the nested step in secondary
+     ink in both themes; the edge matches the fill, so it keeps the tag's box. */
+  --tag-neutral-bg: var(--color-panel-tonal);
+  --tag-neutral-border: var(--color-panel-tonal);
+  --tag-neutral-text: var(--color-secondary);
   --state-surface: var(--color-panel);
   --sidebar-width: 240px;
   --compact-topbar-height: 56px;
@@ -285,8 +290,8 @@
      soft ambient layer. Nothing glows and nothing carries an inset bevel; the
      only sheen is the primary action's faint top highlight. The ring is a
      shadow, so it never changes an object's box geometry. */
-  --surface-ring: rgb(11 15 13 / 8%);
-  --surface-drop: rgb(11 15 13 / 5%);
+  --surface-ring: rgb(10 10 10 / 8%);
+  --surface-drop: rgb(10 10 10 / 5%);
   --elevation-sheet: 0 0 0 1px var(--color-border);
   --elevation-track: inset 0 0 0 1px var(--color-border-subtle);
   /* An icon target inside a 32px field (clear, calendar): the field's height
@@ -372,8 +377,8 @@
   --elevation-card: 0 0 0 1px var(--color-border);
   /* The workspace sheet and focused task sheets. */
   --elevation-flow:
-    0 0 0 1px rgb(11 15 13 / 6%), 0 1px 2px rgb(11 15 13 / 4%),
-    0 8px 24px -6px rgb(11 15 13 / 8%), 0 32px 64px -24px rgb(11 15 13 / 12%);
+    0 0 0 1px rgb(10 10 10 / 6%), 0 1px 2px rgb(10 10 10 / 4%),
+    0 8px 24px -6px rgb(10 10 10 / 8%), 0 32px 64px -24px rgb(10 10 10 / 12%);
 }
 
 /* Flat onboarding: nothing at rest casts a
@@ -1087,38 +1092,34 @@ input:-webkit-autofill:focus {
   --tag-yellow-bg: #33301a;
   --tag-yellow-border: #5a5228;
   --tag-yellow-text: #fde68a;
-  --tag-neutral-bg: #232825;
-  --tag-neutral-border: #313733;
-  --tag-neutral-text: #cdd3cf;
-  /* The dark ramp keeps the light system's order in near-black neutrals with
-     the same slight green tint, each surface about five L* lighter than the
-     one it sits on so the hierarchy reads without borders: ground and rail
-     #0b0d0c → sheet #101311 → card #1a1e1c → nested #252a27, with overlays
-     at #202522. Wells and fields sink below the sheet. */
-  --color-background: #0b0d0c;
-  --color-background-alt: #1f2421;
-  --color-sheet: #101311;
-  --color-panel: #1a1e1c;
-  --color-panel-tonal: #252a27;
-  --color-elevated: #202522;
-  --color-well: #0e100f;
-  --color-input: #0f1210;
-  /* The same three inks in white: a softened ~80% white so long reading on
-     the dark ground does not glare, a light grey for sentences and labels,
-     and a dim grey for captions and metadata, light enough to hold 4.5:1 on
-     the pressed tint of a card. */
-  --color-foreground: #d3d8d5;
-  --color-secondary: #a9b0ac;
-  --color-muted: #969d99;
-  --color-ink-faint: #6d746f;
-  --color-brand-ink: #e1e5e2;
+  /* The dark ramp keeps the light system's order in pure neutral near-blacks
+     (no tint, owner 2026-11-03): ground and rail #111111 → sheet #161616 →
+     card #1c1c1c → nested #242424, with overlays at #262626. Wells and fields
+     sink below the sheet. */
+  --color-background: #111111;
+  --color-sheet: #161616;
+  --color-panel: #1c1c1c;
+  --color-panel-tonal: #242424;
+  --color-background-alt: var(--color-panel-tonal);
+  --color-elevated: #262626;
+  --color-well: #141414;
+  --color-input: var(--color-well);
+  /* The same three inks in white: a soft white so long reading on the dark
+     ground does not glare, a light grey for sentences and labels, and a dim
+     grey for captions and metadata that holds 4.5:1 on a card's pressed tint.
+     Faint is placeholder and disabled ink only. */
+  --color-foreground: #f5f5f5;
+  --color-secondary: #a3a3a3;
+  --color-muted: #939393;
+  --color-ink-faint: #6b6b6b;
+  --color-brand-ink: #fafafa;
   /* The segmented track is the nested step in dark: a lighter inset that the
      selected segment's card fill and ring sit in. */
   --color-track: var(--color-panel-tonal);
-  --color-border-subtle: #222724;
-  --color-border: #2b302d;
-  --color-border-strong: #3d433f;
-  --color-border-bold: #737b76;
+  --color-border-subtle: #222222;
+  --color-border: #2a2a2a;
+  --color-border-strong: #3a3a3a;
+  --color-border-bold: #686868;
   --color-accent: #76df9c;
   --color-accent-hover: #94ebb0;
   --color-accent-active: #b2f4c6;
@@ -1132,27 +1133,31 @@ input:-webkit-autofill:focus {
   --color-accent-soft: rgb(118 223 156 / 12%);
   --color-accent-border: rgb(118 223 156 / 45%);
   --color-selection: rgb(118 223 156 / 35%);
-  --color-selection-fg: #f1f4f2;
-  --color-state-ink: var(--color-foreground);
-  --color-on-inverse: #0b0d0c;
-  --color-success: #2ec4b0;
-  --color-success-bg: rgb(46 196 176 / 13%);
-  --color-success-text: #7fe0d0;
-  --color-warning: #f2c879;
-  --color-warning-bg: rgb(242 200 121 / 13%);
+  --color-selection-fg: var(--color-foreground);
+  /* The secondary ink tints hover, selected and pressed: hover lands near
+     the nested step, and muted ink still holds 4.5:1 on a pressed card. */
+  --color-state-ink: var(--color-secondary);
+  --color-on-inverse: #111111;
+  --color-success: #47c27a;
+  --color-success-bg: rgb(91 214 138 / 12%);
+  --color-success-text: var(--color-accent-text);
+  /* Marks keep a lightness step apart for red–green colour vision: light
+     amber over mid green over a deeper red. */
+  --color-warning: var(--color-warning-text);
+  --color-warning-bg: rgb(242 200 121 / 12%);
   --color-warning-text: #f7d99e;
-  --color-danger: #ef6b73;
+  --color-danger: var(--color-danger-solid);
   --color-danger-solid: #d95767;
   --color-danger-solid-hover: #eb7481;
-  --color-danger-bg: rgb(243 151 158 / 13%);
-  --color-danger-border: rgb(243 151 158 / 38%);
+  --color-danger-bg: rgb(239 107 115 / 12%);
+  --color-danger-border: rgb(239 107 115 / 38%);
   --color-danger-text: #f6abb1;
   --color-danger-fg: #350b10;
   --color-info: #7aa7f5;
-  --color-info-bg: rgb(122 167 245 / 13%);
+  --color-info-bg: rgb(122 167 245 / 12%);
   --color-info-text: #a9c6f8;
-  --color-neutral: #5f6762;
-  --color-neutral-bg: #2a2f2c;
+  --color-neutral: #525252;
+  --color-neutral-bg: var(--color-elevated);
   --color-chart-1: #4ade80;
   --color-chart-2: #60a5fa;
   --color-chart-3: #fbbf24;
@@ -1160,7 +1165,7 @@ input:-webkit-autofill:focus {
   --color-chart-5: #22d3ee;
   --color-chart-6: #a78bfa;
   --color-chart-7: #fb923c;
-  --color-chart-8: #9aa29d;
+  --color-chart-8: var(--color-secondary);
   --color-overlay-scrim: rgb(0 0 0 / 72%);
   --skeleton-base: var(--color-panel-tonal);
   /* On near-black a drop shadow carries no edge, so dark material leads with

@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
-import { listRowClasses } from '@/components/ui/list-row';
 import { ComparisonValue, MetricValue } from '@/components/ui/metric-value';
 import { ScoreRing } from '@/components/ui/score-ring';
 import { textRole } from '@/components/ui/typography';
@@ -173,6 +172,21 @@ function textRows(segment: StatSegment) {
   return (1 + optional.filter(Boolean).length) as keyof typeof ROW_SPAN;
 }
 
+/**
+ * A pressable segment's state. Selected keeps the card's own fill and takes a
+ * 2px accent bar along its foot and the foreground ink; there is no fill
+ * block, so the first segment, flush with the card's inset, never shows a box
+ * edge against its label.
+ */
+function statSelectionClasses(selected: boolean) {
+  return cn(
+    'transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
+    selected
+      ? "text-foreground after:bg-accent after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:content-['']"
+      : 'text-secondary hover:text-foreground',
+  );
+}
+
 function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
   const pressable = Boolean(segment.onSelect);
   // A score ring sits at the segment's top right; the rest stacks in the first column.
@@ -183,7 +197,7 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
       className={cn(
         'grid min-w-0 content-start gap-1 py-3 desktop:px-4 desktop:first:ps-0 desktop:last:pe-0',
         segment.score && 'grid-cols-[minmax(0,1fr)_auto] gap-x-4',
-        pressable && cn('relative', listRowClasses({ selected: segment.selected ?? false })),
+        pressable && cn('relative', statSelectionClasses(segment.selected ?? false)),
       )}
     >
       {segment.score ? (
