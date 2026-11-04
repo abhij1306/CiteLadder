@@ -116,6 +116,7 @@ describe('GET /visibility/ads', () => {
     await answer(tenant, auditId, { prompt: 'trail shoes', ads: [] });
     await answer(tenant, auditId, { prompt: 'trail shoes' });
     await answer(tenant, auditId, { engine: 'claude', citations: ['https://blog.example/a'] });
+    await fixtures.sourceAggregates(tenant, auditId);
   });
 
   it('summarises ad presence over answers parsed for ads, by advertiser and prompt', async () => {

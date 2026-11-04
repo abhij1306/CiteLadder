@@ -447,6 +447,19 @@ export interface ApiKeys {
   workspace_id: string;
 }
 
+export interface AuditAnswerAggregates {
+  analysis_ids: string[];
+  analyzer_version: string;
+  audit_id: string;
+  cohort: string;
+  created_at: Timestamp;
+  id: string;
+  logical_engine: string;
+  project_id: string;
+  prompt_keys: string[];
+  workspace_id: string;
+}
+
 export interface AuditComparisonBaselines {
   analyzer_version: string;
   audit_id: string;
@@ -550,6 +563,28 @@ export interface AuditSchedules {
   repetitions: number | null;
   timezone: string;
   updated_at: Timestamp;
+  workspace_id: string;
+}
+
+export interface AuditSourceAggregates {
+  analysis_ids: string[];
+  analyzer_version: string;
+  audit_id: string;
+  citation_ids: string[];
+  classification: string;
+  cohort: string;
+  created_at: Timestamp;
+  dimension: string;
+  domain: string;
+  id: string;
+  key: string;
+  logical_engine: string;
+  project_id: string;
+  prompt_keys: string[];
+  source_class: string | null;
+  source_taxonomy_version: string | null;
+  url_hash: string | null;
+  urls: string[];
   workspace_id: string;
 }
 
@@ -2941,11 +2976,13 @@ export interface DB {
   answer_perceptions: AnswerPerceptions;
   api_idempotency: ApiIdempotency;
   api_keys: ApiKeys;
+  audit_answer_aggregates: AuditAnswerAggregates;
   audit_comparison_baselines: AuditComparisonBaselines;
   audit_engine_snapshots: AuditEngineSnapshots;
   audit_events: AuditEvents;
   audit_prompt_snapshots: AuditPromptSnapshots;
   audit_schedules: AuditSchedules;
+  audit_source_aggregates: AuditSourceAggregates;
   audit_tasks: AuditTasks;
   audits: Audits;
   bot_activity_daily: BotActivityDaily;

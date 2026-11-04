@@ -2,6 +2,8 @@
  * The AI Traffic Overview's tracked-citation figure as a persisted projection:
  * audit finalization records each run's owned citations with their exact IDs,
  * and the Overview read serves that fact over HTTP without counting citations.
+ * The Visibility Sources table reads the run's persisted source facts the same
+ * way, written by the same finalization.
  */
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
@@ -17,6 +19,7 @@ import { auditInput } from '../src/audits/inputs.ts';
 import { persistExecutionSuccess, type ExecutionResult } from '../src/audits/result-persistence.ts';
 import { aiTrafficOverview } from '../src/crawl-logs/overview.ts';
 import { AuditQueue } from '../src/queue/audit-queue.ts';
+import { persistSourceAggregates } from '../src/visibility/source-aggregates.ts';
 import { auditTenant, auditTestKey } from './audit-fixtures.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
@@ -363,5 +366,162 @@ describe('AI Traffic tracked citations', () => {
       state: 'measured',
       count: 3,
     });
+  });
+});
+
+type SourcesBody = {
+  responses: number;
+  prompts: number;
+  total_citations: number;
+  items: { key: string; responses: number; prompts: number; urls: number; annotations: number }[];
+};
+
+/** A Visibility Sources table read over HTTP, as the screen makes it. */
+async function sourcesRead(t: Tenant, projectId: string, query: string) {
+  const response = await app.request(`/api/v1/projects/${projectId}/visibility/sources?${query}`, {
+    headers: {
+      cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: t.userId, ver: 0 })}`,
+    },
+  });
+  const json: unknown = await response.json();
+  return {
+    status: response.status,
+    body: response.ok ? (json as SourcesBody) : null,
+    code: response.ok ? null : (json as { error: { code: string } }).error.code,
+  };
+}
+
+const counted = (body: SourcesBody | null) =>
+  body?.items.map((row) => [row.key, row.responses, row.prompts, row.urls, row.annotations]);
+
+describe('Visibility Sources facts', () => {
+  it('persists each run’s exact answers and citations, and reads only those', async () => {
+    const t = await tenant();
+    const auditId = await finalizedRun(t, [
+      'https://review.example/a',
+      'https://review.example/b',
+      'https://blog.test/x',
+    ]);
+    const analyses = await db
+      .selectFrom('response_analyses')
+      .select('id')
+      .where('workspace_id', '=', t.workspaceId)
+      .where('audit_id', '=', auditId)
+      .orderBy('id')
+      .execute();
+    const citations = await db
+      .selectFrom('citations')
+      .select(['id', 'url'])
+      .where('workspace_id', '=', t.workspaceId)
+      .where('audit_id', '=', auditId)
+      .orderBy('id')
+      .execute();
+    expect([analyses.length, citations.length]).toEqual([3, 9]);
+    // Both dimensions account for every citation of the run, exactly once.
+    const rows = await db
+      .selectFrom('audit_source_aggregates')
+      .select(['dimension', 'key', 'citation_ids', 'analysis_ids'])
+      .where('workspace_id', '=', t.workspaceId)
+      .where('audit_id', '=', auditId)
+      .execute();
+    for (const dimension of ['domain', 'url']) {
+      expect(
+        rows
+          .filter((row) => row.dimension === dimension)
+          .flatMap((row) => row.citation_ids)
+          .sort(),
+      ).toEqual(citations.map((c) => c.id));
+    }
+    const answered = await db
+      .selectFrom('audit_answer_aggregates')
+      .select(['logical_engine', 'cohort', 'analysis_ids', 'prompt_keys'])
+      .where('workspace_id', '=', t.workspaceId)
+      .where('audit_id', '=', auditId)
+      .execute();
+    expect(answered).toEqual([
+      {
+        logical_engine: 'chatgpt',
+        cohort: 'core',
+        analysis_ids: analyses.map((a) => a.id),
+        prompt_keys: [t.promptId],
+      },
+    ]);
+
+    // A citation row appended after finalization is not counted.
+    const template = await db
+      .selectFrom('citations')
+      .selectAll()
+      .where('id', '=', citations[0]!.id)
+      .executeTakeFirstOrThrow();
+    await db
+      .insertInto('citations')
+      .values({
+        ...template,
+        id: randomUUID(),
+        url: 'https://late.example/z',
+        domain: 'late.example',
+        ordinal: template.ordinal + 100,
+      })
+      .execute();
+    const read = await sourcesRead(t, t.projectId, `audit_id=${auditId}`);
+    expect(read.status).toBe(200);
+    expect([read.body?.responses, read.body?.prompts, read.body?.total_citations]).toEqual([
+      3, 1, 9,
+    ]);
+    expect(counted(read.body)).toEqual([
+      ['blog.test', 3, 1, 1, 3],
+      ['review.example', 3, 1, 2, 6],
+    ]);
+  });
+
+  it('counts a prompt and a URL cited in two selected runs once', async () => {
+    const t = await tenant();
+    const first = await finalizedRun(t, ['https://review.example/a']);
+    const second = await finalizedRun(t, ['https://review.example/a', 'https://blog.test/x']);
+    const { body } = await sourcesRead(t, t.projectId, `audit_ids=${first}&audit_ids=${second}`);
+    expect([body?.responses, body?.prompts, body?.total_citations]).toEqual([6, 1, 9]);
+    expect(counted(body)).toEqual([
+      ['review.example', 6, 1, 1, 6],
+      ['blog.test', 3, 1, 1, 3],
+    ]);
+    const pages = await sourcesRead(
+      t,
+      t.projectId,
+      `audit_ids=${first}&audit_ids=${second}&dimension=url`,
+    );
+    expect(counted(pages.body)).toEqual([
+      ['https://review.example/a', 6, 1, 1, 6],
+      ['https://blog.test/x', 3, 1, 1, 3],
+    ]);
+  });
+
+  it('reads a run without its persisted facts as pending, never as zero', async () => {
+    const t = await tenant();
+    const auditId = await finalizedRun(t, ['https://review.example/a']);
+    expect(counted((await sourcesRead(t, t.projectId, `audit_id=${auditId}`)).body)).toEqual([
+      ['review.example', 3, 1, 1, 3],
+    ]);
+    await db.deleteFrom('audit_answer_aggregates').where('audit_id', '=', auditId).execute();
+    const read = await sourcesRead(t, t.projectId, `audit_id=${auditId}`);
+    expect([read.status, read.code]).toEqual([404, 'visibility_metrics_pending']);
+  });
+
+  it('never writes or serves another workspace’s run', async () => {
+    const t = await tenant(),
+      other = await tenant();
+    const auditId = await finalizedRun(other, ['https://review.example/a']);
+    // The writer is workspace-scoped: naming the run under another workspace writes nothing.
+    await persistSourceAggregates(db, { workspaceId: t.workspaceId, auditId, at: new Date() });
+    const foreign = await db
+      .selectFrom('audit_source_aggregates')
+      .select('id')
+      .where('workspace_id', '=', t.workspaceId)
+      .execute();
+    expect(foreign).toEqual([]);
+    expect((await sourcesRead(t, other.projectId, `audit_id=${auditId}`)).status).toBe(404);
+    expect((await sourcesRead(t, t.projectId, `audit_id=${auditId}`)).status).toBe(404);
+    expect(
+      counted((await sourcesRead(other, other.projectId, `audit_id=${auditId}`)).body),
+    ).toEqual([['review.example', 3, 1, 1, 3]]);
   });
 });

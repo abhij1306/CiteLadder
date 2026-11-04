@@ -357,6 +357,8 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
   let selected: string;
   let unselected: string;
   const url = 'https://example.com/selected';
+  // The page identity its citations resolved to; this project has no record of it until a test adds one.
+  const pageHash = `hash-${randomUUID()}`;
 
   beforeAll(async () => {
     tenant = await fixtures.tenant();
@@ -374,8 +376,8 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       theme: 'Payroll',
       analysis: {
         citations: [
-          { url, domain: 'example.com', title: 'Selected page' },
-          { url, domain: 'example.com' },
+          { url, domain: 'example.com', title: 'Selected page', urlHash: pageHash },
+          { url, domain: 'example.com', urlHash: pageHash },
         ],
         brandMentions: ['Acme Corp'],
         competitorMentions: ['TransferWise'],
@@ -392,7 +394,7 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
       auditId: selected,
       promptIndex: 2,
       taskStatus: 'failed',
-      analysis: { citations: [{ url, domain: 'example.com' }] },
+      analysis: { citations: [{ url, domain: 'example.com', urlHash: pageHash }] },
     });
     await fixtures.execution(tenant, {
       auditId: unselected,
@@ -400,6 +402,8 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
         citations: [{ url: 'https://unselected.example/', domain: 'unselected.example' }],
       },
     });
+    await fixtures.sourceAggregates(tenant, selected);
+    await fixtures.sourceAggregates(tenant, unselected);
   });
 
   it('draws one dense line per leading source over the selected runs', async () => {
@@ -497,14 +501,8 @@ describe('GET /projects/{project_id}/visibility/sources/*', () => {
   });
 
   it('shows what the last successful reading found on the page and the Action to get listed', async () => {
-    const hash = `hash-${randomUUID()}`;
+    const hash = pageHash;
     const scope = { workspace_id: tenant.workspaceId, project_id: tenant.projectId };
-    await db
-      .updateTable('citations')
-      .set({ url_hash: hash })
-      .where('workspace_id', '=', tenant.workspaceId)
-      .where('url', '=', url)
-      .execute();
     const pageId = randomUUID();
     await db
       .insertInto('source_pages')

@@ -139,6 +139,7 @@ it('pins the Visibility review to canonical measures and source-to-answer eviden
     answerText: 'Acme retained answer',
     analysis: { citations: [{ url: 'https://publisher.example/a', domain: 'publisher.example' }] },
   });
+  await fixtures.sourceAggregates(tenant, auditId);
   const rendered = await read('render_visibility', { view: 'overview' });
   const handoff = new URL((rendered.links as { application: string }).application);
   expect([handoff.pathname, handoff.searchParams.get('project')]).toEqual([
@@ -1049,6 +1050,7 @@ it('reads cited sources for the latest run when no audit_id is named', async () 
     answerText: 'Acme answer',
     analysis: { citations: [{ url: 'https://publisher.example/a', domain: 'publisher.example' }] },
   });
+  await fixtures.sourceAggregates(tenant, first);
   expect(await read('read_visibility_sources')).toMatchObject({
     state: 'available',
     audit_id: first,
@@ -1057,6 +1059,13 @@ it('reads cited sources for the latest run when no audit_id is named', async () 
     artifact_refs: [expect.objectContaining({ id: first })],
   });
   const latest = await fixtures.audit(tenant, { completedAt: new Date('2026-10-02T00:00:00Z') });
+  await fixtures.execution(tenant, { auditId: latest, taskStatus: 'failed', analysis: null });
+  // Its source facts are not written yet: pending, never an empty read.
+  expect(await read('read_visibility_sources')).toMatchObject({
+    state: 'unavailable',
+    reason: 'metrics_pending',
+  });
+  await fixtures.sourceAggregates(tenant, latest);
   expect(await read('read_visibility_sources')).toMatchObject({
     audit_id: latest,
     coverage: { responses: 0 },

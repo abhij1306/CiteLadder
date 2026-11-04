@@ -308,16 +308,22 @@ export async function visibilitySources(
   }
   const auditId = selection.auditId;
   if (auditId === null) throw new Error('A sources read selects exactly one run');
-  const page = await getVisibilitySources(db, selection, {
-    domain: args.domain ?? null,
-    sourceClass: null,
-    standing: null,
-    dimension: args.level,
-    asOf: null,
-    cursor: args.cursor ?? null,
-    limit: args.limit ?? mcpPolicy.default_list_limit,
-    baselineAuditIds: null,
-  });
+  let page: Awaited<ReturnType<typeof getVisibilitySources>>;
+  try {
+    page = await getVisibilitySources(db, selection, {
+      domain: args.domain ?? null,
+      sourceClass: null,
+      standing: null,
+      dimension: args.level,
+      asOf: null,
+      cursor: args.cursor ?? null,
+      limit: args.limit ?? mcpPolicy.default_list_limit,
+      baselineAuditIds: null,
+    });
+  } catch (error) {
+    // A run whose source facts are not written yet is pending, never empty.
+    return notYetMeasured(error, Boolean(args.audit_id));
+  }
   return {
     state: 'available',
     audit_id: auditId,

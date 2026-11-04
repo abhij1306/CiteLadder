@@ -435,6 +435,20 @@ CREATE TABLE public.api_keys (
     CONSTRAINT ck_api_keys_revocation CHECK (((revoked_at IS NULL) = (revoke_reason IS NULL)))
 );
 
+CREATE TABLE public.audit_answer_aggregates (
+    id uuid NOT NULL,
+    workspace_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    audit_id uuid NOT NULL,
+    logical_engine character varying(32) NOT NULL,
+    cohort character varying(32) NOT NULL,
+    analysis_ids uuid[] NOT NULL,
+    prompt_keys text[] NOT NULL,
+    analyzer_version character varying(32) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_audit_answer_aggregate_prompts CHECK (((cardinality(analysis_ids) = 0) = (cardinality(prompt_keys) = 0)))
+);
+
 CREATE TABLE public.audit_comparison_baselines (
     id uuid NOT NULL,
     workspace_id uuid NOT NULL,
@@ -508,6 +522,30 @@ CREATE TABLE public.audit_schedules (
     lease_expires_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
+);
+
+CREATE TABLE public.audit_source_aggregates (
+    id uuid NOT NULL,
+    workspace_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    audit_id uuid NOT NULL,
+    logical_engine character varying(32) NOT NULL,
+    cohort character varying(32) NOT NULL,
+    dimension character varying(8) NOT NULL,
+    key text NOT NULL,
+    domain character varying(255) NOT NULL,
+    url_hash character varying(64),
+    source_class character varying(48),
+    classification character varying(24) NOT NULL,
+    source_taxonomy_version character varying(32),
+    analysis_ids uuid[] NOT NULL,
+    prompt_keys text[] NOT NULL,
+    urls text[] NOT NULL,
+    citation_ids uuid[] NOT NULL,
+    analyzer_version character varying(32) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_audit_source_aggregate_dimension CHECK ((((dimension)::text = 'url'::text) OR (((dimension)::text = 'domain'::text) AND (key = (domain)::text) AND (url_hash IS NULL)))),
+    CONSTRAINT ck_audit_source_aggregate_evidence CHECK (((cardinality(analysis_ids) > 0) AND (cardinality(prompt_keys) > 0) AND (cardinality(urls) > 0) AND (cardinality(citation_ids) >= cardinality(analysis_ids))))
 );
 
 CREATE TABLE public.audit_tasks (
@@ -3032,6 +3070,12 @@ ALTER TABLE ONLY public.api_keys
 ALTER TABLE ONLY public.entity_sentiments
     ADD CONSTRAINT entity_sentiments_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT uq_audit_answer_aggregate UNIQUE (audit_id, logical_engine, cohort);
+
 ALTER TABLE ONLY public.audit_comparison_baselines
     ADD CONSTRAINT audit_comparison_baselines_pkey PRIMARY KEY (id);
 
@@ -3049,6 +3093,9 @@ ALTER TABLE ONLY public.audit_prompt_snapshots
 
 ALTER TABLE ONLY public.audit_schedules
     ADD CONSTRAINT audit_schedules_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.audit_tasks
     ADD CONSTRAINT audit_tasks_pkey PRIMARY KEY (id);
@@ -3974,6 +4021,10 @@ CREATE INDEX ix_api_keys_created_by_user_id ON public.api_keys USING btree (crea
 
 CREATE INDEX ix_entity_sentiments_workspace_id ON public.entity_sentiments USING btree (workspace_id);
 
+CREATE INDEX ix_audit_answer_aggregates_project_id ON public.audit_answer_aggregates USING btree (project_id);
+
+CREATE INDEX ix_audit_answer_aggregates_workspace_id ON public.audit_answer_aggregates USING btree (workspace_id);
+
 CREATE INDEX ix_audit_comparison_baselines_baseline_audit_id ON public.audit_comparison_baselines USING btree (baseline_audit_id);
 
 CREATE INDEX ix_audit_comparison_baselines_project_id ON public.audit_comparison_baselines USING btree (project_id);
@@ -3997,6 +4048,12 @@ CREATE INDEX ix_audit_schedules_project_id ON public.audit_schedules USING btree
 CREATE INDEX ix_audit_schedules_prompt_set_id ON public.audit_schedules USING btree (prompt_set_id);
 
 CREATE INDEX ix_audit_schedules_workspace_id ON public.audit_schedules USING btree (workspace_id);
+
+CREATE INDEX ix_audit_source_aggregates_audit_dimension ON public.audit_source_aggregates USING btree (audit_id, dimension);
+
+CREATE INDEX ix_audit_source_aggregates_project_id ON public.audit_source_aggregates USING btree (project_id);
+
+CREATE INDEX ix_audit_source_aggregates_workspace_id ON public.audit_source_aggregates USING btree (workspace_id);
 
 CREATE INDEX ix_audit_tasks_available_at ON public.audit_tasks USING btree (available_at);
 
@@ -4834,6 +4891,15 @@ ALTER TABLE ONLY public.claim_verdicts
 ALTER TABLE ONLY public.claim_verdicts
     ADD CONSTRAINT claim_verdicts_workspace_id_claim_id_fkey FOREIGN KEY (workspace_id, claim_id) REFERENCES public.answer_claims(workspace_id, id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_workspace_id_project_id_audit_id_fkey FOREIGN KEY (workspace_id, project_id, audit_id) REFERENCES public.audits(workspace_id, project_id, id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY public.audit_comparison_baselines
     ADD CONSTRAINT audit_comparison_baselines_audit_id_fkey FOREIGN KEY (audit_id) REFERENCES public.audits(id) ON DELETE CASCADE;
 
@@ -4869,6 +4935,15 @@ ALTER TABLE ONLY public.audit_schedules
 
 ALTER TABLE ONLY public.audit_schedules
     ADD CONSTRAINT audit_schedules_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_workspace_id_project_id_audit_id_fkey FOREIGN KEY (workspace_id, project_id, audit_id) REFERENCES public.audits(workspace_id, project_id, id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.audit_tasks
     ADD CONSTRAINT audit_tasks_engine_snapshot_id_fkey FOREIGN KEY (engine_snapshot_id) REFERENCES public.audit_engine_snapshots(id) ON DELETE CASCADE;

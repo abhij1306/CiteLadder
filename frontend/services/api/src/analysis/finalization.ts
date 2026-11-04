@@ -16,6 +16,7 @@ import { getLogger } from '../logging.ts';
 import { compareText } from '../text-order.ts';
 import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
 import { persistComparisonBaselines } from '../visibility/baselines.ts';
+import { persistSourceAggregates } from '../visibility/source-aggregates.ts';
 
 type ScopedTask = Selectable<AuditTasks> & { cohort: string };
 function coverage(tasks: ScopedTask[], completed: number) {
@@ -319,6 +320,9 @@ export function finalizeAudit(
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+    // The run's Sources facts, beside its metric snapshot, so the Sources
+    // table reads them instead of re-joining answers and citations.
+    await persistSourceAggregates(trx, { workspaceId, auditId, at });
     await persistPromptMetrics(
       trx,
       audit,

@@ -169,24 +169,34 @@ export async function authorizedSelection(
  */
 export function evidenceScope(db: Database, selection: RunSelection) {
   const cohorts = selectedCohorts(selection.cohort);
-  let query = db
-    .selectFrom('response_analyses as ra')
+  let query = selectedRuns(db, selection)
+    .innerJoin('response_analyses as ra', 'ra.audit_id', 'audit.id')
     .innerJoin('audit_tasks as task', 'task.id', 'ra.task_id')
-    .innerJoin('audits as audit', 'audit.id', 'ra.audit_id')
     .innerJoin('audit_prompt_snapshots as snapshot', 'snapshot.id', 'task.prompt_snapshot_id')
     .where('ra.workspace_id', '=', selection.workspaceId)
-    .where('audit.workspace_id', '=', selection.workspaceId)
-    .where('audit.project_id', '=', selection.projectId)
-    .where('audit.status', 'in', visibility.dashboard_audit_statuses)
     .where('task.status', '=', visibility.succeeded_task_status)
     .where('ra.cohort', 'in', cohorts);
-  if (selection.auditId !== null) query = query.where('ra.audit_id', '=', selection.auditId);
-  if (selection.auditIds?.length) query = query.where('ra.audit_id', 'in', selection.auditIds);
-  if (readsMarket(selection))
-    query = query.where('audit.market_id', 'is not distinct from', selection.marketId);
   if (selection.logicalEngine !== null) {
     query = query.where('ra.logical_engine', '=', selection.logicalEngine);
   }
+  return query;
+}
+
+/**
+ * The project's dashboard-ready runs the selection names, or those of its
+ * market and window: the runs `evidenceScope` reads answers from, for
+ * readers of a run's persisted facts.
+ */
+export function selectedRuns(db: Database, selection: RunSelection) {
+  let query = db
+    .selectFrom('audits as audit')
+    .where('audit.workspace_id', '=', selection.workspaceId)
+    .where('audit.project_id', '=', selection.projectId)
+    .where('audit.status', 'in', visibility.dashboard_audit_statuses);
+  if (selection.auditId !== null) query = query.where('audit.id', '=', selection.auditId);
+  if (selection.auditIds?.length) query = query.where('audit.id', 'in', selection.auditIds);
+  if (readsMarket(selection))
+    query = query.where('audit.market_id', 'is not distinct from', selection.marketId);
   if (selection.fromAt !== null) {
     query = query.where('audit.completed_at', '>=', timestamptz(selection.fromAt));
   }
