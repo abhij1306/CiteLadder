@@ -30,8 +30,6 @@ import {
 } from '@/lib/prompts/forms';
 import { usePromptCandidates } from '@/lib/prompts/use-prompt-candidates';
 import { usePromptSet } from '@/lib/prompts/use-prompt-set';
-import { TabsRoot, type TabRowProps } from '@/components/ui/tabs';
-import { InlineFigure } from '@/components/ui/typography';
 
 import { PendingReviewNotice } from './candidate-review';
 import { PromptEmptyState } from './prompt-empty-state';
@@ -77,17 +75,12 @@ const RAIL_MAX_WIDTH = 400;
 const LIBRARY_MIN_WIDTH = 572;
 const RAIL_SEPARATOR_LABEL = 'Resize topics panel';
 
-const STATUS_TABS: { id: PromptStatus; label: string }[] = [
-  { id: 'active', label: 'Active' },
-  { id: 'archived', label: 'Archived' },
-];
-
 /**
  * Prompt library client. Owns the active prompt set (via the project
  * context), the topic/status/search filter state, and every CRUD, import,
- * lifecycle, and AI-generation mutation. Layout: topics rail on the left;
- * Active / Archived status tabs over the prompt table on the
- * right. The desktop split is user-resizable; "Prompt Builder" opens the
+ * lifecycle, and AI-generation mutation. Layout: one control row (Active /
+ * Archived, search, filters) over the topics rail on the left and the prompt
+ * table on the right. The desktop split is user-resizable; "Prompt Builder" opens the
  * sheet that steers generation and reviews its suggestions.
  */
 // react-doctor-disable-next-line react-doctor/no-giant-component -- this component only orchestrates queries/mutations; toolbar, topic rail, table, empty state, and dialogs are extracted.
@@ -111,7 +104,7 @@ export function PromptLibrary({
 
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<PromptFilters>(emptyFilters);
-  const [statusTab, setStatusTab] = useState<PromptStatus>('active');
+  const [statusFilter, setStatusFilter] = useState<PromptStatus>('active');
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Prompt | undefined>(undefined);
@@ -152,7 +145,7 @@ export function PromptLibrary({
     promptSet,
     workspaceId: requestScope.workspaceId,
     onReviewed: async () => {
-      setStatusTab('active');
+      setStatusFilter('active');
       // Show every newly tracked prompt, whichever topic it landed in.
       setSelectedTopicId(null);
       await invalidate();
@@ -271,10 +264,10 @@ export function PromptLibrary({
     deleteMutation.mutate(pending.prompt.id);
   };
 
-  // Status tab -> topic -> search/filters, preserving order.
+  // Status -> topic -> search/filters, preserving order.
   const byStatus = useMemo(
-    () => prompts.filter((prompt) => prompt.status === statusTab),
-    [prompts, statusTab],
+    () => prompts.filter((prompt) => prompt.status === statusFilter),
+    [prompts, statusFilter],
   );
   const byTopic = useMemo(
     () =>
@@ -357,143 +350,120 @@ export function PromptLibrary({
     libraryBody = <PromptEmptyState onGenerate={() => openBuilder('business')} onAdd={openAdd} />;
   }
 
-  // Active / Archived lead the route in the tab band, above the filters.
-  const statusTabs: TabRowProps<PromptStatus> = {
-    ariaLabel: 'Prompt status',
-    items: STATUS_TABS.map((tab) => ({
-      value: tab.id,
-      label: (
-        <>
-          {tab.label}
-          {statusCounts[tab.id] > 0 ? (
-            <>
-              {' '}
-              <InlineFigure className="type-caption">{statusCounts[tab.id]}</InlineFigure>
-            </>
-          ) : null}
-        </>
-      ),
-    })),
-  };
-
-  // Search and filters ride a control band once loaded; the first load holds
-  // it (and the tab band) so the table starts where the box stood.
+  // Status, search and filters share one control band once loaded; the first
+  // load holds it so the table starts where the box stood.
   const figuresRead = measurements !== undefined;
   if (awaitingFirstLoad({ promptsLoading: isLoading, hasPrompts, figuresRead })) {
     return (
-      <TabsRoot value={statusTab} onValueChange={setStatusTab}>
-        <ListScreen tabs={statusTabs} controls={RESERVED_CONTROLS}>
-          <QueryState kind="loading" />
-        </ListScreen>
-      </TabsRoot>
+      <ListScreen controls={RESERVED_CONTROLS}>
+        <QueryState kind="loading" />
+      </ListScreen>
     );
   }
 
   return (
-    <TabsRoot value={statusTab} onValueChange={setStatusTab}>
-      <ListScreen
-        tabs={statusTabs}
-        actions={
-          <PromptActions
-            onImport={() => setImportOpen(true)}
-            onAdd={openAdd}
-            onGenerate={() => openBuilder('business')}
-            hasActivePrompts={statusCounts.active > 0}
+    <ListScreen
+      actions={
+        <PromptActions
+          onImport={() => setImportOpen(true)}
+          onAdd={openAdd}
+          onGenerate={() => openBuilder('business')}
+          hasActivePrompts={statusCounts.active > 0}
+        />
+      }
+      controls={promptFilterControls({
+        status: { value: statusFilter, counts: statusCounts, onChange: setStatusFilter },
+        search,
+        onSearchChange: setSearch,
+        filters,
+        onFiltersChange: setFilters,
+        personas,
+      })}
+    >
+      <>
+        {error && !failedEmpty ? (
+          <ReadError
+            error={error}
+            fallback="Could not load prompts. Check your connection and try again."
+            onRetry={retry}
+            pending={retrying}
           />
-        }
-        controls={promptFilterControls({
-          search,
-          onSearchChange: setSearch,
-          filters,
-          onFiltersChange: setFilters,
-          personas,
-        })}
-      >
-        <>
-          {error && !failedEmpty ? (
-            <ReadError
-              error={error}
-              fallback="Could not load prompts. Check your connection and try again."
-              onRetry={retry}
-              pending={retrying}
+        ) : null}
+        <PendingReviewNotice
+          count={review.candidates.length}
+          hidden={builderOpen}
+          onReview={() => openBuilder('review')}
+        />
+
+        <ResizableSplitPane
+          listId="prompt-topic-rail"
+          separatorLabel={RAIL_SEPARATOR_LABEL}
+          defaultWidth={RAIL_DEFAULT_WIDTH}
+          minWidth={RAIL_MIN_WIDTH}
+          maxWidth={RAIL_MAX_WIDTH}
+          minDetailWidth={LIBRARY_MIN_WIDTH}
+          stickyList
+          list={
+            <TopicRail
+              topics={topics}
+              selectedTopicId={selectedTopicId}
+              onSelect={setSelectedTopicId}
+              onCreate={async (name, parentId) => {
+                await topicMutations.create.mutateAsync({ name, parentId });
+              }}
+              onDelete={(topic) => setPendingDelete({ kind: 'topic', topic })}
+              onRename={async (topic, name) => {
+                await topicMutations.rename.mutateAsync({ topic, name });
+              }}
+              isCreating={topicMutations.create.isPending}
+              loadError={topicsQuery.isError}
+              actionError={topicMutations.error}
             />
-          ) : null}
-          <PendingReviewNotice
-            count={review.candidates.length}
-            hidden={builderOpen}
-            onReview={() => openBuilder('review')}
-          />
+          }
+        >
+          <Stack gap="compact" className="min-w-0 content-start">
+            {libraryBody}
+          </Stack>
+        </ResizableSplitPane>
 
-          <ResizableSplitPane
-            listId="prompt-topic-rail"
-            separatorLabel={RAIL_SEPARATOR_LABEL}
-            defaultWidth={RAIL_DEFAULT_WIDTH}
-            minWidth={RAIL_MIN_WIDTH}
-            maxWidth={RAIL_MAX_WIDTH}
-            minDetailWidth={LIBRARY_MIN_WIDTH}
-            stickyList
-            list={
-              <TopicRail
-                topics={topics}
-                selectedTopicId={selectedTopicId}
-                onSelect={setSelectedTopicId}
-                onCreate={async (name, parentId) => {
-                  await topicMutations.create.mutateAsync({ name, parentId });
-                }}
-                onDelete={(topic) => setPendingDelete({ kind: 'topic', topic })}
-                onRename={async (topic, name) => {
-                  await topicMutations.rename.mutateAsync({ topic, name });
-                }}
-                isCreating={topicMutations.create.isPending}
-                loadError={topicsQuery.isError}
-                actionError={topicMutations.error}
-              />
-            }
-          >
-            <Stack gap="compact" className="min-w-0 content-start">
-              {libraryBody}
-            </Stack>
-          </ResizableSplitPane>
-
-          <PromptLibraryDialogs
-            pendingDelete={pendingDelete}
-            setPendingDelete={setPendingDelete}
-            confirmDelete={confirmDelete}
-            formOpen={formOpen}
-            setFormOpen={setFormOpen}
-            editing={editing}
-            setEditing={setEditing}
-            submitForm={submitForm}
-            isSaving={createMutation.isPending || updateMutation.isPending}
-            formError={mutationErrorMessage(createMutation, updateMutation)}
-            importOpen={importOpen}
-            setImportOpen={setImportOpen}
-            importPrompts={async (rows) => {
-              await importMutation.mutateAsync(rows).catch(() => undefined);
-            }}
-            isImporting={importMutation.isPending}
-            importError={
-              importMutation.isError ? humanizeApiError(importMutation.error).message : undefined
-            }
-            projectId={requestScope.projectId}
-            workspaceId={requestScope.workspaceId}
-            builderOpen={builderOpen}
-            setBuilderOpen={setBuilderOpen}
-            builderStep={builderStep}
-            hasCompetitors={hasCompetitors}
-            topics={topics}
-            selectedTopicId={selectedTopicId}
-            generatePrompts={(input) => generateMutation.mutateAsync(input).catch(() => null)}
-            isGenerating={generateMutation.isPending}
-            generateError={generateMutation.isError ? generateMutation.error : undefined}
-            onTopicsChanged={invalidate}
-            review={review}
-            setsLoading={isLoading}
-            setsError={error !== null}
-            retrySets={retry}
-          />
-        </>
-      </ListScreen>
-    </TabsRoot>
+        <PromptLibraryDialogs
+          pendingDelete={pendingDelete}
+          setPendingDelete={setPendingDelete}
+          confirmDelete={confirmDelete}
+          formOpen={formOpen}
+          setFormOpen={setFormOpen}
+          editing={editing}
+          setEditing={setEditing}
+          submitForm={submitForm}
+          isSaving={createMutation.isPending || updateMutation.isPending}
+          formError={mutationErrorMessage(createMutation, updateMutation)}
+          importOpen={importOpen}
+          setImportOpen={setImportOpen}
+          importPrompts={async (rows) => {
+            await importMutation.mutateAsync(rows).catch(() => undefined);
+          }}
+          isImporting={importMutation.isPending}
+          importError={
+            importMutation.isError ? humanizeApiError(importMutation.error).message : undefined
+          }
+          projectId={requestScope.projectId}
+          workspaceId={requestScope.workspaceId}
+          builderOpen={builderOpen}
+          setBuilderOpen={setBuilderOpen}
+          builderStep={builderStep}
+          hasCompetitors={hasCompetitors}
+          topics={topics}
+          selectedTopicId={selectedTopicId}
+          generatePrompts={(input) => generateMutation.mutateAsync(input).catch(() => null)}
+          isGenerating={generateMutation.isPending}
+          generateError={generateMutation.isError ? generateMutation.error : undefined}
+          onTopicsChanged={invalidate}
+          review={review}
+          setsLoading={isLoading}
+          setsError={error !== null}
+          retrySets={retry}
+        />
+      </>
+    </ListScreen>
   );
 }

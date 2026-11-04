@@ -6,7 +6,7 @@ import type { FormEvent, ReactNode } from 'react';
 import { Icon } from '@/components/ui/icon';
 import { Pressable } from '@/components/ui/pressable';
 import { Spinner } from '@/components/ui/spinner';
-import { Tooltip } from '@/components/ui/tooltip';
+import { ClampText } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
@@ -147,9 +147,9 @@ export function RailItem({
           selected && textRole('emphasis'),
         )}
       >
-        <Tooltip content={label}>
-          <span className="min-w-0 flex-1 truncate">{label}</span>
-        </Tooltip>
+        <ClampText lines={1} className="flex-1">
+          {label}
+        </ClampText>
         {typeof count === 'number' ? (
           <span className="type-caption font-numeric shrink-0">{count}</span>
         ) : null}

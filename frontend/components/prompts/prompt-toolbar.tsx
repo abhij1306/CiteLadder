@@ -16,6 +16,8 @@ import {
 import { FilterTrigger, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Icon } from '@/components/ui/icon';
 import { SearchField } from '@/components/ui/search-field';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import type { PromptStatus } from '@/lib/api/types';
 import {
   buyerStageLabels,
   buyerStageValues,
@@ -24,9 +26,15 @@ import {
 } from '@/lib/prompts/forms';
 import type { EnabledFilter, PromptFilters } from '@/lib/prompts/filter';
 
+const PROMPT_STATUSES: readonly { value: PromptStatus; label: string }[] = [
+  { value: 'active', label: 'Active' },
+  { value: 'archived', label: 'Archived' },
+];
+
 /**
- * The prompt library's narrowing controls: a search box and the intent /
- * enabled / branded filter menu. For the `ListScreen` control band.
+ * The prompt library's narrowing controls, on one row: the Active / Archived
+ * status, a search box and the intent / enabled / branded filter menu. For
+ * the `ListScreen` control band.
  *
  * The bulk-upload, generate and add buttons used to sit on this same row.
  * They are not filters — they act on the library rather than narrowing it — so
@@ -47,12 +55,19 @@ const BRANDED_FILTER_LABEL: Record<'all' | 'enabled' | 'disabled', string> = {
 };
 
 export function promptFilterControls({
+  status,
   search,
   onSearchChange,
   filters,
   onFiltersChange,
   personas = [],
 }: Readonly<{
+  /** Active / Archived, with the number of prompts in each. */
+  status: Readonly<{
+    value: PromptStatus;
+    counts: Readonly<Record<PromptStatus, number>>;
+    onChange: (value: PromptStatus) => void;
+  }>;
   search: string;
   onSearchChange: (value: string) => void;
   filters: PromptFilters;
@@ -86,6 +101,20 @@ export function promptFilterControls({
   const setBranded = (value: EnabledFilter) => onFiltersChange({ ...filters, branded: value });
 
   return {
+    // The status leads the one control row and pushes search and the filter
+    // menu to its end, so a count changing never moves them.
+    view: (
+      <SegmentedControl
+        ariaLabel="Prompt status"
+        value={status.value}
+        onChange={status.onChange}
+        options={PROMPT_STATUSES.map((option) => ({
+          value: option.value,
+          label: option.label,
+          count: status.counts[option.value],
+        }))}
+      />
+    ),
     search: (
       <SearchField
         value={search}

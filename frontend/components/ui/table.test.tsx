@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -37,6 +37,43 @@ describe('table cell text', () => {
     await userEvent.hover(screen.getByText(LONG));
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(LONG);
+  });
+
+  it('keeps one tooltip open as the pointer moves down rows, and closes it on leave', async () => {
+    layout({ scrollHeight: 60 });
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider>
+        <button type="button">Outside</button>
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableCell>{LONG}</TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Second row prompt that is also cut by the clamp</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TooltipProvider>,
+    );
+
+    await user.hover(screen.getByText(LONG));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(LONG);
+
+    const second = screen.getByText('Second row prompt that is also cut by the clamp');
+    // A real pointer keeps moving once it crosses into the next row.
+    await user.hover(second);
+    await user.pointer({ target: second, coords: { clientX: 100, clientY: 100 } });
+    await user.pointer({ target: second, coords: { clientX: 120, clientY: 100 } });
+    await waitFor(() =>
+      expect(screen.getAllByRole('tooltip').map((tip) => tip.textContent)).toEqual([
+        'Second row prompt that is also cut by the clamp',
+      ]),
+    );
+
+    await user.hover(screen.getByRole('button', { name: 'Outside' }));
+    await waitFor(() => expect(screen.queryByRole('tooltip')).not.toBeInTheDocument());
   });
 
   it('shows no tooltip when the text fits', async () => {

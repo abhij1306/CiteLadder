@@ -81,6 +81,7 @@ function DateRangeFields({
   to,
   onFrom,
   onTo,
+  onActivate,
   min,
   max,
 }: Readonly<{
@@ -89,14 +90,18 @@ function DateRangeFields({
   to: string;
   onFrom: (value: string) => void;
   onTo: (value: string) => void;
+  /** Reaching either date (typing, clicking, its calendar) chooses Custom. */
+  onActivate: () => void;
   min?: string;
   max?: string;
 }>) {
+  // The inputs' placeholder already shows the YYYY-MM-DD shape, so the fields
+  // carry no hint repeating it.
   return (
-    <Stack as="fieldset" gap="compact">
+    <Stack as="fieldset" gap="compact" onFocus={onActivate}>
       <legend className="sr-only">{legend}</legend>
       <Inline gap="compact" className="flex-wrap">
-        <Field label="Start date" hint="YYYY-MM-DD">
+        <Field label="Start date">
           {(props) => (
             <DateField
               {...props}
@@ -109,7 +114,7 @@ function DateRangeFields({
           )}
         </Field>
         <span className="text-muted">–</span>
-        <Field label="End date" hint="YYYY-MM-DD">
+        <Field label="End date">
           {(props) => (
             <DateField
               {...props}
@@ -183,6 +188,8 @@ export function DateRangeDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Date range"
+      // Two date fields and their separator share one row.
+      width="wide"
       description={
         coverage.earliest && coverage.latest
           ? `Imported history covers ${coverage.earliest} to ${coverage.latest}.`
@@ -228,8 +235,8 @@ export function DateRangeDialog({
             />
             {/* Always visible: the dates are the point of the Custom option, so
                 hiding them behind selecting the radio first costs a click for
-                no benefit. Typing a date IS choosing Custom, so the inputs
-                select the radio themselves. */}
+                no benefit. Reaching a date IS choosing Custom, so focusing,
+                clicking or typing in the inputs selects the radio. */}
             <DateRangeFields
               legend="Custom date range"
               from={draft.from}
@@ -238,6 +245,7 @@ export function DateRangeDialog({
               max={coverage.latest ?? undefined}
               onFrom={(from) => patch({ from, range: 'custom' })}
               onTo={(to) => patch({ to, range: 'custom' })}
+              onActivate={() => patch({ range: 'custom' })}
             />
           </Stack>
         </TabPanel>
@@ -257,6 +265,7 @@ export function DateRangeDialog({
               max={coverage.latest ?? undefined}
               onFrom={(compareFrom) => patch({ compareFrom, compare: 'custom' })}
               onTo={(compareTo) => patch({ compareTo, compare: 'custom' })}
+              onActivate={() => patch({ compare: 'custom' })}
             />
           </Stack>
         </TabPanel>
