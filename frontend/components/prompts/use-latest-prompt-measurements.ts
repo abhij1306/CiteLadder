@@ -23,10 +23,17 @@ export function useLatestPromptMetrics(scope: ProjectRequestScope) {
  * Keyed by the SOURCE prompt id, because that is what this table's rows are.
  * A prompt added since the last run simply has no entry, which reads as
  * "Not measured" rather than a fabricated zero.
+ *
+ * Undefined until the first read settles: whether a run exists decides the
+ * table's columns, so the table waits for it instead of drawing without the
+ * measured columns and then squeezing four in beside rows already on screen.
  */
-export function useLatestPromptMeasurements(scope: ProjectRequestScope) {
+export function useLatestPromptMeasurements(
+  scope: ProjectRequestScope,
+): ReadonlyMap<string, PromptMeasurement> | undefined {
   const result = useLatestPromptMetrics(scope);
   return useMemo(() => {
+    if (result.isLoading) return undefined;
     const map = new Map<string, PromptMeasurement>();
     // A failed read is not a measured absence. Returning an empty map drops the
     // columns entirely, which says "no run yet" rather than "every prompt is
@@ -42,5 +49,5 @@ export function useLatestPromptMeasurements(scope: ProjectRequestScope) {
       });
     }
     return map;
-  }, [result.data, result.isError]);
+  }, [result.data, result.isError, result.isLoading]);
 }

@@ -58,6 +58,17 @@ function mutationErrorMessage(
   return update.isError ? humanizeApiError(update.error).message : undefined;
 }
 
+/**
+ * Whether the library still shows its first-load frame. Prompts often arrive
+ * with the project, before the latest run's figures; a run adds four columns,
+ * and adding them beside rows already on screen moved every cell sideways.
+ */
+function awaitingFirstLoad(
+  state: Readonly<{ promptsLoading: boolean; hasPrompts: boolean; figuresRead: boolean }>,
+): boolean {
+  return state.promptsLoading || (state.hasPrompts && !state.figuresRead);
+}
+
 /** The topic rail's widths, in px: the default, its bounds, and the room the library keeps. */
 const RAIL_DEFAULT_WIDTH = 240;
 const RAIL_MIN_WIDTH = 208;
@@ -350,7 +361,8 @@ export function PromptLibrary({
 
   // The library's search and filters ride a control band once it loads; the
   // first load holds that band so the table starts where the box stood.
-  if (isLoading) {
+  const figuresRead = measurements !== undefined;
+  if (awaitingFirstLoad({ promptsLoading: isLoading, hasPrompts, figuresRead })) {
     return (
       <ListScreen controls={RESERVED_CONTROLS}>
         <QueryState kind="loading" />
