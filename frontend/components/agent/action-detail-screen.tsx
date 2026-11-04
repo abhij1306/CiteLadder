@@ -36,7 +36,6 @@ import {
   approachLabel,
   familyLabel,
   measurementLegLabel,
-  OUTPUT_PHASE_LABEL,
   targetKindLabel,
 } from '@/lib/agent/vocabulary';
 import { actionsMutations, actionsQueries, type ActionDetail } from '@/lib/api/actions';
@@ -359,10 +358,8 @@ function LinkedChats({
               >
                 {chat.title}
               </TextLink>
-              {chat.output_kind && chat.output_phase ? (
-                <span className={textRole('caption')}>
-                  {kindLabel(chat.output_kind)} · {OUTPUT_PHASE_LABEL[chat.output_phase]}
-                </span>
+              {chat.output_kind ? (
+                <span className={textRole('caption')}>{kindLabel(chat.output_kind)}</span>
               ) : null}
             </Stack>
           ))}

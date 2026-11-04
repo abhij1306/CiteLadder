@@ -35,7 +35,7 @@ A quantitative gap claim needs the dataset behind it. Without demand data, label
 
 1. **Start from the business:** audience → offer → buyer task → topic. Do not expand into a generic keyword universe.
 2. **Inventory what works.** Existing useful pages, current queries and visibility gaps. Check existing pages before proposing a new one; mark a page "proposed" if you did not inspect the inventory.
-3. **Type the competitors:** direct business alternatives, search-result competitors, AI-answer competitors, cited publishers. A directory can compete for attention without selling the same thing. Keep the user's chosen competitors and label any additions.
+3. **Type the competitors:** direct business alternatives, search-result competitors, AI-answer competitors, cited publishers. A directory can compete for attention without selling the same thing. Keep the person's chosen competitors and label any additions.
 4. **Ground each opportunity** in the query data and any matching dataset, with its market, device and date. Do not describe search result pages you have not read, and never invent ranks, volumes or difficulty.
 5. **Cluster by the same buyer job**, not just similar words. Split when the decision, offer or format differs. Zero estimated volume does not prove no need.
 6. **Compare coverage** against what was inspected only: missing questions, outdated facts, weak proof, wrong format. "Absent from five inspected pages" is not "unique on the internet".

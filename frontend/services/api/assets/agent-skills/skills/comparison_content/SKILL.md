@@ -17,12 +17,12 @@ Write a comparison that helps a real buyer decide. The sponsoring brand may be t
 ## How the work flows
 
 - Answer questions about the draft directly, without saving a new document.
-- Choose the format: usually `comparison` (set `format_id`). It is long-form, so first deliver an outline (the decision, the criteria, the options, the sections) for the user to approve, then write the full page. Edit the current document when the user asks for changes.
+- Choose the format: usually `comparison` (set `format_id`), and write the full page. Give an outline first only when asked for one. For changes, use `edit_document` on the parts that change.
 - Research only the named comparison. Do not turn it into a full competitor survey.
 
 ## Inputs
 
-You need the actual options being compared, the buyer and market, and facts about each option. Get company facts from `get_project_business_context`. Useful extras: buyer questions from tracked prompts and AI answers (`read_visibility_results` with an `audit_id` from `read_visibility_overview`), search demand (`read_performance` with a `dimension`, `read_search_dataset`), and existing owned pages. You cannot check the live web, so use only facts already saved or supplied by the user.
+You need the actual options being compared, the buyer and market, and facts about each option. Get company facts from `get_project_business_context`. Useful extras: buyer questions from tracked prompts and AI answers (`read_visibility_results` with an `audit_id` from `read_visibility_overview`), search demand (`read_performance` with a `dimension`, `read_search_dataset`), and existing owned pages. You cannot check the live web, so use only facts already saved or supplied by the person.
 
 ## Method
 

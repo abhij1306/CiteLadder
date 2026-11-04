@@ -9,7 +9,6 @@ import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { SearchField } from '@/components/ui/search-field';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
-import { OUTPUT_PHASE_LABEL } from '@/lib/agent/vocabulary';
 import { agentQueries, type AgentChatSummary } from '@/lib/api/agent';
 import { AGENT_CHAT_LIST_POLL_MS, AGENT_CHAT_SEARCH_DEBOUNCE_MS } from '@/lib/config/agent';
 import { ICONS } from '@/lib/icons';
@@ -192,10 +191,7 @@ function ChatRows({
 
 function ChatMeta({ chat }: Readonly<{ chat: AgentChatSummary }>) {
   const { kindLabel } = useAgentCatalog();
-  const marker =
-    chat.output_kind && chat.output_phase
-      ? `${kindLabel(chat.output_kind)} · ${OUTPUT_PHASE_LABEL[chat.output_phase]}`
-      : null;
+  const marker = chat.output_kind ? kindLabel(chat.output_kind) : null;
   if (chat.running)
     return (
       <span className={textRole('caption', 'flex items-center gap-2')}>

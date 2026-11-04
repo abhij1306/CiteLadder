@@ -146,8 +146,6 @@ export interface AgentModelAttempts {
 }
 
 export interface AgentOutputRevisions {
-  approved_at: Timestamp | null;
-  approved_by_user_id: string | null;
   author: string;
   author_user_id: string | null;
   body: string;
@@ -157,7 +155,6 @@ export interface AgentOutputRevisions {
   number: number;
   output_id: string;
   parent_revision_id: string | null;
-  phase: string;
   project_id: string;
   run_id: string | null;
   source_refs: Json;
@@ -172,7 +169,6 @@ export interface AgentOutputs {
   format_id: string | null;
   id: string;
   kind: string;
-  phase: string;
   project_id: string;
   skill_id: string;
   target_kind: string | null;
@@ -199,7 +195,6 @@ export interface AgentRuns {
   lease_expires_at: Timestamp | null;
   lease_owner: string | null;
   max_attempts: number;
-  mode: string;
   priority: number;
   project_id: string;
   protocol_version: string;

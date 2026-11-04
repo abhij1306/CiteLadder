@@ -20,7 +20,7 @@ You need verified business facts (`get_project_business_context`) and at least o
 
 - Sources cited in AI answers: `read_visibility_sources`, `read_visibility_results` (with an `audit_id` from `read_visibility_overview`), and `read_source_url` for one page's prompts and the brands it lists.
 - Backlink datasets: `read_search_intelligence`, then `read_search_dataset`. These are referring-domain and destination-page totals, not individual links; never describe a specific linking page or anchor from them.
-- A prospect list the user supplies.
+- A prospect list the person supplies.
 
 You cannot browse, so you cannot check live pages, find contacts or confirm a link exists.
 
@@ -48,7 +48,7 @@ A live backlink, an unlinked mention, a cited source that names the brand, and a
 - No bought links, link networks, fake reviews, required positive sentiment or manufactured community consensus. Paid sponsorship is labelled as such.
 - A low provider score does not prove a harmful link; never recommend automatic disavows.
 - A competitor appearing on a source does not prove the source caused its recommendation. A new link does not prove an AI visibility gain.
-- Sending, posting and follow-ups are the user's actions.
+- Sending, posting and follow-ups are the person's actions.
 
 ## Deliver
 

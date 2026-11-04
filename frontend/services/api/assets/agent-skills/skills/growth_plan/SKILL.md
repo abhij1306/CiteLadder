@@ -14,7 +14,7 @@ description: Prioritize SEO and AI visibility opportunities using persisted Cite
 
 Turn the business objective into a short, evidence-backed sequence of work, and point each item to the specialist skill that should do it next. No skill runs automatically; you suggest the next chat.
 
-If the user only asks what data is available, answer with the data, dates and gaps, and stop. If the user asks for a reusable task prompt, write it without claiming it ran.
+If the person only asks what data is available, answer with the data, dates and gaps, and stop. If the person asks for a reusable task prompt, write it without claiming it ran.
 
 ## Inputs
 

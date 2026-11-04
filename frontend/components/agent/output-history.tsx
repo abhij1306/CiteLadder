@@ -14,7 +14,6 @@ import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { diffLines } from '@/lib/agent/diff';
 import { agentWriteFailure } from '@/lib/agent/errors';
-import { OUTPUT_PHASE_LABEL } from '@/lib/agent/vocabulary';
 import { agentMutations, agentQueries, type AgentRevision } from '@/lib/api/agent';
 import { queryKeys } from '@/lib/api/query-keys';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
@@ -118,8 +117,7 @@ function RevisionRow({
         <span className={textRole('itemTitle')}>Revision {revision.number}</span>
         <span className={textRole('caption')}>
           {revision.author === 'user' ? 'Your edit' : 'Agent'} ·{' '}
-          {OUTPUT_PHASE_LABEL[revision.phase]}
-          {revision.approved_at ? ' · Approved' : ''} · <DisplayTime value={revision.created_at} />
+          <DisplayTime value={revision.created_at} />
         </span>
         {latest ? <span className={textRole('caption')}>Current</span> : null}
         <span className="flex-1" />

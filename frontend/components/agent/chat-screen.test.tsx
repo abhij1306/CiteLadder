@@ -80,7 +80,7 @@ describe('ChatScreen', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Automatic' })).toBeChecked();
   });
 
-  it('shows supplied context omissions and approval as an action tied to its revision', async () => {
+  it('shows supplied context and its omissions in plain words', async () => {
     const current = {
       ...detail(revision(REV1, 1, 'agent', 'Body.')),
       context: {
@@ -93,27 +93,17 @@ describe('ChatScreen', () => {
         },
       },
     };
-    const approval = {
-      ...current.messages[0]!,
-      event: { kind: 'outline_approved', revision_id: REV1, run_id: RUN },
-    };
     mswServer.use(
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-        HttpResponse.json({ ...current, messages: [approval, current.messages[1]] }),
-      ),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(current)),
     );
     const user = userEvent.setup();
     renderChat();
-    expect(await screen.findByRole('article', { name: 'Outline approval' })).toHaveTextContent(
-      'Outline approved',
-    );
-    await user.click(screen.getByText('Context used'));
+    await user.click(await screen.findByText('Context used'));
     expect(screen.getByText('Selected issue group')).toBeVisible();
     // Omissions are disclosed in plain words, never as internal codes.
     expect(screen.getByText(/left out to fit this turn/)).toBeVisible();
     expect(screen.queryByText(/oldest_history|history messages/)).not.toBeInTheDocument();
-    expect(screen.queryByText(current.messages[0]!.content)).not.toBeInTheDocument();
   });
   it('saves an edit as a new revision and shows it inline in the thread', async () => {
     let current = detail(revision(REV1, 1, 'agent', 'Old title tag.'));
@@ -316,7 +306,7 @@ describe('ChatScreen', () => {
     await user.click(within(pane).getByRole('button', { name: 'Edit' }));
     await user.type(within(pane).getByLabelText('Output body (Markdown)'), ' Draft.');
     await user.click(within(pane).getByRole('tab', { name: 'Sources' }));
-    await user.click(within(pane).getByRole('tab', { name: 'Final' }));
+    await user.click(within(pane).getByRole('tab', { name: 'Document' }));
 
     expect(within(pane).getByLabelText('Output body (Markdown)')).toHaveValue(
       'Old title tag. Draft.',

@@ -142,7 +142,7 @@ function TurnActions({
 }>) {
   const request = [...detail.messages].reverse().find((message) => message.role === 'user');
   const kind = runOutcome(detail.latest_run).kind;
-  if (!canSend || !request || request.event?.kind === 'outline_approved') return null;
+  if (!canSend || !request) return null;
   const ended = ['failed', 'cancelled', 'stopped_at_limit'].includes(kind);
   if (!ended && kind !== 'succeeded') return null;
   return (
@@ -191,18 +191,6 @@ function MessageBubble({
   message,
   skill,
 }: Readonly<{ message: AgentMessage; skill: string | null }>) {
-  if (message.event?.kind === 'outline_approved')
-    return (
-      <Stack
-        as="article"
-        gap="tight"
-        aria-label="Outline approval"
-        className={panelClasses({ tone: 'well' })}
-      >
-        <span className={textRole('label')}>Outline approved</span>
-        <p className={textRole('caption')}>Draft requested from the approved revision.</p>
-      </Stack>
-    );
   if (message.role === 'user')
     return (
       <div className="flex justify-end">

@@ -137,7 +137,7 @@ async function seed(db: Database, content: boolean): Promise<ActionSeed> {
   });
 }
 
-function revision(db: Database, workspace: string, project: string, action: string, phase: string) {
+function revision(db: Database, workspace: string, project: string, action: string) {
   return db.transaction().execute(async (trx) => {
     const scope = { workspace_id: workspace, project_id: project };
     const now = new Date();
@@ -167,7 +167,6 @@ function revision(db: Database, workspace: string, project: string, action: stri
         action_id: action,
         kind: 'page_edits',
         skill_id: 'gsc_optimize',
-        phase,
         created_at: now,
         updated_at: now,
       })
@@ -180,7 +179,6 @@ function revision(db: Database, workspace: string, project: string, action: stri
         output_id: outputId,
         number: 1,
         author: 'run',
-        phase,
         title: 'Page edits',
         body: 'Rewrite the title.',
         source_refs: '[]',
@@ -298,8 +296,7 @@ export async function actionFixture<T>(phase: string, ...args: string[]): Promis
   const db = testDatabase();
   try {
     if (phase === 'seed' || phase === 'content') return (await seed(db, phase === 'content')) as T;
-    if (phase === 'revision')
-      return (await revision(db, args[0]!, args[1]!, args[2]!, args[3]!)) as T;
+    if (phase === 'revision') return (await revision(db, args[0]!, args[1]!, args[2]!)) as T;
     return await db.transaction().execute(async (trx) => {
       const scope = { workspace_id: args[0]!, project_id: args[1]! };
       if (phase === 'observe') return (await observation(trx, scope, args[2]!, true)) as T;

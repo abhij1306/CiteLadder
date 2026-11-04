@@ -28,7 +28,7 @@ You need the verified offer and audience (`get_project_business_context`), a rep
 6. **Pick a pilot.** A typical case, a rich case and a sparse or edge case; three to five pages is a sensible default. Draft complete pages only for rows with enough verified data; show why sparse rows fail.
 7. **Architecture.** Stable URLs on the existing domain and route pattern, canonicals, hub pages, internal links and sitemap inclusion for eligible pages only. No indexable filter combinations or location doorways.
 8. **Gates before scale.** Each row must pass: complete facts, distinct value, intent match, no duplicate, correct links and metadata, an owner for updates. Failed rows stay unpublished.
-9. **Release and observe** (the user publishes). Check indexing, useful traffic, engagement and conversions, and whether existing pages lose queries. Scale only if quality, value and maintenance capacity hold; stop if rows cannot be maintained or only simulate coverage.
+9. **Release and observe** (the person publishes). Check indexing, useful traffic, engagement and conversions, and whether existing pages lose queries. Scale only if quality, value and maintenance capacity hold; stop if rows cannot be maintained or only simulate coverage.
 
 ## Deliver
 

@@ -110,7 +110,7 @@ describe('Action routes', () => {
           .executeTakeFirstOrThrow()
       ).effective_status;
     // The output writer's transaction persists in-progress.
-    await actionFixture<string>('revision', s.workspace_id, s.project_id, actionId(s), 'draft');
+    await actionFixture<string>('revision', s.workspace_id, s.project_id, actionId(s));
     expect(await stored()).toBe('in_progress');
     // A declaration persists implemented in its own transaction.
     const declared = await declarationBody(await declare(s, 'persisted'));
@@ -326,26 +326,15 @@ describe('Action routes', () => {
     expect((await declare(s, 'foreign-members')).status).toBe(409);
   });
 
-  it('accepts only a shippable revision of this Action and derives in-progress from its output', async () => {
+  it('accepts only a revision of this Action and derives in-progress from its output', async () => {
     const s = await seed();
-    const outline = await actionFixture<string>(
-      'revision',
-      s.workspace_id,
-      s.project_id,
-      actionId(s),
-      'outline',
-    );
-    expect((await detailBody(await request(s, actionPath(s)))).status).toBe('in_progress');
-    expect((await declare(s, 'outline', pageRule, { output_revision_id: outline })).status).toBe(
-      409,
-    );
     const draft = await actionFixture<string>(
       'revision',
       s.workspace_id,
       s.project_id,
       actionId(s),
-      'draft',
     );
+    expect((await detailBody(await request(s, actionPath(s)))).status).toBe('in_progress');
     expect(
       (await declare(s, 'foreign-output', otherRule, { output_revision_id: draft })).status,
     ).toBe(409);

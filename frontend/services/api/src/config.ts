@@ -30,11 +30,7 @@ import { validateSiteHealthSettings } from './config/site-health/validation.ts';
 import { commerce, commerceShelf } from './config/commerce.ts';
 import { auditSchedules } from './config/audit-schedules.ts';
 import { industryLibrary } from './config/industry-library.ts';
-import {
-  opportunities,
-  opportunityDeclaration,
-  opportunityDefaults,
-} from './config/opportunity.ts';
+import { opportunities, opportunityDefaults } from './config/opportunity.ts';
 import { earnedActions } from './config/earned-actions.ts';
 import { actions } from './config/actions.ts';
 import { sourcePatterns } from './config/source-patterns.ts';
@@ -107,7 +103,6 @@ export const policy = {
   opportunity: {
     ...opportunityDefaults,
     measurement_policy_key: audits.constants.measurement_policy_key,
-    declaration: opportunityDeclaration,
     opportunities: { ...opportunities },
     actions: { ...actions },
     earned_actions: earnedActions,

@@ -15,7 +15,6 @@ export const agentSkills = {
     'earned_brief',
     'content',
   ],
-  outline_first_kinds: ['content'],
   format_kinds: ['content'],
   description_max_chars: 320,
   body_max_chars: 14000,

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { Selectable } from 'kysely';
-import { agentOutputPhaseSchema } from '@citeladder/contracts/agent';
 import { z } from 'zod';
 import type { Database } from '../db/database.ts';
 import type { AgentOutputRevisions, AgentOutputs as OutputTable } from '../generated/db-schema.ts';
@@ -41,17 +40,7 @@ export async function currentOutput(db: Database, chat: Chat) {
         .executeTakeFirst()
     : undefined;
   if (output && !revision) throw new TypeError('Agent output has no revision');
-  const approved = output
-    ? await db
-        .selectFrom('agent_output_revisions')
-        .select('id')
-        .where('workspace_id', '=', chat.workspace_id)
-        .where('output_id', '=', output.id)
-        .where('phase', '=', 'outline')
-        .where('approved_at', 'is not', null)
-        .executeTakeFirst()
-    : undefined;
-  return { output: output ?? null, revision: revision ?? null, outlineApproved: Boolean(approved) };
+  return { output: output ?? null, revision: revision ?? null };
 }
 /** Existing Action owner attaches targets in the same terminal transaction.
  * Required even for untargeted replies: no second Action writer lives here. */
@@ -73,8 +62,6 @@ export async function saveAgentOutput(
     messageId: string;
     userId: string;
     refs: string[];
-    /** The runtime's format-aware outline rule (long-form content, prompt portfolios). */
-    outlineRequired: boolean;
     bounds?: OutputBounds;
   },
   attach: AttachTarget,
@@ -85,7 +72,6 @@ export async function saveAgentOutput(
     throw new AgentError('output_conflict');
   if (current.output && current.output.kind !== input.skill.outputKind)
     throw new AgentError('output_conflict');
-  const phase = input.outlineRequired && !current.outlineApproved ? 'outline' : payload.phase;
   const now = new Date();
   const output =
     current.output ??
@@ -99,7 +85,6 @@ export async function saveAgentOutput(
         action_id: chat.action_id,
         kind: input.skill.outputKind,
         skill_id: input.skill.id,
-        phase,
         format_id: null,
         target_kind: null,
         target_label: null,
@@ -112,7 +97,7 @@ export async function saveAgentOutput(
   // The attach may have linked the output to an Action; an open one now reads as in progress.
   const { action_id: actionId } = await db
     .updateTable('agent_outputs')
-    .set({ phase, updated_at: now, format_id: payload.format_id ?? output.format_id })
+    .set({ updated_at: now, format_id: payload.format_id ?? output.format_id })
     .where('workspace_id', '=', chat.workspace_id)
     .where('id', '=', output.id)
     .returning('action_id')
@@ -123,7 +108,6 @@ export async function saveAgentOutput(
     run_id: input.runId,
     message_id: input.messageId,
     author_user_id: null,
-    phase,
     title: payload.title,
     body: payload.body,
     source_refs: [...new Set(input.refs)],
@@ -136,17 +120,9 @@ function appendRevision(
   parent: Revision | null,
   content: Pick<
     Revision,
-    | 'author'
-    | 'author_user_id'
-    | 'run_id'
-    | 'message_id'
-    | 'phase'
-    | 'title'
-    | 'body'
-    | 'source_refs'
+    'author' | 'author_user_id' | 'run_id' | 'message_id' | 'title' | 'body' | 'source_refs'
   >,
 ) {
-  agentOutputPhaseSchema.parse(content.phase);
   return db
     .insertInto('agent_output_revisions')
     .values({
@@ -158,8 +134,6 @@ function appendRevision(
       parent_revision_id: parent?.id ?? null,
       ...content,
       source_refs: JSON.stringify(revisionRefs(content.source_refs)),
-      approved_at: null,
-      approved_by_user_id: null,
       created_at: new Date(),
     })
     .returningAll()
@@ -190,7 +164,7 @@ export class AgentOutputs {
       const current = await currentOutput(db, chat);
       if (current.revision?.id !== baseId || !current.output)
         throw new AgentError('output_conflict');
-      const payload = outputPayloadSchema.parse({ title, body, phase: current.revision.phase });
+      const payload = outputPayloadSchema.parse({ title, body });
       return appendRevision(db, chat, current.output, current.revision, {
         author: 'user',
         author_user_id: scope.userId,
@@ -215,7 +189,7 @@ export class AgentOutputs {
       if (!source) throw new AgentError('output_conflict');
       await db
         .updateTable('agent_outputs')
-        .set({ phase: source.phase, updated_at: new Date() })
+        .set({ updated_at: new Date() })
         .where('workspace_id', '=', scope.workspaceId)
         .where('id', '=', current.output.id)
         .execute();
@@ -224,7 +198,6 @@ export class AgentOutputs {
         author_user_id: scope.userId,
         run_id: null,
         message_id: null,
-        phase: source.phase,
         title: source.title,
         body: source.body,
         source_refs: source.source_refs,

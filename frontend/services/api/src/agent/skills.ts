@@ -59,12 +59,7 @@ function parseSkill(path: string, body: string): CatalogSkill {
   const methodology = content.trim();
   if (!methodology || methodology.length > p.body_max_chars)
     throw new TypeError('Invalid skill body');
-  return {
-    ...parsed,
-    outputKind: parsed.output_kind,
-    body: methodology,
-    outlineFirst: p.outline_first_kinds.includes(parsed.output_kind),
-  };
+  return { ...parsed, outputKind: parsed.output_kind, body: methodology };
 }
 export async function loadSkillCatalog(root: string): Promise<PackagedCatalog> {
   const digest = createHash('sha256');
@@ -113,17 +108,7 @@ export async function loadSkillCatalog(root: string): Promise<PackagedCatalog> {
     workflows: parseWorkflows(workflowFile, catalogSkills, formats),
   };
 }
-/** Kinds with content formats choose a format; only long-form formats start from an outline. */
+/** Kinds with content formats choose a format. */
 export function usesFormats(skill: Pick<Skill, 'outputKind'>) {
   return (p.format_kinds as readonly string[]).includes(skill.outputKind);
-}
-export function outlineRequired(
-  catalog: Pick<SkillCatalog, 'formats'>,
-  skill: Skill,
-  formatId: string | null | undefined,
-) {
-  if (!skill.outlineFirst) return false;
-  if (!usesFormats(skill)) return true;
-  // An unknown format cannot be shown to be short, so it keeps the outline.
-  return catalog.formats?.get(formatId ?? '')?.longForm ?? true;
 }

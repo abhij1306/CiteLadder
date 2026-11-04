@@ -21,7 +21,6 @@ function chat(id: string, title: string, running: boolean) {
     title,
     turn_count: 1,
     output_kind: null,
-    output_phase: null,
     last_activity_at: NOW,
     created_at: NOW,
     running,

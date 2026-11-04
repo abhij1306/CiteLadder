@@ -1,8 +1,6 @@
 /** Opportunity catalog: deterministic decisions over persisted evidence. */
 import type { ExpectedCheck } from '@citeladder/contracts/opportunities';
 
-export const opportunityDeclaration = { output_phase_outline: 'outline' };
-
 export const opportunities = {
   ANALYZER_VERSION: 'opp-analyzer-1',
   RULE_VERSION: 'opp-rules-1',

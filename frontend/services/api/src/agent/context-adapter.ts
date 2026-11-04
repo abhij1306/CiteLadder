@@ -131,7 +131,7 @@ async function resolveOrigins(
           .onRef('o.workspace_id', '=', 'r.workspace_id')
           .onRef('o.project_id', '=', 'r.project_id'),
       )
-      .select(['r.id', 'r.output_id', 'r.title', 'r.body', 'r.phase', 'r.source_refs', 'r.number'])
+      .select(['r.id', 'r.output_id', 'r.title', 'r.body', 'r.source_refs', 'r.number'])
       .where('r.workspace_id', '=', scope.workspaceId)
       .where('r.project_id', '=', scope.projectId)
       .where('r.id', '=', upstreamRef.revision_id)

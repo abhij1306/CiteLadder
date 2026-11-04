@@ -48,7 +48,6 @@ const ACCEPTED = {
   run: {
     id: '55555555-5555-4555-8555-555555555555',
     status: 'queued',
-    mode: 'turn',
     skill_id: null,
     skill_source: null,
     steps_used: 0,

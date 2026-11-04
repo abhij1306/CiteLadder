@@ -27,7 +27,6 @@ function chatDetail(): AgentChatDetail {
       title: 'Discuss buyer needs',
       turn_count: 12,
       output_kind: null,
-      output_phase: null,
       last_activity_at: NOW,
       created_at: NOW,
       running: false,
@@ -63,7 +62,6 @@ function chatDetail(): AgentChatDetail {
     latest_run: {
       id: RUN,
       status: 'running',
-      mode: 'turn',
       skill_id: 'growth_plan',
       skill_source: 'chat',
       steps_used: 1,

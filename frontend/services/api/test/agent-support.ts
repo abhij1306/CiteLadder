@@ -25,11 +25,10 @@ export const catalog: SkillCatalog = {
       'content',
       {
         id: 'content',
-        description: 'Create requested long-form content.',
+        description: 'Create requested content.',
         version: 1,
         outputKind: 'content',
         body: 'Write requested content.',
-        outlineFirst: true,
       },
     ],
     [
@@ -40,7 +39,6 @@ export const catalog: SkillCatalog = {
         version: 1,
         outputKind: 'plan',
         body: 'Plan requested work.',
-        outlineFirst: false,
       },
     ],
   ]),
@@ -69,11 +67,12 @@ export const read = (input: Record<string, Json> = {}, name = 'read_evidence'): 
 export const loadSkill = (skillId: string): Response => [
   toolUse('load_skill', { skill_id: skillId }),
 ];
-export const save = (
-  phase = 'draft',
-  body = 'Requested document',
-  extra: Record<string, Json> = {},
-): Response => [toolUse('save_document', { title: 'Document', body, phase, ...extra })];
+export const save = (body = 'Requested document', extra: Record<string, Json> = {}): Response => [
+  toolUse('save_document', { title: 'Document', body, ...extra }),
+];
+export const edit = (edits: { old_string: string; new_string: string }[]): Response => [
+  toolUse('edit_document', { edits }),
+];
 /** A request for a dispatch that never reaches a model. */
 export const request: ModelRequest = {
   system: 'test',
@@ -130,6 +129,7 @@ export function scripted(
 export const zeroFunding: Funding = {
   reserve: () => Promise.resolve({ reservationId: null, credits: 0, pricingRevision: '' }),
   settle: () => Promise.resolve({ credits: 0, status: 'zero_debit' }),
+  refund: () => Promise.resolve(),
 };
 export class AgentFixtures extends VisibilityFixtures {
   readonly agentDb: Database;

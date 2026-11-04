@@ -33,7 +33,7 @@ If the priority pages are not known, propose a small map (money, hub, support, t
 6. **Spot imbalance.** Important pages starved of contextual links, accidental template concentration, and links to redirected or broken pages. Do not remove useful hub or navigation links just to redistribute.
 7. **Write each placement.** Source URL, target URL, the section and current sentence, the revised sentence, a descriptive anchor, and why it helps the reader. Skip placements that do not fit, even if a target has few links. Never invent the current text; if you do not have it, say the source copy is needed.
 
-Some studies associate about four contextual inbound links with better performance. Use that only as an optional triage view if the user asks, never as a rule or a reason to add an irrelevant link.
+Some studies associate about four contextual inbound links with better performance. Use that only as an optional triage view if the person asks, never as a rule or a reason to add an irrelevant link.
 
 ## Deliver
 

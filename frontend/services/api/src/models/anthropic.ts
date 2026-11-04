@@ -132,7 +132,7 @@ const ANTHROPIC_STOPS: Record<string, ConversationStop> = {
   stop_sequence: 'end_turn',
   tool_use: 'tool_use',
   max_tokens: 'max_tokens',
-  model_context_window_exceeded: 'max_tokens',
+  model_context_window_exceeded: 'context_window',
   refusal: 'refusal',
 };
 

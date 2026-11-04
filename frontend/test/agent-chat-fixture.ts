@@ -14,11 +14,9 @@ export function revision(id: string, number: number, author: 'agent' | 'user', b
     number,
     parent_revision_id: number > 1 ? REV1 : null,
     author,
-    phase: 'final' as const,
     title: 'Pricing page edits',
     body,
     source_refs: ['citeladder://opportunity/66666666-6666-4666-8666-666666666666'],
-    approved_at: null,
     created_at: NOW,
   };
 }
@@ -41,7 +39,6 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
       title: 'Improve pricing snippet',
       turn_count: 1,
       output_kind: 'page_edits',
-      output_phase: 'final',
       last_activity_at: NOW,
       created_at: NOW,
       running: false,
@@ -82,7 +79,6 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
     latest_run: {
       id: RUN,
       status: run.status,
-      mode: 'turn',
       skill_id: 'gsc_optimize',
       skill_source: 'model',
       steps_used: 2,
@@ -112,7 +108,6 @@ export function detail(latest: ReturnType<typeof revision>, run: DetailRun = DEF
       format_id: null,
       target_kind: null,
       target_label: null,
-      phase: 'final',
       latest_revision: latest,
     },
   };

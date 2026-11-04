@@ -407,25 +407,6 @@ export const agentRoutes = [
       );
     },
   }),
-  definePostRoute({
-    family,
-    path: '/api/v1/agent/chats/{chat_id}/output/approve-outline',
-    capability: 'run',
-    params: { path: chatPath, query: {} },
-    headers,
-    body: body.approve,
-    response: agentTurnAcceptedSchema,
-    status: 202,
-    async handle({ db, c }, { path }) {
-      const input = await readBody(c, body.approve),
-        value = await chatScope(db, c, path.chat_id),
-        { store } = await agentBindings(db);
-      const run = await mapped(() =>
-        store.approveOutline(value, path.chat_id, input.revision_id, key(c)),
-      );
-      return { chat_id: run.chat_id, run: runView(run) };
-    },
-  }),
   defineGetRoute({
     ...projectFamily,
     path: '/api/v1/projects/{project_id}/agent/instructions',

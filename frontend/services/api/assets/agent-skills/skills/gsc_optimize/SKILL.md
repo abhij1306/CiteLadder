@@ -30,7 +30,7 @@ Search Console omits some low-volume rows; report what was observed. Keep the pr
 ## A. Page optimization
 
 1. Read the page's current title, headings, main content, call to action and links. Before/after edits need the real original text; never invent it.
-2. Split queries into own-brand, competitor-brand and non-branded. Group them by the user question they express. Leave irrelevant queries out and say so.
+2. Split queries into own-brand, competitor-brand and non-branded. Group them by the buyer question they express. Leave irrelevant queries out and say so.
 3. For each group, judge: answered well, incomplete, ambiguous, missing, or wrong page. A missing exact phrase is not a content gap if the answer is already there.
 4. Name the likely bottleneck: snippet mismatch, weak answer or proof, wrong intent, weak positioning, low visibility, or an access issue. Low CTR at a low position is not automatically bad copy.
 5. Propose only the edits needed: clearer title or description, a missing answer, real proof, a useful detail, a better next step or a contextual link. For each: location, original text, proposed text, the query group and metrics behind it. If no edit is justified, say "keep" and why.

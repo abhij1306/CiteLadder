@@ -49,15 +49,12 @@ export async function requireIdle(db: Database, chat: Chat) {
   if (run) throw new AgentError('agent_run_active');
 }
 
-function requestIdentity(scope: Scope, input: TurnInput, mode: string, approvalRevision?: string) {
-  if (approvalRevision)
-    return { op: 'approve_outline', chat: input.chatId, revision: approvalRevision, mode };
+function requestIdentity(scope: Scope, input: TurnInput) {
   if (input.chatId)
     return {
       op: 'send_message',
       chat: input.chatId,
       content: input.message,
-      mode,
       skill: input.skillId === undefined ? { mode: 'inherit' } : input.skillId,
       workflow: input.workflowId ?? null,
       mentions: input.mentionIds ?? [],
@@ -66,7 +63,6 @@ function requestIdentity(scope: Scope, input: TurnInput, mode: string, approvalR
     op: 'create_chat',
     project: scope.projectId,
     content: input.message,
-    mode,
     skill: input.skillId === undefined ? { mode: 'inherit' } : input.skillId,
     workflow: input.workflowId ?? null,
     action: input.actionId ?? null,
@@ -115,17 +111,7 @@ export class AgentStore {
     this.db = db;
     this.dependencies = dependencies;
   }
-  enqueue(scope: Scope, input: TurnInput) {
-    return this.submit(scope, input);
-  }
-  approveOutline(scope: Scope, chatId: string, revisionId: string, key: string) {
-    return this.submit(
-      scope,
-      { chatId, message: 'Use the approved outline and write the draft.', key },
-      revisionId,
-    );
-  }
-  private submit(scope: Scope, raw: TurnInput, approvalRevision?: string): Promise<Run> {
+  enqueue(scope: Scope, raw: TurnInput): Promise<Run> {
     const chosen = raw.workflowId
       ? this.dependencies.catalog.workflows?.byId.get(raw.workflowId)
       : undefined;
@@ -138,9 +124,8 @@ export class AgentStore {
       ...(chosen ? { skillId: chosen.skill_id } : {}),
     };
     z.string().trim().min(1).max(agentPolicy.idempotency_key_max_chars).parse(input.key);
-    const mode = approvalRevision ? 'draft_from_outline' : 'turn';
     // Canonical JSON binds nested refs as well as the visible message.
-    const hash = fingerprint(requestIdentity(scope, input, mode, approvalRevision));
+    const hash = fingerprint(requestIdentity(scope, input));
     const lockKey = 'agent-enqueue:' + scope.workspaceId;
     return this.db.transaction().execute(async (trx) => {
       await authorize(trx, scope);
@@ -178,7 +163,6 @@ export class AgentStore {
       );
       const workflow =
         chosen ?? (input.chatId ? await this.inheritedWorkflow(trx, chat, skill.id) : undefined);
-      if (approvalRevision) await this.approveRevision(trx, scope, chat, approvalRevision);
       const message = await appendMessage(trx, chat, {
         role: 'user',
         content: input.message,
@@ -203,7 +187,6 @@ export class AgentStore {
           user_id: scope.userId,
           idempotency_key: input.key,
           request_fingerprint: hash,
-          mode,
           requested_skill_id: skill.id,
           requested_skill_source: skill.source,
           context_manifest: {
@@ -211,7 +194,6 @@ export class AgentStore {
             ...(workflow
               ? { workflow: { id: workflow.id, format_id: workflow.format_id ?? null } }
               : {}),
-            ...(approvalRevision ? { approval: { revision_id: approvalRevision } } : {}),
           },
           budget: admittedBudget(this.dependencies.timeoutSeconds),
           runtime_version: agentPolicy.runtime_version,
@@ -254,32 +236,6 @@ export class AgentStore {
         .execute();
       return run;
     });
-  }
-  private async approveRevision(db: Database, scope: Scope, chat: Chat, revisionId: string) {
-    const latest = await db
-      .selectFrom('agent_output_revisions as revision')
-      .innerJoin('agent_outputs as output', (join) =>
-        join
-          .onRef('output.id', '=', 'revision.output_id')
-          .onRef('output.workspace_id', '=', 'revision.workspace_id'),
-      )
-      .selectAll('revision')
-      .where('output.workspace_id', '=', scope.workspaceId)
-      .where('output.chat_id', '=', chat.id)
-      .orderBy('revision.number', 'desc')
-      .limit(1)
-      .executeTakeFirst();
-    if (latest?.id !== revisionId || latest.phase !== 'outline')
-      throw new AgentError('agent_outline_not_approvable');
-    await db
-      .updateTable('agent_output_revisions')
-      .set({
-        approved_at: latest.approved_at ?? new Date(),
-        approved_by_user_id: latest.approved_by_user_id ?? scope.userId,
-      })
-      .where('id', '=', revisionId)
-      .where('workspace_id', '=', scope.workspaceId)
-      .execute();
   }
   archive(scope: Scope, chatId: string) {
     return this.db.transaction().execute(async (trx) => {

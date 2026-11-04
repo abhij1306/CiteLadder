@@ -32,10 +32,6 @@ const CODED: {
     message: 'The output changed since you opened it. Review the latest revision and try again.',
     startNewChat: false,
   },
-  agent_outline_not_approvable: {
-    message: 'Only the latest outline can be approved.',
-    startNewChat: false,
-  },
 };
 
 export function agentWriteFailure(error: unknown): AgentWriteFailure {

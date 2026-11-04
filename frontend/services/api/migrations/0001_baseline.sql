@@ -139,12 +139,9 @@ CREATE TABLE public.agent_output_revisions (
     author_user_id uuid,
     run_id uuid,
     message_id uuid,
-    phase character varying(16) NOT NULL,
     title character varying(255) NOT NULL,
     body text NOT NULL,
     source_refs jsonb NOT NULL,
-    approved_at timestamp with time zone,
-    approved_by_user_id uuid,
     created_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
     project_id uuid NOT NULL
@@ -159,7 +156,6 @@ CREATE TABLE public.agent_outputs (
     format_id character varying(32),
     target_kind character varying(24),
     target_label character varying(255),
-    phase character varying(16) NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
@@ -173,7 +169,6 @@ CREATE TABLE public.agent_runs (
     user_id uuid,
     idempotency_key character varying(128) NOT NULL,
     request_fingerprint character varying(64) NOT NULL,
-    mode character varying(24) NOT NULL,
     requested_skill_id character varying(64),
     requested_skill_source character varying(16),
     context_manifest jsonb NOT NULL,
@@ -4716,9 +4711,6 @@ ALTER TABLE ONLY public.agent_messages
 
 ALTER TABLE ONLY public.agent_model_attempts
     ADD CONSTRAINT agent_model_attempts_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
-
-ALTER TABLE ONLY public.agent_output_revisions
-    ADD CONSTRAINT agent_output_revisions_approved_by_user_id_fkey FOREIGN KEY (approved_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.agent_output_revisions
     ADD CONSTRAINT agent_output_revisions_author_user_id_fkey FOREIGN KEY (author_user_id) REFERENCES public.users(id) ON DELETE SET NULL;

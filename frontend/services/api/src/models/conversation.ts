@@ -33,8 +33,17 @@ export type ConversationRequest = {
   compactAtTokens: number;
 };
 export type ToolCall = { id: string; name: string; input: Record<string, Json> };
-/** How a response ended, the same whichever API produced it. */
-export type ConversationStop = 'end_turn' | 'tool_use' | 'max_tokens' | 'refusal' | 'other';
+/**
+ * How a response ended, the same whichever API produced it: `max_tokens` is the
+ * output cap (thinking included), `context_window` the model's input limit.
+ */
+export type ConversationStop =
+  | 'end_turn'
+  | 'tool_use'
+  | 'max_tokens'
+  | 'context_window'
+  | 'refusal'
+  | 'other';
 export type ConversationResult = {
   /** The assistant content exactly as returned, for append-only replay. */
   blocks: ConversationBlock[];

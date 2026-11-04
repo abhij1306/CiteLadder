@@ -54,5 +54,7 @@ export function agentFunding(gateway: GatewaySettings): Funding {
       return { reservationId: null, credits: 0, pricingRevision: '' };
     },
     settle: async () => ({ credits: 0, status: 'zero_debit' }),
+    // Nothing was debited, so a failed turn has nothing to refund.
+    refund: async () => {},
   };
 }

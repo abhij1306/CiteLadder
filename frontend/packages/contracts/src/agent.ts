@@ -36,7 +36,6 @@ export const agentRunStepSchema = responseObject({
 export const agentRunSchema = responseObject({
   id: uuid(),
   status: agentRunStatusSchema,
-  mode: z.enum(['turn', 'draft_from_outline']),
   skill_id: z.string().nullable(),
   skill_source: z.string().nullable(),
   steps_used: z.number().int(),
@@ -90,18 +89,14 @@ export const agentTurnEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), code: z.string() }),
 ]);
 
-export const agentOutputPhaseSchema = z.enum(['outline', 'draft', 'final']);
-
 export const agentRevisionSchema = responseObject({
   id: uuid(),
   number: z.number().int(),
   parent_revision_id: uuid().nullable(),
   author: z.enum(['agent', 'user']),
-  phase: agentOutputPhaseSchema,
   title: z.string(),
   body: z.string(),
   source_refs: z.array(z.string()),
-  approved_at: z.string().nullable(),
   created_at: z.string(),
 });
 
@@ -115,7 +110,6 @@ export const agentOutputSchema = responseObject({
   format_id: z.string().nullable(),
   target_kind: z.string().nullable(),
   target_label: z.string().nullable(),
-  phase: agentOutputPhaseSchema,
   latest_revision: agentRevisionSchema.nullable(),
 });
 
@@ -144,13 +138,6 @@ export const agentMessageSchema = responseObject({
     .array(responseObject({ kind: z.string(), id: uuid(), label: z.string() }))
     .default([]),
   created_at: z.string(),
-  event: responseObject({
-    kind: z.literal('outline_approved'),
-    revision_id: uuid(),
-    run_id: uuid(),
-  })
-    .nullable()
-    .optional(),
 });
 
 export const agentChatSummarySchema = responseObject({
@@ -161,7 +148,6 @@ export const agentChatSummarySchema = responseObject({
   title: z.string(),
   turn_count: z.number().int(),
   output_kind: z.string().nullable(),
-  output_phase: agentOutputPhaseSchema.nullable(),
   last_activity_at: z.string(),
   created_at: z.string(),
   /** A turn is queued or running in this chat. */
@@ -310,7 +296,6 @@ export function agentRequestSchemas(bounds: {
       title: z.string().max(bounds.output_title_max_chars).trim().min(1),
       body: z.string().max(bounds.output_body_max_chars).trim().min(1),
     }),
-    approve: z.strictObject({ revision_id: uuid() }),
     instructions: z.strictObject({ text: z.string().max(bounds.instructions_max_chars) }),
   };
 }

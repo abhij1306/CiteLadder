@@ -170,18 +170,6 @@ const agentApi = {
       ),
       'agent.restoreRevision',
     ),
-  approveOutline: async (
-    chatId: string,
-    revisionId: string,
-    idempotencyKey: string,
-    options?: ApiRequestOptions,
-  ) =>
-    admitTurn(
-      `/agent/chats/${chatId}/output/approve-outline`,
-      { revision_id: revisionId },
-      idempotencyKey,
-      options,
-    ),
   instructions: async (projectId: string, options?: ApiRequestOptions) =>
     strictValidate(
       agentInstructionsSchema,
@@ -280,13 +268,6 @@ export const agentMutations = {
     mutationOptions({
       mutationFn: (vars: { chatId: string; revisionId: string }) =>
         agentApi.restoreRevision(vars.chatId, vars.revisionId, { workspaceId }),
-    }),
-  approveOutline: (workspaceId: string) =>
-    mutationOptions({
-      mutationFn: (vars: { chatId: string; revisionId: string; idempotencyKey: string }) =>
-        agentApi.approveOutline(vars.chatId, vars.revisionId, vars.idempotencyKey, {
-          workspaceId,
-        }),
     }),
   saveInstructions: (workspaceId: string) =>
     mutationOptions({

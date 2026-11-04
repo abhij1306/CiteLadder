@@ -174,12 +174,6 @@ export function movementStateLabel(state: string): string {
   return MOVEMENT_STATE_LABEL[state] ?? 'state not recognized';
 }
 
-export const OUTPUT_PHASE_LABEL: Record<'outline' | 'draft' | 'final', string> = {
-  outline: 'Outline',
-  draft: 'Draft',
-  final: 'Final',
-};
-
 const SKILL_GROUP_LABEL: Record<string, string> = {
   strategy: 'Strategy',
   demand: 'Search demand',
@@ -213,6 +207,10 @@ const RUN_ERROR_COPY: Record<string, string> = {
   tool_failed: 'A data read failed. Try again.',
   model_refused:
     'The model declined to answer this request. Nothing was saved; rephrase it or ask about one part at a time.',
+  output_too_long:
+    'The model ran out of room to finish, even after a shorter second attempt. Nothing was saved or charged; ask for one part at a time.',
+  context_too_long:
+    'This chat is longer than the model can read at once. Nothing was saved or charged; start a new chat to continue.',
   incompatible_budget:
     'The agent policy changed incompatibly after admission. Send this request again.',
   context_size_limit:

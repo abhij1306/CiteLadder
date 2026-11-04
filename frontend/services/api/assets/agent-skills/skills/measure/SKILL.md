@@ -16,7 +16,7 @@ Say whether an implemented change was followed by a meaningful measured change, 
 
 ## Inputs
 
-- What changed and when: `read_actions` (with `action_id` for the implementation declaration and verification), earlier results in this chat, or the user's description.
+- What changed and when: `read_actions` (with `action_id` for the implementation declaration and verification), earlier results in this chat, or the person's description.
 - AI visibility over time: `read_visibility_trends` with an explicit `from_at`/`to_at` window; `read_visibility_overview` with `audit_id` and `baseline_id` for a direct comparison of two audits.
 - Answer tone: `read_perception` for each compared `audit_id`; always state its coverage ("N of M mentions classified"); a pending or unavailable read has no value, never zero. Sources it lists were cited alongside criticism, never shown to cause it. Compare runs only when their perception versions match.
 - Search: `read_performance` with a comparison period; `read_query_evidence` for a page's queries (saved window from `read_demand`, `site_url_id` from `read_site_pages`; say so when that window is not the period you compare).
@@ -27,7 +27,7 @@ Confirm it is the same page or asset, the change date, and the same prompts, eng
 ## Method
 
 1. **Define the question.** Target, change, expected effect (a hypothesis), one primary metric and one guardrail. Without revenue data, name the proxy you use.
-2. **Separate draft from live.** A drafted edit is not an implemented change. Use the implementation date the user or the Action records. Results collected before the change was live cannot measure it.
+2. **Separate draft from live.** A drafted edit is not an implemented change. Use the implementation date the person or the Action records. Results collected before the change was live cannot measure it.
 3. **Use a comparable baseline.** Same window length, prompts and prompt versions, engines, cohort, locale and settings. Default: matched complete 28-day windows for search; a stable repeated prompt set for AI. Report new or retired prompts separately; a changed prompt starts a new series.
 4. **Fix denominators before looking at wins.** Search CTR is clicks ÷ impressions over the group. For AI, report mentions, owned citations, recommendations and recommendations against separately, each over valid answers. Failed runs are listed, not counted as zero. For AI Overviews, report how often an Overview appeared, then outcomes within those.
 5. **Show the change plainly:** baseline count/denominator and rate, follow-up count/denominator and rate, the change in percentage points, and relative change only if the baseline is not zero. Example of the arithmetic only: 8/20 → 10/20 is +10 percentage points, not +10%.

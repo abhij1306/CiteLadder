@@ -6,6 +6,7 @@ import { testDatabase } from './support.ts';
 import {
   AgentFixtures,
   catalog,
+  edit,
   emptyPackage,
   loadSkill,
   read,
@@ -166,7 +167,7 @@ describe('Agent runtime on PostgreSQL', () => {
   it('distinguishes inherited selection, clearing a pin and changing output kind', async () => {
     const scope = await fixtures.scope();
     const first = await fixtures.claimed(scope, { skillId: 'plan' });
-    await fixtures.runtime(scope, scripted([save('final')])).execute(first.lease);
+    await fixtures.runtime(scope, scripted([save()])).execute(first.lease);
     const cleared = await fixtures.store().enqueue(scope, {
       chatId: first.run.chat_id,
       key: randomUUID(),
@@ -268,6 +269,7 @@ describe('Agent runtime on PostgreSQL', () => {
       .object({ tools: z.array(z.object({ name: z.string() })) })
       .parse(JSON.parse([...prefixes][0]!));
     expect(prefix.tools.map((tool) => tool.name)).toEqual([
+      'edit_document',
       'load_skill',
       'read_evidence',
       'save_document',
@@ -319,7 +321,7 @@ describe('Agent runtime on PostgreSQL', () => {
       .runtime(
         scope,
         scripted(
-          [read(), save('draft', 'Prompt plan grounded in the current topics.')],
+          [read(), save('Prompt plan grounded in the current topics.')],
           async (sent, ordinal) => {
             if (ordinal === 1) opening.push(...texts(sent));
           },
@@ -334,7 +336,6 @@ describe('Agent runtime on PostgreSQL', () => {
     expect(detail.output).toMatchObject({
       skill_id: 'prompt_discovery',
       kind: 'prompt_plan',
-      phase: 'draft',
       latest_revision: { source_refs: [`citeladder://project/${scope.projectId}`] },
     });
   });
@@ -351,7 +352,7 @@ describe('Agent runtime on PostgreSQL', () => {
             save(),
             loadSkill('unknown'),
             loadSkill('plan'),
-            [...save('final', 'First'), ...save('final', 'Second')],
+            [...save('First'), ...save('Second')],
             loadSkill('content'),
             reply('The plan is ready.'),
           ],
@@ -383,7 +384,7 @@ describe('Agent runtime on PostgreSQL', () => {
       {
         error: false,
         content:
-          'Staged the final; it is saved with your reply. Now reply briefly; do not repeat the document.',
+          'Staged the document; it is saved with your reply. Now reply briefly; do not repeat the document.',
       },
       {
         error: true,
@@ -394,7 +395,7 @@ describe('Agent runtime on PostgreSQL', () => {
       {
         error: true,
         content:
-          'This turn already uses the plan methodology. A different deliverable belongs in a new chat the user starts; suggest it as a next step.',
+          'This chat’s document is of kind “plan” and this methodology writes “content”, so it cannot be used here. Answer in your reply instead, or offer to continue in a new chat.',
       },
     ]);
     const detail = await readChat(db, scope, run.chat_id);
@@ -410,7 +411,7 @@ describe('Agent runtime on PostgreSQL', () => {
   it('keeps a staged document out of the chat when the turn fails before its reply', async () => {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope, { skillId: 'plan' });
-    const base = scripted([save('final')]);
+    const base = scripted([save()]);
     let calls = 0;
     const model = {
       ...base,
@@ -430,32 +431,35 @@ describe('Agent runtime on PostgreSQL', () => {
         .execute(),
     ).toEqual([]);
   });
-  /** One turn of `skillId` under a catalog with a single long-form page format. */
+  /** One turn of `skillId` under a catalog with a single page format. */
   async function runWithPageFormat(skillId: string, responses: Response[]) {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope, { skillId });
     const formats = new Map([
-      ['page', { id: 'page', label: 'Website page', body: 'Write a page.', longForm: true }],
+      ['page', { id: 'page', label: 'Website page', body: 'Write a page.' }],
     ]);
     await fixtures
       .runtime(scope, scripted(responses), { catalog: { ...catalog, formats } })
       .execute(lease);
     return readChat(db, scope, run.chat_id);
   }
-  it('refuses an unknown content format, then saves the outline in the corrected one', async () => {
+  it('refuses an unknown content format, then saves the whole document in the corrected one', async () => {
     const detail = await runWithPageFormat('content', [
-      save('draft', 'Requested document', { format_id: 'unknown' }),
-      save('draft', 'Requested document', { format_id: 'page' }),
+      save('Requested document', { format_id: 'unknown' }),
+      save('Requested document', { format_id: 'page' }),
     ]);
-    expect(detail.output).toMatchObject({ phase: 'outline', format_id: 'page' });
+    expect(detail.output).toMatchObject({
+      format_id: 'page',
+      latest_revision: { number: 1, body: 'Requested document' },
+    });
     expect(detail.messages.at(-1)?.content).toBe(
-      'Answer from supplied evidence.\n\nOutline saved in Website page format. Approve it before requesting a draft.',
+      'Answer from supplied evidence.\n\nDocument saved in Website page format.',
     );
     expect(detail.messages.filter((message) => message.role === 'agent')).toHaveLength(1);
   });
   it('saves a deliverable whose skill has no formats even when the model names one', async () => {
     const detail = await runWithPageFormat('plan', [
-      save('draft', 'Requested document', { format_id: 'page' }),
+      save('Requested document', { format_id: 'page' }),
     ]);
     expect(detail.latest_run).toMatchObject({ status: 'succeeded' });
     expect(detail.output).toMatchObject({ format_id: null });
@@ -642,7 +646,7 @@ describe('Agent runtime on PostgreSQL', () => {
     const fake = scripted(
       [
         [toolUse('load_skill', { skill_id: 'plan' }), toolUse('read_evidence', {}, 'call_read')],
-        save('final', 'Use the supplied evidence.'),
+        save('Use the supplied evidence.'),
         reply(`Read ${uri}; invented citeladder://project/${randomUUID()}.`),
       ],
       async (_request, ordinal) => {
@@ -801,8 +805,45 @@ describe('Agent runtime on PostgreSQL', () => {
     expect((await fixtures.run(second.run.id)).error_code).toBe('access_revoked');
     expect(calls).toBe(0);
   });
+  it('asks a cut-off call once more at low effort, then saves its document', async () => {
+    const scope = await fixtures.scope();
+    const { run, lease } = await fixtures.claimed(scope, { skillId: 'plan' });
+    const efforts: string[] = [];
+    const model = scripted(
+      [result(save('Cut off'), { stop: 'max_tokens' }), save('Whole plan')],
+      async (request) => {
+        efforts.push(request.effort);
+      },
+    );
+    await fixtures.runtime(scope, model).execute(lease);
+    expect(efforts).toEqual(['medium', 'low', 'medium']);
+    const detail = await readChat(db, scope, run.chat_id);
+    expect(detail.latest_run).toMatchObject({ status: 'succeeded' });
+    expect(detail.output?.latest_revision?.body).toBe('Whole plan');
+  });
+  it('ends the turn when the low-effort retry is cut off too, saving nothing', async () => {
+    const scope = await fixtures.scope();
+    const { run, lease } = await fixtures.claimed(scope, { skillId: 'plan' });
+    const efforts: string[] = [];
+    const cut = result(save(), { stop: 'max_tokens' });
+    await fixtures
+      .runtime(
+        scope,
+        scripted([cut, cut], async (request) => {
+          efforts.push(request.effort);
+        }),
+      )
+      .execute(lease);
+    expect(efforts).toEqual(['medium', 'low']);
+    const detail = await readChat(db, scope, run.chat_id);
+    expect(detail.latest_run).toMatchObject({ status: 'failed', error_code: 'output_too_long' });
+    expect(detail.messages.at(-1)?.content).toBe(
+      'The model ran out of room to finish this step, even after a second, shorter attempt, so nothing was saved. Ask for one part at a time.',
+    );
+    expect(detail.output).toBeNull();
+  });
   it.each([
-    ['max_tokens', 'output_too_long'],
+    ['context_window', 'context_too_long'],
     ['refusal', 'model_refused'],
   ] as const)(
     'ends a response stopped by %s after one call, saving nothing',
@@ -874,15 +915,19 @@ describe('Agent runtime on PostgreSQL', () => {
     expect(detail.latest_run).toMatchObject({ status: 'succeeded', steps_used: 2, skill_id: null });
     expect(detail.messages.at(-1)?.content).toBe('The observed value is zero.');
   });
-  it('enforces outline approval and refuses editing during the admitted draft', async () => {
+  it('saves a whole draft at once, then edits it in place while refusing user edits mid-turn', async () => {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope, { skillId: 'content' });
-    await fixtures.runtime(scope, scripted([save()])).execute(lease);
+    await fixtures
+      .runtime(scope, scripted([save('Intro.\n\nSizes run small.\n\nShop now.')]))
+      .execute(lease);
     const outputs = new AgentOutputs(db);
     let detail = await readChat(db, scope, run.chat_id);
     const original = detail.output!.latest_revision!;
-    expect(original.phase).toBe('outline');
-    expect(detail.messages.at(-1)?.content).toContain('Outline saved');
+    expect(original).toMatchObject({ number: 1, body: 'Intro.\n\nSizes run small.\n\nShop now.' });
+    expect(detail.messages.at(-1)?.content).toBe(
+      'Answer from supplied evidence.\n\nDocument saved.',
+    );
     await expect(
       fixtures.store().enqueue(scope, {
         chatId: run.chat_id,
@@ -891,41 +936,50 @@ describe('Agent runtime on PostgreSQL', () => {
         skillId: 'plan',
       }),
     ).rejects.toMatchObject({ code: 'agent_skill_kind_conflict' });
-    const draft = await fixtures
-      .store()
-      .approveOutline(scope, run.chat_id, original.id, randomUUID());
-    const queue = new AgentQueue(db, 30);
-    const owned = await queue.claim('draft', [scope.workspaceId]);
-    const next = await queue.start(owned!, 'draft');
+    const second = await fixtures.claimed(scope, { chatId: run.chat_id });
     await expect(
       outputs.edit(scope, run.chat_id, original.id, 'Busy', 'Busy'),
     ).rejects.toMatchObject({ code: 'agent_run_active' });
+    const opening: string[] = [];
     await fixtures
       .runtime(
         scope,
-        scripted([save('draft', 'Draft after approval')], async (request) => {
-          // The outline is in the replayed exchange that saved it.
-          expect(JSON.stringify(request.messages)).toContain(original.body);
-        }),
+        scripted(
+          [
+            edit([{ old_string: 'Sizes run missing.', new_string: 'x' }]),
+            edit([{ old_string: 'Sizes run small.', new_string: 'Sizes run true to size.' }]),
+          ],
+          async (request, ordinal) => {
+            if (ordinal === 1) opening.push(JSON.stringify(request.messages.at(-1)));
+          },
+        ),
       )
-      .execute(next);
+      .execute(second.lease);
+    // The model saved the whole draft in a replayed turn, so it is not supplied again.
+    expect(opening[0]).not.toContain('Sizes run small.');
     detail = await readChat(db, scope, run.chat_id);
     expect(detail.output!.latest_revision).toMatchObject({
-      phase: 'draft',
       number: 2,
       parent_revision_id: original.id,
+      body: 'Intro.\n\nSizes run true to size.\n\nShop now.',
     });
-    expect((await fixtures.run(draft.id)).status).toBe('succeeded');
-    expect(detail.messages.find((message) => message.event)?.event).toMatchObject({
-      kind: 'outline_approved',
-      revision_id: original.id,
-      run_id: draft.id,
-    });
+    // After an edit the model holds only the replacements, so the next turn gets the exact text.
+    const third = await fixtures.claimed(scope, { chatId: run.chat_id });
+    await fixtures
+      .runtime(
+        scope,
+        scripted([reply('Noted.')], async (request, ordinal) => {
+          if (ordinal === 1) opening.push(JSON.stringify(request.messages.at(-1)));
+        }),
+      )
+      .execute(third.lease);
+    expect(opening[1]).toContain('Sizes run true to size.');
+    expect((await readChat(db, scope, run.chat_id)).output?.latest_revision?.number).toBe(2);
   });
   it('appends user edits and restores while refusing stale bases', async () => {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope, { skillId: 'plan' });
-    await fixtures.runtime(scope, scripted([save('final')])).execute(lease);
+    await fixtures.runtime(scope, scripted([save()])).execute(lease);
     const outputs = new AgentOutputs(db);
     const original = (await readChat(db, scope, run.chat_id)).output!.latest_revision!;
     const edited = await outputs.edit(scope, run.chat_id, original.id, 'Edited', 'User document');
@@ -945,7 +999,7 @@ describe('Agent runtime on PostgreSQL', () => {
   it('supplies the user’s edit as the base of a later Agent revision', async () => {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope, { skillId: 'plan' });
-    await fixtures.runtime(scope, scripted([save('draft')])).execute(lease);
+    await fixtures.runtime(scope, scripted([save()])).execute(lease);
     const outputs = new AgentOutputs(db);
     const latest = (await readChat(db, scope, run.chat_id)).output!.latest_revision!;
     const userEdit = await outputs.edit(
@@ -963,13 +1017,13 @@ describe('Agent runtime on PostgreSQL', () => {
     await fixtures
       .runtime(
         scope,
-        scripted([save('final', 'Refined')], async (request, ordinal) => {
+        scripted([save('Refined')], async (request, ordinal) => {
           if (ordinal === 1) opening.push(...texts(request));
         }),
       )
       .execute(followup.lease);
     expect(opening).toEqual([
-      'The chat\'s current document (draft), which a revision updates:\n{"title":"My draft","body":"User edited draft"}',
+      'The chat\'s current document, which edit_document or save_document updates:\n{"title":"My draft","body":"User edited draft"}',
       'Refine the current draft',
     ]);
     expect(
@@ -980,7 +1034,7 @@ describe('Agent runtime on PostgreSQL', () => {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope, { skillId: 'plan' });
     await fixtures
-      .runtime(scope, scripted([save('final')]), {
+      .runtime(scope, scripted([save()]), {
         attachTarget: async () => {
           throw new AgentError('output_conflict');
         },
@@ -995,9 +1049,7 @@ describe('Agent runtime on PostgreSQL', () => {
   it('freezes the exact upstream revision and refuses mismatched or sibling-project references', async () => {
     const scope = await fixtures.scope();
     const first = await fixtures.claimed(scope, { skillId: 'plan' });
-    await fixtures
-      .runtime(scope, scripted([save('final', 'Accepted upstream brief')]))
-      .execute(first.lease);
+    await fixtures.runtime(scope, scripted([save('Accepted upstream brief')])).execute(first.lease);
     const detail = await readChat(db, scope, first.run.chat_id);
     const refs = {
       output_revision_reference: {
@@ -1274,7 +1326,7 @@ describe('Agent runtime on PostgreSQL', () => {
   it('fences a moved output base and never commits its reply on top of that revision', async () => {
     const scope = await fixtures.scope();
     const first = await fixtures.claimed(scope, { skillId: 'plan' });
-    await fixtures.runtime(scope, scripted([save('final')])).execute(first.lease);
+    await fixtures.runtime(scope, scripted([save()])).execute(first.lease);
     const initial = (await readChat(db, scope, first.run.chat_id)).output!.latest_revision!;
     const followup = await fixtures.claimed(scope, {
       chatId: first.run.chat_id,
@@ -1284,7 +1336,7 @@ describe('Agent runtime on PostgreSQL', () => {
     await fixtures
       .runtime(
         scope,
-        scripted([save('final', 'Stale model body')], async (_request, ordinal) => {
+        scripted([save('Stale model body')], async (_request, ordinal) => {
           if (ordinal !== 1) return;
           const source = await db
             .selectFrom('agent_output_revisions')
@@ -1352,24 +1404,6 @@ describe('Agent runtime on PostgreSQL', () => {
         .executeTakeFirst(),
     ).toMatchObject({ outcome: 'recovered_unknown' });
   });
-  it('drafts short formats directly and starts long-form formats from an outline', async () => {
-    const scope = await fixtures.scope();
-    const formats = new Map([
-      ['post', { id: 'post', label: 'Post', body: 'Write a post.', longForm: false }],
-      ['guide', { id: 'guide', label: 'Guide', body: 'Write a guide.', longForm: true }],
-    ]);
-    const phases = [];
-    for (const format_id of ['post', 'guide']) {
-      const { run, lease } = await fixtures.claimed(scope, { skillId: 'content' });
-      await fixtures
-        .runtime(scope, scripted([save('draft', 'Requested document', { format_id })]), {
-          catalog: { ...catalog, formats },
-        })
-        .execute(lease);
-      phases.push((await readChat(db, scope, run.chat_id)).output?.phase);
-    }
-    expect(phases).toEqual(['draft', 'outline']);
-  });
   it('keeps a revision’s sources and adds the records its turn read', async () => {
     const scope = await fixtures.scope();
     const first = await fixtures.claimed(scope, { skillId: 'plan' });
@@ -1377,7 +1411,7 @@ describe('Agent runtime on PostgreSQL', () => {
     await fixtures.runtime(scope, scripted([read(), save()])).execute(first.lease);
     const next = await fixtures.claimed(scope, { chatId: first.run.chat_id });
     await fixtures
-      .runtime(scope, scripted([save('draft', `Revised with ${uri} kept.`)]))
+      .runtime(scope, scripted([save(`Revised with ${uri} kept.`)]))
       .execute(next.lease);
     const detail = await readChat(db, scope, first.run.chat_id);
     expect(detail.output?.latest_revision).toMatchObject({
@@ -1390,7 +1424,7 @@ describe('Agent runtime on PostgreSQL', () => {
   it('pins a workflow’s skill and format, and keeps them through a clarifying first turn', async () => {
     const scope = await fixtures.scope();
     const formats = new Map([
-      ['post', { id: 'post', label: 'Post', body: 'Write one short post.', longForm: false }],
+      ['post', { id: 'post', label: 'Post', body: 'Write one short post.' }],
     ]);
     const workflows = parseWorkflows(
       JSON.stringify({
@@ -1440,11 +1474,10 @@ describe('Agent runtime on PostgreSQL', () => {
     );
     await store.enqueue(scope, { key: randomUUID(), chatId: first.chat_id, message: 'Pricing' });
     // The save names no format, so the pinned one applies.
-    await execute([save('draft')]);
-    // The pinned short format is saved without an outline.
+    await execute([save()]);
     expect((await readChat(db, scope, first.chat_id)).output).toMatchObject({
       format_id: 'post',
-      phase: 'draft',
+      latest_revision: { body: 'Requested document' },
     });
   });
 });

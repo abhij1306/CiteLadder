@@ -8,9 +8,11 @@ import { authorize } from './access.ts';
 import {
   isBuiltin,
   agentToolList,
+  editDocument,
   loadSkill,
   methodology,
   saveDocument,
+  EDIT_DOCUMENT,
   LOAD_SKILL,
   SAVE_DOCUMENT,
   type DocumentState,
@@ -30,7 +32,6 @@ import { ModelCalls, type AgentModel, type ModelRequest } from './model-calls.ts
 import { currentOutput, revisionRefs, saveAgentOutput, type AttachTarget } from './outputs.ts';
 import { lockRun, terminalize } from './queue.ts';
 import { appendMessage, appendRecoveryReply, getChat, touchChat } from './messages.ts';
-import { outlineRequired } from './skills.ts';
 import { readSources, scrubRecordRefs, uniqueSources } from './sources.ts';
 import { documentEmitter, type TurnEvents } from './stream.ts';
 import {
@@ -91,11 +92,19 @@ function withSummary(summary: PromptSummary) {
     context_manifest: sql<Json>`context_manifest || jsonb_build_object('prompt_summary', ${JSON.stringify(summary)}::jsonb)`,
   };
 }
-const SAVED_PHASE: Record<string, string> = { outline: 'Outline saved', draft: 'Draft saved' };
-function savedNotice(phase: string, formatLabel: string | null) {
+function savedNotice(formatLabel: string | null) {
   const format = formatLabel ? ` in ${formatLabel} format` : '';
-  const approval = phase === 'outline' ? ' Approve it before requesting a draft.' : '';
-  return `${SAVED_PHASE[phase] ?? 'Document saved'}${format}.${approval}`;
+  return `Document saved${format}.`;
+}
+/**
+ * Thinking shares the output cap, so a cut-off call is discarded and asked
+ * once more with low effort as the next call of the turn; a cut-off retry, or
+ * a cut-off last call, ends the turn.
+ */
+function retryEffort(effort: Budget['reasoning_effort'], ordinal: number, budget: Budget) {
+  if (effort === 'low' || ordinal === budget.max_model_calls)
+    throw new AgentError('output_too_long');
+  return 'low' as const;
 }
 /** A turn never ends without a reply, even when the model wrote none. */
 function noReply(reads: number) {
@@ -108,7 +117,7 @@ function noReply(reads: number) {
 function reminder(budget: Budget, ordinal: number, toolsUsed: number) {
   const left = budget.max_model_calls - ordinal;
   if (left === 1)
-    return 'This is the last step of the turn: answer the user now from what you have read and name anything still missing. Tool calls will be refused.';
+    return 'This is the last step of the turn: answer now from what you have read and name anything still missing. Tool calls will be refused.';
   const notes = [
     left <= budget.limit_reminder_calls ? `${left} steps are left in this turn.` : '',
     toolsUsed >= budget.max_tool_calls
@@ -214,7 +223,7 @@ export class AgentRuntime {
       pinned: state.skill
         ? {
             skill: state.skill,
-            text: methodology(this.deps.catalog, state.skill, state, budget),
+            text: methodology(state.skill, state, budget),
           }
         : null,
       request: turn.request,
@@ -231,16 +240,22 @@ export class AgentRuntime {
     // The cached prefix: built once per turn from the catalog and the run's frozen bounds.
     const system = systemPrefix(this.deps.catalog);
     const tools = agentToolList(this.deps.tools, this.deps.catalog, budget);
+    let effort = budget.reasoning_effort;
     for (let ordinal = 1; ordinal <= budget.max_model_calls; ordinal++) {
       signal?.throwIfAborted();
       const request: ModelRequest = {
         system,
         tools,
         messages: [...history, ...state.messages],
-        effort: budget.reasoning_effort,
+        effort,
         compactAtTokens: budget.compaction_trigger_tokens,
       };
       const response = await this.callModel(lease, ordinal, model, request, signal, events);
+      if (response.stop === 'max_tokens') {
+        effort = retryEffort(effort, ordinal, budget);
+        continue;
+      }
+      effort = budget.reasoning_effort;
       // An empty assistant message would make every later replay of this chat invalid.
       const blocks = response.blocks.length
         ? response.blocks
@@ -289,8 +304,8 @@ export class AgentRuntime {
         : {}),
     });
     signal?.throwIfAborted();
-    // A cut-off answer cannot be repaired by asking again: the same request is cut again.
-    if (result.stop === 'max_tokens') throw new AgentError('output_too_long');
+    // Neither is repaired by asking again: the same input is too long or refused again.
+    if (result.stop === 'context_window') throw new AgentError('context_too_long');
     if (result.stop === 'refusal') throw new AgentError('model_refused');
     return result;
   }
@@ -303,8 +318,10 @@ export class AgentRuntime {
       skill,
       skillSource: turn.run.requested_skill_source ?? (skill ? 'chat' : null),
       outputKind: turn.current.output?.kind ?? null,
-      outlineApproved: turn.current.outlineApproved,
       formatId: currentFormat(turn),
+      document: turn.current.revision
+        ? { title: turn.current.revision.title, body: turn.current.revision.body }
+        : null,
       staged: null,
       read: [],
       steps: [],
@@ -342,6 +359,9 @@ export class AgentRuntime {
       if (isBuiltin(call.name)) {
         const outcome = this.builtin(turn, state, call, saved);
         if (call.name === SAVE_DOCUMENT && outcome.ok) saved = true;
+        // An edit's input is not the document, so the edited text is shown once applied.
+        if (call.name === EDIT_DOCUMENT && outcome.ok && state.staged)
+          events?.document?.({ ordinal, title: state.staged.title, body: state.staged.body });
         tool(outcome.ok ? 'completed' : 'refused');
         return Promise.resolve(result(call, outcome.text, !outcome.ok));
       }
@@ -378,7 +398,12 @@ export class AgentRuntime {
         state.steps.push({ kind: 'skill', skill_id: state.skill.id });
       return outcome;
     }
-    // One document per response, so completion order never picks the winner.
+    if (call.name === EDIT_DOCUMENT) {
+      const outcome = editDocument(catalog, state, call.input, turn.budget);
+      if (outcome.ok) state.steps.push({ kind: 'document' });
+      return outcome;
+    }
+    // One whole document per response, so completion order never picks the winner.
     if (saved)
       return {
         ok: false,
@@ -483,7 +508,7 @@ export class AgentRuntime {
       const formatLabel = document?.format_id
         ? (this.deps.catalog.formats?.get(document.format_id)?.label ?? document.format_id)
         : null;
-      const completion = document ? savedNotice(document.phase, formatLabel) : '';
+      const completion = document ? savedNotice(formatLabel) : '';
       const reply = scrubRecordRefs(text).trim();
       let content = completion;
       if (reply) {
@@ -516,7 +541,6 @@ export class AgentRuntime {
             messageId: message.id,
             userId: turn.scope.userId,
             refs: uniqueSources(turn.carried, sources),
-            outlineRequired: outlineRequired(this.deps.catalog, skill, document.format_id),
           },
           this.deps.attachTarget,
         );
@@ -545,12 +569,15 @@ export class AgentRuntime {
       await terminalize(trx, lease, 'succeeded');
     });
   }
-  /** Ends the turn with its code-specific reply, settling any open model attempt. */
+  /**
+   * Ends the turn with its code-specific reply. A failed turn saves nothing,
+   * so its model calls are settled and then refunded.
+   */
   async fail(lease: Lease, code: string, summary?: PromptSummary) {
     try {
       await this.db.transaction().execute(async (trx) => {
         const run = await lockRun(trx, lease);
-        await this.deps.models.reconcile(trx, run);
+        await this.deps.models.settleFailed(trx, run);
         if (run.user_id && code !== 'access_revoked') {
           await authorize(trx, {
             workspaceId: run.workspace_id,

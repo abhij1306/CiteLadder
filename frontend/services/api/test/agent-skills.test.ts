@@ -63,13 +63,13 @@ describe('packaged Agent model inputs', () => {
     for (const skill of skills) agentSkillSchema.parse({ ...skill, output_kind: skill.outputKind });
     expect(skills.some((skill) => /\{\{[a-z_]+\}\}/u.test(skill.body))).toBe(false);
   });
-  it('reads the long-form marker without making it part of the label', () => {
+  it('reads each format heading into its id, label and body', () => {
     const { formats } = parseContentFormats(
-      '# Formats\n## guide — Guide [long-form]\nBody\n## post — Post\nBody\n',
+      '# Formats\n## guide — Buyer guide\nGuide body\n## post — Post\nPost body\n',
     );
-    expect([...formats.values()].map(({ label, longForm }) => [label, longForm])).toEqual([
-      ['Guide', true],
-      ['Post', false],
+    expect([...formats.values()]).toEqual([
+      { id: 'guide', label: 'Buyer guide', body: 'Guide body' },
+      { id: 'post', label: 'Post', body: 'Post body' },
     ]);
   });
   it('fingerprints workflows and refuses one that names a missing skill, format or next step', async () => {

@@ -9,7 +9,6 @@ const API_ERROR_CODES = [
   'agent_idempotency_conflict',
   'agent_model_unavailable',
   'agent_not_configured',
-  'agent_outline_not_approvable',
   'agent_output_conflict',
   'agent_run_active',
   'agent_skill_kind_conflict',

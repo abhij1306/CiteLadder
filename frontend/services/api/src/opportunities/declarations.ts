@@ -74,7 +74,7 @@ async function checkedRevision(db: Database, action: ActionRow, revisionId: stri
   const revision = await db
     .selectFrom('agent_output_revisions as revision')
     .innerJoin('agent_outputs as output', 'output.id', 'revision.output_id')
-    .select('revision.phase')
+    .select('revision.id')
     .where('revision.id', '=', revisionId)
     .where('revision.workspace_id', '=', action.workspace_id)
     .where('revision.project_id', '=', action.project_id)
@@ -83,8 +83,6 @@ async function checkedRevision(db: Database, action: ActionRow, revisionId: stri
     .where('output.action_id', '=', action.id)
     .executeTakeFirst();
   if (!revision) throw declarationConflict('The output revision does not belong to this Action');
-  if (revision.phase === policy.opportunity.declaration.output_phase_outline)
-    throw declarationConflict('An outline cannot be declared implemented');
 }
 
 async function targets(

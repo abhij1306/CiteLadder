@@ -244,7 +244,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
     expect(refreshed.messages.at(-1)?.evidence_refs).toEqual([uri]);
     expect(refreshed.latest_run?.progress.filter((step) => step.tool === 'fetch')).toHaveLength(1);
   });
-  it('carries an Action through outline approval, user edit, refinement and an exact next-step revision', async () => {
+  it('carries an Action through a draft, user edit, refinement and an exact next-step revision', async () => {
     const scope = await fixtures.scope();
     const action = await db
       .transaction()
@@ -272,12 +272,8 @@ describe('Agent bindings to the evidence and Action owners', () => {
       skillId: 'content',
       message: 'Write a buyer guide',
     });
-    const outlined = await execute([save('draft', 'Proposed outline')]);
+    const drafted = await execute([save('First draft')]);
     expect(opened[0]).toContain(action.id);
-    const outline = outlined.output!.latest_revision!;
-    expect(outline.phase).toBe('outline');
-    await store.approveOutline(scope, first.chat_id, outline.id, randomUUID());
-    const drafted = await execute([save('draft', 'Approved draft')]);
     const edited = await new AgentOutputs(db).edit(
       scope,
       first.chat_id,
@@ -293,7 +289,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
       chatId: first.chat_id,
       message: 'Refine my edit',
     });
-    const refined = await execute([save('draft', 'Refined accepted guide')]);
+    const refined = await execute([save('Refined accepted guide')]);
     // The user's edit is new to the model, so the turn supplies it.
     expect(opened[0]).toContain('User edited draft');
     const accepted = refined.output!.latest_revision!;
@@ -307,7 +303,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
         output_revision_reference: { output_id: refined.output!.id, revision_id: accepted.id },
       },
     });
-    const next = await execute([save('final', 'Distribution plan')]);
+    const next = await execute([save('Distribution plan')]);
     expect(opened[0]).toContain(accepted.id);
     expect(opened[0]).toContain('Refined accepted guide');
     expect(next.output?.kind).toBe('plan');
@@ -342,7 +338,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
       .runtime(
         scope,
         scripted([
-          save('outline', 'Evidence-grounded guide', {
+          save('Evidence-grounded guide', {
             title: 'Guide',
             target_kind: 'planned_page',
             target: 'Buyer guide',
@@ -364,7 +360,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
       .runtime(
         scope,
         scripted([
-          save('outline', 'Revised guide', {
+          save('Revised guide', {
             title: 'Guide',
             target_kind: 'page',
             target: 'https://other.test/page',
@@ -379,7 +375,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
       .runtime(
         scope,
         scripted([
-          save('outline', 'Saved for retargeting', {
+          save('Saved for retargeting', {
             title: 'Guide',
             target_kind: 'page',
             target: 'https://other.test/page',

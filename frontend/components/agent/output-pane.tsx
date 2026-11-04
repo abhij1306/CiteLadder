@@ -1,6 +1,5 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Download, Pencil } from 'lucide-react';
 import { useState } from 'react';
 
@@ -11,7 +10,6 @@ import { EvidenceChips } from '@/components/agent/evidence-chips';
 import { OutputEditor, type OutputDraft } from '@/components/agent/output-editor';
 import { OutputHistory } from '@/components/agent/output-history';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';
@@ -19,18 +17,14 @@ import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
-import { agentWriteFailure } from '@/lib/agent/errors';
 import { downloadOutputMarkdown, outputMarkdown } from '@/lib/agent/export';
-import { newIdempotencyKey } from '@/lib/agent/idempotency';
-import { OUTPUT_PHASE_LABEL } from '@/lib/agent/vocabulary';
-import { agentMutations, type AgentOutput, type AgentRevision } from '@/lib/api/agent';
-import { queryKeys } from '@/lib/api/query-keys';
+import { type AgentOutput, type AgentRevision } from '@/lib/api/agent';
 import { PROMPTS_GENERATE_HREF } from '@/lib/prompts/routes';
 
 type PaneTab = 'output' | 'sources' | 'history';
 
 /**
- * The chat's deliverable, shown inline in the thread. Edits, restores and outline approval are refused by
+ * The chat's deliverable, shown inline in the thread. Edits and restores are refused by
  * the server while a turn is queued or running, so the pane disables them
  * then rather than offering a control that will fail.
  */
@@ -83,7 +77,6 @@ export function OutputPane({
         </h2>
         <Inline className="flex-wrap">
           <Badge>{kindLabel(output.kind)}</Badge>
-          <Badge>{OUTPUT_PHASE_LABEL[output.phase]}</Badge>
           <span className={textRole('caption')}>Revision {revision.number}</span>
           {output.target_label ? (
             <span className={textRole('caption', 'truncate')}>{output.target_label}</span>
@@ -103,13 +96,6 @@ export function OutputPane({
             }}
           />
         )}
-        <OutlineApproval
-          workspaceId={workspaceId}
-          chatId={chatId}
-          revision={revision}
-          runActive={runActive}
-          canSend={canSend}
-        />
         {editing ? null : (
           <OutputDeclaration workspaceId={workspaceId} output={output} runActive={runActive} />
         )}
@@ -121,7 +107,7 @@ export function OutputPane({
         ariaLabel="Output views"
         spaced
         items={[
-          { value: 'output', label: OUTPUT_PHASE_LABEL[output.phase] },
+          { value: 'output', label: 'Document' },
           { value: 'sources', label: 'Sources' },
           { value: 'history', label: 'History' },
         ]}
@@ -197,57 +183,5 @@ function OutputActions({
         Export Markdown
       </Button>
     </Inline>
-  );
-}
-
-/** Only long-form content is outline-first. */
-const OUTLINE_APPROVAL = {
-  help: 'Review the outline, edit it if needed, then approve it to write the draft.',
-  action: 'Use outline & write',
-};
-
-/** The explicit approval that lets the full deliverable be written. */
-function OutlineApproval({
-  workspaceId,
-  chatId,
-  revision,
-  runActive,
-  canSend,
-}: Readonly<{
-  workspaceId: string;
-  chatId: string;
-  revision: AgentRevision;
-  runActive: boolean;
-  canSend: boolean;
-}>) {
-  const queryClient = useQueryClient();
-  const approve = useMutation({
-    ...agentMutations.approveOutline(workspaceId),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.agent.chat(chatId),
-      }),
-  });
-  if (revision.phase !== 'outline' || revision.approved_at) return null;
-  return (
-    <Stack gap="compact">
-      <p className={textRole('body')}>{OUTLINE_APPROVAL.help}</p>
-      {approve.isError ? (
-        <Alert tone="danger">{agentWriteFailure(approve.error).message}</Alert>
-      ) : null}
-      <Button
-        className="justify-self-start"
-        disabled={!canSend || runActive || approve.isPending}
-        onClick={() =>
-          approve.mutate({
-            chatId,
-            revisionId: revision.id,
-            idempotencyKey: newIdempotencyKey(),
-          })
-        }
-      >
-        {OUTLINE_APPROVAL.action}
-      </Button>
-    </Stack>
   );
 }

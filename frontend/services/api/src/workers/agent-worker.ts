@@ -87,7 +87,7 @@ export class AgentWorker {
       workspaces,
       policy.agent.recovery_batch_size,
       policy.agent.unclaimed_grace_seconds,
-      (db, run) => models.reconcile(db, run),
+      (db, run) => models.settleFailed(db, run),
     );
     await models.recoverCancelled(
       workspaces,

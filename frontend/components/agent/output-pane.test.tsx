@@ -20,17 +20,14 @@ const output = (kind: string): AgentOutput => ({
   format_id: null,
   target_kind: null,
   target_label: null,
-  phase: 'draft',
   latest_revision: {
     id: '22222222-2222-4222-8222-222222222222',
     number: 1,
     parent_revision_id: null,
     author: 'agent',
-    phase: 'draft',
     title: 'Prompt plan',
     body: '## Topics\n\nKeep "Golf nets"; add "Golf simulator enclosures".',
     source_refs: [],
-    approved_at: null,
     created_at: '2026-11-01T00:00:00Z',
   },
 });

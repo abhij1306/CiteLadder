@@ -21,18 +21,12 @@ import { workspaceChat } from './messages.ts';
 import { manifestSchema } from './context.ts';
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
-function summary(
-  chat: Chat,
-  output: { kind: string; phase: string } | null,
-  label: string | null,
-  running: boolean,
-) {
+function summary(chat: Chat, outputKind: string | null, label: string | null, running: boolean) {
   return agentChatSummarySchema.parse({
     ...chat,
     running,
     target_label: label,
-    output_kind: output?.kind ?? null,
-    output_phase: output?.phase ?? null,
+    output_kind: outputKind,
     last_activity_at: iso(chat.last_activity_at),
     created_at: iso(chat.created_at),
   });
@@ -47,19 +41,11 @@ export function runView(run: Run, steps: z.input<typeof agentRunStepSchema>[] = 
     progress: steps,
   });
 }
-export function revisionView(
-  revision: Parameters<typeof revisionRefs>[0] & {
-    id: string;
-    created_at: Date;
-    approved_at: Date | null;
-    source_refs: unknown;
-  },
-) {
+export function revisionView(revision: { created_at: Date; source_refs: unknown }) {
   return agentRevisionSchema.parse({
     ...revision,
     source_refs: revisionRefs(revision.source_refs),
     created_at: iso(revision.created_at),
-    approved_at: iso(revision.approved_at),
   });
 }
 function modelStepStatus(outcome: string, latest: boolean) {
@@ -190,31 +176,6 @@ export async function readChat(
   const manifest = parsedManifest?.success ? parsedManifest.data : null;
   let limitations = manifest?.package.summary.omissions ?? [];
   if (run && !manifest) limitations = [{ reason: 'context_manifest_unavailable' }];
-  const approvals = await db
-    .selectFrom('agent_runs')
-    .select(['id', 'user_message_id', 'context_manifest'])
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('chat_id', '=', chat.id)
-    .where('mode', '=', 'draft_from_outline')
-    .execute();
-  const events = new Map(
-    approvals.flatMap((approval) => {
-      const parsed = manifestSchema.safeParse(approval.context_manifest);
-      return parsed.success && parsed.data.approval
-        ? [
-            [
-              approval.user_message_id,
-              {
-                kind: 'outline_approved' as const,
-                revision_id: parsed.data.approval.revision_id,
-                run_id: approval.id,
-              },
-            ] as const,
-          ]
-        : [];
-    }),
-  );
   const action = chat.action_id
     ? await db
         .selectFrom('actions')
@@ -227,7 +188,7 @@ export async function readChat(
   return agentChatDetailSchema.parse({
     chat: summary(
       chat,
-      current.output,
+      current.output?.kind ?? null,
       action?.target_label ?? null,
       run ? active.includes(run.status) : false,
     ),
@@ -256,7 +217,6 @@ export async function readChat(
     messages: messages.map((message) =>
       agentMessageSchema.parse({
         ...message,
-        event: events.get(message.id) ?? null,
         created_at: iso(message.created_at),
         evidence_refs: revisionRefs(message.evidence_refs),
       }),
@@ -266,14 +226,7 @@ export async function readChat(
       ? agentOutputSchema.parse({
           ...current.output,
           message_id: generated?.message_id ?? null,
-          latest_revision: current.revision
-            ? agentRevisionSchema.parse({
-                ...current.revision,
-                source_refs: revisionRefs(current.revision.source_refs),
-                created_at: iso(current.revision.created_at),
-                approved_at: iso(current.revision.approved_at),
-              })
-            : null,
+          latest_revision: current.revision ? revisionView(current.revision) : null,
         })
       : null,
   });
@@ -298,14 +251,7 @@ export async function listRevisions(
         .execute()
     : [];
   return agentRevisionsPageSchema.parse({
-    items: revisions.map((revision) =>
-      agentRevisionSchema.parse({
-        ...revision,
-        source_refs: revisionRefs(revision.source_refs),
-        created_at: iso(revision.created_at),
-        approved_at: iso(revision.approved_at),
-      }),
-    ),
+    items: revisions.map((revision) => revisionView(revision)),
   });
 }
 /** The project's open chats; the caller has authorized the project (`authorize: 'active-project'`). */
@@ -334,7 +280,7 @@ export async function listChats(
         .onRef('action.project_id', '=', 'chat.project_id'),
     )
     .selectAll('chat')
-    .select(['output.kind as output_kind', 'output.phase as output_phase', 'action.target_label'])
+    .select(['output.kind as output_kind', 'action.target_label'])
     .select((eb) =>
       eb
         .exists(
@@ -394,14 +340,7 @@ export async function listChats(
   const page = rows.slice(0, limit);
   const last = page.at(-1);
   return agentChatsPageSchema.parse({
-    items: page.map((row) =>
-      summary(
-        row,
-        row.output_kind ? { kind: row.output_kind, phase: row.output_phase! } : null,
-        row.target_label,
-        Boolean(row.running),
-      ),
-    ),
+    items: page.map((row) => summary(row, row.output_kind, row.target_label, Boolean(row.running))),
     next_cursor:
       rows.length > limit && last
         ? Buffer.from(JSON.stringify({ at: last.cursor_at, id: last.id })).toString('base64url')
