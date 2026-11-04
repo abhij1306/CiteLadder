@@ -105,7 +105,14 @@ function referralsControls({
       </>
     ) : null,
     filters: (
+      // Segments, then the range trigger: the one order Performance uses too.
       <>
+        <SegmentedControl
+          value={granularity}
+          onChange={onChangeGranularity}
+          options={GRANULARITY_OPTIONS}
+          ariaLabel="Chart interval"
+        />
         <FilterChoice
           label="Range"
           menuLabel="Date range"
@@ -113,12 +120,6 @@ function referralsControls({
           defaultValue="latest"
           options={RANGE_OPTIONS}
           onChange={onChangeRange}
-        />
-        <SegmentedControl
-          value={granularity}
-          onChange={onChangeGranularity}
-          options={GRANULARITY_OPTIONS}
-          ariaLabel="Chart interval"
         />
       </>
     ),

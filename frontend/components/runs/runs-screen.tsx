@@ -15,6 +15,7 @@ import { Dot } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { runsQueries } from '@/lib/api/runs';
 import type { Audit } from '@/lib/api/types';
 import { useProjectHref } from '@/lib/navigation/project-destination';
@@ -88,23 +89,20 @@ export function RunsScreen() {
       Launch audit
     </Button>
   );
-  // Each status is a control the user presses, so it is a 32px pressed-state
-  // button with 14px text, not a badge.
+  // A status filter is the one shared segmented control, each choice with the
+  // number of runs it keeps (2026-11-03 app review).
   const controls = {
     filters: (
-      <fieldset className="contents" aria-label="Filter by status">
-        {STATUS_FILTERS.map((filter) => (
-          <Button
-            key={filter.id}
-            variant="secondary"
-            aria-pressed={statusFilter === filter.id}
-            onClick={() => setStatusFilter(filter.id)}
-          >
-            {filter.label}
-            <span className="text-muted tabular-nums">{audits.filter(filter.match).length}</span>
-          </Button>
-        ))}
-      </fieldset>
+      <SegmentedControl
+        ariaLabel="Filter by status"
+        value={statusFilter}
+        onChange={setStatusFilter}
+        options={STATUS_FILTERS.map((filter) => ({
+          value: filter.id,
+          label: filter.label,
+          count: audits.filter(filter.match).length,
+        }))}
+      />
     ),
   };
 

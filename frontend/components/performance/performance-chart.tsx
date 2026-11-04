@@ -5,6 +5,7 @@ import { lazy } from 'react';
 import { ChartContainer, LegendSwatch, type ChartConfig } from '@/components/ui/chart';
 import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
+import { InlineFigure } from '@/components/ui/typography';
 import {
   axisDomainMax,
   formatAxisTick,
@@ -116,7 +117,7 @@ export function PerformanceChart({
           <Inline as="li" key={entry.key} className="type-caption">
             <LegendSwatch color={entry.color} shape="line" />
             {entry.label}
-            <span className="tabular-nums">0–{formatAxisTick(entry.key, domainFor(entry)[1])}</span>
+            <InlineFigure>0–{formatAxisTick(entry.key, domainFor(entry)[1])}</InlineFigure>
           </Inline>
         ))}
       </Inline>

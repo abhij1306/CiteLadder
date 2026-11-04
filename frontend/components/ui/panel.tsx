@@ -20,19 +20,18 @@ const PANEL_TONE = {
   panel: 'bg-panel border-border',
   /** Recessed — evidence, payloads, quoted source. */
   well: 'bg-well border-transparent',
-  /** The nested step inside a card, for a row that is chrome rather than content. */
-  tonal: 'bg-panel-tonal border-transparent',
-  /** Advice: a suggested next step or a quoted prompt. */
-  accent: 'bg-accent-soft border-transparent',
+  /** A row inside a card that is chrome rather than content: its edge only,
+   *  because a fill inside a card would be a fourth surface level. */
+  tonal: 'border-border',
   /** The caller supplies the fill because it carries a status meaning. */
   none: 'border-transparent',
 } as const;
 
 /*
- * A box is separated by a fill OR an edge, never both. Only the white `panel`
- * tone shows its edge, because it is white inside a white card and has nothing
- * else; a tinted panel's border is transparent, so it keeps the same one-pixel
- * geometry without one more line on the screen carrying no information.
+ * A box is separated by a fill OR an edge, never both. The `panel` and `tonal`
+ * tones show their edge; the recessed `well` is the one inset fill a card may
+ * hold (owner, 2026-11-03: at most three surface levels), so its border is
+ * transparent and keeps the same one-pixel geometry.
  */
 export type PanelTone = keyof typeof PANEL_TONE;
 

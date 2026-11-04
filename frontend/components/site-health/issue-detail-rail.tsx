@@ -115,7 +115,7 @@ export function IssueDetailRail({
         </Stack>
       ) : null}
       <Stack as="section">
-        <h3 className={textRole('itemTitle')}>Affected pages</h3>
+        <h3 className={textRole('sectionTitle')}>Affected pages</h3>
         <OccurrenceList issue={issue} detail={detail} crawlId={crawlId} query={detailQuery} />
       </Stack>
     </ListDetailPane>

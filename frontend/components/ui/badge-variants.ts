@@ -46,19 +46,23 @@ export const classificationBadge = {
   'third-party': { label: 'text-secondary', dot: 'bg-citation-third-party' },
 } as const satisfies Record<string, BadgeTone>;
 
-export const runStatusBadge = {
-  draft: { label: 'text-muted', dot: 'bg-neutral' },
-  queued: { label: 'text-muted', dot: 'bg-neutral' },
-  running: { label: 'text-secondary', dot: 'bg-info' },
-  paused: { label: 'text-muted', dot: 'bg-neutral' },
-  analyzing: { label: 'text-secondary', dot: 'bg-info' },
-  completed: { label: 'text-secondary', dot: 'bg-success' },
-  partial: { label: 'text-secondary', dot: 'bg-warning' },
-  failed: { label: 'text-danger-text', dot: 'bg-danger' },
-  cancelled: { label: 'text-muted', dot: 'bg-neutral' },
-} as const satisfies Record<string, BadgeTone>;
+export const neutralBadge = { label: 'bg-neutral-bg text-secondary', dot: 'bg-neutral' } as const;
 
-export const neutralBadge = { label: 'bg-neutral-bg text-muted', dot: 'bg-neutral' } as const;
+// A run's state is the same badge wherever it shows (owner review,
+// 2026-11-03): a summary line and a table cell both draw the outcome scale's
+// filled badge, so "Completed" never reads grey in one place and green in
+// another.
+export const runStatusBadge = {
+  draft: neutralBadge,
+  queued: neutralBadge,
+  running: statusBadge.info,
+  paused: neutralBadge,
+  analyzing: statusBadge.info,
+  completed: statusBadge.success,
+  partial: statusBadge.warning,
+  failed: statusBadge.danger,
+  cancelled: neutralBadge,
+} as const satisfies Record<string, BadgeTone>;
 
 export type StatusValue = keyof typeof statusBadge;
 export type SentimentValue = keyof typeof sentimentBadge;

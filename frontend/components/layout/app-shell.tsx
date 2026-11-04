@@ -75,13 +75,13 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
     <CompactPageTitleContext.Provider value={setCompactTitleOverride}>
       <AgentPanelProvider>
         <TooltipProvider>
-          <div data-app-surface className="bg-background relative flex min-h-dvh">
+          <div data-app-surface className="bg-panel relative flex min-h-dvh">
             <a href="#main" className="skip-link">
               Skip to main content
             </a>
             {/* The rail starts one sheet inset down, so its rows line up with
                 the bands of the floating sheet beside it. */}
-            <aside className="shell-rail bg-background desktop:flex sticky top-0 z-1 hidden h-dvh w-[var(--sidebar-width)] shrink-0 flex-col pt-[var(--workspace-inset)]">
+            <aside className="shell-rail bg-panel desktop:flex sticky top-0 z-1 hidden h-dvh w-[var(--sidebar-width)] shrink-0 flex-col pt-[var(--workspace-inset)]">
               {/* The project selector is the sidebar's first row, at the same
                   height as the header beside it. The rail reads project →
                   tools → destinations → brand: the switcher is the thing a
@@ -175,7 +175,7 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
                 hideHeader
                 closeLabel="Close navigation"
                 side="left"
-                className="bg-background w-[min(17rem,100vw)] max-w-none border-l-0"
+                className="bg-panel w-[min(17rem,100vw)] max-w-none border-l-0"
               >
                 <div className="grid gap-4">
                   <Link

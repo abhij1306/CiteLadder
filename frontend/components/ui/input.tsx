@@ -7,10 +7,7 @@ import { cn } from '@/lib/utils';
 
 /** Fields share a hairline boundary whose colour shows keyboard focus. */
 const inputClasses =
-  'focus-input h-[var(--control-height-md)] w-full rounded-[var(--radius-control)] border border-border bg-input px-3 text-field text-foreground leading-[calc(var(--control-height-md)_-_2px)] transition-[border-color,background-color] placeholder:text-muted enabled:hover:border-border-strong aria-invalid:border-danger aria-invalid:enabled:hover:border-danger disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle';
-
-/** Preserve the composer emphasis through a stronger boundary. */
-const raisedClasses = 'border border-border-strong enabled:hover:border-border-strong';
+  'focus-input h-[var(--control-height-md)] w-full rounded-[var(--radius-control)] border border-border-bold bg-input px-3 text-field text-foreground leading-[calc(var(--control-height-md)_-_2px)] transition-[border-color,background-color] placeholder:text-muted enabled:hover:border-muted aria-invalid:border-danger aria-invalid:enabled:hover:border-danger disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle';
 
 /**
  * The roomier field of the public website's forms. The product field —
@@ -45,7 +42,6 @@ export function Input({
   endContentFlush = false,
   size = 'md',
   width = 'fill',
-  raised = false,
   ref,
   ...props
 }: Readonly<
@@ -53,8 +49,6 @@ export function Input({
     size?: keyof typeof inputSizes;
     /** The field's width role; see `inputWidths`. */
     width?: keyof typeof inputWidths;
-    /** The composer treatment — for a field that is the point of its screen. */
-    raised?: boolean;
     /** Leading content rendered inside the shared input frame. */
     startContent?: ReactNode;
     /** Trailing content rendered inside the shared input frame. */
@@ -76,7 +70,6 @@ export function Input({
           inputClasses,
           inputSizes[size],
           inputWidths[width],
-          raised && raisedClasses,
           containerClassName,
           className,
         )}
@@ -88,9 +81,8 @@ export function Input({
   return (
     <div
       className={cn(
-        'focus-frame bg-input has-[[aria-invalid=true]]:border-danger has-[[aria-invalid=true]]:has-[:enabled]:hover:border-danger flex h-[var(--control-height-md)] w-full items-center gap-2 rounded-[var(--radius-control)] px-3 border border-border transition-[border-color,background-color] has-[:enabled]:hover:border-border-strong',
+        'focus-frame bg-input has-[[aria-invalid=true]]:border-danger has-[[aria-invalid=true]]:has-[:enabled]:hover:border-danger flex h-[var(--control-height-md)] w-full items-center gap-2 rounded-[var(--radius-control)] px-3 border border-border-bold transition-[border-color,background-color] has-[:enabled]:hover:border-muted',
         size === 'lg' && 'h-[var(--control-height-lg)] px-3',
-        raised && raisedClasses,
         props.disabled && 'cursor-not-allowed bg-disabled text-muted border-border-subtle',
         endContentFlush && 'pe-1',
         containerClassName,

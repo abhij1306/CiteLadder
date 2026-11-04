@@ -82,6 +82,24 @@ export function CodeToken({ children }: Readonly<{ children: string }>) {
   );
 }
 
+/**
+ * InlineFigure — a number inside a line that owns its size and ink (a tab or
+ * chip count, a summary line's total, an ID, "30 / 210"): the surrounding
+ * role is kept and only the digits take the figure face. Feature screens use
+ * this instead of setting the face themselves.
+ */
+export function InlineFigure({
+  children,
+  className,
+  ...props
+}: Readonly<ComponentPropsWithoutRef<'span'>>) {
+  return (
+    <span {...props} className={cn('font-numeric', className)}>
+      {children}
+    </span>
+  );
+}
+
 /** Primary numeral in the figure face — the `figure` role. */
 export function Metric({
   children,

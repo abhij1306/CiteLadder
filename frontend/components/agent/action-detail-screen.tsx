@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { FactList, type Fact } from '@/components/ui/facts';
 import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
-import { panelClasses } from '@/components/ui/panel';
+import { cardClasses } from '@/components/ui/card-variants';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
@@ -351,7 +351,7 @@ function LinkedChats({
       {rows.length > 0 ? (
         <Stack as="ul" gap="compact">
           {rows.map((chat) => (
-            <Stack as="li" gap="tight" key={chat.id} className={panelClasses()}>
+            <Stack as="li" gap="tight" key={chat.id} className={cardClasses()}>
               <TextLink
                 href={`/agent/chats/${chat.id}`}
                 text="itemTitle"

@@ -4,10 +4,11 @@ import { memo, useDeferredValue } from 'react';
 
 import { Disclosure } from '@/components/ui/disclosure';
 import { Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { cardClasses } from '@/components/ui/card-variants';
 import { textRole } from '@/components/ui/typography';
 import type { LiveTurn } from '@/lib/agent/live-turns';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
+import { cn } from '@/lib/utils';
 
 /**
  * The thinking summary, reply and document as they are written. The saved
@@ -42,7 +43,7 @@ const LiveDocument = memo(function LiveDocument({
       as="section"
       gap="compact"
       aria-label={title ? `Writing ${title}` : 'Writing the document'}
-      className={panelClasses({}, 'min-w-0')}
+      className={cn(cardClasses(), 'min-w-0')}
     >
       <span className={textRole('caption')}>Writing…</span>
       {title ? <h2 className={textRole('sectionTitle')}>{title}</h2> : null}

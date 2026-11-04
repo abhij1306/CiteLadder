@@ -165,7 +165,10 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
                 href={issueHref(issue.rule_id, issue.finding_class)}
                 className="min-w-0"
               >
-                <ClampText>{issueTitle(issue)}</ClampText>
+                {/* One line, cut with its full title in a tooltip: beside an
+                    Advisory badge in a half-width card, two clamped lines
+                    broke a title mid-word ("Recommend / ed schema"). */}
+                <ClampText lines={1}>{issueTitle(issue)}</ClampText>
               </TextLink>
               {issue.finding_class === 'advisory' ? <Badge>Advisory</Badge> : null}
             </Inline>

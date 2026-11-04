@@ -8,7 +8,7 @@ import { ProjectLink } from '@/components/layout/scoped-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { cardClasses } from '@/components/ui/card-variants';
 import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader, splitPaneClasses } from '@/components/ui/workspace';
@@ -74,9 +74,9 @@ function SkillGroups({ skills }: Readonly<{ skills: AgentSkill[] }>) {
           />
           <ul className={splitPaneClasses('peers', 'items-stretch')}>
             {rows.map((skill) => (
-              <Stack as="li" key={skill.id} className={panelClasses()}>
+              <Stack as="li" key={skill.id} className={cardClasses()}>
                 <Stack gap="tight">
-                  <h3 className={textRole('itemTitle')}>{skill.label}</h3>
+                  <h3 className={textRole('sectionTitle')}>{skill.label}</h3>
                   <p className={textRole('body')}>{skill.description}</p>
                 </Stack>
                 <Inline className="flex-wrap justify-between self-end">

@@ -155,6 +155,9 @@ export function PagesTable({
       pageSize={pageSize}
       rowCount={pages.length}
       busy={busy}
+      // Every Pages tab shares one footprint, so switching tabs never moves
+      // the sections below the table.
+      reserveRows
     >
       {pages.map((page, index) => (
         <TableRow

@@ -155,12 +155,12 @@ export function PerformanceActions({
 }
 
 /**
- * The chart's bucket-size control, at the plot's top-right.
+ * The chart's bucket-size control, at the end of the control band.
  *
- * Deliberately NOT in the toolbar with the range quick-selects: the range
- * picks which window is charted, this picks how that window is bucketed, and
- * putting both in one row invites reading them as the same control (they
- * even share the words day/week/month).
+ * Apart from the range quick-selects at the band's start: the range picks
+ * which window is charted, this picks how that window is bucketed, and
+ * putting the two side by side invites reading them as the same control
+ * (they even share the words day/week/month).
  */
 export function GranularitySelect({
   value,

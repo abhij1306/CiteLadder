@@ -69,7 +69,7 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
     <Stack as="section">
       <Label>Evidence</Label>
       {promptText ? (
-        <blockquote className={panelClasses({ tone: 'accent' })}>
+        <blockquote className={panelClasses({ tone: 'well' })}>
           <p className="type-body text-foreground">“{promptText}”</p>
         </blockquote>
       ) : null}

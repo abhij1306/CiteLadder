@@ -253,7 +253,17 @@
    `.flow-action-content` is deliberately excluded: it shares the measure so its
    buttons line up with the pane, but it is a row on the ground. */
 .flow-content {
-  padding: var(--flow-block) var(--flow-gutter);
+  padding: var(--card-padding);
+}
+
+/* The onboarding sheet is the product's one box recipe (docs/design.md
+   §Component recipes): the card radius, a one-pixel subtle edge and no
+   shadow ring. The extra attribute outranks the pane's own elevation rule in
+   globals.css whichever stylesheet loads last. */
+[data-flow-surface] .flow-content.app-pane {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: none;
 }
 
 .flow-footer {

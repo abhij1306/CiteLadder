@@ -95,21 +95,18 @@ function PerceptionState({
   coverage?: PerceptionCoverage;
 }>) {
   const copy = stateCopy(state, reason);
+  // One state box at the shared footprint: the coverage it read is part of
+  // the same sentence, not a caption that grows the box.
   return (
-    <Card>
-      <CardContent>
-        <Stack gap="item">
-          <QueryState
-            kind="empty"
-            headingLevel={3}
-            icon={MessageSquareQuote}
-            heading={copy.heading}
-            description={copy.description}
-          />
-          {coverage?.mentions ? <CoverageNote coverage={coverage} /> : null}
-        </Stack>
-      </CardContent>
-    </Card>
+    <QueryState
+      kind="empty"
+      headingLevel={3}
+      icon={MessageSquareQuote}
+      heading={copy.heading}
+      description={
+        coverage?.mentions ? `${copy.description} ${coverageLine(coverage)}.` : copy.description
+      }
+    />
   );
 }
 

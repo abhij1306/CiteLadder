@@ -33,6 +33,7 @@ import {
   type RankedSignal,
 } from '@/lib/demand/signals';
 import { formatCount, formatWindowDate } from '@/lib/format';
+import { InlineFigure } from '@/components/ui/typography';
 import { useProjectContext } from '@/lib/project/project-context';
 import { optionalStringUrlCodec, stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { Icon } from '@/components/ui/icon';
@@ -270,9 +271,8 @@ function SearchDemandView({
         <Stack>
           <Inline as="p" gap="meta">
             <span className="type-caption">
-              {snapshot.signals.length === 1
-                ? '1 signal observed'
-                : `${formatCount(snapshot.signals.length)} signals observed`}
+              <InlineFigure>{formatCount(snapshot.signals.length)}</InlineFigure>
+              {snapshot.signals.length === 1 ? ' signal observed' : ' signals observed'}
             </span>
             <Inline as="span" gap="tight" className="type-caption">
               <Icon icon={Calendar} />

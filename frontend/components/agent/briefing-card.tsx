@@ -6,7 +6,7 @@ import { Sparkles } from 'lucide-react';
 import type { NewChatInput } from '@/components/agent/use-chat-turns';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { panelClasses } from '@/components/ui/panel';
+import { cardClasses } from '@/components/ui/card-variants';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { actionsQueries } from '@/lib/api/actions';
 import { AGENT_BRIEFING_ACTIONS } from '@/lib/config/agent';
@@ -40,7 +40,7 @@ export function BriefingCard({
       ? `Reads your evidence and your top ${top.length} open ${actionLabel}.`
       : 'Reads your evidence across Visibility, Site Health, Demand and Performance.';
   return (
-    <section aria-labelledby="agent-briefing" className={panelClasses()}>
+    <section aria-labelledby="agent-briefing" className={cardClasses()}>
       <EditorialSectionHeader
         title="What should I work on?"
         headingId="agent-briefing"

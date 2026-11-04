@@ -25,6 +25,22 @@ import { formatScore, measurementCaveat } from '@/lib/site-health/status';
  * a page-selection UI nested inside a table cell. The canonical inventory is
  * the only URL surface; re-auditing one page belongs on its detail screen.
  */
+/**
+ * No summary yet (nothing analysed) and a summary with no classified page
+ * kinds are different states, so they say different things.
+ */
+function emptyState(unmeasured: boolean, rowCount: number) {
+  if (rowCount > 0) return undefined;
+  return {
+    kind: 'empty',
+    icon: ICONS.siteHealth,
+    headingLevel: 3,
+    heading: unmeasured
+      ? 'Scores by page kind appear after the first analysis'
+      : 'Per-page-kind scores appear once the analysis classifies your pages',
+  } as const;
+}
+
 export function PageKindScores({
   crawl,
   dashboard,
@@ -32,10 +48,10 @@ export function PageKindScores({
   crawl: SiteCrawl | null;
   dashboard: SiteHealthDashboard | undefined;
 }>) {
+  // The section keeps its place with no summary yet: it draws its own empty
+  // state instead of vanishing and pulling the sections below it up.
   const summary = dashboard?.score_summary ?? crawl?.score_summary ?? null;
-  if (summary === null) return null;
-
-  const rows = byPageKindRows(summary.by_page_kind);
+  const rows = summary === null ? [] : byPageKindRows(summary.by_page_kind);
 
   return (
     <div data-testid="page-kind-scores" className="grid min-w-0">
@@ -44,23 +60,14 @@ export function PageKindScores({
         columns={COLUMNS}
         minWidth="md"
         footer="Mean scores across the analyzed pages of each type."
-        state={
-          rows.length === 0
-            ? {
-                kind: 'empty',
-                icon: ICONS.siteHealth,
-                headingLevel: 3,
-                heading: 'Per-page-kind scores appear once the analysis classifies your pages',
-              }
-            : undefined
-        }
+        state={emptyState(summary === null, rows.length)}
       >
         {rows.map((row) => (
           <TableRow key={row.page_kind}>
             <TableCell className="whitespace-nowrap">
               <PageKindBadge pageKind={row.page_kind} />
             </TableCell>
-            <TableCell numeric className="text-secondary tabular-nums">
+            <TableCell numeric className="text-secondary">
               {row.analyzed_count}
             </TableCell>
             <TableCell numeric className={scoreTextClass(row.web_fundamentals_score)}>

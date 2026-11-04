@@ -87,7 +87,7 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
       ) : null}
 
       {action ? (
-        <Stack gap="tight" className={panelClasses({ tone: 'accent' })}>
+        <Stack gap="tight" className={panelClasses({ tone: 'well' })}>
           <span className="type-caption">Suggested next action</span>
           <p className="type-body text-foreground">{action}</p>
         </Stack>

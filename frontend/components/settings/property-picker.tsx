@@ -17,7 +17,7 @@ import {
 } from '@/lib/api/integrations';
 import { humanizeApiError } from '@/lib/api/errors';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
-import { tagClasses } from '@/components/ui/tag-variants';
+import { InlineFigure } from '@/components/ui/typography';
 import {
   activeMappingFor,
   mappingsQuery,
@@ -124,9 +124,10 @@ function SelectedProperty({
   return (
     <Inline className="flex-wrap">
       {selected ? (
-        <span className={tagClasses('outline', 'max-w-full truncate tabular-nums')}>
-          {selected}
-        </span>
+        // A GA4 property is a number; a Search Console property is a site.
+        <Badge className="max-w-full truncate">
+          {provider === 'ga4' ? <InlineFigure>{selected}</InlineFigure> : selected}
+        </Badge>
       ) : (
         <Badge variant="status" value="warning">
           No {noun} selected

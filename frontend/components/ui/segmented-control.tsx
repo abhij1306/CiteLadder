@@ -14,6 +14,20 @@ const ARROW_DELTA: Readonly<Record<string, number>> = {
 };
 
 /**
+ * One choice. A filter choice may carry the number of rows it keeps (`count`,
+ * figure-face digits), a short status after its label (`detail`, muted) and
+ * an explanation beside it (`hint`, an `InfoHint`), so every status or signal
+ * filter in the product is this one control (2026-11-03 app review).
+ */
+export type SegmentedOption<T extends string> = Readonly<{
+  value: T;
+  label: string;
+  count?: number;
+  detail?: string;
+  hint?: ReactNode;
+}>;
+
+/**
  * SegmentedControl — a single-select segmented toggle used for
  * `benchmark_mode`. Radiogroup semantics so it is keyboard + screen-reader
  * accessible; selection is fully controlled by the caller (react-hook-form).
@@ -44,7 +58,7 @@ export function SegmentedControl<T extends string>({
 }: Readonly<{
   value: T;
   onChange: (value: T) => void;
-  options: readonly { value: T; label: string }[];
+  options: readonly SegmentedOption<T>[];
   ariaLabel?: string;
   id?: string;
   'aria-describedby'?: string;
@@ -83,7 +97,7 @@ export function SegmentedControl<T extends string>({
       >
         {options.map((option, index) => {
           const selected = option.value === value;
-          return (
+          const segment = (
             <button
               key={option.value}
               ref={(node) => {
@@ -109,10 +123,23 @@ export function SegmentedControl<T extends string>({
                 event.preventDefault();
                 move(index, delta);
               }}
-              className={segmentedItemVariants({ selected })}
+              className={cn(segmentedItemVariants({ selected }), 'gap-1')}
             >
               {option.label}
+              {/* Each part leads with a space, so the radio's accessible name
+                  reads "CTR gaps · Partial 50"; the flex gap draws the space. */}
+              {option.detail ? <span className="text-muted">{` · ${option.detail}`}</span> : null}
+              {option.count === undefined ? null : (
+                <span className="text-muted font-numeric">{` ${option.count.toLocaleString()}`}</span>
+              )}
             </button>
+          );
+          if (!option.hint) return segment;
+          return (
+            <span key={option.value} className="inline-flex shrink-0 items-center gap-1">
+              {segment}
+              {option.hint}
+            </span>
           );
         })}
       </div>

@@ -15,20 +15,20 @@ import { cn } from '@/lib/utils';
  * and its scroll container. `CardGrid` opts a row into that column layout
  * instead, so only the cards that need aligned footers get it.
  *
- * The card's `panel` fill is one step above the sheet it sits on, so the fill
- * carries the separation and the edge is only the `subtle` hairline.
+ * The card's `panel` fill is one step above the sheet it sits on, and every
+ * card, panel and bare table shares the one `border` edge (2026-11-03 app
+ * review: one border colour for every box).
  */
 const CARD_BOX =
-  'surface-card bg-panel rounded-[var(--radius-card)] border border-border-subtle p-[var(--card-padding)]';
+  'surface-card bg-panel rounded-[var(--radius-card)] border border-border p-[var(--card-padding)]';
 
-export type CardTone = 'default' | 'danger' | 'recommendation';
+export type CardTone = 'default' | 'danger';
 
 const CARD_TONE = {
   default: '',
+  // Colour means state only (owner, 2026-11-03): a recommendation is a
+  // default card; only a failure tints its edge.
   danger: 'border-danger-border',
-  // The wash alone marks the recommendation; a bright green outline on top
-  // of it shouted louder than the action inside.
-  recommendation: 'surface-card-recommendation bg-accent-soft',
 } as const satisfies Record<CardTone, string>;
 
 export const cardClasses = (tone: CardTone = 'default') => cn(CARD_BOX, CARD_TONE[tone]);

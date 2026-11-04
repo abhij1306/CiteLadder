@@ -173,8 +173,6 @@ function SearchConsoleWorkspace({
   activeMetrics,
   onToggleMetric,
   series,
-  granularity,
-  onGranularityChange,
   refreshing,
 }: Readonly<{
   available: boolean;
@@ -185,17 +183,12 @@ function SearchConsoleWorkspace({
   activeMetrics: ReadonlySet<PerformanceMetricKey>;
   onToggleMetric: (metric: PerformanceMetricKey) => void;
   series: ChartSeries[];
-  granularity: PerformanceDashboard['granularity'];
-  onGranularityChange: (value: PerformanceDashboard['granularity']) => void;
   refreshing: boolean;
 }>) {
   if (!available) return null;
   return (
     <Card className="overflow-hidden">
-      <CardHeader
-        bordered
-        actions={<GranularitySelect value={granularity} onChange={onGranularityChange} />}
-      >
+      <CardHeader bordered>
         <MetricCards
           data-testid="metric-card-strip"
           className="min-w-0"
@@ -250,6 +243,19 @@ function PerformanceLoading() {
       <QueryState kind="loading" label="Loading performance…" />
     </ListScreen>
   );
+}
+
+/**
+ * The chart's bucket size is a control of what is shown, so it rides the one
+ * control band, not the KPI card's header (2026-11-03 review), at its end so
+ * it does not read as part of the range. Absent while there is no chart.
+ */
+function granularityAction(
+  shown: boolean,
+  value: PerformanceDashboard['granularity'],
+  onChange: (value: PerformanceDashboard['granularity']) => void,
+) {
+  return shown ? <GranularitySelect value={value} onChange={onChange} /> : undefined;
 }
 
 export function PerformanceScreen() {
@@ -348,6 +354,7 @@ export function PerformanceScreen() {
         />
       }
       controls={{
+        actions: granularityAction(evidence.hasSearchConsoleTotals, granularity, setGranularity),
         filters: (
           <PerformanceToolbar
             selection={selection}
@@ -406,8 +413,6 @@ export function PerformanceScreen() {
               activeMetrics={activeMetrics}
               onToggleMetric={toggleMetric}
               series={series}
-              granularity={granularity}
-              onGranularityChange={setGranularity}
               refreshing={refreshing}
             />
             <Ga4Workspace

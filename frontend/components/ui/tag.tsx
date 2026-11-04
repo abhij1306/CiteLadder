@@ -42,7 +42,7 @@ export function TagGroup({
           aria-label={expanded ? 'Show fewer tags' : `Show ${labels.length - 2} more tags`}
           onClick={() => setExpanded(!expanded)}
         >
-          {expanded ? 'Show less' : `+${labels.length - 2}`}
+          {expanded ? 'Show less' : <span className="font-numeric">{`+${labels.length - 2}`}</span>}
         </button>
       ) : null}
     </div>

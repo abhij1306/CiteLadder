@@ -7,10 +7,9 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LegendSwatch } from '@/components/ui/chart';
-import type { DataTone } from '@/components/ui/data-tone';
+import { ChartKey } from '@/components/ui/chart';
 import { Delta } from '@/components/ui/delta';
-import { Inline, Stack } from '@/components/ui/layout';
+import { Stack } from '@/components/ui/layout';
 import { InfoHint } from '@/components/ui/info-hint';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
@@ -307,19 +306,15 @@ function MeasurementHistory({
           formatTick={(value) => `${Math.round(value)}%`}
           className="h-auto w-full"
         />
-        <Inline as="ul" gap="meta">
-          <SeriesKey label={primaryLabel} tone={{ series: 1 }} />
-          {competitors.map((entry) => (
-            <SeriesKey key={entry.label} label={entry.label} tone={{ series: entry.series }} />
-          ))}
-          {focused ? (
-            <li>
-              <Button variant="ghost" onClick={onClearFocus}>
-                Show all brands
-              </Button>
-            </li>
-          ) : null}
-        </Inline>
+        <ChartKey
+          entries={[
+            { label: primaryLabel, tone: { series: 1 } },
+            ...competitors.map((entry) => ({
+              label: entry.label,
+              tone: { series: entry.series },
+            })),
+          ]}
+        />
       </Stack>
     );
   }
@@ -327,27 +322,27 @@ function MeasurementHistory({
     <Card>
       <CardHeader
         actions={
-          <FilterChoice
-            label="Plotted metric"
-            value={metric}
-            options={VISIBILITY_METRICS}
-            onChange={setMetric}
-          />
+          <>
+            {/* Beside the metric picker, not inside the key: a control in
+                the key's row made the key one height focused and another
+                with the roster (2026-11-03 app review). */}
+            {focused ? (
+              <Button variant="secondary" onClick={onClearFocus}>
+                Show all brands
+              </Button>
+            ) : null}
+            <FilterChoice
+              label="Plotted metric"
+              value={metric}
+              options={VISIBILITY_METRICS}
+              onChange={setMetric}
+            />
+          </>
         }
       >
         <CardTitle>Over time</CardTitle>
       </CardHeader>
       <CardContent>{body}</CardContent>
     </Card>
-  );
-}
-
-/** One entry in the chart key: the brand, then each comparison line. */
-function SeriesKey({ label, tone }: Readonly<{ label: string; tone: DataTone }>) {
-  return (
-    <Inline as="li">
-      <LegendSwatch tone={tone} />
-      <span className={textRole('caption')}>{label}</span>
-    </Inline>
   );
 }

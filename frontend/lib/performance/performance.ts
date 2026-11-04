@@ -396,17 +396,17 @@ type DimensionTabs<Value extends PerformanceDimension> = readonly [
 ];
 
 export const DIMENSION_TABS: DimensionTabs<SearchConsoleDimension> = [
-  { value: 'query', label: 'QUERIES', header: 'Top queries', noun: 'queries' },
-  { value: 'page', label: 'PAGES', header: 'Top pages', noun: 'pages' },
-  { value: 'country', label: 'COUNTRIES', header: 'Top countries', noun: 'countries' },
-  { value: 'device', label: 'DEVICES', header: 'Top devices', noun: 'devices' },
+  { value: 'query', label: 'Queries', header: 'Top queries', noun: 'queries' },
+  { value: 'page', label: 'Pages', header: 'Top pages', noun: 'pages' },
+  { value: 'country', label: 'Countries', header: 'Top countries', noun: 'countries' },
+  { value: 'device', label: 'Devices', header: 'Top devices', noun: 'devices' },
   {
     value: 'search_appearance',
-    label: 'SEARCH APPEARANCE',
+    label: 'Search appearance',
     header: 'Search appearance',
     noun: 'appearance types',
   },
-  { value: 'day', label: 'DAYS', header: 'Date', noun: 'days' },
+  { value: 'day', label: 'Days', header: 'Date', noun: 'days' },
 ] as const;
 
 /**
@@ -420,8 +420,8 @@ export const DIMENSION_TABS: DimensionTabs<SearchConsoleDimension> = [
 export const BING_DIMENSION_TABS: DimensionTabs<
   Extract<PerformanceDimension, 'bing_query' | 'bing_page'>
 > = [
-  { value: 'bing_query', label: 'QUERIES', header: 'Top queries', noun: 'queries' },
-  { value: 'bing_page', label: 'PAGES', header: 'Top pages', noun: 'pages' },
+  { value: 'bing_query', label: 'Queries', header: 'Top queries', noun: 'queries' },
+  { value: 'bing_page', label: 'Pages', header: 'Top pages', noun: 'pages' },
 ] as const;
 
 export function dimensionTab(dimension: PerformanceDimension) {

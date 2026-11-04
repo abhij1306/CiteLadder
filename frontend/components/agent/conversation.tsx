@@ -10,6 +10,7 @@ import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { cardClasses } from '@/components/ui/card-variants';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Icon } from '@/components/ui/icon';
@@ -25,6 +26,7 @@ import { runOutcome } from '@/lib/agent/run-state';
 import { useLiveTurn, type LiveTurn } from '@/lib/agent/live-turns';
 import type { AgentChatDetail, AgentMessage, AgentRun } from '@/lib/api/agent';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
+import { cn } from '@/lib/utils';
 
 /**
  * Messages and the saved output in conversational order, followed by current
@@ -63,13 +65,13 @@ export function Conversation({
           <Stack as="li" gap="workspace" key={message.id}>
             <MessageBubble message={message} skill={skillLabel(skills, message.skill_id)} />
             {outputView && message.id === outputMessageId ? (
-              <div className={panelClasses({}, 'min-w-0')}>{outputView}</div>
+              <div className={cn(cardClasses(), 'min-w-0')}>{outputView}</div>
             ) : null}
           </Stack>
         ))}
       </Stack>
       {outputView && !outputMessageId ? (
-        <div className={panelClasses({}, 'min-w-0')}>{outputView}</div>
+        <div className={cn(cardClasses(), 'min-w-0')}>{outputView}</div>
       ) : null}
       {pendingMessage ? <PendingMessage text={pendingMessage} /> : null}
       <LiveActivity detail={detail} />

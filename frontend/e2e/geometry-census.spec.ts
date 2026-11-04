@@ -157,10 +157,10 @@ function measure(route: string) {
     add('tab.padding-x', element, px(getComputedStyle(element).paddingLeft));
   }
   // A segmented switch is measured by its track: segments sit inside it.
-  for (const element of all('[role="radiogroup"], .selection-track'))
+  for (const element of all('[role="radiogroup"], .segmented-track'))
     add('segmented.height', element, element.getBoundingClientRect().height);
   for (const element of all('aside a, nav a')) {
-    if (element.closest('[role="radiogroup"], [role="tablist"], .selection-track')) continue;
+    if (element.closest('[role="radiogroup"], [role="tablist"], .segmented-track')) continue;
     if (!hasText(element)) continue;
     add('nav-row.height', element, element.getBoundingClientRect().height);
   }

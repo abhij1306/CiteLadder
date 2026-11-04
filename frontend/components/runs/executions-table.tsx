@@ -4,8 +4,15 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { Stack } from '@/components/ui/layout';
-import { ClampText, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
+import {
+  ClampText,
+  TableActionsCell,
+  TableCell,
+  TableCellLines,
+  TableRow,
+} from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
+import { formatCount } from '@/lib/format';
 import { engineLabel, productTransportLabel } from '@/lib/providers/catalog';
 import type { Execution } from '@/lib/api/types';
 import {
@@ -21,7 +28,7 @@ const COLUMNS: readonly DataTableColumn[] = [
   // A long waiting state ("Waiting for Google AI Overview") cuts with a title.
   { key: 'status', label: 'Status', width: 'category' },
   { key: 'latency', label: 'Latency', width: 'figure', numeric: true },
-  { key: 'evidence', label: 'Evidence', width: 'action', hideLabel: true },
+  { key: 'evidence', label: 'Evidence', width: 'action', trailing: true, hideLabel: true },
 ];
 
 /**
@@ -73,18 +80,19 @@ export function ExecutionsTable({
             {execution.latency_ms == null ? (
               <UnavailableValue state="not_measured" />
             ) : (
-              `${execution.latency_ms} ms`
+              `${formatCount(execution.latency_ms)} ms`
             )}
           </TableCell>
-          <TableCell className="text-right">
+          <TableActionsCell>
+            {/* A real button face, so the control reads as one, not as loose text. */}
             {execution.status === 'succeeded' ? (
-              <Button variant="ghost" onClick={() => onSelectEvidence(execution)}>
+              <Button variant="secondary" onClick={() => onSelectEvidence(execution)}>
                 Evidence
               </Button>
             ) : (
               <UnavailableValue state="unavailable" />
             )}
-          </TableCell>
+          </TableActionsCell>
         </TableRow>
       ))}
     </DataTable>
