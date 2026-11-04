@@ -516,14 +516,14 @@ body {
    `text-danger-text`) still overrides the ink where the value's meaning is its
    colour. Edit a role here and every screen moves with it. */
 @layer components {
-  /* Titles take the display treatment at product scale: 500 with
-     tracking that tightens as size grows. */
+  /* Titles take the display treatment at product scale: 500 at the
+     display face's own spacing, untracked. */
   .type-page-title {
     font-family: var(--font-display);
     font-size: 1.25rem;
     line-height: 1.75rem;
     font-weight: 500;
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
     color: var(--color-foreground);
   }
   .type-section-title {
@@ -765,7 +765,7 @@ body {
      rendered size: a flat 2 paints a 1px stem at 12px and a 2px stem at
      24px, which is why large icons currently read heavier than small ones.
      These rungs compensate so every glyph lands near a 1.3px stem, in step
-     with the text face (Lexend Deca) at body sizes. Compensation is partial on purpose: an
+     with the text face at body sizes. Compensation is partial on purpose: an
      identical absolute stem at 12px closes up the counters and muddies the
      glyph.
 

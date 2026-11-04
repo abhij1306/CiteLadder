@@ -12,13 +12,13 @@
     <link rel="icon" href="/citeladder-favicon.ico" sizes="any" />
     <title>CiteLadder</title>
     <style>
-      /* Lexend Deca, Outfit and the figure face are used when the reader has
+      /* Switzer, TASA Orbiter and the figure face are used when the reader has
          them installed; otherwise these metric-matched Arial faces stand in,
-         so the layout is the same either way. */
+         so the layout is the same either way. Every face is capped at 500. */
       /* The figure face sets numbers only: digits and the marks that sit
          inside a number (. , : % + - −). Letters and spaces fall through to
-         Lexend Deca, so a figure's unit or a "Not measured" in a figure cell
-         stays in the text face, and the line box keeps Lexend Deca's metrics
+         the text face, so a figure's unit or a "Not measured" in a figure cell
+         stays in the text face, and the line box keeps the text face's metrics
          (the first family that covers the space). Keep this range in step
          with the fallback below and the MCP app. */
       @font-face {
@@ -29,29 +29,27 @@
         unicode-range: U+0025, U+002B-002E, U+0030-003A, U+2212;
       }
 
-      /* Match Arial's x-height to Lexend Deca's (0.525em vs 0.519em). Vertical
-         overrides use Lexend Deca's 1000/-250/0 hhea metrics (1000 UPM),
-         divided by size-adjust. */
+      /* Match Arial's x-height to Switzer's. The vertical overrides carry
+         Switzer's hhea metrics divided by size-adjust. */
       @font-face {
-        font-family: 'Lexend Deca Fallback';
+        font-family: 'Switzer Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 101.16%;
-        ascent-override: 98.86%;
-        descent-override: 24.71%;
-        line-gap-override: 0%;
+        size-adjust: 102.31%;
+        ascent-override: 95.79%;
+        descent-override: 24.44%;
+        line-gap-override: 8.8%;
       }
 
-      /* Match Arial's x-height to Outfit's (0.460em vs 0.519em). Vertical
-         overrides use Outfit's 1000/-260/0 hhea metrics (1000 UPM), divided
-         by size-adjust. */
+      /* Match Arial's x-height to TASA Orbiter's. The vertical overrides
+         carry TASA Orbiter's hhea metrics divided by size-adjust. */
       @font-face {
-        font-family: 'Outfit Fallback';
+        font-family: 'TASA Orbiter Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 88.63%;
-        ascent-override: 112.83%;
-        descent-override: 29.33%;
+        size-adjust: 96.34%;
+        ascent-override: 97.57%;
+        descent-override: 26.99%;
         line-gap-override: 0%;
       }
 
@@ -63,21 +61,21 @@
         font-family: 'JetBrains Mono Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 107.88%;
-        ascent-override: 94.55%;
-        descent-override: 27.81%;
+        size-adjust: 107.91%;
+        ascent-override: 94.52%;
+        descent-override: 27.8%;
         line-gap-override: 0%;
         unicode-range: U+0025, U+002B-002E, U+0030-003A, U+2212;
       }
 
       :root {
         font-synthesis-weight: none;
-        /* Lexend Deca carries body, UI and data; Outfit carries display
+        /* Switzer carries body, UI and data; TASA Orbiter carries display
            headings; the figure face sets the digits of figures in data roles
-           (`--font-numeric` in globals.css), because Lexend Deca has no
-           tabular figures (no `tnum`). */
-        --font-text: 'Lexend Deca Variable', 'Lexend Deca Fallback', Arial;
-        --font-heading: 'Outfit Variable', 'Outfit Fallback', Arial;
+           (`--font-numeric` in globals.css), so a figure column keeps one
+           digit width. */
+        --font-text: 'Switzer Variable', 'Switzer', 'Switzer Fallback', Arial;
+        --font-heading: 'TASA Orbiter Variable', 'TASA Orbiter', 'TASA Orbiter Fallback', Arial;
         --font-figure: 'JetBrains Mono Variable', 'JetBrains Mono Fallback';
       }
     </style>
