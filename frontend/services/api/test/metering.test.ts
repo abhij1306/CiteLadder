@@ -70,6 +70,25 @@ describe('platform AI usage recording', () => {
         output_tokens: 100_000,
       }),
     ).toBe(80_500);
+    // One-hour writes cost twice the base rate: /usr/bin/bash.01 + /usr/bin/bash.008 + /usr/bin/bash.02 + /usr/bin/bash.05 = /usr/bin/bash.088.
+    expect(
+      costMicrousd(haiku, {
+        input_tokens: 1_000_000,
+        cached_input_tokens: 800_000,
+        cache_write_input_tokens: 100_000,
+        cache_write_1h_input_tokens: 100_000,
+        output_tokens: 100_000,
+      }),
+    ).toBe(88_000);
+    // More one-hour writes than writes is unreadable usage.
+    expect(
+      costMicrousd(haiku, {
+        input_tokens: 10,
+        cache_write_input_tokens: 2,
+        cache_write_1h_input_tokens: 3,
+        output_tokens: 1,
+      }),
+    ).toBeNull();
     // An unpriced model has no price, except the configured gateway model at the default rate.
     expect(modelPrice('unpriced-model', 'gateway-model')).toBeNull();
     expect(modelPrice('gateway-model', 'gateway-model')).toEqual(haiku);

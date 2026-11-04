@@ -108,6 +108,9 @@ export interface AgentMessages {
 }
 
 export interface AgentModelAttempts {
+  cache_miss_reason: Generated<string>;
+  cache_missed_input_tokens: Int8 | null;
+  cache_write_1h_input_tokens: Int8 | null;
   cache_write_input_tokens: Int8 | null;
   cached_input_tokens: Int8 | null;
   created_at: Timestamp;
@@ -135,6 +138,7 @@ export interface AgentModelAttempts {
   requested_model: string;
   reservation_id: string | null;
   reserved_credits: Int8;
+  response_id: Generated<string>;
   returned_model: string;
   run_attempt: number;
   run_id: string;
@@ -142,6 +146,7 @@ export interface AgentModelAttempts {
   settlement_status: string;
   total_tokens: Int8 | null;
   usage_complete: boolean;
+  usage_iterations: Generated<Json>;
   workspace_id: string;
 }
 

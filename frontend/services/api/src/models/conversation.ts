@@ -1,7 +1,8 @@
 /**
  * The native tool-calling conversation shape shared by both provider adapters.
- * Blocks follow the Messages API: Anthropic receives them verbatim, so a
- * replayed transcript is byte-identical; the OpenAI adapter translates them.
+ * Blocks follow the Messages API: Anthropic receives them verbatim (stored as
+ * `json` and validated without being rebuilt), so a replayed transcript is
+ * byte-identical; the OpenAI adapter translates them.
  */
 import { z } from 'zod';
 import { plainJson } from '../db/json.ts';
@@ -31,6 +32,31 @@ export type ConversationRequest = {
   effort: ReasoningEffort;
   /** Anthropic server-side compaction triggers at this many input tokens. */
   compactAtTokens: number;
+  /**
+   * The provider's id for the chat's previous response, or `null` for a chat's
+   * first call: Anthropic compares the two prompts and reports why the cache missed.
+   */
+  previousResponseId: string | null;
+};
+/**
+ * Why the prompt cache could not reuse the previous call's prefix. `not_requested`
+ * had no previous response to compare; `none` compared and found no change;
+ * `pending` came back before the comparison finished. Changed reasons carry the
+ * provider's estimate of the input that followed the change.
+ */
+export type CacheDiagnosis =
+  | { reason: 'not_requested' | 'none' | 'pending' | 'previous_message_not_found' | 'unavailable' }
+  | {
+      reason: 'model_changed' | 'system_changed' | 'tools_changed' | 'messages_changed';
+      missed_input_tokens: number;
+    };
+/** One sampling step of a call: a compaction summary or the answer itself. */
+export type UsageIteration = {
+  type: string;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
 };
 export type ToolCall = { id: string; name: string; input: Record<string, Json> };
 /**
@@ -57,6 +83,11 @@ export type ConversationResult = {
   finish_status: string;
   usage: Record<string, number | null>;
   latency_ms: number;
+  /** The provider's id for this response; '' when it sent none. */
+  response_id: string;
+  cache: CacheDiagnosis;
+  /** Per-step usage when the provider reports it, compaction steps included. */
+  iterations: UsageIteration[];
 };
 /** Display listeners for one call; nothing here is persisted. */
 export type ConversationListener = {
@@ -73,7 +104,14 @@ export type Converse = (
   listener?: ConversationListener,
 ) => Promise<ConversationResult>;
 
-export const blocksSchema = z.array(z.object({ type: z.string() }).catchall(z.json()));
+const blockShape = z.object({ type: z.string() }).catchall(z.json());
+/**
+ * Content blocks, validated but returned as given: an object schema would
+ * rebuild each block with its own key order, and replay must keep the bytes.
+ */
+export const blocksSchema = z.array(
+  z.custom<ConversationBlock>((value) => blockShape.safeParse(value).success),
+);
 /** Provider content as plain JSON blocks; anything else is an unreadable answer. */
 export function parseBlocks(value: unknown): ConversationBlock[] {
   return blocksSchema.parse(plainJson(value));

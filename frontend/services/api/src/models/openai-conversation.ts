@@ -291,6 +291,10 @@ export function openAIConversation(
       // Chat completions charge no cache write.
       usage: { ...normalizedUsage(answer.usage), cache_write_input_tokens: 0 },
       latency_ms: latency,
+      // Chat completions report no cache diagnosis or per-step usage.
+      response_id: '',
+      cache: { reason: 'not_requested' },
+      iterations: [],
     };
   };
 }

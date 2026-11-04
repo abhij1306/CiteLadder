@@ -127,7 +127,12 @@ CREATE TABLE public.agent_model_attempts (
     deadline_at timestamp with time zone NOT NULL,
     settled_at timestamp with time zone,
     late_receipt boolean NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    response_id character varying(128) DEFAULT ''::character varying NOT NULL,
+    cache_write_1h_input_tokens bigint,
+    cache_miss_reason character varying(32) DEFAULT ''::character varying NOT NULL,
+    cache_missed_input_tokens bigint,
+    usage_iterations jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 CREATE TABLE public.agent_output_revisions (
@@ -212,7 +217,7 @@ CREATE TABLE public.agent_run_transcripts (
     model character varying(255) NOT NULL,
     skill_id character varying(64),
     context_hash character varying(64) NOT NULL,
-    messages jsonb NOT NULL,
+    messages json NOT NULL,
     created_at timestamp with time zone NOT NULL
 );
 

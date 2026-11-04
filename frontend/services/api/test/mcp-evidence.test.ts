@@ -921,6 +921,85 @@ it("lists exactly the pages a Site Health rule affects, with each page's failing
   ]);
 });
 
+it("finds a crawled page by the address a person types and reads its copy, never another project's", async () => {
+  const seed = await siteFixtures.crawl();
+  const pricing = await siteFixtures.page(
+    seed,
+    '/pricing',
+    {
+      title: 'Pricing',
+      meta_description: 'Plans and prices',
+      headings: { h1_texts: ['Simple pricing'], h2_texts: ['Starter', 'Growth'], h3_texts: [] },
+      body: { text: 'Starter costs $10 a month.', word_count: 5, truncated: false },
+    },
+    { observed: true },
+  );
+  await siteFixtures.page(seed, '/pricing-faq', { title: 'Pricing FAQ' }, { observed: true });
+  const call = (tool: string, args: Record<string, unknown>) =>
+    dispatchTool(db, siteMember(seed), tool, { project_id: seed.projectId, ...args }, origin);
+
+  // The scheme, www and a trailing slash a person types do not hide the page.
+  const found = await call('read_site_pages', { url: 'https://www.example.test/pricing/' });
+  expect((found.items as { url: string }[]).map((item) => item.url)).toEqual([
+    'https://example.test/pricing',
+    'https://example.test/pricing-faq',
+  ]);
+  expect(await call('read_page_text', { url: 'www.example.test/pricing/' })).toMatchObject({
+    state: 'available',
+    url: 'https://example.test/pricing',
+    title: 'Pricing',
+    meta_description: 'Plans and prices',
+    headings: { h1: ['Simple pricing'], h2: ['Starter', 'Growth'], h3: [] },
+    text: 'Starter costs $10 a month.',
+    text_chars_omitted: 0,
+    crawl_text_truncated: false,
+    word_count: 5,
+    site_url_id: pricing.id,
+    crawl_id: seed.crawlId,
+    artifact_refs: [
+      { kind: 'site_crawl', id: seed.crawlId },
+      { kind: 'site_page', id: pricing.analysisId },
+    ],
+  });
+  expect(await call('read_page_text', { site_url_id: pricing.id })).toMatchObject({
+    url: 'https://example.test/pricing',
+    text: 'Starter costs $10 a month.',
+  });
+  // A page the crawl never reached is unavailable with the crawled pages to try, not empty text.
+  expect(await call('read_page_text', { url: 'https://example.test/pric' })).toEqual({
+    state: 'unavailable',
+    reason: 'page_not_crawled',
+    crawl_id: seed.crawlId,
+    crawl_status: expect.any(String),
+    crawled_urls: ['https://example.test/pricing', 'https://example.test/pricing-faq'],
+    artifact_refs: [{ kind: 'site_crawl', id: seed.crawlId, record_uri: expect.any(String) }],
+  });
+  await expect(call('read_page_text', {})).rejects.toThrow('Pass url');
+  // The cap counts copy as serialized: a quote escapes to two characters, so 36 000
+  // less the 77 the title and empty headings take holds 17 961 of 40 000 quotes.
+  await siteFixtures.page(
+    seed,
+    '/quotes',
+    { title: 'Quotes', body: { text: '"'.repeat(40_000) } },
+    { observed: true },
+  );
+  const quoted = await call('read_page_text', { url: 'example.test/quotes' });
+  expect([(quoted.text as string).length, quoted.text_chars_omitted]).toEqual([17_961, 22_039]);
+  // Another project's crawl stays out of reach.
+  const foreign = await siteFixtures.crawl();
+  const hidden = await siteFixtures.page(
+    foreign,
+    '/secret',
+    { title: 'Secret' },
+    { observed: true },
+  );
+  expect(await call('read_page_text', { site_url_id: hidden.id })).toMatchObject({
+    state: 'unavailable',
+    reason: 'page_not_crawled',
+    crawled_urls: [],
+  });
+});
+
 it('reads the internal links of several pages in one call, by page URL rather than internal neighbor ids', async () => {
   const seed = await siteFixtures.crawl();
   const [home, docs, blog] = [

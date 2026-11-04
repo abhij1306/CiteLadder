@@ -29,7 +29,7 @@ You need the audience, the offer, the topic or target page, and the purpose. Get
 
 - Real search queries for the target page: `read_query_evidence` (needs the page's `site_url_id` from `read_site_pages` and the saved window from `read_demand`).
 - Buyer questions and AI answers: `read_prompt_portfolio`, `read_visibility_results` (with an `audit_id` from `read_visibility_overview`).
-- Existing pages: `read_site_pages` for saved page facts (open a returned analysis with `fetch` for detail), or page text the person supplied.
+- Existing pages: `read_site_pages` (filter by `url`) for saved page facts, `read_page_text` for a crawled page's words, or page text the person supplied.
 
 Internal analytics can guide the topic but do not belong in the published copy.
 

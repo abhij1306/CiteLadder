@@ -13,6 +13,7 @@ import { comparableUrl, selectContentFragments } from '../site-health/reads/cont
 import { issueDetail } from '../site-health/reads/issues.ts';
 import { crawlability } from '../mcp/evidence-site.ts';
 import { McpInputError } from '../mcp/types.ts';
+import { stripLeading, stripTrailing } from '../text-order.ts';
 import { revisionRefs } from './outputs.ts';
 import type { ContextReader } from './context.ts';
 import { AgentError } from './contracts.ts';
@@ -27,6 +28,33 @@ function owned(candidate: unknown, website: string) {
   } catch {
     return '';
   }
+}
+const hostOf = (value: string) => {
+  try {
+    return new URL(value).hostname.toLowerCase().replace(/^www\./u, '');
+  } catch {
+    return '';
+  }
+};
+const QUOTES = '<>"\'`()[]';
+/**
+ * The first address in the person's message on the project's own site, with
+ * or without a scheme or `www.`: the page the request is about. Each word is
+ * read apart; an email (`name@site.com`) or another site's URL is never a target.
+ */
+function requestedPageUrl(request: string, website: string) {
+  const site = hostOf(website);
+  if (!site) return '';
+  for (const word of request.split(/\s+/u)) {
+    const bare = stripTrailing(stripLeading(word, QUOTES), `${QUOTES}.,;:!?`);
+    // A query or fragment never names another page, and crawled URLs carry none.
+    const cut = bare.search(/[?#]/u);
+    const url = cut < 0 ? bare : bare.slice(0, cut);
+    if (!url.includes('.') || url.includes('@')) continue;
+    const absolute = /^https?:\/\//iu.test(url) ? url : `https://${url}`;
+    if (hostOf(absolute) === site) return absolute;
+  }
+  return '';
 }
 type OriginDb = Parameters<ContextReader>[0];
 type OriginScope = Parameters<ContextReader>[1];
@@ -86,6 +114,7 @@ async function resolveOrigins(
   db: Parameters<ContextReader>[0],
   scope: Parameters<ContextReader>[1],
   refs: z.infer<typeof agentContextRefsSchema>,
+  request: string,
 ) {
   const project = await db
     .selectFrom('projects')
@@ -151,6 +180,7 @@ async function resolveOrigins(
     (groupRef?.site_url_id ? issueGroup?.occurrences[0]?.display_url : '') ||
     owned(opportunity?.target_url, project.website_url) ||
     owned(demand?.signal.page_url, project.website_url) ||
+    requestedPageUrl(request, project.website_url) ||
     '';
   return {
     project,
@@ -180,7 +210,7 @@ export const readAgentContext: ContextReader = async (db, scope, raw, request) =
       issueGroup,
       siteFacts,
       upstream,
-    } = await resolveOrigins(db, scope, refs);
+    } = await resolveOrigins(db, scope, refs, request);
     const query = [request, opportunity?.target_theme, demand?.signal.topic_cluster]
       .filter(Boolean)
       .join(' ');

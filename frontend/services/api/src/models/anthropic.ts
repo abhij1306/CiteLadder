@@ -1,13 +1,20 @@
 import Anthropic, { APIConnectionError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
-import type { BetaMessageParam, BetaUsage } from '@anthropic-ai/sdk/resources/beta/messages';
+import type {
+  BetaMessage,
+  BetaMessageParam,
+  BetaUsage,
+} from '@anthropic-ai/sdk/resources/beta/messages';
 
 import { getLogger } from '../logging.ts';
 import {
   blockText,
   blockToolCalls,
   parseBlocks,
+  type CacheDiagnosis,
+  type ConversationMessage,
   type ConversationStop,
   type Converse,
+  type UsageIteration,
 } from './conversation.ts';
 import type { GatewaySettings } from './gateway.ts';
 import {
@@ -140,6 +147,9 @@ const ANTHROPIC_STOPS: Record<string, ConversationStop> = {
  * Prompt tokens by class. Input counts every prompt token, cached or not, as
  * OpenAI-compatible usage does; a compaction's own tokens are billed too but
  * are not in the top-level counts, so they are added from its iteration.
+ * One-hour cache writes are billed above five-minute ones, so they are counted
+ * apart; every breakpoint this adapter sends lives an hour, so a count without
+ * the TTL breakdown is all one-hour writes.
  */
 function conversationUsage(usage: BetaUsage): Record<string, number | null> {
   const compactions = (usage.iterations ?? []).flatMap((entry) =>
@@ -154,21 +164,107 @@ function conversationUsage(usage: BetaUsage): Record<string, number | null> {
     return { input_tokens: null, output_tokens: usage.output_tokens, cached_input_tokens: null };
   const read = cached + sum((entry) => entry.cache_read_input_tokens);
   const write = written + sum((entry) => entry.cache_creation_input_tokens);
+  const hourWrites =
+    (usage.cache_creation?.ephemeral_1h_input_tokens ?? written) +
+    sum(
+      (entry) =>
+        entry.cache_creation?.ephemeral_1h_input_tokens ?? entry.cache_creation_input_tokens,
+    );
   return {
     input_tokens: usage.input_tokens + sum((entry) => entry.input_tokens) + read + write,
     output_tokens: usage.output_tokens + sum((entry) => entry.output_tokens),
     cached_input_tokens: read,
     cache_write_input_tokens: write,
+    // The breakdown arrives at stream start; a later total never makes it the larger.
+    cache_write_1h_input_tokens: Math.min(hourWrites, write),
     // Thinking is billed inside output; its share is recorded for the audit.
     reasoning_tokens: usage.output_tokens_details?.thinking_tokens ?? null,
   };
 }
 
+/** Each sampling step's own counts, so compaction cost and cache use can be read apart. */
+function usageIterations(usage: BetaUsage): UsageIteration[] {
+  return (usage.iterations ?? []).flatMap((entry) =>
+    'input_tokens' in entry
+      ? [
+          {
+            type: entry.type,
+            input_tokens: entry.input_tokens,
+            output_tokens: entry.output_tokens,
+            cache_read_input_tokens: entry.cache_read_input_tokens ?? 0,
+            cache_creation_input_tokens: entry.cache_creation_input_tokens ?? 0,
+          },
+        ]
+      : [],
+  );
+}
+
+/** The response's cache diagnosis; without a previous response there was nothing to compare. */
+function cacheDiagnosis(
+  previousResponseId: string | null,
+  diagnostics: BetaMessage['diagnostics'],
+): CacheDiagnosis {
+  if (previousResponseId === null) return { reason: 'not_requested' };
+  if (!diagnostics) return { reason: 'none' };
+  const miss = diagnostics.cache_miss_reason;
+  if (!miss) return { reason: 'pending' };
+  switch (miss.type) {
+    case 'previous_message_not_found':
+    case 'unavailable':
+      return { reason: miss.type };
+    case 'model_changed':
+    case 'system_changed':
+    case 'tools_changed':
+    case 'messages_changed':
+      return { reason: miss.type, missed_input_tokens: miss.cache_missed_input_tokens };
+    default: {
+      const _exhaustive: never = miss;
+      return _exhaustive;
+    }
+  }
+}
+
+const HOUR_CACHE = { type: 'ephemeral', ttl: '1h' } as const;
+
+/**
+ * The messages as sent: stored blocks unchanged, plus two cache breakpoints
+ * (a marker is not part of the cached prefix, so adding one keeps the bytes
+ * the cache compares). One sits where the previous call's automatic breakpoint
+ * wrote, the end of the message before the newest answer, so a step that adds
+ * more blocks than the cache looks back over still reads the whole history.
+ * The other sits on the newest compaction block, which replaces everything
+ * before it; a breakpoint before that block would mark ignored content.
+ */
+export function cachedMessages(messages: readonly ConversationMessage[]): BetaMessageParam[] {
+  const compactedAt = messages.findLastIndex((message) =>
+    message.content.some((block) => block.type === 'compaction'),
+  );
+  const boundary = messages.length - 3;
+  return messages.map((message, index) => {
+    const marked = message.content.map((block, position) => {
+      const last = position === message.content.length - 1;
+      const atBoundary =
+        index === boundary && index > compactedAt && message.role === 'user' && last;
+      const compaction =
+        index === compactedAt &&
+        block.type === 'compaction' &&
+        position === message.content.findLastIndex((item) => item.type === 'compaction');
+      return atBoundary || compaction ? { ...block, cache_control: HOUR_CACHE } : block;
+    });
+    // Stored provider blocks are replayed verbatim; the API validates them.
+    return { role: message.role, content: marked } as BetaMessageParam;
+  });
+}
+
 /**
  * Native tool calling. The stable system prefix carries one cache breakpoint;
  * top-level automatic caching covers the growing conversation; server-side
- * compaction bounds a long chat. Messages are sent exactly as stored, so a
- * replayed transcript keeps its thinking blocks and its cache.
+ * compaction bounds a long chat. Every breakpoint lives an hour, so a person
+ * who pauses between turns still reads the chat from cache. Messages are sent
+ * exactly as stored, so a replayed transcript keeps its thinking blocks and
+ * its cache; each call names the chat's previous response so the API reports
+ * why any cache read fell short. Effort and thinking stay fixed per call shape,
+ * since a change to either misses the message cache.
  */
 export function anthropicConversation(
   settings: Settings,
@@ -185,18 +281,18 @@ export function anthropicConversation(
           model: settings.model,
           max_tokens: settings.maxOutputTokens,
           betas: ['compact-2026-01-12'],
-          system: [{ type: 'text', text: request.system, cache_control: { type: 'ephemeral' } }],
+          system: [{ type: 'text', text: request.system, cache_control: HOUR_CACHE }],
           tools: request.tools.map(({ name, description, input_schema, stream_input }) => ({
             name,
             description,
             input_schema: { ...input_schema, type: 'object' as const },
             ...(stream_input ? { eager_input_streaming: true } : {}),
           })),
-          // Stored provider blocks are replayed verbatim; the API validates them.
-          messages: request.messages as BetaMessageParam[],
+          messages: cachedMessages(request.messages),
           thinking: { type: 'adaptive', display: 'summarized' },
           output_config: { effort: request.effort },
-          cache_control: { type: 'ephemeral' },
+          cache_control: HOUR_CACHE,
+          diagnostics: { previous_message_id: request.previousResponseId },
           context_management: {
             edits: [
               {
@@ -223,11 +319,17 @@ export function anthropicConversation(
     }
     const blocks = parseBlocks(message.content);
     const latency = Math.round(performance.now() - started);
+    const cache = cacheDiagnosis(request.previousResponseId, message.diagnostics);
+    const iterations = usageIterations(message.usage);
     logger.info('default agent call ok', {
       latency_ms: latency,
       model: settings.model,
       cache_read_input_tokens: message.usage.cache_read_input_tokens,
       cache_creation_input_tokens: message.usage.cache_creation_input_tokens,
+      cache_creation_1h_input_tokens: message.usage.cache_creation?.ephemeral_1h_input_tokens,
+      cache_miss_reason: cache.reason,
+      cache_missed_input_tokens: 'missed_input_tokens' in cache ? cache.missed_input_tokens : null,
+      compacted: iterations.some((entry) => entry.type === 'compaction'),
     });
     return {
       blocks,
@@ -241,6 +343,9 @@ export function anthropicConversation(
       finish_status: message.stop_reason ?? 'unknown',
       usage: conversationUsage(message.usage),
       latency_ms: latency,
+      response_id: message.id,
+      cache,
+      iterations,
     };
   };
 }

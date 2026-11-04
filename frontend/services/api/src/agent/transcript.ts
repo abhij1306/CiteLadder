@@ -3,7 +3,9 @@
  * then the system text) is identical for every chat, so providers serve it
  * from cache. Earlier turns are replayed exactly as stored, thinking and
  * compaction blocks included: rewriting or dropping a block would be a history
- * edit, which misses the cache and invalidates later thinking. Persisted
+ * edit, which misses the cache and invalidates later thinking. The column is
+ * `json`, not `jsonb`, so stored blocks come back with their keys in the
+ * order the provider wrote them and replay is byte-identical. Persisted
  * transcripts are run records, never a knowledge store, and are never shown.
  */
 import { createHash, randomUUID } from 'node:crypto';
@@ -78,6 +80,25 @@ export async function chatTranscripts(
     skillId: row.skill_id,
     messages: messagesSchema.parse(row.messages),
   }));
+}
+
+/**
+ * The provider's id for a run's last answered call, which the next turn names
+ * so the provider can say why its cache read fell short; `null` when none.
+ */
+export async function lastResponseId(db: Database, scope: Scope, runId: string) {
+  const row = await db
+    .selectFrom('agent_model_attempts')
+    .select('response_id')
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
+    .where('run_id', '=', runId)
+    .where('outcome', '=', 'completed')
+    .where('response_id', '!=', '')
+    .orderBy('run_attempt', 'desc')
+    .orderBy('ordinal', 'desc')
+    .executeTakeFirst();
+  return row?.response_id ?? null;
 }
 
 /**

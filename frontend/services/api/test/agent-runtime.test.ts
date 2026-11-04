@@ -201,14 +201,25 @@ describe('Agent runtime on PostgreSQL', () => {
     const first = await fixtures.claimed(scope, { message: 'Prior question' });
     const thinking = { type: 'thinking', thinking: 'Weighing the evidence', signature: 'sig-1' };
     const compaction = { type: 'compaction', content: 'Summary of the earlier work' };
-    const call = toolUse('read_evidence', {}, 'call_prior');
+    // Keys out of sorted order: replay must keep the provider's bytes, not a normalized copy.
+    const call = toolUse(
+      'read_evidence',
+      { limit: 5, url: 'https://example.test/pricing' },
+      'call_prior',
+    );
+    const firstSent: ModelRequest[] = [];
     await fixtures
       .runtime(
         scope,
-        scripted([
-          [thinking, call],
-          [compaction, text('Prior answer')],
-        ]),
+        scripted(
+          [
+            [thinking, call],
+            [compaction, text('Prior answer')],
+          ],
+          async (request) => {
+            firstSent.push(request);
+          },
+        ),
       )
       .execute(first.lease);
     const second = await fixtures.claimed(scope, {
@@ -235,11 +246,25 @@ describe('Agent runtime on PostgreSQL', () => {
       { role: 'assistant', content: [thinking, call] },
       {
         role: 'user',
-        content: [{ type: 'tool_result', tool_use_id: 'call_prior', content: '{"observed":0}' }],
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'call_prior',
+            content: 'Invalid arguments: arguments: Unrecognized keys: "limit", "url"',
+            is_error: true,
+          },
+        ],
       },
       { role: 'assistant', content: [compaction, text('Prior answer')] },
       { role: 'user', content: [text('Follow up')] },
     ]);
+    // Byte-identical: the replayed history serializes exactly as the first turn sent it.
+    expect(JSON.stringify(sent[0]?.messages.slice(0, 3))).toBe(
+      JSON.stringify(firstSent[1]?.messages),
+    );
+    expect(JSON.stringify(sent[0]?.messages[1]?.content[1])).toBe(
+      '{"type":"tool_use","id":"call_prior","name":"read_evidence","input":{"limit":5,"url":"https://example.test/pricing"}}',
+    );
     // Transcripts are run records for replay; no chat read returns them.
     const detail = await readChat(db, scope, first.run.chat_id);
     expect(detail.messages.map((message) => message.content)).toEqual([
@@ -249,6 +274,90 @@ describe('Agent runtime on PostgreSQL', () => {
       'Next answer',
     ]);
     expect(JSON.stringify(detail)).not.toContain('Weighing the evidence');
+  });
+  it("names the chat's previous response on every call and records each call's cache use", async () => {
+    const scope = await fixtures.scope();
+    const first = await fixtures.claimed(scope, { message: 'Prior question' });
+    const firstSent: (string | null)[] = [];
+    await fixtures
+      .runtime(
+        scope,
+        scripted(
+          [
+            result(read(), { response_id: 'msg_a' }),
+            result(reply('Prior answer'), {
+              response_id: 'msg_b',
+              cache: { reason: 'messages_changed', missed_input_tokens: 5845 },
+              iterations: [
+                {
+                  type: 'compaction',
+                  input_tokens: 900,
+                  output_tokens: 30,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              ],
+            }),
+          ],
+          async (request) => {
+            firstSent.push(request.previousResponseId);
+          },
+        ),
+      )
+      .execute(first.lease);
+    const second = await fixtures.claimed(scope, {
+      chatId: first.run.chat_id,
+      message: 'Follow up',
+    });
+    const secondSent: (string | null)[] = [];
+    await fixtures
+      .runtime(
+        scope,
+        scripted([reply('Next answer')], async (request) => {
+          secondSent.push(request.previousResponseId);
+        }),
+      )
+      .execute(second.lease);
+    // A chat's first call has nothing to compare; later calls, across turns too, name the last one.
+    expect(firstSent).toEqual([null, 'msg_a']);
+    expect(secondSent).toEqual(['msg_b']);
+    expect(
+      await db
+        .selectFrom('agent_model_attempts')
+        .select([
+          'ordinal',
+          'response_id',
+          'cache_miss_reason',
+          'cache_missed_input_tokens',
+          'usage_iterations',
+        ])
+        .where('run_id', '=', first.run.id)
+        .orderBy('ordinal')
+        .execute(),
+    ).toEqual([
+      {
+        ordinal: 1,
+        response_id: 'msg_a',
+        cache_miss_reason: 'not_requested',
+        cache_missed_input_tokens: null,
+        usage_iterations: [],
+      },
+      {
+        ordinal: 2,
+        response_id: 'msg_b',
+        cache_miss_reason: 'messages_changed',
+        cache_missed_input_tokens: '5845',
+        usage_iterations: [
+          {
+            type: 'compaction',
+            input_tokens: 900,
+            output_tokens: 30,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+        ],
+      },
+    ]);
   });
   it('sends the same tool and system prefix on every call and in every chat', async () => {
     const scope = await fixtures.scope();

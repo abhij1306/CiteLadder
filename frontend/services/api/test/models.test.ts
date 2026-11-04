@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { cachedMessages } from '../src/models/anthropic.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { createJevClient, jevSettings } from '../src/models/jev.ts';
 import { runMetered } from '../src/models/meter-scope.ts';
@@ -294,6 +295,10 @@ describe('configured model gateway', () => {
               output_tokens: 1,
               cache_read_input_tokens: 100,
               cache_creation_input_tokens: 20,
+              cache_creation: { ephemeral_1h_input_tokens: 20, ephemeral_5m_input_tokens: 0 },
+            },
+            diagnostics: {
+              cache_miss_reason: { type: 'messages_changed', cache_missed_input_tokens: 5845 },
             },
           },
         },
@@ -335,7 +340,27 @@ describe('configured model gateway', () => {
         {
           type: 'message_delta',
           delta: { stop_reason: 'tool_use', stop_sequence: null },
-          usage: { output_tokens: 40 },
+          usage: {
+            output_tokens: 40,
+            iterations: [
+              {
+                type: 'compaction',
+                input_tokens: 900,
+                output_tokens: 30,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+                cache_creation: null,
+              },
+              {
+                type: 'message',
+                input_tokens: 10,
+                output_tokens: 40,
+                cache_read_input_tokens: 100,
+                cache_creation_input_tokens: 20,
+                cache_creation: null,
+              },
+            ],
+          },
         },
         { type: 'message_stop' },
       ];
@@ -372,6 +397,7 @@ describe('configured model gateway', () => {
           messages: history,
           effort: 'medium',
           compactAtTokens: 80_000,
+          previousResponseId: 'msg_1',
         },
         undefined,
         {
@@ -385,12 +411,32 @@ describe('configured model gateway', () => {
         stop: 'tool_use',
         finish_status: 'tool_use',
         toolCalls: [{ id: 'toolu_1', name: 'read_visibility', input: { limit: 5 } }],
+        // The compaction step's own tokens are billed on top of the answer's.
         usage: {
-          input_tokens: 130,
+          input_tokens: 1030,
           cached_input_tokens: 100,
           cache_write_input_tokens: 20,
-          output_tokens: 40,
+          cache_write_1h_input_tokens: 20,
+          output_tokens: 70,
         },
+        response_id: 'msg_2',
+        cache: { reason: 'messages_changed', missed_input_tokens: 5845 },
+        iterations: [
+          {
+            type: 'compaction',
+            input_tokens: 900,
+            output_tokens: 30,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+          {
+            type: 'message',
+            input_tokens: 10,
+            output_tokens: 40,
+            cache_read_input_tokens: 100,
+            cache_creation_input_tokens: 20,
+          },
+        ],
       });
       // The thinking block keeps its signature so the next call can replay it unchanged.
       expect(result.blocks[0]).toMatchObject({
@@ -406,8 +452,12 @@ describe('configured model gateway', () => {
       const [, init] = io.fetch.mock.calls[0]!;
       expect(new Headers(init!.headers).get('anthropic-beta')).toContain('compact-2026-01-12');
       expect(JSON.parse(String(init!.body))).toMatchObject({
-        system: [{ type: 'text', text: 'contract', cache_control: { type: 'ephemeral' } }],
-        cache_control: { type: 'ephemeral' },
+        // An hour-long cache, so a pause between turns still reads the chat from cache.
+        system: [
+          { type: 'text', text: 'contract', cache_control: { type: 'ephemeral', ttl: '1h' } },
+        ],
+        cache_control: { type: 'ephemeral', ttl: '1h' },
+        diagnostics: { previous_message_id: 'msg_1' },
         thinking: { type: 'adaptive', display: 'summarized' },
         output_config: { effort: 'medium' },
         context_management: {
@@ -421,6 +471,73 @@ describe('configured model gateway', () => {
       });
     }),
   );
+
+  it('marks where the previous call cached and the newest compaction, leaving the blocks as stored', () => {
+    const hour = { type: 'ephemeral', ttl: '1h' };
+    const marked = cachedMessages([
+      { role: 'user', content: [{ type: 'text', text: 'Old question' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'compaction', content: 'Summary' },
+          { type: 'text', text: 'Answer' },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Context' },
+          { type: 'text', text: 'Next question' },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'read_a', input: { b: 1, a: 2 } }],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '{}' }] },
+    ]);
+    expect(JSON.stringify(marked)).toBe(
+      JSON.stringify([
+        { role: 'user', content: [{ type: 'text', text: 'Old question' }] },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'compaction', content: 'Summary', cache_control: hour },
+            { type: 'text', text: 'Answer' },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Context' },
+            { type: 'text', text: 'Next question', cache_control: hour },
+          ],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'read_a', input: { b: 1, a: 2 } }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '{}' }],
+        },
+      ]),
+    );
+    // Before the newest compaction everything is ignored, so nothing there is marked.
+    const compactedLast = cachedMessages([
+      { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+      { role: 'assistant', content: [{ type: 'compaction', content: 'Summary' }] },
+      { role: 'user', content: [{ type: 'text', text: 'Follow up' }] },
+    ]);
+    expect(compactedLast[0]).toEqual({
+      role: 'user',
+      content: [{ type: 'text', text: 'Question' }],
+    });
+    expect(compactedLast[1]).toEqual({
+      role: 'assistant',
+      content: [{ type: 'compaction', content: 'Summary', cache_control: hour }],
+    });
+  });
 
   it(
     'converses over chat completions: translated history, parallel streamed calls and usage',
@@ -495,6 +612,7 @@ describe('configured model gateway', () => {
           ],
           effort: 'low',
           compactAtTokens: 80_000,
+          previousResponseId: null,
         },
         undefined,
         { text: (delta) => deltas.push(delta) },
@@ -513,6 +631,8 @@ describe('configured model gateway', () => {
           cached_input_tokens: 30,
           cache_write_input_tokens: 0,
         },
+        // Chat completions have no cache diagnosis to report.
+        cache: { reason: 'not_requested' },
       });
       expect(deltas).toEqual(['Reading both.']);
       const body = JSON.parse(String(io.fetch.mock.calls[0]![1]!.body));

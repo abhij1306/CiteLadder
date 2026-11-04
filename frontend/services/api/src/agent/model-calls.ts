@@ -196,6 +196,15 @@ export class ModelCalls {
           output_hash: result ? hash(JSON.stringify(result.blocks)) : '',
           error_code: result ? '' : 'provider_error',
           latency_ms: result?.latency_ms ?? null,
+          // How this call used the prompt cache, for cost and cache analysis.
+          response_id: result?.response_id.slice(0, 128) ?? '',
+          cache_write_1h_input_tokens: usage('cache_write_1h_input_tokens'),
+          cache_miss_reason: result?.cache.reason ?? '',
+          cache_missed_input_tokens:
+            result && 'missed_input_tokens' in result.cache
+              ? result.cache.missed_input_tokens
+              : null,
+          usage_iterations: JSON.stringify(result?.iterations ?? []),
           settlement_status: settled.status,
           debited_credits: settled.credits,
         })

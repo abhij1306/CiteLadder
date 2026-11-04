@@ -36,6 +36,7 @@ import { readSources, scrubRecordRefs, uniqueSources } from './sources.ts';
 import { documentEmitter, type TurnEvents } from './stream.ts';
 import {
   chatTranscripts,
+  lastResponseId,
   openingMessage,
   replayed,
   saveTranscript,
@@ -241,6 +242,10 @@ export class AgentRuntime {
     const system = systemPrefix(this.deps.catalog);
     const tools = agentToolList(this.deps.tools, this.deps.catalog, budget);
     let effort = budget.reasoning_effort;
+    const lastKept = kept.at(-1);
+    let previousResponseId = lastKept
+      ? await lastResponseId(this.db, turn.scope, lastKept.runId)
+      : null;
     for (let ordinal = 1; ordinal <= budget.max_model_calls; ordinal++) {
       signal?.throwIfAborted();
       const request: ModelRequest = {
@@ -249,8 +254,10 @@ export class AgentRuntime {
         messages: [...history, ...state.messages],
         effort,
         compactAtTokens: budget.compaction_trigger_tokens,
+        previousResponseId,
       };
       const response = await this.callModel(lease, ordinal, model, request, signal, events);
+      previousResponseId = response.response_id || previousResponseId;
       if (response.stop === 'max_tokens') {
         effort = retryEffort(effort, ordinal, budget);
         continue;

@@ -38,7 +38,7 @@ import {
   visibilitySources,
   visibilityTrends,
 } from './evidence-analytics.ts';
-import { crawlability, siteLinks, sitePages, siteSnapshot } from './evidence-site.ts';
+import { crawlability, pageText, siteLinks, sitePages, siteSnapshot } from './evidence-site.ts';
 import {
   aiTrafficInsights,
   aiTrafficPages,
@@ -512,10 +512,20 @@ export const definitions = {
   read_site_pages: projectTool({
     title: 'Read site pages',
     description:
-      "Pages from a crawl, paged: URL, title, page type, status, scores, issue count and the rule ids of each page's issues by finding class. Pass rule_id (from read_site_health top_issues or an issue group) to list exactly the pages affected by that issue, each with rule_evidence: what that check found on that page (a site-level architecture issue is recorded once on the home page, and its rule_evidence names the affected pages); filter by page_kind or status to find pages by type or status. read_site_health gives the totals.",
+      "Pages from a crawl, paged: URL, title, page type, status, scores, issue count and the rule ids of each page's issues by finding class. Pass url to find a page by its address, rule_id (from read_site_health top_issues or an issue group) to list exactly the pages affected by that issue, each with rule_evidence: what that check found on that page (a site-level architecture issue is recorded once on the home page, and its rule_evidence names the affected pages); filter by page_kind or status to find pages by type or status. This returns metadata, not page copy: use read_page_text for a page's words. read_site_health gives the totals.",
     schema: z.strictObject({
       ...project,
       crawl_id,
+      url: optional(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .describe(
+            'A page address or part of one, such as https://example.com/pricing or /pricing; keeps pages whose URL contains it, ignoring scheme, www and a trailing slash.',
+          ),
+      ),
       rule_id: optional(
         z
           .string()
@@ -533,6 +543,28 @@ export const definitions = {
       ...page,
     }),
     read: sitePages,
+  }),
+  read_page_text: projectTool({
+    title: 'Read page text',
+    description: `Read the words of one crawled page of the project's site, by URL or by site_url_id from read_site_pages: its title, meta description, h1-h3 headings, then the visible body text (up to ${mcpPolicy.page_text_max_chars} characters in all; text_chars_omitted counts any body text left out), with its URL, page type and when it was fetched. Use it to quote, review or rewrite what a page actually says. It reads the latest crawl, or crawl_id; it never fetches the live page, so the copy is as of fetched_at. unavailable page_not_crawled means the crawl has no page at that address, and crawled_urls lists the nearest crawled addresses to try; no_site_crawl means no crawl exists.`,
+    schema: z.strictObject({
+      ...project,
+      crawl_id,
+      url: optional(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .describe(
+            'The page address, such as https://example.com/pricing; scheme, www and a trailing slash are ignored.',
+          ),
+      ),
+      site_url_id: optional(
+        uuid.describe('A page id (site_url_id) from read_site_pages; pass this or url.'),
+      ),
+    }),
+    read: pageText,
   }),
   read_site_links: projectTool({
     title: 'Read internal links',

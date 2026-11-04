@@ -80,6 +80,7 @@ export const request: ModelRequest = {
   messages: [{ role: 'user', content: [text('test')] }],
   effort: 'medium',
   compactAtTokens: 80_000,
+  previousResponseId: null,
 };
 export function result(blocks: Response, overrides: Partial<ModelResult> = {}): ModelResult {
   const toolCalls = blockToolCalls(blocks);
@@ -96,6 +97,9 @@ export function result(blocks: Response, overrides: Partial<ModelResult> = {}): 
     usage: { input_tokens: 20, output_tokens: 10 },
     latency_ms: 1,
     finish_status: stop,
+    response_id: '',
+    cache: { reason: 'not_requested' },
+    iterations: [],
     ...overrides,
   };
 }
