@@ -24,7 +24,7 @@ import {
 import { AgentError } from '../src/agent/contracts.ts';
 import { AgentQueue, lockRun } from '../src/agent/queue.ts';
 import { AgentOutputs } from '../src/agent/outputs.ts';
-import { ModelCalls, type ModelRequest } from '../src/agent/model-calls.ts';
+import { ModelCalls, type Funding, type ModelRequest } from '../src/agent/model-calls.ts';
 import { readChat, listChats, listRevisions, progress } from '../src/agent/reads.ts';
 import { appendMessage, getChat, recoveryReply } from '../src/agent/messages.ts';
 import { ToolRegistry } from '../src/agent/tools.ts';
