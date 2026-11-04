@@ -17,6 +17,7 @@ import {
   type CrawlReadOptions,
 } from './reads.ts';
 import type { CrawlScope } from './state.ts';
+import { citationCoverage, citationRuns, type CitationCoverage } from './citation-runs.ts';
 import { pageDataset, pageSorts, aiBots, type JoinedPage, type PageOptions } from './pages-data.ts';
 import { partitionQuality } from '../integrations/partitions.ts';
 import { strings, record } from '../db/json.ts';
@@ -73,20 +74,11 @@ export async function pageContext(db: Database, scope: CrawlScope, input: CrawlR
   const options = await withReportingTimezone(db, scope, input);
   const w = crawlWindow(options),
     bounds = windowBounds(w, options);
-  const [crawl, partitions, mapping, audits, snapshot] = await Promise.all([
+  const [crawl, partitions, mapping, runs, snapshot] = await Promise.all([
     crawlSummary(db, scope, options),
     partitionQuality(db, { ...scope, ...w }, 'ga4_landing_daily'),
     ga4Mapped(db, scope),
-    db
-      .selectFrom('audits')
-      .select('id')
-      .where('workspace_id', '=', scope.workspaceId)
-      .where('project_id', '=', scope.projectId)
-      .where('status', '=', 'completed')
-      .where('created_at', '>=', bounds.from)
-      .where('created_at', '<', bounds.to)
-      .limit(1)
-      .executeTakeFirst(),
+    citationRuns(db, scope, bounds).execute(),
     db
       .selectFrom('ai_referrals_snapshots')
       .select('metrics')
@@ -115,7 +107,7 @@ export async function pageContext(db: Database, scope: CrawlScope, input: CrawlR
     crawl,
     quality,
     ga4Connected: mapping,
-    citationsAvailable: !!audits,
+    citations: citationCoverage(runs),
     ga4Complete: quality.every(
       (q) => q.revision !== null && q.flags.length === 0 && q.reporting_timezone !== null,
     ),
@@ -140,6 +132,27 @@ export function pageComparable(r: JoinedPage, context: Awaited<ReturnType<typeof
         (q) => q.reporting_timezone && q.reporting_timezone !== crawl.reporting_timezone,
       ))
   );
+}
+/**
+ * A page's owned citations from the window's persisted run facts: a window
+ * without a completed run is not connected, and a run without its fact is
+ * unavailable (not computed) rather than zero.
+ */
+function citationLeg(value: number | null, coverage: CitationCoverage): Leg {
+  switch (coverage) {
+    case 'no_completed_run':
+      return { state: 'not_connected', value: null, coverage: null, reason: null };
+    case 'not_computed':
+      return { state: 'unavailable', value: null, coverage: null, reason: 'not_computed' };
+    case 'measured':
+      return value
+        ? { state: 'value', value, coverage: null, reason: null }
+        : { state: 'zero', value: 0, coverage: null, reason: null };
+    default: {
+      const _exhaustive: never = coverage;
+      return _exhaustive;
+    }
+  }
 }
 function pageRow(
   r: JoinedPage,
@@ -210,7 +223,7 @@ function pageRow(
       flags,
       comparable,
     ),
-    citations: leg(r.citations, context.citationsAvailable, context.citationsAvailable, null),
+    citations: citationLeg(r.citations, context.citations),
     findings: leg(r.findings, r.findings !== null, hasInventory, null),
     key_events: keyEvents,
     errors_4xx: r.errors_4xx ?? (context.crawlComplete ? 0 : null),
@@ -276,25 +289,46 @@ async function patternScope<T extends PageOptions>(
     urlHashes,
   };
 }
+/**
+ * The window a Pages cursor pinned and the row it continues after. The window
+ * must be the request's explicit dates, or span the request's preset.
+ */
+function cursorPosition(position: string[], options: CrawlReadOptions) {
+  const [start, end, ...after] = position;
+  if (position.length !== 4 || !start || !end) throw new InvalidCursorError('invalid Pages cursor');
+  const w = crawlWindow({ ...options, range: null, start_date: start, end_date: end });
+  const matches =
+    options.start_date && options.end_date
+      ? w.start === options.start_date && w.end === options.end_date
+      : (Date.parse(w.end) - Date.parse(w.start)) / 86400000 + 1 === presetDays(options);
+  if (!matches) throw new InvalidCursorError('invalid Pages cursor');
+  return { w, after };
+}
 export async function pagesRead(db: Database, scope: CrawlScope, input: PageOptions = {}) {
-  const { options, urlHashes } = await patternScope(
+  const { options: requested, urlHashes } = await patternScope(
     db,
     scope,
     await withReportingTimezone(db, scope, input),
   );
-  const w = crawlWindow(options),
-    limit = pageLimit(options);
+  const limit = pageLimit(requested);
   // A keyset cursor marks a position, so a continuation may ask for a different page size.
-  const { cursor, limit: _limit, ...rest } = options,
-    filters = { ...rest, ...w, sort: options.sort ?? 'requests_desc' },
+  // It also carries the window the first page resolved, so a preset's pages
+  // all read the same days even when the reporting day rolls over between them.
+  const { cursor, limit: _limit, ...rest } = requested,
+    filters = { ...rest, sort: requested.sort ?? 'requests_desc' },
     endpoint = [scope.workspaceId, scope.projectId, 'pages'].join(':');
-  let after: string[] = [];
+  let position: { w: { start: string; end: string }; after: string[] };
   try {
-    if (cursor) after = decodeKeysetCursor(cursor, endpoint, filters);
+    position = cursor
+      ? cursorPosition(decodeKeysetCursor(cursor, endpoint, filters), requested)
+      : { w: crawlWindow(requested), after: [] };
   } catch (e) {
     if (e instanceof InvalidCursorError) throw new ApiError(422, e.message);
     throw e;
   }
+  const { w, after } = position;
+  // Every read below takes the pinned dates, never the preset again.
+  const options = { ...requested, range: null, start_date: w.start, end_date: w.end };
   const [data, context] = await Promise.all([
     pageDataset(db, scope, { ...options, after, url_hashes: urlHashes }),
     pageContext(db, scope, options),
@@ -309,6 +343,8 @@ export async function pagesRead(db: Database, scope: CrawlScope, input: PageOpti
     next_cursor:
       data.rows.length > limit && last
         ? encodeKeysetCursor(endpoint, filters, [
+            w.start,
+            w.end,
             String(last[pageSorts[sort]] ?? -1),
             last.url_hash,
           ])
@@ -374,15 +410,13 @@ export async function urlRead(
       where workspace_id=${scope.workspaceId}::uuid and project_id=${scope.projectId}::uuid and url_hash=${urlHash}
       and reporting_date between ${w.start}::date and ${w.end}::date
       group by ai_source order by sum(sessions) desc,ai_source asc limit ${cap + 1}`.execute(db),
-    sql`with selected_audits as (select distinct on (audit_scope) id from audits where workspace_id=${scope.workspaceId}::uuid
-      and project_id=${scope.projectId}::uuid and status='completed' and created_at>=${bounds.from} and created_at<${bounds.to}
-      order by audit_scope,created_at desc,id desc)
-      select to_char(a.created_at at time zone 'UTC','YYYY-MM-DD') as date,c.id as citation_id,c.audit_id
-      from citations c join audits a on a.id=c.audit_id and a.workspace_id=c.workspace_id where c.workspace_id=${scope.workspaceId}::uuid
-      and a.project_id=${scope.projectId}::uuid and c.url_hash=${urlHash} and c.is_owned and a.status='completed'
-      and a.id in(select id from selected_audits) order by a.created_at,c.id limit ${cap + 1}`.execute(
-      db,
-    ),
+    // The page's owned citations in the window's persisted run facts, dated
+    // on the reporting day the run was selected by.
+    sql`select to_char(r.created_at at time zone ${options.reporting_timezone},'YYYY-MM-DD') as date,c.id as citation_id,r.audit_id
+      from (${citationRuns(db, scope, bounds).select('m.owned_citation_pages')}) r
+      cross join lateral jsonb_to_recordset(r.owned_citation_pages) as p(url_hash text,citation_ids jsonb)
+      cross join lateral jsonb_array_elements_text(p.citation_ids) as c(id)
+      where p.url_hash=${urlHash} order by r.created_at,c.id limit ${cap + 1}`.execute(db),
   ]);
   return aiTrafficUrlSchema.parse({
     page: data.rows[0] ? pageRow(data.rows[0], context, !!data.crawl) : null,

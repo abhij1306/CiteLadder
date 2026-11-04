@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 import { TEST_SESSION_COOKIE, testConfig, testDatabase, sessionToken } from './support.ts';
 import { createApp } from '../src/app.ts';
@@ -259,14 +259,15 @@ describe('A3 persisted Pages join', () => {
     expect(detail.crawls.map((r) => [r.bot_id, r.requests])).toEqual([['openai_oai_searchbot', 3]]);
     expect(detail.page?.crawl).toMatchObject({ state: 'value', value: 3 });
   });
-  it('aggregates bots, sources and citations independently, gates inventory coverage and preserves detail totals', async () => {
+  it('aggregates bots and sources independently, gates inventory coverage and preserves detail totals', async () => {
     const result = await pagesRead(db, scope(), filters),
       row = result.items.find((r) => r.url_hash === guide)!;
     expect(row).toMatchObject({
       crawl: { state: 'value', value: 6 },
       referrals: { state: 'value', value: 8 },
       key_events: 3,
-      citations: { state: 'value', value: 3 },
+      // The fixture run was never finalized: three owned citation rows, no fact.
+      citations: { state: 'unavailable', value: null, reason: 'not_computed' },
       findings: { state: 'zero', value: 0 },
       errors_4xx: 2,
       errors_5xx: 0,
@@ -276,7 +277,8 @@ describe('A3 persisted Pages join', () => {
     const detail = await urlRead(db, scope(), guide, filters);
     expect(detail.crawls.reduce((sum, r) => sum + r.requests, 0)).toBe(6);
     expect(detail.referrals.reduce((sum, r) => sum + r.sessions, 0)).toBe(8);
-    expect(detail.citations).toHaveLength(3);
+    expect(detail.page?.crawl).toMatchObject({ state: 'value', value: 6 });
+    expect(detail.citations).toEqual([]);
     expect(result.items.some((r) => r.display_path.includes('secret-value'))).toBe(false);
     await db
       .updateTable('crawl_log_coverage_daily')
@@ -332,6 +334,36 @@ describe('A3 persisted Pages join', () => {
     );
     expect(response.status).toBe(200);
     expect(await response.text()).toContain('https://example.test/guide');
+  });
+  it('keeps a preset’s pages on the first page’s window when the reporting day rolls over', async () => {
+    const next = (date: string) => new Date(Date.parse(date) + 86400000).toISOString().slice(0, 10);
+    const evening = next(day),
+      morning = next(evening);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date(`${evening}T23:59:59.000Z`));
+      const first = await pagesRead(db, scope(), { range: '30d', limit: 1 });
+      expect([first.window_end, first.items[0]?.display_path]).toEqual([evening, '/guide']);
+      vi.setSystemTime(new Date(`${morning}T00:00:01.000Z`));
+      const second = await pagesRead(db, scope(), {
+        range: '30d',
+        limit: 1,
+        cursor: first.next_cursor,
+      });
+      expect([second.window_start, second.window_end, second.items[0]?.display_path]).toEqual([
+        first.window_start,
+        evening,
+        '/quiet',
+      ]);
+      // A new first page reads the new reporting day.
+      expect((await pagesRead(db, scope(), { range: '30d', limit: 1 })).window_end).toBe(morning);
+      // The cursor's window must span the preset it continues.
+      await expect(
+        pagesRead(db, scope(), { range: '90d', limit: 1, cursor: first.next_cursor }),
+      ).rejects.toThrow(/cursor/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it('exports in one bounded read exactly the CSV that walking every page cursor yields', async () => {
     const paged: Awaited<ReturnType<typeof pagesRead>>['items'] = [];

@@ -5,9 +5,11 @@ import type { CrawlScope } from './state.ts';
 import {
   crawlWindow,
   verificationFilter,
+  windowBounds,
   withReportingTimezone,
   type CrawlReadOptions,
 } from './reads.ts';
+import { citationRuns } from './citation-runs.ts';
 import { crawlers } from '../config/crawlers.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { ApiError } from '../errors.ts';
@@ -126,11 +128,10 @@ export async function pageDataset(db: Database, scope: CrawlScope, input: PageOp
         jsonb_array_elements_text(q.analytics_quality) flag where q.workspace_id=${scope.workspaceId}::uuid
         and q.project_id=${scope.projectId}::uuid and q.url_hash=l.url_hash and q.reporting_date between ${w.start}::date and ${w.end}::date) as analytics_quality
       from ai_referral_landing_daily l where ${owned} and ${days} group by url_hash),
-    selected_audits as (select distinct on (audit_scope) id from audits where ${owned} and status='completed'
-      and created_at>=${w.start}::date and created_at<${w.end}::date+1 order by audit_scope,created_at desc,id desc),
-    citation as (select url_hash,min(canonical_url) as canonical_url,count(*)::integer as citations,jsonb_agg(id) as citation_ids,jsonb_agg(distinct audit_id) as audit_ids
-      from citations where workspace_id=${scope.workspaceId}::uuid and is_owned and url_hash is not null
-        and audit_id in(select id from selected_audits) group by url_hash),
+    citation_runs as (${citationRuns(db, scope, windowBounds(w, options)).select('m.owned_citation_pages')}),
+    citation as (select p.url_hash,min(p.canonical_url) as canonical_url,count(*)::integer as citations,jsonb_agg(c.id order by r.audit_id,c.n) as citation_ids,jsonb_agg(distinct r.audit_id) as audit_ids
+      from citation_runs r cross join lateral jsonb_to_recordset(r.owned_citation_pages) as p(url_hash text,canonical_url text,citation_ids jsonb)
+        cross join lateral jsonb_array_elements_text(p.citation_ids) with ordinality as c(id,n) group by p.url_hash),
     inventory as (select distinct u.url_hash,u.normalized_url as canonical_url from site_urls u
       join site_url_observations o on o.site_url_id=u.id and o.workspace_id=u.workspace_id and o.project_id=u.project_id
       where u.workspace_id=${scope.workspaceId}::uuid and u.project_id=${scope.projectId}::uuid and o.crawl_id=any(${crawl ? inventoryCrawlIds(crawl) : []}::uuid[])),

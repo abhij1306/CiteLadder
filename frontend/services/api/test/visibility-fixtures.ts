@@ -534,6 +534,7 @@ export class VisibilityFixtures extends Fixtures {
         source_artifact_ids: JSON.stringify([]),
         owned_citation_count: 0,
         owned_citation_ids: JSON.stringify([]),
+        owned_citation_pages: JSON.stringify([]),
         created_at: now(),
       })
       .execute();

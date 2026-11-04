@@ -141,6 +141,127 @@ async function overview(t: Tenant, projectId: string, query = 'range=30d') {
   };
 }
 
+type Leg = { state: string; value: number | null; reason: string | null };
+type PageRow = { url_hash: string; canonical_url: string; citations: Leg };
+type UrlDetail = { page: PageRow | null; citations: { citation_id: string; audit_id: string }[] };
+
+/** A Pages or URL detail read over HTTP, as the screen makes it. */
+async function trafficRead<T>(t: Tenant, projectId: string, path: string) {
+  const response = await app.request(`/api/v1/projects/${projectId}/ai-traffic/${path}`, {
+    headers: {
+      cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: t.userId, ver: 0 })}`,
+    },
+  });
+  return { status: response.status, body: response.ok ? ((await response.json()) as T) : null };
+}
+
+/** The owned citation rows the run recorded for one cited URL. */
+async function ownedRows(t: AuditTenant, auditId: string, url: string) {
+  return db
+    .selectFrom('citations')
+    .select(['id', 'url_hash'])
+    .where('workspace_id', '=', t.workspaceId)
+    .where('audit_id', '=', auditId)
+    .where('url', '=', url)
+    .where('is_owned', '=', true)
+    .orderBy('id')
+    .execute();
+}
+
+describe('AI Traffic Pages citations', () => {
+  it('serves each page’s owned citations from the run’s persisted per-page fact', async () => {
+    const t = await tenant();
+    const auditId = await finalizedRun(t, [
+      'https://acme.example/guide',
+      'https://acme.example/pricing',
+      'https://competitor.test/review',
+    ]);
+    const guide = await ownedRows(t, auditId, 'https://acme.example/guide');
+    const pricing = await ownedRows(t, auditId, 'https://acme.example/pricing');
+    const guideHash = guide[0]!.url_hash!;
+    // Finalization grouped the owned rows by page; the competitor URL has none.
+    const { owned_citation_pages: pages } = await db
+      .selectFrom('metric_snapshots')
+      .select('owned_citation_pages')
+      .where('workspace_id', '=', t.workspaceId)
+      .where('audit_id', '=', auditId)
+      .executeTakeFirstOrThrow();
+    expect(
+      (pages as { url_hash: string; citation_ids: string[] }[]).map((p) => [
+        p.url_hash,
+        [...p.citation_ids].sort(),
+      ]),
+    ).toEqual(
+      [
+        [guideHash, guide.map((r) => r.id)],
+        [pricing[0]!.url_hash!, pricing.map((r) => r.id)],
+      ].sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    );
+
+    // A citation row appended after finalization is not counted by either read.
+    const template = await db
+      .selectFrom('citations')
+      .selectAll()
+      .where('id', '=', guide[0]!.id)
+      .executeTakeFirstOrThrow();
+    await db
+      .insertInto('citations')
+      .values({ ...template, id: randomUUID(), ordinal: template.ordinal + 100 })
+      .execute();
+
+    const list = await trafficRead<{ items: PageRow[] }>(t, t.projectId, 'pages?range=30d');
+    expect(list.status).toBe(200);
+    const row = list.body!.items.find((r) => r.url_hash === guideHash);
+    expect(row?.citations).toEqual({
+      state: 'value',
+      value: guide.length,
+      coverage: null,
+      reason: null,
+    });
+    const detail = await trafficRead<UrlDetail>(t, t.projectId, `pages/${guideHash}?range=30d`);
+    expect(detail.body!.page?.citations.value).toBe(guide.length);
+    expect(detail.body!.citations.map((c) => [c.citation_id, c.audit_id])).toEqual(
+      guide.map((r) => [r.id, auditId]),
+    );
+  });
+
+  it('reads each scope’s newest run in the window, so an older run’s citations drop out', async () => {
+    const t = await tenant();
+    const older = await finalizedRun(t, ['https://acme.example/guide']);
+    const guide = await ownedRows(t, older, 'https://acme.example/guide');
+    const path = `pages/${guide[0]!.url_hash}?range=30d`;
+    expect(
+      (await trafficRead<UrlDetail>(t, t.projectId, path)).body!.citations.map((c) => [
+        c.citation_id,
+        c.audit_id,
+      ]),
+    ).toEqual(guide.map((r) => [r.id, older]));
+    await finalizedRun(t, ['https://competitor.test/review']);
+    const detail = await trafficRead<UrlDetail>(t, t.projectId, path);
+    expect(detail.body).toMatchObject({ page: null, citations: [] });
+    expect(
+      (await trafficRead<{ items: PageRow[] }>(t, t.projectId, 'pages?range=30d')).body!.items,
+    ).toEqual([]);
+  });
+
+  it('never serves another workspace’s per-page fact', async () => {
+    const t = await tenant(),
+      other = await tenant();
+    const auditId = await finalizedRun(other, ['https://acme.example/guide']);
+    const guide = await ownedRows(other, auditId, 'https://acme.example/guide');
+    expect((await trafficRead(t, other.projectId, 'pages?range=30d')).status).toBe(404);
+    expect(
+      (await trafficRead(t, other.projectId, `pages/${guide[0]!.url_hash}?range=30d`)).status,
+    ).toBe(404);
+    const own = await trafficRead<UrlDetail>(
+      other,
+      other.projectId,
+      `pages/${guide[0]!.url_hash}?range=30d`,
+    );
+    expect(own.body!.citations.map((c) => c.citation_id)).toEqual(guide.map((r) => r.id));
+  });
+});
+
 describe('AI Traffic tracked citations', () => {
   it('persists the run’s owned citations with their IDs at finalization and serves that fact', async () => {
     const t = await tenant();

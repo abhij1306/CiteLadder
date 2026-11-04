@@ -76,6 +76,39 @@ function tallyStatusCounts(statusCounts: { status: string; count: string }[]) {
   }
   return { completed, failed, open };
 }
+type OwnedPage = { url_hash: string; canonical_url: string | null; citation_ids: string[] };
+/**
+ * The run's owned citations per cited page, for the AI Traffic Pages and URL
+ * reads: each identified page's exact citation IDs in the run's citation order. A citation
+ * without a page identity has no page to count against.
+ */
+function ownedPages(
+  citations: {
+    id: string;
+    is_owned: boolean;
+    url_hash: string | null;
+    canonical_url: string | null;
+  }[],
+): OwnedPage[] {
+  const pages = new Map<string, OwnedPage>();
+  for (const c of citations) {
+    if (!c.is_owned || !c.url_hash) continue;
+    const page = pages.get(c.url_hash) ?? {
+      url_hash: c.url_hash,
+      canonical_url: null,
+      citation_ids: [],
+    };
+    // The lowest canonical URL, so the fact is independent of answer order.
+    if (
+      c.canonical_url &&
+      (page.canonical_url === null || compareText(c.canonical_url, page.canonical_url) < 0)
+    )
+      page.canonical_url = c.canonical_url;
+    page.citation_ids.push(c.id);
+    pages.set(c.url_hash, page);
+  }
+  return [...pages.values()].sort((a, b) => compareText(a.url_hash, b.url_hash));
+}
 function artifactsByTask<T extends { task_id: string }>(artifacts: T[]) {
   const byTask = new Map<string, T>();
   for (const artifact of artifacts) {
@@ -263,6 +296,7 @@ export function finalizeAudit(
     // The run's owned-citation fact for AI Traffic: the exact citation rows,
     // all cohorts, so readers select it and never count citations themselves.
     const ownedCitationIds = citations.filter((c) => c.is_owned).map((c) => c.id);
+    const ownedCitationPages = ownedPages(citations);
     const metric = await trx
       .insertInto('metric_snapshots')
       .values({
@@ -280,6 +314,7 @@ export function finalizeAudit(
         source_artifact_ids: JSON.stringify(analyses.map((a) => a.artifact_id)),
         owned_citation_count: ownedCitationIds.length,
         owned_citation_ids: JSON.stringify(ownedCitationIds),
+        owned_citation_pages: JSON.stringify(ownedCitationPages),
         created_at: at,
       })
       .returningAll()

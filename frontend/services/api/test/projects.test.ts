@@ -76,6 +76,7 @@ async function rawSnapshot(database: Database, t: Tenant, auditId: string, count
       source_artifact_ids: '[]',
       owned_citation_count: 0,
       owned_citation_ids: '[]',
+      owned_citation_pages: '[]',
       created_at: new Date(),
     })
     .execute();

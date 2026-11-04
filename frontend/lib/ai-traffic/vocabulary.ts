@@ -80,6 +80,7 @@ const LEG_STATE = {
 /** Reasons from page legs, verification, coverage and GA4 quality checks. */
 const REASON = {
   incomplete_coverage: 'Coverage is incomplete for this window',
+  not_computed: CITATION_GAP.not_computed,
   timezone_mismatch: 'Sources report in different timezones',
   currency_mismatch: 'GA4 reported more than one currency',
   projection_pending: 'A newer GA4 import is still being processed',

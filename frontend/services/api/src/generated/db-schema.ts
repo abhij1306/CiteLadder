@@ -1473,6 +1473,7 @@ export interface MetricSnapshots {
   metrics: Json | null;
   owned_citation_count: number;
   owned_citation_ids: Json;
+  owned_citation_pages: Json;
   project_id: string;
   scoring_rule_version: string;
   source_analysis_ids: Json | null;
