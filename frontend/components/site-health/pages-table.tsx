@@ -194,13 +194,7 @@ export function PagesTable({
               {statusLabel(page.analysis_status)}
             </Badge>
           </TableCell>
-          <TableCell
-            numeric
-            className={cn(
-              'tabular-nums',
-              page.issue_count !== null && page.issue_count > 0 && 'text-danger-text',
-            )}
-          >
+          <TableCell numeric className="tabular-nums">
             <Measured value={formatIssueCount(page.issue_count)} />
           </TableCell>
           <TableCell numeric className={scoreTextClass(page.web_fundamentals_score)}>

@@ -153,14 +153,12 @@ function Headline({ data }: Readonly<{ data: AccuracyResponse }>) {
                 key: 'supported',
                 label: 'Supported',
                 value: String(coverage.supported),
-                tone: 'success',
                 sub: 'A confirmed fact states the same thing.',
               },
               {
                 key: 'contradicted',
                 label: 'Contradicted',
                 value: String(coverage.contradicted),
-                tone: 'danger',
                 sub: 'A confirmed fact states something incompatible.',
               },
               {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
-import { scoreBand, scoreBandStroke, scoreBandText } from './score-band';
+import { scoreBand, scoreBandStroke } from './score-band';
 
 /** The ring's one form: a 48px dial with a 4px track and the `figureSm` numeral. */
 const RING_SIZE = 48;
@@ -17,6 +17,8 @@ const RING_STROKE = 4;
  * One form: the ring sits in a `StatRow` segment beside its label, so it is
  * the same 48px dial wherever a score is drawn. The size, stroke and numeral
  * props it used to take are gone; a bigger ring would out-shout the page title.
+ *
+ * The arc carries the score band's colour; the numeral keeps the foreground ink.
  *
  * The arc sweeps to its value with the slow motion role on mount. `motion-reduce` drops the
  * transition so the ring simply appears at its final value.
@@ -86,10 +88,7 @@ export function ScoreRing({
       </svg>
       <span
         aria-hidden
-        className={cn(
-          'type-figure-sm absolute inset-0 flex items-center justify-center',
-          scoreBandText[band],
-        )}
+        className="type-figure-sm text-foreground absolute inset-0 flex items-center justify-center"
       >
         {clamped}
       </span>

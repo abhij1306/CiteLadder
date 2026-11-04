@@ -103,20 +103,13 @@ function EvidenceMetrics({ evidence }: Readonly<{ evidence: ExecutionEvidence }>
           key: 'brand',
           label: 'Brand',
           value: evidence.brand_mentioned ? 'Mentioned' : 'Not mentioned',
-          tone: outcomeTone(evidence.brand_mentioned),
         },
-        {
-          key: 'owned',
-          label: 'Owned sources',
-          value: evidence.owned_citation_count,
-          tone: outcomeTone(evidence.owned_citation_count > 0),
-        },
+        { key: 'owned', label: 'Owned sources', value: evidence.owned_citation_count },
         { key: 'citations', label: 'Citations', value: evidence.citation_count },
         {
           key: 'searches',
           label: 'Searches',
           value: evidence.search_used ? evidence.search_query_count : 'Not used',
-          tone: outcomeTone(evidence.search_used),
         },
       ]}
     />
@@ -245,12 +238,6 @@ function EvidenceAnswerBody({
     return <span className="type-body">No AI Overview was shown for this search.</span>;
   }
   return <span className="type-body">No answer text was captured for this execution.</span>;
-}
-
-/** Present, absent and not-applicable are three tones, not a boolean. */
-function outcomeTone(positive: boolean | undefined): 'success' | 'muted' | 'default' {
-  if (positive === true) return 'success';
-  return positive === false ? 'muted' : 'default';
 }
 
 function brandOutcomeDetail(evidence: ExecutionEvidence): string {

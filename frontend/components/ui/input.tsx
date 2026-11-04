@@ -67,6 +67,8 @@ export function Input({
   }
 >) {
   if (!startContent && !endContent) {
+    // A bare field is its own frame, so the frame's layout applies to it too:
+    // an adorned and a bare field given the same frame render the same height.
     return (
       <input
         ref={ref}
@@ -75,6 +77,7 @@ export function Input({
           inputSizes[size],
           inputWidths[width],
           raised && raisedClasses,
+          containerClassName,
           className,
         )}
         {...props}

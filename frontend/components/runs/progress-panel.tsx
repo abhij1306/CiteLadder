@@ -163,18 +163,8 @@ function ProgressMetrics({ audit }: Readonly<{ audit: Audit }>) {
     <StatRow
       segments={[
         { key: 'requested', label: 'Requested', value: audit.requested_count },
-        {
-          key: 'completed',
-          label: 'Completed',
-          value: audit.completed_count,
-          tone: 'success',
-        },
-        {
-          key: 'failed',
-          label: 'Failed',
-          value: audit.failed_count,
-          tone: audit.failed_count > 0 ? 'danger' : 'muted',
-        },
+        { key: 'completed', label: 'Completed', value: audit.completed_count },
+        { key: 'failed', label: 'Failed', value: audit.failed_count },
         // A date is not a figure: the day holds the figure's one line and the
         // time, with its zone, is the line under it.
         {

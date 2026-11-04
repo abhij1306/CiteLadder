@@ -41,17 +41,11 @@ import { cn } from '@/lib/utils';
  * named by `actionLabel`; `selected` makes it a toggle (`aria-pressed`).
  */
 
-/** A value's ink when the value itself is the finding. */
-const TONE = {
-  default: '',
-  success: 'text-success-text',
-  warning: 'text-warning-text',
-  danger: 'text-danger-text',
-  info: 'text-info-text',
-  muted: 'text-muted',
-} as const;
-
-type StatTone = keyof typeof TONE;
+/*
+ * A value always takes the foreground ink: colour means a state, so it goes
+ * on the delta beside a figure, never on the figure itself (owner,
+ * 2026-11-03). That is why a segment has no tone.
+ */
 
 type StatValue =
   | { value: ReactNode; score?: undefined }
@@ -70,7 +64,6 @@ export type StatSegment = Readonly<
     /** Accessible name of the missing state. Defaults to "Not measured". */
     missingLabel?: string;
     loading?: boolean;
-    tone?: StatTone;
     /** A small mark at the end of the label row (series key, info hint). */
     marker?: ReactNode;
     /** A caption above the value, e.g. the period it covers. */
@@ -303,17 +296,15 @@ function SegmentComparison({
 
 function SegmentValue({ segment }: Readonly<{ segment: StatSegment }>) {
   const { value } = segment;
-  const tone = TONE[segment.tone ?? 'default'];
   if (segment.loading || value == null || typeof value === 'string' || typeof value === 'number') {
     return (
       <MetricValue
         value={value == null ? null : String(value)}
         label={segment.missingLabel ?? availabilityLabel('not_measured')}
         loading={segment.loading ?? false}
-        tone={tone}
         className="min-w-0 [overflow-wrap:anywhere]"
       />
     );
   }
-  return <div className={textRole('figure', cn('min-w-0', tone))}>{value}</div>;
+  return <div className={textRole('figure', 'min-w-0')}>{value}</div>;
 }
