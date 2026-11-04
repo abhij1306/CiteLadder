@@ -89,7 +89,8 @@ CREATE TABLE public.agent_messages (
     mentions jsonb NOT NULL,
     created_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
-    project_id uuid NOT NULL
+    project_id uuid NOT NULL,
+    web_sources jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 CREATE TABLE public.agent_model_attempts (
@@ -127,7 +128,17 @@ CREATE TABLE public.agent_model_attempts (
     deadline_at timestamp with time zone NOT NULL,
     settled_at timestamp with time zone,
     late_receipt boolean NOT NULL,
-    created_at timestamp with time zone NOT NULL
+    created_at timestamp with time zone NOT NULL,
+    response_id character varying(128) DEFAULT ''::character varying NOT NULL,
+    cache_write_1h_input_tokens bigint,
+    cache_miss_reason character varying(32) DEFAULT ''::character varying NOT NULL,
+    cache_missed_input_tokens bigint,
+    usage_iterations jsonb DEFAULT '[]'::jsonb NOT NULL,
+    web_search_requests integer,
+    input_bytes bigint,
+    max_output_tokens integer,
+    CONSTRAINT ck_agent_model_attempt_input_bytes CHECK (((input_bytes IS NULL) OR (input_bytes >= 0))),
+    CONSTRAINT ck_agent_model_attempt_max_output_tokens CHECK (((max_output_tokens IS NULL) OR (max_output_tokens > 0)))
 );
 
 CREATE TABLE public.agent_output_revisions (
@@ -139,15 +150,13 @@ CREATE TABLE public.agent_output_revisions (
     author_user_id uuid,
     run_id uuid,
     message_id uuid,
-    phase character varying(16) NOT NULL,
     title character varying(255) NOT NULL,
     body text NOT NULL,
     source_refs jsonb NOT NULL,
-    approved_at timestamp with time zone,
-    approved_by_user_id uuid,
     created_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
-    project_id uuid NOT NULL
+    project_id uuid NOT NULL,
+    web_sources jsonb DEFAULT '[]'::jsonb NOT NULL
 );
 
 CREATE TABLE public.agent_outputs (
@@ -159,11 +168,12 @@ CREATE TABLE public.agent_outputs (
     format_id character varying(32),
     target_kind character varying(24),
     target_label character varying(255),
-    phase character varying(16) NOT NULL,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
     workspace_id uuid NOT NULL,
-    project_id uuid NOT NULL
+    project_id uuid NOT NULL,
+    number integer NOT NULL,
+    CONSTRAINT ck_agent_output_number_positive CHECK ((number > 0))
 );
 
 CREATE TABLE public.agent_runs (
@@ -173,7 +183,6 @@ CREATE TABLE public.agent_runs (
     user_id uuid,
     idempotency_key character varying(128) NOT NULL,
     request_fingerprint character varying(64) NOT NULL,
-    mode character varying(24) NOT NULL,
     requested_skill_id character varying(64),
     requested_skill_source character varying(16),
     context_manifest jsonb NOT NULL,
@@ -217,7 +226,7 @@ CREATE TABLE public.agent_run_transcripts (
     model character varying(255) NOT NULL,
     skill_id character varying(64),
     context_hash character varying(64) NOT NULL,
-    messages jsonb NOT NULL,
+    messages json NOT NULL,
     created_at timestamp with time zone NOT NULL
 );
 
@@ -435,6 +444,20 @@ CREATE TABLE public.api_keys (
     CONSTRAINT ck_api_keys_revocation CHECK (((revoked_at IS NULL) = (revoke_reason IS NULL)))
 );
 
+CREATE TABLE public.audit_answer_aggregates (
+    id uuid NOT NULL,
+    workspace_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    audit_id uuid NOT NULL,
+    logical_engine character varying(32) NOT NULL,
+    cohort character varying(32) NOT NULL,
+    analysis_ids uuid[] NOT NULL,
+    prompt_keys text[] NOT NULL,
+    analyzer_version character varying(32) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_audit_answer_aggregate_prompts CHECK (((cardinality(analysis_ids) = 0) = (cardinality(prompt_keys) = 0)))
+);
+
 CREATE TABLE public.audit_comparison_baselines (
     id uuid NOT NULL,
     workspace_id uuid NOT NULL,
@@ -508,6 +531,30 @@ CREATE TABLE public.audit_schedules (
     lease_expires_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL
+);
+
+CREATE TABLE public.audit_source_aggregates (
+    id uuid NOT NULL,
+    workspace_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    audit_id uuid NOT NULL,
+    logical_engine character varying(32) NOT NULL,
+    cohort character varying(32) NOT NULL,
+    dimension character varying(8) NOT NULL,
+    key text NOT NULL,
+    domain character varying(255) NOT NULL,
+    url_hash character varying(64),
+    source_class character varying(48),
+    classification character varying(24) NOT NULL,
+    source_taxonomy_version character varying(32),
+    analysis_ids uuid[] NOT NULL,
+    prompt_keys text[] NOT NULL,
+    urls text[] NOT NULL,
+    citation_ids uuid[] NOT NULL,
+    analyzer_version character varying(32) NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    CONSTRAINT ck_audit_source_aggregate_dimension CHECK ((((dimension)::text = 'url'::text) OR (((dimension)::text = 'domain'::text) AND (key = (domain)::text) AND (url_hash IS NULL)))),
+    CONSTRAINT ck_audit_source_aggregate_evidence CHECK (((cardinality(analysis_ids) > 0) AND (cardinality(prompt_keys) > 0) AND (cardinality(urls) > 0) AND (cardinality(citation_ids) >= cardinality(analysis_ids))))
 );
 
 CREATE TABLE public.audit_tasks (
@@ -1489,8 +1536,10 @@ CREATE TABLE public.metric_snapshots (
     source_artifact_ids jsonb,
     owned_citation_count integer NOT NULL,
     owned_citation_ids jsonb NOT NULL,
+    owned_citation_pages jsonb NOT NULL,
     created_at timestamp with time zone NOT NULL,
-    CONSTRAINT ck_metric_snapshot_owned_citations CHECK (((jsonb_typeof(owned_citation_ids) = 'array'::text) AND (owned_citation_count = jsonb_array_length(owned_citation_ids))))
+    CONSTRAINT ck_metric_snapshot_owned_citations CHECK (((jsonb_typeof(owned_citation_ids) = 'array'::text) AND (owned_citation_count = jsonb_array_length(owned_citation_ids)))),
+    CONSTRAINT ck_metric_snapshot_owned_citation_pages CHECK ((jsonb_typeof(owned_citation_pages) = 'array'::text))
 );
 
 CREATE TABLE public.monitored_site_urls (
@@ -3030,6 +3079,12 @@ ALTER TABLE ONLY public.api_keys
 ALTER TABLE ONLY public.entity_sentiments
     ADD CONSTRAINT entity_sentiments_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT uq_audit_answer_aggregate UNIQUE (audit_id, logical_engine, cohort);
+
 ALTER TABLE ONLY public.audit_comparison_baselines
     ADD CONSTRAINT audit_comparison_baselines_pkey PRIMARY KEY (id);
 
@@ -3047,6 +3102,9 @@ ALTER TABLE ONLY public.audit_prompt_snapshots
 
 ALTER TABLE ONLY public.audit_schedules
     ADD CONSTRAINT audit_schedules_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.audit_tasks
     ADD CONSTRAINT audit_tasks_pkey PRIMARY KEY (id);
@@ -3442,7 +3500,7 @@ ALTER TABLE ONLY public.agent_model_attempts
     ADD CONSTRAINT uq_agent_model_attempt_slot UNIQUE (run_id, run_attempt, ordinal);
 
 ALTER TABLE ONLY public.agent_outputs
-    ADD CONSTRAINT uq_agent_output_chat UNIQUE (chat_id);
+    ADD CONSTRAINT uq_agent_output_chat_number UNIQUE (chat_id, number);
 
 ALTER TABLE ONLY public.agent_output_revisions
     ADD CONSTRAINT uq_agent_output_revision_number UNIQUE (output_id, number);
@@ -3972,6 +4030,10 @@ CREATE INDEX ix_api_keys_created_by_user_id ON public.api_keys USING btree (crea
 
 CREATE INDEX ix_entity_sentiments_workspace_id ON public.entity_sentiments USING btree (workspace_id);
 
+CREATE INDEX ix_audit_answer_aggregates_project_id ON public.audit_answer_aggregates USING btree (project_id);
+
+CREATE INDEX ix_audit_answer_aggregates_workspace_id ON public.audit_answer_aggregates USING btree (workspace_id);
+
 CREATE INDEX ix_audit_comparison_baselines_baseline_audit_id ON public.audit_comparison_baselines USING btree (baseline_audit_id);
 
 CREATE INDEX ix_audit_comparison_baselines_project_id ON public.audit_comparison_baselines USING btree (project_id);
@@ -3995,6 +4057,12 @@ CREATE INDEX ix_audit_schedules_project_id ON public.audit_schedules USING btree
 CREATE INDEX ix_audit_schedules_prompt_set_id ON public.audit_schedules USING btree (prompt_set_id);
 
 CREATE INDEX ix_audit_schedules_workspace_id ON public.audit_schedules USING btree (workspace_id);
+
+CREATE INDEX ix_audit_source_aggregates_audit_dimension ON public.audit_source_aggregates USING btree (audit_id, dimension);
+
+CREATE INDEX ix_audit_source_aggregates_project_id ON public.audit_source_aggregates USING btree (project_id);
+
+CREATE INDEX ix_audit_source_aggregates_workspace_id ON public.audit_source_aggregates USING btree (workspace_id);
 
 CREATE INDEX ix_audit_tasks_available_at ON public.audit_tasks USING btree (available_at);
 
@@ -4659,9 +4727,6 @@ ALTER TABLE ONLY public.agent_model_attempts
     ADD CONSTRAINT agent_model_attempts_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE RESTRICT;
 
 ALTER TABLE ONLY public.agent_output_revisions
-    ADD CONSTRAINT agent_output_revisions_approved_by_user_id_fkey FOREIGN KEY (approved_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
-
-ALTER TABLE ONLY public.agent_output_revisions
     ADD CONSTRAINT agent_output_revisions_author_user_id_fkey FOREIGN KEY (author_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.agent_output_revisions
@@ -4832,6 +4897,15 @@ ALTER TABLE ONLY public.claim_verdicts
 ALTER TABLE ONLY public.claim_verdicts
     ADD CONSTRAINT claim_verdicts_workspace_id_claim_id_fkey FOREIGN KEY (workspace_id, claim_id) REFERENCES public.answer_claims(workspace_id, id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_answer_aggregates
+    ADD CONSTRAINT audit_answer_aggregates_workspace_id_project_id_audit_id_fkey FOREIGN KEY (workspace_id, project_id, audit_id) REFERENCES public.audits(workspace_id, project_id, id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY public.audit_comparison_baselines
     ADD CONSTRAINT audit_comparison_baselines_audit_id_fkey FOREIGN KEY (audit_id) REFERENCES public.audits(id) ON DELETE CASCADE;
 
@@ -4867,6 +4941,15 @@ ALTER TABLE ONLY public.audit_schedules
 
 ALTER TABLE ONLY public.audit_schedules
     ADD CONSTRAINT audit_schedules_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_workspace_id_fkey FOREIGN KEY (workspace_id) REFERENCES public.workspaces(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.audit_source_aggregates
+    ADD CONSTRAINT audit_source_aggregates_workspace_id_project_id_audit_id_fkey FOREIGN KEY (workspace_id, project_id, audit_id) REFERENCES public.audits(workspace_id, project_id, id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.audit_tasks
     ADD CONSTRAINT audit_tasks_engine_snapshot_id_fkey FOREIGN KEY (engine_snapshot_id) REFERENCES public.audit_engine_snapshots(id) ON DELETE CASCADE;

@@ -25,6 +25,10 @@ export const budgetSchema = z.object({
   max_model_calls: z.number().int().positive(),
   max_tool_calls: z.number().int().nonnegative(),
   max_parallel_tool_calls: z.number().int().positive(),
+  /** Provider-hosted web searches per turn, across all its model calls. */
+  max_web_searches: z.number().int().nonnegative(),
+  /** At most this many of them in one model call, so a call holds only what it can run. */
+  max_web_searches_per_call: z.number().int().nonnegative(),
   limit_reminder_calls: z.number().int().nonnegative(),
   reasoning_effort: z.enum(['low', 'medium', 'high']),
   compaction_trigger_tokens: z.number().int().positive(),
@@ -47,7 +51,6 @@ export function admittedBudget(executionTimeoutSeconds: number) {
 export const outputPayloadSchema = z.strictObject({
   title: z.string().trim().min(1).max(agentPolicy.output_title_max_chars),
   body: z.string().trim().min(1).max(agentPolicy.output_body_max_chars),
-  phase: z.enum(['outline', 'draft', 'final']),
   target_kind: z.enum(['page', 'planned_page']).nullish(),
   target: z.string().nullish(),
   format_id: z.string().nullish(),
@@ -69,7 +72,6 @@ export type Skill = {
   version: number;
   outputKind: string;
   body: string;
-  outlineFirst: boolean;
 };
 export type SkillCatalog = {
   version: string;

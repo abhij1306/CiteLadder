@@ -57,7 +57,7 @@ export function DateField({
         // Invalid fields retain their semantic boundary on hover.
         isInvalid
           ? 'border border-danger hover:border-danger'
-          : 'border border-border has-[:enabled]:hover:border-border-strong',
+          : 'border border-border-bold has-[:enabled]:hover:border-muted',
         disabled && 'cursor-not-allowed bg-disabled border-border-subtle',
         className,
       )}

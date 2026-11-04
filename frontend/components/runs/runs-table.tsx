@@ -87,9 +87,8 @@ export function RunsTable({
             </Badge>
           </TableCell>
           <TableCell>
-            <Badge variant="status" value={audit.audit_scope === 'commerce' ? 'info' : 'success'}>
-              {audit.audit_scope === 'commerce' ? 'Commerce' : 'Brand'}
-            </Badge>
+            {/* A scope is a category, not a state: one neutral tag for both. */}
+            <Badge>{audit.audit_scope === 'commerce' ? 'Commerce' : 'Brand'}</Badge>
           </TableCell>
           {showMarket ? <TableCell>{marketLabel(audit.market)}</TableCell> : null}
           <TableCell numeric>{audit.requested_count}</TableCell>

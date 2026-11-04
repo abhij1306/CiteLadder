@@ -43,7 +43,7 @@ describe('served Agent cutover on PostgreSQL', () => {
     bindings.store.dependencies.admission = fixtures.store().dependencies.admission;
     bindings.runtime.deps.models = new ModelCalls(db, zeroFunding);
     bindings.runtime.deps.modelFor = () =>
-      scripted([save('outline', 'Requested document', { format_id: 'content_page' })]);
+      scripted([save('Requested document', { format_id: 'content_page' })]);
     bindings.models = bindings.runtime.deps.models;
     vi.spyOn(bindingsOwner, 'agentBindings').mockResolvedValue(bindings);
     const token = await sessionToken({ sub: scope.userId, ver: 0 });
@@ -85,7 +85,7 @@ describe('served Agent cutover on PostgreSQL', () => {
           { type: 'thinking', thinking: 'Choosing a method', signature: 'sig' },
           toolUse('load_skill', { skill_id: 'content_create' }, 'call_skill'),
         ],
-        save('outline', 'Outline body', { format_id: 'content_page' }),
+        save('Outline body', { format_id: 'content_page' }),
         reply(long),
       ]);
     const { accepted, response } = await startTurn(scope.projectId, headers);
@@ -124,9 +124,9 @@ describe('served Agent cutover on PostgreSQL', () => {
       await (await app.request(`/api/v1/agent/chats/${accepted.chat_id}`, { headers })).json(),
     );
     expect(detail.messages.at(-1)?.content).toBe(
-      `${long}\n\nOutline saved in Website page format. Approve it before requesting a draft.`,
+      `${long}\n\nDocument 1 saved in Website page format.`,
     );
-    expect(detail.output?.latest_revision?.body).toBe('Outline body');
+    expect(detail.outputs.map((output) => output.latest_revision.body)).toEqual(['Outline body']);
     // A second request for the finished turn never executes it again.
     const again = await app.request(
       `/api/v1/agent/chats/${accepted.chat_id}/runs/${accepted.run.id}/run`,
@@ -183,7 +183,7 @@ describe('served Agent cutover on PostgreSQL', () => {
       output_kind: 'content',
     });
   });
-  it('serves instructions, a queued outline, optimistic edits, restoration and archive without model calls on reads', async () => {
+  it('serves instructions, a queued document, optimistic edits, restoration and archive without model calls on reads', async () => {
     const { scope, headers, worker } = await setup();
     const instructions = `/api/v1/projects/${scope.projectId}/agent/instructions`;
     expect(
@@ -227,10 +227,12 @@ describe('served Agent cutover on PostgreSQL', () => {
     ).toBe(200);
     const detail = agentChatDetailSchema.parse(await (await app.request(chat, { headers })).json());
     expect(detail.latest_run?.status).toBe('succeeded');
-    expect(detail.output?.latest_revision?.phase).toBe('outline');
-    const revisionId = detail.output!.latest_revision!.id;
+    const [output] = detail.outputs;
+    expect(output?.latest_revision.body).toBe('Requested document');
+    const revisionId = output!.latest_revision.id;
+    const revisions = `${chat}/outputs/${output!.id}/revisions`;
     const edit = { base_revision_id: revisionId, title: 'Revised title', body: 'Reviewed outline' };
-    const edited = await app.request(`${chat}/output/revisions`, {
+    const edited = await app.request(revisions, {
       method: 'POST',
       headers,
       body: JSON.stringify(edit),
@@ -238,7 +240,7 @@ describe('served Agent cutover on PostgreSQL', () => {
     expect(edited.status).toBe(201);
     expect(
       (
-        await app.request(`${chat}/output/revisions`, {
+        await app.request(revisions, {
           method: 'POST',
           headers,
           body: JSON.stringify(edit),
@@ -247,16 +249,15 @@ describe('served Agent cutover on PostgreSQL', () => {
     ).toBe(409);
     expect(
       (
-        await app.request(`${chat}/output/revisions/${revisionId}/restore`, {
+        await app.request(`${revisions}/${revisionId}/restore`, {
           method: 'POST',
           headers,
         })
       ).status,
     ).toBe(201);
     expect(
-      agentRevisionsPageSchema.parse(
-        await (await app.request(`${chat}/output/revisions`, { headers })).json(),
-      ).items,
+      agentRevisionsPageSchema.parse(await (await app.request(revisions, { headers })).json())
+        .items,
     ).toHaveLength(3);
     expect((await app.request(chat, { method: 'DELETE', headers })).status).toBe(204);
     const list = await app.request(`/api/v1/projects/${scope.projectId}/agent/chats`, { headers });

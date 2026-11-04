@@ -101,13 +101,11 @@ function FanoutEmpty({
 }: Readonly<Pick<EvidenceTabProps, 'isFiltered' | 'onClearFilters'>>) {
   return isFiltered ? (
     <EvidenceFilteredEmpty
-      title={TITLE}
       body="No answers match the selected run, model, prompt and period. Widen the period or clear a filter."
       onClear={onClearFilters}
     />
   ) : (
     <EvidenceEmpty
-      title={TITLE}
       heading="No searches recorded yet"
       body="Once a run answers your prompts, the searches each engine ran first appear here."
     />
@@ -157,15 +155,17 @@ export function FanoutEvidence({
   const selectionWide = isSelectionWide(summary, scopeNarrowed);
   const matched = summaryMatchesInput ? selectionMatchedQueries(summary, scopeNarrowed) : null;
 
-  if (query.isLoading) return <EvidenceSkeleton title={TITLE} />;
-  if (query.isError) return <EvidenceError title={TITLE} onRetry={() => query.refetch()} />;
+  if (query.isLoading) return <EvidenceSkeleton />;
+  if (query.isError) return <EvidenceError onRetry={() => query.refetch()} />;
   if (items.length === 0) {
     return <FanoutEmpty isFiltered={isFiltered} onClearFilters={onClearFilters} />;
   }
 
   return (
+    // Named, not titled: the tab row already says "Query fanouts", so a
+    // heading over the table only repeated it (2026-11-03 app review).
     <DataTable
-      title={TITLE}
+      label={TITLE}
       busy={{ active: query.isFetching, label: 'Updating evidence' }}
       toolbar={{
         search: (

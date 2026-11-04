@@ -16,7 +16,7 @@ import { Alert } from '@/components/ui/alert';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { AiReferralsScreen } from './referrals-screen';
-import { TrafficControls } from './traffic-controls';
+import { TrafficControls, TrafficExport } from './traffic-controls';
 import { TrafficOverview, TrafficCrawlers, TrafficActivity } from './traffic-views';
 import { TrafficPages } from './pages-view';
 import { CrawlLogAvailabilityNotice } from './crawl-log-availability';
@@ -98,12 +98,14 @@ function TrafficDataView({
   const model = useTrafficData(tab);
   const { projectId, summary } = model;
   const controls = { filters: <TrafficControls model={model} crawlAvailable={crawlAvailable} /> };
+  // Export is a route action, so the control band keeps one short row on every tab.
+  const actions = tab === 'overview' ? undefined : <TrafficExport model={model} />;
   // First load keeps the identity, tab and control bands; only the work waits.
   // The table tabs draw their own loading, error and empty states inside the
   // table, in the footprint of a page of rows.
   if (model.isLoading || (tab === 'overview' && summary.isLoading))
     return (
-      <ListScreen tabs={tabs} controls={controls}>
+      <ListScreen tabs={tabs} actions={actions} controls={controls}>
         <QueryState kind="loading" label="Loading AI Traffic…" />
       </ListScreen>
     );
@@ -111,7 +113,7 @@ function TrafficDataView({
   // footprint its loading state took.
   if (tab === 'overview' && summary.isError && projectId)
     return (
-      <ListScreen tabs={tabs} controls={controls}>
+      <ListScreen tabs={tabs} actions={actions} controls={controls}>
         <QueryState
           kind="error"
           {...readErrorProps(summary)}
@@ -120,7 +122,7 @@ function TrafficDataView({
       </ListScreen>
     );
   return (
-    <ListScreen tabs={tabs} controls={controls}>
+    <ListScreen tabs={tabs} actions={actions} controls={controls}>
       <TrafficTabContent tab={tab} model={model} crawlAvailable={crawlAvailable} />
     </ListScreen>
   );

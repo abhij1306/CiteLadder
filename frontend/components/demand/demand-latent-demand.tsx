@@ -2,6 +2,7 @@ import { Zap } from 'lucide-react';
 
 import { Icon } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
+import { InlineFigure } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { DemandSnapshot } from '@/lib/api/demand';
 import { isActionableGap, numericMetric } from '@/lib/demand/signals';
@@ -29,12 +30,20 @@ export function DemandLatentDemand({ snapshot }: Readonly<{ snapshot: DemandSnap
         </>
       ) : (
         <>
-          <span className="text-foreground tabular-nums">
+          <InlineFigure className="text-foreground">
             {formatCount(known.reduce((sum, value) => sum + value, 0))}
-          </span>
-          {partial
-            ? ` impressions on ${formatCount(known.length)} of ${formatCount(observed.length)} non-branded signals`
-            : ' impressions on non-branded signals'}
+          </InlineFigure>
+          {partial ? (
+            <>
+              {' impressions on '}
+              <InlineFigure>{formatCount(known.length)}</InlineFigure>
+              {' of '}
+              <InlineFigure>{formatCount(observed.length)}</InlineFigure>
+              {' non-branded signals'}
+            </>
+          ) : (
+            ' impressions on non-branded signals'
+          )}
         </>
       )}
     </Inline>

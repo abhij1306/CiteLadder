@@ -9,8 +9,9 @@ import { Field } from '@/components/ui/field';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { cardClasses } from '@/components/ui/card-variants';
 import { Pressable } from '@/components/ui/pressable';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { textRole } from '@/components/ui/typography';
 import { splitPaneClasses } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
@@ -31,23 +32,18 @@ export function WorkflowGallery({
   if (catalog.workflows.length === 0) return null;
   return (
     <Stack as="section" gap="compact" aria-labelledby="agent-workflows">
-      <h3 id="agent-workflows" className={textRole('label')}>
+      <h3 id="agent-workflows" className={textRole('sectionTitle')}>
         Or start from a workflow
       </h3>
-      <Inline as="fieldset" className="flex-wrap">
-        <legend className="sr-only">Workflow type</legend>
-        {catalog.workflow_groups.map((option) => (
-          <Button
-            key={option.id}
-            type="button"
-            variant="secondary"
-            aria-pressed={option.id === group}
-            onClick={() => setChosenGroup(option.id)}
-          >
-            {option.label}
-          </Button>
-        ))}
-      </Inline>
+      <SegmentedControl
+        ariaLabel="Workflow type"
+        value={group ?? ''}
+        options={catalog.workflow_groups.map((option) => ({
+          value: option.id,
+          label: option.label,
+        }))}
+        onChange={setChosenGroup}
+      />
       {/* Every group's cards share one grid cell, so the gallery is always as
           tall as its largest group: choosing a group never moves the page
           (which centres this column). Only the chosen group is live. */}
@@ -71,10 +67,10 @@ export function WorkflowGallery({
                     <Pressable
                       disabled={disabled}
                       onClick={() => onPick(workflow)}
-                      className={panelClasses({}, 'hover:bg-hover')}
+                      className={cn(cardClasses(), 'hover:bg-hover')}
                     >
                       <Stack as="span" gap="tight">
-                        <span className={textRole('itemTitle')}>{workflow.label}</span>
+                        <span className={textRole('sectionTitle')}>{workflow.label}</span>
                         <span className={textRole('caption')}>{workflow.description}</span>
                       </Stack>
                     </Pressable>
@@ -119,11 +115,11 @@ export function WorkflowStart({
       // One inline message per missing input instead of the browser's bubble.
       noValidate
       onSubmit={submit}
-      className={panelClasses()}
+      className={cardClasses()}
     >
       <Stack gap="workspace">
         <Stack gap="tight">
-          <h3 id="workflow-title" className={textRole('itemTitle')}>
+          <h3 id="workflow-title" className={textRole('sectionTitle')}>
             {workflow.label}
           </h3>
           <p className={textRole('caption')}>{workflow.description}</p>

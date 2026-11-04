@@ -214,7 +214,7 @@ describe('Overview PDF', () => {
     // face; the words around them stay in the text face.
     const embedded = Buffer.from(bytes).toString('latin1');
     expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+JetBrainsMono-Medium/u);
-    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+LexendDeca-Regular/u);
+    expect(embedded).toMatch(/\/BaseFont \/[A-Z]{6}\+Inter-Regular/u);
     expect(text).toContain('ChatGPT API and Claude API');
     expect(text).toContain(
       'No comparison yet: changes appear once a second run uses the same prompts and engines.',

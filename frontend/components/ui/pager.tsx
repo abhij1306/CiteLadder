@@ -121,7 +121,7 @@ function PageSizeSelect({ pageSize, noun }: Readonly<{ pageSize: PagerPageSize; 
           value: String(size),
           label: String(size),
         }))}
-        className="w-20"
+        className="font-numeric w-20"
       />
     </div>
   );

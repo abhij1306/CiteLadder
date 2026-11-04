@@ -30,7 +30,6 @@ import {
 } from '@/lib/prompts/forms';
 import { usePromptCandidates } from '@/lib/prompts/use-prompt-candidates';
 import { usePromptSet } from '@/lib/prompts/use-prompt-set';
-import { Tabs } from '@/components/ui/tabs';
 
 import { PendingReviewNotice } from './candidate-review';
 import { PromptEmptyState } from './prompt-empty-state';
@@ -58,6 +57,17 @@ function mutationErrorMessage(
   return update.isError ? humanizeApiError(update.error).message : undefined;
 }
 
+/**
+ * Whether the library still shows its first-load frame. Prompts often arrive
+ * with the project, before the latest run's figures; a run adds four columns,
+ * and adding them beside rows already on screen moved every cell sideways.
+ */
+function awaitingFirstLoad(
+  state: Readonly<{ promptsLoading: boolean; hasPrompts: boolean; figuresRead: boolean }>,
+): boolean {
+  return state.promptsLoading || (state.hasPrompts && !state.figuresRead);
+}
+
 /** The topic rail's widths, in px: the default, its bounds, and the room the library keeps. */
 const RAIL_DEFAULT_WIDTH = 240;
 const RAIL_MIN_WIDTH = 208;
@@ -65,17 +75,12 @@ const RAIL_MAX_WIDTH = 400;
 const LIBRARY_MIN_WIDTH = 572;
 const RAIL_SEPARATOR_LABEL = 'Resize topics panel';
 
-const STATUS_TABS: { id: PromptStatus; label: string }[] = [
-  { id: 'active', label: 'Active' },
-  { id: 'archived', label: 'Archived' },
-];
-
 /**
  * Prompt library client. Owns the active prompt set (via the project
  * context), the topic/status/search filter state, and every CRUD, import,
- * lifecycle, and AI-generation mutation. Layout: topics rail on the left;
- * Active / Archived status tabs over the prompt table on the
- * right. The desktop split is user-resizable; "Prompt Builder" opens the
+ * lifecycle, and AI-generation mutation. Layout: one control row (Active /
+ * Archived, search, filters) over the topics rail on the left and the prompt
+ * table on the right. The desktop split is user-resizable; "Prompt Builder" opens the
  * sheet that steers generation and reviews its suggestions.
  */
 // react-doctor-disable-next-line react-doctor/no-giant-component -- this component only orchestrates queries/mutations; toolbar, topic rail, table, empty state, and dialogs are extracted.
@@ -99,7 +104,7 @@ export function PromptLibrary({
 
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<PromptFilters>(emptyFilters);
-  const [statusTab, setStatusTab] = useState<PromptStatus>('active');
+  const [statusFilter, setStatusFilter] = useState<PromptStatus>('active');
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Prompt | undefined>(undefined);
@@ -140,7 +145,7 @@ export function PromptLibrary({
     promptSet,
     workspaceId: requestScope.workspaceId,
     onReviewed: async () => {
-      setStatusTab('active');
+      setStatusFilter('active');
       // Show every newly tracked prompt, whichever topic it landed in.
       setSelectedTopicId(null);
       await invalidate();
@@ -259,10 +264,10 @@ export function PromptLibrary({
     deleteMutation.mutate(pending.prompt.id);
   };
 
-  // Status tab -> topic -> search/filters, preserving order.
+  // Status -> topic -> search/filters, preserving order.
   const byStatus = useMemo(
-    () => prompts.filter((prompt) => prompt.status === statusTab),
-    [prompts, statusTab],
+    () => prompts.filter((prompt) => prompt.status === statusFilter),
+    [prompts, statusFilter],
   );
   const byTopic = useMemo(
     () =>
@@ -295,10 +300,7 @@ export function PromptLibrary({
   };
   const submitForm = async (values: PromptFormValues) => {
     const mutation = editing
-      ? updateMutation.mutateAsync({
-          id: editing.id,
-          input: formValuesToPromptUpdate(values),
-        })
+      ? updateMutation.mutateAsync({ id: editing.id, input: formValuesToPromptUpdate(values) })
       : createMutation.mutateAsync(formValuesToPromptInput(values));
     await mutation.catch(() => undefined);
   };
@@ -348,9 +350,10 @@ export function PromptLibrary({
     libraryBody = <PromptEmptyState onGenerate={() => openBuilder('business')} onAdd={openAdd} />;
   }
 
-  // The library's search and filters ride a control band once it loads; the
-  // first load holds that band so the table starts where the box stood.
-  if (isLoading) {
+  // Status, search and filters share one control band once loaded; the first
+  // load holds it so the table starts where the box stood.
+  const figuresRead = measurements !== undefined;
+  if (awaitingFirstLoad({ promptsLoading: isLoading, hasPrompts, figuresRead })) {
     return (
       <ListScreen controls={RESERVED_CONTROLS}>
         <QueryState kind="loading" />
@@ -369,6 +372,7 @@ export function PromptLibrary({
         />
       }
       controls={promptFilterControls({
+        status: { value: statusFilter, counts: statusCounts, onChange: setStatusFilter },
         search,
         onSearchChange: setSearch,
         filters,
@@ -418,26 +422,6 @@ export function PromptLibrary({
           }
         >
           <Stack gap="compact" className="min-w-0 content-start">
-            <Tabs
-              value={statusTab}
-              onValueChange={setStatusTab}
-              ariaLabel="Prompt status"
-              items={STATUS_TABS.map((tab) => ({
-                value: tab.id,
-                label: (
-                  <>
-                    {tab.label}
-                    {statusCounts[tab.id] > 0 ? (
-                      <>
-                        {' '}
-                        <span className="type-caption tabular-nums">{statusCounts[tab.id]}</span>
-                      </>
-                    ) : null}
-                  </>
-                ),
-              }))}
-            />
-
             {libraryBody}
           </Stack>
         </ResizableSplitPane>

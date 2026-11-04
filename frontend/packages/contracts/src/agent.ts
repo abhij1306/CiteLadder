@@ -36,7 +36,6 @@ export const agentRunStepSchema = responseObject({
 export const agentRunSchema = responseObject({
   id: uuid(),
   status: agentRunStatusSchema,
-  mode: z.enum(['turn', 'draft_from_outline']),
   skill_id: z.string().nullable(),
   skill_source: z.string().nullable(),
   steps_used: z.number().int(),
@@ -68,6 +67,7 @@ export const agentToolStatusSchema = z.enum([
  * - `document_delta`: the document being saved, so far (a snapshot).
  * - `thinking`: the next piece of that call's thinking summary.
  * - `tool`: one call's state, keyed by `call_id`; calls in one step run together.
+ *   A provider-hosted web search is the tool `web_search`.
  */
 export const agentTurnEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('step'), ordinal: z.number().int() }),
@@ -90,23 +90,25 @@ export const agentTurnEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('error'), code: z.string() }),
 ]);
 
-export const agentOutputPhaseSchema = z.enum(['outline', 'draft', 'final']);
+/** A web page a search returned: an untrusted observation, apart from CiteLadder records. */
+export const agentWebSourceSchema = responseObject({ url: z.string(), title: z.string() });
 
 export const agentRevisionSchema = responseObject({
   id: uuid(),
   number: z.number().int(),
   parent_revision_id: uuid().nullable(),
   author: z.enum(['agent', 'user']),
-  phase: agentOutputPhaseSchema,
   title: z.string(),
   body: z.string(),
   source_refs: z.array(z.string()),
-  approved_at: z.string().nullable(),
+  web_sources: z.array(agentWebSourceSchema),
   created_at: z.string(),
 });
 
+// One of a chat's documents; `number` is its label ("Document 2"), in creation order.
 export const agentOutputSchema = responseObject({
   id: uuid(),
+  number: z.number().int(),
   // Latest generating reply; user edits and restores keep this placement.
   message_id: uuid().nullish(),
   action_id: uuid().nullable(),
@@ -115,12 +117,13 @@ export const agentOutputSchema = responseObject({
   format_id: z.string().nullable(),
   target_kind: z.string().nullable(),
   target_label: z.string().nullable(),
-  phase: agentOutputPhaseSchema,
-  latest_revision: agentRevisionSchema.nullable(),
+  // Every document has at least one revision.
+  latest_revision: agentRevisionSchema,
 });
 
 // A step summary is `{kind: 'model', ordinal}`, `{kind: 'skill', skill_id}`,
-// `{kind: 'document'}` or `{kind: 'tool', tool, status, call_id, ordinal}`.
+// `{kind: 'document'}`, `{kind: 'tool', tool, status, call_id, ordinal}` or
+// `{kind: 'search', query, status, call_id, ordinal}` (a web search).
 const agentStepSchema = responseObject({
   kind: z.string(),
   ordinal: z.number().int().optional(),
@@ -128,6 +131,7 @@ const agentStepSchema = responseObject({
   tool: z.string().optional(),
   status: z.string().optional(),
   call_id: z.string().optional(),
+  query: z.string().optional(),
 });
 
 export const agentMessageSchema = responseObject({
@@ -138,19 +142,13 @@ export const agentMessageSchema = responseObject({
   skill_id: z.string().nullable(),
   skill_source: z.string().nullable(),
   evidence_refs: z.array(z.string()),
+  web_sources: z.array(agentWebSourceSchema).default([]),
   steps: z.array(agentStepSchema),
   // Actions a user message @-mentioned, as resolved when it was sent.
   mentions: z
     .array(responseObject({ kind: z.string(), id: uuid(), label: z.string() }))
     .default([]),
   created_at: z.string(),
-  event: responseObject({
-    kind: z.literal('outline_approved'),
-    revision_id: uuid(),
-    run_id: uuid(),
-  })
-    .nullable()
-    .optional(),
 });
 
 export const agentChatSummarySchema = responseObject({
@@ -161,7 +159,6 @@ export const agentChatSummarySchema = responseObject({
   title: z.string(),
   turn_count: z.number().int(),
   output_kind: z.string().nullable(),
-  output_phase: agentOutputPhaseSchema.nullable(),
   last_activity_at: z.string(),
   created_at: z.string(),
   /** A turn is queued or running in this chat. */
@@ -188,7 +185,8 @@ export const agentChatDetailSchema = responseObject({
   context: agentContextDisclosureSchema.partial(),
   messages: z.array(agentMessageSchema),
   latest_run: agentRunSchema.nullable(),
-  output: agentOutputSchema.nullable(),
+  // The chat's documents in number order.
+  outputs: z.array(agentOutputSchema),
 });
 
 export const agentTurnAcceptedSchema = responseObject({
@@ -310,7 +308,6 @@ export function agentRequestSchemas(bounds: {
       title: z.string().max(bounds.output_title_max_chars).trim().min(1),
       body: z.string().max(bounds.output_body_max_chars).trim().min(1),
     }),
-    approve: z.strictObject({ revision_id: uuid() }),
     instructions: z.strictObject({ text: z.string().max(bounds.instructions_max_chars) }),
   };
 }

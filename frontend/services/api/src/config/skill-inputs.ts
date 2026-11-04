@@ -37,25 +37,18 @@ function formatSections(body: string): string[] {
   return sections;
 }
 
-export type ContentFormat = { id: string; label: string; body: string; longForm: boolean };
+export type ContentFormat = { id: string; label: string; body: string };
 
 export function parseContentFormats(body: string) {
   const [preamble = '', ...sections] = formatSections(body);
   const formats = new Map<string, ContentFormat>();
   for (const section of sections) {
-    // `[long-form]` marks formats whose drafts start from an approved outline.
-    const [heading, id, label, longForm] =
-      /^## ([a-z_]+) — (.+?)( \[long-form\])?\n/u.exec(section) ?? [];
+    const [heading, id, label] = /^## ([a-z_]+) — (.+?)\n/u.exec(section) ?? [];
     if (heading === undefined || id === undefined || label === undefined || formats.has(id))
       throw new TypeError('Invalid content format');
     const text = section.slice(heading.length).trim();
     if (!text) throw new TypeError('Empty content format');
-    formats.set(id, {
-      id,
-      label: label.trim(),
-      body: text,
-      longForm: Boolean(longForm),
-    });
+    formats.set(id, { id, label: label.trim(), body: text });
   }
   return { formatPreamble: preamble.slice(preamble.indexOf('\n') + 1).trim(), formats };
 }

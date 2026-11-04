@@ -115,7 +115,7 @@ export function IssueDetailRail({
         </Stack>
       ) : null}
       <Stack as="section">
-        <h3 className={textRole('itemTitle')}>Affected pages</h3>
+        <h3 className={textRole('sectionTitle')}>Affected pages</h3>
         <OccurrenceList issue={issue} detail={detail} crawlId={crawlId} query={detailQuery} />
       </Stack>
     </ListDetailPane>
@@ -153,7 +153,7 @@ function askAgentPrompt(issue: SiteIssue, page?: string): string {
   const scope = page ? ` on ${page}` : ` (${count} affected ${pages})`;
   return page
     ? `Analyze the Site Health issue "${issueTitle(issue)}"${scope} and propose exact page edits from the selected evidence.`
-    : `Analyze the Site Health issue "${issueTitle(issue)}"${scope}, prioritize the work and propose a bounded implementation plan. Label sampled occurrences and distinguish them from the total affected pages.`;
+    : `Analyze the Site Health issue "${issueTitle(issue)}"${scope}, prioritize the work and propose a bounded implementation plan from the supplied sample; say how many pages it covers versus the total.`;
 }
 
 const OCCURRENCE_PLACEHOLDERS = ['first', 'second', 'third'] as const;

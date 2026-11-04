@@ -9,6 +9,7 @@ import { fanoutProjection } from '../src/analysis/fanout.ts';
 
 import type { Database } from '../src/db/database.ts';
 import { persistComparisonBaselines } from '../src/visibility/baselines.ts';
+import { persistSourceAggregates } from '../src/visibility/source-aggregates.ts';
 import { Fixtures } from './support.ts';
 
 const now = () => new Date();
@@ -68,6 +69,8 @@ export type ExecutionInput = {
 };
 
 const TABLES_BY_WORKSPACE = [
+  'audit_source_aggregates',
+  'audit_answer_aggregates',
   'opportunities',
   'metric_snapshots',
   'prompt_metric_snapshots',
@@ -534,12 +537,18 @@ export class VisibilityFixtures extends Fixtures {
         source_artifact_ids: JSON.stringify([]),
         owned_citation_count: 0,
         owned_citation_ids: JSON.stringify([]),
+        owned_citation_pages: JSON.stringify([]),
         created_at: now(),
       })
       .execute();
     // Finalization persists the run's comparable baselines once its snapshot exists.
     await persistComparisonBaselines(this.database, { workspaceId: tenant.workspaceId, auditId });
     return id;
+  }
+
+  /** A run's persisted Sources facts over its seeded answers, as finalization writes them. */
+  async sourceAggregates(tenant: Tenant, auditId: string, at = now()): Promise<void> {
+    await persistSourceAggregates(this.database, { workspaceId: tenant.workspaceId, auditId, at });
   }
 
   /** One prompt's persisted score for a run. */

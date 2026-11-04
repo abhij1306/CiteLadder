@@ -14,7 +14,7 @@ import { PROMPTS_GENERATE_HREF, PROMPTS_HREF } from '@/lib/prompts/routes';
  */
 export function PromptSetupCard() {
   return (
-    <Card tone="recommendation" aria-labelledby="prompt-setup-heading">
+    <Card aria-labelledby="prompt-setup-heading">
       <CardHeader>
         <CardTitle id="prompt-setup-heading">Choose the questions you want to track</CardTitle>
         <p className={textRole('caption')}>

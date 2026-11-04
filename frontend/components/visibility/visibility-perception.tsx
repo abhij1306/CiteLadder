@@ -95,21 +95,18 @@ function PerceptionState({
   coverage?: PerceptionCoverage;
 }>) {
   const copy = stateCopy(state, reason);
+  // One state box at the shared footprint: the coverage it read is part of
+  // the same sentence, not a caption that grows the box.
   return (
-    <Card>
-      <CardContent>
-        <Stack gap="item">
-          <QueryState
-            kind="empty"
-            headingLevel={3}
-            icon={MessageSquareQuote}
-            heading={copy.heading}
-            description={copy.description}
-          />
-          {coverage?.mentions ? <CoverageNote coverage={coverage} /> : null}
-        </Stack>
-      </CardContent>
-    </Card>
+    <QueryState
+      kind="empty"
+      headingLevel={3}
+      icon={MessageSquareQuote}
+      heading={copy.heading}
+      description={
+        coverage?.mentions ? `${copy.description} ${coverageLine(coverage)}.` : copy.description
+      }
+    />
   );
 }
 
@@ -138,7 +135,6 @@ function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
                 key: 'positive',
                 label: 'Positive',
                 value: formatShare(score?.positive_share ?? null),
-                tone: 'success',
                 missingLabel: 'Unavailable',
                 sub: `${score?.positive ?? 0} of ${score?.classified ?? 0} classified mentions`,
               },
@@ -146,7 +142,6 @@ function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
                 key: 'negative',
                 label: 'Negative',
                 value: formatShare(score?.negative_share ?? null),
-                tone: 'danger',
                 missingLabel: 'Unavailable',
                 sub: `${score?.negative ?? 0} of ${score?.classified ?? 0} classified mentions`,
               },

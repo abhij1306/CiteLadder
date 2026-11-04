@@ -156,6 +156,7 @@ export function DataTable({
   nested = false,
   footer,
   label,
+  reserveRows = false,
 }: Readonly<{
   /** The table's heading (an h3, the card title rung). */
   title?: string;
@@ -189,10 +190,16 @@ export function DataTable({
   footer?: ReactNode;
   /** The table's accessible name when it has no visible title. */
   label?: string;
+  /**
+   * One of several views of the same table (its tabs or filters): keep the
+   * pager and a full page of rows even when this view fits on one page, so
+   * switching views never moves what follows (2026-11-03 app review).
+   */
+  reserveRows?: boolean;
 }>) {
   const headingId = useId();
   const colSpan = columns.length + (selection ? 1 : 0);
-  const paging = pagingLayout(pager, pageSize);
+  const paging = pagingLayout(pager, pageSize, reserveRows);
   const fit = FITS[nested ? 'nested' : 'card'];
   // The region and the table share one name: the visible title, else `label`.
   const naming = title
@@ -269,14 +276,16 @@ function hasMorePages(pager: DataTablePager): boolean {
 
 /**
  * The pager to draw and the page of rows to reserve. A fixed list with no
- * pager (top movers) keeps its reserved rows.
+ * pager (top movers), and a view that shares its footprint with its sibling
+ * views (`reserveRows`), keep their reserved rows.
  */
 function pagingLayout(
   pager: DataTablePager | undefined,
   pageSize: number | undefined,
+  reserveRows: boolean,
 ): { pager?: DataTablePager; pageSize?: number } {
   if (pager === undefined) return { pageSize };
-  return hasMorePages(pager) ? { pager, pageSize } : {};
+  return reserveRows || hasMorePages(pager) ? { pager, pageSize } : {};
 }
 
 /**

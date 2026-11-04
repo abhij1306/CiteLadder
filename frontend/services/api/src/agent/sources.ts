@@ -1,3 +1,5 @@
+import type { WebSource } from '../models/conversation.ts';
+
 /**
  * A turn's sources are the records its reads returned, not references the
  * model repeats. Record references are working values for later reads; they
@@ -43,4 +45,11 @@ export function readSources(refs: readonly { record_uri?: string | null }[]) {
  */
 export function uniqueSources(...groups: Iterable<string>[]) {
   return [...new Set(groups.flatMap((group) => [...group]))];
+}
+
+/** Web pages unique by URL, the first title kept; bounded by the turn's search budget. */
+export function uniqueWeb(...groups: readonly WebSource[][]) {
+  const pages = new Map<string, string>();
+  for (const { url, title } of groups.flat()) if (!pages.has(url)) pages.set(url, title);
+  return [...pages].map(([url, title]) => ({ url, title }));
 }

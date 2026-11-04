@@ -598,7 +598,7 @@ describe('PerformanceScreen table interactions', () => {
     renderWithProviders(<PerformanceScreen />);
     expect(await screen.findByText('query 1')).toBeVisible();
 
-    await user.click(screen.getByRole('tab', { name: 'PAGES' }));
+    await user.click(screen.getByRole('tab', { name: 'Pages' }));
 
     // The pager is already where the loaded table puts it, naming the page to come.
     expect(screen.getByText('1–10 of 30 pages')).toBeVisible();

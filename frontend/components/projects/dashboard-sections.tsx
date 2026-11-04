@@ -31,7 +31,7 @@ import { DisplayTime } from '@/components/ui/display-time';
 
 import { ProjectControls } from './dashboard-controls';
 import { actionItem, metricValue, MovementChart, VS_PREVIOUS_RUN } from './dashboard-primitives';
-import { Tooltip } from '@/components/ui/tooltip';
+import { ClampText } from '@/components/ui/table';
 
 function brandName(data: CommandCenter) {
   return data.project.brand_name || data.project.name;
@@ -168,9 +168,9 @@ export function DashboardActions({
 function FactSummary({ value }: Readonly<{ value: string }>) {
   if (!value.trim()) return <UnavailableValue state="not_set" />;
   return (
-    <Tooltip content={value}>
-      <p className={textRole('body', 'line-clamp-2 overflow-hidden')}>{value}</p>
-    </Tooltip>
+    <ClampText lines={2} className={textRole('body')}>
+      {value}
+    </ClampText>
   );
 }
 
@@ -258,7 +258,6 @@ const NEXT_ACTION_COPY: Record<
 export function NextAction({ data }: Readonly<{ data: CommandCenter }>) {
   return (
     <Card
-      tone="recommendation"
       aria-labelledby="next-action"
       className="text-foreground flex h-full flex-col justify-between"
     >

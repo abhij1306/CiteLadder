@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
+import { cachedMessages } from '../src/models/anthropic.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { createJevClient, jevSettings } from '../src/models/jev.ts';
 import { runMetered } from '../src/models/meter-scope.ts';
@@ -294,6 +295,10 @@ describe('configured model gateway', () => {
               output_tokens: 1,
               cache_read_input_tokens: 100,
               cache_creation_input_tokens: 20,
+              cache_creation: { ephemeral_1h_input_tokens: 20, ephemeral_5m_input_tokens: 0 },
+            },
+            diagnostics: {
+              cache_miss_reason: { type: 'messages_changed', cache_missed_input_tokens: 5845 },
             },
           },
         },
@@ -335,7 +340,27 @@ describe('configured model gateway', () => {
         {
           type: 'message_delta',
           delta: { stop_reason: 'tool_use', stop_sequence: null },
-          usage: { output_tokens: 40 },
+          usage: {
+            output_tokens: 40,
+            iterations: [
+              {
+                type: 'compaction',
+                input_tokens: 900,
+                output_tokens: 30,
+                cache_read_input_tokens: 0,
+                cache_creation_input_tokens: 0,
+                cache_creation: null,
+              },
+              {
+                type: 'message',
+                input_tokens: 10,
+                output_tokens: 40,
+                cache_read_input_tokens: 100,
+                cache_creation_input_tokens: 20,
+                cache_creation: null,
+              },
+            ],
+          },
         },
         { type: 'message_stop' },
       ];
@@ -372,6 +397,8 @@ describe('configured model gateway', () => {
           messages: history,
           effort: 'medium',
           compactAtTokens: 80_000,
+          previousResponseId: 'msg_1',
+          webSearches: 0,
         },
         undefined,
         {
@@ -385,12 +412,32 @@ describe('configured model gateway', () => {
         stop: 'tool_use',
         finish_status: 'tool_use',
         toolCalls: [{ id: 'toolu_1', name: 'read_visibility', input: { limit: 5 } }],
+        // The compaction step's own tokens are billed on top of the answer's.
         usage: {
-          input_tokens: 130,
+          input_tokens: 1030,
           cached_input_tokens: 100,
           cache_write_input_tokens: 20,
-          output_tokens: 40,
+          cache_write_1h_input_tokens: 20,
+          output_tokens: 70,
         },
+        response_id: 'msg_2',
+        cache: { reason: 'messages_changed', missed_input_tokens: 5845 },
+        iterations: [
+          {
+            type: 'compaction',
+            input_tokens: 900,
+            output_tokens: 30,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+          },
+          {
+            type: 'message',
+            input_tokens: 10,
+            output_tokens: 40,
+            cache_read_input_tokens: 100,
+            cache_creation_input_tokens: 20,
+          },
+        ],
       });
       // The thinking block keeps its signature so the next call can replay it unchanged.
       expect(result.blocks[0]).toMatchObject({
@@ -406,8 +453,12 @@ describe('configured model gateway', () => {
       const [, init] = io.fetch.mock.calls[0]!;
       expect(new Headers(init!.headers).get('anthropic-beta')).toContain('compact-2026-01-12');
       expect(JSON.parse(String(init!.body))).toMatchObject({
-        system: [{ type: 'text', text: 'contract', cache_control: { type: 'ephemeral' } }],
-        cache_control: { type: 'ephemeral' },
+        // An hour-long cache, so a pause between turns still reads the chat from cache.
+        system: [
+          { type: 'text', text: 'contract', cache_control: { type: 'ephemeral', ttl: '1h' } },
+        ],
+        cache_control: { type: 'ephemeral', ttl: '1h' },
+        diagnostics: { previous_message_id: 'msg_1' },
         thinking: { type: 'adaptive', display: 'summarized' },
         output_config: { effort: 'medium' },
         context_management: {
@@ -421,6 +472,201 @@ describe('configured model gateway', () => {
       });
     }),
   );
+
+  it(
+    'offers Anthropic web search within the call’s allowance and keeps its blocks as returned',
+    metered(async () => {
+      const result = {
+        type: 'web_search_tool_result',
+        tool_use_id: 'srvtoolu_1',
+        content: [
+          {
+            type: 'web_search_result',
+            url: 'https://example.com/uniforms',
+            title: 'School uniforms',
+            encrypted_content: 'enc-1',
+            page_age: 'May 1, 2026',
+          },
+        ],
+      };
+      const cited = {
+        type: 'text',
+        text: 'Uniform prices start at $10.',
+        citations: [
+          {
+            type: 'web_search_result_location',
+            url: 'https://example.com/uniforms',
+            title: 'School uniforms',
+            encrypted_index: 'idx-1',
+            cited_text: 'Polos from $10',
+          },
+        ],
+      };
+      const frames = [
+        {
+          type: 'message_start',
+          message: {
+            id: 'msg_3',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-haiku-5-5',
+            content: [],
+            stop_reason: null,
+            stop_sequence: null,
+            usage: {
+              input_tokens: 10,
+              output_tokens: 1,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          },
+        },
+        {
+          type: 'content_block_start',
+          index: 0,
+          content_block: {
+            type: 'server_tool_use',
+            id: 'srvtoolu_1',
+            name: 'web_search',
+            input: {},
+          },
+        },
+        {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: '{"query":"school uniform prices"}' },
+        },
+        { type: 'content_block_stop', index: 0 },
+        { type: 'content_block_start', index: 1, content_block: result },
+        { type: 'content_block_stop', index: 1 },
+        { type: 'content_block_start', index: 2, content_block: { ...cited, text: '' } },
+        {
+          type: 'content_block_delta',
+          index: 2,
+          delta: { type: 'text_delta', text: 'Uniform prices start at $10.' },
+        },
+        { type: 'content_block_stop', index: 2 },
+        {
+          type: 'message_delta',
+          delta: { stop_reason: 'pause_turn', stop_sequence: null },
+          usage: { output_tokens: 12, server_tool_use: { web_search_requests: 1 } },
+        },
+        { type: 'message_stop' },
+      ];
+      const sse = frames
+        .map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`)
+        .join('');
+      const io = transport([
+        new Response(sse, { headers: { 'content-type': 'text/event-stream' } }),
+      ]);
+      const gateway = createModelGateway(
+        { ...settings, baseUrl: 'https://api.anthropic.com/v1', attempts: 1 },
+        io,
+      );
+      const events: unknown[] = [];
+      const answer = await gateway.converse(
+        {
+          system: 'contract',
+          tools: [{ name: 'read_a', description: 'A.', input_schema: { type: 'object' } }],
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'Uniform prices?' }] }],
+          effort: 'medium',
+          compactAtTokens: 80_000,
+          previousResponseId: null,
+          webSearches: 3,
+          // A call held for less than the route's cap is sent with its own.
+          maxOutputTokens: 5_000,
+        },
+        undefined,
+        { serverTool: (event) => events.push(event) },
+      );
+      expect(answer).toMatchObject({
+        stop: 'pause_turn',
+        toolCalls: [],
+        text: 'Uniform prices start at $10.',
+        usage: { input_tokens: 10, output_tokens: 12, web_search_requests: 1 },
+      });
+      // The result and citations replay byte for byte, encrypted content included.
+      expect(JSON.stringify(answer.blocks.slice(1))).toBe(JSON.stringify([result, cited]));
+      expect(events).toEqual([
+        { id: 'srvtoolu_1', name: 'web_search', status: 'started' },
+        { id: 'srvtoolu_1', name: 'web_search', status: 'completed' },
+      ]);
+      const [, init] = io.fetch.mock.calls[0]!;
+      const body = JSON.parse(String(init!.body));
+      expect(body.tools).toEqual([
+        { name: 'read_a', description: 'A.', input_schema: { type: 'object' } },
+        { type: 'web_search_20250305', name: 'web_search', max_uses: 3 },
+      ]);
+      expect(body.max_tokens).toBe(5_000);
+    }),
+  );
+
+  it('marks where the previous call cached and the newest compaction, leaving the blocks as stored', () => {
+    const hour = { type: 'ephemeral', ttl: '1h' };
+    const marked = cachedMessages([
+      { role: 'user', content: [{ type: 'text', text: 'Old question' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'compaction', content: 'Summary' },
+          { type: 'text', text: 'Answer' },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Context' },
+          { type: 'text', text: 'Next question' },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_use', id: 'toolu_1', name: 'read_a', input: { b: 1, a: 2 } }],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '{}' }] },
+    ]);
+    expect(JSON.stringify(marked)).toBe(
+      JSON.stringify([
+        { role: 'user', content: [{ type: 'text', text: 'Old question' }] },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'compaction', content: 'Summary', cache_control: hour },
+            { type: 'text', text: 'Answer' },
+          ],
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Context' },
+            { type: 'text', text: 'Next question', cache_control: hour },
+          ],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'read_a', input: { b: 1, a: 2 } }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '{}' }],
+        },
+      ]),
+    );
+    // Before the newest compaction everything is ignored, so nothing there is marked.
+    const compactedLast = cachedMessages([
+      { role: 'user', content: [{ type: 'text', text: 'Question' }] },
+      { role: 'assistant', content: [{ type: 'compaction', content: 'Summary' }] },
+      { role: 'user', content: [{ type: 'text', text: 'Follow up' }] },
+    ]);
+    expect(compactedLast[0]).toEqual({
+      role: 'user',
+      content: [{ type: 'text', text: 'Question' }],
+    });
+    expect(compactedLast[1]).toEqual({
+      role: 'assistant',
+      content: [{ type: 'compaction', content: 'Summary', cache_control: hour }],
+    });
+  });
 
   it(
     'converses over chat completions: translated history, parallel streamed calls and usage',
@@ -495,6 +741,9 @@ describe('configured model gateway', () => {
           ],
           effort: 'low',
           compactAtTokens: 80_000,
+          previousResponseId: null,
+          // Chat completions have no hosted search: the allowance offers nothing.
+          webSearches: 2,
         },
         undefined,
         { text: (delta) => deltas.push(delta) },
@@ -513,6 +762,8 @@ describe('configured model gateway', () => {
           cached_input_tokens: 30,
           cache_write_input_tokens: 0,
         },
+        // Chat completions have no cache diagnosis to report.
+        cache: { reason: 'not_requested' },
       });
       expect(deltas).toEqual(['Reading both.']);
       const body = JSON.parse(String(io.fetch.mock.calls[0]![1]!.body));

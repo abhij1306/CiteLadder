@@ -103,21 +103,19 @@ function AdsState({
   engines?: VisibilityAdsResponse['engines'];
 }>) {
   const copy = adsStateCopy(state);
+  // One state box at the shared footprint: each engine's applicability is
+  // part of the same sentence, not a footer that grows the box.
+  const applicability = engines
+    .map((engine) => `${engineLabel(engine.engine)}: ${AD_APPLICABILITY[engine.applicability]}`)
+    .join(' · ');
   return (
-    <Card>
-      <CardContent>
-        <Stack gap="item">
-          <QueryState
-            kind="empty"
-            headingLevel={3}
-            icon={Megaphone}
-            heading={copy.heading}
-            description={copy.description}
-          />
-          <EngineApplicability engines={engines} />
-        </Stack>
-      </CardContent>
-    </Card>
+    <QueryState
+      kind="empty"
+      headingLevel={3}
+      icon={Megaphone}
+      heading={copy.heading}
+      description={applicability ? `${copy.description} ${applicability}.` : copy.description}
+    />
   );
 }
 

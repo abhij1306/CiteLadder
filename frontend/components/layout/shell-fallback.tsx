@@ -31,11 +31,11 @@ import { hasPageTitle } from './page-titles';
 export function ShellFallback({ children }: Readonly<{ children?: ReactNode }>) {
   return (
     <div
-      className="bg-background flex min-h-dvh"
+      className="bg-panel flex min-h-dvh"
       aria-busy={children === undefined ? 'true' : undefined}
     >
       {/* Match the settled shell's rail fill before session identity resolves. */}
-      <div className="bg-background desktop:block hidden w-[var(--sidebar-width)] shrink-0" />
+      <div className="bg-panel desktop:block hidden w-[var(--sidebar-width)] shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="desktop:hidden h-[var(--compact-topbar-height)] shrink-0" />
         <div className="app-pane app-pane-workspace flex min-w-0 flex-1 flex-col">

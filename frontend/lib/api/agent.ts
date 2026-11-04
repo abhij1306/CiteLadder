@@ -37,7 +37,10 @@ import { startLiveTurn } from '@/lib/agent/live-turns';
 export type AgentRun = z.infer<typeof agentRunSchema>;
 export type AgentRevision = z.infer<typeof agentRevisionSchema>;
 export type AgentOutput = z.infer<typeof agentOutputSchema>;
+/** One of a chat's documents, addressed for edits and restores. */
+export type AgentDocumentRef = { chatId: string; outputId: string; number: number };
 export type AgentMessage = z.infer<typeof agentMessageSchema>;
+export type AgentWebSource = AgentMessage['web_sources'][number];
 export type AgentChatSummary = z.infer<typeof agentChatSummarySchema>;
 export type AgentChatDetail = z.infer<typeof agentChatDetailSchema>;
 export type AgentSkill = z.infer<typeof agentSkillSchema>;
@@ -144,43 +147,39 @@ const agentApi = {
       await apiClient.post(`/agent/chats/${chatId}/runs/${runId}/cancel`, {}, options),
       'agent.cancelRun',
     ),
-  revisions: async (chatId: string, options?: ApiRequestOptions) =>
+  revisions: async (chatId: string, outputId: string, options?: ApiRequestOptions) =>
     strictValidate(
       agentRevisionsPageSchema,
-      await apiClient.get(`/agent/chats/${chatId}/output/revisions`, options),
+      await apiClient.get(`/agent/chats/${chatId}/outputs/${outputId}/revisions`, options),
       'agent.revisions',
     ),
   editOutput: async (
-    chatId: string,
+    document: { chatId: string; outputId: string },
     input: { base_revision_id: string; title: string; body: string },
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
       agentRevisionSchema,
-      await apiClient.post(`/agent/chats/${chatId}/output/revisions`, input, options),
+      await apiClient.post(
+        `/agent/chats/${document.chatId}/outputs/${document.outputId}/revisions`,
+        input,
+        options,
+      ),
       'agent.editOutput',
     ),
-  restoreRevision: async (chatId: string, revisionId: string, options?: ApiRequestOptions) =>
+  restoreRevision: async (
+    document: { chatId: string; outputId: string },
+    revisionId: string,
+    options?: ApiRequestOptions,
+  ) =>
     strictValidate(
       agentRevisionSchema,
       await apiClient.post(
-        `/agent/chats/${chatId}/output/revisions/${revisionId}/restore`,
+        `/agent/chats/${document.chatId}/outputs/${document.outputId}/revisions/${revisionId}/restore`,
         {},
         options,
       ),
       'agent.restoreRevision',
-    ),
-  approveOutline: async (
-    chatId: string,
-    revisionId: string,
-    idempotencyKey: string,
-    options?: ApiRequestOptions,
-  ) =>
-    admitTurn(
-      `/agent/chats/${chatId}/output/approve-outline`,
-      { revision_id: revisionId },
-      idempotencyKey,
-      options,
     ),
   instructions: async (projectId: string, options?: ApiRequestOptions) =>
     strictValidate(
@@ -228,10 +227,10 @@ export const agentQueries = {
       queryKey: queryKeys.agent.chat(chatId),
       queryFn: ({ signal }) => agentApi.getChat(chatId, { signal, workspaceId }),
     }),
-  revisions: (workspaceId: string, chatId: string, latestRevisionId: string) =>
+  revisions: (workspaceId: string, chatId: string, outputId: string, latestRevisionId: string) =>
     queryOptions({
-      queryKey: [...queryKeys.agent.revisions(chatId), latestRevisionId],
-      queryFn: ({ signal }) => agentApi.revisions(chatId, { signal, workspaceId }),
+      queryKey: [...queryKeys.agent.revisions(chatId), outputId, latestRevisionId],
+      queryFn: ({ signal }) => agentApi.revisions(chatId, outputId, { signal, workspaceId }),
     }),
   instructions: (workspaceId: string, projectId: string) =>
     queryOptions({
@@ -269,24 +268,23 @@ export const agentMutations = {
     }),
   editOutput: (workspaceId: string) =>
     mutationOptions({
-      mutationFn: (vars: { chatId: string; baseRevisionId: string; title: string; body: string }) =>
+      mutationFn: (vars: {
+        chatId: string;
+        outputId: string;
+        baseRevisionId: string;
+        title: string;
+        body: string;
+      }) =>
         agentApi.editOutput(
-          vars.chatId,
+          vars,
           { base_revision_id: vars.baseRevisionId, title: vars.title, body: vars.body },
           { workspaceId },
         ),
     }),
   restoreRevision: (workspaceId: string) =>
     mutationOptions({
-      mutationFn: (vars: { chatId: string; revisionId: string }) =>
-        agentApi.restoreRevision(vars.chatId, vars.revisionId, { workspaceId }),
-    }),
-  approveOutline: (workspaceId: string) =>
-    mutationOptions({
-      mutationFn: (vars: { chatId: string; revisionId: string; idempotencyKey: string }) =>
-        agentApi.approveOutline(vars.chatId, vars.revisionId, vars.idempotencyKey, {
-          workspaceId,
-        }),
+      mutationFn: (vars: { chatId: string; outputId: string; revisionId: string }) =>
+        agentApi.restoreRevision(vars, vars.revisionId, { workspaceId }),
     }),
   saveInstructions: (workspaceId: string) =>
     mutationOptions({

@@ -20,20 +20,12 @@ const CODED: {
     message: 'Wait for the agent to finish its current turn, then try again.',
     startNewChat: false,
   },
-  agent_skill_kind_conflict: {
-    message: 'That skill produces a different kind of output. Start a new chat for it.',
-    startNewChat: true,
-  },
   agent_turn_limit: {
     message: 'This chat has reached its turn limit. Start a new chat to continue.',
     startNewChat: true,
   },
   agent_output_conflict: {
     message: 'The output changed since you opened it. Review the latest revision and try again.',
-    startNewChat: false,
-  },
-  agent_outline_not_approvable: {
-    message: 'Only the latest outline can be approved.',
     startNewChat: false,
   },
 };

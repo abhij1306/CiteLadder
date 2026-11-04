@@ -4,7 +4,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 
-import { Alert } from '@/components/ui/alert';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
@@ -78,7 +77,7 @@ function orderableSort(
 
 /**
  * The header row: the row identity (a quarter of the table, so every tab
- * lays out identically and switching QUERIES -> PAGES does not reflow the
+ * lays out identically and switching Queries -> Pages does not reflow the
  * metric columns under the pointer), then each metric. Search Console groups
  * each metric with its own comparison and difference rather than appending
  * all comparisons at the end, so a reader compares adjacent columns. The
@@ -264,32 +263,47 @@ export function DimensionTable({
     total: (current) => current?.total_count ?? measuredRows,
   });
 
+  const columns = dimensionColumns({
+    header: tab.header,
+    metrics: displayedMetrics,
+    activeSort,
+    onSort: (key) => setSort(toggleSort(activeSort, key)),
+    comparing,
+    selectedLabel,
+    compareLabel,
+  });
+  // Every tab holds one footprint, its pager and a page of rows (2026-11-03
+  // app review): a breakdown that fits on one page, and its empty or
+  // not-imported state, reserve the same, so switching tabs never resizes
+  // the panel under the tab row.
   if (unavailable) {
     // Distinct from an empty table: Search Console does not serve this
     // breakdown in a form this project imports, so nothing was measured —
     // which is not the same as having measured nothing.
     return (
-      <Alert tone="info">
-        Search Console does not provide {tab.noun} alongside a date range, so this breakdown is not
-        imported. Every other tab is unaffected.
-      </Alert>
+      <DataTable
+        label={tab.header}
+        columns={columns}
+        minWidth={comparing ? 'md' : 'sm'}
+        reserveRows
+        {...table}
+        state={{
+          kind: 'empty',
+          icon: SearchX,
+          heading: `No ${tab.noun} imported`,
+          description: `Search Console does not provide ${tab.noun} alongside a date range, so this breakdown is not imported. Every other tab is unaffected.`,
+        }}
+      />
     );
   }
 
   return (
     <DataTable
       label={tab.header}
-      columns={dimensionColumns({
-        header: tab.header,
-        metrics: displayedMetrics,
-        activeSort,
-        onSort: (key) => setSort(toggleSort(activeSort, key)),
-        comparing,
-        selectedLabel,
-        compareLabel,
-      })}
+      columns={columns}
       minWidth={comparing ? 'md' : 'sm'}
       pinFirstColumn
+      reserveRows
       {...table}
     >
       {page?.items.map((row) => (

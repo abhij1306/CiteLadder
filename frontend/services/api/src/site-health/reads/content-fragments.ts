@@ -8,12 +8,14 @@ import { compareText, scalarText, stripTrailing } from '../../text-order.ts';
 import type { Scope } from '../../opportunities/sources.ts';
 
 const p = policy.agent_context;
+/** A URL as pages are matched: scheme, `www.` and a trailing slash do not tell pages apart. */
 export const comparableUrl = (value: string) =>
   stripTrailing(
     value
       .trim()
       .toLowerCase()
-      .replace(/^https?:\/\//u, ''),
+      .replace(/^https?:\/\//u, '')
+      .replace(/^www\./u, ''),
     '/',
   );
 function clean(value: unknown, cap = p.content_context_field_max_chars) {
@@ -77,7 +79,8 @@ function rowsQuery(db: Database, scope: Scope, crawlId: string) {
       'f.extractor_version',
     ]);
 }
-function pageBlock(row: PageRow) {
+/** A page's context block; the requested page carries a longer body excerpt. */
+function pageBlock(row: PageRow, target: boolean) {
   const facts = record(row.normalized_facts),
     headings = record(facts.headings);
   return {
@@ -95,7 +98,10 @@ function pageBlock(row: PageRow) {
     h2: strings(headings.h2_texts)
       .slice(0, p.context_max_h2)
       .map((value) => clean(value)),
-    body_text: clean(record(facts.body).text, p.content_context_per_page_body_chars),
+    body_text: clean(
+      record(facts.body).text,
+      target ? p.content_context_target_body_chars : p.content_context_per_page_body_chars,
+    ),
   };
 }
 /** Whether the row is the requested page, by either recorded URL. */
@@ -121,7 +127,7 @@ function score(row: PageRow, terms: Set<string>, target: string, monitored: Set<
     (monitored.has(row.site_url_id) ? p.content_score_monitored : 0)
   );
 }
-function projection(ordered: PageRow[]) {
+function projection(ordered: PageRow[], target: string) {
   const pages: ReturnType<typeof pageBlock>[] = [],
     provenance: Record<string, unknown>[] = [],
     omissions: { reason: string; count: number }[] = [];
@@ -132,7 +138,7 @@ function projection(ordered: PageRow[]) {
       omissions.push({ reason: 'page_limit', count: ordered.length - index });
       break;
     }
-    const page = pageBlock(row);
+    const page = pageBlock(row, isTarget(row, target));
     const size = Object.values(page).reduce(
       (sum, value) => sum + (Array.isArray(value) ? value.join('').length : value.length),
       0,
@@ -223,7 +229,7 @@ export async function selectContentFragments(
     target = comparableUrl(targetUrl);
   const home = (row: PageRow) =>
     comparableUrl(row.normalized_url) === comparableUrl(profile?.root_url ?? '') ||
-    comparableUrl(row.normalized_url) === (profile?.root_host ?? '');
+    comparableUrl(row.normalized_url) === comparableUrl(profile?.root_host ?? '');
   const tier = (row: PageRow) => {
     if (home(row)) return 0;
     return monitored.has(row.site_url_id) ? 1 : 2;
@@ -263,7 +269,10 @@ export async function selectContentFragments(
     if (batch.length < p.content_context_read_batch_size || last === undefined) break;
     after = last.site_url_id;
   }
-  const result = projection(candidates.map(({ row }) => row));
+  const result = projection(
+    candidates.map(({ row }) => row),
+    target,
+  );
   if (omitted)
     result.summary.omissions.push({ reason: 'background_candidate_limit', count: omitted });
   return {

@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import { queryKeys } from '@/lib/api/query-keys';
-import { CHAT, REV1, REV2, revision } from '@/test/agent-chat-fixture';
+import { CHAT, OUTPUT, REV1, REV2, revision } from '@/test/agent-chat-fixture';
 
 import { OutputHistory } from './output-history';
 
@@ -17,12 +17,15 @@ describe('OutputHistory', () => {
   it('refreshes history for a new latest revision and retains prefix invalidation', async () => {
     let items = [revision(REV1, 1, 'agent', 'First draft')];
     mswServer.use(
-      http.get(`/api/v1/agent/chats/${CHAT}/output/revisions`, () => HttpResponse.json({ items })),
+      http.get(`/api/v1/agent/chats/${CHAT}/outputs/${OUTPUT}/revisions`, () =>
+        HttpResponse.json({ items }),
+      ),
     );
     const { rerender, queryClient } = renderWithProviders(
       <OutputHistory
         workspaceId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         chatId={CHAT}
+        outputId={OUTPUT}
         latestRevisionId={REV1}
         canRestore={false}
       />,
@@ -33,6 +36,7 @@ describe('OutputHistory', () => {
       <OutputHistory
         workspaceId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         chatId={CHAT}
+        outputId={OUTPUT}
         latestRevisionId={REV2}
         canRestore={false}
       />,

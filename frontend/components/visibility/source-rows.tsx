@@ -91,7 +91,11 @@ function domainColumns(
   retrieval: SourcesData['retrieval'] | undefined,
 ): DataTableColumn[] {
   return [
-    { key: 'source', label: 'Source', width: 'lead', sort: sortProps(sort, onSort, 'key') },
+    // Every figure takes the `metric` role: a sortable header with its hint
+    // needs that width to show its label whole, and the table scrolls in its
+    // frame behind the pinned source rather than cutting headers to "Cited…"
+    // (2026-11-03 app review).
+    { key: 'source', label: 'Source', sort: sortProps(sort, onSort, 'key') },
     {
       key: 'type',
       label: 'Domain type',
@@ -101,6 +105,7 @@ function domainColumns(
     {
       key: 'cited',
       label: 'Cited in',
+      width: 'metric',
       numeric: true,
       sort: sortProps(sort, onSort, 'response_rate'),
       hint: 'Answers that cited at least one page from this domain, as a share of all answers in the selection.',
@@ -108,6 +113,7 @@ function domainColumns(
     {
       key: 'retrieved',
       label: 'Retrieved',
+      width: 'metric',
       numeric: true,
       sort: sortProps(sort, onSort, 'retrieved'),
       hint: retrievedHint(
@@ -118,6 +124,7 @@ function domainColumns(
     {
       key: 'pages',
       label: 'Pages cited',
+      width: 'metric',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'retrieval_rate'),
@@ -126,6 +133,7 @@ function domainColumns(
     {
       key: 'citations',
       label: 'Citations',
+      width: 'metric',
       numeric: true,
       sort: sortProps(sort, onSort, 'annotations'),
       hint: 'Every inline citation belonging to this domain.',
@@ -133,6 +141,7 @@ function domainColumns(
     {
       key: 'share',
       label: 'Citation share',
+      width: 'metric',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'citation_share'),
@@ -141,6 +150,7 @@ function domainColumns(
     {
       key: 'rate',
       label: 'Citation rate',
+      width: 'metric',
       numeric: true,
       desktopOnly: true,
       sort: sortProps(sort, onSort, 'citation_rate'),
@@ -178,6 +188,8 @@ export function DomainTable({
     <DataTable
       label="Cited domains"
       columns={domainColumns(sort, onSort, retrieval)}
+      minWidth="xl"
+      pinFirstColumn
       rowCount={rows.length}
       {...frame}
     >

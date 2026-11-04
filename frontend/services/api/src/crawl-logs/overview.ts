@@ -22,6 +22,7 @@ import {
   type CrawlReadOptions,
 } from './reads.ts';
 import type { CrawlScope } from './state.ts';
+import { citationCoverage, citationRuns } from './citation-runs.ts';
 
 const TRACKED_CITATIONS_LABEL = "Observed in CiteLadder's tracked answers";
 
@@ -39,32 +40,14 @@ async function trackedCitations(
   scope: CrawlScope,
   bounds: ReturnType<typeof windowBounds>,
 ): Promise<TrackedCitations> {
-  const runs = await db
-    .selectFrom('audits as a')
-    .leftJoin('metric_snapshots as m', (join) =>
-      join
-        .onRef('m.audit_id', '=', 'a.id')
-        .onRef('m.workspace_id', '=', 'a.workspace_id')
-        .onRef('m.project_id', '=', 'a.project_id'),
-    )
-    .select(['a.id as audit_id', 'm.owned_citation_count', 'm.analyzer_version'])
-    .distinctOn('a.audit_scope')
-    .where('a.workspace_id', '=', scope.workspaceId)
-    .where('a.project_id', '=', scope.projectId)
-    .where('a.status', '=', 'completed')
-    .where('a.created_at', '>=', bounds.from)
-    .where('a.created_at', '<', bounds.to)
-    .orderBy('a.audit_scope')
-    .orderBy('a.created_at', 'desc')
-    .orderBy('a.id', 'desc')
-    .execute();
+  const runs = await citationRuns(db, scope, bounds).execute();
   const base = { unit: 'tracked_citations', label: TRACKED_CITATIONS_LABEL } as const;
-  if (!runs.length)
-    return { ...base, state: 'not_available', reason: 'no_completed_run', count: null };
+  const coverage = citationCoverage(runs);
+  if (coverage !== 'measured')
+    return { ...base, state: 'not_available', reason: coverage, count: null };
   const sources: { audit_id: string; analyzer_version: string; count: number }[] = [];
   for (const run of runs) {
-    if (run.owned_citation_count === null || run.analyzer_version === null)
-      return { ...base, state: 'not_available', reason: 'not_computed', count: null };
+    if (run.owned_citation_count === null || run.analyzer_version === null) continue;
     sources.push({
       audit_id: run.audit_id,
       analyzer_version: run.analyzer_version,

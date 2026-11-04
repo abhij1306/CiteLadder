@@ -13,6 +13,7 @@ import { DisplayTime, TableTime } from '@/components/ui/display-time';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
+import { QueryState } from '@/components/ui/query-state';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { ReadError } from '@/components/ui/read-error';
 import { TagGroup } from '@/components/ui/tag';
@@ -277,7 +278,7 @@ export function ApiKeys() {
       return cache.invalidateQueries({ queryKey: queryKeys.apiKeys.all });
     },
   });
-  if (query.isPending) return <output>Loading API keys…</output>;
+  if (query.isPending) return <QueryState kind="loading" label="Loading API keys…" />;
   if (query.isError)
     return (
       <ReadError
@@ -310,6 +311,7 @@ export function ApiKeys() {
                 icon: KeyRound,
                 headingLevel: 3,
                 heading: 'No API keys yet',
+                description: 'Create a key to call the REST API from your own code.',
               }
             : undefined
         }

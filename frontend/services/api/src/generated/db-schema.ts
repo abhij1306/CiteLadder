@@ -104,10 +104,14 @@ export interface AgentMessages {
   skill_id: string | null;
   skill_source: string | null;
   steps: Json;
+  web_sources: Generated<Json>;
   workspace_id: string;
 }
 
 export interface AgentModelAttempts {
+  cache_miss_reason: Generated<string>;
+  cache_missed_input_tokens: Int8 | null;
+  cache_write_1h_input_tokens: Int8 | null;
   cache_write_input_tokens: Int8 | null;
   cached_input_tokens: Int8 | null;
   created_at: Timestamp;
@@ -120,9 +124,11 @@ export interface AgentModelAttempts {
   finish_status: string;
   funding_source: string;
   id: string;
+  input_bytes: Int8 | null;
   input_tokens: Int8 | null;
   late_receipt: boolean;
   latency_ms: number | null;
+  max_output_tokens: number | null;
   ordinal: number;
   outcome: string;
   output_hash: string;
@@ -135,6 +141,7 @@ export interface AgentModelAttempts {
   requested_model: string;
   reservation_id: string | null;
   reserved_credits: Int8;
+  response_id: Generated<string>;
   returned_model: string;
   run_attempt: number;
   run_id: string;
@@ -142,12 +149,12 @@ export interface AgentModelAttempts {
   settlement_status: string;
   total_tokens: Int8 | null;
   usage_complete: boolean;
+  usage_iterations: Generated<Json>;
+  web_search_requests: number | null;
   workspace_id: string;
 }
 
 export interface AgentOutputRevisions {
-  approved_at: Timestamp | null;
-  approved_by_user_id: string | null;
   author: string;
   author_user_id: string | null;
   body: string;
@@ -157,11 +164,11 @@ export interface AgentOutputRevisions {
   number: number;
   output_id: string;
   parent_revision_id: string | null;
-  phase: string;
   project_id: string;
   run_id: string | null;
   source_refs: Json;
   title: string;
+  web_sources: Generated<Json>;
   workspace_id: string;
 }
 
@@ -172,7 +179,7 @@ export interface AgentOutputs {
   format_id: string | null;
   id: string;
   kind: string;
-  phase: string;
+  number: number;
   project_id: string;
   skill_id: string;
   target_kind: string | null;
@@ -199,7 +206,6 @@ export interface AgentRuns {
   lease_expires_at: Timestamp | null;
   lease_owner: string | null;
   max_attempts: number;
-  mode: string;
   priority: number;
   project_id: string;
   protocol_version: string;
@@ -447,6 +453,19 @@ export interface ApiKeys {
   workspace_id: string;
 }
 
+export interface AuditAnswerAggregates {
+  analysis_ids: string[];
+  analyzer_version: string;
+  audit_id: string;
+  cohort: string;
+  created_at: Timestamp;
+  id: string;
+  logical_engine: string;
+  project_id: string;
+  prompt_keys: string[];
+  workspace_id: string;
+}
+
 export interface AuditComparisonBaselines {
   analyzer_version: string;
   audit_id: string;
@@ -550,6 +569,28 @@ export interface AuditSchedules {
   repetitions: number | null;
   timezone: string;
   updated_at: Timestamp;
+  workspace_id: string;
+}
+
+export interface AuditSourceAggregates {
+  analysis_ids: string[];
+  analyzer_version: string;
+  audit_id: string;
+  citation_ids: string[];
+  classification: string;
+  cohort: string;
+  created_at: Timestamp;
+  dimension: string;
+  domain: string;
+  id: string;
+  key: string;
+  logical_engine: string;
+  project_id: string;
+  prompt_keys: string[];
+  source_class: string | null;
+  source_taxonomy_version: string | null;
+  url_hash: string | null;
+  urls: string[];
   workspace_id: string;
 }
 
@@ -1473,6 +1514,7 @@ export interface MetricSnapshots {
   metrics: Json | null;
   owned_citation_count: number;
   owned_citation_ids: Json;
+  owned_citation_pages: Json;
   project_id: string;
   scoring_rule_version: string;
   source_analysis_ids: Json | null;
@@ -2940,11 +2982,13 @@ export interface DB {
   answer_perceptions: AnswerPerceptions;
   api_idempotency: ApiIdempotency;
   api_keys: ApiKeys;
+  audit_answer_aggregates: AuditAnswerAggregates;
   audit_comparison_baselines: AuditComparisonBaselines;
   audit_engine_snapshots: AuditEngineSnapshots;
   audit_events: AuditEvents;
   audit_prompt_snapshots: AuditPromptSnapshots;
   audit_schedules: AuditSchedules;
+  audit_source_aggregates: AuditSourceAggregates;
   audit_tasks: AuditTasks;
   audits: Audits;
   bot_activity_daily: BotActivityDaily;

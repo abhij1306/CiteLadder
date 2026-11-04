@@ -44,6 +44,8 @@ export async function appendMessage(
     skillId?: string | null;
     skillSource?: string | null;
     evidence?: string[];
+    /** Web pages the turn's searches returned, kept apart from CiteLadder records. */
+    webSources?: { url: string; title: string }[];
     steps?: Json[];
     mentions?: Json[];
   },
@@ -69,6 +71,7 @@ export async function appendMessage(
       skill_id: input.skillId ?? null,
       skill_source: input.skillSource ?? null,
       evidence_refs: JSON.stringify(input.evidence ?? []),
+      web_sources: JSON.stringify(input.webSources ?? []),
       steps: JSON.stringify(input.steps ?? []),
       mentions: JSON.stringify(input.mentions ?? []),
       created_at: new Date(),
@@ -80,7 +83,9 @@ const RECOVERY: Record<string, string> = {
   stopped_at_limit:
     'I reached this turn’s step limit before I could finish. Nothing was saved. Narrow the request and try again.',
   output_too_long:
-    'The result was longer than one reply can hold, so nothing was saved. Ask for one section at a time or a shorter format.',
+    'The model ran out of room to finish this step, even after a second, shorter attempt, so nothing was saved. Ask for one part at a time.',
+  context_too_long:
+    'This chat is now longer than the model can read at once, so nothing was saved. Start a new chat to continue.',
   context_size_limit:
     'This request and its selected evidence are too large for one turn. Remove some references or ask about one part at a time.',
   skills_changed:

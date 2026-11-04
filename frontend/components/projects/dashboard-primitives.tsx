@@ -8,6 +8,7 @@ import { TextLink } from '@/components/ui/text-link';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { CommandCenter, Opportunity } from '@/lib/api/types';
 import { availabilityLabel } from '@/lib/format';
+import { severityBadgeValue, severityLabel } from '@/lib/site-health/issues';
 import { textRole } from '@/components/ui/typography';
 import { splitPaneClasses } from '@/components/ui/workspace';
 
@@ -88,13 +89,10 @@ export function actionItem(action: Opportunity): ReorderItem {
           >
             {action.title}
           </TextLink>
-          {action.severity === 'critical' ? (
-            <Badge variant="status" value="danger">
-              {action.severity}
-            </Badge>
-          ) : (
-            <Badge>{action.severity}</Badge>
-          )}
+          {/* The one severity mapping the evidence drawer and Site Health use. */}
+          <Badge variant="status" value={severityBadgeValue(action.severity)}>
+            {severityLabel(action.severity)}
+          </Badge>
         </Inline>
         <p className="type-caption truncate">
           {action.target_label ?? 'Project-wide'} · {action.evidence_summary.count} persisted

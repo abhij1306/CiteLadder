@@ -60,11 +60,11 @@ runs answered.
 
 ### A full MCP server, reads and changes
 
-CiteLadder ships an MCP server with **48 tools** (self-hosted; the hosted version may list fewer), so Claude Code or any MCP client can work with
+CiteLadder ships an MCP server with **49 tools** (self-hosted; the hosted version may list fewer), so Claude Code or any MCP client can work with
 your project directly:
 
-- **31 read tools** across AI visibility, perception, fact checks, ads in AI answers, cited sources
-  and URLs, prompts, Actions, Site Health (pages, links, AI crawlability), AI crawler logs and
+- **32 read tools** across AI visibility, perception, fact checks, ads in AI answers, cited sources
+  and URLs, prompts, Actions, Site Health (pages, page text, links, AI crawlability), AI crawler logs and
   AI traffic, search performance and demand, and keyword research.
 - **3 interactive app views** (MCP Apps) for visibility, Site Health and analytics, rendered inside
   clients that support them.
@@ -115,7 +115,7 @@ engines over time. Site and demand metrics are leading indicators, never present
 | **Search Intelligence** | Keyword suggestions, search volume and backlink research via DataForSEO, with a cost review before any paid call runs. |
 | **AI Traffic** | AI crawler logs from Cloudflare (Worker or Logpush), AWS Firehose, Google Cloud Pub/Sub or file uploads, and referral traffic from answer engines: which bots read which pages, and which answers send visitors. |
 | **Commerce Suite** | Product catalog, buyer prompts and an AI "shelf" view of how your products appear next to competitors. |
-| **MCP server** | 48 tools (self-hosted) for Claude, ChatGPT and any MCP client: read visibility, sources, Site Health, actions, demand and traffic, **and make changes**: add or archive prompts, add or remove competitors, manage topics, launch and schedule audits, update actions. Larger changes are shown as a preview and applied only after you confirm. Includes interactive MCP Apps views. |
+| **MCP server** | 49 tools (self-hosted) for Claude, ChatGPT and any MCP client: read visibility, sources, Site Health, actions, demand and traffic, **and make changes**: add or archive prompts, add or remove competitors, manage topics, launch and schedule audits, update actions. Larger changes are shown as a preview and applied only after you confirm. Includes interactive MCP Apps views. |
 | **Public API** | Scoped API keys for `/v1` endpoints, with an OpenAPI document at `/v1/openapi.json`. |
 | **Overview reports** | An editable project overview with layout control and PDF export. |
 

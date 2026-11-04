@@ -6,7 +6,7 @@ import { SearchX } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Stack } from '@/components/ui/layout';
-import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Pressable } from '@/components/ui/pressable';
 import { MISSING_MARK } from '@/lib/format';
 import { DisplayTime, TableTime } from '@/components/ui/display-time';
@@ -82,13 +82,11 @@ function UnavailableTrafficValue({
   label = 'Unavailable',
 }: Readonly<{ reason: string; label?: string }>) {
   return (
-    <TooltipProvider>
-      <Tooltip content={reason}>
-        <Pressable type="button" className="w-auto text-center" aria-label={label}>
-          {MISSING_MARK}
-        </Pressable>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip content={reason}>
+      <Pressable type="button" className="w-auto text-center" aria-label={label}>
+        {MISSING_MARK}
+      </Pressable>
+    </Tooltip>
   );
 }
 

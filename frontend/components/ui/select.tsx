@@ -97,7 +97,7 @@ export function Select<T extends string>({
         aria-required={required || undefined}
         id={id}
         className={cn(
-          'focus-ring bg-input text-foreground data-[placeholder]:text-muted flex h-[var(--control-height-md)] min-w-0 items-center justify-between gap-2 rounded-[var(--radius-control)] px-3 text-field border border-border transition-[border-color,background-color] enabled:hover:border-border-strong disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle aria-invalid:border-danger aria-invalid:enabled:hover:border-danger data-[state=open]:bg-selected enabled:active:bg-active',
+          'focus-ring bg-input text-foreground data-[placeholder]:text-muted flex h-[var(--control-height-md)] min-w-0 items-center justify-between gap-2 rounded-[var(--radius-control)] px-3 text-field border border-border-bold transition-[border-color,background-color] enabled:hover:border-muted disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle aria-invalid:border-danger aria-invalid:enabled:hover:border-danger data-[state=open]:bg-selected enabled:active:bg-active',
           className,
         )}
       >

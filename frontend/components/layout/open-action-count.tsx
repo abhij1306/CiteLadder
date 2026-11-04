@@ -1,6 +1,6 @@
 'use client';
 
-import { textRole } from '@/components/ui/typography';
+import { InlineFigure, textRole } from '@/components/ui/typography';
 import { queueCount, useActionStatusCounts } from '@/lib/agent/use-action-status-counts';
 
 /** Open plus in-progress Actions for the active project, beside the Actions destination. */
@@ -10,9 +10,9 @@ export function OpenActionCount() {
   const count = queueCount(counts);
   return (
     <>
-      <span aria-hidden className={textRole('caption', 'tabular-nums')}>
+      <InlineFigure aria-hidden className={textRole('caption')}>
         {count}
-      </span>
+      </InlineFigure>
       <span className="sr-only">, {count} open</span>
     </>
   );

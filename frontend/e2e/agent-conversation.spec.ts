@@ -27,7 +27,6 @@ function chatDetail(): AgentChatDetail {
       title: 'Discuss buyer needs',
       turn_count: 12,
       output_kind: null,
-      output_phase: null,
       last_activity_at: NOW,
       created_at: NOW,
       running: false,
@@ -44,7 +43,7 @@ function chatDetail(): AgentChatDetail {
         max_chars: 90000,
       },
     },
-    output: null,
+    outputs: [],
     messages: Array.from({ length: 24 }, (_, index) => ({
       id: `77777777-7777-4777-8777-${String(index + 1).padStart(12, '0')}`,
       sequence: index + 1,
@@ -56,6 +55,7 @@ function chatDetail(): AgentChatDetail {
       skill_id: 'growth_plan',
       skill_source: 'chat',
       evidence_refs: [],
+      web_sources: [],
       steps: [],
       mentions: [],
       created_at: NOW,
@@ -63,7 +63,6 @@ function chatDetail(): AgentChatDetail {
     latest_run: {
       id: RUN,
       status: 'running',
-      mode: 'turn',
       skill_id: 'growth_plan',
       skill_source: 'chat',
       steps_used: 1,

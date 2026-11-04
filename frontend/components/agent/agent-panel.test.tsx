@@ -31,7 +31,6 @@ const NOW = '2026-09-26T10:00:00Z';
 const RUN = {
   id: '55555555-5555-4555-8555-555555555555',
   status: 'succeeded',
-  mode: 'turn',
   skill_id: null,
   skill_source: null,
   steps_used: 1,
@@ -50,7 +49,6 @@ const DETAIL = {
     title: 'Missing meta description',
     turn_count: 1,
     output_kind: null,
-    output_phase: null,
     last_activity_at: NOW,
     created_at: NOW,
     running: false,
@@ -82,7 +80,7 @@ const DETAIL = {
     },
   ],
   latest_run: RUN,
-  output: null,
+  outputs: [],
 };
 
 /** Lets a test change the screen's context, as a background refetch would. */

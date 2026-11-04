@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useId, type ReactNode } from 'react';
 import '@/apps/app/src/website-type.css';
 
+import { Icon } from '@/components/ui/icon';
+import { InlineFigure } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
 import { Inline } from '@/components/ui/layout';
@@ -135,11 +137,12 @@ function FlowProgress({
                 )}
                 aria-hidden="true"
               >
-                {isDone ? <Check /> : index + 1}
+                {isDone ? <Icon icon={Check} /> : <InlineFigure>{index + 1}</InlineFigure>}
               </span>
               <span className="flow-step-label">
                 <span className="flow-step-mobile-prefix">
-                  Step {index + 1} of {steps.length} ·{' '}
+                  Step <InlineFigure>{index + 1}</InlineFigure> of{' '}
+                  <InlineFigure>{steps.length}</InlineFigure> ·{' '}
                 </span>
                 {step.label}
               </span>

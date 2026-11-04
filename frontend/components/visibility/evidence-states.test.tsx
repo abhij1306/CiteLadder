@@ -23,17 +23,16 @@ import {
  * tells a user their data does not exist when it does.
  */
 describe('evidence loading and error states', () => {
-  it('hides the skeleton from assistive technology', () => {
-    const { container } = render(<EvidenceSkeleton title="Query Fanout" />);
+  it('announces that the evidence is loading', async () => {
+    render(<EvidenceSkeleton />);
 
-    // A skeleton announced to a screen reader is noise, not content.
-    expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(await screen.findByRole('status', { name: 'Loading evidence…' })).toBeInTheDocument();
   });
 
   it('offers a retry and promises the filters are untouched', async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
-    render(<EvidenceError title="Query Fanout" onRetry={onRetry} />);
+    render(<EvidenceError onRetry={onRetry} />);
 
     expect(screen.getByText(/Couldn't load this evidence/)).toBeVisible();
     expect(screen.getByText(/Your filters are unchanged/)).toBeVisible();
@@ -47,7 +46,6 @@ describe('evidence empty states', () => {
   it('sends a user with no executions to Runs', () => {
     render(
       <EvidenceEmpty
-        title="Tracked answers"
         heading="No evidence yet"
         body="Run a visibility audit to collect evidence."
       />,
@@ -60,7 +58,7 @@ describe('evidence empty states', () => {
   });
 
   it('says filters are the cause when a filtered result is empty', () => {
-    render(<EvidenceFilteredEmpty title="Query Fanout" body="Try widening the date range." />);
+    render(<EvidenceFilteredEmpty body="Try widening the date range." />);
 
     expect(screen.getByText('No results match these filters')).toBeVisible();
     // Crucially NOT the "go run an audit" state: the data may well exist.
@@ -70,9 +68,7 @@ describe('evidence empty states', () => {
   it('offers a clear-filters escape when the caller can clear them', async () => {
     const user = userEvent.setup();
     const onClear = vi.fn();
-    render(
-      <EvidenceFilteredEmpty title="Query Fanout" body="Widen the range." onClear={onClear} />,
-    );
+    render(<EvidenceFilteredEmpty body="Widen the range." onClear={onClear} />);
 
     await user.click(screen.getByRole('button', { name: 'Clear filters' }));
 
@@ -80,7 +76,7 @@ describe('evidence empty states', () => {
   });
 
   it('omits the clear-filters button when there is nothing to clear', () => {
-    render(<EvidenceFilteredEmpty title="Query Fanout" body="Widen the range." />);
+    render(<EvidenceFilteredEmpty body="Widen the range." />);
 
     expect(screen.queryByRole('button', { name: 'Clear filters' })).not.toBeInTheDocument();
   });

@@ -31,6 +31,18 @@ function IssuesCatalog(props: Readonly<{ crawlId: string }>) {
  * asserted against `window.location` and browser history is driven with the
  * real `history.back()`/`forward()`.
  */
+/** The severity-or-category menu's trigger, which names the current choice. */
+function classFilter(choice?: string) {
+  return screen.getByRole('button', {
+    name: choice ? `Severity or category: ${choice}` : /^Severity or category:/,
+  });
+}
+
+async function chooseClass(user: ReturnType<typeof userEvent.setup>, choice: string) {
+  await user.click(classFilter());
+  await user.click(await screen.findByRole('menuitemradio', { name: choice }));
+}
+
 function currentUrl(): string {
   return window.location.pathname + window.location.search;
 }
@@ -293,7 +305,7 @@ describe('IssuesCatalog', () => {
     expect(seen.at(-1)?.get('page_kind')).toBe('article');
     expect(seen.at(-1)?.get('cursor')).toBe('page-two');
     expect(screen.getByRole('searchbox', { name: 'Search issues' })).toHaveValue('schema');
-    expect(screen.getByRole('radio', { name: 'AEO (17)' })).toHaveAttribute('aria-checked', 'true');
+    expect(classFilter('AEO (17)')).toBeInTheDocument();
   });
 
   it('writes filters to history and reflects back/forward navigation', async () => {
@@ -311,28 +323,18 @@ describe('IssuesCatalog', () => {
     expect(
       screen.getByRole('button', { name: /^Showing: WebSite schema is missing/ }),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole('radio', { name: 'Medium (23)' }));
+    await chooseClass(user, 'Medium (23)');
     await waitFor(() => expect(currentUrl()).toContain('severity=medium'));
     expect(currentUrl()).not.toContain('rule=');
     expect(currentUrl()).toContain('campaign=overview');
     expect(screen.queryByRole('button', { name: /^Showing:/ })).not.toBeInTheDocument();
 
     window.history.back();
-    await waitFor(() =>
-      expect(screen.getByRole('radio', { name: 'All (47)' })).toHaveAttribute(
-        'aria-checked',
-        'true',
-      ),
-    );
+    await waitFor(() => expect(classFilter('All (47)')).toBeInTheDocument());
     expect(currentUrl()).not.toContain('severity=medium');
 
     window.history.forward();
-    await waitFor(() =>
-      expect(screen.getByRole('radio', { name: 'Medium (23)' })).toHaveAttribute(
-        'aria-checked',
-        'true',
-      ),
-    );
+    await waitFor(() => expect(classFilter('Medium (23)')).toBeInTheDocument());
   });
 
   it('drops a filter-bound cursor while preserving unknown URL params', async () => {
@@ -401,11 +403,12 @@ describe('IssuesCatalog', () => {
     renderIssues(<IssuesCatalog crawlId={CRAWL} />);
 
     expect(await screen.findAllByText('WebSite schema is missing')).not.toHaveLength(0);
-    // Chip counts (tiles removed): All (47), Medium (23), AEO (17). The counts
-    // come from the API-owned summary, not a client re-count.
-    expect(screen.getByRole('radio', { name: 'All (47)' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Medium (23)' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'AEO (17)' })).toBeInTheDocument();
+    // Filter counts (tiles removed): All (47), Medium (23), AEO (17). The
+    // counts come from the API-owned summary, not a client re-count.
+    await userEvent.setup().click(classFilter('All (47)'));
+    expect(await screen.findByRole('menuitemradio', { name: 'Medium (23)' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitemradio', { name: 'AEO (17)' })).toBeInTheDocument();
+    await userEvent.setup().keyboard('{Escape}');
     // Evidence is the notation of the fix, with no "Observed evidence" label
     // and no restatement of the title above it.
     expect(
@@ -472,7 +475,11 @@ describe('IssuesCatalog', () => {
 
     renderIssues(<IssuesCatalog crawlId={CRAWL} />);
 
-    expect(await screen.findByText('3 pages')).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        (_, element) => element?.tagName === 'SPAN' && element.textContent === '3 pages',
+      ),
+    ).toBeInTheDocument();
     const winner = await screen.findByRole('link', { name: /Winner announced/ });
     expect(winner).toHaveAttribute(
       'href',
@@ -551,7 +558,7 @@ describe('IssuesCatalog', () => {
     renderIssues(<IssuesCatalog crawlId={CRAWL} />);
     await screen.findAllByText('WebSite schema is missing');
 
-    await user.click(screen.getByRole('radio', { name: 'Medium (23)' }));
+    await chooseClass(user, 'Medium (23)');
     await waitFor(() => expect(seen).toContain('medium'));
   });
 
@@ -588,9 +595,9 @@ describe('IssuesCatalog', () => {
           element.textContent === '47 issues · 94 occurrences · 50 pages',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Issues (47)' })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Issues\s*47$/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('radio', { name: 'Advisories (2)' }));
+    await user.click(screen.getByRole('radio', { name: /^Advisories\s*2$/ }));
     expect(await screen.findAllByText('Title length outside recommended band')).not.toHaveLength(0);
     expect(screen.getAllByText('Advisory')).toHaveLength(2);
     expect(
@@ -600,7 +607,9 @@ describe('IssuesCatalog', () => {
           element.textContent === '2 advisories · 94 occurrences · 50 pages',
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole('radio', { name: /High/ })).not.toBeInTheDocument();
+    await user.click(classFilter());
+    expect(await screen.findByRole('menuitemradio', { name: /^All/ })).toBeInTheDocument();
+    expect(screen.queryByRole('menuitemradio', { name: /High/ })).not.toBeInTheDocument();
     expect(seen).toContain('advisory');
   });
 
@@ -629,7 +638,7 @@ describe('IssuesCatalog', () => {
     // fresh combination via a chip and assert THAT request omits page_kind.
     await user.click(trigger);
     await user.click(await screen.findByRole('menuitemradio', { name: 'All page kinds' }));
-    await user.click(screen.getByRole('radio', { name: 'Medium (23)' }));
+    await chooseClass(user, 'Medium (23)');
     await waitFor(() => expect(seen.at(-1)).toBeNull());
   });
 

@@ -251,18 +251,22 @@ test('invalid field edges survive keyboard focus in both themes', async ({ page 
     await field.focus();
     const focused = await field.evaluate(async (node) => {
       await Promise.all(node.getAnimations().map((animation) => animation.finished));
+      const style = getComputedStyle(node);
       return {
-        edge: getComputedStyle(node).borderColor,
-        outline: getComputedStyle(node).outlineStyle,
+        edge: style.borderColor,
+        ring: style.outlineColor,
+        offset: Number.parseFloat(style.outlineOffset),
       };
     });
+    // The danger edge survives focus, and the focus ring inside it takes the
+    // same danger colour, drawn inside the field so its box never grows.
     expect(focused.edge).toBe(edge);
-    expect(focused.outline).toBe('none');
+    expect(focused.ring).toBe(edge);
+    expect(focused.offset).toBeLessThan(0);
   }
   await page.emulateMedia({ forcedColors: 'active' });
   await field.focus();
   expect(await field.evaluate((node) => getComputedStyle(node).borderStyle)).toBe('solid');
-  expect(await field.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
 });
 
 test('Agent text entry paints one focus boundary', async ({ page }) => {
@@ -279,6 +283,9 @@ test('Agent text entry paints one focus boundary', async ({ page }) => {
     expect(await prompt.evaluate((node) => getComputedStyle(node).borderColor)).not.toBe(inputEdge);
   }).toPass();
   expect(await form.evaluate((node) => getComputedStyle(node).borderColor)).toBe(outerEdge);
+  // The composer's outer form draws no second ring around the field's own.
   expect(await form.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
-  expect(await prompt.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
+  expect(
+    await prompt.evaluate((node) => Number.parseFloat(getComputedStyle(node).outlineOffset)),
+  ).toBeLessThan(0);
 });

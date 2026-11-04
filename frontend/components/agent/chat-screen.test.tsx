@@ -24,6 +24,7 @@ import { queryKeys } from '@/lib/api/query-keys';
 import {
   CHAT,
   NOW,
+  OUTPUT,
   PROJECT,
   REV1,
   REV2,
@@ -70,7 +71,7 @@ describe('ChatScreen', () => {
       http.get(`/api/v1/agent/chats/${CHAT}`, () =>
         HttpResponse.json({
           ...detail(revision(REV1, 1, 'agent', 'Body.')),
-          output: null,
+          outputs: [],
         }),
       ),
     );
@@ -80,7 +81,7 @@ describe('ChatScreen', () => {
     expect(screen.getByRole('menuitemradio', { name: 'Automatic' })).toBeChecked();
   });
 
-  it('shows supplied context omissions and approval as an action tied to its revision', async () => {
+  it('shows supplied context and its omissions in plain words', async () => {
     const current = {
       ...detail(revision(REV1, 1, 'agent', 'Body.')),
       context: {
@@ -93,27 +94,17 @@ describe('ChatScreen', () => {
         },
       },
     };
-    const approval = {
-      ...current.messages[0]!,
-      event: { kind: 'outline_approved', revision_id: REV1, run_id: RUN },
-    };
     mswServer.use(
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
-        HttpResponse.json({ ...current, messages: [approval, current.messages[1]] }),
-      ),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(current)),
     );
     const user = userEvent.setup();
     renderChat();
-    expect(await screen.findByRole('article', { name: 'Outline approval' })).toHaveTextContent(
-      'Outline approved',
-    );
-    await user.click(screen.getByText('Context used'));
+    await user.click(await screen.findByText('Context used'));
     expect(screen.getByText('Selected issue group')).toBeVisible();
     // Omissions are disclosed in plain words, never as internal codes.
     expect(screen.getByText(/left out to fit this turn/)).toBeVisible();
     expect(screen.queryByText(/oldest_history|history messages/)).not.toBeInTheDocument();
-    expect(screen.queryByText(current.messages[0]!.content)).not.toBeInTheDocument();
   });
   it('saves an edit as a new revision and shows it inline in the thread', async () => {
     let current = detail(revision(REV1, 1, 'agent', 'Old title tag.'));
@@ -121,7 +112,7 @@ describe('ChatScreen', () => {
     mswServer.use(
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
       http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(current)),
-      http.post(`/api/v1/agent/chats/${CHAT}/output/revisions`, async ({ request }) => {
+      http.post(`/api/v1/agent/chats/${CHAT}/outputs/${OUTPUT}/revisions`, async ({ request }) => {
         edits.push(await request.json());
         const saved = revision(REV2, 2, 'user', 'New title tag.');
         current = detail(saved);
@@ -179,7 +170,7 @@ describe('ChatScreen', () => {
     await vi.waitFor(() => expect(sent).toHaveLength(1));
     expect(sent[0]).toMatchObject({
       message:
-        'Revise only the section "Title tag": Shorter. Keep every other section exactly as it is.',
+        'In Document 1, revise only the section "Title tag": Shorter. Keep every other section exactly as it is.',
     });
   });
 
@@ -191,7 +182,7 @@ describe('ChatScreen', () => {
       http.get(`/api/v1/agent/chats/${CHAT}`, () =>
         HttpResponse.json(detail(revision(REV1, 1, 'agent', body))),
       ),
-      http.post(`/api/v1/agent/chats/${CHAT}/output/revisions`, async ({ request }) => {
+      http.post(`/api/v1/agent/chats/${CHAT}/outputs/${OUTPUT}/revisions`, async ({ request }) => {
         edits.push(await request.json());
         return HttpResponse.json(revision(REV2, 2, 'user', 'x'), { status: 201 });
       }),
@@ -273,7 +264,7 @@ describe('ChatScreen', () => {
 
   it('compares an earlier revision with the current one', async () => {
     mswServer.use(
-      http.get(`/api/v1/agent/chats/${CHAT}/output/revisions`, () =>
+      http.get(`/api/v1/agent/chats/${CHAT}/outputs/${OUTPUT}/revisions`, () =>
         HttpResponse.json({
           items: [
             revision(REV1, 1, 'agent', 'Keep.\nOld line.'),
@@ -287,6 +278,7 @@ describe('ChatScreen', () => {
       <OutputHistory
         workspaceId="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
         chatId={CHAT}
+        outputId={OUTPUT}
         latestRevisionId={REV2}
         canRestore={false}
       />,
@@ -316,7 +308,7 @@ describe('ChatScreen', () => {
     await user.click(within(pane).getByRole('button', { name: 'Edit' }));
     await user.type(within(pane).getByLabelText('Output body (Markdown)'), ' Draft.');
     await user.click(within(pane).getByRole('tab', { name: 'Sources' }));
-    await user.click(within(pane).getByRole('tab', { name: 'Final' }));
+    await user.click(within(pane).getByRole('tab', { name: 'Document' }));
 
     expect(within(pane).getByLabelText('Output body (Markdown)')).toHaveValue(
       'Old title tag. Draft.',

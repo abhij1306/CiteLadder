@@ -6,11 +6,11 @@ import { Alert } from '@/components/ui/alert';
 import { Dot } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
-import { textRole } from '@/components/ui/typography';
+import { InlineFigure, textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import type { PageSummary, SiteCrawl } from '@/lib/api/types';
+import { formatCount } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
-import { cn } from '@/lib/utils';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
 import { crawlFailureCopy, dashboardRunNotice } from '@/lib/site-health/run-notice';
 import {
@@ -167,7 +167,7 @@ function DashboardNotice({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
       narration={notice?.message ?? 'Latest crawl results'}
       counts={[
         { label: 'Pages discovered', value: crawl.visible_url_count },
-        { label: 'Pages analyzed', value: analyzed, className: 'text-success-text' },
+        { label: 'Pages analyzed', value: analyzed },
       ]}
     />
   );
@@ -223,9 +223,9 @@ function ProgressRow({
                 {count.value === null ? (
                   <UnavailableValue state="not_measured" />
                 ) : (
-                  <span className={textRole('emphasis', cn('tabular-nums', count.className))}>
-                    {count.value}
-                  </span>
+                  <InlineFigure className={textRole('emphasis', count.className)}>
+                    {formatCount(count.value)}
+                  </InlineFigure>
                 )}
               </dd>
             </Inline>

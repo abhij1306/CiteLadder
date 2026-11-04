@@ -11,7 +11,7 @@ import { ChipList, ChipListField } from '@/components/ui/chip-list-field';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
-import { RadioGroup } from '@/components/ui/radio-group';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
 import { splitPaneClasses } from '@/components/ui/workspace';
@@ -121,12 +121,14 @@ function FacetChoice<T extends string>({
       <span className={textRole('label')} aria-hidden>
         {label}
       </span>
-      <RadioGroup<T | ''>
-        variant="chip"
+      {/* A single choice is the shared segmented control: selection is its
+          accent bar and foreground ink, never a filled chip. */}
+      <SegmentedControl<T | ''>
         ariaLabel={label}
         value={value ?? ''}
         options={options}
-        onValueChange={(next) => {
+        disabled={disabled}
+        onChange={(next) => {
           if (next && !disabled) onPick(next);
         }}
       />

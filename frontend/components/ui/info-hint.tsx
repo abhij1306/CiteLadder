@@ -15,8 +15,8 @@ import { Tooltip } from '@/components/ui/tooltip';
  * The trigger is a real button so the tooltip is reachable by keyboard and
  * announced by name, which a focusable `<span>` is not. Its name is the short
  * label; the tooltip supplies the explanation as its description. The button
- * is a 28px target around the 12px glyph (at least the 24px minimum), with
- * negative margin so the larger hit area does not push the label beside it.
+ * is the 32px control target around the 12px glyph, with negative margin
+ * so the larger hit area does not push the label beside it.
  */
 export function InfoHint({ label, children }: Readonly<{ label: string; children: string }>) {
   return (
@@ -24,7 +24,7 @@ export function InfoHint({ label, children }: Readonly<{ label: string; children
       <button
         type="button"
         aria-label={label}
-        className="focus-ring text-muted hover:text-foreground -m-2 inline-flex size-7 items-center justify-center align-middle"
+        className="focus-ring text-muted hover:text-foreground -m-2 inline-flex size-8 items-center justify-center align-middle"
       >
         <Info className="size-3" aria-hidden />
       </button>

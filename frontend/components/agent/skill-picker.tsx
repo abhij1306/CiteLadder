@@ -32,14 +32,13 @@ export function skillLabel(skills: AgentSkill[], skillId: string | null): string
 }
 
 /**
- * Choose the skill for the next turn, or leave it automatic. A chat with an
- * output offers only skills that produce the same kind of output; a different
- * kind of deliverable belongs in a new chat.
+ * Choose the skill for the next turn, or leave it automatic. Any skill can
+ * write in any chat; a different kind of deliverable becomes another document.
  */
 export function SkillPicker({
   value,
   onChange,
-  outputKind,
+  hasDocument = false,
   inheritedSkillId,
   hasAction = false,
   disabled,
@@ -50,7 +49,8 @@ export function SkillPicker({
 }: Readonly<{
   value: string | null | undefined;
   onChange: (skillId: string | null | undefined) => void;
-  outputKind?: string | null;
+  /** The chat already holds a document, so an unpicked skill continues its workflow. */
+  hasDocument?: boolean;
   inheritedSkillId?: string | null;
   hasAction?: boolean;
   disabled?: boolean;
@@ -59,16 +59,14 @@ export function SkillPicker({
   onSelect?: () => void;
   onCloseAutoFocus?: (event: Event) => void;
 }>) {
-  const skills = useSkillCatalog().filter(
-    (skill) => !outputKind || skill.output_kind === outputKind,
-  );
+  const skills = useSkillCatalog();
   const groups = new Map<string, AgentSkill[]>();
   for (const skill of skills) {
     const label = skillGroupLabel(skill.group);
     groups.set(label, [...(groups.get(label) ?? []), skill]);
   }
   const inherited = skillLabel(skills, inheritedSkillId ?? null);
-  const defaultLabel = inheritedLabel(inherited, outputKind, hasAction);
+  const defaultLabel = inheritedLabel(inherited, hasDocument, hasAction);
   const current =
     value === null ? 'Automatic' : (skillLabel(skills, value ?? null) ?? defaultLabel);
   return (
@@ -109,13 +107,9 @@ export function SkillPicker({
     </Dropdown>
   );
 }
-function inheritedLabel(
-  skill: string | null,
-  outputKind: string | null | undefined,
-  hasAction: boolean,
-) {
+function inheritedLabel(skill: string | null, hasDocument: boolean, hasAction: boolean) {
   if (skill) return `Continue with ${skill}`;
-  if (outputKind) return 'Continue chat workflow';
+  if (hasDocument) return 'Continue chat workflow';
   return hasAction ? 'From attached Action' : 'Automatic';
 }
 function selectedValue(next: string) {

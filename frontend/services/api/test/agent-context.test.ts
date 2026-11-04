@@ -212,6 +212,37 @@ describe('Agent persisted context binding', () => {
       related_page_count: 2,
     });
   });
+  it("treats an address on the project's site in the message as the target page, with a longer excerpt", async () => {
+    const seed = await fixtures.crawl();
+    const copy = 'Every plan includes support. '.repeat(200).trim();
+    await fixtures.page(seed, '/pricing', { title: 'Pricing', body: { text: copy } });
+    await fixtures.page(seed, '/about', { title: 'About', body: { text: copy } });
+    await db
+      .updateTable('site_page_analyses')
+      .set({ finalized_at: new Date() })
+      .where('crawl_id', '=', seed.crawlId)
+      .execute();
+    const context = await readAgentContext(
+      db,
+      seed,
+      {},
+      'Tighten the copy on www.example.test/pricing/?utm_source=mail, and email kerry@example.test when done.',
+    );
+    expect(context.summary).toMatchObject({ target_url: 'https://www.example.test/pricing/' });
+    expect(context.sections?.target_page).toMatchObject({
+      title: 'Pricing',
+      body_text: copy.slice(0, policy.agent_context.content_context_target_body_chars),
+    });
+    const related = context.sections?.related_site as { title: string; body_text: string }[];
+    expect(related.map((page) => [page.title, page.body_text.length])).toEqual([
+      ['About', policy.agent_context.content_context_per_page_body_chars],
+    ]);
+    // Another site's address, or only an email domain, names no target.
+    for (const request of ['Compare us with https://rival.test/pricing', 'Mail kerry@example.test'])
+      expect((await readAgentContext(db, seed, {}, request)).summary).toMatchObject({
+        target_url: null,
+      });
+  });
   it('refuses explicit origins from a sibling project and records absent crawl evidence', async () => {
     const seed = await fixtures.crawl(),
       foreign = await fixtures.crawl();

@@ -35,6 +35,15 @@ export const mcp = {
     named_link_page_neighbors: 3,
     // Per-page evidence lines a rule-filtered page read carries.
     rule_evidence_items: 3,
+    // Characters of crawled copy one page-text read returns (title, meta, headings,
+    // then body text in what is left), so the result fits one Agent tool result
+    // (tool_result_max_chars, 40 000) with its identity and references.
+    page_text_max_chars: 36000,
+    // Headings per level, each cut to the heading cap.
+    page_text_max_headings: 30,
+    page_text_heading_chars: 200,
+    // Crawled URLs offered when a URL names no crawled page.
+    page_text_url_suggestions: 5,
     max_document_bytes: 256000,
     protocol_cleanup_batch: 100,
     last_used_resolution_seconds: 300,

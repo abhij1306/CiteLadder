@@ -98,7 +98,7 @@ export function TopicRail({
       <Card className="desktop:block hidden min-w-0">
         <Stack as="nav" gap="tight" aria-label="Topics" className="min-w-0 content-start">
           <Inline className="justify-between">
-            <h3 className={textRole('label')}>Topics</h3>
+            <h3 className={textRole('sectionTitle')}>Topics</h3>
             <IconButton icon={Plus} label="Add topic" onClick={() => setAdding((v) => !v)} />
           </Inline>
 
@@ -272,7 +272,7 @@ function TopicItem({
           {onDelete ? (
             <IconButton
               icon={Trash2}
-              variant="destructiveGhost"
+              // Neutral at rest like Rename: the confirm dialog carries the danger.
               label={`Delete topic ${name}`}
               onClick={onDelete}
               className="shrink-0"

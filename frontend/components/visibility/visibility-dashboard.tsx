@@ -118,32 +118,37 @@ function VisibilityWorkspace({
           onIntent: queries.prefetchTab,
         }}
         controls={{
-          view: filters.activeTab === 'sources' && !state ? sourceDimension : null,
+          // Domains | URLs leads the filters rather than taking the band's
+          // `view` slot, which pushes the filters to the end: every tab's
+          // filters start at the same left edge (2026-11-03 app review).
           filters: (
-            <VisibilityToolbar
-              activeTab={filters.activeTab}
-              runs={queries.runOptions}
-              selectedRunId={filters.selectedRunId}
-              onSelectMeasurement={filters.selectMeasurement}
-              engine={filters.engine}
-              onChangeEngine={filters.setEngine}
-              promptOptions={queries.promptOptions}
-              promptId={filters.promptId}
-              onChangePrompt={filters.setPromptId}
-              range={filters.range}
-              onChangeRange={filters.setRange}
-              granularity={filters.granularity}
-              onChangeGranularity={filters.setGranularity}
-              cohort={filters.cohort}
-              onChangeCohort={filters.setCohort}
-              selectionMode={filters.selectionMode}
-              onChangeSelectionMode={filters.setSelectionMode}
-              outcome={filters.outcome}
-              onChangeOutcome={filters.setOutcome}
-              markets={queries.markets}
-              market={filters.market}
-              onChangeMarket={filters.setMarket}
-            />
+            <>
+              {filters.activeTab === 'sources' && !state ? sourceDimension : null}
+              <VisibilityToolbar
+                activeTab={filters.activeTab}
+                runs={queries.runOptions}
+                selectedRunId={filters.selectedRunId}
+                onSelectMeasurement={filters.selectMeasurement}
+                engine={filters.engine}
+                onChangeEngine={filters.setEngine}
+                promptOptions={queries.promptOptions}
+                promptId={filters.promptId}
+                onChangePrompt={filters.setPromptId}
+                range={filters.range}
+                onChangeRange={filters.setRange}
+                granularity={filters.granularity}
+                onChangeGranularity={filters.setGranularity}
+                cohort={filters.cohort}
+                onChangeCohort={filters.setCohort}
+                selectionMode={filters.selectionMode}
+                onChangeSelectionMode={filters.setSelectionMode}
+                outcome={filters.outcome}
+                onChangeOutcome={filters.setOutcome}
+                markets={queries.markets}
+                market={filters.market}
+                onChangeMarket={filters.setMarket}
+              />
+            </>
           ),
         }}
       >

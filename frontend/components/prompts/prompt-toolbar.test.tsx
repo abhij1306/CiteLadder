@@ -18,6 +18,11 @@ describe('promptFilterControls', () => {
       return (
         <FilterBar
           {...promptFilterControls({
+            status: {
+              value: 'active',
+              counts: { active: 0, archived: 0 },
+              onChange: () => undefined,
+            },
             search,
             onSearchChange: setSearch,
             filters: emptyFilters,
@@ -34,6 +39,33 @@ describe('promptFilterControls', () => {
     expect(search).toHaveValue('');
     await user.type(search, 'brand');
     expect(search).toHaveValue('brand');
+  });
+
+  it('switches between active and archived prompts, each with its count', async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [status, setStatus] = useState<'active' | 'archived'>('active');
+      return (
+        <FilterBar
+          {...promptFilterControls({
+            status: { value: status, counts: { active: 12, archived: 3 }, onChange: setStatus },
+            search: '',
+            onSearchChange: () => undefined,
+            filters: emptyFilters,
+            onFiltersChange: () => undefined,
+          })}
+        />
+      );
+    }
+
+    render(<Harness />);
+    // jsdom drops the space the browser reads between label and count.
+    const archived = screen.getByRole('radio', { name: /^Archived\s*3$/ });
+    const active = screen.getByRole('radio', { name: /^Active\s*12$/ });
+    expect(active).toBeChecked();
+    await user.click(archived);
+    expect(archived).toBeChecked();
+    expect(active).not.toBeChecked();
   });
 });
 

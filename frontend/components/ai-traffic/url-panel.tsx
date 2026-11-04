@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
-import { Tooltip, TooltipProvider } from '@/components/ui/tooltip';
+import { Tooltip } from '@/components/ui/tooltip';
 import { DisplayTime } from '@/components/ui/display-time';
 import { aiTrafficApi, aiTrafficQueries, type TrafficFilters } from '@/lib/api/ai-traffic';
 import { queryKeys } from '@/lib/api/query-keys';
@@ -53,17 +53,15 @@ function CompactTrafficLeg({
     </>
   );
   return qualified ? (
-    <TooltipProvider>
-      <Tooltip content={detail}>
-        <Pressable
-          type="button"
-          className="w-auto text-center tabular-nums"
-          aria-label={`${leg.value ?? 'Unavailable'} ${unit}`}
-        >
-          {value}
-        </Pressable>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip content={detail}>
+      <Pressable
+        type="button"
+        className="w-auto text-center tabular-nums"
+        aria-label={`${leg.value ?? 'Unavailable'} ${unit}`}
+      >
+        {value}
+      </Pressable>
+    </Tooltip>
   ) : (
     <span className="tabular-nums">{value}</span>
   );

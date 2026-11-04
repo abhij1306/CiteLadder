@@ -20,7 +20,7 @@ import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { textRole } from '@/components/ui/typography';
+import { InlineFigure, textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { integrationsApi, type IntegrationProvider } from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
@@ -200,7 +200,12 @@ function SourceRow({
         title={source.label}
         status={
           <Inline as="span" gap="meta">
-            <span className="tabular-nums">{step.mapping.property_ref}</span>
+            {/* A GA4 property is a number; a Search Console property is a site. */}
+            {step.connection.provider === 'ga4' ? (
+              <InlineFigure>{step.mapping.property_ref}</InlineFigure>
+            ) : (
+              <span>{step.mapping.property_ref}</span>
+            )}
             <BackfillProgress
               workspaceId={step.connection.workspace_id}
               connectionId={step.connection.id}

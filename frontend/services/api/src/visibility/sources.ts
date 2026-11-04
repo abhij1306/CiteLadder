@@ -1,11 +1,17 @@
 /**
  * The Sources table: cited domains, or cited pages, over a selection.
  *
- * Shared API/MCP projection. Every rate's denominator is the
- * selection bounded by `as_of`, so paging never picks up a run that finished
- * mid-read. Totals follow the same filters as the rows. Page rows carry what
- * this project knows about the page (its standing and the Action to get listed
- * on it) and the brands named in the answers that cited it, which is
+ * Shared API/MCP projection. It reads the per-run facts audit finalization
+ * persisted (`source-aggregates.ts`), never the answers and citations
+ * themselves: counts are distinct values over the selected runs' persisted
+ * answer, prompt and URL IDs, so a prompt or URL cited in two runs counts
+ * once. Every rate's denominator is the selection's persisted answers bounded
+ * by `as_of`, so paging never picks up a run that finished mid-read. Totals
+ * follow the same filters as the rows; the page-format and gap filters read
+ * this project's current page records. A selected run with no persisted facts
+ * is not computed (`metrics_pending`), never zero. Page rows carry what this
+ * project knows about the page (its standing and the Action to get listed on
+ * it) and the brands named in the answers that cited it, which is
  * co-occurrence, never presence on the page.
  */
 import type { visibilitySourcesSchema } from '@citeladder/contracts/visibility-evidence';
@@ -30,10 +36,12 @@ import { ratio } from './metrics.ts';
 import { runSetComparisonStatus } from './run-sets.ts';
 import { attachRetrieved, retrievalCoverage } from './source-retrieval.ts';
 import {
+  AnalysisNotFoundError,
   authorizedSelection,
   authorizeRunSet,
-  evidenceScope,
   observedAt,
+  selectedCohorts,
+  selectedRuns,
   TrendQueryError,
   type RunSelection,
 } from './selection.ts';
@@ -57,8 +65,19 @@ export type SourceQuery = {
   baselineAuditIds: string[] | null;
 };
 
-type Scope = ReturnType<typeof scopeOf>;
-type ScopeQuery = ReturnType<typeof scopeQuery>;
+type RowFilters = Pick<SourceQuery, 'domain' | 'sourceClass' | 'standing'>;
+const UNFILTERED: RowFilters = { domain: null, sourceClass: null, standing: null };
+
+/** The selected runs, each with when it was observed. */
+/**
+ * The selected brand runs, each with when it was observed. A commerce run
+ * measures something else, so even when named it contributes no sources.
+ */
+const runsOf = (db: Database, selection: RunSelection) =>
+  selectedRuns(db, selection)
+    .where('audit.audit_scope', '=', policy.visibility.brand_audit_scope)
+    .select(['audit.id', observedAt.as('observed_at')]);
+type Runs = ReturnType<typeof runsOf>;
 
 function sourcePosition(query: SourceQuery, filters: Record<string, unknown>) {
   if (query.asOf !== null && query.asOf.offsetSeconds === null)
@@ -84,83 +103,140 @@ function sourcePosition(query: SourceQuery, filters: Record<string, unknown>) {
   return { position, asOf };
 }
 
-/** Every answer in the selection up to `as_of`, with the prompt it answered. */
-function scopeQuery(db: Database, selection: RunSelection, asOf: string) {
-  return evidenceScope(db, selection)
-    .where('ra.created_at', '<=', sql<Date>`${asOf}::timestamptz`)
-    .select([
-      'ra.id as analysis_id',
-      // Coalesced to the frozen text: a deleted prompt's snapshot has no id.
-      sql<string>`coalesce(snapshot.prompt_id::text, snapshot.text)`.as('prompt_key'),
-      observedAt.as('observed_at'),
-    ]);
+/** The runs' persisted answers per engine and cohort, finalized by `as_of`. */
+function answerRows(db: Database, selection: RunSelection, runs: Runs, asOf: string) {
+  let rows = db
+    .selectFrom('audit_answer_aggregates as answer')
+    .innerJoin(runs.as('run'), 'run.id', 'answer.audit_id')
+    .where('answer.workspace_id', '=', selection.workspaceId)
+    .where('answer.cohort', 'in', selectedCohorts(selection.cohort))
+    .where('answer.created_at', '<=', sql<Date>`${asOf}::timestamptz`);
+  if (selection.logicalEngine !== null)
+    rows = rows.where('answer.logical_engine', '=', selection.logicalEngine);
+  return rows.select(['answer.analysis_ids', 'answer.prompt_keys']);
 }
 
-const scopeOf = (query: ScopeQuery) => query.as('scope');
-
 /**
- * The citations the rows count. A domain row is filtered by its publisher
- * class, a page row by its own page format, exactly as the type ring is.
+ * The runs' persisted source rows the table counts. A domain row is filtered
+ * by its publisher class, a page row by its page's current format, exactly
+ * as the type ring is; `category` is that same class or format.
  */
-function filteredCitations(
+function sourceRows(
   db: Database,
-  scope: Scope,
   selection: RunSelection,
-  query: SourceQuery,
-  pages: boolean,
+  input: { runs: Runs; asOf: string; pages: boolean; filters: RowFilters },
 ) {
-  let citations = db
-    .selectFrom('citations as citation')
-    .innerJoin(scope, 'scope.analysis_id', 'citation.analysis_id')
-    .where('citation.workspace_id', '=', selection.workspaceId);
-  if (query.domain) citations = citations.where('citation.domain', '=', query.domain);
-  if (query.standing === 'gap')
-    citations = citations.where(sql<boolean>`citation.url_hash in (${gapPageHashes(selection)})`);
-  if (!query.sourceClass) return citations;
-  if (!pages) return citations.where('citation.source_class', '=', query.sourceClass);
-  return citations
-    .innerJoin('source_pages as page', (join) =>
+  const { filters, pages } = input;
+  let rows = db
+    .selectFrom('audit_source_aggregates as source')
+    .innerJoin(input.runs.as('run'), 'run.id', 'source.audit_id')
+    .leftJoin('source_pages as page', (join) =>
       join
-        .onRef('page.url_hash', '=', 'citation.url_hash')
+        .onRef('page.url_hash', '=', 'source.url_hash')
         .on('page.workspace_id', '=', selection.workspaceId)
         .on('page.project_id', '=', selection.projectId),
     )
-    .where('page.page_format', '=', query.sourceClass);
+    .where('source.workspace_id', '=', selection.workspaceId)
+    .where('source.dimension', '=', pages ? 'url' : 'domain')
+    .where('source.cohort', 'in', selectedCohorts(selection.cohort))
+    .where('source.created_at', '<=', sql<Date>`${input.asOf}::timestamptz`);
+  if (selection.logicalEngine !== null)
+    rows = rows.where('source.logical_engine', '=', selection.logicalEngine);
+  if (filters.domain) rows = rows.where('source.domain', '=', filters.domain);
+  if (filters.standing === 'gap')
+    rows = rows.where(sql<boolean>`source.url_hash in (${gapPageHashes(selection)})`);
+  if (filters.sourceClass)
+    rows = rows.where(pages ? 'page.page_format' : 'source.source_class', '=', filters.sourceClass);
+  return rows.select([
+    'source.key',
+    'source.url_hash',
+    'source.analysis_ids',
+    'source.prompt_keys',
+    'source.urls',
+    'source.citation_ids',
+    'source.classification',
+    'source.source_class',
+    'source.source_taxonomy_version',
+    'run.observed_at',
+    (pages ? sql<string | null>`page.page_format` : sql<string | null>`source.source_class`).as(
+      'category',
+    ),
+  ]);
 }
 
-/** The compact citation rows shared by source paging and category totals. */
-function citationSelection(
-  db: Database,
-  scope: Scope,
-  selection: RunSelection,
-  query: SourceQuery,
-  pages: boolean,
-) {
-  const key = pages ? 'citation.url' : 'citation.domain';
-  let citations = filteredCitations(db, scope, selection, query, pages);
-  if (pages)
-    citations = citations.leftJoin('source_pages as format_page', (join) =>
-      join
-        .onRef('format_page.url_hash', '=', 'citation.url_hash')
-        .on('format_page.workspace_id', '=', selection.workspaceId)
-        .on('format_page.project_id', '=', selection.projectId),
-    );
-  return citations.select([
-    'citation.id',
-    'citation.analysis_id',
-    'citation.url_hash',
-    'citation.url',
-    'citation.classification',
-    'citation.source_class',
-    'citation.source_taxonomy_version',
-    'scope.prompt_key',
-    'scope.observed_at',
-    sql<string>`${sql.ref(key)}`.as('key'),
-    (pages
-      ? sql<string | null>`format_page.page_format`
-      : sql<string | null>`citation.source_class`
-    ).as('category'),
-  ]);
+type GroupRow = {
+  key: string;
+  url_hash: string | null;
+  responses: number;
+  prompts: number;
+  last_cited_at: string | null;
+  annotations: number;
+  urls: number;
+  ownership: (string | null)[];
+  categories: (string | null)[];
+  versions: (string | null)[];
+};
+
+type Summary = {
+  responses: number;
+  prompts: number;
+  missing: number;
+  total: number;
+  citations: number;
+  category_totals: Record<string, number>;
+  rows: GroupRow[];
+};
+
+/** The keyset condition past the cursor's row, in the page's direction. */
+function keysetAfter(position: string[] | null, backwards: boolean) {
+  if (!position) return sql<boolean>`true`;
+  const responses = Number(position[1]);
+  return backwards
+    ? sql<boolean>`responses > ${responses} or (responses = ${responses} and key collate "C" < ${position[2]})`
+    : sql<boolean>`responses < ${responses} or (responses = ${responses} and key collate "C" > ${position[2]})`;
+}
+
+const present = (values: (string | null)[]) =>
+  values.filter((value): value is string => Boolean(value)).sort(compareText);
+
+/** One grouped row as the table serves it, before page facts and brands fill in. */
+function sourceItem(
+  row: GroupRow,
+  totals: { pages: boolean; responses: number; prompts: number; citations: number },
+): SourceRow {
+  const { pages } = totals;
+  return {
+    key: row.key,
+    retrieved: null,
+    url_hash: pages ? row.url_hash : null,
+    // "Last seen" is asked of a page, never of a publisher.
+    last_cited_at: pages ? wireUtcOrNull(row.last_cited_at) : null,
+    responses: row.responses,
+    prompts: row.prompts,
+    annotations: row.annotations,
+    urls: row.urls,
+    response_rate: ratio(row.responses, totals.responses),
+    prompt_coverage: ratio(row.prompts, totals.prompts),
+    // How much of a publisher the engines reached; a page is one URL.
+    retrieval_rate: pages ? null : ratio(row.urls, totals.responses),
+    citation_share: ratio(row.annotations, totals.citations),
+    // Per answer the source was retrieved in, never per answer selected.
+    citation_rate: ratio(row.annotations, row.responses),
+    ownership: present(row.ownership),
+    categories: present(row.categories),
+    taxonomy_versions: present(row.versions),
+    category_unavailable: row.categories.includes(null),
+    response_delta: null,
+    inspection_state: null,
+    opportunity_id: null,
+    standing: null,
+    action_id: null,
+    title: null,
+    page_format: null,
+    page_format_method: null,
+    mentions: 0,
+    brands: [],
+  };
 }
 
 export async function getVisibilitySources(
@@ -185,112 +261,79 @@ export async function getVisibilitySources(
     baselineAuditIds: [...(query.baselineAuditIds ?? [])].sort(compareText),
   };
   const { position, asOf } = sourcePosition(query, filters);
-  const answers = scopeQuery(db, selection, asOf);
-  const scope = scopeOf(answers);
-  const selected = citationSelection(db, scope, selection, query, pages);
-  const base = db.with(
-    (cte) => cte('selected').materialized(),
-    () => selected,
-  );
-  const group = base
-    .selectFrom('selected')
-    .select([
-      'key',
-      sql<string | null>`min(url_hash)`.as('url_hash'),
-      sql<number>`count(distinct analysis_id)::int`.as('responses'),
-      sql<number>`count(distinct prompt_key)::int`.as('prompts'),
-      utcText(sql`max(observed_at)`).as('last_cited_at'),
-      sql<number>`count(id)::int`.as('annotations'),
-      sql<number>`count(distinct url)::int`.as('urls'),
-      sql<(string | null)[]>`array_agg(distinct classification)`.as('ownership'),
-      sql<(string | null)[]>`array_agg(distinct source_class)`.as('categories'),
-      sql<(string | null)[]>`array_agg(distinct source_taxonomy_version)`.as('versions'),
-    ])
-    .groupBy('key');
-  const grouped = base.with('groups', () => group);
+  const runs = runsOf(db, selection);
+  const answers = answerRows(db, selection, runs, asOf);
+  const selected = sourceRows(db, selection, { runs, asOf, pages, filters: query });
   const backwards = position?.[3] === 'prev';
-  let page = grouped
-    .selectFrom('groups')
-    .selectAll()
-    .orderBy('responses', backwards ? 'asc' : 'desc')
-    .orderBy(sql`key collate "C"`, backwards ? 'desc' : 'asc')
-    .limit(query.limit + 1);
-  if (position)
-    page = page.where(
-      backwards
-        ? sql<boolean>`responses > ${Number(position[1])} or (responses = ${Number(position[1])} and key collate "C" < ${position[2]})`
-        : sql<boolean>`responses < ${Number(position[1])} or (responses = ${Number(position[1])} and key collate "C" > ${position[2]})`,
-    );
-  // One round trip: the rates' denominator, the totals and the page of rows.
-  const summary = await grouped
-    .selectNoFrom([
-      sql<{ responses: number; prompts: number }>`(select jsonb_build_object(
-        'responses', count(answer.analysis_id), 'prompts', count(distinct answer.prompt_key))
-        from (${answers}) answer)`.as('denominator'),
-      sql<number>`(select count(*)::int from groups)`.as('total'),
-      sql<number>`(select coalesce(sum(annotations), 0)::int from groups)`.as('citations'),
-      sql<
-        Record<string, number>
-      >`(select coalesce(jsonb_object_agg(category, count), '{}'::jsonb) from
-      (select category, count(*)::int as count from selected where category is not null group by category) categories)`.as(
-        'category_totals',
-      ),
-      sql<
-        Awaited<ReturnType<typeof group.execute>>
-      >`(select coalesce(jsonb_agg(to_jsonb(page)), '[]'::jsonb) from (${page}) page)`.as('rows'),
-    ])
-    .executeTakeFirstOrThrow();
-  const responses = Number(summary.denominator.responses);
-  const prompts = Number(summary.denominator.prompts);
-  const total = summary.total;
-  const totalCitations = summary.citations;
+  const order = backwards ? sql`asc` : sql`desc`;
+  const keyOrder = backwards ? sql`desc` : sql`asc`;
+  const after = keysetAfter(position, backwards);
+  // One round trip: the rates' denominator, the runs without persisted
+  // facts, the totals and the page of rows. A key's distinct answers, prompts
+  // and URLs are counted over the union of its rows' arrays, never summed.
+  const { rows: summaryRows } = await sql<Summary>`
+    with selected as materialized (${selected}),
+    facts as (
+      select key, min(url_hash) as url_hash, ${utcText(sql`max(observed_at)`)} as last_cited_at,
+        sum(cardinality(citation_ids))::int as annotations,
+        array_agg(distinct classification) as ownership,
+        array_agg(distinct source_class) as categories,
+        array_agg(distinct source_taxonomy_version) as versions
+      from selected group by key),
+    answered as (
+      select key, count(distinct answer.id)::int as responses
+      from selected, unnest(selected.analysis_ids) as answer(id) group by key),
+    prompted as (
+      select key, count(distinct prompt.value)::int as prompts
+      from selected, unnest(selected.prompt_keys) as prompt(value) group by key),
+    linked as (
+      select key, count(distinct link.value)::int as urls
+      from selected, unnest(selected.urls) as link(value) group by key),
+    groups as (
+      select facts.key, facts.url_hash, answered.responses, prompted.prompts,
+        facts.last_cited_at, facts.annotations, linked.urls, facts.ownership, facts.categories,
+        facts.versions
+      from facts
+      join answered using (key) join prompted using (key) join linked using (key)),
+    page as (
+      select * from groups where ${after}
+      order by responses ${order}, key collate "C" ${keyOrder}
+      limit ${query.limit + 1})
+    select
+      (select coalesce(sum(cardinality(answer.analysis_ids)), 0)::int
+        from (${answers}) answer) as responses,
+      (select count(distinct prompt.value)::int
+        from (${answers}) answer, unnest(answer.prompt_keys) as prompt(value)) as prompts,
+      (select count(*)::int from (${runs}) run
+        where not exists (select 1 from audit_answer_aggregates computed
+          where computed.audit_id = run.id
+            and computed.workspace_id = ${selection.workspaceId})) as missing,
+      (select count(*)::int from groups) as total,
+      (select coalesce(sum(annotations), 0)::int from groups) as citations,
+      (select coalesce(jsonb_object_agg(category, count), '{}'::jsonb) from
+        (select category, sum(cardinality(citation_ids))::int as count
+          from selected where category is not null group by category) categories)
+        as category_totals,
+      (select coalesce(jsonb_agg(to_jsonb(page)
+        order by page.responses ${order}, page.key collate "C" ${keyOrder}), '[]'::jsonb)
+        from page) as rows
+  `.execute(db);
+  const summary = summaryRows[0];
+  if (!summary) throw new Error('The sources summary returned no row');
+  if (summary.missing)
+    throw new AnalysisNotFoundError('Sources not computed for a selected run', 'metrics_pending');
+  const { responses, prompts, total, citations: totalCitations } = summary;
   const rows = summary.rows.slice(0, query.limit);
   if (backwards) rows.reverse();
   const last = rows.at(-1);
   const first = rows[0];
-  const items: SourceRow[] = rows.map((row) => {
-    const rowResponses = Number(row.responses);
-    const annotations = Number(row.annotations);
-    const urls = Number(row.urls);
-    const present = (values: (string | null)[]) =>
-      values.filter((value): value is string => Boolean(value)).sort(compareText);
-    return {
-      key: row.key,
-      retrieved: null,
-      url_hash: pages ? row.url_hash : null,
-      // "Last seen" is asked of a page, never of a publisher.
-      last_cited_at: pages ? wireUtcOrNull(row.last_cited_at) : null,
-      responses: rowResponses,
-      prompts: Number(row.prompts),
-      annotations,
-      urls,
-      response_rate: ratio(rowResponses, responses),
-      prompt_coverage: ratio(Number(row.prompts), prompts),
-      // How much of a publisher the engines reached; a page is one URL.
-      retrieval_rate: pages ? null : ratio(urls, responses),
-      citation_share: ratio(annotations, totalCitations),
-      // Per answer the source was retrieved in, never per answer selected.
-      citation_rate: ratio(annotations, rowResponses),
-      ownership: present(row.ownership),
-      categories: present(row.categories),
-      taxonomy_versions: present(row.versions),
-      category_unavailable: row.categories.includes(null),
-      response_delta: null,
-      inspection_state: null,
-      opportunity_id: null,
-      standing: null,
-      action_id: null,
-      title: null,
-      page_format: null,
-      page_format_method: null,
-      mentions: 0,
-      brands: [],
-    };
-  });
+  const items = rows.map((row) =>
+    sourceItem(row, { pages, responses, prompts, citations: totalCitations }),
+  );
   // Each step fills its own fields of the loaded rows, so they run together.
   const [, , retrieval] = await Promise.all([
     attachPageLinks(db, selection, items),
-    pages ? attachRowMentions(db, selection, scope, items) : undefined,
+    pages ? attachRowMentions(db, selection, { runs, asOf, items }) : undefined,
     retrievalCoverage(db, selection, asOf),
   ]);
   await attachRetrieved(db, selection, { asOf, pages, coverage: retrieval, items });
@@ -327,7 +370,7 @@ export async function getVisibilitySources(
   if (query.baselineAuditIds?.length) {
     response.comparison_status = await applySourceComparison(db, selection, response, {
       baselineIds: query.baselineAuditIds,
-      domain: query.domain,
+      filters: query,
       pages,
       asOf,
     });
@@ -409,65 +452,65 @@ async function attachPageLinks(
   }
 }
 
-/** The brands named in the answers that cited each loaded page, in place. */
+/**
+ * The brands named in the answers that cited each loaded page, in place: the
+ * persisted answers behind each page row, joined to the mentions those
+ * answers recorded.
+ */
 async function attachRowMentions(
   db: Database,
   selection: RunSelection,
-  scope: Scope,
-  items: SourceRow[],
+  input: { runs: Runs; asOf: string; items: SourceRow[] },
 ): Promise<void> {
-  const urls = items.map((row) => row.key).filter(Boolean);
+  const urls = input.items.map((row) => row.key).filter(Boolean);
   if (urls.length === 0) return;
-  const cited = db
-    .selectFrom('citations as citation')
-    .innerJoin(scope, 'scope.analysis_id', 'citation.analysis_id')
-    .where('citation.workspace_id', '=', selection.workspaceId)
-    .where('citation.url', 'in', urls);
-  const [brand, competitor, identities] = await Promise.all([
-    cited
-      .innerJoin('brand_mentions as mention', 'mention.analysis_id', 'citation.analysis_id')
-      .where('mention.brand_name', '!=', '')
-      .select([
-        'citation.url',
-        'mention.brand_name as name',
-        sql<string>`count(distinct mention.analysis_id)`.as('responses'),
-      ])
-      .groupBy(['citation.url', 'mention.brand_name'])
-      .execute(),
-    cited
-      .innerJoin('competitor_mentions as mention', 'mention.analysis_id', 'citation.analysis_id')
-      .where('mention.competitor_name', '!=', '')
-      .select([
-        'citation.url',
-        'mention.competitor_name as name',
-        sql<string>`count(distinct mention.analysis_id)`.as('responses'),
-      ])
-      .groupBy(['citation.url', 'mention.competitor_name'])
-      .execute(),
+  const cited = sourceRows(db, selection, {
+    runs: input.runs,
+    asOf: input.asOf,
+    pages: true,
+    filters: UNFILTERED,
+  }).where('source.key', 'in', urls);
+  const [{ rows: named }, identities] = await Promise.all([
+    sql<{ url: string; kind: 'brand' | 'competitor'; name: string; responses: number }>`
+      with cited as (
+        select distinct source_row.key as url, answer.id as analysis_id
+        from (${cited}) source_row, unnest(source_row.analysis_ids) as answer(id))
+      select cited.url, 'brand' as kind, mention.brand_name as name,
+        count(distinct cited.analysis_id)::int as responses
+      from cited join brand_mentions mention on mention.analysis_id = cited.analysis_id
+        and mention.workspace_id = ${selection.workspaceId}
+      where mention.brand_name <> ''
+      group by cited.url, mention.brand_name
+      union all
+      select cited.url, 'competitor' as kind, mention.competitor_name as name,
+        count(distinct cited.analysis_id)::int as responses
+      from cited join competitor_mentions mention on mention.analysis_id = cited.analysis_id
+        and mention.workspace_id = ${selection.workspaceId}
+      where mention.competitor_name <> ''
+      group by cited.url, mention.competitor_name
+    `.execute(db),
     brandIdentities(db, selection.projectId),
   ]);
   const found = new Map<
     string,
     { kind: 'brand' | 'competitor'; name: string; responses: number }[]
   >();
-  for (const [kind, rows] of [
-    ['brand', brand],
-    ['competitor', competitor],
-  ] as const) {
-    for (const row of rows) {
-      const list = found.get(row.url) ?? [];
-      list.push({ kind, name: row.name, responses: Number(row.responses) });
-      found.set(row.url, list);
-    }
+  for (const row of named) {
+    const list = found.get(row.url) ?? [];
+    list.push({ kind: row.kind, name: row.name, responses: row.responses });
+    found.set(row.url, list);
   }
-  for (const row of items) {
-    const named = found.get(row.key);
-    if (!named?.length) continue;
-    named.sort(
-      (left, right) => right.responses - left.responses || compareText(left.name, right.name),
+  for (const row of input.items) {
+    const entries = found.get(row.key);
+    if (!entries?.length) continue;
+    entries.sort(
+      (left, right) =>
+        right.responses - left.responses ||
+        compareText(left.kind, right.kind) ||
+        compareText(left.name, right.name),
     );
-    row.mentions = named.length;
-    row.brands = named.slice(0, SOURCE_ROW_MAX_BRANDS).map((entry) => {
+    row.mentions = entries.length;
+    row.brands = entries.slice(0, SOURCE_ROW_MAX_BRANDS).map((entry) => {
       const identity = identities.get(identityKey(entry.name));
       return { ...entry, logo_url: identity?.logo_url ?? null, website: identity?.website ?? null };
     });
@@ -476,13 +519,14 @@ async function attachRowMentions(
 
 /**
  * Each row's movement in response rate against a baseline run set, when the
- * two sets are comparable; returns the comparison status.
+ * two sets are comparable; returns the comparison status. The baseline's
+ * answers and each row's answers in it are the baseline runs' persisted facts.
  */
 async function applySourceComparison(
   db: Database,
   selection: RunSelection,
   response: SourcesResponse,
-  input: { baselineIds: string[]; domain: string | null; pages: boolean; asOf: string },
+  input: { baselineIds: string[]; filters: RowFilters; pages: boolean; asOf: string },
 ): Promise<string> {
   await authorizeRunSet(db, selection, input.baselineIds);
   let currentIds: string[] = selection.auditId ? [selection.auditId] : [];
@@ -494,46 +538,45 @@ async function applySourceComparison(
     engine: selection.logicalEngine,
     cohort: selection.cohort,
   });
+  // A comparable baseline has its metric snapshots, written in the same
+  // finalization transaction as its persisted source facts.
   if (status !== 'comparable') return status;
-  const baseline = evidenceScope(db, {
+  // The named baseline runs, in whatever market they measured: named runs
+  // bring their own market, and the comparison status already proved the two
+  // sets share one frozen identity.
+  const baseline = {
     ...selection,
     auditId: null,
-    auditIds: null,
+    auditIds: input.baselineIds,
     fromAt: null,
     toAt: null,
-  })
-    .where('ra.audit_id', 'in', input.baselineIds)
-    .where('ra.created_at', '<=', sql<Date>`${input.asOf}::timestamptz`)
-    .select('ra.id');
-  const { answers } = await db
-    .selectFrom(baseline.as('baseline'))
-    .select(sql<string>`count(*)`.as('answers'))
+  };
+  const runs = runsOf(db, baseline);
+  const answers = answerRows(db, baseline, runs, input.asOf);
+  const { answered } = await db
+    .selectFrom(answers.as('answer'))
+    .select(sql<number>`coalesce(sum(cardinality(answer.analysis_ids)), 0)::int`.as('answered'))
     .executeTakeFirstOrThrow();
-  const denominator = Number(answers);
-  if (!denominator) return 'no_observations';
+  if (!answered) return 'no_observations';
   const keys = response.items.map((row) => row.key);
   if (keys.length === 0) return 'comparable';
-  const key = input.pages ? 'citation.url' : 'citation.domain';
-  let counted = db
-    .selectFrom('citations as citation')
-    .where('citation.workspace_id', '=', selection.workspaceId)
-    .where('citation.analysis_id', 'in', baseline)
-    .where(key, 'in', keys);
-  if (input.domain) counted = counted.where('citation.domain', '=', input.domain);
-  const counts = new Map(
-    (
-      await counted
-        .select([
-          sql<string>`${sql.ref(key)}`.as('key'),
-          sql<string>`count(distinct citation.analysis_id)`.as('answers'),
-        ])
-        .groupBy(key)
-        .execute()
-    ).map((row) => [row.key, Number(row.answers)]),
-  );
+  const cited = sourceRows(db, baseline, {
+    runs,
+    asOf: input.asOf,
+    pages: input.pages,
+    // The rows' own filters, so a row moves against the same source type,
+    // domain and page standing it was counted under.
+    filters: input.filters,
+  }).where('source.key', 'in', keys);
+  const { rows: counted } = await sql<{ key: string; answers: number }>`
+    select cited.key, count(distinct answer.id)::int as answers
+    from (${cited}) cited, unnest(cited.analysis_ids) as answer(id)
+    group by cited.key
+  `.execute(db);
+  const counts = new Map(counted.map((row) => [row.key, row.answers]));
   for (const row of response.items) {
     if (row.response_rate === null) continue;
-    row.response_delta = (row.response_rate - (counts.get(row.key) ?? 0) / denominator) * 100;
+    row.response_delta = (row.response_rate - (counts.get(row.key) ?? 0) / answered) * 100;
   }
   return 'comparable';
 }

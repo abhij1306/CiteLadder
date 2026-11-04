@@ -29,6 +29,7 @@ import { tokenAuditViolations } from './audit-design-tokens.mjs';
 import { brandTokenViolations, svgColorScan } from './design-system-asset-checks.mjs';
 import { resolvePalette } from './design-system-contrast.mjs';
 import { cssPolicyScan } from './design-system-css-checks.mjs';
+import { headingPunctuationViolations } from './design-system-copy-checks.mjs';
 import { ratchetVerdict, readBaseline, writeBaseline } from './design-system-ratchet.mjs';
 import { typeDisciplineFindings } from './type-discipline-checks.mjs';
 
@@ -72,6 +73,9 @@ for (const path of files(root)) {
   if (!sourceExtensions.has(extname(path))) continue;
   const source = readFileSync(path, 'utf8');
   const label = relative(root, path).replaceAll('\\', '/');
+  if (/^(?:apps|components|lib)\//.test(label) && /\.tsx?$/.test(label)) {
+    violations.push(...headingPunctuationViolations(source, label));
+  }
   if (/\.tsx?$/.test(label) && !/\.test\.tsx?$/.test(label)) scriptSources.push({ label, source });
   const legacyIdentifiers = [
     ['Search', 'ify'].join(''),

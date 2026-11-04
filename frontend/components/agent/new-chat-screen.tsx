@@ -21,7 +21,8 @@ import { Button } from '@/components/ui/button';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
+import { cardClasses } from '@/components/ui/card-variants';
+import { cn } from '@/lib/utils';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
@@ -203,7 +204,7 @@ function AttachedAction({
   if (!query.data) return null;
   const action = query.data;
   return (
-    <Stack as="section" gap="tight" aria-label="Working on" className={panelClasses()}>
+    <Stack as="section" gap="tight" aria-label="Working on" className={cardClasses()}>
       <span className={textRole('label')}>Working on</span>
       <Inline className="flex-wrap">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
@@ -249,7 +250,7 @@ function TopActions({
 
 function TopActionRow({ action }: Readonly<{ action: Action }>) {
   return (
-    <Inline as="li" gap="compact" className={panelClasses({}, 'flex-wrap')}>
+    <Inline as="li" gap="compact" className={cn(cardClasses(), 'flex-wrap')}>
       <Stack gap="tight" className="min-w-0 flex-1">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle" className="truncate">
           {action.target_label}

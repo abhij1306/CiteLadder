@@ -1,8 +1,7 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { InfoHint } from '@/components/ui/info-hint';
-import { Inline } from '@/components/ui/layout';
+import { SegmentedControl, type SegmentedOption } from '@/components/ui/segmented-control';
 import type { DemandSnapshot } from '@/lib/api/demand';
 import { DEMAND_DETECTORS } from '@/lib/config/demand';
 import { detectorStates, FILTER_TABS, type FilterTab } from '@/lib/demand/signals';
@@ -62,10 +61,11 @@ function DetectorHint({
 }
 
 /**
- * The filters in the signals table's control band. Each filter is a pressed-
- * state button carrying its signal count and, for a detector's filter, the
- * status of the detectors it counts when they did not run in full; the hint
- * beside it gives each detector's rule.
+ * The filter in the signals table's control band: one `SegmentedControl`,
+ * the same status filter every screen uses (2026-11-03 app review). Each
+ * choice carries its signal count and, for a detector's filter, the status
+ * of the detectors it counts when they did not run in full; the hint beside
+ * it gives each detector's rule.
  */
 export function DemandSignalFilters({
   snapshot,
@@ -79,34 +79,33 @@ export function DemandSignalFilters({
   tabCounts: ReadonlyMap<FilterTab, number>;
 }>) {
   const detectors = detectorStates(snapshot.summary);
+  const options = FILTER_TABS.flatMap(({ tab, label }): SegmentedOption<FilterTab>[] => {
+    const count = tabCounts.get(tab) ?? 0;
+    // Branded stays hidden while empty, but a tab the user has already
+    // selected must remain visible to switch away from.
+    if (tab === 'branded' && count === 0 && activeTab !== tab) return [];
+    const counted = DEMAND_DETECTORS.filter((entry) => entry.tab === tab);
+    const status = counted.length
+      ? filterStatus(counted.map((entry) => detectors[entry.key]?.state))
+      : null;
+    return [
+      {
+        value: tab,
+        label,
+        count,
+        detail: status ?? undefined,
+        hint: counted.length ? <DetectorHint detectors={counted} states={detectors} /> : undefined,
+      },
+    ];
+  });
 
   return (
-    <>
-      {FILTER_TABS.map(({ tab, label }) => {
-        const count = tabCounts.get(tab) ?? 0;
-        // Branded stays hidden while empty, but a tab the user has already
-        // selected must remain visible to switch away from.
-        if (tab === 'branded' && count === 0 && activeTab !== tab) return null;
-        const counted = DEMAND_DETECTORS.filter((entry) => entry.tab === tab);
-        const status = counted.length
-          ? filterStatus(counted.map((entry) => detectors[entry.key]?.state))
-          : null;
-        return (
-          <Inline as="span" key={tab} gap="tight">
-            <Button
-              variant="secondary"
-              aria-pressed={activeTab === tab}
-              onClick={() => onTabChange(tab)}
-            >
-              {label}
-              {status ? <span className="text-muted">{` · ${status}`}</span> : null}
-              <span className="text-muted tabular-nums">{count}</span>
-            </Button>
-            {counted.length ? <DetectorHint detectors={counted} states={detectors} /> : null}
-          </Inline>
-        );
-      })}
-    </>
+    <SegmentedControl
+      value={activeTab}
+      onChange={onTabChange}
+      options={options}
+      ariaLabel="Signal type"
+    />
   );
 }
 

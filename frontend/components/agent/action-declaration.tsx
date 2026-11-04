@@ -240,8 +240,7 @@ function newAttempt() {
 
 /**
  * The output pane's implementation state. Declaring anchors the Action to the
- * revision on screen; an outline is approved and drafted first, and an output
- * with no target has no Action to declare.
+ * revision on screen; an output with no target has no Action to declare.
  */
 export function OutputDeclaration({
   workspaceId,
@@ -249,7 +248,7 @@ export function OutputDeclaration({
   runActive,
 }: Readonly<{ workspaceId: string; output: AgentOutput; runActive: boolean }>) {
   const revision = output.latest_revision;
-  if (output.phase === 'outline' || !revision) return null;
+  if (!revision) return null;
   if (!output.action_id)
     return (
       <p className={textRole('caption')}>

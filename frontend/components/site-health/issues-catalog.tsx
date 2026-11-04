@@ -32,21 +32,14 @@ import {
   type IssueFilters,
 } from '@/lib/site-health/issue-filters';
 import { issueTitle } from '@/lib/site-health/issues';
-import { textRole } from '@/components/ui/typography';
+import { InlineFigure, textRole } from '@/components/ui/typography';
+import { FilterChoice } from '@/components/ui/filter-bar';
+import { formatCount } from '@/lib/format';
 
-const FILTER_GROUP_KEYS: Record<'All issues' | 'Severity' | 'Category', readonly string[]> = {
-  'All issues': ['all'],
-  Severity: ['high', 'medium', 'low'],
-  Category: ['technical', 'aeo'],
-};
-
-/** The toggle's label, with the count only once a summary has landed. */
-function findingViewLabel(view: FindingClass, summary: IssuesSummary | null): string {
-  const defects = view === 'defect';
-  const label = defects ? 'Issues' : 'Advisories';
-  if (!summary) return label;
-  const count = defects ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
-  return `${label} (${count})`;
+/** The toggle's count, only once a summary has landed. */
+function findingViewCount(view: FindingClass, summary: IssuesSummary | null): number | undefined {
+  if (!summary) return undefined;
+  return view === 'defect' ? summary.defect_issue_type_count : summary.advisory_issue_type_count;
 }
 
 function filterCount(filter: IssueFilterClass, summary: IssuesSummary, view: FindingClass): number {
@@ -144,24 +137,20 @@ export function IssuesCatalog({
           summary={summary}
           onChange={(value) => updateFilters(findingClassChange(value))}
         />
-        {(['All issues', 'Severity', 'Category'] as const).map((group) => {
-          const keys = FILTER_GROUP_KEYS[group];
-          const options = issueFilterClasses(findingView).filter((item) => keys.includes(item.key));
-          return options.length > 0 ? (
-            <SegmentedControl
-              key={group}
-              value={issueFilterClass(filters)}
-              onChange={(value) => updateFilters(issueFilterClassChange(value))}
-              ariaLabel={group}
-              options={options.map((item) => ({
-                value: item.key,
-                label: summary
-                  ? `${item.label} (${filterCount(item.key, summary, findingView)})`
-                  : item.label,
-              }))}
-            />
-          ) : null;
-        })}
+        {/* Severity and category share one menu: as three segmented groups
+            the band wrapped to two rows at the owner's 982px. */}
+        <FilterChoice
+          label="Severity or category"
+          value={issueFilterClass(filters)}
+          defaultValue="all"
+          onChange={(value) => updateFilters(issueFilterClassChange(value))}
+          options={issueFilterClasses(findingView).map((item) => ({
+            value: item.key,
+            label: summary
+              ? `${item.label} (${filterCount(item.key, summary, findingView)})`
+              : item.label,
+          }))}
+        />
         {/* Last in the strip, so clearing it moves no other control. */}
         {filters.rule_id ? (
           <RuleFilterChip
@@ -370,7 +359,7 @@ function SummaryCount({
 }: Readonly<{ value: number; singular: string; plural: string }>) {
   return (
     <span>
-      <span className={textRole('emphasis', 'tabular-nums')}>{value}</span>{' '}
+      <InlineFigure className={textRole('emphasis')}>{formatCount(value)}</InlineFigure>{' '}
       {value === 1 ? singular : plural}
     </span>
   );
@@ -392,7 +381,8 @@ function FindingClassFilter({
       ariaLabel="Finding class"
       options={(['defect', 'advisory'] as const).map((view) => ({
         value: view,
-        label: findingViewLabel(view, summary),
+        label: view === 'defect' ? 'Issues' : 'Advisories',
+        count: findingViewCount(view, summary),
       }))}
     />
   );
@@ -417,7 +407,8 @@ function IssueGroupList({
       <Inline as="span" className="flex-wrap justify-between">
         <IssueMetadata issue={issue} />
         <span className="type-caption whitespace-nowrap">
-          {issue.affected_url_count} {issue.affected_url_count === 1 ? 'page' : 'pages'}
+          <InlineFigure>{formatCount(issue.affected_url_count)}</InlineFigure>{' '}
+          {issue.affected_url_count === 1 ? 'page' : 'pages'}
         </span>
       </Inline>
     </ListDetailRow>

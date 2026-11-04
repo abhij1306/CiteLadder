@@ -25,11 +25,10 @@ export const catalog: SkillCatalog = {
       'content',
       {
         id: 'content',
-        description: 'Create requested long-form content.',
+        description: 'Create requested content.',
         version: 1,
         outputKind: 'content',
         body: 'Write requested content.',
-        outlineFirst: true,
       },
     ],
     [
@@ -40,7 +39,6 @@ export const catalog: SkillCatalog = {
         version: 1,
         outputKind: 'plan',
         body: 'Plan requested work.',
-        outlineFirst: false,
       },
     ],
   ]),
@@ -69,11 +67,13 @@ export const read = (input: Record<string, Json> = {}, name = 'read_evidence'): 
 export const loadSkill = (skillId: string): Response => [
   toolUse('load_skill', { skill_id: skillId }),
 ];
-export const save = (
-  phase = 'draft',
-  body = 'Requested document',
+export const save = (body = 'Requested document', extra: Record<string, Json> = {}): Response => [
+  toolUse('save_document', { title: 'Document', body, ...extra }),
+];
+export const edit = (
+  edits: { old_string: string; new_string: string }[],
   extra: Record<string, Json> = {},
-): Response => [toolUse('save_document', { title: 'Document', body, phase, ...extra })];
+): Response => [toolUse('edit_document', { edits, ...extra })];
 /** A request for a dispatch that never reaches a model. */
 export const request: ModelRequest = {
   system: 'test',
@@ -81,6 +81,8 @@ export const request: ModelRequest = {
   messages: [{ role: 'user', content: [text('test')] }],
   effort: 'medium',
   compactAtTokens: 80_000,
+  previousResponseId: null,
+  webSearches: 0,
 };
 export function result(blocks: Response, overrides: Partial<ModelResult> = {}): ModelResult {
   const toolCalls = blockToolCalls(blocks);
@@ -97,6 +99,9 @@ export function result(blocks: Response, overrides: Partial<ModelResult> = {}): 
     usage: { input_tokens: 20, output_tokens: 10 },
     latency_ms: 1,
     finish_status: stop,
+    response_id: '',
+    cache: { reason: 'not_requested' },
+    iterations: [],
     ...overrides,
   };
 }
@@ -130,6 +135,7 @@ export function scripted(
 export const zeroFunding: Funding = {
   reserve: () => Promise.resolve({ reservationId: null, credits: 0, pricingRevision: '' }),
   settle: () => Promise.resolve({ credits: 0, status: 'zero_debit' }),
+  refund: () => Promise.resolve(),
 };
 export class AgentFixtures extends VisibilityFixtures {
   readonly agentDb: Database;

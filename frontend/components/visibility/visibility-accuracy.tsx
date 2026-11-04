@@ -55,17 +55,13 @@ export function VisibilityAccuracy({
   // No run selected: nothing to read yet, which says nothing about the facts.
   if (!enabled)
     return (
-      <Card>
-        <CardContent>
-          <QueryState
-            kind="empty"
-            headingLevel={3}
-            icon={ShieldCheck}
-            heading="No run selected"
-            description="Choose a run to see how its answers state your facts."
-          />
-        </CardContent>
-      </Card>
+      <QueryState
+        kind="empty"
+        headingLevel={3}
+        icon={ShieldCheck}
+        heading="No run selected"
+        description="Choose a run to see how its answers state your facts."
+      />
     );
   if (!query.data)
     return (
@@ -111,21 +107,20 @@ function AccuracyState({
   coverage?: AccuracyCoverage;
 }>) {
   const copy = accuracyStateCopy(state, reason);
+  // One state box at the shared footprint: the coverage it read is part of
+  // the same sentence, not a caption that grows the box.
   return (
-    <Card>
-      <CardContent>
-        <Stack gap="item">
-          <QueryState
-            kind="empty"
-            headingLevel={3}
-            icon={ShieldCheck}
-            heading={copy.heading}
-            description={copy.description}
-          />
-          {coverage?.claims ? <CoverageNote coverage={coverage} /> : null}
-        </Stack>
-      </CardContent>
-    </Card>
+    <QueryState
+      kind="empty"
+      headingLevel={3}
+      icon={ShieldCheck}
+      heading={copy.heading}
+      description={
+        coverage?.claims
+          ? `${copy.description} ${accuracyCoverageLine(coverage)}.`
+          : copy.description
+      }
+    />
   );
 }
 
@@ -153,14 +148,12 @@ function Headline({ data }: Readonly<{ data: AccuracyResponse }>) {
                 key: 'supported',
                 label: 'Supported',
                 value: String(coverage.supported),
-                tone: 'success',
                 sub: 'A confirmed fact states the same thing.',
               },
               {
                 key: 'contradicted',
                 label: 'Contradicted',
                 value: String(coverage.contradicted),
-                tone: 'danger',
                 sub: 'A confirmed fact states something incompatible.',
               },
               {

@@ -2,8 +2,9 @@ import type { DataTone } from './data-tone';
 
 /**
  * Score-band mapping (§ score bands): low 0–24, mid 25–49, good 50–74,
- * high 75–100. Returns the bridged token utility classes for stroke/text
- * so data-viz primitives stay token-only (no raw hex). */
+ * high 75–100. Returns the bridged token utility classes for the band's
+ * marks (ring stroke, meter tone) so data-viz primitives stay token-only (no
+ * raw hex). The numeral beside a mark keeps the foreground ink. */
 export type ScoreBand = 'low' | 'mid' | 'good' | 'high';
 
 export function scoreBand(score: number): ScoreBand {
@@ -25,17 +26,6 @@ export const scoreBandStroke: Record<ScoreBand, string> = {
   high: 'stroke-success',
 };
 
-/**
- * Band as text. Uses the outcome `*-text` inks, which are the AA-gated
- * variants — the marks are not guaranteed readable as type.
- */
-export const scoreBandText: Record<ScoreBand, string> = {
-  low: 'text-danger-text',
-  mid: 'text-warning-text',
-  good: 'text-success-text',
-  high: 'text-success-text',
-};
-
 /** Horizontal meter tone per band, on the same outcome steps as the ring. */
 export const scoreBandTone: Record<ScoreBand, DataTone> = {
   low: 'danger',
@@ -46,10 +36,10 @@ export const scoreBandTone: Record<ScoreBand, DataTone> = {
 
 /**
  * Null-aware text class for a score cell: muted for a missing score (which
- * renders the `Not measured` placeholder), the band colour otherwise. Shared by every
- * score table so the missing-score treatment never diverges.
+ * renders the `Not measured` placeholder), the foreground ink otherwise. A
+ * score is a figure, not a state, so it never takes the band colour. Shared
+ * by every score table so the missing-score treatment never diverges.
  */
 export function scoreTextClass(score: number | null): string {
-  if (score === null) return 'text-muted';
-  return scoreBandText[scoreBand(score)];
+  return score === null ? 'text-muted' : 'text-foreground';
 }

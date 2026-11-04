@@ -1,6 +1,7 @@
 import { readdir, readFile } from 'node:fs/promises';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
 import * as sharedTools from '../src/mcp/tools.ts';
 import { AgentFixtures, reply, save, scripted, toolUse, type Response } from './agent-support.ts';
 import { testDatabase } from './support.ts';
@@ -61,7 +62,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
           db,
           scope,
           'read_site_pages',
-          { crawl_id: scope.crawlId, limit: 100, cursor },
+          { crawl_id: scope.crawlId, limit: 50, cursor },
           signal(),
           5000,
         );
@@ -73,6 +74,33 @@ describe('Agent bindings to the evidence and Action owners', () => {
         cursor = page.pagination.next_cursor;
       } while (cursor && seen.length <= expected.length);
       expect(seen.sort()).toEqual(expected.sort());
+    } finally {
+      await site.cleanup();
+    }
+  });
+  it('reads pages 20 at a time for the Agent, up to 50, while MCP clients keep larger pages', async () => {
+    const site = new SiteFixtures(db);
+    try {
+      const scope = await site.crawl();
+      for (let index = 0; index < 23; index++)
+        await site.page(scope, `/page-${index}`, {}, { observed: true });
+      const tools = agentTools(db);
+      const read = (args: Record<string, string | number>) =>
+        tools.execute(db, scope, 'read_site_pages', args, signal(), 40_000);
+      const first = JSON.parse((await read({ crawl_id: scope.crawlId })).text);
+      expect(first.items).toHaveLength(20);
+      const rest = JSON.parse(
+        (await read({ crawl_id: scope.crawlId, cursor: first.pagination.next_cursor })).text,
+      );
+      expect(rest.items).toHaveLength(3);
+      expect(await read({ crawl_id: scope.crawlId, limit: 51 })).toMatchObject({
+        status: 'refused',
+        error: 'invalid_arguments',
+      });
+      const mcpLimit = (
+        sharedTools.definitions.read_site_pages.schema.shape as Record<string, z.ZodType>
+      ).limit!;
+      expect(mcpLimit.safeParse(200).success).toBe(true);
     } finally {
       await site.cleanup();
     }
@@ -244,7 +272,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
     expect(refreshed.messages.at(-1)?.evidence_refs).toEqual([uri]);
     expect(refreshed.latest_run?.progress.filter((step) => step.tool === 'fetch')).toHaveLength(1);
   });
-  it('carries an Action through outline approval, user edit, refinement and an exact next-step revision', async () => {
+  it('carries an Action through a draft, user edit, refinement and an exact next-step revision', async () => {
     const scope = await fixtures.scope();
     const action = await db
       .transaction()
@@ -272,20 +300,15 @@ describe('Agent bindings to the evidence and Action owners', () => {
       skillId: 'content',
       message: 'Write a buyer guide',
     });
-    const outlined = await execute([save('draft', 'Proposed outline')]);
+    const drafted = await execute([save('First draft')]);
     expect(opened[0]).toContain(action.id);
-    const outline = outlined.output!.latest_revision!;
-    expect(outline.phase).toBe('outline');
-    await store.approveOutline(scope, first.chat_id, outline.id, randomUUID());
-    const drafted = await execute([save('draft', 'Approved draft')]);
-    const edited = await new AgentOutputs(db).edit(
-      scope,
-      first.chat_id,
-      drafted.output!.latest_revision!.id,
-      'Buyer guide',
-      'User edited draft',
-    );
-    expect((await readChat(db, scope, first.chat_id)).output?.message_id).toBe(
+    const draft = drafted.outputs[0]!;
+    const edited = await new AgentOutputs(db).edit(scope, first.chat_id, draft.id, {
+      baseId: draft.latest_revision.id,
+      title: 'Buyer guide',
+      body: 'User edited draft',
+    });
+    expect((await readChat(db, scope, first.chat_id)).outputs[0]?.message_id).toBe(
       drafted.messages.at(-1)!.id,
     );
     await store.enqueue(scope, {
@@ -293,24 +316,25 @@ describe('Agent bindings to the evidence and Action owners', () => {
       chatId: first.chat_id,
       message: 'Refine my edit',
     });
-    const refined = await execute([save('draft', 'Refined accepted guide')]);
+    const refined = await execute([save('Refined accepted guide', { document: 1 })]);
     // The user's edit is new to the model, so the turn supplies it.
     expect(opened[0]).toContain('User edited draft');
-    const accepted = refined.output!.latest_revision!;
+    const [document] = refined.outputs;
+    const accepted = document!.latest_revision;
     expect(accepted.parent_revision_id).toBe(edited.id);
-    expect(refined.output!.message_id).toBe(refined.messages.at(-1)!.id);
+    expect(document!.message_id).toBe(refined.messages.at(-1)!.id);
     await store.enqueue(scope, {
       key: randomUUID(),
       message: 'Plan distribution',
       skillId: 'plan',
       refs: {
-        output_revision_reference: { output_id: refined.output!.id, revision_id: accepted.id },
+        output_revision_reference: { output_id: document!.id, revision_id: accepted.id },
       },
     });
-    const next = await execute([save('final', 'Distribution plan')]);
+    const next = await execute([save('Distribution plan')]);
     expect(opened[0]).toContain(accepted.id);
     expect(opened[0]).toContain('Refined accepted guide');
-    expect(next.output?.kind).toBe('plan');
+    expect(next.outputs.map((output) => output.kind)).toEqual(['plan']);
     expect(next.chat.id).not.toBe(first.chat_id);
   });
   it('attaches concurrent same-target outputs once and preserves invalid-target work', async () => {
@@ -342,7 +366,7 @@ describe('Agent bindings to the evidence and Action owners', () => {
       .runtime(
         scope,
         scripted([
-          save('outline', 'Evidence-grounded guide', {
+          save('Evidence-grounded guide', {
             title: 'Guide',
             target_kind: 'planned_page',
             target: 'Buyer guide',
@@ -352,34 +376,44 @@ describe('Agent bindings to the evidence and Action owners', () => {
       )
       .execute(lease);
     const chat = await readChat(db, scope, run.chat_id);
-    expect(chat.output).toMatchObject({
-      target_kind: 'planned_page',
-      target_label: 'Buyer guide',
-      format_id: null,
-    });
-    const actionId = chat.output?.action_id;
+    expect(chat.outputs).toMatchObject([
+      { target_kind: 'planned_page', target_label: 'Buyer guide', format_id: null },
+    ]);
+    const actionId = chat.outputs[0]?.action_id;
     expect(actionId).toBeTruthy();
+    expect(chat.chat.action_id).toBe(actionId);
     const next = await fixtures.claimed(scope, { chatId: run.chat_id });
     await fixtures
       .runtime(
         scope,
         scripted([
-          save('outline', 'Revised guide', {
+          save('Revised guide', {
+            document: 1,
             title: 'Guide',
             target_kind: 'page',
             target: 'https://other.test/page',
           }),
+          // A new document in the Action's chat belongs to that Action.
+          save('Second guide', { title: 'Guide two' }),
         ]),
         { attachTarget: attachAgentTarget },
       )
       .execute(next.lease);
-    expect((await readChat(db, scope, run.chat_id)).output?.action_id).toBe(actionId);
+    expect(
+      (await readChat(db, scope, run.chat_id)).outputs.map((output) => [
+        output.number,
+        output.action_id,
+      ]),
+    ).toEqual([
+      [1, actionId],
+      [2, actionId],
+    ]);
     const invalid = await fixtures.claimed(scope, { skillId: 'content' });
     await fixtures
       .runtime(
         scope,
         scripted([
-          save('outline', 'Saved for retargeting', {
+          save('Saved for retargeting', {
             title: 'Guide',
             target_kind: 'page',
             target: 'https://other.test/page',
@@ -388,9 +422,8 @@ describe('Agent bindings to the evidence and Action owners', () => {
         { attachTarget: attachAgentTarget },
       )
       .execute(invalid.lease);
-    expect((await readChat(db, scope, invalid.run.chat_id)).output).toMatchObject({
-      action_id: null,
-      latest_revision: { body: 'Saved for retargeting' },
-    });
+    expect((await readChat(db, scope, invalid.run.chat_id)).outputs).toMatchObject([
+      { action_id: null, latest_revision: { body: 'Saved for retargeting' } },
+    ]);
   });
 });

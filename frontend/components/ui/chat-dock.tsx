@@ -80,7 +80,7 @@ export function ComposerFrame({
 }>) {
   return (
     <form
-      className="bg-input border-border-strong grid gap-1 rounded-[var(--radius-card)] border p-2"
+      className="bg-input border-border-bold grid gap-1 rounded-[var(--radius-card)] border p-2"
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
         onSubmit();
@@ -110,7 +110,7 @@ export function RemovableChip({
   onRemove,
 }: Readonly<{ label: string; onRemove?: () => void }>) {
   return (
-    <li className="bg-background-alt text-secondary inline-flex max-w-full items-center gap-1 rounded-full px-3 py-0.5">
+    <li className="border-border text-secondary inline-flex max-w-full items-center gap-1 rounded-full border px-3 py-0.5">
       <span className={textRole('caption', 'truncate text-secondary')}>{label}</span>
       {onRemove ? (
         <Pressable

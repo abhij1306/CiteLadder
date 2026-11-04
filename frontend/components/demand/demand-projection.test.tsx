@@ -157,6 +157,10 @@ vi.mock('@/lib/api/demand', () => ({
 
 import { demandApi } from '@/lib/api/demand';
 
+/** The summary line's count, whose figure is its own element inside the line. */
+const findSignalCount = (text: string) =>
+  screen.findByText((_, element) => element?.tagName === 'SPAN' && element.textContent === text);
+
 describe('DemandProjection', () => {
   beforeEach(() => {
     // The filter and selection live in the address, which outlives a render.
@@ -185,7 +189,7 @@ describe('DemandProjection', () => {
     renderProjection();
 
     // One summary line; latent demand is the only figure the filters lack.
-    const summary = await screen.findByText('2 signals observed');
+    const summary = await findSignalCount('2 signals observed');
     expect(summary.parentElement).toHaveTextContent('350 impressions on non-branded signals'); // 250 + 100
     // No section heading: the page title already names the page.
     expect(screen.queryByRole('heading', { name: 'Signals' })).not.toBeInTheDocument();
@@ -193,18 +197,16 @@ describe('DemandProjection', () => {
     // Each filter carries its count once, and its detectors' status when they
     // did not run in full, including one the snapshot never reported. CTR gaps
     // counts the low-CTR signal, whose detector ran, beside an unavailable one.
-    const filters = screen
-      .getAllByRole('button', { pressed: false })
-      .concat(screen.getAllByRole('button', { pressed: true }))
+    const filters = within(screen.getByRole('radiogroup', { name: 'Signal type' }))
+      .getAllByRole('radio')
       .map((chip) => chip.textContent);
-    expect(filters).toEqual(
-      expect.arrayContaining([
-        'Striking distance1',
-        'Cannibalization · Not reported0',
-        'CTR gaps · Partial1',
-        'Trends · Needs more history0',
-      ]),
-    );
+    expect(filters).toEqual([
+      'All signals 2',
+      'Striking distance 1',
+      'Cannibalization · Not reported 0',
+      'CTR gaps · Partial 1',
+      'Trends · Needs more history 0',
+    ]);
     expect(
       screen.getByRole('button', { name: 'How the CTR gap and Low CTR detectors work' }),
     ).toBeVisible();
@@ -293,7 +295,7 @@ describe('DemandProjection', () => {
 
     // `school fees` is the second-priority signal; filtering to CTR gaps must
     // not relabel it as the top-priority one.
-    fireEvent.click(screen.getByRole('button', { name: /^CTR gaps/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /^CTR gaps/i }));
 
     expect(signalRows().map((row) => [rankOf(row), row.textContent])).toEqual([
       ['2', expect.stringContaining('school fees')],
@@ -351,7 +353,7 @@ describe('DemandProjection', () => {
     ).toHaveLength(22);
 
     // A different filter is a different list: it opens on its first page.
-    await user.click(screen.getByRole('button', { name: /^Striking distance/i }));
+    await user.click(screen.getByRole('radio', { name: /^Striking distance/i }));
     expect(pagerSummary()).toBe('1–25 of 27 signals');
     expect(rankOf(signalRows()[0]!)).toBe('1');
   });
@@ -398,8 +400,8 @@ describe('DemandProjection', () => {
     const user = userEvent.setup();
     renderProjection();
 
-    expect((await screen.findByRole('button', { name: /^CTR gaps/ })).textContent).toBe(
-      'CTR gaps1',
+    expect((await screen.findByRole('radio', { name: /^CTR gaps/ })).textContent).toBe(
+      'CTR gaps 1',
     );
     await user.hover(
       screen.getByRole('button', { name: 'How the CTR gap and Low CTR detectors work' }),
@@ -415,18 +417,18 @@ describe('DemandProjection', () => {
     expect(await screen.findByText('ai marketing tools')).toBeInTheDocument();
     expect(screen.getByText('school fees')).toBeInTheDocument();
 
-    // Click Striking Distance filter chip (using aria-pressed)
-    const strikingChip = screen.getByRole('button', {
+    const strikingChip = screen.getByRole('radio', {
       name: /^Striking Distance/i,
-      pressed: false,
+      checked: false,
     });
     fireEvent.click(strikingChip);
+    expect(strikingChip).toBeChecked();
 
     expect(screen.getByText('ai marketing tools')).toBeInTheDocument();
     expect(screen.queryByText('school fees')).not.toBeInTheDocument();
 
     // Click All Signals chip
-    const allChip = screen.getByRole('button', { name: /^All Signals/i });
+    const allChip = screen.getByRole('radio', { name: /^All Signals/i });
     fireEvent.click(allChip);
     expect(screen.getByText('school fees')).toBeInTheDocument();
 
@@ -509,7 +511,7 @@ describe('DemandProjection', () => {
     });
     renderProjection();
 
-    expect((await screen.findByText('2 signals observed')).parentElement).toHaveTextContent(
+    expect((await findSignalCount('2 signals observed')).parentElement).toHaveTextContent(
       '250 impressions on 1 of 2 non-branded signals',
     );
   });
@@ -548,7 +550,7 @@ describe('DemandProjection', () => {
   it('reports that recompute was queued rather than implying a finished rebuild', async () => {
     renderProjection();
 
-    expect(await screen.findByText('2 signals observed')).toBeInTheDocument();
+    expect(await findSignalCount('2 signals observed')).toBeInTheDocument();
 
     const fetchesBeforeRecompute = vi.mocked(demandApi.getLatest).mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: /Recompute Signals/i }));
@@ -602,7 +604,7 @@ describe('DemandProjection', () => {
     vi.mocked(demandApi.recompute).mockRejectedValueOnce(new Error('boom'));
     renderProjection();
 
-    expect(await screen.findByText('2 signals observed')).toBeInTheDocument();
+    expect(await findSignalCount('2 signals observed')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: /Recompute Signals/i }));
 
     expect(await screen.findByRole('button', { name: /Try again/i })).toBeInTheDocument();

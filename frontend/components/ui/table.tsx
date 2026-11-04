@@ -1,8 +1,6 @@
 import {
   createContext,
   useContext,
-  useEffect,
-  useRef,
   useState,
   type HTMLAttributes,
   type ReactNode,
@@ -138,8 +136,13 @@ export function TableRow({
     <tr
       {...props}
       className={cn(
-        'hover:bg-hover active:bg-active aria-selected:bg-selected aria-selected:hover:bg-selected h-[var(--table-row-height)] transition-colors',
-        highlight && 'bg-selected hover:bg-selected',
+        'hover:bg-hover active:bg-active h-[var(--table-row-height)] transition-colors',
+        // A selected or highlighted row keeps the card's fill and takes a 2px
+        // accent bar at its first cell's start (rows cannot position a mark
+        // in every engine) and the foreground ink: no fill block.
+        "[&>*:first-child]:relative aria-selected:text-foreground aria-selected:[&>*:first-child]:after:bg-accent aria-selected:[&>*:first-child]:after:absolute aria-selected:[&>*:first-child]:after:inset-y-0 aria-selected:[&>*:first-child]:after:start-0 aria-selected:[&>*:first-child]:after:w-0.5 aria-selected:[&>*:first-child]:after:content-['']",
+        highlight &&
+          "text-foreground [&>*:first-child]:after:bg-accent [&>*:first-child]:after:absolute [&>*:first-child]:after:inset-y-0 [&>*:first-child]:after:start-0 [&>*:first-child]:after:w-0.5 [&>*:first-child]:after:content-['']",
         className,
       )}
     >
@@ -242,9 +245,10 @@ function isCut(node: HTMLElement) {
  * second line), with the whole text in a tooltip only when something was
  * actually cut. This is what holds every row to one or two lines.
  *
- * Measuring is lazy: nothing is observed until a pointer or focus reaches the
- * text, so a table of hundreds of cells costs no layout reads at rest. The
- * tooltip mounts open on that first reach and behaves normally afterwards.
+ * Measuring is lazy: the text is measured only as its tooltip is about to
+ * open, so a table of hundreds of cells costs no layout reads at rest. The
+ * tooltip is always mounted, so it opens and closes through the shared atom
+ * and only one is ever open.
  *
  * `tooltip` overrides the tooltip content, e.g. a full URL behind a label.
  */
@@ -264,43 +268,23 @@ export function ClampText({
   const lines = requestedLines ?? tableLines;
   // The full text as plain text: styled children (a title role, a caption)
   // would carry their own ink onto the inverse tooltip chip.
-  const [fullText, setFullText] = useState<string | null>(null);
-  const textRef = useRef<HTMLSpanElement>(null);
-  // Mounting the tooltip remounts the text, and a focused link or button in
-  // it with it; a keyboard reach hands focus back to the new control.
-  const refocus = useRef(false);
-  useEffect(() => {
-    if (fullText === null || !refocus.current) return;
-    refocus.current = false;
-    textRef.current?.querySelector<HTMLElement>('a, button, [tabindex]')?.focus();
-  }, [fullText]);
-  const check =
-    fullText === null
-      ? (event: { currentTarget: HTMLElement; type: string }) => {
-          if (!isCut(event.currentTarget)) return;
-          refocus.current = event.type === 'focus';
-          setFullText(event.currentTarget.textContent ?? '');
-        }
-      : undefined;
-  const text = (
-    <span
-      ref={textRef}
-      onPointerEnter={check}
-      onFocus={check}
-      className={cn(
-        'block min-w-0 break-words',
-        lines === 1 ? 'truncate' : 'line-clamp-2',
-        className,
-      )}
-    >
-      {children}
-    </span>
-  );
-  return fullText === null ? (
-    text
-  ) : (
-    <Tooltip content={tooltip ?? fullText} defaultOpen>
-      {text}
+  const [fullText, setFullText] = useState('');
+  const openWhenCut = (node: HTMLElement) => {
+    if (!isCut(node)) return false;
+    setFullText(node.textContent ?? '');
+    return true;
+  };
+  return (
+    <Tooltip content={tooltip ?? fullText} shouldOpen={openWhenCut}>
+      <span
+        className={cn(
+          'block min-w-0 break-words',
+          lines === 1 ? 'truncate' : 'line-clamp-2',
+          className,
+        )}
+      >
+        {children}
+      </span>
     </Tooltip>
   );
 }

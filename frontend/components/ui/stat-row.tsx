@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
-import { listRowClasses } from '@/components/ui/list-row';
 import { ComparisonValue, MetricValue } from '@/components/ui/metric-value';
 import { ScoreRing } from '@/components/ui/score-ring';
 import { textRole } from '@/components/ui/typography';
@@ -42,17 +41,11 @@ import { cn } from '@/lib/utils';
  * named by `actionLabel`; `selected` makes it a toggle (`aria-pressed`).
  */
 
-/** A value's ink when the value itself is the finding. */
-const TONE = {
-  default: '',
-  success: 'text-success-text',
-  warning: 'text-warning-text',
-  danger: 'text-danger-text',
-  info: 'text-info-text',
-  muted: 'text-muted',
-} as const;
-
-type StatTone = keyof typeof TONE;
+/*
+ * A value always takes the foreground ink: colour means a state, so it goes
+ * on the delta beside a figure, never on the figure itself (owner,
+ * 2026-11-03). That is why a segment has no tone.
+ */
 
 type StatValue =
   | { value: ReactNode; score?: undefined }
@@ -71,7 +64,6 @@ export type StatSegment = Readonly<
     /** Accessible name of the missing state. Defaults to "Not measured". */
     missingLabel?: string;
     loading?: boolean;
-    tone?: StatTone;
     /** A small mark at the end of the label row (series key, info hint). */
     marker?: ReactNode;
     /** A caption above the value, e.g. the period it covers. */
@@ -173,6 +165,21 @@ function textRows(segment: StatSegment) {
   return (1 + optional.filter(Boolean).length) as keyof typeof ROW_SPAN;
 }
 
+/**
+ * A pressable segment's state. Selected keeps the card's own fill and takes a
+ * 2px accent bar along its foot and the foreground ink; there is no fill
+ * block, so the first segment, flush with the card's inset, never shows a box
+ * edge against its label.
+ */
+function statSelectionClasses(selected: boolean) {
+  return cn(
+    'transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
+    selected
+      ? "text-foreground after:bg-accent after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:content-['']"
+      : 'text-secondary hover:text-foreground',
+  );
+}
+
 function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
   const pressable = Boolean(segment.onSelect);
   // A score ring sits at the segment's top right; the rest stacks in the first column.
@@ -183,7 +190,7 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
       className={cn(
         'grid min-w-0 content-start gap-1 py-3 desktop:px-4 desktop:first:ps-0 desktop:last:pe-0',
         segment.score && 'grid-cols-[minmax(0,1fr)_auto] gap-x-4',
-        pressable && cn('relative', listRowClasses({ selected: segment.selected ?? false })),
+        pressable && cn('relative', statSelectionClasses(segment.selected ?? false)),
       )}
     >
       {segment.score ? (
@@ -289,17 +296,15 @@ function SegmentComparison({
 
 function SegmentValue({ segment }: Readonly<{ segment: StatSegment }>) {
   const { value } = segment;
-  const tone = TONE[segment.tone ?? 'default'];
   if (segment.loading || value == null || typeof value === 'string' || typeof value === 'number') {
     return (
       <MetricValue
         value={value == null ? null : String(value)}
         label={segment.missingLabel ?? availabilityLabel('not_measured')}
         loading={segment.loading ?? false}
-        tone={tone}
         className="min-w-0 [overflow-wrap:anywhere]"
       />
     );
   }
-  return <div className={textRole('figure', cn('min-w-0', tone))}>{value}</div>;
+  return <div className={textRole('figure', 'min-w-0')}>{value}</div>;
 }

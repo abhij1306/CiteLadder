@@ -3,14 +3,24 @@ import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { ModelError } from '../models/http.ts';
-import type { ConversationBlock, ConversationMessage, ToolCall } from '../models/conversation.ts';
+import {
+  hasPendingServerTool,
+  webSearchBlocks,
+  type ServerToolEvent,
+  type ConversationBlock,
+  type ConversationMessage,
+  type ToolCall,
+} from '../models/conversation.ts';
 import { authorize } from './access.ts';
 import {
   isBuiltin,
   agentToolList,
+  documentLabel,
+  editDocument,
   loadSkill,
   methodology,
   saveDocument,
+  EDIT_DOCUMENT,
   LOAD_SKILL,
   SAVE_DOCUMENT,
   type DocumentState,
@@ -26,15 +36,22 @@ import {
   type SkillCatalog,
 } from './contracts.ts';
 import { contextCitations, manifestSchema, suppliedManifest } from './context.ts';
-import { ModelCalls, type AgentModel, type ModelRequest } from './model-calls.ts';
-import { currentOutput, revisionRefs, saveAgentOutput, type AttachTarget } from './outputs.ts';
+import { ModelCalls, RefusedDispatch, type AgentModel, type ModelRequest } from './model-calls.ts';
+import {
+  chatDocuments,
+  latestDocument,
+  revisionRefs,
+  revisionWebSources,
+  saveAgentOutput,
+  type AttachTarget,
+} from './outputs.ts';
 import { lockRun, terminalize } from './queue.ts';
 import { appendMessage, appendRecoveryReply, getChat, touchChat } from './messages.ts';
-import { outlineRequired } from './skills.ts';
-import { readSources, scrubRecordRefs, uniqueSources } from './sources.ts';
+import { readSources, scrubRecordRefs, uniqueSources, uniqueWeb } from './sources.ts';
 import { documentEmitter, type TurnEvents } from './stream.ts';
 import {
   chatTranscripts,
+  lastResponseId,
   openingMessage,
   replayed,
   saveTranscript,
@@ -51,17 +68,25 @@ function failureCode(error: unknown) {
   return 'internal_error';
 }
 type StepRecord = {
-  kind: 'model' | 'skill' | 'document' | 'tool';
+  kind: 'model' | 'skill' | 'document' | 'tool' | 'search';
   ordinal?: number;
   skill_id?: string;
   tool?: string;
   status?: string;
   call_id?: string;
+  /** A web search's query, as the model wrote it. */
+  query?: string;
 };
 type PromptSummary = Record<string, Json>;
 type TurnState = DocumentState & {
   /** Records this turn's reads returned: the reply's sources. */
   read: string[];
+  /** Web pages this turn's searches returned, by URL: sources apart from CiteLadder records. */
+  web: Map<string, string>;
+  /** Each web search's query by call id, until its result arrives. */
+  queries: Map<string, string>;
+  /** Web searches the provider ran this turn, discarded responses included. */
+  searches: number;
   steps: StepRecord[];
   toolsUsed: number;
   /** This turn's messages, appended in order and persisted as its transcript. */
@@ -81,9 +106,9 @@ export type RuntimeDependencies = {
   attachTarget: AttachTarget;
 };
 type Turn = Awaited<ReturnType<AgentRuntime['load']>>;
-/** The saved document's format, else the one its workflow pinned. */
+/** The workflow's pinned format, else the latest document's. */
 function currentFormat(turn: Turn) {
-  return turn.current.output?.format_id ?? turn.manifest.workflow?.format_id ?? null;
+  return turn.manifest.workflow?.format_id ?? turn.latest?.output.format_id ?? null;
 }
 /** Merges the last prompt summary into the frozen manifest without rewriting it. */
 function withSummary(summary: PromptSummary) {
@@ -91,11 +116,31 @@ function withSummary(summary: PromptSummary) {
     context_manifest: sql<Json>`context_manifest || jsonb_build_object('prompt_summary', ${JSON.stringify(summary)}::jsonb)`,
   };
 }
-const SAVED_PHASE: Record<string, string> = { outline: 'Outline saved', draft: 'Draft saved' };
-function savedNotice(phase: string, formatLabel: string | null) {
+function savedNotice(number: number, formatLabel: string | null) {
   const format = formatLabel ? ` in ${formatLabel} format` : '';
-  const approval = phase === 'outline' ? ' Approve it before requesting a draft.' : '';
-  return `${SAVED_PHASE[phase] ?? 'Document saved'}${format}.${approval}`;
+  return `${documentLabel(number)} saved${format}.`;
+}
+/**
+ * The web searches the next call may run, and is held for: what is left of the
+ * turn's budget, at most the per-call cap. None left offers no search tool. A
+ * search the previous response left waiting (beside a read, or paused) runs
+ * in the next call, which must offer the tool, so at least one is offered then.
+ * The last call starts no new search: one left waiting there could never run.
+ */
+function searchAllowance(budget: Budget, used: number, waiting: boolean, last: boolean) {
+  const left = last ? 0 : Math.max(0, budget.max_web_searches - used);
+  const allowed = Math.min(left, budget.max_web_searches_per_call);
+  return waiting ? Math.max(1, allowed) : allowed;
+}
+/**
+ * Thinking shares the output cap, so a cut-off call is discarded and asked
+ * once more with low effort as the next call of the turn; a cut-off retry, or
+ * a cut-off last call, ends the turn.
+ */
+function retryEffort(effort: Budget['reasoning_effort'], ordinal: number, budget: Budget) {
+  if (effort === 'low' || ordinal === budget.max_model_calls)
+    throw new AgentError('output_too_long');
+  return 'low' as const;
 }
 /** A turn never ends without a reply, even when the model wrote none. */
 function noReply(reads: number) {
@@ -104,15 +149,24 @@ function noReply(reads: number) {
     ? `I completed ${read} but reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request to one page, prompt or date range and ask again.`
     : 'I reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request and ask again.';
 }
+const UNFUNDED_REPLY = 'The Agent model connection changed before I could write a summary.';
+const unfunded = (error: unknown) => error instanceof RefusedDispatch;
 /** Appended after a step's tool results, never deleted, so the cached history stays exact. */
-function reminder(budget: Budget, ordinal: number, toolsUsed: number) {
+function reminder(
+  budget: Budget,
+  ordinal: number,
+  state: Pick<TurnState, 'toolsUsed' | 'searches'>,
+) {
   const left = budget.max_model_calls - ordinal;
   if (left === 1)
-    return 'This is the last step of the turn: answer the user now from what you have read and name anything still missing. Tool calls will be refused.';
+    return 'This is the last step of the turn: answer now from what you have read and name anything still missing. Tool calls will be refused.';
   const notes = [
     left <= budget.limit_reminder_calls ? `${left} steps are left in this turn.` : '',
-    toolsUsed >= budget.max_tool_calls
+    state.toolsUsed >= budget.max_tool_calls
       ? 'The read budget for this turn is spent: answer from what you have read.'
+      : '',
+    budget.max_web_searches > 0 && state.searches >= budget.max_web_searches
+      ? 'The web search budget for this turn is spent.'
       : '',
   ].filter(Boolean);
   return notes.join(' ');
@@ -156,7 +210,7 @@ export class AgentRuntime {
       )
         throw new AgentError('skills_changed');
       const chat = await getChat(trx, scope, run.chat_id, true);
-      const current = await currentOutput(trx, chat);
+      const documents = await chatDocuments(trx, chat);
       const request = await trx
         .selectFrom('agent_messages')
         .select('content')
@@ -169,9 +223,8 @@ export class AgentRuntime {
         run,
         scope,
         chat,
-        current,
-        // A revision keeps its predecessor's sources and adds this turn's reads.
-        carried: revisionRefs(current.revision?.source_refs ?? []),
+        documents,
+        latest: latestDocument(documents),
         request: request.content,
         manifest,
         // Fixed for the turn: computed once, not on every call.
@@ -209,12 +262,16 @@ export class AgentRuntime {
     const opening = openingMessage({
       kept,
       context: turn.context.text,
-      revision: turn.current.revision,
-      formatId: state.formatId,
+      documents: turn.documents.map(({ output, revision }) => ({
+        number: output.number,
+        kind: output.kind,
+        formatId: output.format_id,
+        revision,
+      })),
       pinned: state.skill
         ? {
             skill: state.skill,
-            text: methodology(this.deps.catalog, state.skill, state, budget),
+            text: methodology(state.skill, state, budget),
           }
         : null,
       request: turn.request,
@@ -231,25 +288,62 @@ export class AgentRuntime {
     // The cached prefix: built once per turn from the catalog and the run's frozen bounds.
     const system = systemPrefix(this.deps.catalog);
     const tools = agentToolList(this.deps.tools, this.deps.catalog, budget);
+    let effort = budget.reasoning_effort;
+    const lastKept = kept.at(-1);
+    let previousResponseId = lastKept
+      ? await lastResponseId(this.db, turn.scope, lastKept.runId)
+      : null;
+    // Provider-hosted search exists only on the Messages API.
+    const searchable = model.adapter === 'anthropic';
+    let waiting = false;
     for (let ordinal = 1; ordinal <= budget.max_model_calls; ordinal++) {
       signal?.throwIfAborted();
       const request: ModelRequest = {
         system,
         tools,
         messages: [...history, ...state.messages],
-        effort: budget.reasoning_effort,
+        effort,
         compactAtTokens: budget.compaction_trigger_tokens,
+        previousResponseId,
+        webSearches: searchable
+          ? searchAllowance(budget, state.searches, waiting, ordinal === budget.max_model_calls)
+          : 0,
       };
-      const response = await this.callModel(lease, ordinal, model, request, signal, events);
+      let response;
+      try {
+        response = await this.callModel(lease, ordinal, model, request, signal, events);
+      } catch (error) {
+        // Finished work is kept: a document already staged commits with a fixed reply.
+        if (unfunded(error) && state.staged.size && !waiting)
+          return this.finish(lease, turn, model, state, UNFUNDED_REPLY, latest.summary, true);
+        throw error;
+      }
+      previousResponseId = response.response_id || previousResponseId;
+      // A discarded response's searches were still run and billed.
+      const reported = response.usage.web_search_requests;
+      state.searches +=
+        typeof reported === 'number' ? reported : webSearchBlocks(response.blocks).calls.length;
+      if (response.stop === 'max_tokens') {
+        effort = retryEffort(effort, ordinal, budget);
+        continue;
+      }
+      effort = budget.reasoning_effort;
       // An empty assistant message would make every later replay of this chat invalid.
       const blocks = response.blocks.length
         ? response.blocks
         : [{ type: 'text', text: '(no answer)' }];
       state.messages.push({ role: 'assistant', content: blocks });
       state.steps.push({ kind: 'model', ordinal });
+      this.searched(state, ordinal, blocks);
+      const last = ordinal === budget.max_model_calls;
+      // A paused search loop continues from the unchanged response in the next call.
+      waiting = response.stop === 'pause_turn' || hasPendingServerTool(blocks);
+      if (response.stop === 'pause_turn') {
+        if (last) return this.finish(lease, turn, model, state, response.text, latest.summary);
+        continue;
+      }
       if (!response.toolCalls.length)
         return this.finish(lease, turn, model, state, response.text, latest.summary);
-      const last = ordinal === budget.max_model_calls;
       const results = await this.runTools(
         lease,
         turn,
@@ -258,7 +352,8 @@ export class AgentRuntime {
         signal,
         events,
       );
-      const note = last ? '' : reminder(budget, ordinal, state.toolsUsed);
+      // A search waiting on these results needs a message of results only.
+      const note = last || waiting ? '' : reminder(budget, ordinal, state);
       state.messages.push({
         role: 'user',
         content: [...results, ...(note ? [{ type: 'text', text: note }] : [])],
@@ -287,31 +382,62 @@ export class AgentRuntime {
       ...(document
         ? { toolInput: (name: string, input: unknown) => name === SAVE_DOCUMENT && document(input) }
         : {}),
+      ...(events?.tool
+        ? {
+            serverTool: ({ id, name, status }: ServerToolEvent) =>
+              events.tool?.({ ordinal, call_id: id.slice(0, 64), tool: name, status }),
+          }
+        : {}),
     });
     signal?.throwIfAborted();
-    // A cut-off answer cannot be repaired by asking again: the same request is cut again.
-    if (result.stop === 'max_tokens') throw new AgentError('output_too_long');
+    // Neither is repaired by asking again: the same input is too long or refused again.
+    if (result.stop === 'context_window') throw new AgentError('context_too_long');
     if (result.stop === 'refusal') throw new AgentError('model_refused');
     return result;
   }
   private initialState(turn: Turn): TurnState {
     const skill = this.deps.catalog.skills.get(
-      turn.run.requested_skill_id ?? turn.current.output?.skill_id ?? '',
+      turn.run.requested_skill_id ?? turn.latest?.output.skill_id ?? '',
     );
     if (turn.run.requested_skill_id && !skill) throw new AgentError('skills_changed');
     return {
       skill,
       skillSource: turn.run.requested_skill_source ?? (skill ? 'chat' : null),
-      outputKind: turn.current.output?.kind ?? null,
-      outlineApproved: turn.current.outlineApproved,
       formatId: currentFormat(turn),
-      staged: null,
+      documents: turn.documents.map(({ output, revision }) => ({
+        number: output.number,
+        kind: output.kind,
+        skillId: output.skill_id,
+        formatId: output.format_id,
+        title: revision.title,
+        body: revision.body,
+      })),
+      staged: new Map(),
       read: [],
+      web: new Map(),
+      queries: new Map(),
+      searches: 0,
       steps: [],
       toolsUsed: 0,
       messages: [],
       contextHash: '',
     };
+  }
+  /** Records one response's web searches: a step per result, and the pages each returned. */
+  private searched(state: TurnState, ordinal: number, blocks: ConversationBlock[]) {
+    const { calls, results } = webSearchBlocks(blocks);
+    for (const call of calls) state.queries.set(call.id, call.query);
+    for (const { callId, sources } of results) {
+      state.steps.push({
+        kind: 'search',
+        ordinal,
+        status: sources ? 'completed' : 'failed',
+        call_id: callId.slice(0, 64),
+        query: (state.queries.get(callId) ?? '').slice(0, 200),
+      });
+      for (const source of sources ?? [])
+        if (!state.web.has(source.url)) state.web.set(source.url, source.title);
+    }
   }
   /**
    * One response's tool calls. Built-ins run first, in the order written, since
@@ -326,7 +452,7 @@ export class AgentRuntime {
     signal?: AbortSignal,
     events?: TurnEvents,
   ) {
-    let saved = false;
+    const saved = new Set<number>();
     let parallel = 0;
     const pending = calls.map((call, index) => {
       const callId = (call.id || `call_${index}`).slice(0, 64);
@@ -341,7 +467,12 @@ export class AgentRuntime {
       }
       if (isBuiltin(call.name)) {
         const outcome = this.builtin(turn, state, call, saved);
-        if (call.name === SAVE_DOCUMENT && outcome.ok) saved = true;
+        if (call.name === SAVE_DOCUMENT && outcome.ok && outcome.document)
+          saved.add(outcome.document);
+        // An edit's input is not the document, so the edited text is shown once applied.
+        const edited = outcome.document ? state.staged.get(outcome.document) : undefined;
+        if (call.name === EDIT_DOCUMENT && outcome.ok && edited)
+          events?.document?.({ ordinal, title: edited.payload.title, body: edited.payload.body });
         tool(outcome.ok ? 'completed' : 'refused');
         return Promise.resolve(result(call, outcome.text, !outcome.ok));
       }
@@ -369,22 +500,20 @@ export class AgentRuntime {
     });
     return Promise.all(pending);
   }
-  private builtin(turn: Turn, state: TurnState, call: ToolCall, saved: boolean) {
+  private builtin(turn: Turn, state: TurnState, call: ToolCall, saved: ReadonlySet<number>) {
     const { catalog } = this.deps;
     if (call.name === LOAD_SKILL) {
       const before = state.skill;
       const outcome = loadSkill(catalog, state, call.input, turn.budget);
-      if (outcome.ok && !before && state.skill)
+      if (outcome.ok && state.skill && before?.id !== state.skill.id)
         state.steps.push({ kind: 'skill', skill_id: state.skill.id });
       return outcome;
     }
-    // One document per response, so completion order never picks the winner.
-    if (saved)
-      return {
-        ok: false,
-        text: 'Save one document per step. The first save in this step was kept.',
-      };
-    const outcome = saveDocument(catalog, state, call.input, turn.budget);
+    // A document is saved whole once per response, so a later save never silently wins.
+    const outcome =
+      call.name === EDIT_DOCUMENT
+        ? editDocument(catalog, state, call.input, turn.budget)
+        : saveDocument(catalog, state, call.input, turn.budget, saved);
     if (outcome.ok) state.steps.push({ kind: 'document' });
     return outcome;
   }
@@ -462,7 +591,11 @@ export class AgentRuntime {
         .execute();
     });
   }
-  /** The reply, the staged document and the transcript commit together, or not at all. */
+  /**
+   * The reply, the staged document and the transcript commit together, or not
+   * at all. A `closing` reply is one the model did not write; it ends the
+   * transcript as its answer, so a later turn replays a well-formed chat.
+   */
   private finish(
     lease: Lease,
     turn: Turn,
@@ -470,20 +603,26 @@ export class AgentRuntime {
     state: TurnState,
     text: string,
     summary: PromptSummary | undefined,
+    closing = false,
   ) {
-    const { skill, skillSource: source, read, steps, staged } = state;
+    if (closing) state.messages.push({ role: 'assistant', content: [{ type: 'text', text }] });
+    const { skill, skillSource: source, read, steps } = state;
     const { budget } = turn;
     const reads = steps.filter((step) => step.kind === 'tool' && step.status === 'completed');
+    const staged = [...state.staged].toSorted(([left], [right]) => left - right);
+    const web = [...state.web].map(([url, title]) => ({ url, title }));
     return this.db.transaction().execute(async (trx) => {
       const run = await lockRun(trx, lease);
       await authorize(trx, turn.scope);
       const chat = await getChat(trx, turn.scope, run.chat_id, true);
       const sources = uniqueSources(contextCitations(turn.manifest), read);
-      const document = staged && skill ? staged : null;
-      const formatLabel = document?.format_id
-        ? (this.deps.catalog.formats?.get(document.format_id)?.label ?? document.format_id)
-        : null;
-      const completion = document ? savedNotice(document.phase, formatLabel) : '';
+      const completion = staged
+        .map(([number, { payload }]) => {
+          const format = payload.format_id;
+          const label = format ? (this.deps.catalog.formats?.get(format)?.label ?? format) : null;
+          return savedNotice(number, label);
+        })
+        .join(' ');
       const reply = scrubRecordRefs(text).trim();
       let content = completion;
       if (reply) {
@@ -493,33 +632,39 @@ export class AgentRuntime {
           '\n[reply truncated at its size bound]',
         );
         content = [answer, completion].filter(Boolean).join('\n\n');
-      } else if (!document) content = noReply(reads.length);
+      } else if (!staged.length) content = noReply(reads.length);
       const message = await appendMessage(trx, chat, {
         role: 'agent',
         replyTo: run.user_message_id,
         content,
         evidence: sources,
+        webSources: web,
         steps,
         skillId: skill?.id,
         skillSource: source,
       });
-      if (document && skill)
+      for (const [number, document] of staged) {
+        const saved = turn.documents.find(({ output }) => output.number === number);
+        // A revision keeps its predecessor's sources and adds this turn's.
         await saveAgentOutput(
           trx,
           chat,
           {
-            skill,
+            number,
+            kind: document.kind,
+            skillId: document.skillId,
             bounds: budget,
-            payload: document,
-            baseRevisionId: turn.current.revision?.id ?? null,
+            payload: document.payload,
+            baseRevisionId: saved?.revision.id ?? null,
             runId: run.id,
             messageId: message.id,
             userId: turn.scope.userId,
-            refs: uniqueSources(turn.carried, sources),
-            outlineRequired: outlineRequired(this.deps.catalog, skill, document.format_id),
+            refs: uniqueSources(revisionRefs(saved?.revision.source_refs ?? []), sources),
+            webSources: uniqueWeb(revisionWebSources(saved?.revision.web_sources ?? []), web),
           },
           this.deps.attachTarget,
         );
+      }
       await saveTranscript(trx, {
         scope: turn.scope,
         runId: run.id,
@@ -545,12 +690,15 @@ export class AgentRuntime {
       await terminalize(trx, lease, 'succeeded');
     });
   }
-  /** Ends the turn with its code-specific reply, settling any open model attempt. */
+  /**
+   * Ends the turn with its code-specific reply. A failed turn saves nothing,
+   * so its model calls are settled and then refunded.
+   */
   async fail(lease: Lease, code: string, summary?: PromptSummary) {
     try {
       await this.db.transaction().execute(async (trx) => {
         const run = await lockRun(trx, lease);
-        await this.deps.models.reconcile(trx, run);
+        await this.deps.models.settleFailed(trx, run);
         if (run.user_id && code !== 'access_revoked') {
           await authorize(trx, {
             workspaceId: run.workspace_id,

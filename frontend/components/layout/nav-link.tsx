@@ -47,9 +47,10 @@ export function NavLink({
       aria-current={active ? 'page' : undefined}
       className={cn(
         'shell-link focus-ring group relative flex h-[var(--nav-item-height)] items-center gap-2 rounded-[var(--radius-control)] px-3 transition-colors duration-[var(--motion-fast)]',
-        // Current destinations use neutral selection; hover remains a lighter tint.
+        // The current destination keeps the neutral tint and adds the 2px
+        // accent bar on its start edge (owner, 2026-11-03).
         active
-          ? textRole('control', 'bg-selected text-foreground active:bg-active')
+          ? textRole('control', 'selection-bar bg-selected text-foreground active:bg-active')
           : textRole(
               'control',
               'text-secondary hover:bg-hover active:bg-active hover:text-foreground',

@@ -7,32 +7,38 @@ import { EvidenceChips } from '@/components/agent/evidence-chips';
 import { skillLabel, useSkillCatalog } from '@/components/agent/skill-picker';
 import { LiveReply } from '@/components/agent/live-reply';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
+import { WebSources } from '@/components/agent/web-sources';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { cardClasses } from '@/components/ui/card-variants';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
+import { Pressable } from '@/components/ui/pressable';
 import { Spinner } from '@/components/ui/spinner';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { treeBranchClasses } from '@/components/ui/workspace';
+import { documentAnchor, latestOutput, outputPlacements } from '@/lib/agent/documents';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { runErrorCopy, runStepLabel, toolCallLabel } from '@/lib/agent/vocabulary';
 import { runOutcome } from '@/lib/agent/run-state';
 import { useLiveTurn, type LiveTurn } from '@/lib/agent/live-turns';
-import type { AgentChatDetail, AgentMessage, AgentRun } from '@/lib/api/agent';
+import type { AgentChatDetail, AgentMessage, AgentOutput, AgentRun } from '@/lib/api/agent';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
+import { cn } from '@/lib/utils';
 
 /**
- * Messages and the saved output in conversational order, followed by current
- * activity and recovery. Follow-ups never jump ahead of earlier work.
+ * Messages and the chat's documents in conversational order (each document
+ * after the reply that last wrote it), followed by current activity and
+ * recovery. Follow-ups never jump ahead of earlier work.
  */
 export function Conversation({
   detail,
-  output: outputView,
+  renderOutput,
   onRefine,
   onRecover,
   onRetry,
@@ -41,7 +47,8 @@ export function Conversation({
   pendingMessage = null,
 }: Readonly<{
   detail: AgentChatDetail;
-  output?: ReactNode;
+  /** How one document is shown in the thread; omitted, documents are not shown. */
+  renderOutput?: (output: AgentOutput) => ReactNode;
   onRefine: (instruction: string) => void;
   /** Puts a request back in the composer to edit. */
   onRecover: (message: AgentMessage) => void;
@@ -53,24 +60,33 @@ export function Conversation({
   pendingMessage?: string | null;
 }>) {
   const skills = useSkillCatalog();
-  const output = detail.output;
-  const outputMessageId = output?.message_id ?? revisionReplyMessage(detail);
+  const output = latestOutput(detail);
+  const { byMessage, unplaced } = outputPlacements(detail);
+  const documents = (outputs: readonly AgentOutput[] | undefined) =>
+    renderOutput
+      ? outputs?.map((placed) => (
+          <div
+            key={placed.id}
+            id={documentAnchor(placed.id)}
+            className={cn(cardClasses(), 'min-w-0')}
+          >
+            {renderOutput(placed)}
+          </div>
+        ))
+      : null;
   return (
     <Stack gap="workspace">
       <ContextUsed context={detail.context} />
+      {renderOutput ? <DocumentList outputs={detail.outputs} /> : null}
       <Stack as="ol" gap="workspace" aria-label="Messages">
         {detail.messages.map((message) => (
           <Stack as="li" gap="workspace" key={message.id}>
             <MessageBubble message={message} skill={skillLabel(skills, message.skill_id)} />
-            {outputView && message.id === outputMessageId ? (
-              <div className={panelClasses({}, 'min-w-0')}>{outputView}</div>
-            ) : null}
+            {documents(byMessage.get(message.id))}
           </Stack>
         ))}
       </Stack>
-      {outputView && !outputMessageId ? (
-        <div className={panelClasses({}, 'min-w-0')}>{outputView}</div>
-      ) : null}
+      {documents(unplaced)}
       {pendingMessage ? <PendingMessage text={pendingMessage} /> : null}
       <LiveActivity detail={detail} />
       <TurnActions
@@ -80,7 +96,7 @@ export function Conversation({
         onEdit={onRecover}
         hasDraft={hasDraft}
       />
-      {output?.latest_revision && canSend && hasFreshDeliverable(detail) ? (
+      {output && canSend && hasFreshDeliverable(detail, output) ? (
         <FollowUps
           kind={output.kind}
           title={output.latest_revision.title}
@@ -94,29 +110,43 @@ export function Conversation({
   );
 }
 
-/** A revision without a recorded generating reply matches by its persisted time. */
-function revisionReplyMessage(detail: AgentChatDetail) {
-  const revision = detail.output?.latest_revision;
-  if (!revision) return undefined;
-  return [...detail.messages]
-    .reverse()
-    .find(
-      (message) =>
-        message.role === 'agent' &&
-        Date.parse(message.created_at) <= Date.parse(revision.created_at),
-    )?.id;
-}
-
-function hasFreshDeliverable(detail: AgentChatDetail): boolean {
-  const revision = detail.output?.latest_revision;
+/** The latest reply wrote this document and the turn finished. */
+function hasFreshDeliverable(detail: AgentChatDetail, output: AgentOutput): boolean {
+  const revision = output.latest_revision;
   const reply = detail.messages.at(-1);
   return (
-    revision?.author === 'agent' &&
+    revision.author === 'agent' &&
     reply?.role === 'agent' &&
-    (detail.output?.message_id
-      ? detail.output.message_id === reply.id
+    (output.message_id
+      ? output.message_id === reply.id
       : Date.parse(revision.created_at) >= Date.parse(reply.created_at)) &&
     detail.latest_run?.status === 'succeeded'
+  );
+}
+
+/** With more than one document, a list that jumps to each in the thread. */
+function DocumentList({ outputs }: Readonly<{ outputs: readonly AgentOutput[] }>) {
+  if (outputs.length < 2) return null;
+  return (
+    <Stack as="nav" gap="tight" aria-label="Documents">
+      <span className={textRole('label')}>Documents</span>
+      <Stack as="ol" gap="tight" className={treeBranchClasses()}>
+        {outputs.map((output) => (
+          <li key={output.id}>
+            <Pressable
+              className={textRole('caption', 'hover:text-accent-text w-auto')}
+              onClick={() =>
+                document
+                  .getElementById(documentAnchor(output.id))
+                  ?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+              }
+            >
+              Document {output.number}: {output.latest_revision.title}
+            </Pressable>
+          </li>
+        ))}
+      </Stack>
+    </Stack>
   );
 }
 
@@ -140,7 +170,7 @@ function TurnActions({
 }>) {
   const request = [...detail.messages].reverse().find((message) => message.role === 'user');
   const kind = runOutcome(detail.latest_run).kind;
-  if (!canSend || !request || request.event?.kind === 'outline_approved') return null;
+  if (!canSend || !request) return null;
   const ended = ['failed', 'cancelled', 'stopped_at_limit'].includes(kind);
   if (!ended && kind !== 'succeeded') return null;
   return (
@@ -189,18 +219,6 @@ function MessageBubble({
   message,
   skill,
 }: Readonly<{ message: AgentMessage; skill: string | null }>) {
-  if (message.event?.kind === 'outline_approved')
-    return (
-      <Stack
-        as="article"
-        gap="tight"
-        aria-label="Outline approval"
-        className={panelClasses({ tone: 'well' })}
-      >
-        <span className={textRole('label')}>Outline approved</span>
-        <p className={textRole('caption')}>Draft requested from the approved revision.</p>
-      </Stack>
-    );
   if (message.role === 'user')
     return (
       <div className="flex justify-end">
@@ -220,9 +238,6 @@ function MessageBubble({
         </Stack>
       </div>
     );
-  const calls = message.steps.filter((step) => step.kind === 'model').length;
-  const tools = message.steps.filter((step) => step.kind === 'tool').length;
-  const readsLabel = tools === 1 ? 'read' : 'reads';
   return (
     <Stack as="article" gap="compact" aria-label="Agent reply">
       <Inline className="flex-wrap">
@@ -236,12 +251,9 @@ function MessageBubble({
           Copy reply
         </CopyButton>
       </Inline>
+      <WebSources sources={message.web_sources} />
       {message.steps.length > 0 ? (
-        <Disclosure
-          title={`Run complete · ${calls} model ${calls === 1 ? 'call' : 'calls'}${
-            tools > 0 ? ` · ${tools} data ${readsLabel}` : ''
-          }`}
-        >
+        <Disclosure title={runSummary(message.steps)}>
           <Stack as="ul" gap="tight" className={treeBranchClasses()}>
             {message.steps.map((step, index) => (
               <li key={`${step.kind}-${index}`} className={textRole('caption')}>
@@ -360,10 +372,30 @@ function FollowUps({
   );
 }
 
-function stepLabel(step: AgentMessage['steps'][number]): string {
+type MessageStep = AgentMessage['steps'][number];
+
+function runSummary(steps: readonly MessageStep[]): string {
+  const count = (kind: string) => steps.filter((step) => step.kind === kind).length;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const calls = count('model'),
+    reads = count('tool'),
+    searches = count('search');
+  return [
+    'Run complete',
+    plural(calls, 'model call', 'model calls'),
+    reads > 0 ? plural(reads, 'data read', 'data reads') : null,
+    searches > 0 ? plural(searches, 'web search', 'web searches') : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function stepLabel(step: MessageStep): string {
   if (step.kind === 'skill') return toolCallLabel({ tool: 'load_skill', status: 'completed' });
   if (step.kind === 'document')
     return toolCallLabel({ tool: 'save_document', status: 'completed' });
+  if (step.kind === 'search')
+    return step.query ? `Searched the web: ${step.query}` : 'Searched the web';
   if (step.kind === 'tool')
     return runStepLabel({
       tool: step.tool ?? 'read_data',

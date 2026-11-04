@@ -38,7 +38,7 @@ import {
   visibilitySources,
   visibilityTrends,
 } from './evidence-analytics.ts';
-import { crawlability, siteLinks, sitePages, siteSnapshot } from './evidence-site.ts';
+import { crawlability, pageText, siteLinks, sitePages, siteSnapshot } from './evidence-site.ts';
 import {
   aiTrafficInsights,
   aiTrafficPages,
@@ -364,7 +364,7 @@ export const definitions = {
   read_visibility_results: projectTool({
     title: 'Read AI answers',
     description:
-      "Read the answers engines gave in one run, to see exactly what an engine said for a prompt. Each answer has the prompt text, engine, model, repetition, whether web search was used, the brands mentioned (with first position) and every citation (URL, domain, whether it is your site or a competitor's), plus a citeladder:// id for fetch. audit_id is required: take it from read_visibility_overview. Answers come 50 per page by default; pass next_cursor for more. Only core prompts are included unless cohort is comparison or all. Filters (prompt_id, domain, url, engine) combine. Use read_visibility_overview for rates and read_visibility_sources for citation totals.",
+      "Read the answers engines gave in one run, to see exactly what an engine said for a prompt. Each answer has the prompt text, engine, model, repetition, whether web search was used, the brands mentioned (with first position) and every citation (URL, domain, whether it is your site or a competitor's), plus a citeladder:// id for fetch. audit_id is required: take it from read_visibility_overview. Answers come in pages; pass next_cursor for more. Only core prompts are included unless cohort is comparison or all. Filters (prompt_id, domain, url, engine) combine. Use read_visibility_overview for rates and read_visibility_sources for citation totals.",
     schema: z.strictObject({
       ...project,
       audit_id: run,
@@ -382,7 +382,7 @@ export const definitions = {
   read_visibility_sources: projectTool({
     title: 'Read cited sources',
     description:
-      "Rank the domains or pages AI answers cited in one run, to find the sources worth earning a place on. Each row has how many answers and prompts cited it, its citation share and rate, ownership (yours, a competitor's or third party) and category; page rows also list up to 3 brands named on the page and whether there is an Action for it. It defaults to the latest run; unavailable no_completed_run means none has finished. Rows come 50 per page by default; pass next_cursor for more. level domain lists publishers; level url, or passing domain, lists pages. Use read_source_url for one page in depth, and read_visibility_results for the answers that cite it.",
+      "Rank the domains or pages AI answers cited in one run, to find the sources worth earning a place on. Each row has how many answers and prompts cited it, its citation share and rate, ownership (yours, a competitor's or third party) and category; page rows also list up to 3 brands named on the page and whether there is an Action for it. It defaults to the latest run; unavailable no_completed_run means none has finished. Rows come in pages; pass next_cursor for more. level domain lists publishers; level url, or passing domain, lists pages. Use read_source_url for one page in depth, and read_visibility_results for the answers that cite it.",
     schema: z.strictObject({
       ...project,
       market_id,
@@ -427,7 +427,7 @@ export const definitions = {
   read_prompt_portfolio: projectTool({
     title: 'Read prompts',
     description:
-      'List the prompts the project tracks, so you know what is measured before reading results or changing prompts. Each row has the prompt id, text, topic, intent, buyer stage, cohort (core prompts are scored; comparison prompts name a competitor and are reported separately), status and whether audits measure it now, plus its prompt set and topic_id. topics lists every project topic (id, name, description), including topics with no prompts yet; topics_truncated says the list is partial. Rows come oldest first, 50 per page by default; pass next_cursor for more. To find one prompt by its wording use search; to see what engines answered for a prompt use read_visibility_results with its prompt_id. Prompt ids feed update_prompt_text, prepare_archive_prompts and prepare_launch_audit.',
+      'List the prompts the project tracks, so you know what is measured before reading results or changing prompts. Each row has the prompt id, text, topic, intent, buyer stage, cohort (core prompts are scored; comparison prompts name a competitor and are reported separately), status and whether audits measure it now, plus its prompt set and topic_id. topics lists every project topic (id, name, description), including topics with no prompts yet; topics_truncated says the list is partial. Rows come oldest first, in pages; pass next_cursor for more. To find one prompt by its wording use search; to see what engines answered for a prompt use read_visibility_results with its prompt_id. Prompt ids feed update_prompt_text, prepare_archive_prompts and prepare_launch_audit.',
     schema: z.strictObject({
       ...project,
       prompt_set_id: optional(
@@ -462,7 +462,7 @@ export const definitions = {
   read_actions: projectTool({
     title: 'Read Actions',
     description:
-      'List the work CiteLadder recommends to improve visibility, highest priority first. Without a status filter it lists open and in-progress Actions; each item has its id, target (page, prompt or source), status, priority score, approach and link, and status_counts counts every status. Items come 50 per page by default; pass next_cursor for more. Pass action_id for one Action in full: its diagnosis, each finding with its remediation, the measured outcome and any declaration. Use update_action_status to dismiss or reopen one, and prepare_declare_implemented when its work is done.',
+      'List the work CiteLadder recommends to improve visibility, highest priority first. Without a status filter it lists open and in-progress Actions; each item has its id, target (page, prompt or source), status, priority score, approach and link, and status_counts counts every status. Items come in pages; pass next_cursor for more. Pass action_id for one Action in full: its diagnosis, each finding with its remediation, the measured outcome and any declaration. Use update_action_status to dismiss or reopen one, and prepare_declare_implemented when its work is done.',
     schema: z.strictObject({
       ...project,
       action_id: optional(
@@ -512,10 +512,20 @@ export const definitions = {
   read_site_pages: projectTool({
     title: 'Read site pages',
     description:
-      "Pages from a crawl, paged: URL, title, page type, status, scores, issue count and the rule ids of each page's issues by finding class. Pass rule_id (from read_site_health top_issues or an issue group) to list exactly the pages affected by that issue, each with rule_evidence: what that check found on that page (a site-level architecture issue is recorded once on the home page, and its rule_evidence names the affected pages); filter by page_kind or status to find pages by type or status. read_site_health gives the totals.",
+      "Pages from a crawl, paged: URL, title, page type, status, scores, issue count and the rule ids of each page's issues by finding class. Pass url to find a page by its address, rule_id (from read_site_health top_issues or an issue group) to list exactly the pages affected by that issue, each with rule_evidence: what that check found on that page (a site-level architecture issue is recorded once on the home page, and its rule_evidence names the affected pages); filter by page_kind or status to find pages by type or status. This returns metadata, not page copy: use read_page_text for a page's words. read_site_health gives the totals.",
     schema: z.strictObject({
       ...project,
       crawl_id,
+      url: optional(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .describe(
+            'A page address or part of one, such as https://example.com/pricing or /pricing; keeps pages whose URL contains it, ignoring scheme, www and a trailing slash.',
+          ),
+      ),
       rule_id: optional(
         z
           .string()
@@ -534,10 +544,32 @@ export const definitions = {
     }),
     read: sitePages,
   }),
+  read_page_text: projectTool({
+    title: 'Read page text',
+    description: `Read the words of one crawled page of the project's site, by URL or by site_url_id from read_site_pages: its title, meta description, h1-h3 headings, then the visible body text (up to ${mcpPolicy.page_text_max_chars} characters in all; text_chars_omitted counts any body text left out), with its URL, page type and when it was fetched. Use it to quote, review or rewrite what a page actually says. It reads the latest crawl, or crawl_id; it never fetches the live page, so the copy is as of fetched_at. unavailable page_not_crawled means the crawl has no page at that address, and crawled_urls lists the nearest crawled addresses to try; no_site_crawl means no crawl exists.`,
+    schema: z.strictObject({
+      ...project,
+      crawl_id,
+      url: optional(
+        z
+          .string()
+          .trim()
+          .min(1)
+          .max(2048)
+          .describe(
+            'The page address, such as https://example.com/pricing; scheme, www and a trailing slash are ignored.',
+          ),
+      ),
+      site_url_id: optional(
+        uuid.describe('A page id (site_url_id) from read_site_pages; pass this or url.'),
+      ),
+    }),
+    read: pageText,
+  }),
   read_site_links: projectTool({
     title: 'Read internal links',
     description:
-      'Read the internal links of crawled pages: per page, inbound and outbound link counts (overall and in main content) and nofollow inbound links, click depth from the home page, a bounded sample of the pages linking to it and linked from it with their anchors, and anchor diagnostics. Use it to find orphaned or buried pages. Pass up to 10 site_url_ids from read_site_pages to read those pages in one call (with smaller neighbor samples and anchor diagnostics counted by kind); missing_site_url_ids lists any without link metrics in this crawl (for example a page that was not analyzed). Otherwise rows come 50 per page; pass next_cursor for more. unavailable no_site_crawl means no crawl exists. Use read_site_pages for page scores and issues.',
+      'Read the internal links of crawled pages: per page, inbound and outbound link counts (overall and in main content) and nofollow inbound links, click depth from the home page, a bounded sample of the pages linking to it and linked from it with their anchors, and anchor diagnostics. Use it to find orphaned or buried pages. Pass up to 10 site_url_ids from read_site_pages to read those pages in one call (with smaller neighbor samples and anchor diagnostics counted by kind); missing_site_url_ids lists any without link metrics in this crawl (for example a page that was not analyzed). Otherwise rows come in pages; pass next_cursor for more. unavailable no_site_crawl means no crawl exists. Use read_site_pages for page scores and issues.',
     schema: z.strictObject({
       ...project,
       crawl_id,
@@ -687,7 +719,7 @@ export const definitions = {
   read_query_evidence: projectTool({
     title: 'Read queries by page',
     description:
-      'Read the Search Console queries that bring searchers to each site page, matched to pages CiteLadder crawled, for one saved window. Use it to see which queries a page ranks for, or which page answers a query; for totals and trends use read_performance, and for the search signals found in the same window use read_demand. The window must exactly match a saved one: read_demand returns it. Any other window returns unavailable exact_query_evidence_window_not_projected, which is not zero. Each row is one query, page and day: the query, the page Search Console reported, the crawled page it was matched to (site_url_id), how the match was made (resolution_outcome), and impressions, clicks and CTR. Rows come 50 per page by default; pass next_cursor for more. Country, device and search type are not broken out.',
+      'Read the Search Console queries that bring searchers to each site page, matched to pages CiteLadder crawled, for one saved window. Use it to see which queries a page ranks for, or which page answers a query; for totals and trends use read_performance, and for the search signals found in the same window use read_demand. The window must exactly match a saved one: read_demand returns it. Any other window returns unavailable exact_query_evidence_window_not_projected, which is not zero. Each row is one query, page and day: the query, the page Search Console reported, the crawled page it was matched to (site_url_id), how the match was made (resolution_outcome), and impressions, clicks and CTR. Rows come in pages; pass next_cursor for more. Country, device and search type are not broken out.',
     schema: z.strictObject({
       ...project,
       window_start: z.iso

@@ -128,12 +128,12 @@ describe('chart projection', () => {
 describe('dimension tabs', () => {
   it('lists the six tables in Search Console order', () => {
     expect(DIMENSION_TABS.map((tab) => tab.label)).toEqual([
-      'QUERIES',
-      'PAGES',
-      'COUNTRIES',
-      'DEVICES',
-      'SEARCH APPEARANCE',
-      'DAYS',
+      'Queries',
+      'Pages',
+      'Countries',
+      'Devices',
+      'Search appearance',
+      'Days',
     ]);
   });
 

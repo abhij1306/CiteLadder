@@ -3,7 +3,7 @@
    (globals.css); this scope changes type scale only. Every size is a rung of
    the one globals.css scale. */
 :where([data-flow-surface]) {
-  /* Lexend Deca carries body, UI and data, Outfit the display headings, as in
+  /* The text face carries body, UI and data, the display face the headings, as in
      the product. The scale is the product's (globals.css @theme), unchanged;
      being "roomier" is a job for measure and rhythm, not for resizing rungs. */
   --tracking-tight: -0.02em;
@@ -42,7 +42,7 @@
   font-size: 1.75rem;
   line-height: 2.25rem;
   font-weight: 500;
-  letter-spacing: -0.026em;
+  letter-spacing: 0;
   color: var(--color-foreground);
 }
 
@@ -79,7 +79,7 @@
 :where([data-flow-surface]) :where(h1, h2, h3, h4, h5, h6) {
   font-family: var(--font-display);
   font-weight: 500;
-  letter-spacing: -0.022em;
+  letter-spacing: 0;
 }
 
 :where([data-flow-surface]) [data-button-size='md'],
@@ -253,7 +253,17 @@
    `.flow-action-content` is deliberately excluded: it shares the measure so its
    buttons line up with the pane, but it is a row on the ground. */
 .flow-content {
-  padding: var(--flow-block) var(--flow-gutter);
+  padding: var(--card-padding);
+}
+
+/* The onboarding sheet is the product's one box recipe (docs/design.md
+   §Component recipes): the card radius, a one-pixel subtle edge and no
+   shadow ring. The extra attribute outranks the pane's own elevation rule in
+   globals.css whichever stylesheet loads last. */
+[data-flow-surface] .flow-content.app-pane {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  box-shadow: none;
 }
 
 .flow-footer {

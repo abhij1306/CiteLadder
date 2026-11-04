@@ -240,16 +240,15 @@ function PanelConversation({
       <ChatConversation
         thread={thread}
         detail={detail}
-        output={
-          detail.output?.latest_revision ? (
-            <Stack gap="compact" className="justify-items-start">
-              <span className={textRole('itemTitle')}>{detail.output.latest_revision.title}</span>
-              <Button variant="secondary" onClick={openOutput}>
-                Open output
-              </Button>
-            </Stack>
-          ) : null
-        }
+        renderOutput={(output) => (
+          <Stack gap="compact" className="justify-items-start">
+            <span className={textRole('caption')}>Document {output.number}</span>
+            <span className={textRole('itemTitle')}>{output.latest_revision.title}</span>
+            <Button variant="secondary" onClick={openOutput}>
+              Open output
+            </Button>
+          </Stack>
+        )}
       />
     </DockedThread>
   );

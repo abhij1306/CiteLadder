@@ -21,7 +21,7 @@ import { QueryState } from '@/components/ui/query-state';
 import type { AgentChatDetail } from '@/lib/api/agent';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 
-/** One chat: a single thread with its output inline and the composer pinned below. */
+/** One chat: a single thread with its documents inline and the composer pinned below. */
 export function ChatScreen() {
   const { chatId = '' } = useParams();
   const { activeProjectId, activeWorkspaceId } = useProjectContext();
@@ -78,19 +78,17 @@ function ChatView({
         <ChatConversation
           thread={thread}
           detail={detail}
-          output={
-            detail.output ? (
-              <OutputPane
-                workspaceId={workspaceId}
-                chatId={chatId}
-                output={detail.output}
-                runActive={thread.runActive}
-                canEdit={canEdit}
-                canSend={thread.access.canSend && !thread.turn.pending}
-                onRevise={(message) => thread.turn.send(message)}
-              />
-            ) : null
-          }
+          renderOutput={(output) => (
+            <OutputPane
+              workspaceId={workspaceId}
+              chatId={chatId}
+              output={output}
+              runActive={thread.runActive}
+              canEdit={canEdit}
+              canSend={thread.access.canSend && !thread.turn.pending}
+              onRevise={(message) => thread.turn.send(message)}
+            />
+          )}
         />
       </Stack>
       {/* The composer stays at the bottom of the window while the thread scrolls. */}
@@ -100,7 +98,7 @@ function ChatView({
           thread={thread}
           detail={detail}
           placeholder={
-            detail.output?.latest_revision
+            detail.outputs.length > 0
               ? 'Ask about the work or request a change. / picks a skill, @ mentions an Action.'
               : 'Ask a follow-up. / picks a skill, @ mentions an Action.'
           }
