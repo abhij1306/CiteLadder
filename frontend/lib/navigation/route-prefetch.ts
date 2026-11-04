@@ -4,7 +4,7 @@ import { readFromIntent, warmQuery } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
 import { preloadRouteChunk } from '@/lib/navigation/route-chunks';
 
-type ProjectScope = { projectId: string; workspaceId: string };
+export type ProjectScope = { projectId: string; workspaceId: string };
 type RoutePrefetcher = (client: QueryClient, scope: ProjectScope) => Promise<void>;
 
 /**
@@ -87,17 +87,36 @@ const ROUTE_PREFETCHERS: Readonly<Record<string, RoutePrefetcher>> = {
     warmQuery(client, projectQueries.brandFacts(workspaceId, projectId));
   },
   '/prompts': async (client, { projectId, workspaceId }) => {
-    const { promptsQueries } = await import('@/lib/api/prompts');
+    const [{ promptsQueries }, { topicsApi }, { visibilityQueries }] = await Promise.all([
+      import('@/lib/api/prompts'),
+      import('@/lib/api/topics'),
+      import('@/lib/api/visibility-queries'),
+    ]);
+    // The library's three independent reads: its sets, its topic filter, and
+    // what the latest run measured for each prompt.
     warmQuery(client, promptsQueries.sets(workspaceId, projectId));
+    warmQuery(client, {
+      queryKey: queryKeys.topics.list(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        topicsApi.list(projectId, { signal, workspaceId }),
+    });
+    warmQuery(client, visibilityQueries.latestPrompts(workspaceId, projectId));
   },
   '/visibility': async (client, { projectId, workspaceId }) => {
-    const [{ runsQueries }, { INITIAL_VISIBILITY_PARAMS }, { visibilityQueries }] =
+    const [{ runsQueries }, { INITIAL_VISIBILITY_PARAMS }, { visibilityQueries }, { projectsApi }] =
       await Promise.all([
         import('@/lib/api/runs'),
         import('@/lib/api/visibility'),
         import('@/lib/api/visibility-queries'),
+        import('@/lib/api/projects'),
       ]);
     warmQuery(client, runsQueries.list(workspaceId, projectId));
+    // The market picker's list, which the screen reads beside the runs.
+    warmQuery(client, {
+      queryKey: queryKeys.projects.markets(projectId),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        projectsApi.listMarkets(projectId, { signal, workspaceId }),
+    });
     // The landing selection, built from the screen's own defaults. A key
     // spelled out here drifted from the one the screen reads and warmed an
     // entry nothing consumed.
@@ -163,6 +182,8 @@ async function prefetchSiteHealth(client: QueryClient, { projectId, workspaceId 
   const dashboard = siteHealthQueries.dashboard(workspaceId, projectId);
   const cached = client.getQueryData(dashboard.queryKey);
   warmQuery(client, dashboard);
+  // The monitored set supplies the analysis progress totals; it needs only the project.
+  warmQuery(client, siteHealthQueries.monitored(workspaceId, projectId));
   if (cached) {
     const preview = screen.pagePreviewQuery(workspaceId, cached);
     if (preview) warmQuery(client, preview);
@@ -220,12 +241,38 @@ async function prefetchIssues(client: QueryClient, { projectId, workspaceId }: P
   if (client.getQueryData(key) === undefined) client.setQueryData(key, page);
 }
 
-/** Warm a destination's route code and, with a project, its primary read. */
-export function prefetchRoute(client: QueryClient, href: string, project: ProjectScope | null) {
+/**
+ * Warm the reads the application shell makes for a project on every screen:
+ * the Actions badge beside the navigation reads the unfiltered first page of
+ * the project's Actions. Its component loads lazily, so on a cold load the
+ * read otherwise started a round trip after the page's own.
+ */
+export function prefetchProjectShell(
+  client: QueryClient,
+  { projectId, workspaceId }: ProjectScope,
+): Promise<void> {
+  return import('@/lib/api/actions')
+    .then(({ actionsQueries }) => warmQuery(client, actionsQueries.list(workspaceId, projectId)))
+    .catch(() => {});
+}
+
+/**
+ * Warm a destination's route code and, with a project, its primary read.
+ *
+ * Settles, never rejects, once every read the destination warms has been
+ * issued — nothing needs to wait for that except a caller withdrawing those
+ * reads, which must not run before they exist.
+ */
+export function prefetchRoute(
+  client: QueryClient,
+  href: string,
+  project: ProjectScope | null,
+): Promise<void> {
   const pathname = new URL(href, 'https://citeladder.local').pathname;
   preloadRouteChunk(pathname);
-  if (!project) return;
+  const prefetcher = project ? ROUTE_PREFETCHERS[pathname] : undefined;
+  if (!project || !prefetcher) return Promise.resolve();
   // Intent is best-effort: a chunk that fails to load must not surface here,
   // and the navigation that follows will report the failure properly.
-  void ROUTE_PREFETCHERS[pathname]?.(client, project).catch(() => {});
+  return prefetcher(client, project).catch(() => {});
 }

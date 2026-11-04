@@ -251,8 +251,13 @@ describe('bootstrapPrivateRoutes', () => {
         settled = true;
         return location;
       });
+      // The shell's Actions badge read rides along on every screen; this test
+      // is about the screen's own reads.
       const screenReads = () =>
-        requests.paths.filter((path) => path.startsWith(`/api/v1/projects/${PROJECT}/`)).sort();
+        requests.paths
+          .filter((path) => path.startsWith(`/api/v1/projects/${PROJECT}/`))
+          .filter((path) => !path.startsWith(`/api/v1/projects/${PROJECT}/actions`))
+          .sort();
       await waitFor(() =>
         expect(screenReads()).toEqual([
           `/api/v1/projects/${PROJECT}/ai-traffic/insights?range=30d`,
@@ -263,6 +268,45 @@ describe('bootstrapPrivateRoutes', () => {
       expect(settled).toBe(false);
 
       answer(HttpResponse.json({ user: USER }));
+      expect(await pending).toBeNull();
+      requests.stop();
+    });
+
+    it('asks for the project list, the shell’s reads and the screen’s in the same round as the session', async () => {
+      window.localStorage.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, WORKSPACE);
+      stub({ projects: [PROJECT_ROW] });
+      let answerMe!: (response: HttpResponse<DefaultBodyType>) => void;
+      let answerWorkspaces!: (response: HttpResponse<DefaultBodyType>) => void;
+      const me = new Promise<HttpResponse<DefaultBodyType>>((resolve) => {
+        answerMe = resolve;
+      });
+      const memberships = new Promise<HttpResponse<DefaultBodyType>>((resolve) => {
+        answerWorkspaces = resolve;
+      });
+      mswServer.use(
+        http.get('/api/v1/auth/me', () => me),
+        http.get('/api/v1/workspaces', () => memberships),
+        http.get(`/api/v1/projects/${PROJECT}/*`, () =>
+          HttpResponse.json({ error: { message: 'not here' } }, { status: 404 }),
+        ),
+      );
+      const requests = recordRequests();
+      const started = () => requests.paths.map((path) => path.replace(/\?.*$/u, ''));
+
+      const pending = run(`/site?project=${PROJECT}`);
+      const firstRound = [
+        '/api/v1/projects',
+        `/api/v1/projects/${PROJECT}/actions`,
+        `/api/v1/projects/${PROJECT}/monitored-urls`,
+        `/api/v1/projects/${PROJECT}/site-health`,
+      ];
+      // `me` and the membership list are unanswered by construction.
+      await waitFor(() =>
+        expect(firstRound.filter((path) => started().includes(path))).toEqual(firstRound),
+      );
+
+      answerMe(HttpResponse.json({ user: USER }));
+      answerWorkspaces(HttpResponse.json([WORKSPACE_ROW]));
       expect(await pending).toBeNull();
       requests.stop();
     });

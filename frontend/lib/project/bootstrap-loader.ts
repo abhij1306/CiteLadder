@@ -27,7 +27,7 @@ import { queryKeys } from '@/lib/api/query-keys';
 import type { Project, Workspace } from '@/lib/api/types';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import { projectDestination, workspaceDestination } from '@/lib/navigation/project-destination';
-import { prefetchRoute } from '@/lib/navigation/route-prefetch';
+import { prefetchProjectShell, prefetchRoute } from '@/lib/navigation/route-prefetch';
 import {
   readStoredActiveProjectId,
   readStoredActiveWorkspaceId,
@@ -80,23 +80,23 @@ type Scope = {
 };
 
 /**
- * Start the landing screen's primary read as soon as its project is known.
+ * Start the project's reads as soon as it is known: the shell's own (the
+ * Actions badge) and the landing screen's.
  *
- * A cache warm under the screen's own query key, never a render: the session
+ * Cache warms under each consumer's own query key, never a render: the session
  * gate still decides whether anything mounts, and the backend authorizes every
  * read. Only an address naming nothing but its scope is
  * warmed — the prefetchers warm each screen's default view, and filters in the
  * address ask for a different key.
  */
 function warmScreen(client: QueryClient, url: URL, project: Project) {
+  const scope = { projectId: project.id, workspaceId: project.workspace_id };
+  void prefetchProjectShell(client, scope);
   const scopeOnly = [...url.searchParams.keys()].every(
     (key) => key === 'project' || key === 'workspace',
   );
   if (!scopeOnly) return;
-  prefetchRoute(client, url.pathname, {
-    projectId: project.id,
-    workspaceId: project.workspace_id,
-  });
+  void prefetchRoute(client, url.pathname, scope);
 }
 
 /**
@@ -241,6 +241,11 @@ export async function bootstrapPrivateRoutes({ request }: { request: Request }) 
   // `me` and the membership list are independent; the tree's own providers
   // already issue them in parallel, and the loader pays for every round trip
   // it serializes.
+  // The addressed or remembered workspace's project list is the gate's next
+  // read; asked in the same round, it is usually already answered (a wrong
+  // guess only warms a list nothing reads).
+  const guessedWorkspaceId = url.searchParams.get('workspace') || readStoredActiveWorkspaceId();
+  if (guessedWorkspaceId) void readProjects(client, guessedWorkspaceId);
   const [userResolved, scope] = await Promise.all([
     loadLocalUser(client),
     resolveScope(client, url),
