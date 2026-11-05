@@ -1,14 +1,12 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { DetailScreen } from '@/components/layout/page-shell';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChartKey } from '@/components/ui/chart';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
@@ -70,7 +68,7 @@ export function PromptDetailScreen() {
   if (!activeWorkspaceId)
     return (
       <DetailScreen back={BACK}>
-        <Alert tone="info">Choose a workspace to open this prompt.</Alert>
+        <Callout tone="info">Choose a workspace to open this prompt.</Callout>
       </DetailScreen>
     );
   if (!query.data)
@@ -108,28 +106,10 @@ export function PromptDetailScreen() {
   );
 }
 
-// Tailwind's `lg`, where Visibility splits its chart into a half-width pane.
-const WIDE_VIEWPORT_QUERY = '(min-width: 64rem)';
-
-function subscribeWideViewport(notify: () => void): () => void {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function')
-    return () => undefined;
-  const media = window.matchMedia(WIDE_VIEWPORT_QUERY);
-  media.addEventListener('change', notify);
-  return () => media.removeEventListener('change', notify);
-}
-
-function isWideViewport(): boolean {
-  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia(WIDE_VIEWPORT_QUERY).matches
-    : false;
-}
-
 /** Mention and owned-citation rates per run, with declared work marked. */
 function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
   const timeZone = useDisplayTimeZone();
   const data = mentionRatePoints(history.points, timeZone);
-  const wide = useSyncExternalStore(subscribeWideViewport, isWideViewport, () => false);
   return (
     <Card>
       <CardHeader>
@@ -141,39 +121,16 @@ function HistoryCard({ history }: Readonly<{ history: PromptHistory }>) {
       </CardHeader>
       <CardContent>
         {data.length ? (
-          <Stack gap="compact">
-            <TrendChart
-              label="Mention rate over time"
-              data={data}
-              series={[
-                {
-                  label: 'Owned citation rate',
-                  values: ownedCitationValues(history.points),
-                  strokeClass: 'stroke-chart-2',
-                },
-              ]}
-              events={implementationEvents(history.implementations, timeZone)}
-              // The viewBox scales to the card, so its text does too. On wide
-              // screens this card spans the page where Visibility's chart spans
-              // half, and a 360-wide viewBox drew text twice Visibility's size;
-              // below `lg` both span the card and share the 360 width.
-              width={wide ? 720 : 360}
-              height={168}
-              xAxisLabel="Run date"
-              yAxisLabel="Rate (%)"
-              formatTick={formatWholePercent}
-              className="h-auto w-full"
-            />
-            <ChartKey
-              entries={[
-                { label: 'Mention rate', tone: { series: 1 } },
-                { label: 'Owned citation rate', tone: { series: 2 } },
-                ...(history.implementations.length
-                  ? [{ label: 'Marked implemented', tone: { series: 6 } } as const]
-                  : []),
-              ]}
-            />
-          </Stack>
+          <TrendChart
+            label="Mention rate over time"
+            name="Mention rate"
+            data={data}
+            series={[{ label: 'Owned citation rate', values: ownedCitationValues(history.points) }]}
+            events={implementationEvents(history.implementations, timeZone)}
+            eventsLabel="Marked implemented"
+            yMax={100}
+            yFormat={formatWholePercent}
+          />
         ) : (
           <QueryState
             kind="empty"

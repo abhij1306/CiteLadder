@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { QueryState } from '@/components/ui/query-state';
 import { Button } from '@/components/ui/button';
@@ -89,7 +89,11 @@ export function TargetPrompts({
             <Button variant="secondary" disabled={busy} onClick={() => generate.mutate()}>
               {generate.isPending ? 'Generating…' : `Generate ${GENERATED_COUNT}`}
             </Button>
-            <Button disabled={!approvedIds.length || busy} onClick={() => setLaunchOpen(true)}>
+            <Button
+              variant="primary"
+              disabled={!approvedIds.length || busy}
+              onClick={() => setLaunchOpen(true)}
+            >
               Review and launch
             </Button>
           </>
@@ -105,19 +109,19 @@ export function TargetPrompts({
       <CardContent>
         <Stack>
           {failed ? (
-            <Alert tone="danger">The buyer-prompt update failed. Please try again.</Alert>
+            <Callout tone="negative">The buyer-prompt update failed. Please try again.</Callout>
           ) : null}
           {shortfall !== null ? (
-            <Alert tone="info">
+            <Callout tone="info">
               {shortfall} of {GENERATED_COUNT} generated prompts were usable. Generate again for
               more.
-            </Alert>
+            </Callout>
           ) : null}
           {launchedAuditId ? (
-            <Alert tone="info">
+            <Callout tone="info">
               Audit launched. Shelf metrics update here when it finishes.{' '}
               <ProjectLink href={`/runs/${launchedAuditId}`}>View the run</ProjectLink>
-            </Alert>
+            </Callout>
           ) : null}
           <LaunchDialog
             open={launchOpen}
@@ -144,7 +148,11 @@ export function TargetPrompts({
               placeholder="best instant read thermometer for grilling under $50"
             />
             <div>
-              <Button disabled={!text.trim() || busy} onClick={() => manual.mutate()}>
+              <Button
+                variant="primary"
+                disabled={!text.trim() || busy}
+                onClick={() => manual.mutate()}
+              >
                 Add prompt
               </Button>
             </div>
@@ -184,7 +192,7 @@ function PromptRows({
     <ul className={ledgerClasses()}>
       {rows.map((row) => (
         <Inline as="li" key={row.id} gap="compact" className={ledgerItemClasses('flex-wrap')}>
-          <span className="text-secondary min-w-0 flex-1">{row.text}</span>
+          <span className="text-ink-secondary min-w-0 flex-1">{row.text}</span>
           <Button
             variant={row.enabled ? 'secondary' : 'primary'}
             disabled={pending}

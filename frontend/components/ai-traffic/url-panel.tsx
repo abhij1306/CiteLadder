@@ -8,7 +8,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { Pressable } from '@/components/ui/pressable';
 import { MISSING_MARK } from '@/lib/format';
 import { Button } from '@/components/ui/button';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -122,9 +122,9 @@ function UrlEvidence({
   const page = data.page;
   if (!page)
     return (
-      <Alert tone="info">
+      <Callout tone="info">
         No joinable evidence is available for this path in the selected window.
-      </Alert>
+      </Callout>
     );
   const link = (tab: string) =>
     projectDestination('/ai-traffic', new URLSearchParams({ tab }), projectId);
@@ -165,7 +165,7 @@ function UrlEvidence({
         <p key={r.citation_id}>Tracked citation: {r.date}</p>
       ))}
       {data.provenance.bounded ? (
-        <Alert tone="info">The timeline reached its display bound.</Alert>
+        <Callout tone="info">The timeline reached its display bound.</Callout>
       ) : null}
       <p className="type-caption">
         Timeline uses saved crawler rollups, GA4 metric rows and tracked citations.

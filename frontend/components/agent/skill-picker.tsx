@@ -6,14 +6,14 @@ import { Fragment } from 'react';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import {
-  Dropdown,
-  DropdownContent,
-  DropdownLabel,
-  DropdownRadioGroup,
-  DropdownRadioItem,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
+  Menu,
+  MenuContent,
+  MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
 import { skillGroupLabel } from '@/lib/agent/vocabulary';
 import { type AgentSkill } from '@/lib/api/agent';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
@@ -70,15 +70,15 @@ export function SkillPicker({
   const current =
     value === null ? 'Automatic' : (skillLabel(skills, value ?? null) ?? defaultLabel);
   return (
-    <Dropdown open={disabled ? false : open} onOpenChange={onOpenChange}>
-      <DropdownTrigger asChild>
+    <Menu open={disabled ? false : open} onOpenChange={onOpenChange}>
+      <MenuTrigger asChild>
         <Button variant="ghost" disabled={disabled} aria-label={`Skill: ${current}`}>
           Skill: {current}
           <Icon icon={ChevronDown} />
         </Button>
-      </DropdownTrigger>
-      <DropdownContent align="start" width="panel" onCloseAutoFocus={onCloseAutoFocus}>
-        <DropdownRadioGroup
+      </MenuTrigger>
+      <MenuContent align="start" onCloseAutoFocus={onCloseAutoFocus}>
+        <MenuRadioGroup
           value={
             value === undefined && defaultLabel !== 'Automatic' ? INHERIT : (value ?? AUTOMATIC)
           }
@@ -88,23 +88,23 @@ export function SkillPicker({
           }}
         >
           {defaultLabel !== 'Automatic' ? (
-            <DropdownRadioItem value={INHERIT}>{defaultLabel}</DropdownRadioItem>
+            <MenuRadioItem value={INHERIT}>{defaultLabel}</MenuRadioItem>
           ) : null}
-          <DropdownRadioItem value={AUTOMATIC}>Automatic</DropdownRadioItem>
+          <MenuRadioItem value={AUTOMATIC}>Automatic</MenuRadioItem>
           {[...groups].map(([group, rows]) => (
             <Fragment key={group}>
-              <DropdownSeparator />
-              <DropdownLabel>{group}</DropdownLabel>
+              <MenuSeparator />
+              <MenuLabel>{group}</MenuLabel>
               {rows.map((skill) => (
-                <DropdownRadioItem key={skill.id} value={skill.id}>
+                <MenuRadioItem key={skill.id} value={skill.id}>
                   {skill.label}
-                </DropdownRadioItem>
+                </MenuRadioItem>
               ))}
             </Fragment>
           ))}
-        </DropdownRadioGroup>
-      </DropdownContent>
-    </Dropdown>
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
   );
 }
 function inheritedLabel(skill: string | null, hasDocument: boolean, hasAction: boolean) {

@@ -10,13 +10,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import {
-  Dropdown,
-  DropdownContent,
-  DropdownItem,
-  DropdownLabel,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
 import { addableWidgets, addWidget } from '@/lib/overview/layout';
 
 /**
@@ -39,23 +39,23 @@ export function OverviewLayoutMenu({
 }>) {
   const addable = addableWidgets(layout.widgets);
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
+    <Menu>
+      <MenuTrigger asChild>
         <Button variant="secondary" pending={pending}>
           <Icon icon={LayoutGrid} />
           Layout
         </Button>
-      </DropdownTrigger>
-      <DropdownContent align="end">
-        <DropdownItem onSelect={() => onEditingChange(!editing)}>
+      </MenuTrigger>
+      <MenuContent align="end">
+        <MenuItem onSelect={() => onEditingChange(!editing)}>
           {editing ? 'Done editing' : 'Edit layout'}
-        </DropdownItem>
+        </MenuItem>
         {addable.length ? (
           <>
-            <DropdownSeparator />
-            <DropdownLabel>Add widget</DropdownLabel>
+            <MenuSeparator />
+            <MenuLabel>Add widget</MenuLabel>
             {addable.map((key) => (
-              <DropdownItem
+              <MenuItem
                 key={key}
                 onSelect={() => {
                   onSave(addWidget(layout.widgets, key));
@@ -63,15 +63,15 @@ export function OverviewLayoutMenu({
                 }}
               >
                 {overviewWidgetTitles[key]}
-              </DropdownItem>
+              </MenuItem>
             ))}
           </>
         ) : null}
-        <DropdownSeparator />
-        <DropdownItem disabled={!layout.customized} onSelect={() => onSave(null)}>
+        <MenuSeparator />
+        <MenuItem disabled={!layout.customized} onSelect={() => onSave(null)}>
           Reset to default
-        </DropdownItem>
-      </DropdownContent>
-    </Dropdown>
+        </MenuItem>
+      </MenuContent>
+    </Menu>
   );
 }

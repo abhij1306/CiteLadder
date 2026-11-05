@@ -8,13 +8,7 @@ import { IconButton } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
 import { Delta } from '@/components/ui/delta';
-import {
-  Dropdown,
-  DropdownContent,
-  DropdownItem,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
@@ -118,7 +112,7 @@ export function PromptTable({
               primary={
                 <ProjectLink
                   href={promptHistoryHref(prompt.id)}
-                  className="text-foreground hover:underline"
+                  className="text-ink hover:underline"
                 >
                   {prompt.text}
                 </ProjectLink>
@@ -138,37 +132,36 @@ export function PromptTable({
             </Inline>
           </TableCell>
           <TableActionsCell>
-            <Dropdown>
-              <DropdownTrigger asChild>
+            <Menu>
+              <MenuTrigger asChild>
                 <IconButton icon={MoreHorizontal} label="Prompt actions" />
-              </DropdownTrigger>
-              <DropdownContent align="end">
+              </MenuTrigger>
+              <MenuContent align="end">
                 {onSetStatus && prompt.status === 'archived' ? (
-                  <DropdownItem onSelect={() => onSetStatus(prompt, 'active')}>
-                    <Icon icon={Check} />
+                  <MenuItem
+                    icon={<Icon icon={Check} />}
+                    onSelect={() => onSetStatus(prompt, 'active')}
+                  >
                     Restore
-                  </DropdownItem>
+                  </MenuItem>
                 ) : null}
-                <DropdownItem onSelect={() => onEdit(prompt)}>
-                  <Icon icon={Pencil} />
+                <MenuItem icon={<Icon icon={Pencil} />} onSelect={() => onEdit(prompt)}>
                   Edit
-                </DropdownItem>
+                </MenuItem>
                 {onSetStatus && prompt.status !== 'archived' ? (
-                  <DropdownItem onSelect={() => onSetStatus(prompt, 'archived')}>
-                    <Icon icon={Archive} />
+                  <MenuItem
+                    icon={<Icon icon={Archive} />}
+                    onSelect={() => onSetStatus(prompt, 'archived')}
+                  >
                     Archive
-                  </DropdownItem>
+                  </MenuItem>
                 ) : null}
-                <DropdownSeparator />
-                <DropdownItem
-                  onSelect={() => onDelete(prompt)}
-                  className="text-danger-text data-[highlighted]:bg-danger-bg"
-                >
-                  <Icon icon={Trash2} />
+                <MenuSeparator />
+                <MenuItem icon={<Icon icon={Trash2} />} danger onSelect={() => onDelete(prompt)}>
                   Delete
-                </DropdownItem>
-              </DropdownContent>
-            </Dropdown>
+                </MenuItem>
+              </MenuContent>
+            </Menu>
           </TableActionsCell>
         </TableRow>
       ))}

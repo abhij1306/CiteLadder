@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
 
 import { Input } from '@/components/ui/input';
-import { menuItemVariants, menuPanelClasses } from '@/components/ui/menu-variants';
+import { MENU_PANEL, menuItemClasses } from '@/components/ui/menu';
 import { cn } from '@/lib/utils';
 
 export type SearchableSelectOption = { value: string; label: string; detail?: string };
@@ -149,7 +149,7 @@ export function SearchableSelect({
           role="listbox"
           aria-label={ariaLabel}
           data-open="true"
-          className={cn(menuPanelClasses, 'absolute mt-1 max-h-56 w-full overflow-auto')}
+          className={cn(MENU_PANEL, 'absolute mt-1 max-h-74 w-full min-w-60 overflow-auto')}
         >
           {filtered.map((option, index) => (
             <li
@@ -160,12 +160,13 @@ export function SearchableSelect({
               // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/no-noninteractive-element-to-interactive-role -- ARIA listbox options keep focus on the editable input.
               role="option"
               aria-selected={option.value === value}
-              className={cn(
-                menuItemVariants({ selected: option.value === value }),
-                'grid gap-x-3',
-                optionGridClass(Boolean(renderLeading), Boolean(renderOptionEnd)),
-                index === activeIndex && option.value !== value && 'bg-hover',
-              )}
+              className={menuItemClasses({
+                className: cn(
+                  'grid h-auto min-h-8 gap-x-3 py-1.5',
+                  optionGridClass(Boolean(renderLeading), Boolean(renderOptionEnd)),
+                  (index === activeIndex || option.value === value) && 'bg-surface-sunken',
+                ),
+              })}
               onMouseDown={(event) => {
                 event.preventDefault();
                 commit(option);
@@ -176,7 +177,7 @@ export function SearchableSelect({
               <span className="grid min-w-0 gap-0.5">
                 <span className="truncate">{option.label}</span>
                 {option.detail ? (
-                  <span className="text-muted truncate">{option.detail}</span>
+                  <span className="text-ink-muted truncate">{option.detail}</span>
                 ) : null}
               </span>
               {renderOptionEnd ? renderOptionEnd(option) : null}

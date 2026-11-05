@@ -15,13 +15,12 @@ import { ActionPriorityBadge, ActionStatusBadge } from '@/components/agent/actio
 import { DetailScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { EvidenceDrawer } from '@/components/opportunities/evidence-drawer';
-import { Alert } from '@/components/ui/alert';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Callout } from '@/components/ui/callout';
+import { Card, CardContent, CardHeader, CardTitle, cardClasses } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FactList, type Fact } from '@/components/ui/facts';
 import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
-import { cardClasses } from '@/components/ui/card-variants';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { TextLink } from '@/components/ui/text-link';
@@ -68,7 +67,7 @@ export function ActionDetailScreen() {
   if (!activeWorkspaceId)
     return (
       <DetailScreen back={BACK}>
-        <Alert tone="info">Choose a workspace to open this Action.</Alert>
+        <Callout tone="info">Choose a workspace to open this Action.</Callout>
       </DetailScreen>
     );
   if (!query.data)
@@ -80,9 +79,9 @@ export function ActionDetailScreen() {
   if (query.data.project_id !== activeProjectId)
     return (
       <DetailScreen back={BACK}>
-        <Alert tone="danger">
+        <Callout tone="negative">
           This Action belongs to another project. Choose an Action from the current project.
-        </Alert>
+        </Callout>
       </DetailScreen>
     );
   // Keyed so a mutation's state (and its Retry) never outlives its Action.
@@ -174,7 +173,7 @@ function ActionControls({
           {dismissed ? 'Reopen' : 'Dismiss'}
         </Button>
       ) : null}
-      <Button asChild>
+      <Button asChild variant="primary">
         <ProjectLink href={agentHandoffHref({ actionId: action.id })}>Work on this</ProjectLink>
       </Button>
     </>
@@ -204,7 +203,7 @@ function ActionFacts({ action }: Readonly<{ action: ActionDetail }>) {
 
       <FactList layout="inline" facts={facts} />
       {action.evidence_cleared_at ? (
-        <Alert tone="info">No current evidence targets this Action. Its chats are kept.</Alert>
+        <Callout tone="info">No current evidence targets this Action. Its chats are kept.</Callout>
       ) : null}
     </Stack>
   );

@@ -2,7 +2,7 @@
 
 import type { BuyerPrompt, CompetitorCandidate, Shelf } from '@citeladder/contracts/commerce-suite';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { pluralCount } from '@/lib/format';
 
 type Inputs = Readonly<{
@@ -38,8 +38,8 @@ export function nextStep({ kind, competitors, prompts, shelf }: Inputs): string 
 
 export function TargetNextStep(props: Inputs) {
   return (
-    <Alert tone="info">
+    <Callout tone="info">
       <strong>Next step:</strong> {nextStep(props)}
-    </Alert>
+    </Callout>
   );
 }

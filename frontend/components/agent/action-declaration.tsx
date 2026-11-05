@@ -87,6 +87,7 @@ export function MarkImplementedButton({
   return (
     <>
       <Button
+        variant="primary"
         disabled={disabled}
         onClick={() => {
           declare.reset();
@@ -113,6 +114,7 @@ export function MarkImplementedButton({
               Cancel
             </Button>
             <Button
+              variant="primary"
               pending={declare.isPending}
               pendingLabel="Declaring…"
               disabled={!valid}

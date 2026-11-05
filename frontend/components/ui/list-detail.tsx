@@ -2,11 +2,9 @@
 
 import type { ReactNode } from 'react';
 
-import { BusyBar } from '@/components/ui/busy-bar';
+import { BusyBar } from '@/components/ui/progress-bar';
 import { Card } from '@/components/ui/card';
-import { listRowClasses } from '@/components/ui/list-row';
 import { Pressable } from '@/components/ui/pressable';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
 
 /**
@@ -25,12 +23,12 @@ export function ListDetailCard({
     <Card
       // `overflow-clip` (not `hidden`) rounds the corners without becoming a
       // scroll container, so the detail pane stays sticky against the page.
-      className={splitPaneClasses('list-detail', 'gap-0 overflow-clip')}
+      className="desktop:grid-cols-[var(--pane-list-detail)] grid min-w-0 items-start overflow-clip"
       aria-busy={busy}
     >
       {/* One vertical list at every width: above the detail when the panes
           stack, beside it on desktop. */}
-      <div className="border-border-subtle divide-border-subtle desktop:border-r desktop:border-b-0 grid min-w-0 divide-y border-b">
+      <div className="border-line desktop:border-r desktop:border-b-0 grid min-w-0 content-start gap-0.5 border-b p-2">
         {list}
       </div>
       {detail}
@@ -38,7 +36,10 @@ export function ListDetailCard({
   );
 }
 
-/** One row of the list: a pressed toggle for the item it selects. */
+/**
+ * One row of the list: a pressed toggle for the item it selects, at least
+ * 56px, `radius-sm`, `surface-sunken` when hovered or selected.
+ */
 export function ListDetailRow({
   selected,
   onSelect,
@@ -50,8 +51,8 @@ export function ListDetailRow({
       onClick={onSelect}
       aria-pressed={selected}
       className={cn(
-        'focus-ring grid w-full gap-2 px-4 py-3 text-left',
-        listRowClasses({ selected }),
+        'focus-ring hover:bg-surface-sunken grid min-h-14 w-full gap-1 rounded-sm px-3 py-2 text-left transition-colors focus-visible:-outline-offset-2',
+        selected && 'bg-surface-sunken',
       )}
     >
       {children}
@@ -78,18 +79,19 @@ export function ListDetailPane({
 }>) {
   return (
     <section
-      className="desktop:sticky desktop:top-[var(--workspace-gap)] desktop:max-h-[calc(100dvh-2*var(--workspace-gap))] desktop:overflow-hidden min-w-0"
+      // Sticks `workspace-gap` under the app's sticky top bar (D12), never beneath it.
+      className="desktop:sticky desktop:top-[calc(var(--sticky-header-offset)+var(--workspace-gap))] desktop:max-h-[calc(100dvh-var(--sticky-header-offset)-2*var(--workspace-gap))] desktop:overflow-hidden min-w-0"
       aria-busy={busy?.active}
     >
-      <div className="desktop:max-h-[calc(100dvh-2*var(--workspace-gap))] relative flex flex-col">
+      <div className="desktop:max-h-[calc(100dvh-var(--sticky-header-offset)-2*var(--workspace-gap))] relative flex flex-col">
         {busy ? <BusyBar active={busy.active} label={busy.label} /> : null}
-        <header className="border-border-subtle grid min-w-0 shrink-0 gap-[var(--compact-gap)] border-b p-[var(--card-padding)]">
+        <header className="border-line grid min-w-0 shrink-0 gap-[var(--compact-gap)] border-b p-[var(--card-padding)]">
           {header}
         </header>
         <div className="content-scroll desktop:flex-1 desktop:overflow-y-auto grid min-h-0 gap-[var(--workspace-gap)] p-[var(--card-padding)]">
           {children}
         </div>
-        {footer ? <div className="bg-panel shrink-0">{footer}</div> : null}
+        {footer ? <div className="bg-surface shrink-0">{footer}</div> : null}
       </div>
     </section>
   );

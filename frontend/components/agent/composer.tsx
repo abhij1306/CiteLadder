@@ -30,7 +30,6 @@ export function Composer({
   onRemoveChip,
   tools,
   commands,
-  rows = 3,
   onStop,
   stopping = false,
 }: Readonly<{
@@ -48,8 +47,6 @@ export function Composer({
   onRemoveChip?: (chip: ContextChip) => void;
   tools?: ReactNode;
   commands?: ComposerCommands;
-  /** Visible lines before the field scrolls. */
-  rows?: number;
   /** While a turn runs, the send button stops it instead. */
   onStop?: () => void;
   stopping?: boolean;
@@ -97,21 +94,34 @@ export function Composer({
             commands={commands}
             disabled={disabled}
             placeholder={placeholder}
-            rows={rows}
+            rows={3}
           />
         </>
       }
       tools={tools}
       submit={
         onStop ? (
-          <Button type="button" variant="secondary" disabled={stopping} onClick={onStop}>
+          // Pending keeps each button's box, so the control row never reflows.
+          <Button
+            type="button"
+            variant="secondary"
+            pending={stopping}
+            pendingLabel="Stopping…"
+            onClick={onStop}
+          >
             <Icon icon={Square} />
-            {stopping ? 'Stopping…' : 'Stop'}
+            Stop
           </Button>
         ) : (
-          <Button type="submit" disabled={!canSend}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!canSend}
+            pending={pending}
+            pendingLabel="Sending…"
+          >
             <Icon icon={SendHorizontal} />
-            {pending ? 'Sending…' : 'Send'}
+            Send
           </Button>
         )
       }

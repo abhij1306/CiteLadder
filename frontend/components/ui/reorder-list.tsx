@@ -17,13 +17,12 @@ export type ReorderItem = Readonly<{
   /** Names the item in its move controls ("Move <name> up"). */
   name: string;
   content: ReactNode;
-  /** A figure beside the move controls (a priority score). */
-  figure?: ReactNode;
 }>;
 
 /**
  * A shared, ranked list the reader can reorder: each row is its position, its
- * content, an optional figure, and move-up/move-down controls. Dragging a row
+ * content and move-up/move-down controls. The row's content carries its rank
+ * (a severity badge); no score column repeats it (decision D14). Dragging a row
  * onto another is a progressive enhancement; the buttons are the complete
  * keyboard path. Rows are divided like a ledger and padded 12; below
  * `desktop` the position, content and controls stack.
@@ -94,17 +93,16 @@ function ReorderRow({
         if (!pending) onDropped(event.dataTransfer.getData(ROW_DRAG_TYPE));
       }}
       className={cn(
-        'hover:bg-hover active:bg-active desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center grid gap-3 py-3 transition-colors',
+        'hover:bg-surface-sunken active:bg-surface-sunken desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center grid gap-3 py-3 transition-colors',
         dragging && 'opacity-60',
       )}
     >
       <div className="flex items-center gap-2">
-        <Icon icon={GripVertical} className="text-muted hover:text-foreground cursor-grab" />
-        <span className={textRole('label', 'font-numeric w-5 text-center')}>{index + 1}</span>
+        <Icon icon={GripVertical} className="text-ink-muted hover:text-ink cursor-grab" />
+        <span className={textRole('label', 'font-mono w-5 text-center')}>{index + 1}</span>
       </div>
       <div className="min-w-0">{item.content}</div>
       <div className="flex items-center justify-end gap-2">
-        {item.figure}
         <IconButton
           icon={ArrowUp}
           label={`Move ${item.name} up`}

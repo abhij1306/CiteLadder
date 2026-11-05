@@ -78,7 +78,7 @@ describe('Visibility by market', () => {
       within(us!)
         .getAllByRole('cell')
         .map((cell) => cell.textContent),
-    ).toEqual(['United States · English', '25%', '+5.0 pp', '50%', '−2.0 pp', '+40']);
+    ).toEqual(['United States · English', '25%', '↑up 5.0 pp', '50%', '↓down 2.0 pp', '+40']);
     expect(within(de!).getByText('Being prepared')).toBeInTheDocument();
     expect(within(de!).queryByText('Not run')).not.toBeInTheDocument();
     expect(within(fr!).getByText('Not run')).toBeInTheDocument();

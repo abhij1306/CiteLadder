@@ -63,7 +63,7 @@ describe('RankingRowsTable', () => {
     render(
       <RankingRowsTable rows={[row({ name: 'Globex', gap_count: 3, visibility_delta: 0.3 })]} />,
     );
-    expect(screen.getByText('+0.3 pp')).toBeVisible();
+    expect(screen.getByText('0.3 pp').parentElement).toHaveTextContent('↑up 0.3 pp');
     // The overlap measure is undefined for the tracked brand itself, so it is
     // not a column of a table whose every other column applies to every row.
     // It survives on `gap_count` for opportunity analysis.
@@ -128,7 +128,7 @@ describe('RankingRowsTable', () => {
     );
     // Which comparison produced the number is explained once above the table,
     // so the cell shows the number and nothing else.
-    expect(screen.getByText('+10.0 pp')).toBeVisible();
+    expect(screen.getByText('10.0 pp').parentElement).toHaveTextContent('↑up 10.0 pp');
     expect(screen.queryByText('Matched subset')).toBeNull();
   });
 });

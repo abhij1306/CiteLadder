@@ -41,7 +41,7 @@ export function ConfirmDeleteDialog({
           <Button variant="secondary" onClick={onCancel}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={onConfirm}>
+          <Button variant="danger" onClick={onConfirm}>
             Delete
           </Button>
         </>

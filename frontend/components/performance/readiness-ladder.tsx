@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Circle, CircleCheck } from 'lucide-react';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
@@ -78,9 +78,9 @@ function stageIndex(stage: ProjectReadinessStage): number {
 
 /** A rung's mark, at the one glyph size: reached, in flight, or still ahead. */
 function StepMark({ state }: Readonly<{ state: 'done' | 'active' | 'pending' }>) {
-  if (state === 'done') return <Icon icon={CircleCheck} className="text-success-text" />;
-  if (state === 'active') return <Spinner className="text-info-text" />;
-  return <Icon icon={Circle} className="text-border-strong" />;
+  if (state === 'done') return <Icon icon={CircleCheck} className="text-positive" />;
+  if (state === 'active') return <Spinner className="text-info" />;
+  return <Icon icon={Circle} className="text-line" />;
 }
 
 /**
@@ -116,7 +116,7 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
   if (!data || data.stage === 'analysis_ready' || data.stage === 'not_connected') return null;
 
   if (data.stage === 'import_failed') {
-    return <Alert tone="danger">{EXPLANATION.import_failed}</Alert>;
+    return <Callout tone="negative">{EXPLANATION.import_failed}</Callout>;
   }
 
   const reached = stageIndex(data.stage);
@@ -136,7 +136,7 @@ export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | un
               <StepMark state={state} />
               <span
                 className={cn(
-                  textRole('label', state === 'pending' ? 'text-muted' : 'text-foreground'),
+                  textRole('label', state === 'pending' ? 'text-ink-muted' : 'text-ink'),
                 )}
               >
                 {step.label}

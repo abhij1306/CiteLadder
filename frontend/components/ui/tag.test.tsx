@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { expect, it } from 'vite-plus/test';
+import { expect, it, vi } from 'vite-plus/test';
 
-import { TagGroup } from './tag';
+import { Tag, TagGroup } from './tag';
 
 it('reveals overflow labels from the keyboard and keeps the disclosure focused', async () => {
   const user = userEvent.setup();
@@ -18,6 +18,24 @@ it('reveals overflow labels from the keyboard and keeps the disclosure focused',
   await user.keyboard('{Enter}');
   expect(screen.queryByText('Consulting')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Show 2 more tags' })).toHaveFocus();
+});
+
+it('removes a tag from its named remove button', async () => {
+  const user = userEvent.setup();
+  const onRemove = vi.fn();
+  render(<Tag onRemove={onRemove}>ChatGPT</Tag>);
+  await user.click(screen.getByRole('button', { name: 'Remove ChatGPT' }));
+  expect(onRemove).toHaveBeenCalledTimes(1);
+});
+
+it('carries a long label in full in its tooltip', () => {
+  // The cut itself is geometry; e2e/surface-layout.spec.ts holds the page to
+  // the viewport with this label at 982px.
+  const long =
+    'AI Visibility tracking (brand mentions, position, sentiment and competitors across AI answers)';
+  render(<TagGroup labels={[long, 'Citation Intelligence']} />);
+  expect(screen.getByTitle(long)).toHaveTextContent(long);
+  expect(screen.getByTitle('Citation Intelligence')).toHaveTextContent('Citation Intelligence');
 });
 
 it('does not offer a disclosure when all labels fit', () => {

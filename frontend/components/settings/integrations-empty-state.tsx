@@ -28,7 +28,10 @@ export function IntegrationsEmptyState({ workspaceId }: Readonly<{ workspaceId: 
             >
               Connect Bing
             </Button>
-            <Button onClick={() => hardNavigate(integrationsApi.oauthStartUrl('gsc', workspaceId))}>
+            <Button
+              variant="primary"
+              onClick={() => hardNavigate(integrationsApi.oauthStartUrl('gsc', workspaceId))}
+            >
               Connect Google
             </Button>
           </>

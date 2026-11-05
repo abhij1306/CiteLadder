@@ -2,8 +2,11 @@
 
 import { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
 
-import { segmentedItemVariants, segmentedTrackVariants } from '@/components/ui/segmented-variants';
+import { SidebarRowTooltip } from '@/components/ui/app-shell';
+import { MODE_TRACK, modeSegmentClasses } from '@/components/ui/tabs';
+import { ICONS } from '@/lib/icons';
 import { scopedNavigationDestination } from '@/lib/navigation/project-destination';
 import {
   rememberModeRoute,
@@ -11,21 +14,22 @@ import {
   type NavigationMode,
 } from '@/lib/navigation/mode-memory';
 import { useProjectContext } from '@/lib/project/project-context';
-import { cn } from '@/lib/utils';
 
 import { AGENT_HOME, navigationMode } from './nav-items';
 
-const MODES: readonly { mode: NavigationMode; label: string; home: string }[] = [
-  { mode: 'dashboard', label: 'Dashboard', home: '/projects' },
-  { mode: 'agent', label: 'Agent', home: AGENT_HOME },
+const MODES: readonly { mode: NavigationMode; label: string; home: string; icon: LucideIcon }[] = [
+  { mode: 'dashboard', label: 'Dashboard', home: '/projects', icon: ICONS.overview },
+  { mode: 'agent', label: 'Agent', home: AGENT_HOME, icon: ICONS.agent },
 ];
 
 /**
- * Dashboard | Agent. The active mode is derived from the route, so deep links
- * and back navigation stay correct; each segment returns to the last route
- * used in that mode for the project during this session.
+ * Dashboard | Agent: the shared tab track stretched to two equal segments,
+ * stacked as two icon segments in the rail. The active mode is derived from
+ * the route, so deep links and back navigation stay correct; each segment
+ * returns to the last route used in that mode for the project during this
+ * session.
  */
-export function ModeSwitch({ onNavigate }: Readonly<{ onNavigate?: () => void }>) {
+export function ModeSwitch() {
   const location = useLocation();
   const pathname = location.pathname ?? '';
   const search = location.search ?? '';
@@ -37,20 +41,26 @@ export function ModeSwitch({ onNavigate }: Readonly<{ onNavigate?: () => void }>
   }, [activeProjectId, current, pathname, search]);
 
   return (
-    <nav aria-label="Mode" className={cn(segmentedTrackVariants(), 'flex w-full')}>
-      {MODES.map(({ mode, label, home }) => {
+    <nav aria-label="Mode" data-segmented-track="" className={MODE_TRACK}>
+      {MODES.map(({ mode, label, home, icon: Icon }) => {
         const selected = mode === current;
         const target = rememberedModeRoute(mode, activeProjectId) ?? home;
         return (
-          <Link
-            key={mode}
-            to={scopedNavigationDestination(target, 'project', activeProjectId, activeWorkspaceId)}
-            aria-current={selected ? 'page' : undefined}
-            onClick={onNavigate}
-            className={cn(segmentedItemVariants({ selected }), 'flex-1')}
-          >
-            {label}
-          </Link>
+          <SidebarRowTooltip key={mode} label={label}>
+            <Link
+              to={scopedNavigationDestination(
+                target,
+                'project',
+                activeProjectId,
+                activeWorkspaceId,
+              )}
+              aria-current={selected ? 'page' : undefined}
+              className={modeSegmentClasses(selected)}
+            >
+              <Icon className="shell:hidden size-4" aria-hidden />
+              <span className="shell:not-sr-only sr-only">{label}</span>
+            </Link>
+          </SidebarRowTooltip>
         );
       })}
     </nav>

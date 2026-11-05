@@ -52,7 +52,7 @@ export const heading = (report: PdfReport, key: OverviewWidgetKey) =>
   report.heading(overviewWidgetTitles[key]);
 /** A quiet line: an empty state or a qualification. */
 export const quiet = (report: PdfReport, text: string) =>
-  report.text(text, { size: 9, tone: 'muted' });
+  report.text(text, { size: 9, tone: 'inkMuted' });
 /** Says how much of a longer list the report printed. */
 export function truncated(report: PdfReport, total: number, noun: string) {
   if (total > ROWS) quiet(report, `Showing ${ROWS} of ${plural(total, noun)}.`);

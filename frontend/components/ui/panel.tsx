@@ -12,17 +12,17 @@ import { cn } from '@/lib/utils';
  * `li`, `section` and `dd` alike and the element must stay semantic.
  *
  * One box recipe (docs/design.md §Component recipes), shared with `Card`:
- * radius 12, a one-pixel `border` and 16 padding. The tone picks the fill and
+ * `radius-lg` (8), a one-pixel `border` and `card-padding`. The tone picks the fill and
  * the edge colour only; there is no padding, radius or edge variant.
  */
 const PANEL_TONE = {
   /** Raised out of the section — the default for a nested object. */
-  panel: 'bg-panel border-border',
+  panel: 'bg-surface border-line',
   /** Recessed — evidence, payloads, quoted source. */
-  well: 'bg-well border-transparent',
+  well: 'bg-surface-sunken border-transparent',
   /** A row inside a card that is chrome rather than content: its edge only,
    *  because a fill inside a card would be a fourth surface level. */
-  tonal: 'border-border',
+  tonal: 'border-line',
   /** The caller supplies the fill because it carries a status meaning. */
   none: 'border-transparent',
 } as const;
@@ -39,7 +39,7 @@ export function panelClasses({ tone = 'panel' }: { tone?: PanelTone } = {}, clas
   return cn(
     // Marks a container surface: a nested empty state shares it rather than
     // drawing a second card inside.
-    'surface-panel rounded-[var(--radius-card)] border p-[var(--card-padding)]',
+    'surface-panel rounded-lg border p-[var(--card-padding)]',
     PANEL_TONE[tone],
     className,
   );

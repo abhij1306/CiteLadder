@@ -113,7 +113,7 @@ function DiscoveringInventory({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
           <TableCell>
             {/* Clamped for the same reason as the scored table: a long
                 query-string URL is one unbreakable token. */}
-            <ClampText lines={1} className="type-caption text-foreground tabular-nums">
+            <ClampText lines={1} className="type-caption text-ink tabular-nums">
               {row.display_url}
             </ClampText>
           </TableCell>

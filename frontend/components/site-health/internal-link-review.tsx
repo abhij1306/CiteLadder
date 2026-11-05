@@ -88,9 +88,14 @@ export function InternalLinkReview({
             </p>
           </Stack>
           <Inline className="flex-wrap">
-            <CopyButton value={link.anchor}>Copy anchor</CopyButton>
-            <CopyButton value={link.target.url}>Copy URL</CopyButton>
+            <CopyButton variant="primary" value={link.anchor}>
+              Copy anchor
+            </CopyButton>
+            <CopyButton variant="primary" value={link.target.url}>
+              Copy URL
+            </CopyButton>
             <CopyButton
+              variant="primary"
               value={`<a href="${escapeHtml(link.target.url)}">${escapeHtml(link.anchor)}</a>`}
             >
               Copy HTML

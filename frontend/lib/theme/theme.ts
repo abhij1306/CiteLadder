@@ -1,18 +1,68 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * The product's light/dark preference. Light is the default; dark is an opt-in
- * per device, kept in localStorage. Only the app document applies it.
+ * The one light/dark/system preference for the app, kept in a cookie (on the
+ * parent domain when the app is served from a subdomain). With no cookie the
+ * preference is `system`, which follows the device's colour scheme live.
  *
- * The document's `data-theme` attribute is the live state. `index.html` sets it
- * from storage before first paint (it repeats THEME_STORAGE_KEY inline, since
- * that script runs before any module loads), and this module keeps it current.
+ * The document's `data-theme` attribute is the resolved theme. Each surface's
+ * <head> loads `/theme-preference.js` before first paint (it repeats
+ * THEME_COOKIE inline, since it runs before any module loads); this module
+ * keeps the attribute current after that.
  */
+export type ThemePreference = 'light' | 'dark' | 'system';
 export type Theme = 'light' | 'dark';
 
-export const THEME_STORAGE_KEY = 'citeladder.theme';
+export const THEME_COOKIE = 'citeladder_theme';
+/** A year: the choice is a standing preference, refreshed whenever it changes. */
+const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 const listeners = new Set<() => void>();
+
+function isExplicit(value: string | undefined): value is Theme {
+  return value === 'light' || value === 'dark';
+}
+
+/** The stored preference; anything but an explicit theme is `system`. */
+function storedPreference(): ThemePreference {
+  const entry = document.cookie
+    .split('; ')
+    .find((part) => part.startsWith(`${THEME_COOKIE}=`))
+    ?.slice(THEME_COOKIE.length + 1);
+  return isExplicit(entry) ? entry : 'system';
+}
+
+/**
+ * The cookie's Domain: the parent of a subdomain (`app.citeladder.com` →
+ * `citeladder.com`), the host itself for an apex, and none (host-only) for
+ * localhost and IP addresses, where a Domain attribute would be rejected.
+ */
+export function themeCookieDomain(hostname: string): string | null {
+  if (hostname === 'localhost' || /^[\d.]+$/.test(hostname) || hostname.includes(':')) return null;
+  const labels = hostname.split('.');
+  if (labels.length < 2) return null;
+  return labels.length > 2 ? labels.slice(1).join('.') : hostname;
+}
+
+function writePreference(preference: ThemePreference) {
+  const domain = themeCookieDomain(window.location.hostname);
+  const domainPart = domain ? '; Domain=' + domain : '';
+  const securePart = window.location.protocol === 'https:' ? '; Secure' : '';
+  const scope = '; Path=/; SameSite=Lax' + domainPart + securePart;
+  document.cookie =
+    preference === 'system'
+      ? `${THEME_COOKIE}=; Max-Age=0${scope}`
+      : `${THEME_COOKIE}=${preference}; Max-Age=${THEME_COOKIE_MAX_AGE}${scope}`;
+}
+
+function systemTheme(): Theme {
+  return window.matchMedia?.(DARK_QUERY).matches ? 'dark' : 'light';
+}
+
+function resolve(preference: ThemePreference): Theme {
+  return preference === 'system' ? systemTheme() : preference;
+}
 
 /**
  * Run a palette swap with transitions paused. Fields, selects and selected rows
@@ -25,50 +75,56 @@ function withoutTransitions(change: () => void) {
   pause.textContent = '*,*::before,*::after{transition:none!important}';
   document.head.append(pause);
   change();
-  // The first frame paints the new palette with transitions still off.
   window.requestAnimationFrame(() => window.requestAnimationFrame(() => pause.remove()));
 }
 
-function applyTheme(theme: Theme) {
+function apply() {
+  const theme = resolve(storedPreference());
   const root = document.documentElement;
-  withoutTransitions(() => {
-    if (theme === 'dark') root.dataset.theme = 'dark';
-    else delete root.dataset.theme;
-    document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme);
-  });
+  if (root.dataset.theme !== theme) {
+    withoutTransitions(() => {
+      root.dataset.theme = theme;
+      document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', theme);
+    });
+  }
   for (const listener of listeners) listener();
+}
+
+export function setThemePreference(preference: ThemePreference) {
+  writePreference(preference);
+  apply();
+}
+
+/** The device scheme changed, or another tab or surface changed the cookie. */
+function onExternalChange() {
+  apply();
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  if (listeners.size === 1) {
+    window.matchMedia?.(DARK_QUERY).addEventListener('change', onExternalChange);
+    window.addEventListener('focus', onExternalChange);
+  }
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      window.matchMedia?.(DARK_QUERY).removeEventListener('change', onExternalChange);
+      window.removeEventListener('focus', onExternalChange);
+    }
+  };
 }
 
 function currentTheme(): Theme {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }
 
-export function setTheme(theme: Theme) {
-  try {
-    if (theme === 'dark') window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-    else window.localStorage.removeItem(THEME_STORAGE_KEY);
-  } catch {
-    // Storage unavailable (private mode / quota): the choice lasts this document.
-  }
-  applyTheme(theme);
-}
-
-function onStorage(event: StorageEvent) {
-  // Another tab changed the preference; follow it so open tabs stay consistent.
-  if (event.key === THEME_STORAGE_KEY || event.key === null) {
-    applyTheme(event.newValue === 'dark' ? 'dark' : 'light');
-  }
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  if (listeners.size === 1) window.addEventListener('storage', onStorage);
-  return () => {
-    listeners.delete(listener);
-    if (listeners.size === 0) window.removeEventListener('storage', onStorage);
-  };
-}
-
+/** The resolved theme the document is showing. */
 export function useTheme(): Theme {
   return useSyncExternalStore(subscribe, currentTheme, () => 'light');
+}
+
+/** The stored choice: light, dark or system. */
+export function useThemePreference(): ThemePreference {
+  return useSyncExternalStore(subscribe, storedPreference, () => 'system');
 }

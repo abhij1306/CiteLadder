@@ -67,7 +67,7 @@ export function IssueDetailRail({
             <h2 className={textRole('sectionTitle')}>{issueTitle(issue)}</h2>
             <IssueMetadata issue={issue} />
             <Inline gap="meta" className="type-body">
-              <span className="text-secondary whitespace-nowrap tabular-nums">
+              <span className="text-ink-secondary whitespace-nowrap tabular-nums">
                 {issue.affected_url_count} {issue.affected_url_count === 1 ? 'page' : 'pages'}{' '}
                 affected
               </span>
@@ -94,7 +94,6 @@ export function IssueDetailRail({
           // stack and Previous would need two presses to undo one: `busy`
           // holds both steps until the page lands.
           <Pager
-            frame="table"
             hideWhenSinglePage
             canPrev={canPrevious}
             canNext={Boolean(detail.next_cursor)}
@@ -129,7 +128,7 @@ export function IssueDetailRail({
 function IssueActions({ issue, crawlId }: Readonly<{ issue: SiteIssue; crawlId: string }>) {
   return (
     <Inline className="flex-wrap">
-      <Button asChild>
+      <Button asChild variant="primary">
         <ProjectLink
           href={agentHandoffHref({
             issueGroup: { crawlId, groupId: issue.group_id },
@@ -187,8 +186,8 @@ function OccurrenceList({
       <ul aria-busy="true" className={ledgerClasses('open')}>
         {OCCURRENCE_PLACEHOLDERS.map((placeholder) => (
           <Stack as="li" gap="item" key={placeholder} className={ledgerItemClasses()}>
-            <Skeleton shape="line" />
-            <Skeleton shape="line" />
+            <Skeleton />
+            <Skeleton />
           </Stack>
         ))}
       </ul>
@@ -246,7 +245,7 @@ function AffectedPageLink({
 }>) {
   return (
     <TextLink
-      text="inherit"
+      text="itemTitle"
       className="flex min-w-0 flex-col"
       href={`/site/crawls/${crawlId}/pages/${siteUrlId}`}
     >

@@ -3,9 +3,9 @@
 import { Check, X } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Icon } from '@/components/ui/icon';
 import { InfoHint } from '@/components/ui/info-hint';
@@ -74,8 +74,8 @@ export function CandidateReview({
 
   return (
     <Stack gap="compact" className="min-w-0">
-      {error ? <Alert tone="danger">{error}</Alert> : null}
-      {notice ? <Alert tone="success">{notice}</Alert> : null}
+      {error ? <Callout tone="negative">{error}</Callout> : null}
+      {notice ? <Callout tone="positive">{notice}</Callout> : null}
       <DataTable
         nested
         title={`Review ${plural(candidates.length, 'suggestion')}`}
@@ -177,7 +177,7 @@ export function CandidateReviewPanel({
   if (setsLoading || review.isLoading) return <output>Loading suggestions…</output>;
   if (setsError || review.loadError)
     return (
-      <Alert tone="danger">
+      <Callout tone="negative">
         {review.loadError || 'Could not load prompt sets.'}
         <Button
           variant="secondary"
@@ -191,14 +191,14 @@ export function CandidateReviewPanel({
         >
           Retry
         </Button>
-      </Alert>
+      </Callout>
     );
   if (!review.candidates.length && !review.notice)
     return (
-      <Alert tone="info">
+      <Callout tone="info">
         No pending suggestions remain. They may have expired or already been reviewed. Use Adjust
         run to generate a new batch.
-      </Alert>
+      </Callout>
     );
   return (
     <CandidateReview
@@ -221,7 +221,7 @@ export function PendingReviewNotice({
 }: Readonly<{ count: number; hidden: boolean; onReview: () => void }>) {
   if (!count || hidden) return null;
   return (
-    <Alert tone="info">
+    <Callout tone="info">
       <Inline as="span" className="flex-wrap justify-between">
         {count === 1
           ? '1 generated prompt is waiting for review.'
@@ -230,6 +230,6 @@ export function PendingReviewNotice({
           Review suggestions
         </Button>
       </Inline>
-    </Alert>
+    </Callout>
   );
 }

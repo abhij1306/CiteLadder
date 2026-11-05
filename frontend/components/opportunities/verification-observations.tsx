@@ -1,8 +1,7 @@
 'use client';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
-
 import { Stack } from '@/components/ui/layout';
+import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { movementLegLabel, movementStateLabel } from '@/lib/agent/vocabulary';
 
@@ -28,9 +27,9 @@ export function VerificationObservations({
       <ComparableMovement result={result} />
       <GapChanges result={result} />
       {showAuditLink ? (
-        <ProjectLink className="focus-ring w-fit underline underline-offset-2" href="/runs">
+        <TextLink text="caption" className="w-fit" href="/runs">
           Run a comparable audit
-        </ProjectLink>
+        </TextLink>
       ) : null}
     </Stack>
   );

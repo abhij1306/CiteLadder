@@ -3,8 +3,8 @@
 import { Download } from 'lucide-react';
 import { useMemo } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { CsvImportFileInput, CsvImportPreview, useCsvImportFile } from '@/components/ui/csv-import';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Dialog } from '@/components/ui/dialog';
@@ -31,8 +31,8 @@ import {
  */
 function RowStatus({ errors }: Readonly<{ errors: readonly string[] }>) {
   if (errors.length > 0)
-    return <ClampText className="type-caption text-danger-text">{errors.join(' ')}</ClampText>;
-  return <span className="type-caption text-success-text">Ready</span>;
+    return <ClampText className="type-caption text-negative">{errors.join(' ')}</ClampText>;
+  return <span className="type-caption text-positive">Ready</span>;
 }
 
 const PREVIEW_COLUMNS: readonly DataTableColumn[] = [
@@ -82,7 +82,7 @@ export function CsvImportDialog({
       onOpenChange={handleOpenChange}
       title="Import prompts from CSV"
       description="Columns: topic, prompt. New topic names are created; rows without a topic import without one."
-      width="review"
+      width="wide"
       footer={
         <>
           <Button variant="ghost" onClick={() => handleOpenChange(false)}>
@@ -99,7 +99,7 @@ export function CsvImportDialog({
       }
     >
       <Stack gap="workspace">
-        {error ? <Alert tone="danger">{error}</Alert> : null}
+        {error ? <Callout tone="negative">{error}</Callout> : null}
 
         <Stack gap="compact">
           <CsvImportFileInput inputRef={inputRef} onSelect={(file) => void selectFile(file)} />
@@ -110,7 +110,7 @@ export function CsvImportDialog({
         </Stack>
 
         {parsed && parsed.errors.length > 0 ? (
-          <Alert tone="danger">{parsed.errors.join(' ')}</Alert>
+          <Callout tone="negative">{parsed.errors.join(' ')}</Callout>
         ) : null}
 
         {parsed && parsed.rows.length > 0 ? (
@@ -124,7 +124,7 @@ export function CsvImportDialog({
                 const invalid = row.errors.length > 0;
                 return (
                   <TableRow key={row.line} className={invalid ? 'opacity-60' : undefined}>
-                    <TableCell numeric className="text-muted">
+                    <TableCell numeric className="text-ink-muted">
                       {row.line}
                     </TableCell>
                     <TableCell>{row.input.topic || <UnavailableValue state="not_set" />}</TableCell>

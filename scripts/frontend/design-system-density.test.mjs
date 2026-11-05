@@ -11,12 +11,14 @@ test('density policy rejects retired and fixed control metrics without confusing
     '<input className="h-[var(--field-height)]" />',
     '<button className="h-[var(--control-height)]" />',
     '<button className="h-[36px]" />',
+    '<button className="h-[28px]" />',
+    '<button className="min-h-[48px]" />',
   ]) {
     assert.equal(densityRoleViolations(source, label, true).length, 1);
   }
   assert.deepEqual(
     densityRoleViolations(
-      '<button className="h-[var(--control-height-md)]"><svg className="size-4" /></button>',
+      '<button className="h-(--control-md)"><svg className="size-4" /><i className="size-12" /></button>',
       label,
       true,
     ),

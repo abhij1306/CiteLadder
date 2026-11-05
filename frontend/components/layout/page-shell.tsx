@@ -1,24 +1,22 @@
 'use client';
 
-import { useContext, useLayoutEffect, type ReactNode } from 'react';
+import { useContext, useLayoutEffect, type ReactNode, type RefObject } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
+import { AgentPanelTrigger } from '@/components/agent/agent-panel-host';
+import { AppGrid } from '@/components/ui/app-grid';
 import { BackButton } from '@/components/ui/back-button';
+import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
+import { PageHeader } from '@/components/ui/page-header';
 import { QueryState } from '@/components/ui/query-state';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
-import { textRole } from '@/components/ui/typography';
-import { splitPaneClasses, type SplitPaneRole } from '@/components/ui/workspace';
-import { cn } from '@/lib/utils';
 
-import { CompactPageTitleContext } from './compact-page-title-context';
-import { navigationMode } from './nav-items';
-import { resolveMeasure, resolveTitle, type PageMeasure } from './page-titles';
+import { PageTitleContext } from './page-title-context';
+import { resolveTitle } from './page-titles';
 
 /**
- * A detail route's way back to the collection it was opened from. Rendered as
- * a round back button before the H1 in the identity band — the one place every
- * detail route puts it, instead of a breadcrumb line at the top of the content.
+ * A detail route's way back to the collection it was opened from, drawn as
+ * the round back button before the title.
  */
 export type PageBack = Readonly<{
   /** The collection route, e.g. `/runs`; scoped to the project like any app link. */
@@ -30,37 +28,20 @@ export type PageBack = Readonly<{
 }>;
 
 /**
- * PageShell — the grammar every authenticated route is written in.
+ * The page template every authenticated route is written in: the system's
+ * AppShell bands.
  *
- * Routes used to assemble their own top area, and no two agreed: five different
- * wrapper gaps, toolbars that were a bare `flex gap-2` on one screen and a
- * `<Card>` on another, tab strips at three heights, and nothing at all drawn
- * between a page's title and its work. The reader had to re-learn where a page
- * began on every navigation.
+ *   1. header   — the PageHeader: the route's one H1 and its actions, the
+ *                 page's half of the sticky top bar (decision D12).
+ *   2. controls — the route's tabs (settings sections, a screen's views),
+ *                 then its FilterBar (search, filters, one action) for the
+ *                 selected tab.
+ *   3. content  — the work, its cards 12 apart.
  *
- * So a page is now four regions in a fixed order, and only the first and last
- * are compulsory:
- *
- *   1. identity   — the route's one H1 and its actions.       (56px, ruled)
- *   2. navigation — the route's tabs, and nothing else.       (40px, ruled)
- *   3. controls   — filters, search, range, export.           (40px, ruled)
- *   4. content    — the work.
- *
- * Two invariants carry the consistency:
- *
- * Every band that is present closes with a hairline, and that hairline is
- * FULL-BLEED — it runs the whole width of the paper, not just the width of the
- * gutter. So the gutter lives inside each band rather than around all of them,
- * and content always begins directly below exactly one rule, at an offset the
- * reader has already seen on the previous screen. A route with no tabs and no
- * filters is not a different kind of page; it is this page with two rows
- * missing, and it still closes its identity band.
- *
- * And the bands are the only place these things may live. Tabs do not carry
- * actions (those are identity's), filters do not ride a section header, and a
- * toolbar is never boxed. That is what makes a screen's first read the same
- * everywhere: the answer to "where does this page start" is structural, not a
- * judgement each route makes for itself.
+ * The template owns every band-to-band gap (decision D11): header → 16 →
+ * tabs → 8 → filters → 8 → content (16 straight to the content when there
+ * are no controls). The header and the controls sit on the sidebar's lines.
+ * A page passes data, organisms and slots and adds no margins between bands.
  */
 type ScreenBands<T extends string> = Readonly<{
   /** Overrides the route-derived title (rare — prefer `page-titles.ts`). */
@@ -75,46 +56,39 @@ type ScreenBands<T extends string> = Readonly<{
 }>;
 
 /**
- * ListScreen — the template for a collection, dashboard or workspace route:
- * identity band → optional `TabRow` → optional `FilterBar` → the content
- * stack, its sections 24 apart.
- *
- *   `fill` — the content is one column that fills the viewport below the
- *            shell chrome, so a chat's composer sits at the bottom of a
- *            short thread.
- *
- * The content measure is the route's (`resolveMeasure`): the narrower reading
- * measure on Agent, Settings and Billing, analytical everywhere else. A page
- * never picks it, so its loading frame and its loaded page cannot disagree.
- *
- * A page passes data, organisms and slots; the template owns every band and
- * every band-to-band gap.
+ * A screen that fills the viewport below the header (a chat): the content
+ * scrolls in its own region and `dock` (a `ComposerDock`) stays under it, so
+ * the window, the header and the dock never move while the content grows.
+ * `scrollRef` reaches the scrolling region (`useFollowLatest`); `scrollLabel`
+ * names it when it holds a conversation.
  */
-export function ListScreen<T extends string = string>({
-  fill = false,
-  ...bands
-}: ScreenBands<T> & Readonly<{ fill?: boolean }>) {
-  const measure = resolveMeasure(useLocation().pathname ?? '');
-  return <PageShell {...bands} measure={measure} fill={fill} />;
+type FillLayout =
+  | Readonly<{ fill?: false; dock?: never; scrollRef?: never; scrollLabel?: never }>
+  | Readonly<{
+      fill: true;
+      dock?: ReactNode;
+      scrollRef?: RefObject<HTMLElement | null>;
+      scrollLabel?: string;
+    }>;
+
+/** ListScreen — a collection, dashboard or workspace route. */
+export function ListScreen<T extends string = string>(props: ScreenBands<T> & FillLayout) {
+  return <PageShell {...props} />;
 }
 
 /**
- * The control band, held empty while the route's filters wait on their first
- * read. A loading frame passes it as `controls` when the loaded page will have
- * a control band, so the work below starts on the same line in both frames.
+ * The control band, held while the route's filters wait on their first read.
+ * A loading frame passes it as `controls` when the loaded page will have a
+ * control band, so the work below starts on the same line in both frames.
  */
 export const RESERVED_CONTROLS: FilterBarProps = {};
 
 /**
  * RouteLoadingScreen — the frame a route shows before its own page can draw:
- * the route's identity band (its title comes from the path) and one loading
- * box where the content begins.
- *
- * It is the one loading frame of a cold load. The shell's fallback, the route
- * chunk's Suspense boundary and the project gate all draw it, and a page's own
- * first read draws the same box in the same place, so the wait reads as one
- * state from the first paint to the data instead of a blank pane, then a
- * header, then a different box.
+ * the route's header (its title comes from the path) and one loading box
+ * where the content begins. The shell's fallback, the route chunk's Suspense
+ * boundary and the project gate all draw it, and a page's own first read
+ * draws the same box in the same place.
  */
 export function RouteLoadingScreen({ label }: Readonly<{ label?: string }>) {
   return (
@@ -125,16 +99,14 @@ export function RouteLoadingScreen({ label }: Readonly<{ label?: string }>) {
 }
 
 /**
- * DetailScreen — the template for one record: identity band with the back
- * button before the title → optional tabs and controls → the content, either one
- * stack or a split from `splitPaneClasses` when an `aside` is given
- * (`main-aside` by default, `list-detail` for a list beside its selection).
+ * DetailScreen — one record: the back button before the title, optional tabs
+ * or controls, then the content, either one stack or the main column beside
+ * its `aside` (AppGrid `main-aside`).
  */
 export function DetailScreen<T extends string = string>({
   back,
   lead,
   aside,
-  split = 'main-aside',
   children,
   ...bands
 }: ScreenBands<T> &
@@ -147,18 +119,15 @@ export function DetailScreen<T extends string = string>({
     lead?: ReactNode;
     /** Supporting context beside the main content. */
     aside?: ReactNode;
-    split?: Extract<SplitPaneRole, 'main-aside' | 'list-detail'>;
   }>) {
   return (
-    <PageShell {...bands} back={back} measure="analytical" fill={false}>
+    <PageShell {...bands} back={back}>
       {lead}
       {aside ? (
-        <div className={splitPaneClasses(split)}>
-          <div className="grid min-w-0 content-start gap-[var(--page-section-gap)]">{children}</div>
-          <aside className="grid min-w-0 content-start gap-[var(--page-section-gap)]">
-            {aside}
-          </aside>
-        </div>
+        <AppGrid layout="main-aside">
+          <div className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">{children}</div>
+          <aside className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">{aside}</aside>
+        </AppGrid>
       ) : (
         children
       )}
@@ -173,163 +142,110 @@ function PageShell<T extends string>({
   tabs,
   controls,
   children,
-  measure,
-  fill,
-}: ScreenBands<T> &
-  Readonly<{
-    back?: PageBack;
-    measure: PageMeasure;
-    fill: boolean;
-  }>) {
+  ...layout
+}: ScreenBands<T> & FillLayout & Readonly<{ back?: PageBack }>) {
+  const resolved = useRouteTitle(title);
+  const content = <PageContent {...layout}>{children}</PageContent>;
+  const tabBand = tabs ? (
+    <div data-page-band="control">
+      <TabRow {...tabs} />
+    </div>
+  ) : null;
+  const filterBand = controls ? (
+    <div data-page-band="control">
+      <FilterBar {...controls} />
+    </div>
+  ) : null;
   return (
-    <>
-      <IdentityBand title={title} back={back} actions={actions} />
-      {/* The tab band opens with the control band's 8px, so the first row
-          under the title (tabs or filters) starts on the sidebar search's line;
-          the tabs sit on the band's rule. */}
-      {tabs ? (
-        <PageBand kind="navigation" className="pt-2">
-          <TabRow {...tabs} />
-        </PageBand>
-      ) : null}
-      {controls ? (
-        <PageBand kind="control">
-          <FilterBar {...controls} />
-        </PageBand>
-      ) : null}
-      {/* The content region owns the section rhythm: its sections stand 24px
-          apart, whatever each one is. */}
-      <div
-        data-page-measure={measure}
-        className={cn(
-          pageGutterClasses,
-          measure === 'workflow' && 'max-w-[var(--workflow-max-width)]',
-          'grid grid-cols-[minmax(0,1fr)] content-start gap-[var(--page-section-gap)] pt-[var(--content-gutter)] pb-[var(--page-section-gap)]',
-          // `--route-chrome-height` (globals.css) owns the chrome above the
-          // route at each breakpoint; the gutter is the shell's padding under it.
-          fill &&
-            'flex min-h-[calc(100dvh-var(--route-chrome-height)-var(--content-gutter))] flex-col pb-0',
-        )}
-      >
-        {children}
-      </div>
-    </>
-  );
-}
-
-/**
- * The paper's measure. Bands and content share it so their gutters line up and
- * the rules stop at the same place the work does.
- */
-const pageGutterClasses =
-  'mx-auto w-full max-w-[var(--content-max-width)] px-[var(--content-gutter)]';
-
-/**
- * One row of the grammar: a full-width rule with a gutter-padded row inside it.
- * The rule is on the outer element precisely so it is not inset — the reason
- * the whole shape reads as ruled paper rather than as a stack of loose boxes.
- *
- * `data-page-band` is the test surface: the design policy forbids tests
- * asserting visual classes, so the grammar is asserted through the attribute.
- */
-function PageBand({
-  kind,
-  className,
-  children,
-}: Readonly<{
-  kind: 'identity' | 'navigation' | 'control';
-  className?: string;
-  children: ReactNode;
-}>) {
-  return (
-    <div
-      data-page-band={kind}
-      // Every band is the sheet itself, closed by its rule; cards on the
-      // sheet are the raised step, so a band never wears a card's fill.
-      className="bg-sheet border-border-subtle border-b"
-    >
-      <div className={cn(pageGutterClasses, 'flex', className)}>{children}</div>
+    // header → 16 → tabs → 8 → filters → 8 → content; header → 16 → content.
+    <div className="flex min-w-0 flex-col gap-[var(--page-section-gap)]">
+      <PageHeader
+        title={resolved}
+        lead={
+          back ? (
+            <BackButton href={back.href} label={back.label} projectId={back.projectId} />
+          ) : undefined
+        }
+        actions={
+          <>
+            {actions}
+            <AgentPanelTrigger />
+          </>
+        }
+      />
+      {tabBand || filterBand ? (
+        <div className="flex min-w-0 flex-col gap-[var(--page-band-gap)]">
+          {tabBand}
+          {filterBand}
+          {content}
+        </div>
+      ) : (
+        content
+      )}
     </div>
   );
 }
 
-function IdentityBand({
-  title,
-  back,
-  actions,
-}: Readonly<{ title?: string; back?: PageBack; actions?: ReactNode }>) {
+/** The route's title, announced by the shell when a page overrides it. */
+function useRouteTitle(title: string | undefined) {
   const pathname = useLocation().pathname ?? '';
-  const resolved = title ?? resolveTitle(pathname);
-  const setCompactTitle = useContext(CompactPageTitleContext);
-
+  const setTitle = useContext(PageTitleContext);
   useLayoutEffect(() => {
-    if (!setCompactTitle || title === undefined) return;
-    setCompactTitle(title);
+    if (!setTitle || title === undefined) return;
+    setTitle(title);
     return () => {
-      setCompactTitle((current) => (current === title ? undefined : current));
+      setTitle((current) => (current === title ? undefined : current));
     };
-  }, [setCompactTitle, title]);
+  }, [setTitle, title]);
+  return title ?? resolveTitle(pathname);
+}
 
-  return (
-    <div
-      data-page-band="identity"
-      className={cn(
-        'bg-sheet border-border-subtle border-b',
-        // Below the desktop breakpoint the compact topbar already names the
-        // page, so a band holding only a screen-reader title would be an
-        // empty ruled row. A back button is visible content, so it keeps the band.
-        !actions && !back && 'hidden desktop:block',
-      )}
-    >
-      <div
-        className={cn(
-          pageGutterClasses,
-          'flex min-w-0 flex-col gap-[var(--page-header-gap)] pt-[var(--page-header-padding-top)] pb-[var(--page-header-padding-bottom)]',
-          // Desktop: one row on the sidebar's switcher line. The title centres
-          // on it, and the first row of the band below lines up with the
-          // sidebar's search.
-          'desktop:flex-row desktop:items-center desktop:justify-between',
-          'desktop:min-h-[var(--page-band-identity)] desktop:py-0',
-        )}
-      >
-        {/* The title keeps a floor, so a long action row wraps rather than
-            squeezing the page's name to nothing. */}
-        <div
-          className={cn(
-            'flex min-w-0 flex-1 items-center gap-3 desktop:min-w-[var(--page-title-min-width)]',
-            !back && 'sr-only desktop:not-sr-only',
-          )}
-        >
-          {back ? (
-            <BackButton href={back.href} label={back.label} projectId={back.projectId} />
-          ) : null}
-          {/* The route H1 is the top of the type ladder: nothing on the page
-              out-ranks it except a figure. It stays the one H1 per route. */}
-          {/* One row, always: a long title truncates rather than wrapping. The
-              span truncates because `not-sr-only` restores the H1's wrapping. */}
-          <h1 className={textRole('pageTitle', 'min-w-0 sr-only desktop:not-sr-only')}>
-            <span className="block truncate" title={resolved}>
-              {resolved}
-            </span>
-          </h1>
-        </div>
-        {actions ? (
-          // The shell paints the theme toggle, the account glyph and, on
-          // Dashboard routes, the agent trigger at the end of this same row, so
-          // route actions reserve that width instead of running underneath it.
-          // Desktop-only, because that is the only width the glyphs appear at.
-          <div
-            className={cn(
-              'flex min-w-0 min-h-[var(--control-height-md)] flex-wrap items-center gap-2 desktop:justify-end',
-              navigationMode(pathname) === 'dashboard'
-                ? 'desktop:pe-[calc(3*var(--control-height-md)+1.25rem)]'
-                : 'desktop:pe-[calc(2*var(--control-height-md)+1rem)]',
-            )}
-          >
-            {actions}
-          </div>
-        ) : null}
+/**
+ * The content band: its cards stack 12 apart. A fill screen's content is
+ * exactly the viewport left below the header, so the window never scrolls:
+ * the column scrolls in its own region and the dock sits under it.
+ */
+function PageContent({ children, ...layout }: FillLayout & Readonly<{ children: ReactNode }>) {
+  if (!layout.fill) {
+    return (
+      <div data-page-content="" className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">
+        {children}
       </div>
+    );
+  }
+  return (
+    <FillContent dock={layout.dock} scrollRef={layout.scrollRef} scrollLabel={layout.scrollLabel}>
+      {children}
+    </FillContent>
+  );
+}
+
+function FillContent({
+  dock,
+  scrollRef,
+  scrollLabel,
+  children,
+}: Readonly<{
+  dock: ReactNode;
+  scrollRef: RefObject<HTMLElement | null> | undefined;
+  scrollLabel: string | undefined;
+  children: ReactNode;
+}>) {
+  return (
+    <div className="flex h-[calc(100dvh-var(--route-chrome-height))] min-h-0 flex-col gap-[var(--workspace-gap)]">
+      <section
+        ref={scrollRef}
+        aria-label={scrollLabel}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+      >
+        <div
+          data-page-content=""
+          className="flex min-h-full min-w-0 flex-col gap-[var(--workspace-gap)]"
+        >
+          {children}
+        </div>
+      </section>
+      {dock}
     </div>
   );
 }

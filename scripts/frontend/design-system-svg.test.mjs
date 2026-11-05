@@ -5,14 +5,14 @@ import { svgColorFindings } from '../../frontend/scripts/design-system-asset-che
 
 const logo = 'public/citeladder-logo.svg';
 const palette = new Map([
-  ['--color-brand-ink', '#0b0f0d'],
-  ['--color-accent', '#14532d'],
+  ['--color-ink', '#111111'],
+  ['--color-accent', '#e8501a'],
 ]);
 
 test('a brand asset may paint only the tokens it is allowed', () => {
-  const source = '<svg><path fill="#0b0f0d"/>\n<rect fill="#14532D" stroke="none"/></svg>';
+  const source = '<svg><path fill="#111111"/>\n<rect fill="#E8501A" stroke="none"/></svg>';
   assert.deepEqual(svgColorFindings(source, logo, palette), []);
-  const drifted = svgColorFindings('<svg>\n<rect fill="#166534"/></svg>', logo, palette);
+  const drifted = svgColorFindings('<svg>\n<rect fill="#ff6a33"/></svg>', logo, palette);
   assert.equal(drifted.length, 1);
   assert.equal(drifted[0].line, 2);
   assert.match(drifted[0].message, /is not --color-accent/);

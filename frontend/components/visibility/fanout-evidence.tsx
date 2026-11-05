@@ -338,7 +338,7 @@ function SearchGroupRows({ group }: Readonly<{ group: SearchGroup }>) {
         <TableRow key={`${group.key}-${row.query}`}>
           <TableCell nested={Boolean(group.label)}>
             <Inline as="span" className="items-start">
-              <Icon icon={Search} className="text-muted" />
+              <Icon icon={Search} className="text-ink-muted" />
               <ClampText>{row.query}</ClampText>
             </Inline>
           </TableCell>
@@ -348,7 +348,7 @@ function SearchGroupRows({ group }: Readonly<{ group: SearchGroup }>) {
       ))}
       {note ? (
         <TableRow>
-          <TableCell colSpan={3} className={textRole('caption', 'text-secondary')}>
+          <TableCell colSpan={3} className={textRole('caption', 'text-ink-secondary')}>
             {note}
           </TableCell>
         </TableRow>

@@ -15,9 +15,7 @@ import { lineIndex } from './source-ast.mjs';
  */
 
 /** Brand assets and the tokens (light theme) their paints must equal. */
-const BRAND_ASSETS = new Map([
-  ['public/citeladder-logo.svg', ['--color-brand-ink', '--color-accent']],
-]);
+const BRAND_ASSETS = new Map([['public/citeladder-logo.svg', ['--color-ink', '--color-accent']]]);
 
 const PAINT_ATTRIBUTE =
   /\b(fill|stroke|stop-color|flood-color|lighting-color|color)\s*(?:=\s*["']([^"']*)["']|:\s*([^;"'}]+))/g;

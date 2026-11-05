@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { QueryState } from '@/components/ui/query-state';
 import { Button, IconButton } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -196,14 +196,16 @@ export function ProjectEditPanel({
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={save.isPending}>
             Cancel
           </Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending}>
+          <Button variant="primary" onClick={() => save.mutate()} disabled={save.isPending}>
             {save.isPending ? 'Saving…' : 'Save changes'}
           </Button>
         </>
       }
     >
       <Stack gap="workspace">
-        {save.isError ? <Alert tone="danger">{humanizeApiError(save.error).message}</Alert> : null}
+        {save.isError ? (
+          <Callout tone="negative">{humanizeApiError(save.error).message}</Callout>
+        ) : null}
 
         <Stack gap="workspace">
           <Field label="Project name" hint="How this project appears in your project list.">

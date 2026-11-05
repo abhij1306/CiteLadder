@@ -423,9 +423,10 @@ describe('IntegrationSettings — OAuth callback notice (C2)', () => {
     mockList([gscConnection, ga4Connection]);
     renderSettings();
 
-    const alert = await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('Google connected.');
-    expect(alert.textContent).toMatch(/shared OAuth grant/i);
+    // A success notice is a polite status; only failures are alerts.
+    const notice = await screen.findByRole('status');
+    expect(notice).toHaveTextContent('Google connected.');
+    expect(notice.textContent).toMatch(/shared OAuth grant/i);
     await waitFor(() =>
       expect(replaceState).toHaveBeenCalledWith(null, '', '/settings?tab=integrations'),
     );

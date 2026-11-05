@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -134,7 +134,7 @@ export function UrlDetail({
         />
       }
     >
-      {rerunError ? <Alert tone="danger">{rerunError}</Alert> : null}
+      {rerunError ? <Callout tone="negative">{rerunError}</Callout> : null}
     </UrlDetailView>
   );
 }

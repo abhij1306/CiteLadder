@@ -37,12 +37,12 @@ export function SourceBreadcrumb({
                 onClick={crumb.onClick}
                 className={textRole(
                   'caption',
-                  'text-secondary hover:text-accent-text w-auto transition-colors',
+                  'text-ink-secondary hover:text-accent-ink w-auto transition-colors',
                 )}
               >
                 {crumb.label}
               </Pressable>
-              <Icon icon={ChevronRight} className="text-muted" />
+              <Icon icon={ChevronRight} className="text-ink-muted" />
             </Inline>
           ))}
           <li className="min-w-0">

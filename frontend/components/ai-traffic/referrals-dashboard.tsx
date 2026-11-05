@@ -79,7 +79,7 @@ function TrendCard({
   description: string;
   badge: string;
   points: TrendPoint[];
-  /** The y axis's title. */
+  /** What the line counts: its name in the legend and the table. */
   unit: string;
   domainMax?: number;
   formatTick?: (value: number) => string;
@@ -93,14 +93,11 @@ function TrendCard({
       <CardContent>
         <TrendChart
           label={title}
+          name={unit}
           data={points}
-          width={360}
           height={160}
-          domainMax={domainMax}
-          xAxisLabel="Date"
-          yAxisLabel={unit}
-          formatTick={formatTick}
-          className="h-auto w-full"
+          yMax={domainMax}
+          yFormat={formatTick}
         />
       </CardContent>
     </Card>

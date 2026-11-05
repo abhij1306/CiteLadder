@@ -15,7 +15,7 @@ import { Dot } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
-import { SegmentedControl } from '@/components/ui/segmented-control';
+import { SegmentedControl } from '@/components/ui/tabs';
 import { runsQueries } from '@/lib/api/runs';
 import type { Audit } from '@/lib/api/types';
 import { useProjectHref } from '@/lib/navigation/project-destination';
@@ -85,7 +85,7 @@ export function RunsScreen() {
   // so gating the whole screen on it would pin the page on a spinner forever.
   // The page keeps its action and status filters while the first load lands.
   const actions = (
-    <Button onClick={() => setLaunchOpen(true)} disabled={!projectId}>
+    <Button variant="primary" onClick={() => setLaunchOpen(true)} disabled={!projectId}>
       Launch audit
     </Button>
   );
@@ -177,7 +177,11 @@ function RunsContent({
         icon={Play}
         heading="No runs yet"
         description="Launch your first audit to measure how AI engines answer questions about your brand."
-        action={<Button onClick={onLaunch}>Launch your first audit</Button>}
+        action={
+          <Button variant="primary" onClick={onLaunch}>
+            Launch your first audit
+          </Button>
+        }
       />
     );
   }

@@ -22,7 +22,6 @@ import { cn } from '@/lib/utils';
 
 export const BRAND_LOGO_SIZES = {
   brand: 18,
-  sidebar: 18,
   compact: 16,
   mini: 14,
 } as const;
@@ -46,11 +45,11 @@ export function LogoMark({
   const viewWidth = wordmark ? LOGO_VIEWBOX_WIDTH : LOGO_MARK_WIDTH;
 
   return (
-    <span
-      className={cn('text-brand-ink inline-flex shrink-0 items-center select-none', className)}
+    <span // NOSONAR -- role img: an inline SVG painted with currentColor theme tokens, which an <img> cannot inherit
+      className={cn('text-ink inline-flex shrink-0 items-center select-none', className)}
       aria-hidden={alt ? undefined : 'true'}
       aria-label={alt || undefined}
-      role={alt ? 'img' : undefined} // NOSONAR -- an inline SVG painted with currentColor theme tokens, which an <img> cannot inherit
+      role={alt ? 'img' : undefined}
     >
       <svg
         viewBox={`0 0 ${viewWidth} 100`}

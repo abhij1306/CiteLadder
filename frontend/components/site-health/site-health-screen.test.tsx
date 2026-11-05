@@ -97,7 +97,7 @@ describe('SiteHealthScreen — Website tab deep links', () => {
     renderScreen();
     await user.click(await screen.findByRole('tab', { name: 'Overview' }));
     expect(
-      await screen.findByRole('img', { name: 'Web Fundamentals score: 80' }),
+      await screen.findByRole('img', { name: 'Web Fundamentals score: 80 out of 100' }),
     ).toBeInTheDocument();
 
     const start = screen.getByRole('button', { name: 'Run new crawl' });
@@ -253,7 +253,7 @@ describe('SiteHealthScreen — loading frames', () => {
 
     snapshot.release();
     expect(
-      await screen.findByRole('img', { name: 'Web Fundamentals score: 80' }),
+      await screen.findByRole('img', { name: 'Web Fundamentals score: 80 out of 100' }),
     ).toBeInTheDocument();
     expect(loadingRegions()).toHaveLength(0);
   });
@@ -275,7 +275,7 @@ describe('SiteHealthScreen — loading frames', () => {
 
     const { queryClient } = renderScreen();
     expect(
-      await screen.findByRole('img', { name: 'Web Fundamentals score: 80' }),
+      await screen.findByRole('img', { name: 'Web Fundamentals score: 80 out of 100' }),
     ).toBeInTheDocument();
 
     refresh = held();
@@ -284,7 +284,9 @@ describe('SiteHealthScreen — loading frames', () => {
       expect(queryClient.isFetching({ queryKey: queryKeys.siteHealth.all })).toBeGreaterThan(0),
     );
 
-    expect(screen.getByRole('img', { name: 'Web Fundamentals score: 80' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', { name: 'Web Fundamentals score: 80 out of 100' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('tablist', { name: 'Website analysis' })).toBeVisible();
     expect(loadingRegions()).toHaveLength(0);
     refresh.release();

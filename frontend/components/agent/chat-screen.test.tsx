@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
@@ -15,6 +15,7 @@ import {
 
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
+import { expectThreadFollowsLatest } from '@/test/chat-follow';
 
 const mocks = vi.hoisted(() => ({ saveBlob: vi.fn() }));
 vi.mock('@/lib/download', () => ({ saveBlob: mocks.saveBlob }));
@@ -719,39 +720,23 @@ describe('ChatScreen', () => {
     ).toBeVisible();
   });
 
-  it.each([0, 2000])(
-    'preserves reading position through polling from scroll offset %i',
-    async (offset) => {
-      let current = detail(revision(REV1, 1, 'agent', 'Body.'));
-      mswServer.use(
-        http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
-        http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(current)),
-      );
-      const scroll = vi.fn();
-      vi.stubGlobal('scrollY', offset);
-      Object.defineProperty(document.documentElement, 'scrollHeight', {
-        configurable: true,
-        value: 4000,
-      });
-      const oldScroll = HTMLElement.prototype.scrollIntoView;
-      HTMLElement.prototype.scrollIntoView = scroll;
-      try {
-        const user = userEvent.setup();
-        const { queryClient } = renderChat();
-        await screen.findByLabelText('Reply to the agent');
-        const initialScrolls = scroll.mock.calls.length;
-        if (offset > 0) expect(initialScrolls).toBe(0);
-        fireEvent.scroll(window);
+  it('follows the thread in its own region until the reader scrolls up', async () => {
+    let current = detail(revision(REV1, 1, 'agent', 'Body.'));
+    mswServer.use(
+      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(current)),
+    );
+    const user = userEvent.setup();
+    const { queryClient } = renderChat();
+    await screen.findByLabelText('Reply to the agent');
+    await expectThreadFollowsLatest({
+      scope: document.body,
+      user,
+      newerReply: async () => {
         current = detail(revision(REV2, 2, 'agent', 'Updated body.'));
         await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(CHAT) }));
-        expect(scroll).toHaveBeenCalledTimes(initialScrolls);
-        await user.click(screen.getByRole('button', { name: 'Jump to latest' }));
-        expect(scroll).toHaveBeenCalledTimes(initialScrolls + 1);
-      } finally {
-        HTMLElement.prototype.scrollIntoView = oldScroll;
-        Reflect.deleteProperty(document.documentElement, 'scrollHeight');
-        vi.unstubAllGlobals();
-      }
-    },
-  );
+        await screen.findByText('Updated body.');
+      },
+    });
+  });
 });

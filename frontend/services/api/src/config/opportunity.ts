@@ -288,7 +288,7 @@ export const opportunities = {
       enabled: true,
       opportunity_type: 'topic',
       remediation:
-        'Competitors rank for this search and you have no ranking page for it. Improve the page that already covers it or publish one that answers it directly, then confirm in Search Console or a later Search Intelligence analysis. DataForSEO rankings are provider estimates.',
+        'Competitors rank for this search and you have no ranking page for it. Improve the page that already covers it or publish one that answers it directly, then confirm in Search Console or a later Keyword Research analysis. DataForSEO rankings are provider estimates.',
       rule_id: 'search_keyword_gap',
       severity: 'medium',
       title: 'Competitors rank for a search you do not',

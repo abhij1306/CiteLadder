@@ -4,13 +4,13 @@ import { useState } from 'react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 
 import { CohortCompositionContext } from './cohort-composition-context';
+import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Delta } from '@/components/ui/delta';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Drawer } from '@/components/ui/drawer';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { ScoreBar } from '@/components/ui/score-bar';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { QueryState } from '@/components/ui/query-state';
@@ -26,7 +26,6 @@ import {
   EditorialSectionHeader,
   ledgerClasses,
   ledgerItemClasses,
-  splitPaneClasses,
 } from '@/components/ui/workspace';
 import { ICONS } from '@/lib/icons';
 
@@ -38,18 +37,18 @@ export function OverviewDetails({ data }: Readonly<{ data: SiteHealthOverview }>
   const [webFundamentalsOpen, setWebFundamentalsOpen] = useState(false);
   return (
     <>
-      <div className={splitPaneClasses('peers')}>
+      <AppGrid layout="halves">
         <DimensionLedger dimensions={data.aeo_dimensions} />
         <TopIssues issues={data.top_issues} />
-      </div>
-      <div className={splitPaneClasses('thirds')}>
+      </AppGrid>
+      <AppGrid layout="thirds">
         <WebFundamentalsCard
           data={data.web_fundamentals}
           onOpen={() => setWebFundamentalsOpen(true)}
         />
         <TrendCard data={data.trend} />
         <ChangeSummaryCard data={data.change_summary} />
-      </div>
+      </AppGrid>
       <WebFundamentalsDrawer
         data={data.web_fundamentals}
         open={webFundamentalsOpen}
@@ -82,7 +81,7 @@ function DimensionLedger({
                 surface, and a wrapping sentence pushes the score columns
                 off a screenful. Full text stays available on hover. */}
             <div className="grid min-w-0">
-              <ClampText lines={1} className={textRole('emphasis', 'text-foreground')}>
+              <ClampText lines={1} className={textRole('emphasis', 'text-ink')}>
                 {dimension.label}
               </ClampText>
               <ClampText lines={1} className="type-caption">
@@ -92,8 +91,8 @@ function DimensionLedger({
               </ClampText>
             </div>
           </TableCell>
-          <TableCell numeric>{formatScore(dimension.score)}</TableCell>
-          <TableCell>
+          {/* The number only (decision D8); a pillar with no score says why. */}
+          <TableCell numeric>
             {dimension.score === null ? (
               <ClampText lines={1} className="type-caption">
                 {dimension.reason === 'measured_at_site_scope'
@@ -101,7 +100,7 @@ function DimensionLedger({
                   : statusLabel(dimension.dimension_measurement_state)}
               </ClampText>
             ) : (
-              <ScoreBar value={dimension.score} label={`${dimension.label} score`} />
+              formatScore(dimension.score)
             )}
           </TableCell>
           <TableCell numeric>
@@ -119,8 +118,7 @@ function DimensionLedger({
 
 const PILLAR_COLUMNS: readonly DataTableColumn[] = [
   { key: 'pillar', label: 'Pillar' },
-  { key: 'score', label: 'Score', width: 'figure', numeric: true },
-  { key: 'quality', label: 'Quality', width: 'status' },
+  { key: 'score', label: 'Score', width: 'status', numeric: true },
   { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
 ];
 
@@ -161,7 +159,7 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
           <TableCell>
             <Inline>
               <TextLink
-                text="inherit"
+                text="body"
                 href={issueHref(issue.rule_id, issue.finding_class)}
                 className="min-w-0"
               >
@@ -192,7 +190,7 @@ function WebFundamentalsCard({
       </CardHeader>
       <CardContent>
         <Stack gap="workspace">
-          <div className={splitPaneClasses('peers')}>
+          <AppGrid layout="halves">
             {data.areas.map((area) => (
               <Stack
                 gap="tight"
@@ -205,7 +203,7 @@ function WebFundamentalsCard({
                 </Badge>
               </Stack>
             ))}
-          </div>
+          </AppGrid>
           <Button variant="secondary" onClick={onOpen} className="justify-self-start">
             View evidence
           </Button>
@@ -227,8 +225,9 @@ function TrendCard({ data }: Readonly<{ data: SiteHealthOverview['trend'] }>) {
           <TrendChart
             data={data.series}
             label="AEO Readiness trend"
-            height={96}
-            className="h-auto w-full"
+            name="AEO Readiness"
+            height={160}
+            yMax={100}
           />
           {data.state === 'unavailable' ? (
             <p className="type-caption">Run a second comparable crawl to establish a trend.</p>
@@ -261,7 +260,7 @@ function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change
         <Stack>
           {data.metrics.map((metric) => (
             <Inline gap="compact" key={metric.key} className="type-body justify-between">
-              <span className="text-secondary">
+              <span className="text-ink-secondary">
                 {CHANGE_METRIC_LABELS[metric.key] ?? metric.label}
               </span>
               <ChangeDelta metricKey={metric.key} delta={metric.delta} />

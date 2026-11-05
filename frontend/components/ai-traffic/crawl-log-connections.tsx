@@ -9,7 +9,7 @@ import type { crawlSourceSchema } from '@citeladder/contracts/ai-traffic';
 import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
@@ -73,6 +73,7 @@ function Connections({
   const { setupAvailable, unavailable } = setupState(sources);
   const connect = unavailable ? undefined : (
     <Button
+      variant="primary"
       onClick={() => {
         setIssued(null);
         setOpen(true);
@@ -114,7 +115,9 @@ function Connections({
         />
       ) : null}
       <RevokeSourceDialog source={revoking} mutation={mutation} onClose={() => setRevoking(null)} />
-      {mutation.isError && !open ? <Alert tone="danger">{mutation.error.message}</Alert> : null}
+      {mutation.isError && !open ? (
+        <Callout tone="negative">{mutation.error.message}</Callout>
+      ) : null}
       <Dialog
         open={open}
         onOpenChange={(next) => {
@@ -174,7 +177,7 @@ function SetupAvailability({ model }: Readonly<{ model: ReturnType<typeof useCra
   if (sources.data.availability === 'available') return <CrawlLogSetup model={model} />;
   return (
     <>
-      {mutation.isError ? <Alert tone="danger">{mutation.error.message}</Alert> : null}
+      {mutation.isError ? <Callout tone="negative">{mutation.error.message}</Callout> : null}
       <CrawlLogAvailabilityNotice availability={sources.data.availability} />
     </>
   );
@@ -316,7 +319,7 @@ function RevokeSourceDialog({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             disabled={!source}
             pending={mutation.isPending}
             pendingLabel="Revoking…"

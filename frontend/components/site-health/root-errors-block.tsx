@@ -47,7 +47,7 @@ export function RootErrorsBlock({ errors }: Readonly<{ errors: RootError[] }>) {
               <span className={textRole('itemTitle', 'tabular-nums')}>{error.method}</span>
               <span className="type-body min-w-0 flex-1 truncate tabular-nums">{error.target}</span>
               {error.error_code ? (
-                <span className="type-body text-danger-text tabular-nums">{error.error_code}</span>
+                <span className="type-body text-negative tabular-nums">{error.error_code}</span>
               ) : null}
               <span className="type-body tabular-nums">
                 {error.status_code !== null ? (

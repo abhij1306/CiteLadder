@@ -17,10 +17,7 @@ export function Disclosure({
       onToggle={(event) => onOpenChange?.(event.currentTarget.open)}
     >
       <summary
-        className={textRole(
-          'label',
-          'focus-ring hover:text-foreground w-fit cursor-pointer rounded-[var(--radius-control)]',
-        )}
+        className={textRole('label', 'focus-ring hover:text-ink w-fit cursor-pointer rounded-md')}
       >
         {title}
       </summary>

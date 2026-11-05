@@ -3,8 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -57,7 +57,7 @@ export function AuditSchedules({
   promptSets,
 }: Readonly<{ projectId: string; promptSets: PromptSet[] }>) {
   const workspaceId = useActiveWorkspaceId();
-  if (!workspaceId) return <Alert tone="info">Loading your workspace…</Alert>;
+  if (!workspaceId) return <Callout tone="info">Loading your workspace…</Callout>;
   return (
     <WorkspaceSchedules
       key={`${workspaceId}:${projectId}`}
@@ -155,7 +155,7 @@ function WorkspaceSchedules({
             <QueryState kind="empty" inline message="No scheduled audits yet." />
           ) : null}
           {promptSets.length === 0 ? (
-            <Alert tone="info">Add prompts before scheduling an audit.</Alert>
+            <Callout tone="info">Add prompts before scheduling an audit.</Callout>
           ) : (
             <Stack className="desktop:grid-cols-3">
               <Stack gap="item" className={textRole('label')}>
@@ -233,7 +233,11 @@ function WorkspaceSchedules({
               </Stack>
               <MarketChecklist markets={markets} marketIds={marketIds} onToggle={setMarketIds} />
               <div className="flex items-end">
-                <Button onClick={() => createMutation.mutate()} disabled={!canCreate}>
+                <Button
+                  variant="primary"
+                  onClick={() => createMutation.mutate()}
+                  disabled={!canCreate}
+                >
                   {createMutation.isPending ? 'Scheduling…' : 'Schedule audit'}
                 </Button>
               </div>
@@ -323,11 +327,9 @@ function ScheduleRow({
 }>) {
   return (
     <Inline as="li" className={ledgerItemClasses('type-body flex-wrap justify-between')}>
-      <span className={textRole('emphasis', 'text-foreground')}>
-        {CADENCE_LABELS[schedule.cadence]}
-      </span>
+      <span className={textRole('emphasis', 'text-ink')}>{CADENCE_LABELS[schedule.cadence]}</span>
       {schedule.enabled ? (
-        <span className="text-secondary">
+        <span className="text-ink-secondary">
           {schedule.engines.map((engine) => ENGINE_LABELS[engine] ?? engine).join(', ')} · next{' '}
           {schedule.next_run_at ? (
             <DisplayTime value={schedule.next_run_at} />
@@ -339,7 +341,7 @@ function ScheduleRow({
           {marketSummary(schedule, markets)}
         </span>
       ) : (
-        <Inline as="span" className="text-secondary flex-wrap">
+        <Inline as="span" className="text-ink-secondary flex-wrap">
           {pauseLabel(schedule)}
           {/* A one-time schedule that ran is finished, not paused; resuming would run it again. */}
           {finishedOnce(schedule) ? null : (

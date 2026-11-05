@@ -65,7 +65,7 @@ describe('IcpConfirmation', () => {
   it('asks three questions, all answerable by clicking', () => {
     render(<IcpConfirmation profile={profile()} onChange={vi.fn()} />);
 
-    expect(screen.getByRole('heading', { name: 'What you sell' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'What you sell' })).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: 'Who buys it' })).toBeInTheDocument();
     expect(screen.getByRole('radiogroup', { name: 'Where they buy it' })).toBeInTheDocument();
     expect(screen.queryByLabelText(/positioning/i)).toBeNull();

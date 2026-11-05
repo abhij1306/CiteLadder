@@ -3,8 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Inline, Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
@@ -72,7 +72,7 @@ export function OutputHistory({
   return (
     <Stack gap="compact">
       {restore.isError ? (
-        <Alert tone="danger">{agentWriteFailure(restore.error).message}</Alert>
+        <Callout tone="negative">{agentWriteFailure(restore.error).message}</Callout>
       ) : null}
       <ol aria-label="Revisions" className={ledgerClasses()}>
         {revisions.map((revision) => (

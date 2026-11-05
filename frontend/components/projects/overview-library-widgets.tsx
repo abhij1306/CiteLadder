@@ -144,7 +144,10 @@ export function VisibilityTrendWidget({ project }: Readonly<{ project: Project }
             <TrendChart
               data={toChartPoints(points, 'brand_mention_rate')}
               label="Brand mention rate by run"
-              className="w-full"
+              height={160}
+              yMax={100}
+              yFormat={(value) => `${Math.round(value)}%`}
+              legend={false}
             />
           ) : (
             <QueryState kind="empty" inline message="No completed runs yet." />

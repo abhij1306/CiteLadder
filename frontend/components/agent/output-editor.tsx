@@ -3,8 +3,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Textarea } from '@/components/ui/textarea';
@@ -82,12 +82,14 @@ export function OutputEditor({
         onChange={(event) => onChange({ ...draft, body: event.target.value })}
         className="tabular-nums"
       />
-      {save.isError ? <Alert tone="danger">{agentWriteFailure(save.error).message}</Alert> : null}
+      {save.isError ? (
+        <Callout tone="negative">{agentWriteFailure(save.error).message}</Callout>
+      ) : null}
       <Inline className="justify-end">
         <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
           Cancel
         </Button>
-        <Button type="submit" disabled={unchanged || blank || save.isPending}>
+        <Button type="submit" variant="primary" disabled={unchanged || blank || save.isPending}>
           Save as new revision
         </Button>
       </Inline>

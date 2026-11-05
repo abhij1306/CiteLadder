@@ -4,8 +4,7 @@ import type { Shelf } from '@citeladder/contracts/commerce-suite';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Badge } from '@/components/ui/badge';
-import type { StatusValue } from '@/components/ui/badge-variants';
+import { Badge, type StatusValue } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Inline, Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';

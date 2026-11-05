@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { crawlLogAvailabilitySchema } from '@citeladder/contracts/ai-traffic';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 
 /**
  * Why crawl log collection is unavailable: collection is paused on this
@@ -11,10 +11,10 @@ export function CrawlLogAvailabilityNotice({
 }: Readonly<{ availability: z.infer<typeof crawlLogAvailabilitySchema> }>) {
   if (availability === 'disabled')
     return (
-      <Alert tone="info">
+      <Callout tone="info">
         Collection is paused on this server. Sources keep their settings and reports stay readable;
         new log batches are refused until collection resumes.
-      </Alert>
+      </Callout>
     );
   return null;
 }

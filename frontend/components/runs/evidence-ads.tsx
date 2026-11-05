@@ -40,7 +40,7 @@ export function EvidenceAds({ ads }: Readonly<{ ads: ExecutionAds }>) {
                 <AdOwnershipChip ownership={ad.ownership} />
               </Inline>
               {ad.snippet ? (
-                <span className="type-caption text-secondary">{ad.snippet}</span>
+                <span className="type-caption text-ink-secondary">{ad.snippet}</span>
               ) : null}
               <span className="type-caption">
                 Sponsored by {ad.advertiser_name} · {landingLabel(ad.landing_url)}

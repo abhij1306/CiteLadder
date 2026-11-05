@@ -8,7 +8,7 @@ import type {
 import { MessageSquareQuote } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import { BusyBar } from '@/components/ui/busy-bar';
+import { BusyBar } from '@/components/ui/progress-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -64,8 +64,8 @@ export function VisibilityPerception({
 function PerceptionLoading() {
   return (
     <Stack gap="workspace" aria-busy>
-      <Skeleton shape="block" />
-      <Skeleton shape="chart" />
+      <Skeleton variant="block" />
+      <Skeleton variant="chart" />
     </Stack>
   );
 }
@@ -111,7 +111,7 @@ function PerceptionState({
 }
 
 function CoverageNote({ coverage }: Readonly<{ coverage: PerceptionCoverage }>) {
-  return <p className={textRole('caption', 'text-muted')}>{coverageLine(coverage)}</p>;
+  return <p className={textRole('caption', 'text-ink-muted')}>{coverageLine(coverage)}</p>;
 }
 
 function Headline({ data }: Readonly<{ data: PerceptionResponse }>) {
@@ -178,7 +178,7 @@ function EntityTable({ entities }: Readonly<{ entities: PerceptionResponse['enti
             <Inline as="span">
               <ClampText>{entity.name}</ClampText>
               {entity.is_brand ? (
-                <span className={textRole('caption', 'text-muted shrink-0')}>You</span>
+                <span className={textRole('caption', 'text-ink-muted shrink-0')}>You</span>
               ) : null}
             </Inline>
           </TableCell>
@@ -268,7 +268,7 @@ function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
             {quotes.map((quote) => (
               <Stack as="li" gap="tight" key={`${quote.execution_id}:${quote.text}`}>
                 <QuoteLink quote={quote} />
-                <Inline as="span" className={textRole('caption', 'text-muted flex-wrap')}>
+                <Inline as="span" className={textRole('caption', 'text-ink-muted flex-wrap')}>
                   <Badge variant="sentiment" value="negative">
                     {themeLabel(quote.theme)}
                   </Badge>

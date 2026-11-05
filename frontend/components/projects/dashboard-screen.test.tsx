@@ -215,11 +215,11 @@ describe('DashboardScreen', () => {
       within(screen.getByRole('region', { name: 'Project state' })).getByText('72.5%'),
     ).toBeInTheDocument();
     // Rank is better when it falls, so climbing one place reads as an improvement.
-    expect(
-      within(screen.getByRole('region', { name: 'Project state' }))
-        .getByText('−1.0 vs previous')
-        .closest('[data-outcome]'),
-    ).toHaveAttribute('data-outcome', 'improved');
+    const rankChange = within(screen.getByRole('region', { name: 'Project state' }))
+      .getAllByText('vs previous')
+      .map((context) => context.closest('[data-outcome]'))
+      .find((delta) => delta?.textContent === '↓down 1.0vs previous');
+    expect(rankChange).toHaveAttribute('data-outcome', 'improved');
     expect(screen.getByRole('heading', { name: 'Project state' })).toBeInTheDocument();
     expect(
       within(screen.getByRole('region', { name: 'Movement' })).getByText('68.3%'),
@@ -268,7 +268,9 @@ describe('DashboardScreen', () => {
       '/agent/actions/00000000-0000-4000-8000-0000000000d1?project=00000000-0000-4000-8000-000000000001',
     );
     expect(ranked.getByText('/pricing · 3 persisted evidence item(s)')).toBeVisible();
-    expect(ranked.getByText('7.5')).toBeVisible();
+    // The badge carries the priority; the score is not repeated beside it (D14).
+    expect(ranked.getByText('High')).toBeVisible();
+    expect(ranked.queryByText('7.5')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'No open actions' })).not.toBeInTheDocument();
   });
   it('shows an empty state instead of a movement card before a comparable run', () => {

@@ -2,199 +2,175 @@
 
 import { useId, useState } from 'react';
 
-import { LegendSwatch } from '@/components/ui/chart';
-import { textRole } from '@/components/ui/typography';
-import { formatCount } from '@/lib/format';
+import {
+  CHART_STROKE,
+  ChartHatchPattern,
+  ChartSwatch,
+  chartPercent,
+  chartTone,
+  formatChartCount,
+} from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 
-/**
- * A segmented ring with its total in the middle, and a legend beneath it.
- *
- * Distinct from `ScoreRing`, which is one arc measuring one value against 100.
- * This is a composition: several parts of one whole, where the whole is itself
- * the headline number. Sharing an implementation would mean one component
- * where the `value` prop means two different things.
- *
- * The centre reports the TOTAL the segments are shares of, so the ring and the
- * number under it cannot disagree — a mix counted one way beside a total
- * counted another is the failure this shape exists to prevent.
- *
- * Hovering or focusing a segment or its legend entry surfaces that slice's
- * count and share. Both routes reach the same state, so the figures are
- * available without a pointer.
- */
-
-export type DonutSlice = {
-  key: string;
-  label: string;
+export type DonutSlice = Readonly<{
+  name: string;
   value: number;
-  /** Stroke class from the categorical chart tokens, e.g. `stroke-chart-2`. */
-  strokeClass: string;
-  /** Matching fill for the legend swatch, e.g. `bg-chart-2`. */
-  swatchClass: string;
-};
+  /** The merged remainder: hatched, so it never reads as another brand. */
+  other?: boolean;
+}>;
 
-const SIZE = 168;
-const STROKE = 16;
-const RADIUS = (SIZE - STROKE) / 2;
+const SIZE = 152;
+const STROKE = 20;
+const RADIUS = (SIZE - STROKE) / 2 - 3;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-// Enough to separate neighbouring segments without eating a small slice.
-const GAP = 2;
+const CENTRE = SIZE / 2;
+// Enough to separate neighbouring slices without eating a small one.
+const GAP = 3;
 
-function shareText(value: number, total: number): string {
-  if (!total) return '0%';
-  const share = (value / total) * 100;
-  return share < 0.1 ? '<0.1%' : `${share.toFixed(1)}%`;
-}
-
-/** Each segment starts where the ones before it ended, so the offsets are a running total. */
-function ringArcs(slices: readonly DonutSlice[], whole: number) {
+/** Each slice starts where the ones before it ended, so the offsets are a running total. */
+function donutArcs(slices: readonly DonutSlice[], total: number) {
+  const gap = slices.length > 1 ? GAP : 0;
   let start = 0;
   return slices.map((slice) => {
-    const length = (slice.value / whole) * CIRCUMFERENCE;
-    const arc = {
-      ...slice,
-      // A gap is only taken out of a segment long enough to give one up.
-      dash: Math.max(length - (length > GAP * 2 ? GAP : 0), 0.5),
-      offset: -start,
-    };
+    const length = (slice.value / (total || 1)) * CIRCUMFERENCE;
+    const dash = Math.max(0, length - gap);
+    const arc = { dash, offset: -start };
     start += length;
     return arc;
   });
 }
 
+/**
+ * DonutChart — share of a whole as a 152px donut: the total in the `figure`
+ * role (Geist 500) at the centre and a legend of shares and counts beside it. Colour by
+ * order (your brand first in `data-1`, then `data-2`, `data-3`), Other
+ * hatched; at most four slices. Hovering a slice or its legend row thickens
+ * its arc and puts its share in the centre. The figure is one image whose
+ * name lists every share; the legend carries the same figures as text.
+ */
 export function DonutChart({
   slices,
-  total,
   totalLabel,
-  emptyLabel = 'Nothing to chart yet.',
+  total,
+  format = formatChartCount,
+  label = 'Share',
   className,
 }: Readonly<{
+  /** Your brand first, at most three plus Other. */
   slices: readonly DonutSlice[];
-  /** The number in the centre. Passed rather than summed: it is the server's
-   *  count over the whole selection, and the slices may be a bounded subset. */
-  total: number;
+  /** The caption under the centre total, e.g. "Mentions". */
   totalLabel: string;
-  emptyLabel?: string;
+  /** The centre number when it is not the slices' sum. */
+  total?: number;
+  format?: (value: number) => string;
+  /** What the shares are of, e.g. "Share of voice". */
+  label?: string;
   className?: string;
 }>) {
-  const titleId = useId();
-  const [active, setActive] = useState<string | null>(null);
-  const drawn = slices.filter((slice) => slice.value > 0);
-  const sum = drawn.reduce((carry, slice) => carry + slice.value, 0);
-  // The denominator is the DECLARED total, never the slices' own sum. The
-  // slices can be a bounded or classified subset — citations whose page was
-  // never identified are counted in the centre and belong to no type — and
-  // scaling them to fill the ring would report 100% beside a larger number.
-  const whole = Math.max(total, sum);
-  const unaccounted = Math.max(whole - sum, 0);
-
-  if (!drawn.length || whole <= 0) {
-    return <p className={textRole('caption', cn('text-secondary', className))}>{emptyLabel}</p>;
-  }
-
-  const arcs = ringArcs(drawn, whole);
-  // The remainder is drawn as a quiet arc rather than left as a gap: an
-  // unclosed ring reads as a rendering fault, and a closed one that silently
-  // rescaled its parts is worse.
-  const remainderLength = (unaccounted / whole) * CIRCUMFERENCE;
-  const highlighted = active ? drawn.find((slice) => slice.key === active) : undefined;
+  const hatch = `donut-hatch-${useId().replaceAll(':', '')}`;
+  const [active, setActive] = useState<number | null>(null);
+  const shown = slices.slice(0, 4);
+  const sum = shown.reduce((carry, slice) => carry + slice.value, 0);
+  const arcs = donutArcs(shown, sum);
+  const highlighted = active === null ? undefined : shown[active];
+  const description = shown
+    .map((slice) => `${slice.name} ${chartPercent(slice.value, sum)}`)
+    .join(', ');
 
   return (
-    <div className={cn('grid justify-items-center gap-4', className)}>
-      {/* The ring is a picture of the legend below it, and the legend is
-          focusable and reads every figure. Labelling both would announce the
-          same composition twice, so the drawing is hidden and the list is the
-          accessible copy. */}
-      <p id={titleId} className="sr-only">
-        {`${whole} ${totalLabel}. ` +
-          drawn
-            .map((slice) => `${slice.label}: ${slice.value} (${shareText(slice.value, whole)})`)
-            .join(', ') +
-          (unaccounted > 0 ? `. Unclassified: ${unaccounted}` : '')}
-      </p>
-      <div className="relative">
-        <svg viewBox={`0 0 ${SIZE} ${SIZE}`} aria-hidden className="size-[168px]">
-          {/* Rotated so the first segment starts at twelve o'clock, which is
-              where a reader expects a composition to begin. */}
-          <g transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}>
-            {arcs.map((arc) => (
-              <circle
-                key={arc.key}
-                cx={SIZE / 2}
-                cy={SIZE / 2}
-                r={RADIUS}
-                fill="none"
-                strokeWidth={STROKE}
-                strokeDasharray={`${arc.dash} ${CIRCUMFERENCE - arc.dash}`}
-                strokeDashoffset={arc.offset}
-                onMouseEnter={() => setActive(arc.key)}
-                onMouseLeave={() => setActive(null)}
-                className={cn(
-                  arc.strokeClass,
-                  'transition-opacity',
-                  active && active !== arc.key ? 'opacity-30' : 'opacity-100',
-                )}
-              />
-            ))}
-            {remainderLength > 0 ? (
-              <circle
-                cx={SIZE / 2}
-                cy={SIZE / 2}
-                r={RADIUS}
-                fill="none"
-                strokeWidth={STROKE}
-                strokeDasharray={`${remainderLength} ${CIRCUMFERENCE - remainderLength}`}
-                strokeDashoffset={-(CIRCUMFERENCE - remainderLength)}
-                className="stroke-border-subtle"
-              />
-            ) : null}
-          </g>
-        </svg>
-        {/* Centre copy sits over the ring rather than inside the svg so it
-            uses the same type scale as the rest of the card. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 grid place-items-center text-center"
+    <div className={cn('@container min-w-0', className)}>
+      <div className="flex min-w-0 items-center gap-4 @max-sm:flex-col @max-sm:items-stretch">
+        <div // NOSONAR -- the drawing and its centre copy are one picture; <img> cannot hold them
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the drawing and its centre copy are one picture
+          role="img"
+          aria-label={`${label}: ${description}`}
+          className="relative size-38 shrink-0 self-center"
         >
-          {highlighted ? (
-            <div className="grid gap-0.5">
-              <span className={textRole('figure')}>{highlighted.value}</span>
-              <span className={textRole('caption', 'text-secondary')}>
-                {shareText(highlighted.value, whole)}
-              </span>
-            </div>
-          ) : (
-            <div className="grid gap-0.5">
-              <span className={textRole('figure')}>{formatCount(total)}</span>
-              <span className={textRole('caption', 'text-secondary')}>{totalLabel}</span>
-            </div>
-          )}
+          <svg
+            aria-hidden
+            focusable="false"
+            width={SIZE}
+            height={SIZE}
+            viewBox={`0 0 ${SIZE} ${SIZE}`}
+            className="block overflow-visible"
+          >
+            <defs>
+              <ChartHatchPattern id={hatch} />
+            </defs>
+            <circle
+              cx={CENTRE}
+              cy={CENTRE}
+              r={RADIUS}
+              fill="none"
+              strokeWidth={STROKE}
+              className="stroke-chart-grid"
+            />
+            {shown.map((slice, index) => {
+              const tone = chartTone(slice, index);
+              const arc = arcs[index] ?? { dash: 0, offset: 0 };
+              return (
+                <circle
+                  key={slice.name}
+                  cx={CENTRE}
+                  cy={CENTRE}
+                  r={RADIUS}
+                  fill="none"
+                  stroke={tone === 4 ? `url(#${hatch})` : undefined}
+                  strokeWidth={active === index ? STROKE + 4 : STROKE}
+                  strokeDasharray={`${arc.dash} ${CIRCUMFERENCE - arc.dash}`}
+                  strokeDashoffset={arc.offset}
+                  // Rotated so the first slice starts at twelve o'clock.
+                  transform={`rotate(-90 ${CENTRE} ${CENTRE})`}
+                  onMouseEnter={() => setActive(index)}
+                  onMouseLeave={() => setActive(null)}
+                  className={cn(
+                    'transition-[stroke-width] duration-[var(--motion-fast)] ease-[var(--ease-standard)] motion-reduce:transition-none',
+                    tone === 4 ? undefined : CHART_STROKE[tone],
+                  )}
+                />
+              );
+            })}
+          </svg>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-0.5"
+          >
+            <span className="type-figure-ring">
+              {highlighted ? chartPercent(highlighted.value, sum) : format(total ?? sum)}
+            </span>
+            <span className="type-eyebrow max-w-24 truncate">
+              {highlighted ? highlighted.name : totalLabel}
+            </span>
+          </div>
         </div>
+        <ul className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {shown.map((slice, index) => (
+            <li key={slice.name}>
+              {/* A button so the keyboard reaches the same highlight as the pointer. */}
+              <button
+                type="button"
+                onMouseEnter={() => setActive(index)}
+                onMouseLeave={() => setActive(null)}
+                onFocus={() => setActive(index)}
+                onBlur={() => setActive(null)}
+                className={cn(
+                  'focus-ring text-body-sm grid h-[var(--control-md)] w-full grid-cols-[8px_minmax(0,1fr)_48px_36px] items-center gap-x-2 rounded-sm px-2 text-left transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)] motion-reduce:transition-none',
+                  active === index && 'bg-surface-sunken',
+                )}
+              >
+                <ChartSwatch tone={chartTone(slice, index)} />
+                <span className="text-ink truncate">{slice.name}</span>
+                <span className="text-ink text-right font-medium tabular-nums">
+                  {chartPercent(slice.value, sum)}
+                </span>
+                <span className="text-ink-muted text-right tabular-nums">
+                  {format(slice.value)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
-      <ul className="grid w-full grid-cols-2 gap-x-3 gap-y-1">
-        {drawn.map((slice) => (
-          <li key={slice.key}>
-            <button
-              type="button"
-              onMouseEnter={() => setActive(slice.key)}
-              onMouseLeave={() => setActive(null)}
-              onFocus={() => setActive(slice.key)}
-              onBlur={() => setActive(null)}
-              className={cn(
-                'focus-ring flex w-full items-center gap-2 transition-opacity',
-                active && active !== slice.key ? 'opacity-45' : 'opacity-100',
-              )}
-            >
-              <LegendSwatch fillClass={slice.swatchClass} />
-              <span className={textRole('caption', 'truncate')}>{slice.label}</span>
-              <span className={textRole('caption', 'text-secondary font-numeric ml-auto shrink-0')}>
-                {shareText(slice.value, whole)}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

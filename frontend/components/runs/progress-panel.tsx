@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dot } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
-import { Meter } from '@/components/ui/meter';
+import { ProgressBar } from '@/components/ui/progress-bar';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { StatRow } from '@/components/ui/stat-row';
 import { humanizeApiError } from '@/lib/api/errors';
@@ -100,7 +100,7 @@ export function RunActions({
       <Button variant="secondary" onClick={() => onExport('md')} disabled={exporting !== null}>
         {exporting === 'md' ? 'Exporting…' : 'Export MD'}
       </Button>
-      <Button variant="destructive" onClick={onCancel} disabled={!cancelable || cancelPending}>
+      <Button variant="danger" onClick={onCancel} disabled={!cancelable || cancelPending}>
         {cancelPending ? 'Cancelling…' : 'Cancel run'}
       </Button>
       {audit.failed_count > 0 && onRerunFailures ? (
@@ -118,10 +118,10 @@ function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: bo
       <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
         {auditStatusLabel(audit.status)}
       </Badge>
-      <Badge variant="neutral">{marketLabel(audit.market)}</Badge>
+      <Badge>{marketLabel(audit.market)}</Badge>
       <MeasurementContext provenance={audit.model_provenance} />
       {audit.not_applicable_engines.length ? (
-        <Badge variant="neutral">
+        <Badge>
           Not available in this market:{' '}
           {audit.not_applicable_engines.map((engine) => ENGINE_LABELS[engine]).join(', ')}
         </Badge>
@@ -136,7 +136,7 @@ function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: bo
   );
 }
 
-function ProgressBar({
+function RunProgress({
   requested,
   finished,
 }: Readonly<{
@@ -146,15 +146,7 @@ function ProgressBar({
 }>) {
   const percent = requested > 0 ? Math.min(100, Math.round((finished / requested) * 100)) : 0;
 
-  return (
-    <Stack gap="tight">
-      <div className="type-caption flex justify-between">
-        <span>Progress</span>
-        <span>{percent}%</span>
-      </div>
-      <Meter kind="progress" tone="info" label="Progress" value={percent} />
-    </Stack>
-  );
+  return <ProgressBar label="Progress" value={percent} />;
 }
 
 function ProgressMetrics({ audit }: Readonly<{ audit: Audit }>) {
@@ -193,7 +185,7 @@ function ProgressNotices({
 }>) {
   return (
     <>
-      {errorMessage ? <p className="type-body text-danger-text">{errorMessage}</p> : null}
+      {errorMessage ? <p className="type-body text-negative">{errorMessage}</p> : null}
       {cancelNotice ? <MutationNotice notice={cancelNotice} onRetry={onCancelRetry} /> : null}
       {rerunNotice ? <MutationNotice notice={rerunNotice} onRetry={onRerunRetry} /> : null}
     </>
@@ -236,7 +228,7 @@ export function ProgressPanel({
           <ProgressStatus audit={audit} polling={polling} />
 
           {polling && audit.requested_count > 0 ? (
-            <ProgressBar
+            <RunProgress
               requested={audit.requested_count}
               finished={audit.completed_count + audit.failed_count}
             />

@@ -11,7 +11,7 @@ import { SearchIntelligenceReviewDrawer } from '@/components/search-intelligence
 import { SearchIntelligenceOverview } from '@/components/search-intelligence/search-intelligence-overview';
 import { referringLists } from './search-intelligence-format';
 import { CostDetails, RunNotice } from './search-intelligence-runs';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
 import { QueryState } from '@/components/ui/query-state';
@@ -40,7 +40,7 @@ const TABS = [
   { value: 'backlinks', label: 'Backlinks' },
 ] as const;
 type Tab = (typeof TABS)[number]['value'];
-const SEARCH_INTELLIGENCE_TABS = { items: TABS, ariaLabel: 'Search Intelligence views' };
+const SEARCH_INTELLIGENCE_TABS = { items: TABS, ariaLabel: 'Keyword Research views' };
 const TAB_CODEC = stringUrlCodec(
   TABS.map(({ value }) => value),
   'overview' as Tab,
@@ -164,7 +164,7 @@ export function SearchIntelligencePage() {
     return (
       <TabsRoot value={tab} onValueChange={setTab}>
         <ListScreen tabs={SEARCH_INTELLIGENCE_TABS} controls={RESERVED_CONTROLS}>
-          <QueryState kind="loading" label="Loading Search Intelligence…" />
+          <QueryState kind="loading" label="Loading Keyword Research…" />
         </ListScreen>
       </TabsRoot>
     );
@@ -174,7 +174,7 @@ export function SearchIntelligencePage() {
         <QueryState
           kind="error"
           {...readErrorProps(readiness)}
-          fallback="Search Intelligence could not be loaded."
+          fallback="Keyword Research could not be loaded."
         />
       </ListScreen>
     );
@@ -188,7 +188,7 @@ export function SearchIntelligencePage() {
             kind="empty"
             icon={Unplug}
             heading="Connect DataForSEO"
-            description="Search Intelligence uses your workspace’s own DataForSEO account. Add its login once; every analysis shows its cost before anything is fetched."
+            description="Keyword Research uses your workspace’s own DataForSEO account. Add its login once; every analysis shows its cost before anything is fetched."
             action={<TextLink href={PROVIDER_SETTINGS}>Open provider settings</TextLink>}
           />
         </ListScreen>
@@ -202,13 +202,17 @@ export function SearchIntelligencePage() {
             kind="empty"
             icon={Settings2}
             heading="Add your website address"
-            description="Search Intelligence researches the project’s own website, so the project needs its homepage address (for example https://www.example.com)."
+            description="Keyword Research studies the project’s own website, so the project needs its homepage address (for example https://www.example.com)."
             action={<TextLink href="/projects">Edit the project</TextLink>}
           />
         </ListScreen>
       </TabsRoot>
     );
-  const firstRun = <Button onClick={() => openReview('analysis')}>Review first analysis</Button>;
+  const firstRun = (
+    <Button variant="primary" onClick={() => openReview('analysis')}>
+      Review first analysis
+    </Button>
+  );
   return (
     <TabsRoot value={tab} onValueChange={setTab}>
       <ListScreen
@@ -349,10 +353,14 @@ function PageActions({
           <Button variant="secondary" onClick={() => onReview('analysis')}>
             New analysis
           </Button>
-          <Button onClick={() => onReview('refresh')}>Refresh</Button>
+          <Button variant="primary" onClick={() => onReview('refresh')}>
+            Refresh
+          </Button>
         </>
       ) : (
-        <Button onClick={() => onReview('analysis')}>Review first analysis</Button>
+        <Button variant="primary" onClick={() => onReview('analysis')}>
+          Review first analysis
+        </Button>
       )}
     </>
   );
@@ -397,9 +405,9 @@ function CollectionAction({
 function UnavailableNotice({ data }: Readonly<{ data: { connected: boolean } }>) {
   if (data.connected) return null;
   return (
-    <Alert>
+    <Callout tone="negative">
       DataForSEO is not connected, so saved results can be read but not refreshed.{' '}
       <TextLink href={PROVIDER_SETTINGS}>Open provider settings</TextLink>
-    </Alert>
+    </Callout>
   );
 }

@@ -9,14 +9,15 @@ import { LiveReply } from '@/components/agent/live-reply';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { WebSources } from '@/components/agent/web-sources';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { cardClasses } from '@/components/ui/card-variants';
+import { Callout } from '@/components/ui/callout';
+import { cardClasses } from '@/components/ui/card';
+import { AgentThread, AgentTurn, UserTurn } from '@/components/ui/chat-dock';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Disclosure } from '@/components/ui/disclosure';
+import { DisplayTime } from '@/components/ui/display-time';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
-import { panelClasses } from '@/components/ui/panel';
 import { Pressable } from '@/components/ui/pressable';
 import { Spinner } from '@/components/ui/spinner';
 import { TextLink } from '@/components/ui/text-link';
@@ -75,7 +76,7 @@ export function Conversation({
         ))
       : null;
   return (
-    <Stack gap="workspace">
+    <AgentThread>
       <ContextUsed context={detail.context} />
       {renderOutput ? <DocumentList outputs={detail.outputs} /> : null}
       <Stack as="ol" gap="workspace" aria-label="Messages">
@@ -106,7 +107,7 @@ export function Conversation({
           onRefine={onRefine}
         />
       ) : null}
-    </Stack>
+    </AgentThread>
   );
 }
 
@@ -134,7 +135,7 @@ function DocumentList({ outputs }: Readonly<{ outputs: readonly AgentOutput[] }>
         {outputs.map((output) => (
           <li key={output.id}>
             <Pressable
-              className={textRole('caption', 'hover:text-accent-text w-auto')}
+              className={textRole('caption', 'hover:text-accent-ink w-auto')}
               onClick={() =>
                 document
                   .getElementById(documentAnchor(output.id))
@@ -189,14 +190,14 @@ function TurnActions({
 
 function PendingMessage({ text }: Readonly<{ text: string }>) {
   return (
-    <div className="flex justify-end">
-      <Stack gap="tight" className={panelClasses({ tone: 'well' }, 'max-w-[85%]')}>
-        <p className={textRole('body', 'whitespace-pre-wrap')}>{text}</p>
+    <UserTurn
+      text={text}
+      footer={
         <output aria-live="polite" className={textRole('caption')}>
           Sending…
         </output>
-      </Stack>
-    </div>
+      }
+    />
   );
 }
 
@@ -221,10 +222,10 @@ function MessageBubble({
 }: Readonly<{ message: AgentMessage; skill: string | null }>) {
   if (message.role === 'user')
     return (
-      <div className="flex justify-end">
-        <Stack gap="compact" className={panelClasses({ tone: 'well' }, 'max-w-[85%]')}>
-          <p className={textRole('body', 'whitespace-pre-wrap')}>{message.content}</p>
-          {message.mentions.length > 0 ? (
+      <UserTurn
+        text={message.content}
+        footer={
+          message.mentions.length > 0 ? (
             <Inline as="ul" aria-label="Mentioned Actions" className="flex-wrap">
               {message.mentions.map((mention) => (
                 <li key={mention.id}>
@@ -234,16 +235,15 @@ function MessageBubble({
                 </li>
               ))}
             </Inline>
-          ) : null}
-        </Stack>
-      </div>
+          ) : null
+        }
+      />
     );
   return (
-    <Stack as="article" gap="compact" aria-label="Agent reply">
-      <Inline className="flex-wrap">
-        <span className={textRole('label')}>Agent</span>
-        {skill ? <span className={textRole('caption')}>Skill: {skill}</span> : null}
-      </Inline>
+    <AgentTurn
+      time={<DisplayTime value={message.created_at} />}
+      meta={skill ? `Skill: ${skill}` : undefined}
+    >
       <ContentMarkdown markdown={message.content} density="compact" />
       <Inline className="flex-wrap">
         <EvidenceChips refs={message.evidence_refs} />
@@ -263,7 +263,7 @@ function MessageBubble({
           </Stack>
         </Disclosure>
       ) : null}
-    </Stack>
+    </AgentTurn>
   );
 }
 function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context'] }>) {
@@ -277,7 +277,7 @@ function ContextUsed({ context }: Readonly<{ context: AgentChatDetail['context']
     opportunity: 'Recommendation',
     demand: 'Demand evidence',
     site_health: 'Page diagnosis',
-    search_intelligence: 'Selected Search Intelligence rows',
+    search_intelligence: 'Selected Keyword Research rows',
     issue_group: 'Selected issue group',
     site_facts: 'Selected crawl robots policy',
     upstream_revision: 'Selected document revision',
@@ -415,9 +415,9 @@ function RunState({
       return <RunningState run={outcome.run} queued={outcome.queued} live={live} />;
     // Every ended turn now answers with its own reply; older ones may not have.
     case 'stopped_at_limit':
-      return answered ? null : <Alert tone="warning">{runErrorCopy('stopped_at_limit')}</Alert>;
+      return answered ? null : <Callout tone="warning">{runErrorCopy('stopped_at_limit')}</Callout>;
     case 'failed':
-      return answered ? null : <Alert tone="danger">{runErrorCopy(outcome.code)}</Alert>;
+      return answered ? null : <Callout tone="negative">{runErrorCopy(outcome.code)}</Callout>;
     default:
       return null;
   }
@@ -436,7 +436,7 @@ function RunningState({
   return (
     <Stack gap="compact">
       <Inline as="span" gap="compact" className={textRole('caption')}>
-        <Spinner className="text-muted" />
+        <Spinner className="text-ink-muted" />
         <output aria-live="polite" className="flex-1">
           {label}
           <Elapsed since={live?.startedAt ?? Date.parse(run.created_at)} />
@@ -468,7 +468,7 @@ function liveStepLabel(live: LiveTurn | undefined) {
 function Elapsed({ since }: Readonly<{ since: number }>) {
   const now = useNow(1000);
   const seconds = Math.max(0, Math.round((now - since) / 1000));
-  return seconds >= 3 ? <span className="text-muted"> · {seconds}s</span> : null;
+  return seconds >= 3 ? <span className="text-ink-muted"> · {seconds}s</span> : null;
 }
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => Date.now());

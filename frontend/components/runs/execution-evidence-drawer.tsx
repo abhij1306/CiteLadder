@@ -45,9 +45,9 @@ export type EvidenceSubject = {
 function EvidenceLoading() {
   return (
     <Stack gap="workspace" aria-label="Loading execution evidence">
-      <Skeleton shape="line" />
-      <Skeleton shape="block" />
-      <Skeleton shape="chart" />
+      <Skeleton lines={1} />
+      <Skeleton variant="block" />
+      <Skeleton variant="chart" />
     </Stack>
   );
 }
@@ -112,7 +112,7 @@ export function ExecutionEvidenceDrawer({
       onOpenChange={onOpenChange}
       title="Execution evidence"
       description={description}
-      className="desktop:max-w-220"
+      width="wide"
       closeLabel="Close evidence drawer"
     >
       {evidenceBody}

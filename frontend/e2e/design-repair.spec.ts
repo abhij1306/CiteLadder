@@ -75,7 +75,7 @@ test('onboarding advances through a prompt-free review with sequential progress'
 
   await page.goto('/onboarding');
   await expect(page.locator('[data-brand-canvas]')).toHaveCount(0);
-  await expect(page.getByRole('navigation', { name: 'Setup progress' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Setup progress' })).toHaveText(/Step 1 of 3/u);
   await expect(page.getByRole('heading', { name: "Let's get started" })).toBeVisible();
 
   await page.getByLabel(/^Brand name/).fill('Acme Academy');

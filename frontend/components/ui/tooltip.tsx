@@ -11,31 +11,22 @@ import {
   useState,
 } from 'react';
 
-import { cn } from '@/lib/utils';
-
 /**
- * Tooltip — Radix. The shared inverse chip uses a dark `bg-surface-inverse`
- * fill with `text-on-inverse` copy and NO border (an inverse chip needs
- * none), so it reads against every surface including a white card (the
- * Phase 1 `bg-elevated` version was ΔE 0.00 against one). Wrap the app (or a
- * subtree) once in <TooltipProvider>; each Tooltip pairs a trigger with
- * short text `content`.
+ * Tooltip — a short `ink` label that names an icon button or explains a
+ * number: `on-ink` 12/16 medium, `radius-sm`, 4/8px padding, 8px from its
+ * anchor, no arrow and no shadow. It shows after 300ms on hover and at once on
+ * keyboard focus; a shortcut prints as mono `on-ink` text, never a Kbd cap.
  *
- * Every open goes through Radix's own pointer/focus handling, which closes
- * any other open tooltip first, so only one is ever open and it closes when
- * the pointer or focus leaves. Never mount one already open: Radix does not
- * announce an initial open, so the others would stay up beside it.
- *
- * A tooltip outside any provider (a dialog or flow screen rendered on its
- * own) brings a provider of its own; the one-open rule is document-wide, so
- * it still holds there.
+ * Every open goes through Radix's pointer and focus handling, which closes any
+ * other open tooltip first, so only one is ever open. A tooltip outside any
+ * provider brings a provider of its own; the one-open rule still holds.
  */
 const Provided = createContext(false);
 
 export function TooltipProvider(props: Readonly<ComponentProps<typeof TooltipPrimitive.Provider>>) {
   return (
     <Provided.Provider value={true}>
-      <TooltipPrimitive.Provider {...props} />
+      <TooltipPrimitive.Provider delayDuration={300} {...props} />
     </Provided.Provider>
   );
 }
@@ -44,17 +35,21 @@ export function Tooltip({
   children,
   content,
   side = 'top',
-  align = 'center',
-  className,
-  delayDuration = 200,
+  shortcut,
+  describe = true,
   shouldOpen,
 }: Readonly<{
+  /** The described element, the only child. */
   children: ReactNode;
+  /** A phrase, no full stop. */
   content: ReactNode;
   side?: 'top' | 'right' | 'bottom' | 'left';
-  align?: 'start' | 'center' | 'end';
-  className?: string;
-  delayDuration?: number;
+  shortcut?: string;
+  /**
+   * `false` where the trigger's accessible name already is this text (an
+   * IconButton), so assistive technology does not hear it twice.
+   */
+  describe?: boolean;
   /**
    * Asked each time the tooltip is about to open, with its trigger; returning
    * false keeps it closed (e.g. text that turned out not to be cut).
@@ -76,22 +71,22 @@ export function Tooltip({
   };
   const provided = useContext(Provided);
   const tooltip = (
-    <TooltipPrimitive.Root delayDuration={delayDuration} open={open} onOpenChange={onOpenChange}>
-      <TooltipPrimitive.Trigger asChild ref={setTrigger}>
+    <TooltipPrimitive.Root delayDuration={300} open={open} onOpenChange={onOpenChange}>
+      <TooltipPrimitive.Trigger
+        asChild
+        ref={setTrigger}
+        {...(describe ? {} : { 'aria-describedby': undefined })}
+      >
         {children}
       </TooltipPrimitive.Trigger>
       <TooltipPrimitive.Portal>
         <TooltipPrimitive.Content
           side={side}
-          align={align}
-          sideOffset={6}
-          className={cn(
-            'tooltip-panel bg-surface-inverse text-on-inverse shadow-overlay z-modal max-w-[18rem] rounded-[var(--radius-card)] px-3 py-2 type-caption text-on-inverse',
-            className,
-          )}
+          sideOffset={8}
+          className="tooltip-panel bg-ink text-on-ink z-modal text-caption inline-flex max-w-72 items-center gap-2 rounded-sm px-2 py-1 font-medium"
         >
           {content}
-          <TooltipPrimitive.Arrow className="fill-surface-inverse" />
+          {shortcut ? <span className="text-eyebrow font-mono font-medium">{shortcut}</span> : null}
         </TooltipPrimitive.Content>
       </TooltipPrimitive.Portal>
     </TooltipPrimitive.Root>

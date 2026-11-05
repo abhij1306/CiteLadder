@@ -12,7 +12,7 @@ import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { TabsRoot, TabPanel, type TabRowProps } from '@/components/ui/tabs';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { AiReferralsScreen } from './referrals-screen';
@@ -167,7 +167,7 @@ function TrafficStatus({ model }: Readonly<{ model: ReturnType<typeof useTraffic
   return (
     <>
       {projectId ? null : <ProjectRequiredState />}
-      {exporting.isError ? <Alert tone="danger">{exporting.error.message}</Alert> : null}
+      {exporting.isError ? <Callout tone="negative">{exporting.error.message}</Callout> : null}
     </>
   );
 }

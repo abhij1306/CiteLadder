@@ -1,4 +1,4 @@
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
 import type { PromptGenerateResponse } from '@/lib/api/types';
 import { admissionDropSummary } from '@/lib/prompts/admission';
@@ -34,7 +34,7 @@ export function GenerateResultAlert({ result }: Readonly<{ result: PromptGenerat
       ? ' Quality checks may have been unavailable for some suggestions, so an unflagged row may not have been checked.'
       : '';
   return (
-    <Alert tone={result.quality_gate === 'unavailable' || stopped ? 'warning' : 'info'}>
+    <Callout tone={result.quality_gate === 'unavailable' || stopped ? 'warning' : 'info'}>
       Drafted {plural(total, 'suggestion')}
       {shortfall}
       {topicCount ? ` across ${plural(topicCount, 'topic')}` : ''}
@@ -42,7 +42,7 @@ export function GenerateResultAlert({ result }: Readonly<{ result: PromptGenerat
       {gated}. Accept the ones worth tracking.{drops ? ` ${drops}` : ''}
       {stopped}
       {judge}
-    </Alert>
+    </Callout>
   );
 }
 
@@ -55,26 +55,28 @@ export function GenerateErrorAlert({
   if (status === 429) {
     const retryAfter = humanizeApiError(error).retryAfterSeconds;
     return (
-      <Alert tone="warning">
+      <Callout tone="warning">
         The AI provider is rate limited. Try again
         {retryAfter ? ` in about ${retryAfter} seconds` : ' in a moment'}.
-      </Alert>
+      </Callout>
     );
   }
   if (status === 503) {
     return (
-      <Alert tone="warning">Prompt generation isn&apos;t available on this deployment yet.</Alert>
+      <Callout tone="warning">
+        Prompt generation isn&apos;t available on this deployment yet.
+      </Callout>
     );
   }
   if (status === 502)
     return (
-      <Alert tone="danger">
+      <Callout tone="negative">
         The AI provider call failed or returned unusable output. Try again in a moment.
-      </Alert>
+      </Callout>
     );
   return (
-    <Alert tone="danger">
+    <Callout tone="negative">
       {error instanceof Error && error.message ? error.message : fallback}
-    </Alert>
+    </Callout>
   );
 }

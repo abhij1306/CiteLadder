@@ -7,7 +7,7 @@
  * transport, no React — so they are trivially unit-testable.
  */
 import type { AuditStatus, CitationClassification, ExecutionStatus } from '@/lib/api/types';
-import type { ClassificationValue, RunStatusValue } from '@/components/ui/badge-variants';
+import type { ClassificationValue, RunStatusValue } from '@/components/ui/badge';
 import { availabilityLabel, formatDisplayTimestamp } from '@/lib/format';
 import { titleCaseStatus } from '@/lib/utils';
 

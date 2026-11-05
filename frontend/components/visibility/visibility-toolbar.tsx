@@ -4,17 +4,17 @@ import { CircleHelp, Download } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { Button, IconButton } from '@/components/ui/button';
-import { FilterChoice, FilterDivider, FilterTrigger } from '@/components/ui/filter-bar';
+import { FilterChoice, FilterTrigger } from '@/components/ui/filter-bar';
 import { Icon } from '@/components/ui/icon';
 import {
-  Dropdown,
-  DropdownContent,
-  DropdownLabel,
-  DropdownRadioGroup,
-  DropdownRadioItem,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
+  Menu,
+  MenuContent,
+  MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { LogicalEngine } from '@/lib/api/types';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
@@ -99,7 +99,6 @@ export function VisibilityToolbar(props: ToolbarProps) {
       <MeasurementFilter {...props} />
       <RangeFilter {...props} />
       {props.activeTab === 'trends' ? <GranularityFilter {...props} /> : null}
-      <FilterDivider />
       <CohortFilter {...props} />
       <EngineFilterControl {...props} />
       {evidence ? <PromptFilter {...props} /> : null}
@@ -181,42 +180,42 @@ function MeasurementFilter({
   const missingRunLabel = selectedRunId ? 'Run unavailable' : 'Latest run';
   const current = pooled ? 'All runs in period' : (selected?.label ?? missingRunLabel);
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
+    <Menu>
+      <MenuTrigger asChild>
         <FilterTrigger
           label="Select measurement"
           hideLabel
           value={current}
           active={pooled || Boolean(selectedRunId)}
         />
-      </DropdownTrigger>
-      <DropdownContent>
-        <DropdownLabel>Measurement</DropdownLabel>
-        <DropdownRadioGroup value={pooled ? '__range__' : (selectedRunId ?? '__latest__')}>
-          <DropdownRadioItem value="__latest__" onSelect={() => onSelectMeasurement(null)}>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuLabel>Measurement</MenuLabel>
+        <MenuRadioGroup value={pooled ? '__range__' : (selectedRunId ?? '__latest__')}>
+          <MenuRadioItem value="__latest__" onSelect={() => onSelectMeasurement(null)}>
             Latest run
-          </DropdownRadioItem>
-          <DropdownRadioItem value="__range__" onSelect={() => onChangeSelectionMode('range')}>
+          </MenuRadioItem>
+          <MenuRadioItem value="__range__" onSelect={() => onChangeSelectionMode('range')}>
             All runs in period
-          </DropdownRadioItem>
+          </MenuRadioItem>
           {runs.length ? (
             <>
-              <DropdownSeparator />
-              <DropdownLabel>Individual runs</DropdownLabel>
+              <MenuSeparator />
+              <MenuLabel>Individual runs</MenuLabel>
               {runs.map((run) => (
-                <DropdownRadioItem
+                <MenuRadioItem
                   key={run.id}
                   value={run.id}
                   onSelect={() => onSelectMeasurement(run.id)}
                 >
                   {run.label}
-                </DropdownRadioItem>
+                </MenuRadioItem>
               ))}
             </>
           ) : null}
-        </DropdownRadioGroup>
-      </DropdownContent>
-    </Dropdown>
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
   );
 }
 
@@ -233,42 +232,42 @@ function EngineFilterControl({ engine, onChangeEngine }: ToolbarProps) {
   const asked = TREND_ENGINES.filter((key) => !isSearchSurfaceEngine(key));
   const observed = TREND_ENGINES.filter((key) => isSearchSurfaceEngine(key));
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
+    <Menu>
+      <MenuTrigger asChild>
         <FilterTrigger
           label="Filter by surface"
           hideLabel
           value={engine === 'all' ? 'All surfaces' : engineLabel(engine)}
           active={engine !== 'all'}
         />
-      </DropdownTrigger>
-      <DropdownContent>
-        <DropdownLabel>Surface</DropdownLabel>
-        <DropdownRadioGroup value={engine}>
-          <DropdownRadioItem value="all" onSelect={() => onChangeEngine('all')}>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuLabel>Surface</MenuLabel>
+        <MenuRadioGroup value={engine}>
+          <MenuRadioItem value="all" onSelect={() => onChangeEngine('all')}>
             All surfaces
-          </DropdownRadioItem>
-          <DropdownSeparator />
-          <DropdownLabel>Answer engines</DropdownLabel>
+          </MenuRadioItem>
+          <MenuSeparator />
+          <MenuLabel>Answer engines</MenuLabel>
           {asked.map((key) => (
-            <DropdownRadioItem key={key} value={key} onSelect={() => onChangeEngine(key)}>
+            <MenuRadioItem key={key} value={key} onSelect={() => onChangeEngine(key)}>
               {engineLabel(key)}
-            </DropdownRadioItem>
+            </MenuRadioItem>
           ))}
           {observed.length ? (
             <>
-              <DropdownSeparator />
-              <DropdownLabel>Observed surfaces</DropdownLabel>
+              <MenuSeparator />
+              <MenuLabel>Observed surfaces</MenuLabel>
               {observed.map((key) => (
-                <DropdownRadioItem key={key} value={key} onSelect={() => onChangeEngine(key)}>
+                <MenuRadioItem key={key} value={key} onSelect={() => onChangeEngine(key)}>
                   {engineLabel(key)}
-                </DropdownRadioItem>
+                </MenuRadioItem>
               ))}
             </>
           ) : null}
-        </DropdownRadioGroup>
-      </DropdownContent>
-    </Dropdown>
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
   );
 }
 
@@ -301,8 +300,8 @@ function GranularityFilter({ granularity, onChangeGranularity }: ToolbarProps) {
 function PromptFilter({ promptOptions, promptId, onChangePrompt }: ToolbarProps) {
   const prompt = promptOptions.find((option) => option.id === promptId);
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
+    <Menu>
+      <MenuTrigger asChild>
         <FilterTrigger
           label="Filter by prompt"
           hideLabel
@@ -310,25 +309,25 @@ function PromptFilter({ promptOptions, promptId, onChangePrompt }: ToolbarProps)
           active={promptId !== null}
           className="max-w-64"
         />
-      </DropdownTrigger>
-      <DropdownContent>
-        <DropdownLabel>Prompt</DropdownLabel>
-        <DropdownRadioGroup value={promptId ?? '__all__'}>
-          <DropdownRadioItem value="__all__" onSelect={() => onChangePrompt(null)}>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuLabel>Prompt</MenuLabel>
+        <MenuRadioGroup value={promptId ?? '__all__'}>
+          <MenuRadioItem value="__all__" onSelect={() => onChangePrompt(null)}>
             Every prompt
-          </DropdownRadioItem>
+          </MenuRadioItem>
           {promptOptions.map((option) => (
-            <DropdownRadioItem
+            <MenuRadioItem
               key={option.id}
               value={option.id}
               onSelect={() => onChangePrompt(option.id)}
             >
               {option.label}
-            </DropdownRadioItem>
+            </MenuRadioItem>
           ))}
-        </DropdownRadioGroup>
-      </DropdownContent>
-    </Dropdown>
+        </MenuRadioGroup>
+      </MenuContent>
+    </Menu>
   );
 }
 
@@ -342,6 +341,7 @@ export function VisibilityActions() {
           variant="secondary"
           icon={CircleHelp}
           label="About these metrics"
+          tooltip={false}
           href={METRICS_HELP_URL}
         />
       </Tooltip>

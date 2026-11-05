@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { splitPaneClasses, stickyPaneClasses } from '@/components/ui/workspace';
+import { stickyPaneClasses } from '@/components/ui/workspace';
 import { usePaneResizeInteraction } from '@/lib/use-pane-resize-interaction';
 import { cn } from '@/lib/utils';
 
@@ -114,9 +114,12 @@ export function ResizableSplitPane({
     <div
       ref={containerRef}
       style={{ '--split-pane-list-width': `${width}px` } as CSSProperties}
-      className={splitPaneClasses(
-        'list-detail-resizable',
-        cn(resize.dragging && 'cursor-col-resize select-none', className),
+      // The list at the reader's width, the separator, then the detail; the
+      // separator carries the gap. Stacked below 981px.
+      className={cn(
+        'desktop:grid-cols-[var(--split-pane-list-width)_auto_minmax(0,1fr)] grid min-w-0 items-start gap-4 desktop:gap-0',
+        resize.dragging && 'cursor-col-resize select-none',
+        className,
       )}
     >
       <div id={listId} className={cn('min-w-0', stickyList && stickyPaneClasses)}>
@@ -146,7 +149,7 @@ export function ResizableSplitPane({
       >
         <span
           aria-hidden
-          className="bg-border group-hover:bg-border-strong group-focus-visible:bg-accent group-data-[dragging]:bg-accent w-px transition-colors motion-reduce:transition-none"
+          className="bg-line group-hover:bg-line-strong group-focus-visible:bg-ink group-data-[dragging]:bg-ink w-px transition-colors motion-reduce:transition-none"
         />
         <span id={helpId} className="sr-only">
           Use the left and right arrow keys to resize. Hold Shift for larger steps.

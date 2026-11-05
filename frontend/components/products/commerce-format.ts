@@ -1,6 +1,6 @@
 import type { CompetitorCandidate } from '@citeladder/contracts/commerce-suite';
 
-import type { StatusValue } from '@/components/ui/badge-variants';
+import type { StatusValue } from '@/components/ui/badge';
 
 /**
  * Discovery status as a sentence, not a status string dropped into one.

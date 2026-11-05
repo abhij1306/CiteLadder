@@ -1,6 +1,6 @@
 'use client';
 
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Inline } from '@/components/ui/layout';
 import { ClampText, TableCell } from '@/components/ui/table';
 import { MissingValue } from '@/components/ui/unavailable-value';
@@ -16,11 +16,11 @@ export function SourceName({
 }: Readonly<{ name: string; host: string | null; secondary?: string | null }>) {
   return (
     <Inline as="span">
-      <BrandLogo name={name} websiteUrl={host ? `https://${host}` : null} />
+      <BrandMark name={name} websiteUrl={host ? `https://${host}` : null} />
       <span className="grid min-w-0">
         <ClampText lines={secondary ? 1 : 2}>{name}</ClampText>
         {secondary ? (
-          <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
+          <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
             {secondary}
           </ClampText>
         ) : null}

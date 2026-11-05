@@ -100,7 +100,7 @@ function HierarchyList({
                   {node.url}
                 </TextLink>
               ) : (
-                <span className="type-body text-foreground min-w-0 [overflow-wrap:anywhere]">
+                <span className="type-body text-ink min-w-0 [overflow-wrap:anywhere]">
                   {node.url}
                 </span>
               )}

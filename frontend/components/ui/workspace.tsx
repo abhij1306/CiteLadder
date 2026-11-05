@@ -10,50 +10,14 @@ import { cn } from '@/lib/utils';
  */
 
 /**
- * The sanctioned two-column splits. A screen picks a role, never a ratio:
- * pages had drifted to 2fr/1fr, 3fr/2fr, 1.15fr/1fr and fixed rem widths for
- * the same two layouts, so the same kind of page moved its seam on every route.
- *
- *   `list-detail` — a selectable list beside the selected item's evidence.
- *   `main-aside`  — the primary surface beside supporting context.
- *   `peers`       — two equal surfaces read side by side (e.g. two tables).
- *   `thirds`      — three equal summary cards side by side.
- *
- * All stack below the `desktop` breakpoint, with the first child first, and
- * share the workspace gap. Columns align to the top so a short aside never
- * stretches. A detail route takes its split from `DetailScreen`.
- */
-const SPLIT_PANE = {
-  'list-detail': 'desktop:grid-cols-[var(--pane-list-detail)]',
-  /**
-   * The list at the reader's width: three tracks — the list at
-   * `--split-pane-list-width`, the separator, the detail — with the gap carried
-   * by the separator itself. `ResizableSplitPane` owns the width and the
-   * separator; use it rather than this role alone.
-   */
-  'list-detail-resizable':
-    'desktop:grid-cols-[var(--split-pane-list-width)_auto_minmax(0,1fr)] desktop:gap-0',
-  'main-aside': 'desktop:grid-cols-[var(--pane-main-aside)]',
-  peers: 'desktop:grid-cols-2',
-  /** Three equal summary cards read side by side. */
-  thirds: 'desktop:grid-cols-3',
-} as const;
-
-export type SplitPaneRole = keyof typeof SPLIT_PANE;
-
-export function splitPaneClasses(role: SplitPaneRole, className?: string) {
-  return cn('grid min-w-0 items-start gap-[var(--workspace-gap)]', SPLIT_PANE[role], className);
-}
-
-/**
  * The one sticky offset for a pane that stays in view while its neighbour
- * scrolls (the list beside a long detail). It clears the compact topbar on
- * narrow screens and is 0 on desktop, where the sheet scrolls under nothing.
- * The pane scrolls inside itself once it is taller than the viewport, so a
- * long list never pins its own end out of reach.
+ * scrolls (the list beside a long detail). It sticks `workspace-gap` under
+ * the app's sticky top bar (decision D12), never beneath it. The pane scrolls
+ * inside itself once it is taller than the viewport, so a long list never
+ * pins its own end out of reach.
  */
 export const stickyPaneClasses =
-  'desktop:sticky desktop:top-[var(--sticky-header-offset)] desktop:max-h-[calc(100dvh-var(--sticky-header-offset)-2*var(--workspace-gap))] desktop:overflow-y-auto';
+  'desktop:sticky desktop:top-[calc(var(--sticky-header-offset)+var(--workspace-gap))] desktop:max-h-[calc(100dvh-var(--sticky-header-offset)-2*var(--workspace-gap))] desktop:overflow-y-auto';
 
 /**
  * The ledger: a vertical list of peers separated by rules rather than boxed
@@ -69,7 +33,7 @@ export const stickyPaneClasses =
 export type LedgerShell = 'open' | 'boxed';
 
 export function ledgerClasses(shell: LedgerShell = 'open', className?: string) {
-  return cn('divide-border-subtle grid divide-y', shell === 'boxed' && panelClasses(), className);
+  return cn('divide-line grid divide-y', shell === 'boxed' && panelClasses(), className);
 }
 
 /**
@@ -89,7 +53,7 @@ export function ledgerItemClasses(className?: string) {
  * an item for the next level.
  */
 export function treeBranchClasses(className?: string) {
-  return cn('border-border-subtle grid min-w-0 gap-2 border-l pl-4', className);
+  return cn('border-line grid min-w-0 gap-2 border-l pl-4', className);
 }
 
 /**
@@ -104,12 +68,12 @@ export function MetaFooter({
 }: Readonly<{ children: ReactNode; trailing?: ReactNode }>) {
   if (!trailing)
     return (
-      <footer className="type-caption border-border-subtle flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3">
+      <footer className="type-caption border-line flex flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3">
         {children}
       </footer>
     );
   return (
-    <footer className="type-caption border-border-subtle flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+    <footer className="type-caption border-line flex flex-wrap items-center justify-between gap-2 border-t pt-3">
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">{children}</div>
       {trailing}
     </footer>
@@ -117,8 +81,8 @@ export function MetaFooter({
 }
 
 /**
- * Who or what a screen or section is about: the 40px mark (a `BrandLogo` or
- * `Avatar` at its `identity` placement), the title, one caption line under
+ * Who or what a screen or section is about: the 40px mark (a `BrandMark` at
+ * its `header` placement or an `Avatar` at `profile`), the title, one caption line under
  * it, and the actions that act on it at the row's end, wrapping under the
  * text when the row is full. The page supplies the text in its roles; the
  * row owns the alignment and every gap.
@@ -225,7 +189,7 @@ export function EditorialSectionHeader({
  */
 export function FloatingToolbar({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <div className="bg-elevated shadow-overlay absolute end-3 top-3 z-10 flex gap-1 rounded-[var(--radius-card)] p-1">
+    <div className="bg-surface shadow-pop absolute end-3 top-3 z-10 flex gap-1 rounded-lg p-1">
       {children}
     </div>
   );

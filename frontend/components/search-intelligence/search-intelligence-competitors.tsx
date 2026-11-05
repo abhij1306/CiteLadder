@@ -90,7 +90,7 @@ export function SearchIntelligenceCompetitors({
               return (
                 <TableCell numeric key={kind}>
                   {dataset ? (
-                    <TextLink asChild text="inherit">
+                    <TextLink asChild text="body">
                       <Pressable
                         className="w-auto text-center"
                         aria-label={`${competitor.label}: ${SEARCH_DATASET_LABELS[kind]}`}

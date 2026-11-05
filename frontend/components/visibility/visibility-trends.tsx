@@ -2,21 +2,20 @@
 
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { AppGrid } from '@/components/ui/app-grid';
 import { FilterChoice } from '@/components/ui/filter-bar';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Button } from '@/components/ui/button';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChartKey } from '@/components/ui/chart';
 import { Delta } from '@/components/ui/delta';
 import { Stack } from '@/components/ui/layout';
 import { InfoHint } from '@/components/ui/info-hint';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { StatRow, type StatSegment } from '@/components/ui/stat-row';
+import { KpiRow, type StatSegment } from '@/components/ui/stat-row';
 import { TrendChart } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import { RankingRowsTable } from '@/components/visibility/ranking-rows';
 import { EngineComparison } from '@/components/visibility/engine-comparison';
 import { SurfaceRatesPanel } from '@/components/visibility/surface-rates';
@@ -78,9 +77,9 @@ export function VisibilityTrends({
     return <QueryState kind="empty" inline message="No measured run for this selection yet." />;
   if (isMetricsPending(visibilityQuery.error))
     return (
-      <Alert tone="info">
+      <Callout tone="info">
         Results for this run are still being prepared. They appear here as soon as they are ready.
-      </Alert>
+      </Callout>
     );
   if (visibilityQuery.isError) {
     return (
@@ -110,7 +109,7 @@ export function VisibilityTrends({
           an unfiltered cross-surface view would invite reading them as the
           whole product's numbers. */}
       {surfaceEngine ? <SurfaceRatesPanel query={surfaceRatesQuery} /> : null}
-      <div className={splitPaneClasses('peers')}>
+      <AppGrid layout="halves">
         <MeasurementHistory
           query={query}
           metric={metric}
@@ -124,7 +123,7 @@ export function VisibilityTrends({
           onSelect={setFocused}
           selectedName={focusedBrand}
         />
-      </div>
+      </AppGrid>
       <EngineComparison
         visibility={selected}
         filter={engineFilter}
@@ -153,9 +152,9 @@ function PooledSelectionNote({ selected }: Readonly<{ selected: Visibility }>) {
   const pooled = selected.source_audit_ids?.length ?? 0;
   if (Object.keys(groups).length < 2 || pooled >= total) return null;
   return (
-    <Alert tone="info">
+    <Callout tone="info">
       {`Pooled the ${pooled} of ${total} runs in this period that share one measurement setup. The other ${total - pooled} used a different set of models or prompts, so their answers are not comparable with these and are not counted here — open them individually from the measurement menu.`}
-    </Alert>
+    </Callout>
   );
 }
 
@@ -225,15 +224,7 @@ function HeadlineMetrics({ selected }: Readonly<{ selected: Visibility }>) {
       value: formatPosition(position),
     });
   }
-  // A strip on the card fill, like every other metric row in the app, rather
-  // than bare figures on the page sheet.
-  return (
-    <Card>
-      <CardContent>
-        <StatRow segments={segments} />
-      </CardContent>
-    </Card>
-  );
+  return <KpiRow segments={segments} />;
 }
 
 function MeasurementHistory({
@@ -297,23 +288,11 @@ function MeasurementHistory({
       <Stack gap="compact" aria-busy={query.isFetching}>
         <TrendChart
           label={`${metricLabel} over time`}
+          name={primaryLabel}
           data={chartPoints}
           series={competitors}
-          width={360}
-          height={168}
-          xAxisLabel="Run date"
-          yAxisLabel={`${metricLabel} (%)`}
-          formatTick={(value) => `${Math.round(value)}%`}
-          className="h-auto w-full"
-        />
-        <ChartKey
-          entries={[
-            { label: primaryLabel, tone: { series: 1 } },
-            ...competitors.map((entry) => ({
-              label: entry.label,
-              tone: { series: entry.series },
-            })),
-          ]}
+          yMax={100}
+          yFormat={(value) => `${Math.round(value)}%`}
         />
       </Stack>
     );

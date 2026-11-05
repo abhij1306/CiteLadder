@@ -27,8 +27,7 @@ function signalRows() {
 /** The pager's announced position, e.g. "1–10 of 28 signals". */
 function pagerSummary() {
   return screen.getByText(
-    (_, node) =>
-      node?.getAttribute('aria-live') === 'polite' && /signals$/.test(node.textContent ?? ''),
+    (_, node) => node?.tagName === 'OUTPUT' && /signals$/.test(node.textContent ?? ''),
   ).textContent;
 }
 
@@ -201,11 +200,11 @@ describe('DemandProjection', () => {
       .getAllByRole('radio')
       .map((chip) => chip.textContent);
     expect(filters).toEqual([
-      'All signals 2',
-      'Striking distance 1',
-      'Cannibalization · Not reported 0',
-      'CTR gaps · Partial 1',
-      'Trends · Needs more history 0',
+      'All signals (2)',
+      'Striking distance (1)',
+      'Cannibalization · Not reported (0)',
+      'CTR gaps · Partial (1)',
+      'Trends · Needs more history (0)',
     ]);
     expect(
       screen.getByRole('button', { name: 'How the CTR gap and Low CTR detectors work' }),
@@ -401,7 +400,7 @@ describe('DemandProjection', () => {
     renderProjection();
 
     expect((await screen.findByRole('radio', { name: /^CTR gaps/ })).textContent).toBe(
-      'CTR gaps 1',
+      'CTR gaps (1)',
     );
     await user.hover(
       screen.getByRole('button', { name: 'How the CTR gap and Low CTR detectors work' }),

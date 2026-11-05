@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 import { visitorKeys } from 'oxc-parser';
 export { textContrastViolations } from './design-system-contrast.mjs';
@@ -15,8 +15,37 @@ import {
 } from './source-ast.mjs';
 
 const EDITORIAL_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p']);
-const EDITORIAL_SIZE = /\btext-(?:2xs|xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)\b/;
-const WEBSITE_CSS = 'apps/app/src/website-type.css';
+/** Size utilities an editorial heading or paragraph must take from its role instead. */
+const EDITORIAL_SIZES = [
+  '2xs',
+  'xs',
+  'sm',
+  'base',
+  'lg',
+  'xl',
+  '2xl',
+  '3xl',
+  '4xl',
+  '5xl',
+  'caption',
+  'body',
+  'body-sm',
+  'body-lg',
+  'lead',
+  'label',
+  'label-lg',
+  'heading',
+  'title',
+  'title-sm',
+  'display-md',
+  'display-lg',
+  'display-xl',
+  'display-2xl',
+  'stat',
+];
+const EDITORIAL_SIZE = new RegExp(
+  String.raw`(?<![\w-])text-(?:${EDITORIAL_SIZES.join('|')})(?![\w-])`,
+);
 const TOKEN_CSS = 'apps/app/src/globals.css';
 
 const LINE_TERMINATOR = /[\n\r\p{Zl}\p{Zp}]/u;
@@ -71,7 +100,7 @@ function hasRawTiming(value) {
 
 /** Only motion declarations and utilities are policy: measured durations are data. */
 export function motionRoleViolations(source, label, ownsProductUi) {
-  if (!ownsProductUi || label === TOKEN_CSS || label === WEBSITE_CSS) return [];
+  if (!ownsProductUi || label === TOKEN_CSS) return [];
   const text = withoutComments(source);
   const declarations = text.matchAll(
     /(?:animation|transition)(?:-(?:duration|delay|timing-function))?\s*:\s*['"]?([^;\n}'"]+)/g,
@@ -105,7 +134,9 @@ export function focusRoleViolations(source, label, ownsProductUi) {
   return [];
 }
 
-/** Detached surfaces are the only consumers of elevation. */
+/** The system's five shadows (and none) are the whole elevation vocabulary. */
+const SHADOW_ROLES = new Set(['none', 'edge', 'xs', 'card', 'pop', 'press']);
+
 export function shadowRoleViolations(source, label, ownsProductUi) {
   if (!ownsProductUi || label === TOKEN_CSS) return [];
   const text = withoutComments(source);
@@ -113,13 +144,12 @@ export function shadowRoleViolations(source, label, ownsProductUi) {
   const rawDeclaration =
     label.endsWith('.css') &&
     [...text.matchAll(/box-shadow\s*:([^;]+);/g)].some(
-      ([, value]) => !/^(?:none|var\(--shadow-(?:none|overlay|modal)\))$/.test(value.trim()),
+      ([, value]) => !/^(?:none|var\(--shadow-(?:edge|xs|card|pop|press)\))$/.test(value.trim()),
     );
-  if (
-    [...shadows].some(([, role]) => !['none', 'overlay', 'modal'].includes(role)) ||
-    rawDeclaration
-  ) {
-    return [`${label}: elevation must use shadow-none, shadow-overlay or shadow-modal`];
+  if ([...shadows].some(([, role]) => !SHADOW_ROLES.has(role)) || rawDeclaration) {
+    return [
+      `${label}: elevation must use shadow-edge, shadow-xs, shadow-card, shadow-pop, shadow-press or none`,
+    ];
   }
   return [];
 }
@@ -127,25 +157,27 @@ export function shadowRoleViolations(source, label, ownsProductUi) {
 /** Radius family mismatches are review advice because composition can be intentional. */
 export function radiusRoleAdvisories(source, label, ownsProductUi) {
   if (!ownsProductUi || !label.endsWith('.tsx')) return [];
+  // The system's radius per component family: controls 12, app surfaces 14.
   const roles = {
-    Button: 'control',
-    Input: 'control',
-    Textarea: 'control',
-    Select: 'control',
-    Card: 'card',
-    Panel: 'card',
-    Dialog: 'overlay',
-    Drawer: 'overlay',
-    DropdownContent: 'overlay',
-    Tooltip: 'overlay',
+    Button: 'md',
+    Input: 'md',
+    Textarea: 'md',
+    Select: 'md',
+    Card: 'lg',
+    Panel: 'lg',
+    Dialog: 'lg',
+    Drawer: 'lg',
+    DropdownContent: 'lg',
   };
   return jsxClassData(source, label).flatMap(({ tag, classes, line }) => {
     const expected = roles[tag];
     if (!expected) return [];
-    const mismatch = [
-      ...classes.matchAll(/rounded-\[var\(--radius-(control|card|overlay)\)\]/g),
-    ].some(([, role]) => role !== expected);
-    return mismatch ? [`${label}:${line}: review ${tag} radius; family role is ${expected}`] : [];
+    const mismatch = [...classes.matchAll(/(?<![\w-])rounded-(2xs|xs|sm|md|lg|xl)(?![\w-])/g)].some(
+      ([, size]) => size !== expected,
+    );
+    return mismatch
+      ? [`${label}:${line}: review ${tag} radius; its family is rounded-${expected}`]
+      : [];
   });
 }
 
@@ -154,51 +186,13 @@ export function densityRoleViolations(source, label, ownsProductUi) {
   if (!ownsProductUi || !label.startsWith('components/ui/')) return [];
   const text = withoutComments(source);
   if (
-    /--(?:control-height|field-height(?:-lg)?)(?=\))/.test(text) ||
-    /\b(?:min-h|h|size)-(?:9|11|\[(?:20|36|44)px\])(?![\w.])/.test(text)
+    /--(?:control-height|field-height)/.test(text) ||
+    /\b(?:min-h|h|size)-(?:9|11|\[(?:20|28|36|44|48)px\])(?![\w.])/.test(text)
   ) {
-    return [`${label}: control heights must consume named density roles`];
+    return [`${label}: control heights must consume --control-sm, --control-md or --control-lg`];
   }
   return [];
 }
-
-/**
- * Roles the flow stylesheet must define.
- *
- * The role has to exist, because the JSX and the type ladder below refer to it.
- * What it looks like is a design decision: this deliberately does not pin the
- * font-size or letter-spacing a role resolves to, so the type scale can be
- * retuned without editing a gate.
- */
-const REQUIRED_WEBSITE_ROLES = [
-  '[data-flow-surface]',
-  '.flow-actions.safe-bottom',
-  '.flow-title',
-  '.flow-group-title',
-  '.flow-help',
-  '.flow-meta',
-];
-
-/**
- * Roles whose size must stay ordered relative to each other.
- *
- * This is the consistency the frozen font-size list was really protecting: a
- * page title must not out-size the hero, and body copy must not out-size a
- * heading. Any absolute scale satisfying the order passes.
- */
-const WEBSITE_TYPE_LADDER = ['.flow-title', '.flow-group-title', '.flow-help', '.flow-meta'];
-
-/** Geometry roles belong to one ladder in globals.css; no surface re-scales them. */
-const SHARED_GEOMETRY_ROLES = ['--radius-control', '--radius-card', '--radius-lg'];
-
-/**
- * Roles that must take their color from a token rather than a literal.
- *
- * Which token is a design decision — moving a role from `--color-secondary` to
- * `--color-muted` is a legitimate change and no longer fails here. Reaching for
- * a raw hex is not, because it escapes theming and the contrast check below.
- */
-const TOKEN_COLORED_ROLES = ['.flow-title', '.flow-group-title', '.flow-help', '.flow-meta'];
 
 /** Alternation over literal values, escaped for use inside a RegExp. */
 const oneOf = (values) => `(?:${values.map(escapeRegExp).join('|')})`;
@@ -206,6 +200,7 @@ const oneOf = (values) => `(?:${values.map(escapeRegExp).join('|')})`;
 /** A class token (with any variant prefixes) whose utility part matches `utility`. */
 const classToken = (utility, end) => new RegExp(String.raw`(?<![\w-])(?:[\w-]+:)*` + utility + end);
 
+/** Every `--text-*` role in globals.css, plus Tailwind's own scale names. */
 const TYPE_SIZES = [
   '2xs',
   'xs',
@@ -214,12 +209,24 @@ const TYPE_SIZES = [
   'lg',
   'xl',
   ...['2', '3', '4', '5', '6', '7', '8', '9'].map((step) => `${step}xl`),
+  'display-2xl',
+  'display-xl',
+  'display-lg',
+  'display-md',
+  'title',
+  'title-sm',
+  'stat',
+  'lead',
+  'body-lg',
+  'body',
+  'body-sm',
   'label',
-  'field',
-  'page-title',
-  'role-meta',
-  'role-body',
-  'role-section',
+  'label-lg',
+  'heading',
+  'caption',
+  'eyebrow',
+  'data',
+  'code',
 ];
 const SPACING_UTILITIES = [
   'gap',
@@ -252,7 +259,7 @@ const ARBITRARY_PX = String.raw`\[\d+(?:\.\d+)?px\]`;
 
 const RAW_TYPE_SCALE = classToken(`text-${oneOf(TYPE_SIZES)}`, String.raw`(?![\w-])`);
 const RAW_TYPE_METRICS =
-  /(?<![\w-])(?:[\w-]+:)*(?:leading-|tracking-|font-(?:display|sans|numeric)(?![\w-]))/;
+  /(?<![\w-])(?:[\w-]+:)*(?:leading-|tracking-|font-(?:display|sans|mono)(?![\w-]))/;
 const OFF_GRID_SPACING = classToken(
   `-?${oneOf(SPACING_UTILITIES)}-(?:${oneOf(OFF_GRID_STEPS)}|${ARBITRARY_PX})`,
   String.raw`(?![\w.-])`,
@@ -343,7 +350,8 @@ const CLASS_ATTRIBUTES = new Set([
   'triggerClassName',
 ]);
 
-function jsxClassData(source, label) {
+/** Every JSX element's class attributes as `{ tag, classes, line }`. */
+export function jsxClassData(source, label) {
   const program = parseSource(source, label);
   const lineOf = lineIndex(source);
   const bindings = staticBindings(program);
@@ -537,7 +545,7 @@ function staticAssertionText(node) {
 }
 
 function isSemanticTestClass(token) {
-  return SEMANTIC_TEST_CLASSES.has(token) || /^flow-|(?:-hook)$/.test(token);
+  return SEMANTIC_TEST_CLASSES.has(token) || /^website-|(?:-hook)$/.test(token);
 }
 
 function rawStyleAssertionTokens(text) {
@@ -625,9 +633,9 @@ const PRODUCT_UI_CLASS_RULES = [
   {
     appliesTo: outsideUiPackage,
     test: (classes) =>
-      /(?<![:\w\]-])bg-(?:panel|well|background-alt)(?:\/\d+)?\b/.test(classes) &&
+      /(?<![:\w\]-])bg-(?:surface|surface-sunken|paper)(?:\/\d+)?(?![\w-])/.test(classes) &&
       /(?<![:\w\]-])border(?![-\w])/.test(classes) &&
-      /(?<![:\w\]-])rounded-\[var\(--radius-(?:control|card|overlay)\)\]/.test(classes) &&
+      /(?<![:\w\]-])rounded-(?:sm|md|lg|xl)(?![\w-])/.test(classes) &&
       /(?<![:\w\]-])p-(?:\d[\d.]*|\[var\([^)]+\)\])/.test(classes),
     message: 'a bordered filled box is a Panel (components/ui/panel.tsx)',
   },
@@ -686,8 +694,17 @@ const PRODUCT_UI_CLASS_RULES = [
     message: 'product large spacing must use a semantic CSS variable',
   },
   {
+    test: (classes) =>
+      /\bwebsite-(?:hero|page|section|feature|small|lead|body|nav|label)/.test(classes) ||
+      /(?<![\w-])cl-(?:phero-title|lhero-title|shead-title|fcard-title|lead|body|note)(?![\w-])/.test(
+        classes,
+      ),
+    message: 'product UI must not consume website type roles',
+  },
+  {
     appliesTo: outsideUiPackage,
-    test: (classes) => /\b(?:hover:)?shadow-(?:xs|sm|card|card-hover|lg)\b/.test(classes),
+    test: (classes) =>
+      /(?<![\w-])(?:hover:)?shadow-(?:xs|sm|card|card-hover|lg|press)(?![\w-])/.test(classes),
     message: 'feature-owned static elevation is retired',
   },
   {
@@ -780,8 +797,7 @@ export function cardHeaderLayoutViolations(source, label, ownsProductUi) {
   return violations;
 }
 
-const BUTTON_COLOR_ROLE =
-  /^text-(?:foreground|secondary|muted|subtle|accent|danger|success|warning|info|on-|inverse)/;
+const BUTTON_COLOR_ROLE = /^text-(?:ink|accent|positive|negative|warning|info|on-)/;
 
 function cosmeticButtonToken(token) {
   const utility = token.split(':').at(-1) ?? token;
@@ -848,10 +864,10 @@ export function directRadixImportViolations(source, label) {
 
 /**
  * Tailwind v4 generates EVERY utility family from every theme token, so
- * `--color-subtle` / `--color-muted` / `--color-secondary` (the Gray-500/600/700
- * TEXT inks) silently yield usable `bg-*` utilities. `bg-subtle` painted the
- * page-kind score expansion as a dark slate panel with unreadable controls on
- * it, and neither review nor the type system could catch it.
+ * `--color-ink-secondary` / `--color-ink-muted` / `--color-accent-ink` (TEXT
+ * inks) silently yield usable `bg-*` utilities. A text-ink background once
+ * painted the page-kind score expansion as a dark slate panel with unreadable
+ * controls on it, and neither review nor the type system could catch it.
  *
  * This lived as an ESLint `no-restricted-syntax` selector pair until the linter
  * moved to Oxlint, which does not implement that rule. The check belongs here
@@ -860,27 +876,27 @@ export function directRadixImportViolations(source, label) {
  * selectors gave us -- it matches string and template text only, so the rule
  * cannot be tripped by a prose mention in a comment.
  *
- * NOT banned: `bg-foreground` + `text-background` is the deliberate
- * inverse-chip pattern, and `bg-inverse/70` is a white scrim.
+ * NOT banned: `bg-ink` + `text-on-ink` is the primary button and the
+ * inverse-chip pattern.
  */
 const TEXT_ROLE_BACKGROUND = new RegExp(
   // Assembled from fragments so this policy source -- which the walk in
   // check-design-system.mjs also reads -- can never match itself.
-  String.raw`(^|\s)${['bg', '-'].join('')}(subtle|secondary|muted)(\s|/|$)`,
+  String.raw`(^|\s)${['bg', '-'].join('')}(ink-secondary|ink-muted|accent-ink|subtle|secondary|muted)(\s|/|$)`,
 );
 
 const TEXT_ROLE_BACKGROUND_MESSAGE =
   'background utility built from a TEXT-role token; use a surface token ' +
-  '(bg-background-alt, bg-panel, bg-well, bg-elevated, bg-surface-inverse), ' +
-  'a border-scale neutral, or a semantic bg-*-bg';
+  '(bg-paper, bg-surface, bg-surface-sunken, bg-ink) or a semantic bg-*-soft';
 
 /** Surfaces must never be painted with a text-ink token. */
 
 /**
- * Radius is a ladder, not a vocabulary: 4 / 8 / 12 / 16 / full. `--radius-control`
- * / `--radius-card` / `--radius-lg` are the three roles, with `rounded-xs` as
- * the micro rung for chart bars, skeletons and inline code, and `rounded-full`
- * for pills.
+ * Radius is the system's scale and nothing else: `rounded-2xs` (2, chart bars,
+ * rungs), `-xs` (6, badges, checkboxes), `-sm` (8, tabs in a track, menu
+ * items), `-md` (12, buttons, inputs, code), `-lg` (14, app cards, menus,
+ * dialogs), `-xl` (20, website cards, frames, the navbar) and `-full`. No
+ * arbitrary value, not even a `var()`.
  *
  * This applies to every surface, not just product UI: the app, login and
  * flow each used to carry their own idea of a rounded corner, so the same
@@ -893,7 +909,7 @@ export function rawRadiusViolations(source, label) {
     const raw = entry.classes.split(/\s+/).filter(isRawRadiusToken);
     if (raw.length) {
       violations.push(
-        `${label}:${entry.line}: ${raw.join(', ')} — radius must use a role token (--radius-control|card|lg), rounded-xs, or rounded-full`,
+        `${label}:${entry.line}: ${raw.join(', ')} — radius must be rounded-2xs, -xs, -sm, -md, -lg, -xl or -full`,
       );
     }
   }
@@ -901,21 +917,28 @@ export function rawRadiusViolations(source, label) {
 }
 
 const RADIUS_SIDES = ['t', 'b', 'l', 'r', 's', 'e', 'tl', 'tr', 'bl', 'br', 'ss', 'se', 'es', 'ee'];
-const RAW_RADIUS_SIZES = new Set(['none', 'sm', 'md', 'lg', 'xl', '2xl', '3xl']);
+/** The system's radius scale: the only sizes a `rounded-*` utility may name. */
+const SYSTEM_RADII = new Set(['2xs', 'xs', 'sm', 'md', 'lg', 'xl', 'full']);
 const LOWERCASE_VARIANTS = /^(?:[a-z-]+:)*$/;
 
-/** `variant:rounded`, optionally `-side`, then optionally `-size`: the retired raw radius scale. */
+/**
+ * `variant:rounded`, optionally `-side`, then a size outside the system's
+ * scale, no size at all, or an arbitrary `[value]` (even a `var()`): a corner
+ * the system does not name.
+ */
 function isRawRadiusToken(token) {
   const utilityStart = token.lastIndexOf(':') + 1;
   if (!LOWERCASE_VARIANTS.test(token.slice(0, utilityStart))) return false;
-  const [utility, ...suffixes] = token.slice(utilityStart).split('-');
-  if (utility !== 'rounded' || suffixes.length > 2) return false;
+  const utility = token.slice(utilityStart).replace(/^!/, '');
+  if (!/^rounded(?:-|$)/.test(utility)) return false;
+  // `inherit` lets an overlay follow its frame's corner, so it names no value.
+  if (/^rounded(?:-[a-z]+)?-\[/.test(utility)) return !utility.endsWith('-[inherit]');
+  const suffixes = utility.split('-').slice(1);
   if (suffixes.length === 2) {
-    return RADIUS_SIDES.includes(suffixes[0]) && RAW_RADIUS_SIZES.has(suffixes[1]);
+    return !(RADIUS_SIDES.includes(suffixes[0]) && SYSTEM_RADII.has(suffixes[1]));
   }
-  return (
-    suffixes.length === 0 || RADIUS_SIDES.includes(suffixes[0]) || RAW_RADIUS_SIZES.has(suffixes[0])
-  );
+  if (suffixes.length === 1) return !SYSTEM_RADII.has(suffixes[0]);
+  return true;
 }
 const SIZE_UTILITIES = ['w', 'h', 'min-w', 'min-h', 'max-w', 'max-h', 'size'];
 /** A whole class token: variant prefixes, an optional `!`, then `utility-[value]`. */
@@ -1007,13 +1030,9 @@ export function tsxGeometryFindings(source, label) {
   const push = (rule, line, message) => findings.push({ rule, file: label, line, message });
   for (const { token, line } of classTokens(program, lineOf)) {
     const radius = ARBITRARY_RADIUS.exec(token);
-    // `inherit` lets an overlay follow its frame's role, so it is not a literal.
-    if (radius && !/^(?:var\(--radius-[\w-]+\)|inherit|0)$/.test(radius[1])) {
-      push(
-        'tsx-radius',
-        line,
-        `${token} — radius must use a role token, rounded-xs or rounded-full`,
-      );
+    // `inherit` lets an overlay follow its frame's corner, so it is not a literal.
+    if (radius && !/^(?:inherit|0)$/.test(radius[1])) {
+      push('tsx-radius', line, `${token} — radius must be one of the system's rounded-* sizes`);
     }
     const size = ARBITRARY_SIZE.exec(token);
     if (size && LITERAL_LENGTH.test(size[1]) && !label.startsWith('components/ui/')) {
@@ -1090,7 +1109,8 @@ function componentFolder(label) {
  * Geometry a feature folder chose for itself: spacing, sized boxes and radii
  * as utilities (`layer-geometry`), and `size=`/`padding=` props
  * (`layer-size-prop`); and, in every product folder including `ui/` and
- * `layout/`, a breakpoint other than `desktop:` (`layer-breakpoint`).
+ * `layout/`, a breakpoint other than `desktop:` and the shell's `shell:`
+ * (`layer-breakpoint`).
  * Every one is a violation: the layering debt was burned to zero (app
  * geometry PR 7), so none is ratcheted or baselined and none can regrow.
  */
@@ -1113,7 +1133,11 @@ export function featureLayeringViolations(source, label) {
       push('layer-geometry', line, `${token} — geometry belongs to a components/ui organism`);
     }
     if (product && variants.some((variant) => LAYER_BREAKPOINT.test(variant))) {
-      push('layer-breakpoint', line, `${token} — the product's one breakpoint is desktop:`);
+      push(
+        'layer-breakpoint',
+        line,
+        `${token} — the product's breakpoints are desktop: and shell:`,
+      );
     }
   }
   if (!feature) return findings;
@@ -1145,51 +1169,29 @@ export function textRoleBackgroundViolations(source, label) {
   return violations;
 }
 
-/** A role's declared font-size in rem, or null when it does not set one. */
-function fontSizeRem(rules, selector) {
-  const pattern = selectorPattern(selector);
-  for (const rule of rules) {
-    if (!pattern.test(rule.prelude)) continue;
-    const match = /(?:^|[;{]|\s)font-size\s*:\s*([\d.]+)rem/.exec(rule.body);
-    if (match) return Number(match[1]);
-  }
-  return null;
-}
-
 /** Shared token completeness and relative scale consistency; absolute appearance is free to change. */
 export function productContractViolations(root) {
   const violations = [];
   const css = readFileSync(join(root, ...TOKEN_CSS.split('/')), 'utf8');
-  const websiteCss = readFileSync(join(root, ...WEBSITE_CSS.split('/')), 'utf8');
   // Every role the product builds on has to be defined somewhere. The value is
   // the design system's to choose: pinning `--color-accent` to a literal hex
   // meant a rebrand failed a test rather than a review.
+  // The system's own tokens are pinned by design-system-contract.mjs; these are
+  // the component geometry roles the product derives from them.
   const requiredTokens = [
-    '--text-xs',
-    '--text-sm',
-    '--text-2xl',
     '--content-gutter',
+    '--content-max-width',
     '--workspace-gap',
     '--compact-gap',
     '--page-section-gap',
     '--card-padding',
     '--modal-padding',
-    '--control-height-md',
+    '--nav-item-height',
     '--menu-item-height',
+    '--tab-height',
     '--badge-height-sm',
-    '--control-height-lg',
-    '--radius-control',
-    '--radius-card',
-    '--radius-lg',
-    '--color-background',
-    '--color-background-alt',
-    '--color-sheet',
-    '--color-panel-tonal',
-    '--color-well',
-    '--color-active',
-    '--color-accent',
-    '--color-selection',
-    '--color-selection-fg',
+    '--table-row-height',
+    '--table-header-height',
   ];
   for (const token of requiredTokens) {
     if (!new RegExp(escapeRegExp(token) + String.raw`\s*:\s*[^;]+;`).test(css)) {
@@ -1197,19 +1199,34 @@ export function productContractViolations(root) {
     }
   }
   // The type ladder is ordered even though its absolute sizes are free.
-  const TYPE_SCALE = ['--text-xs', '--text-sm', '--text-2xl'];
+  const TYPE_SCALE = [
+    '--text-caption',
+    '--text-body-sm',
+    '--text-body',
+    '--text-body-lg',
+    '--text-lead',
+    '--text-title',
+    '--text-display-md',
+    '--text-display-lg',
+    '--text-display-xl',
+    '--text-display-2xl',
+  ];
   const scale = TYPE_SCALE.map((token) => {
-    const match = new RegExp(escapeRegExp(token) + String.raw`\s*:\s*([\d.]+)rem`).exec(css);
+    const match = new RegExp(escapeRegExp(token) + String.raw`\s*:\s*([\d.]+)px`).exec(css);
     return { token, size: match ? Number(match[1]) : null };
-  }).filter((step) => step.size !== null);
-  for (let index = 1; index < scale.length; index += 1) {
-    if (scale[index].size <= scale[index - 1].size) {
+  });
+  for (const { token, size } of scale) {
+    if (size === null) violations.push(`${TOKEN_CSS}: ${token} must be a px size`);
+  }
+  const sized = scale.filter((step) => step.size !== null);
+  for (let index = 1; index < sized.length; index += 1) {
+    if (sized[index].size <= sized[index - 1].size) {
       violations.push(
-        `${TOKEN_CSS}: ${scale[index].token} must be larger than ${scale[index - 1].token}`,
+        `${TOKEN_CSS}: ${sized[index].token} must be larger than ${sized[index - 1].token}`,
       );
     }
   }
-  if (/\.website-type\b/.test(css + websiteCss)) {
+  if (/\.website-type\b/.test(css)) {
     violations.push(`${TOKEN_CSS}: retired .website-type palette boundary must not return`);
   }
   // The class itself is gone from the shell, so guarding only the palette-override
@@ -1221,120 +1238,8 @@ export function productContractViolations(root) {
   return violations;
 }
 
-/** The index just past the `}` that balances the `{` at `open`, or -1 when unbalanced. */
-function blockEnd(text, open) {
-  let depth = 1;
-  let close = open + 1;
-  while (close < text.length && depth > 0) {
-    if (text[close] === '{') depth += 1;
-    if (text[close] === '}') depth -= 1;
-    close += 1;
-  }
-  return depth === 0 ? close : -1;
-}
-
-function cssRules(source) {
-  const clean = source.replace(/\/\*[\s\S]*?\*\//g, '');
-  const rules = [];
-  let cursor = 0;
-  while (cursor < clean.length) {
-    const open = clean.indexOf('{', cursor);
-    if (open === -1) break;
-    const prelude = clean.slice(cursor, open).trim();
-    const close = blockEnd(clean, open);
-    if (close === -1) break;
-    if (prelude && !prelude.startsWith('@')) {
-      rules.push({ prelude, body: clean.slice(open + 1, close - 1) });
-    }
-    cursor = close;
-  }
-  return rules;
-}
-
 function escapeRegExp(value) {
   return value.replace(/[.*+?^$(){}|[\]\\]/g, String.raw`\$&`);
-}
-
-function selectorPattern(selector) {
-  return new RegExp(escapeRegExp(selector) + String.raw`(?![\w-])`);
-}
-
-function missingRoleViolations(rules, cssLabel) {
-  const violations = [];
-  for (const selector of REQUIRED_WEBSITE_ROLES) {
-    if (!rules.some((candidate) => candidate.prelude.trim() === selector)) {
-      violations.push(cssLabel + ': missing website selector ' + selector);
-    }
-  }
-  return violations;
-}
-
-function typeLadderViolations(rules, cssLabel) {
-  const violations = [];
-  const ladder = WEBSITE_TYPE_LADDER.map((selector) => ({
-    selector,
-    size: fontSizeRem(rules, selector),
-  })).filter((step) => step.size !== null);
-  for (let index = 1; index < ladder.length; index += 1) {
-    const previous = ladder[index - 1];
-    const current = ladder[index];
-    if (current.size > previous.size) {
-      violations.push(
-        cssLabel +
-          ': ' +
-          current.selector +
-          ' (' +
-          current.size +
-          'rem) must not be larger than ' +
-          previous.selector +
-          ' (' +
-          previous.size +
-          'rem)',
-      );
-    }
-  }
-  return violations;
-}
-
-export function websiteContractViolations(root) {
-  const violations = [];
-  const cssPath = join(root, ...WEBSITE_CSS.split('/'));
-  const cssLabel = relative(root, cssPath).replaceAll('\\', '/');
-  const rules = cssRules(readFileSync(cssPath, 'utf8'));
-
-  violations.push(
-    ...missingRoleViolations(rules, cssLabel),
-    ...typeLadderViolations(rules, cssLabel),
-  );
-
-  for (const selector of TOKEN_COLORED_ROLES) {
-    const selectorRegex = selectorPattern(selector);
-    const scoped = rules.filter((rule) => selectorRegex.test(rule.prelude));
-    const colors = scoped.flatMap((rule) => [
-      ...rule.body.matchAll(/(?:^|[;{]|\s)color\s*:([^;]+)/g),
-    ]);
-    if (!colors.length) {
-      violations.push(cssLabel + ': ' + selector + ' must declare a color');
-      continue;
-    }
-    for (const [, value] of colors) {
-      if (!/var\(\s*--/.test(value)) {
-        violations.push(
-          cssLabel + ': ' + selector + ' must take its color from a token, not ' + value.trim(),
-        );
-      }
-    }
-  }
-
-  for (const role of SHARED_GEOMETRY_ROLES) {
-    if (new RegExp(escapeRegExp(role) + String.raw`\s*:`).test(readFileSync(cssPath, 'utf8'))) {
-      violations.push(
-        cssLabel + ': ' + role + ' is a shared geometry role and must not be redefined per surface',
-      );
-    }
-  }
-
-  return violations;
 }
 
 /**

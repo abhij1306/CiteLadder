@@ -4,9 +4,9 @@ import { cn } from '@/lib/utils';
 type DiffLine = { kind: 'same' | 'added' | 'removed'; text: string };
 
 const DIFF_LINE = {
-  same: { mark: ' ', label: null, tone: 'text-muted' },
-  removed: { mark: '−', label: 'Removed', tone: 'bg-well text-secondary' },
-  added: { mark: '+', label: 'Added', tone: 'bg-panel-tonal text-secondary' },
+  same: { mark: ' ', label: null, tone: 'text-ink-muted' },
+  removed: { mark: '−', label: 'Removed', tone: 'bg-surface-sunken text-ink-secondary' },
+  added: { mark: '+', label: 'Added', tone: 'bg-surface-sunken text-ink-secondary' },
 } as const;
 
 /** A computed line diff, with removed/added marks announced to screen readers. */
@@ -26,7 +26,7 @@ export function LineDiff({
       aria-label={label}
       className={textRole(
         'caption',
-        'border-border-subtle grid overflow-x-auto rounded-[var(--radius-control)] border font-mono',
+        'border-line grid overflow-x-auto rounded-md border font-mono',
       )}
     >
       {keyedLines.map((line) => {

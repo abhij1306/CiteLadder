@@ -1,103 +1,103 @@
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Controller, type UseFormReturn } from 'react-hook-form';
 
-import { ActivityProgress, type ActivityStep } from '@/components/ui/activity-progress';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { Inline, Stack } from '@/components/ui/layout';
+import { Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
-import { splitPaneClasses } from '@/components/ui/workspace';
+import { OnboardingStep, StepFindings } from '@/components/ui/onboarding-shell';
+import { StepList, type Step } from '@/components/ui/step-list';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 import { discoveryActivity } from '@/lib/onboarding/discovery-activity';
 import { onboardingErrorMessage, type BrandStepValues } from '@/lib/onboarding/forms';
 import { hasConfirmedIcp, IcpAudience, IcpCategory } from './icp-confirmation';
 import { ReviewStep } from './review-step';
+import { useStaggeredSteps } from './use-staggered-steps';
 
 const MARKET_OPTIONS = [{ value: 'GLOBAL', label: 'Global' }, ...MARKET_COUNTRIES];
 
 /** Each stage's heading; focus moves here when the stage changes. */
 export const STAGE_HEADING_ID = 'onboarding-stage-heading';
 
-function StageHeader({ title, children }: Readonly<{ title: ReactNode; children: ReactNode }>) {
-  return (
-    <div className="flow-header">
-      <h1 id={STAGE_HEADING_ID} tabIndex={-1} className="flow-title outline-none">
-        {title}
-      </h1>
-      <p className="flow-help">{children}</p>
-    </div>
-  );
-}
+/** A stage's footer: the way back (none on the first step) and its one ink action. */
+export type StageActions = Readonly<{ back?: ReactNode; next: ReactNode }>;
 
 export function BrandStage({
   form,
   isAdditional,
   onSubmit,
+  actions,
 }: Readonly<{
   form: UseFormReturn<BrandStepValues>;
   isAdditional: boolean;
   onSubmit: () => void;
+  actions: StageActions;
 }>) {
   return (
-    <form id="onboarding-brand-form" noValidate onSubmit={onSubmit}>
-      <StageHeader title={isAdditional ? 'Add a project' : "Let's get started"}>
-        We&apos;ll review your website, suggest comparable brands, and prepare balanced questions.
-      </StageHeader>
-      <div className={splitPaneClasses('peers')}>
-        <Field label="Brand name" required error={form.formState.errors.brand_name?.message}>
-          {(props) => <Input {...props} {...form.register('brand_name')} placeholder="Acme" />}
-        </Field>
-        <Field label="Website" required error={form.formState.errors.website_url?.message}>
-          {(props) => (
-            <Input
-              {...props}
-              {...form.register('website_url')}
-              placeholder="acme.com"
-              inputMode="url"
-            />
-          )}
-        </Field>
-        <Field label="Primary market" error={form.formState.errors.primary_market?.message}>
-          {(props) => (
-            <Controller
-              control={form.control}
-              name="primary_market"
-              render={({ field }) => (
-                <MarketSelect
-                  {...props}
-                  ariaLabel="Primary market"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  options={MARKET_OPTIONS}
-                  showCountryFlags
-                />
-              )}
-            />
-          )}
-        </Field>
-        <Field label="Language" error={form.formState.errors.language_code?.message}>
-          {(props) => (
-            <Controller
-              control={form.control}
-              name="language_code"
-              render={({ field }) => (
-                <MarketSelect
-                  {...props}
-                  ariaLabel="Language"
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                  options={MARKET_LANGUAGES}
-                />
-              )}
-            />
-          )}
-        </Field>
-      </div>
-    </form>
+    <OnboardingStep
+      titleId={STAGE_HEADING_ID}
+      title={isAdditional ? 'Add a project' : "Let's get started"}
+      help="We'll review your website, suggest comparable brands, and prepare balanced questions."
+      back={actions.back}
+      next={actions.next}
+    >
+      <form id="onboarding-brand-form" noValidate onSubmit={onSubmit}>
+        <Stack gap="workspace">
+          <Field label="Brand name" required error={form.formState.errors.brand_name?.message}>
+            {(props) => <Input {...props} {...form.register('brand_name')} placeholder="Acme" />}
+          </Field>
+          <Field label="Website" required error={form.formState.errors.website_url?.message}>
+            {(props) => (
+              <Input
+                {...props}
+                {...form.register('website_url')}
+                placeholder="acme.com"
+                inputMode="url"
+              />
+            )}
+          </Field>
+          <Field label="Primary market" error={form.formState.errors.primary_market?.message}>
+            {(props) => (
+              <Controller
+                control={form.control}
+                name="primary_market"
+                render={({ field }) => (
+                  <MarketSelect
+                    {...props}
+                    ariaLabel="Primary market"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    options={MARKET_OPTIONS}
+                    showCountryFlags
+                  />
+                )}
+              />
+            )}
+          </Field>
+          <Field label="Language" error={form.formState.errors.language_code?.message}>
+            {(props) => (
+              <Controller
+                control={form.control}
+                name="language_code"
+                render={({ field }) => (
+                  <MarketSelect
+                    {...props}
+                    ariaLabel="Language"
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    options={MARKET_LANGUAGES}
+                  />
+                )}
+              />
+            )}
+          </Field>
+        </Stack>
+      </form>
+    </OnboardingStep>
   );
 }
 
@@ -105,6 +105,7 @@ export function DiscoveryStage({
   brandName,
   discovery,
   onEdit,
+  actions,
 }: Readonly<{
   brandName: string | undefined;
   discovery: {
@@ -116,67 +117,55 @@ export function DiscoveryStage({
     retry: () => void;
   };
   onEdit: () => void;
+  actions: StageActions;
 }>) {
   const found = discoveryResults(discovery.discovery);
   return (
-    <div>
-      <StageHeader title="Finding what to track">
-        We&apos;re reading {brandName || 'your website'} and learning what you offer.
-      </StageHeader>
-      <ActivityProgress
+    <OnboardingStep
+      titleId={STAGE_HEADING_ID}
+      title="Finding what to track"
+      help={`We're reading ${brandName || 'your website'} and learning what you offer.`}
+      back={actions.back}
+      next={actions.next}
+    >
+      <StageSteps
         label="Discovering your brand"
         steps={discoveryActivity(discovery.discovery)}
-        animateCompletion
-        appearance="flow"
+        stagger
       />
-      {found.length > 0 ? (
-        <section className="flow-found">
-          <h2 className="flow-group-title">Found so far</h2>
-          <ul className="flow-found-list">
-            {found.map((item, index) => (
-              <li
-                key={`${item}:${index}`}
-                className="flow-found-item"
-                style={{ '--flow-result-index': index } as CSSProperties}
-              >
-                {item}
-              </li>
-            ))}
-          </ul>
-        </section>
+      {found.length > 0 ? <StepFindings title="Found so far" items={found} /> : null}
+      {(discovery.discovery?.warnings ?? []).map((warning) => (
+        <Callout key={warning} tone="warning">
+          {warningMessage(warning)}
+        </Callout>
+      ))}
+      {discovery.discovery?.status === 'failed' ? (
+        <Callout
+          tone="negative"
+          action={
+            <Button variant="secondary" onClick={onEdit}>
+              Edit website
+            </Button>
+          }
+        >
+          {discovery.discovery.error_code === 'invalid_url'
+            ? 'The website address is invalid. Go back and correct it.'
+            : 'We could not confirm that this website exists. Check the address and try again.'}
+        </Callout>
       ) : null}
-      <Stack gap="workspace" className="flow-stage-band">
-        {(discovery.discovery?.warnings ?? []).map((warning) => (
-          <Alert key={warning} tone="warning">
-            {warningMessage(warning)}
-          </Alert>
-        ))}
-        {discovery.discovery?.status === 'failed' ? (
-          <Alert tone="danger">
-            <Inline gap="compact" className="justify-between">
-              <span>
-                {discovery.discovery.error_code === 'invalid_url'
-                  ? 'The website address is invalid. Go back and correct it.'
-                  : 'We could not confirm that this website exists. Check the address and try again.'}
-              </span>
-              <Button variant="ghost" onClick={onEdit}>
-                Edit website
-              </Button>
-            </Inline>
-          </Alert>
-        ) : null}
-        {discovery.error ? (
-          <Alert tone="warning">
-            <Inline gap="compact" className="justify-between">
-              <span>{onboardingErrorMessage(discovery.error)}</span>
-              <Button variant="ghost" onClick={discovery.retry}>
-                Retry
-              </Button>
-            </Inline>
-          </Alert>
-        ) : null}
-      </Stack>
-    </div>
+      {discovery.error ? (
+        <Callout
+          tone="warning"
+          action={
+            <Button variant="secondary" onClick={discovery.retry}>
+              Retry
+            </Button>
+          }
+        >
+          {onboardingErrorMessage(discovery.error)}
+        </Callout>
+      ) : null}
+    </OnboardingStep>
   );
 }
 
@@ -184,38 +173,71 @@ export function CreationStage({
   committedProjectId,
 }: Readonly<{ committedProjectId: string | null }>) {
   const projectCommitted = committedProjectId !== null;
-  const steps: ActivityStep[] = [
+  const steps: Step[] = [
     {
       id: 'save',
       label: 'Saving your project',
       detail: projectCommitted
         ? 'Your confirmed details are saved.'
         : 'Your confirmed draft remains recoverable.',
-      state: projectCommitted ? 'complete' : 'active',
+      status: projectCommitted ? 'done' : 'running',
     },
     {
       id: 'open',
       label: 'Opening your workspace',
       detail: 'Next, choose the questions you want to track.',
-      state: projectCommitted ? 'active' : 'pending',
+      status: projectCommitted ? 'running' : 'pending',
     },
   ];
 
   return (
     <div aria-busy="true">
-      <StageHeader title="Creating your project">
-        We&apos;re saving your confirmed details and will open the project as soon as it is
-        committed.
-      </StageHeader>
-      <ActivityProgress label="Project creation progress" steps={steps} appearance="flow" />
+      <OnboardingStep
+        titleId={STAGE_HEADING_ID}
+        title="Creating your project"
+        help="We're saving your confirmed details and will open the project as soon as it is committed."
+      >
+        <StageSteps label="Project creation progress" steps={steps} />
+      </OnboardingStep>
     </div>
+  );
+}
+
+/**
+ * A stage's steps, with the overall count as a (visually hidden) progress bar
+ * and the step being worked on announced politely.
+ */
+function StageSteps({
+  label,
+  steps,
+  stagger = false,
+}: Readonly<{ label: string; steps: readonly Step[]; stagger?: boolean }>) {
+  const shown = useStaggeredSteps(steps, stagger);
+  return (
+    <>
+      <progress
+        className="sr-only"
+        aria-label={`${shown.done} of ${steps.length} steps complete`}
+        aria-valuemin={0}
+        aria-valuemax={steps.length}
+        aria-valuenow={shown.done}
+        value={shown.done}
+        max={Math.max(steps.length, 1)}
+      />
+      <StepList label={label} steps={shown.steps} />
+      <span className="sr-only" aria-live="polite">
+        {shown.announcement}
+      </span>
+    </>
   );
 }
 
 export function ReviewStage({
   flow,
+  actions,
 }: Readonly<{
   flow: ReturnType<typeof import('./onboarding-flow').useOnboardingFlow>;
+  actions: StageActions;
 }>) {
   const {
     catalog,
@@ -231,75 +253,74 @@ export function ReviewStage({
     toggle,
   } = flow;
   return (
-    <div>
-      <StageHeader title="Does this look right?">
-        Confirm what we found before we create your project.
-      </StageHeader>
+    <OnboardingStep
+      titleId={STAGE_HEADING_ID}
+      title="Does this look right?"
+      help="Confirm what we found before we create your project."
+      back={actions.back}
+      next={actions.next}
+    >
       <ReviewNotices failed={complete.isError}>
         {catalog.isError ? (
-          <Alert tone="warning">
-            <Inline gap="compact" className="justify-between">
-              <span>We could not load the competitor limit.</span>
-              <Button variant="ghost" onClick={() => catalog.refetch()}>
+          <Callout
+            tone="warning"
+            action={
+              <Button variant="secondary" onClick={() => catalog.refetch()}>
                 Try again
               </Button>
-            </Inline>
-          </Alert>
+            }
+          >
+            We could not load the competitor limit.
+          </Callout>
         ) : null}
         {complete.isError ? (
-          <Alert tone="warning">{onboardingErrorMessage(complete.error)}</Alert>
+          <Callout tone="warning">{onboardingErrorMessage(complete.error)}</Callout>
         ) : null}
         <CompletionStateAlert failed={completionFailed} />
       </ReviewNotices>
-      {/* The websites and competitor picks run full width first, each with its
-          hint beneath; then what you sell and who buys it share a row. */}
-      <div className="flow-review">
-        <ReviewStep
-          domains={domains}
-          competitors={competitors}
-          onToggleDomain={toggle(flow.setDomains)}
-          onToggleCompetitor={(index) =>
-            toggleCompetitor(index, setCompetitors, maximumCompetitors)
-          }
-          onEditCompetitor={(index, name, domain) =>
-            editCompetitor(index, name, domain, setCompetitors)
-          }
-          onRemoveCompetitor={(index) =>
-            setCompetitors((current) => current.filter((_, itemIndex) => itemIndex !== index))
-          }
-          onAddCompetitor={() => addCompetitor(setCompetitors, maximumCompetitors)}
-          maximumCompetitors={maximumCompetitors}
-        />
-        {!hasSelectedDomain ? (
-          <p className="flow-review-hint">Keep at least one website address selected.</p>
-        ) : null}
-        {flow.hasIncompleteCompetitor ? (
-          <p className="flow-review-hint">Add a name and website for each selected competitor.</p>
-        ) : null}
-        {profile ? (
-          <>
-            <div className="flow-review-cell">
-              <IcpCategory profile={profile} onChange={setProfile} />
-              {!hasConfirmedIcp(profile) ? (
-                <p className="flow-review-hint">Choose or describe what you sell.</p>
-              ) : null}
-            </div>
-            <div className="flow-review-card flow-review-audience">
-              <IcpAudience profile={profile} onChange={setProfile} />
-            </div>
-          </>
-        ) : null}
-      </div>
-    </div>
+      {/* In reading order: the websites and competitor picks, each with the
+          reason Create project waits beneath it, then what you sell and who
+          buys it. */}
+      <ReviewStep
+        domains={domains}
+        competitors={competitors}
+        onToggleDomain={toggle(flow.setDomains)}
+        onToggleCompetitor={(index) => toggleCompetitor(index, setCompetitors, maximumCompetitors)}
+        onEditCompetitor={(index, name, domain) =>
+          editCompetitor(index, name, domain, setCompetitors)
+        }
+        onRemoveCompetitor={(index) =>
+          setCompetitors((current) => current.filter((_, itemIndex) => itemIndex !== index))
+        }
+        onAddCompetitor={() => addCompetitor(setCompetitors, maximumCompetitors)}
+        maximumCompetitors={maximumCompetitors}
+        domainNote={hasSelectedDomain ? undefined : 'Keep at least one website address selected.'}
+        competitorNote={
+          flow.hasIncompleteCompetitor
+            ? 'Add a name and website for each selected competitor.'
+            : undefined
+        }
+      />
+      {profile ? (
+        <>
+          <IcpCategory
+            profile={profile}
+            onChange={setProfile}
+            note={hasConfirmedIcp(profile) ? undefined : 'Choose or describe what you sell.'}
+          />
+          <IcpAudience profile={profile} onChange={setProfile} />
+        </>
+      ) : null}
+    </OnboardingStep>
   );
 }
 
 /**
- * Anything that stopped "Create project", above the cards it concerns.
+ * Anything that stopped "Create project", above the fields it concerns.
  *
  * These used to sit below both columns — past the fold on a laptop — so a
  * refused or timed-out creation looked like a button that did nothing. A new
- * failure brings this region into view.
+ * failure brings this region into view. Empty, it takes no room.
  */
 function ReviewNotices({ failed, children }: Readonly<{ failed: boolean; children: ReactNode }>) {
   const region = useRef<HTMLDivElement>(null);
@@ -307,9 +328,9 @@ function ReviewNotices({ failed, children }: Readonly<{ failed: boolean; childre
     if (failed) region.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   }, [failed]);
   return (
-    <div ref={region} aria-live="polite" className="flow-review-notices">
+    <Stack ref={region} gap="workspace" aria-live="polite" className="empty:hidden">
       {children}
-    </div>
+    </Stack>
   );
 }
 
@@ -334,9 +355,9 @@ function withoutTrailingSlashes(value: string): string {
 function CompletionStateAlert({ failed }: Readonly<{ failed: boolean }>) {
   if (failed) {
     return (
-      <Alert tone="danger">
+      <Callout tone="negative">
         Project creation did not finish. Go back, confirm the website again, and retry.
-      </Alert>
+      </Callout>
     );
   }
   return null;

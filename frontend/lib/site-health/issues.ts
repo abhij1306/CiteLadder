@@ -16,7 +16,7 @@
  *     stable order (high → medium → low), never a client re-count.
  */
 import type { IssueSeverity, IssueDimension } from '@/lib/api/types';
-import type { StatusValue } from '@/components/ui/badge-variants';
+import type { StatusValue } from '@/components/ui/badge';
 
 /** Map an issue severity onto a status-badge value (shared palette). */
 export function severityBadgeValue(severity: IssueSeverity): StatusValue {

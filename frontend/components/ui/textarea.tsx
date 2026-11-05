@@ -1,26 +1,38 @@
 import type { ComponentPropsWithoutRef, Ref } from 'react';
 
+import { FIELD_EDGE } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
+/**
+ * Textarea — the multi-line field. It looks like Input: `surface` with the
+ * soft xs ring, `radius-md`, 8/12px padding, 14/20 text, at least two
+ * control heights tall, resizing vertically only. Focus and error come from
+ * the shared `.focus-input` rule.
+ */
 const textareaClasses =
-  'focus-input min-h-[var(--textarea-min-height)] w-full resize-y rounded-[var(--radius-control)] border border-border-bold bg-input p-3 text-field text-foreground transition-[border-color,background-color] placeholder:text-muted enabled:hover:border-muted aria-invalid:border-danger aria-invalid:enabled:hover:border-danger disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle';
+  'text-ink placeholder:text-ink-muted block w-full rounded-md border text-body-sm disabled:cursor-not-allowed disabled:opacity-45';
+
+const fieldClasses = cn(
+  'focus-input min-h-[calc(var(--control-md)*2)] resize-y px-3 py-2 transition-[border-color,box-shadow] duration-[var(--motion-fast)]',
+  FIELD_EDGE,
+);
 
 /**
- * Inside a `ComposerFrame` the frame is the box: the field keeps its focus
- * focus but drops its edge, its fill, resize handle and resting height, and takes the
- * frame's tighter inset so its text lines up with the chips above it.
+ * Inside the Agent composer the composer is the box and draws the one focus
+ * boundary (its `focus-frame`): the field drops its edge, fill, resize
+ * handle, resting height and focus treatment.
  */
-const composerClasses =
-  'min-h-0 resize-none border-transparent bg-transparent px-2 py-1 shadow-none hover:border-transparent hover:shadow-none';
+const composerClasses = 'min-h-0 resize-none border-transparent bg-transparent px-2 py-1';
 
 export function Textarea({
   className,
   placement = 'field',
+  rows = 4,
   ref,
   ...props
 }: Readonly<
   ComponentPropsWithoutRef<'textarea'> & {
-    /** `composer`: the message field inside a `ComposerFrame`. */
+    /** `composer`: the message field inside the Agent composer. */
     placement?: 'field' | 'composer';
     ref?: Ref<HTMLTextAreaElement>;
   }
@@ -28,7 +40,12 @@ export function Textarea({
   return (
     <textarea
       ref={ref}
-      className={cn(textareaClasses, placement === 'composer' && composerClasses, className)}
+      rows={rows}
+      className={cn(
+        textareaClasses,
+        placement === 'composer' ? composerClasses : fieldClasses,
+        className,
+      )}
       {...props}
     />
   );

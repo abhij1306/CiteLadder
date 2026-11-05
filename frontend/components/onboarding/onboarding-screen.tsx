@@ -3,9 +3,10 @@
 import { useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-import { FlowActions, FlowShell, type FlowStep } from '@/components/onboarding/flow-shell';
-import { FlowAccountControls } from '@/components/layout/flow-account-controls';
+import { UserMenuTrigger } from '@/components/layout/user-menu';
 import { Button } from '@/components/ui/button';
+import { OnboardingShell, StepBack } from '@/components/ui/onboarding-shell';
+import { TextLink } from '@/components/ui/text-link';
 import { projectDestination } from '@/lib/navigation/project-destination';
 import { useProjectContext } from '@/lib/project/project-context';
 
@@ -17,13 +18,10 @@ import {
   DiscoveryStage,
   ReviewStage,
   STAGE_HEADING_ID,
+  type StageActions,
 } from './onboarding-stages';
 
-const STEPS: readonly FlowStep[] = [
-  { id: 'brand', label: 'Basics' },
-  { id: 'discovery', label: 'Research' },
-  { id: 'review', label: 'Confirm' },
-];
+const STEPS = ['Basics', 'Research', 'Confirm'] as const;
 
 /** The onboarding transaction coordinator; each visual stage owns its own UI. */
 export function OnboardingScreen() {
@@ -55,29 +53,29 @@ function OnboardingTransaction({ transactionKey }: Readonly<{ transactionKey: st
   const projectsHref = activeProjectId
     ? projectDestination('/projects', null, activeProjectId)
     : undefined;
-  const stage = onboardingStage(flow);
   useStageHeadingFocus(flow.isCompleting ? 'creating' : flow.step);
-  const measure = !flow.isCompleting && flow.step === 2 ? 'wide' : 'default';
+  // No exit unless there is somewhere to exit to; the account menu beside this
+  // reaches settings when there is no project to go back to.
+  const exitHref = flow.isAdditional ? projectsHref : undefined;
 
   return (
-    <FlowShell
+    <OnboardingShell
       mainLabel="Project setup"
       steps={STEPS}
-      currentStep={flow.step}
-      // No exit unless there is somewhere to exit to; the menu beside this
-      // reaches settings when there is no project to go back to.
-      exitHref={flow.isAdditional ? projectsHref : undefined}
-      trailing={<FlowAccountControls />}
-      align={flow.isCompleting ? 'center' : 'start'}
-      measure={measure}
-      actions={
-        flow.isCompleting ? undefined : (
-          <OnboardingActions flow={flow} projectsHref={projectsHref} />
-        )
+      current={flow.step}
+      barEnd={
+        <>
+          {exitHref ? (
+            <TextLink asChild>
+              <Link to={exitHref}>Exit</Link>
+            </TextLink>
+          ) : null}
+          <UserMenuTrigger presenter="compact" />
+        </>
       }
     >
-      {stage}
-    </FlowShell>
+      {onboardingStage(flow, flow.isCompleting ? undefined : stageActions(flow, projectsHref))}
+    </OnboardingShell>
   );
 }
 
@@ -101,13 +99,21 @@ function stripTrailingSlashes(pathname: string): string {
   return pathname.slice(0, end);
 }
 
-function onboardingStage(flow: ReturnType<typeof useOnboardingFlow>) {
-  if (flow.isCompleting) {
+function onboardingStage(
+  flow: ReturnType<typeof useOnboardingFlow>,
+  actions: StageActions | undefined,
+) {
+  if (flow.isCompleting || !actions) {
     return <CreationStage committedProjectId={flow.completedProjectId} />;
   }
   if (flow.step === 0) {
     return (
-      <BrandStage form={flow.form} isAdditional={flow.isAdditional} onSubmit={flow.submitBrand} />
+      <BrandStage
+        form={flow.form}
+        isAdditional={flow.isAdditional}
+        onSubmit={flow.submitBrand}
+        actions={actions}
+      />
     );
   }
   if (flow.step === 1) {
@@ -116,78 +122,65 @@ function onboardingStage(flow: ReturnType<typeof useOnboardingFlow>) {
         brandName={flow.brand?.brand_name}
         discovery={flow.discovery}
         onEdit={() => flow.setStep(0)}
+        actions={actions}
       />
     );
   }
-  return <ReviewStage flow={flow} />;
+  return <ReviewStage flow={flow} actions={actions} />;
 }
 
-function OnboardingActions({
-  flow,
-  projectsHref,
-}: Readonly<{ flow: ReturnType<typeof useOnboardingFlow>; projectsHref: string | undefined }>) {
+/** Each stage's Back and its one ink action, in the step card's footer. */
+function stageActions(
+  flow: ReturnType<typeof useOnboardingFlow>,
+  projectsHref: string | undefined,
+): StageActions {
   if (flow.step === 0) {
-    return (
-      <FlowActions
-        secondary={
-          // Same rule as the exit above: cancelling has to lead somewhere.
-          flow.isAdditional && projectsHref ? (
-            <Button asChild variant="ghost">
-              <Link to={projectsHref}>Cancel</Link>
-            </Button>
-          ) : undefined
-        }
-        primary={
-          <Button type="submit" form="onboarding-brand-form">
-            Continue
+    return {
+      back:
+        // Same rule as the exit above: cancelling has to lead somewhere.
+        flow.isAdditional && projectsHref ? (
+          <Button asChild variant="ghost">
+            <Link to={projectsHref}>Cancel</Link>
           </Button>
-        }
-      />
-    );
+        ) : undefined,
+      next: (
+        <Button type="submit" variant="primary" form="onboarding-brand-form">
+          Continue
+        </Button>
+      ),
+    };
   }
 
   if (flow.step === 1) {
     const discoveryReady =
       !flow.discovery.isRunning && flow.discovery.discovery?.status === 'ready';
-    return (
-      <FlowActions
-        secondary={
-          <Button variant="ghost" onClick={() => flow.setStep(0)}>
-            Back
-          </Button>
-        }
-        primary={
-          <Button onClick={() => flow.setStep(2)} disabled={!discoveryReady}>
-            {flow.discovery.isRunning ? 'Searching…' : 'Review'}
-          </Button>
-        }
-      />
-    );
+    return {
+      back: <StepBack onClick={() => flow.setStep(0)} />,
+      next: (
+        <Button variant="primary" onClick={() => flow.setStep(2)} disabled={!discoveryReady}>
+          {flow.discovery.isRunning ? 'Searching…' : 'Review'}
+        </Button>
+      ),
+    };
   }
 
-  return (
-    <FlowActions
-      wide
-      secondary={
-        <Button variant="ghost" onClick={() => flow.setStep(1)} disabled={flow.isCompleting}>
-          Back
-        </Button>
-      }
-      primary={
-        <Button
-          onClick={() => flow.complete.mutate()}
-          pending={flow.isCompleting}
-          pendingLabel="Creating…"
-          disabled={
-            flow.completionFailed ||
-            !flow.hasSelectedDomain ||
-            flow.hasIncompleteCompetitor ||
-            !hasConfirmedIcp(flow.profile)
-          }
-        >
-          Create project
-        </Button>
-      }
-    />
-  );
+  return {
+    back: <StepBack onClick={() => flow.setStep(1)} disabled={flow.isCompleting} />,
+    next: (
+      <Button
+        variant="primary"
+        onClick={() => flow.complete.mutate()}
+        pending={flow.isCompleting}
+        pendingLabel="Creating…"
+        disabled={
+          flow.completionFailed ||
+          !flow.hasSelectedDomain ||
+          flow.hasIncompleteCompetitor ||
+          !hasConfirmedIcp(flow.profile)
+        }
+      >
+        Create project
+      </Button>
+    ),
+  };
 }

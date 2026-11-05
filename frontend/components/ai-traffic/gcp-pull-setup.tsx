@@ -6,8 +6,8 @@ import { useGcpPullActions } from '@/lib/ai-traffic/use-gcp-pull';
 import { gcpSetupCommands } from '@/lib/ai-traffic/gcp-commands';
 import { verificationFailureLabel } from '@/lib/ai-traffic/vocabulary';
 import { GCP_PULL_SETUP } from '@/lib/config/crawl-logs';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ function CodeText({ value, label }: Readonly<{ value: string; label: string }>) 
       <pre
         className={panelClasses(
           { tone: 'well' },
-          'type-caption overflow-x-auto font-mono break-all whitespace-pre-wrap',
+          'type-code overflow-x-auto break-all whitespace-pre-wrap',
         )}
       >
         {value}
@@ -75,7 +75,7 @@ export function GcpFields({ model }: Readonly<{ model: ReturnType<typeof useCraw
 /** What the setup involves before the source, and its label nonce, exist. */
 export function GcpSteps() {
   return (
-    <p className="type-body text-secondary">
+    <p className="type-body text-ink-secondary">
       CiteLadder pulls a Pub/Sub subscription in your Google Cloud project that a Cloud Logging sink
       fills with crawler requests to your load balancer or Cloud Run services. Create the source
       first: the setup commands then include its verification label. You pay Google for log routing
@@ -112,6 +112,7 @@ export function GcpSourceSetup({
         })}
       />
       <Button
+        variant="primary"
         className="w-fit"
         pending={verify.isPending}
         pendingLabel="Checking…"
@@ -120,12 +121,16 @@ export function GcpSourceSetup({
         Verify subscription
       </Button>
       {outcome?.verified ? (
-        <Alert tone="success">Verified. CiteLadder pulls the subscription every few minutes.</Alert>
+        <Callout tone="positive">
+          Verified. CiteLadder pulls the subscription every few minutes.
+        </Callout>
       ) : null}
       {outcome && !outcome.verified ? (
-        <Alert tone="danger">{verificationFailureLabel(outcome.failure ?? 'unavailable')}</Alert>
+        <Callout tone="negative">
+          {verificationFailureLabel(outcome.failure ?? 'unavailable')}
+        </Callout>
       ) : null}
-      {verify.isError ? <Alert tone="danger">{verify.error.message}</Alert> : null}
+      {verify.isError ? <Callout tone="negative">{verify.error.message}</Callout> : null}
     </Stack>
   );
 }
@@ -169,10 +174,10 @@ function SinkFilterUpdate({
 }>) {
   return (
     <Stack as="section" aria-label={`Sink filter update for ${source.host}`}>
-      <Alert tone="warning">
+      <Callout tone="warning">
         Update your sink filter. CiteLadder recognizes new crawlers; until the sink uses this
         filter, coverage stays partial.
-      </Alert>
+      </Callout>
       <CodeText label="Copy filter" value={gcp.log_filter} />
       {canManage ? (
         <Button
@@ -184,7 +189,9 @@ function SinkFilterUpdate({
           I’ve updated it
         </Button>
       ) : null}
-      {confirmFilter.isError ? <Alert tone="danger">{confirmFilter.error.message}</Alert> : null}
+      {confirmFilter.isError ? (
+        <Callout tone="negative">{confirmFilter.error.message}</Callout>
+      ) : null}
     </Stack>
   );
 }

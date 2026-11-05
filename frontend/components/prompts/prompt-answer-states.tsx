@@ -56,7 +56,7 @@ function ActionHandoff({ actionId }: Readonly<{ actionId: string }>) {
       <Button asChild variant="secondary">
         <ProjectLink href={`/agent/actions/${actionId}`}>Open the Action</ProjectLink>
       </Button>
-      <Button asChild>
+      <Button asChild variant="primary">
         <ProjectLink href={agentHandoffHref({ actionId })}>Work on this</ProjectLink>
       </Button>
     </>

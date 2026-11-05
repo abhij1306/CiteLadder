@@ -2,8 +2,8 @@
 
 import { useId, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
 
-import { BusyBar } from '@/components/ui/busy-bar';
-import { cardClasses } from '@/components/ui/card-variants';
+import { BusyBar } from '@/components/ui/progress-bar';
+import { cardClasses } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Pager } from '@/components/ui/pager';
@@ -211,12 +211,12 @@ export function DataTable({
       aria-label={naming.ariaLabel}
       aria-busy={busy?.active || undefined}
       data-data-table=""
-      className={cn(fit.box, 'relative grid min-w-0 content-start')}
+      className={cn(fit, 'relative grid min-w-0 content-start gap-4')}
     >
       {busy ? <BusyBar active={busy.active} label={busy.label} /> : null}
-      <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} className={fit.row} />
+      <DataTableHeader title={title} headingId={headingId} toolbar={toolbar} />
       {description ? (
-        <p data-data-table-description="" className={textRole('caption', 'py-3')}>
+        <p data-data-table-description="" className="text-caption text-ink-muted">
           {description}
         </p>
       ) : null}
@@ -224,8 +224,7 @@ export function DataTable({
         fixed
         minWidth={minWidth}
         {...naming}
-        wrapperClassName={fit.frame}
-        className={cn(fit.cells, pinFirstColumn && PINNED_FIRST_COLUMN)}
+        className={cn(pinFirstColumn && PINNED_FIRST_COLUMN)}
       >
         <DataTableColumns columns={columns} selection={selection} />
         <TableTextLinesContext value={pager || pageSize !== undefined ? rowLines : 2}>
@@ -240,18 +239,29 @@ export function DataTable({
           </DataTableBody>
         </TableTextLinesContext>
       </Table>
-      {paging.pager ? <Pager frame="table" className={fit.row} {...paging.pager} /> : null}
-      {footer ? (
-        <div
-          className={cn(
-            'type-caption border-border-subtle grid gap-1 border-t px-[var(--table-cell-padding-x)] py-2',
-            fit.row,
-          )}
-        >
-          {footer}
+      <DataTableFoot footer={footer} pager={paging.pager} />
+    </section>
+  );
+}
+
+/**
+ * The foot: the note (source, period or row count) on the left, the Pager on
+ * the right, one control tall; nothing when there is neither.
+ */
+function DataTableFoot({
+  footer,
+  pager,
+}: Readonly<{ footer: ReactNode; pager: DataTablePager | undefined }>) {
+  if (!pager && !footer) return null;
+  return (
+    <div className="flex min-h-[var(--control-md)] min-w-0 flex-wrap items-center justify-between gap-4">
+      {footer ? <div className="type-caption grid min-w-0 gap-1">{footer}</div> : null}
+      {pager ? (
+        <div className="ms-auto min-w-0">
+          <Pager {...pager} />
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -289,29 +299,15 @@ function pagingLayout(
 }
 
 /**
- * In a card, the table runs to the card's edges so the header fill and row
- * rules span it, rather than reading as a second surface inset on the card.
- * The outer cells keep the card's padding, so text stays on the title's line.
+ * The system's TableCard: the table sits inside the card's 24 inset, 16 below
+ * the title row and 16 above the pager and footnote. Inside a box that
+ * already frames it, there is no card of its own.
  */
-const FITS = {
-  card: {
-    // The card's first row (the title band, else the column header) is its
-    // own top inset: card padding above it read as a gap over the header.
-    // The card clips, so the bleeding header fill takes its corners.
-    box: cn(cardClasses(), 'overflow-hidden pt-0'),
-    frame: '-mx-[var(--card-padding)] w-[calc(100%+2*var(--card-padding))] max-w-none rounded-none',
-    cells:
-      '[&_tr>:first-child]:ps-[var(--card-padding)] [&_tr>:last-child]:pe-[var(--card-padding)]',
-    // The title band, pager and footer rules span the card too, their text on the same line.
-    row: '-mx-[var(--card-padding)] px-[var(--card-padding)]',
-  },
-  // Inside a box that already frames it: no card of its own.
-  nested: { box: undefined, frame: undefined, cells: undefined, row: undefined },
-} as const;
+const FITS = { card: cardClasses(), nested: undefined } as const;
 
 /** The first column stays in view while a wide table scrolls in its frame. */
 const PINNED_FIRST_COLUMN =
-  '[&_tr>:first-child]:sticky [&_tr>:first-child]:left-0 [&_tbody_tr>:first-child]:z-10 [&_tbody_tr>:first-child]:bg-panel [&_thead_tr>:first-child]:z-20';
+  '[&_tr>:first-child]:sticky [&_tr>:first-child]:left-0 [&_tbody_tr>:first-child]:z-10 [&_tbody_tr>:first-child]:bg-surface [&_thead_tr>:first-child]:z-20';
 
 /** The column widths and the header row, with the select-all column first. */
 function DataTableColumns({
@@ -348,19 +344,15 @@ function DataTableHeader({
   title,
   headingId,
   toolbar,
-  className,
-}: Readonly<{ title?: string; headingId: string; toolbar?: FilterBarProps; className?: string }>) {
+}: Readonly<{ title?: string; headingId: string; toolbar?: FilterBarProps }>) {
   if (!title && !toolbar) return null;
   return (
     <header
       data-data-table-header=""
-      className={cn(
-        'border-border-subtle flex min-h-[var(--data-table-header-height)] min-w-0 flex-wrap items-center gap-x-4 border-b',
-        className,
-      )}
+      className="flex min-h-[var(--control-md)] min-w-0 flex-wrap items-center gap-x-4 gap-y-2"
     >
       {title ? (
-        <h3 id={headingId} className={textRole('sectionTitle', 'min-w-0 truncate')}>
+        <h3 id={headingId} className={textRole('itemTitle', 'min-w-0 truncate')}>
           {title}
         </h3>
       ) : null}
@@ -432,7 +424,7 @@ function DataTableBody({
  */
 const ROW_HEIGHT = {
   1: 'var(--table-row-height)',
-  2: 'calc(2*var(--table-cell-padding-y)+var(--text-sm--line-height)+var(--text-xs--line-height))',
+  2: 'calc(2*var(--table-cell-padding-y)+var(--text-body-sm--line-height)+var(--text-caption--line-height))',
 } as const;
 
 /** A non-breaking space: a blank line that still takes a line's height. */

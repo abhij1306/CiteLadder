@@ -1,23 +1,39 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
-import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
-import { cardClasses, type CardTone } from './card-variants';
 
 /**
- * Card is reserved for a meaningful semantic object. It owns a white fill, the
- * card radius, fine edge and subtle layered elevation. Structural layout uses
- * metric groups, ledgers, editorial sections,
- * and workspace panes.
+ * Card — a `surface` box on the page that groups one thing: a chart, a
+ * table, a form. `radius-lg`, `shadow-card` and a 24px inset on the box
+ * itself, so content that owns its edges (a table, a scrolling list) sits in
+ * the same inset as text.
  *
- * Optional eyebrow header hook: render <CardEyebrow> above <CardTitle> for the
- * micro-label — e.g.
- *   <CardHeader><CardEyebrow>Visibility score</CardEyebrow><CardTitle>…
+ *   `plain` (default) — the white card.
+ *   `muted` — a flat `surface-sunken` well for secondary content: a tip, a
+ *             code sample, an empty state.
+ *   `ink`   — the one inverted tile a page may hold, for one emphasised
+ *             quote or number.
+ *
+ * Cards never nest and never take a coloured edge or fill. The card sets no
+ * display of its own: a flex column would re-flow every card and put an
+ * overflow boundary between a sticky child and its scroll container.
  */
+export type CardTone = 'plain' | 'muted' | 'ink';
+
+const CARD_TONE = {
+  plain: 'bg-surface text-ink shadow-card',
+  muted: 'bg-surface-sunken text-ink',
+  ink: 'bg-ink text-on-ink',
+} as const satisfies Record<CardTone, string>;
+
+/** The card face, for a semantic element that is not a `section` (a list item, a link). */
+export const cardClasses = (tone: CardTone = 'plain') =>
+  cn('surface-card rounded-lg p-[var(--card-padding)]', CARD_TONE[tone]);
+
 export function Card({
   children,
   className,
-  tone = 'default',
+  tone = 'plain',
   ...props
 }: Readonly<ComponentPropsWithoutRef<'section'> & { tone?: CardTone }>) {
   return (
@@ -28,40 +44,25 @@ export function Card({
 }
 
 /**
- * CardHeader — no bottom rule by default (the editorial language separates the
- * header from content with spacing alone). Pass `bordered` for the few
- * surfaces that genuinely need the hairline, e.g. a header sitting directly
- * atop a full-bleed table.
- *
- * `actions` is the header's trailing slot: a badge, a button, a small control
- * group. The title column (eyebrow, title, description — the children) takes
- * the free width on the left and the actions sit on the same row at the right;
- * when the row is too narrow the actions wrap below the title rather than
- * squeezing it.
+ * CardHeader — the eyebrow, title and description on the left and `actions`
+ * (a secondary or ghost Button, a Badge, a small control group) on the same
+ * row at the right; when the row is too narrow the actions wrap below the
+ * title rather than squeezing it. 16 below it when the card has more content.
  */
 export function CardHeader({
   children,
   className,
-  bordered,
   actions,
   ...props
 }: Readonly<
   ComponentPropsWithoutRef<'header'> & {
-    bordered?: boolean;
     /** Trailing controls or status on the title row; wraps below when narrow. */
     actions?: ReactNode;
   }
 >) {
-  // The card owns the 16 inset; the header only keeps the 12 heading→content
-  // step below it (and a hairline under it when `bordered`), and neither when
-  // it is the card's only content.
-  const edge = cn(
-    'not-last:pb-3',
-    bordered && 'border-border-subtle not-last:mb-3 not-last:border-b',
-  );
   if (!actions) {
     return (
-      <header {...props} className={cn('flex flex-col gap-1', edge, className)}>
+      <header {...props} className={cn('flex flex-col gap-1 not-last:pb-4', className)}>
         {children}
       </header>
     );
@@ -69,7 +70,10 @@ export function CardHeader({
   return (
     <header
       {...props}
-      className={cn('flex flex-wrap items-center justify-between gap-x-4 gap-y-2', edge, className)}
+      className={cn(
+        'flex flex-wrap items-start justify-between gap-x-4 gap-y-2 not-last:pb-4',
+        className,
+      )}
     >
       <div className="grid min-w-0 flex-1 basis-60 gap-1">{children}</div>
       <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
@@ -77,54 +81,49 @@ export function CardHeader({
   );
 }
 
-/**
- * CardEyebrow — optional micro-label for card headers. Pair with CardTitle;
- * never a heading element.
- */
+/** CardEyebrow — the mono uppercase label above a CardTitle; never a heading. */
 export function CardEyebrow({
   children,
   className,
   ...props
 }: Readonly<ComponentPropsWithoutRef<'span'>>) {
   return (
-    <span {...props} className={textRole('label', className)}>
+    <span {...props} className={cn('type-eyebrow', className)}>
       {children}
     </span>
   );
 }
 
+/** CardTitle — 16/24 Geist 500 in `ink`. */
 export function CardTitle({
   children,
   className,
   ...props
 }: Readonly<ComponentPropsWithoutRef<'h3'>>) {
   return (
-    // The object rung, the same one the route H1 and a section H2 sit at. It
-    // used to be 18/500 — larger and lighter than both, so a card's title
-    // outranked the page's and weight said nothing.
-    <h3 {...props} className={textRole('sectionTitle', className)}>
+    <h3
+      {...props}
+      className={cn('text-label-lg text-ink font-medium tracking-[-0.01em]', className)}
+    >
       {children}
     </h3>
   );
 }
 
+/** CardDescription — one or two sentences under the title, in `ink-secondary`. */
 export function CardDescription({
   children,
   className,
   ...props
 }: Readonly<ComponentPropsWithoutRef<'p'>>) {
   return (
-    <p {...props} className={cn(textRole('body'), className)}>
+    <p {...props} className={cn('text-body-sm text-ink-secondary', className)}>
       {children}
     </p>
   );
 }
 
-/**
- * The card's body. The card element carries the one 16 inset, so content has
- * no padding of its own and no mode to cancel it: a table or a scrolling list
- * sits in the same inset as text.
- */
+/** The card's body: no padding of its own, since the card carries the inset. */
 export function CardContent({
   children,
   className,

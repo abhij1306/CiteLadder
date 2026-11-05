@@ -16,8 +16,8 @@ import { useFollowLatest } from '@/components/agent/use-follow-latest';
 import { useChatDetail, useCreateChat } from '@/components/agent/use-chat-turns';
 import { navigationMode } from '@/components/layout/nav-items';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { DockedThread } from '@/components/ui/chat-dock';
 import { Drawer } from '@/components/ui/drawer';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -62,7 +62,6 @@ export function AgentPanel() {
       closeLabel="Close agent"
       // The panel body lays out its own scroll area and bottom-pinned composer.
       body="dock"
-      bodyLabel="Agent conversation"
     >
       {chatId ? (
         <PanelChat
@@ -120,7 +119,6 @@ function PanelStart({
     <DockedThread
       dock={
         <Composer
-          rows={2}
           id="agent-panel-message"
           label="Message the agent"
           value={message}
@@ -160,8 +158,8 @@ function PanelStart({
             : 'The agent reads your CiteLadder evidence and answers with sources.'}
         </p>
       </Stack>
-      {access.canSend ? null : <Alert tone="info">{access.message}</Alert>}
-      {create.failure ? <Alert tone="danger">{create.failure.message}</Alert> : null}
+      {access.canSend ? null : <Callout tone="info">{access.message}</Callout>}
+      {create.failure ? <Callout tone="negative">{create.failure.message}</Callout> : null}
     </DockedThread>
   );
 }
@@ -182,16 +180,27 @@ function PanelChat({
   const query = useChatDetail(workspaceId, chatId);
   if (query.isError && !query.data)
     return (
-      <ReadError
-        error={query.error}
-        fallback="This chat could not be loaded."
-        onRetry={() => void query.refetch()}
-        pending={query.isFetching}
-      />
+      <DockedThread>
+        <ReadError
+          error={query.error}
+          fallback="This chat could not be loaded."
+          onRetry={() => void query.refetch()}
+          pending={query.isFetching}
+        />
+      </DockedThread>
     );
-  if (!query.data) return <QueryState kind="loading" label="Loading chat…" />;
+  if (!query.data)
+    return (
+      <DockedThread>
+        <QueryState kind="loading" label="Loading chat…" />
+      </DockedThread>
+    );
   if (query.data.chat.project_id !== projectId)
-    return <Alert tone="danger">This chat belongs to another project.</Alert>;
+    return (
+      <DockedThread>
+        <Callout tone="negative">This chat belongs to another project.</Callout>
+      </DockedThread>
+    );
   return (
     <PanelConversation
       workspaceId={workspaceId}
@@ -222,10 +231,11 @@ function PanelConversation({
     onLeave();
     navigate(projectHref(`/agent/chats/${chatId}`));
   };
-  const { endRef, showJump, jumpToLatest } = useFollowLatest(detail);
+  const { scrollRef, showJump, jumpToLatest } = useFollowLatest();
   return (
     <DockedThread
-      end={<div ref={endRef} />}
+      label="Agent conversation"
+      scrollRef={scrollRef}
       floating={showJump ? <JumpToLatest onJump={jumpToLatest} /> : null}
       dock={
         <ReplyComposer

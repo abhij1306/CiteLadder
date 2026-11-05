@@ -1,4 +1,4 @@
-import type { ActivityStep } from '@/components/ui/activity-progress';
+import type { Step, StepStatus } from '@/components/ui/step-list';
 import type { BrandDiscovery } from '@/lib/api/brand-discoveries';
 
 type DiscoveryPhase = BrandDiscovery['progress']['phase'];
@@ -30,10 +30,10 @@ function countDetail(
   return `${count} ${noun} ${action}`;
 }
 
-function stepState(index: number, current: number): ActivityStep['state'] {
-  if (index < current) return 'complete';
+function stepStatus(index: number, current: number): StepStatus {
+  if (index < current) return 'done';
   if (index > current) return 'pending';
-  return 'active';
+  return 'running';
 }
 
 function openingLabel(discovery: BrandDiscovery | undefined, current: number): string {
@@ -46,7 +46,7 @@ function openingLabel(discovery: BrandDiscovery | undefined, current: number): s
  * Convert persisted discovery facts into customer language. Unknown backend
  * details never become a copy fallback; adding a phase must be handled here.
  */
-export function discoveryActivity(discovery: BrandDiscovery | undefined): ActivityStep[] {
+export function discoveryActivity(discovery: BrandDiscovery | undefined): Step[] {
   const current = currentStep(discovery);
   const progress = discovery?.progress;
   const labels = [
@@ -65,6 +65,6 @@ export function discoveryActivity(discovery: BrandDiscovery | undefined): Activi
     id: label,
     label,
     detail: details[index],
-    state: stepState(index, current),
+    status: stepStatus(index, current),
   }));
 }

@@ -121,7 +121,7 @@ export function Calendar({
           type="button"
           aria-label="Previous month"
           onClick={() => setMonth((current) => addMonths(current, -1))}
-          className="enabled:hover:bg-hover enabled:active:bg-active inline-flex size-[var(--control-height-md)] items-center justify-center rounded-[var(--radius-control)]"
+          className="enabled:hover:bg-surface-sunken enabled:active:bg-surface-sunken inline-flex size-[var(--control-md)] items-center justify-center rounded-md"
         >
           <ChevronLeft className="size-4" aria-hidden />
         </Pressable>
@@ -133,7 +133,7 @@ export function Calendar({
           type="button"
           aria-label="Next month"
           onClick={() => setMonth((current) => addMonths(current, 1))}
-          className="enabled:hover:bg-hover enabled:active:bg-active inline-flex size-[var(--control-height-md)] items-center justify-center rounded-[var(--radius-control)]"
+          className="enabled:hover:bg-surface-sunken enabled:active:bg-surface-sunken inline-flex size-[var(--control-md)] items-center justify-center rounded-md"
         >
           <ChevronRight className="size-4" aria-hidden />
         </Pressable>
@@ -167,14 +167,14 @@ export function Calendar({
                       disabled={disabled}
                       onClick={() => onSelect(iso)}
                       className={cn(
-                        'type-body text-foreground inline-flex size-[var(--control-height-md)] items-center justify-center rounded-[var(--radius-control)] tabular-nums transition-colors',
+                        'type-body text-ink inline-flex size-[var(--control-md)] items-center justify-center rounded-md tabular-nums transition-colors',
                         isSelected
-                          ? 'bg-accent-fill text-accent-fg enabled:hover:bg-accent-fill-hover enabled:active:bg-accent-fill-active'
-                          : 'enabled:hover:bg-hover enabled:active:bg-active',
+                          ? 'bg-ink text-on-ink enabled:hover:bg-ink-hover enabled:active:bg-ink-hover'
+                          : 'enabled:hover:bg-surface-sunken enabled:active:bg-surface-sunken',
                         // Days spilling in from the neighbouring months stay
                         // legible but recede, so the current month reads as
                         // the subject.
-                        outside && !isSelected && 'text-muted',
+                        outside && !isSelected && 'text-ink-muted',
                       )}
                     >
                       {day.getUTCDate()}

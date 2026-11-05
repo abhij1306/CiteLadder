@@ -696,21 +696,15 @@ describe('OnboardingScreen', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Does this look right?' }),
     ).toHaveFocus();
-    await user.click(screen.getByRole('button', { name: 'Globex' }));
-    await user.click(screen.getByRole('button', { name: 'acme.example' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Globex' }));
+    await user.click(screen.getByRole('checkbox', { name: 'acme.example' }));
     first.unmount();
 
     searchParams = `discovery=${DISCOVERY_ID}&step=review`;
     renderOnboarding();
 
-    expect(await screen.findByRole('button', { name: 'Globex' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
-    expect(screen.getByRole('button', { name: 'acme.example' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    expect(await screen.findByRole('checkbox', { name: 'Globex' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'acme.example' })).not.toBeChecked();
     // A reload leaves focus where the page load put it.
     expect(
       screen.getByRole('heading', { level: 1, name: 'Does this look right?' }),
@@ -732,12 +726,12 @@ describe('OnboardingScreen', () => {
     const user = await enterBrand();
     await user.click(screen.getByRole('button', { name: 'Review' }));
 
-    const sixth = await screen.findByRole('button', { name: 'Peer 6' });
-    expect(screen.getByRole('button', { name: 'Peer 1' })).toHaveAttribute('aria-pressed', 'true');
-    expect(sixth).toHaveAttribute('aria-pressed', 'false');
+    const sixth = await screen.findByRole('checkbox', { name: 'Peer 6' });
+    expect(screen.getByRole('checkbox', { name: 'Peer 1' })).toBeChecked();
+    expect(sixth).not.toBeChecked();
     expect(sixth).toBeDisabled();
-    await user.click(screen.getByRole('button', { name: 'Peer 1' }));
-    expect(screen.getByRole('button', { name: 'Peer 1' })).toHaveAttribute('aria-pressed', 'false');
+    await user.click(screen.getByRole('checkbox', { name: 'Peer 1' }));
+    expect(screen.getByRole('checkbox', { name: 'Peer 1' })).not.toBeChecked();
     expect(sixth).toBeEnabled();
   });
 });

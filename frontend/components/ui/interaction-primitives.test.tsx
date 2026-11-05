@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { Button } from './button';
 import { Checkbox } from './checkbox';
+import { ChipInput, type ChipItem } from './chip-input';
 import { CsvImportFileInput, CsvImportTrigger } from './csv-import';
 import { RadioGroup } from './radio-group';
 import { SearchField } from './search-field';
@@ -151,55 +152,75 @@ describe('authenticated interaction primitives', () => {
     ).toThrow('Checkbox requires a visible label or aria-label.');
   });
 
-  it('uses Radix arrow-key semantics for chip radios', async () => {
+  it('moves and selects card radios with the arrow keys', async () => {
     const user = userEvent.setup();
     function Harness() {
       const [value, setValue] = useState<'one' | 'two'>('one');
       return (
         <RadioGroup
-          variant="chip"
+          variant="cards"
+          columns={2}
           value={value}
           onValueChange={setValue}
           ariaLabel="Choice"
           options={[
-            { value: 'one', label: 'One' },
-            { value: 'two', label: 'Two' },
+            { value: 'one', label: 'One', description: 'The first plan' },
+            { value: 'two', label: 'Two', description: 'The second plan' },
           ]}
         />
       );
     }
     render(<Harness />);
-    screen.getByRole('radio', { name: 'One' }).focus();
+    expect(screen.getByText('The second plan')).toBeInTheDocument();
+    screen.getByRole('radio', { name: /One/ }).focus();
     await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('radio', { name: 'Two' })).toHaveFocus();
+    expect(screen.getByRole('radio', { name: /Two/ })).toHaveFocus();
     await user.keyboard(' ');
-    expect(screen.getByRole('radio', { name: 'Two' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /Two/ })).toBeChecked();
   });
 
-  it('keeps grouped chip options in one keyboard-navigable radio group', async () => {
+  it('clears a SearchField on Escape and focuses it from its shortcut', async () => {
     const user = userEvent.setup();
     function Harness() {
-      const [value, setValue] = useState('article');
+      const [value, setValue] = useState('');
       return (
-        <RadioGroup
-          variant="chip"
-          value={value}
-          onValueChange={setValue}
-          ariaLabel="Content format"
-          options={[
-            { value: 'article', label: 'Article', groupLabel: 'Web' },
-            { value: 'thread', label: 'Thread', groupLabel: 'Social' },
-          ]}
-        />
+        <SearchField value={value} onValueChange={setValue} aria-label="Search" shortcut="/" />
       );
     }
     render(<Harness />);
-    expect(screen.getAllByRole('radiogroup')).toHaveLength(1);
-    screen.getByRole('radio', { name: 'Article' }).focus();
-    await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('radio', { name: 'Thread' })).toHaveFocus();
-    await user.keyboard(' ');
-    expect(screen.getByRole('radio', { name: 'Thread' })).toBeChecked();
+    const field = screen.getByRole('searchbox', { name: 'Search' });
+    expect(field).not.toHaveFocus();
+
+    await user.keyboard('{Control>}/{/Control}');
+    expect(field).toHaveFocus();
+    await user.keyboard('crawl');
+    expect(field).toHaveValue('crawl');
+    await user.keyboard('{Escape}');
+    expect(field).toHaveValue('');
+  });
+
+  it('adds chips on Enter, ignores a duplicate and removes the last on Backspace', async () => {
+    const user = userEvent.setup();
+    function Harness() {
+      const [items, setItems] = useState<ChipItem[]>([{ value: 'Running shoes' }]);
+      return <ChipInput label="Topics" items={items} onChange={setItems} max={5} />;
+    }
+    render(<Harness />);
+    expect(screen.getByRole('group', { name: 'Topics' })).toBeInTheDocument();
+    const field = screen.getByRole('textbox', { name: 'Add to Topics' });
+
+    await user.type(field, 'Trail shoes, waterproof{Enter}');
+    await user.type(field, 'running shoes{Enter}');
+    expect(screen.getByText('Trail shoes, waterproof')).toBeInTheDocument();
+    expect(screen.getAllByText(/running shoes/i)).toHaveLength(1);
+    expect(screen.getByText('2/5')).toBeInTheDocument();
+    // The ignored repeat stays in the field for the person to correct.
+    expect(field).toHaveValue('running shoes');
+
+    await user.clear(field);
+    await user.keyboard('{Backspace}');
+    expect(screen.queryByText('Trail shoes, waterproof')).not.toBeInTheDocument();
+    expect(screen.getByText('Running shoes')).toBeInTheDocument();
   });
 
   it('allows selecting the same CSV file again', () => {

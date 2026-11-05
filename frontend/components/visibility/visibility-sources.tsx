@@ -3,10 +3,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Globe } from 'lucide-react';
 
+import { AppGrid } from '@/components/ui/app-grid';
 import type { DataTableState } from '@/components/ui/data-table';
 import { Stack } from '@/components/ui/layout';
-import { SegmentedControl } from '@/components/ui/segmented-control';
-import { splitPaneClasses } from '@/components/ui/workspace';
+import { SegmentedControl } from '@/components/ui/tabs';
 import { SourceDomainDetail } from '@/components/visibility/source-domain-detail';
 import {
   DomainFilter,
@@ -365,10 +365,10 @@ export function SourcesPanel({
       )}
 
       {/* The table leads; the usage over time and the type mix explain it below. */}
-      <div className={splitPaneClasses('main-aside')}>
+      <AppGrid layout="main-aside">
         <UsageCard dimension={dimension} query={seriesQuery} />
         <TypesCard slices={slices} total={data?.total_citations ?? 0} query={sourceQuery} />
-      </div>
+      </AppGrid>
       {domain ? null : (
         <TopMoversCard dimension={dimension} query={moversQuery} comparable={comparable} />
       )}

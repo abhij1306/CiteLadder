@@ -2,9 +2,10 @@
 
 import { memo, useDeferredValue } from 'react';
 
+import { AgentTurn } from '@/components/ui/chat-dock';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Stack } from '@/components/ui/layout';
-import { cardClasses } from '@/components/ui/card-variants';
+import { cardClasses } from '@/components/ui/card';
 import { textRole } from '@/components/ui/typography';
 import type { LiveTurn } from '@/lib/agent/live-turns';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
@@ -20,8 +21,7 @@ export function LiveReply({ live: latest }: Readonly<{ live: LiveTurn | undefine
   const { thinking, reply, document } = live;
   if (!thinking && !reply && !document) return null;
   return (
-    <Stack as="article" gap="compact" aria-label="Agent reply in progress" aria-busy="true">
-      <span className={textRole('label')}>Agent</span>
+    <AgentTurn inProgress>
       {thinking?.text ? (
         <Disclosure title="Thinking">
           <p className={textRole('caption', 'whitespace-pre-wrap')}>{thinking.text}</p>
@@ -29,7 +29,7 @@ export function LiveReply({ live: latest }: Readonly<{ live: LiveTurn | undefine
       ) : null}
       {reply?.text ? <ContentMarkdown markdown={reply.text} density="compact" /> : null}
       {document?.body ? <LiveDocument title={document.title} body={document.body} /> : null}
-    </Stack>
+    </AgentTurn>
   );
 }
 

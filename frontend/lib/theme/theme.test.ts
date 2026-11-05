@@ -1,30 +1,56 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import { setTheme, THEME_STORAGE_KEY, useTheme } from './theme';
+import { THEME_COOKIE, setThemePreference, useTheme } from './theme';
+
+function mockColorScheme(dark: boolean) {
+  const listeners = new Set<() => void>();
+  const query = {
+    matches: dark,
+    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+  };
+  vi.stubGlobal('matchMedia', () => query);
+  return (next: boolean) => {
+    query.matches = next;
+    for (const listener of listeners) listener();
+  };
+}
 
 describe('useTheme', () => {
   afterEach(() => {
+    document.cookie = `${THEME_COOKIE}=; Max-Age=0; Path=/`;
     delete document.documentElement.dataset.theme;
+    vi.unstubAllGlobals();
   });
 
-  it('follows a preference changed in another tab', () => {
+  it('follows the device scheme live until a theme is chosen', () => {
+    const setDeviceDark = mockColorScheme(false);
     const { result } = renderHook(() => useTheme());
-    expect(result.current).toBe('light');
 
-    act(() => {
-      window.dispatchEvent(
-        new StorageEvent('storage', { key: THEME_STORAGE_KEY, newValue: 'dark' }),
-      );
-    });
+    act(() => setDeviceDark(true));
     expect(result.current).toBe('dark');
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
 
-    act(() => {
-      window.dispatchEvent(new StorageEvent('storage', { key: THEME_STORAGE_KEY, newValue: null }));
-    });
+    act(() => setThemePreference('light'));
+    act(() => setDeviceDark(true));
     expect(result.current).toBe('light');
-    expect(document.documentElement).not.toHaveAttribute('data-theme');
+
+    // Back to system: the device scheme decides again.
+    act(() => setThemePreference('system'));
+    expect(result.current).toBe('dark');
+    expect(document.cookie).not.toContain(`${THEME_COOKIE}=`);
+  });
+
+  it('picks up a choice another surface wrote to the cookie when the window regains focus', () => {
+    mockColorScheme(false);
+    const { result } = renderHook(() => useTheme());
+
+    act(() => {
+      document.cookie = `${THEME_COOKIE}=dark; Path=/`;
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(result.current).toBe('dark');
   });
 
   it('swaps the palette with transitions paused, then restores them', () => {
@@ -35,7 +61,7 @@ describe('useTheme', () => {
       ).length;
     const before = pauses();
     try {
-      setTheme('dark');
+      setThemePreference('dark');
       expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
       expect(pauses()).toBe(before + 1);
 
@@ -43,7 +69,6 @@ describe('useTheme', () => {
       expect(pauses()).toBe(before);
     } finally {
       vi.useRealTimers();
-      window.localStorage.removeItem(THEME_STORAGE_KEY);
     }
   });
 });

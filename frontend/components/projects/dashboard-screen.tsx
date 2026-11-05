@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 import type { OverviewWidget } from '@citeladder/contracts/overview';
 import { ListScreen } from '@/components/layout/page-shell';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Stack } from '@/components/ui/layout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
@@ -145,17 +145,17 @@ function DashboardData({
         <DashboardHeader data={data} activeProject={activeProject} />
         {data.active_prompt_count === 0 ? <PromptSetupCard /> : null}
         {actions.downloadError ? (
-          <Alert tone="danger">The report could not be downloaded. Try again.</Alert>
+          <Callout tone="negative">The report could not be downloaded. Try again.</Callout>
         ) : null}
         {actions.reorderError ? (
-          <Alert tone="warning">
+          <Callout tone="warning">
             The shared action order changed. Review the refreshed order and try again.
-          </Alert>
+          </Callout>
         ) : null}
         {layout.failed ? (
-          <Alert tone="warning">
+          <Callout tone="warning">
             Someone else changed this Overview. The latest layout is shown; make your change again.
-          </Alert>
+          </Callout>
         ) : null}
         <OverviewGrid
           widgets={saved.widgets}

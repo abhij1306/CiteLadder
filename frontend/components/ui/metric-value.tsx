@@ -63,7 +63,7 @@ function ValueSlot({
     // sits in the same place and size as a present one and never out-ranks it.
     return (
       <div className={slot}>
-        <span className={textRole(numeral, cn('text-muted', tone))}>
+        <span className={textRole(numeral, cn('text-ink-muted', tone))}>
           <span aria-hidden>{MISSING_MARK}</span>
           <span className="sr-only">{label}</span>
         </span>

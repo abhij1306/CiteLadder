@@ -88,7 +88,7 @@ export function MissingValue({
       {/* A real button, not a span with a tabindex: the reason has to be
           reachable by keyboard, and only an interactive element announces
           itself as something to reach. */}
-      <button type="button" className="focus-ring rounded-full">
+      <button type="button" className="focus-ring rounded-xs">
         {mark}
       </button>
     </Tooltip>

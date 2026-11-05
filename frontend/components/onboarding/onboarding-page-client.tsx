@@ -3,8 +3,9 @@
 import { Link } from 'react-router-dom';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 
-import { GateNoticeScreen } from '@/components/layout/gate-notice-frame';
 import { ShellFallback } from '@/components/layout/shell-fallback';
+import { UserMenuTrigger } from '@/components/layout/user-menu';
+import { AuthActions, AuthCard, AuthShell } from '@/components/ui/auth-shell';
 import { Button } from '@/components/ui/button';
 import { QueryState } from '@/components/ui/query-state';
 import { WORKSPACE_LOADING_STALL_MS } from '@/lib/config/operational';
@@ -104,16 +105,19 @@ function ProjectSetupBlocked({
   projectsHref: string;
 }>) {
   return (
-    <GateNoticeScreen title={title}>
-      <p>{children}</p>
-      {onRetry && (
-        <Button onClick={onRetry} className="w-fit">
-          Retry
-        </Button>
-      )}
-      <Button asChild variant="secondary" className="w-fit">
-        <Link to={projectsHref}>Back to projects</Link>
-      </Button>
-    </GateNoticeScreen>
+    <AuthShell mainLabel="Project setup" barEnd={<UserMenuTrigger presenter="compact" />}>
+      <AuthCard title={title} sub={children}>
+        <AuthActions>
+          {onRetry && (
+            <Button variant="primary" onClick={onRetry}>
+              Retry
+            </Button>
+          )}
+          <Button asChild variant="secondary">
+            <Link to={projectsHref}>Back to projects</Link>
+          </Button>
+        </AuthActions>
+      </AuthCard>
+    </AuthShell>
   );
 }

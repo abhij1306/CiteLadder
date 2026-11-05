@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { FIXTURE_WORKSPACE_ID, fixtureProjectPath, stubAuthedShell } from './helpers/app-fixture';
 
-test('the first-load indicator keeps rotating until the workspace answers', async ({ page }) => {
+test('the first-load indicator keeps pulsing until the workspace answers', async ({ page }) => {
   await stubAuthedShell(page);
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {
@@ -17,9 +17,11 @@ test('the first-load indicator keeps rotating until the workspace answers', asyn
   const indicator = page.getByRole('status', { name: 'Loading your workspace…' });
   try {
     await expect(indicator).toBeVisible();
-    const initial = await indicator.evaluate((element) => getComputedStyle(element).transform);
+    // The skeleton's bars pulse their opacity; a still bar would read as stuck.
+    const bar = indicator.locator('.animate-skeleton-pulse').first();
+    const initial = await bar.evaluate((element) => getComputedStyle(element).opacity);
     await expect
-      .poll(() => indicator.evaluate((element) => getComputedStyle(element).transform))
+      .poll(() => bar.evaluate((element) => getComputedStyle(element).opacity))
       .not.toBe(initial);
   } finally {
     release();
@@ -83,23 +85,28 @@ test('runs resolve on their own while the schedules empty state waits for its re
   await expect(page.getByRole('heading', { name: 'No runs yet' })).toBeVisible();
 });
 
-test('compact navigation hands focus to the command palette and returns it on Escape', async ({
+test('below 1280px the icon rail keeps every destination named and the palette on the keyboard', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 982, height: 900 });
   await stubAuthedShell(page);
   await page.goto(fixtureProjectPath('/projects'));
-  const menu = page.getByRole('button', { name: 'Open navigation' });
 
-  await menu.click();
-  const navigation = page.getByRole('dialog', { name: 'Navigation', exact: true });
-  await navigation.getByRole('button', { name: 'Search or jump to', exact: true }).click();
-  await expect(navigation).not.toBeVisible();
+  // The rail draws icons only; each destination keeps its name and still navigates.
+  const nav = page.getByRole('navigation', { name: 'Primary' });
+  const performance = nav.getByRole('link', { name: 'Performance', exact: true });
+  await expect(performance).toBeVisible();
+  await performance.click();
+  await page.waitForURL((url) => url.pathname === '/performance');
+  await expect(page.getByRole('heading', { level: 1, name: 'Performance' })).toBeVisible();
+
+  // The rail has no room for the palette's button; its shortcut still opens it.
+  await expect(page.getByRole('button', { name: /search or jump to/i })).toBeHidden();
+  await page.keyboard.press('Control+k');
   const palette = page.getByRole('dialog', { name: 'Command palette', exact: true });
   await expect(palette).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(palette).not.toBeVisible();
-  await expect(menu).toBeFocused();
 });
 
 test('project lookup failure retries in place and only confirmed empty projects enter onboarding', async ({

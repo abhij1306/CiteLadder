@@ -4,7 +4,8 @@ import { useId, type ReactNode } from 'react';
 import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
-import { menuItemVariants, menuPanelClasses } from '@/components/ui/menu-variants';
+import { FIELD_BOX } from '@/components/ui/input';
+import { MENU_PANEL, menuItemClasses } from '@/components/ui/menu';
 import { cn } from '@/lib/utils';
 
 const EMPTY_VALUE = '__citeladder_empty_value__';
@@ -45,8 +46,19 @@ type SelectOption<T extends string> = {
    * trigger, so a detail that loads late or changes does not resize it.
    */
   detail?: string;
+  /** A line under the label in the list (12/16 `ink-muted`); a disabled option says why. */
+  description?: string;
   disabled?: boolean;
 };
+
+/**
+ * Select — a closed trigger that opens a listbox (Radix: arrows move, Enter
+ * picks, Escape closes, disabled options are skipped). The trigger looks
+ * exactly like Input with a `chevron-down`, and is as wide as its widest
+ * option, so a pick never resizes it. The list is the menu panel with 32px
+ * rows (48px with a description); the selected row shows a check in a
+ * reserved slot, so nothing shifts. For long lists use `SearchableSelect`.
+ */
 
 export type SelectProps<T extends string> = {
   value?: T;
@@ -97,7 +109,9 @@ export function Select<T extends string>({
         aria-required={required || undefined}
         id={id}
         className={cn(
-          'focus-ring bg-input text-foreground data-[placeholder]:text-muted flex h-[var(--control-height-md)] min-w-0 items-center justify-between gap-2 rounded-[var(--radius-control)] px-3 text-field border border-border-bold transition-[border-color,background-color] enabled:hover:border-muted disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle aria-invalid:border-danger aria-invalid:enabled:hover:border-danger data-[state=open]:bg-selected enabled:active:bg-active',
+          'focus-input',
+          FIELD_BOX,
+          'data-[placeholder]:text-ink-muted data-[state=open]:border-focus flex w-auto min-w-0 items-center justify-between gap-2 text-start disabled:cursor-not-allowed disabled:opacity-45',
           className,
         )}
       >
@@ -114,7 +128,7 @@ export function Select<T extends string>({
           ))}
         </span>
         <SelectPrimitive.Icon asChild>
-          <ChevronDown className="text-muted size-4 shrink-0" aria-hidden />
+          <ChevronDown className="text-ink-muted size-4 shrink-0" aria-hidden />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
@@ -123,11 +137,11 @@ export function Select<T extends string>({
           sideOffset={6}
           collisionPadding={8}
           className={cn(
-            menuPanelClasses,
-            'max-h-[min(20rem,var(--radix-select-content-available-height))] min-w-[var(--radix-select-trigger-width)]',
+            MENU_PANEL,
+            'max-h-[min(18.5rem,var(--radix-select-content-available-height))] min-w-[max(15rem,var(--radix-select-trigger-width))]',
           )}
         >
-          <SelectPrimitive.ScrollUpButton className="text-muted flex h-[var(--menu-item-height)] items-center justify-center">
+          <SelectPrimitive.ScrollUpButton className="text-ink-muted flex h-[var(--menu-item-height)] items-center justify-center">
             <ChevronUp className="size-4" aria-hidden />
           </SelectPrimitive.ScrollUpButton>
           <SelectPrimitive.Viewport>
@@ -137,11 +151,20 @@ export function Select<T extends string>({
                 value={radixValue(option.value) ?? EMPTY_VALUE}
                 disabled={option.disabled}
                 aria-describedby={option.detail ? `${detailId}-${index}` : undefined}
-                className={cn(menuItemVariants(), 'cursor-default py-1 pr-8 pl-3 select-none')}
+                className={menuItemClasses({
+                  className: cn('pe-8', option.description && 'h-12'),
+                })}
               >
-                <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate">
+                    <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
+                  </span>
+                  {option.description ? (
+                    <span className="text-ink-muted text-caption">{option.description}</span>
+                  ) : null}
+                </span>
                 {option.detail ? (
-                  <span id={`${detailId}-${index}`} className="text-muted font-numeric ms-auto">
+                  <span id={`${detailId}-${index}`} className="text-ink-muted ms-auto font-mono">
                     {option.detail}
                   </span>
                 ) : null}
@@ -151,7 +174,7 @@ export function Select<T extends string>({
               </SelectPrimitive.Item>
             ))}
           </SelectPrimitive.Viewport>
-          <SelectPrimitive.ScrollDownButton className="text-muted flex h-[var(--menu-item-height)] items-center justify-center">
+          <SelectPrimitive.ScrollDownButton className="text-ink-muted flex h-[var(--menu-item-height)] items-center justify-center">
             <ChevronDown className="size-4" aria-hidden />
           </SelectPrimitive.ScrollDownButton>
         </SelectPrimitive.Content>

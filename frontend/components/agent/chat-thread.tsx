@@ -7,8 +7,8 @@ import { Conversation } from '@/components/agent/conversation';
 import { SkillPicker } from '@/components/agent/skill-picker';
 import { useCancelRun, useFollowUp, type FollowUp } from '@/components/agent/use-chat-turns';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { latestOutput } from '@/lib/agent/documents';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { isRunActive } from '@/lib/agent/run-state';
@@ -56,7 +56,7 @@ export function ChatConversation({
         pendingMessage={turn.pendingMessage}
         canSend={access.canSend && !turn.pending && !runActive}
       />
-      {access.canSend ? null : <Alert tone="info">{access.message}</Alert>}
+      {access.canSend ? null : <Callout tone="info">{access.message}</Callout>}
       <FollowUpFailure turn={turn} actionId={detail.chat.action_id} canSend={access.canSend} />
     </>
   );
@@ -71,7 +71,6 @@ export function ReplyComposer({
   const { turn, access, runActive } = thread;
   return (
     <Composer
-      rows={2}
       id={id}
       label="Reply to the agent"
       value={turn.draft}
@@ -121,7 +120,7 @@ function FollowUpFailure({
 }: Readonly<{ turn: FollowUp; actionId: string | null; canSend: boolean }>) {
   if (!turn.failure) return null;
   return (
-    <Alert tone="danger">
+    <Callout tone="negative">
       {turn.failure.message}{' '}
       {turn.failure.startNewChat ? (
         <ProjectLink
@@ -139,6 +138,6 @@ function FollowUpFailure({
           Retry send
         </Button>
       )}
-    </Alert>
+    </Callout>
   );
 }

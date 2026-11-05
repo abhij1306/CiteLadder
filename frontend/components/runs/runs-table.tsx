@@ -94,7 +94,7 @@ export function RunsTable({
           <TableCell numeric>{audit.requested_count}</TableCell>
           <TableCell numeric>{audit.completed_count}</TableCell>
           <TableCell numeric>{audit.failed_count}</TableCell>
-          <TableCell numeric className="text-secondary">
+          <TableCell numeric className="text-ink-secondary">
             {/* One line, cut before the View link; the full time is its tooltip. */}
             <ClampText lines={1}>
               {sameLaunch(audit, pagedAudits[index - 1])

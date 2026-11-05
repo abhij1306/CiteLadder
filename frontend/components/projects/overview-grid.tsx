@@ -4,8 +4,9 @@ import { ArrowDown, ArrowUp, Maximize2, Minimize2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { overviewWidgetTitles, type OverviewWidget } from '@citeladder/contracts/overview';
+import { AppGrid } from '@/components/ui/app-grid';
 import { IconButton } from '@/components/ui/button';
-import { FloatingToolbar, splitPaneClasses } from '@/components/ui/workspace';
+import { FloatingToolbar } from '@/components/ui/workspace';
 import { moveWidget, removeWidget, toggleWidth } from '@/lib/overview/layout';
 import { cn } from '@/lib/utils';
 
@@ -28,13 +29,13 @@ export function OverviewGrid({
   render: (widget: OverviewWidget) => ReactNode;
 }>) {
   return (
-    <div className={splitPaneClasses('peers', 'desktop:items-stretch')}>
+    <AppGrid layout="halves">
       {widgets.map((widget, index) => (
         // The widget's own card names its region; this cell only places it.
         <div
           key={widget.key}
           data-widget={widget.key}
-          className={cn('relative min-w-0', widget.size === 'full' && 'desktop:col-span-2')}
+          className={cn('relative min-w-0', widget.size === 'full' && 'shell:col-span-2')}
         >
           {render(widget)}
           {editing ? (
@@ -52,7 +53,7 @@ export function OverviewGrid({
           ) : null}
         </div>
       ))}
-    </div>
+    </AppGrid>
   );
 }
 

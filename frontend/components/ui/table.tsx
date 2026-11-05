@@ -15,33 +15,24 @@ import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
 /**
- * Dense analytics table — the shared semantic ledger treatment:
- *  - the wrapper is the table's shell: the elevated panel fill at the card
- *    radius, borderless, so a bare table reads as a card the way a Card does
- *  - sticky header (--table-header-height) on the panel itself, no fill band,
- *    with a single object-rung under-rule, so the labels separate from the
- *    rows by the hairline alone; no vertical column-separator hairlines, which
- *    made the tables read as spreadsheets rather than designed surfaces
- *  - one row rhythm everywhere: --table-row-height is the floor, every cell
- *    carries the same --table-cell-padding-y, and text never runs past two
- *    lines — `ClampText` cuts it there and moves the rest into a tooltip, so
- *    a row is either one line or two, never a three-line outlier
- *  - --text-sm cells, subtle ROW hairlines only
- *  - data columns are centred and tabular, so digits line up place by place
- *    under a header centred on the same axis (owner, 2026-11-01); text
- *    columns stay left
- *  - hover uses the surface's hover tint; `highlight` uses the distinct
- *    selected tint for the user's own row
- * The wrapper is scroll-capable so the sticky header pins on vertical scroll;
- * the scroll clip also keeps the pinned header inside the shell's radius. On
- * the white workspace sheet its boundary is the `table-frame` hairline ring
- * (an outer shadow, so it never changes the box); inside a Card the ring drops
- * and the flush fill melts into the card.
- *
- * Column headers take the `label` role (14/20, 500, secondary): a header names the
- * values beneath it, exactly as a metric label does.
+ * Table — the app's data table:
+ *  - the header is a sticky 36px `surface-sunken` band with `radius-sm` ends;
+ *    its labels are 12/16 medium `ink-secondary`, `ink` while sorted
+ *  - `table-row-height` rows (40 in the app) divided by `line` rules, `surface-sunken` on hover and when
+ *    selected; `highlight` tints the tracked brand's own row `accent-soft`
+ *    (one row per table, never for emphasis); no zebra stripes, no column
+ *    rules, no colour by status (that is a Badge cell)
+ *  - text never runs past two lines: `ClampText` cuts it there and moves the
+ *    rest into a tooltip, so a row is one line or two, never an outlier
+ *  - numeric columns align right in tabular figures, under a right-aligned
+ *    header, so digits line up place by place; text columns stay left
+ *  - `fixed` takes column widths from the header cells, never from the rows
+ *    shown, so paging, sorting and loading never move the columns
+ * The wrapper scrolls, so the sticky header pins on vertical scroll. On the
+ * page its boundary is the `table-frame` hairline ring (an outer shadow, so it
+ * never changes the box); inside a Card the ring drops.
  */
-const tableHeadClasses = 'type-label whitespace-nowrap';
+const tableHeadClasses = 'text-caption text-ink-secondary font-medium whitespace-nowrap';
 const TABLE_MIN_WIDTH = {
   sm: 'min-w-[var(--table-min-width-sm)]',
   md: 'min-w-[var(--table-min-width-md)]',
@@ -82,7 +73,7 @@ export function Table({
     <div
       ref={wrapperRef}
       className={cn(
-        'table-frame bg-panel relative w-full max-w-full min-w-0 overflow-auto rounded-[var(--radius-card)]',
+        'table-frame bg-surface relative w-full max-w-full min-w-0 overflow-auto rounded-lg',
         wrapperClassName,
       )}
     >
@@ -90,7 +81,7 @@ export function Table({
         aria-label={ariaLabel}
         aria-labelledby={ariaLabelledBy}
         className={cn(
-          'type-body w-full border-collapse',
+          'text-body-sm text-ink w-full border-separate border-spacing-0',
           fixed && 'table-fixed',
           minWidth && TABLE_MIN_WIDTH[minWidth],
           className,
@@ -136,13 +127,11 @@ export function TableRow({
     <tr
       {...props}
       className={cn(
-        'hover:bg-hover active:bg-active h-[var(--table-row-height)] transition-colors',
-        // A selected or highlighted row keeps the card's fill and takes a 2px
-        // accent bar at its first cell's start (rows cannot position a mark
-        // in every engine) and the foreground ink: no fill block.
-        "[&>*:first-child]:relative aria-selected:text-foreground aria-selected:[&>*:first-child]:after:bg-accent aria-selected:[&>*:first-child]:after:absolute aria-selected:[&>*:first-child]:after:inset-y-0 aria-selected:[&>*:first-child]:after:start-0 aria-selected:[&>*:first-child]:after:w-0.5 aria-selected:[&>*:first-child]:after:content-['']",
-        highlight &&
-          "text-foreground [&>*:first-child]:after:bg-accent [&>*:first-child]:after:absolute [&>*:first-child]:after:inset-y-0 [&>*:first-child]:after:start-0 [&>*:first-child]:after:w-0.5 [&>*:first-child]:after:content-['']",
+        'hover:bg-surface-sunken h-[var(--table-row-height)] transition-colors duration-[var(--motion-fast)]',
+        // A selected row takes `surface-sunken`; the tracked brand's own row
+        // takes `accent-soft`, and hover never changes it.
+        'aria-selected:bg-surface-sunken',
+        highlight && 'bg-accent-soft hover:bg-accent-soft',
         className,
       )}
     >
@@ -201,12 +190,11 @@ export function TableHead({
       {...props}
       className={cn(
         tableHeadClasses,
-        'aria-[sort=ascending]:text-foreground aria-[sort=descending]:text-foreground',
-        // The header row sits on the table's own paper (owner, 2026-11-01): a
-        // tinted header matched the selected-row tint. Its rule separates it,
-        // and the opaque fill keeps a sticky header over scrolled rows.
-        'border-border-subtle bg-panel sticky top-0 z-10 h-[var(--table-header-height)] border-b px-[var(--table-cell-padding-x)] text-left align-middle',
-        numeric && 'tabular-nums text-center',
+        'aria-[sort=ascending]:text-ink aria-[sort=descending]:text-ink',
+        // The header is a `surface-sunken` band with rounded ends; its opaque
+        // fill keeps a sticky header over scrolled rows.
+        'bg-surface-sunken sticky top-0 z-10 h-[var(--table-header-height)] px-[var(--table-cell-padding-x)] text-left align-middle first:rounded-l-sm last:rounded-r-sm',
+        numeric && 'tabular-nums text-right',
         trailing && 'text-right',
         desktopOnly && desktopOnlyClasses,
         className,
@@ -291,14 +279,22 @@ export function ClampText({
 
 const cellClasses = ({ numeric, desktopOnly }: CellOptions) =>
   cn(
-    'type-body text-foreground border-border-subtle px-[var(--table-cell-padding-x)] py-[var(--table-cell-padding-y)] text-left align-middle',
+    'text-body-sm text-ink border-line px-[var(--table-cell-padding-x)] pt-[var(--table-cell-padding-y)] pb-[var(--table-cell-padding-bottom)] text-left align-middle',
     // Row rule, dropped on the last row.
     'border-b [tr:last-child>&]:border-b-0',
     // A value never wraps: "Not measured" split over two lines read as two values.
-    // Its digits take the figure face, so a column lines up place by place.
-    numeric && 'whitespace-nowrap font-numeric text-center',
+    // Tabular figures, so a right-aligned column lines up place by place.
+    numeric && 'whitespace-nowrap text-right tabular-nums',
     desktopOnly && desktopOnlyClasses,
   );
+
+/**
+ * A missing figure (which renders the `Not measured` placeholder) reads muted;
+ * a measured one keeps the cell's ink. A score is a figure, not a state, so it
+ * never takes a band colour.
+ */
+export const mutedWhenMissing = (value: number | null) =>
+  value === null ? 'text-ink-muted' : undefined;
 
 export function TableCell({
   children,

@@ -3,12 +3,14 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 
-import { FlowGroup } from '@/components/onboarding/flow-shell';
-import { EntityRow } from '@/components/onboarding/choice-controls';
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
+import {
+  ChecklistField,
+  type ChecklistEditor,
+  type ChecklistItem,
+} from '@/components/ui/checklist-field';
 import { Icon } from '@/components/ui/icon';
-import { Input } from '@/components/ui/input';
 import type { ReviewCompetitor, ReviewDomain } from '@/lib/onboarding/forms';
 
 function competitorUrl(competitor: ReviewCompetitor): string {
@@ -17,103 +19,31 @@ function competitorUrl(competitor: ReviewCompetitor): string {
   return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
 }
 
-function CompetitorRow({
-  competitor,
-  disabled,
-  onToggle,
-  onEdit,
-  onRemove,
-}: Readonly<{
-  competitor: ReviewCompetitor;
-  disabled: boolean;
-  onToggle: () => void;
-  onEdit: (name: string, domain: string) => void;
-  onRemove: () => void;
-}>) {
+/** A manual choice, not yet named: it opens in the identity editor immediately. */
+function isBlank(competitor: ReviewCompetitor): boolean {
+  return competitor.name === '' && competitor.domains.length === 0;
+}
+
+function competitorItem(competitor: ReviewCompetitor, limitReached: boolean): ChecklistItem {
   const primaryDomain = competitor.domains.find(Boolean) || '';
   const displayName = competitor.name || primaryDomain || 'New competitor';
-
-  // A manual choice opens in the identity editor immediately.
-  const [isEditing, setIsEditing] = useState(
-    competitor.name === '' && competitor.domains.length === 0,
-  );
-  const [draft, setDraft] = useState(primaryDomain);
-  const [draftName, setDraftName] = useState(competitor.name);
-
-  const save = () => {
-    const trimmed = draft.trim();
-    const name = draftName.trim();
-    if (!trimmed || !name) return;
-    onEdit(name, trimmed);
-    setIsEditing(false);
-  };
-  const cancel = () => {
-    if (!competitor.name && !primaryDomain) {
-      onRemove();
-      return;
-    }
-    setDraft(primaryDomain);
-    setDraftName(competitor.name);
-    setIsEditing(false);
-  };
-
-  if (isEditing) {
-    return (
-      <li className="flow-entity">
-        <Input
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- Add and Edit explicitly reveal this field.
-          autoFocus
-          value={draftName}
-          onChange={(event) => setDraftName(event.target.value)}
-          placeholder="Competitor name"
-          aria-label="Competitor name"
-        />
-        <Input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') save();
-            if (event.key === 'Escape') cancel();
-          }}
-          placeholder="acme.com"
-          aria-label={`Website for ${displayName}`}
-        />
-        <Button type="button" onClick={save} disabled={!draft.trim() || !draftName.trim()}>
-          Save
-        </Button>
-        <Button type="button" variant="ghost" onClick={cancel}>
-          Cancel
-        </Button>
-      </li>
-    );
-  }
-
   const url = competitorUrl(competitor);
-  return (
-    <EntityRow
-      name={displayName}
-      meta={primaryDomain && primaryDomain !== displayName ? primaryDomain : undefined}
-      selected={competitor.selected}
-      disabled={disabled}
-      onToggle={onToggle}
-      leading={<BrandLogo name={displayName} websiteUrl={primaryDomain} />}
-      onEdit={() => {
-        setDraft(primaryDomain);
-        setDraftName(competitor.name);
-        setIsEditing(true);
-      }}
-      editLabel={`Edit website for ${displayName}`}
-      trailing={
-        // Kept for assistive tech and tests: the visible row is a control, so
-        // it cannot also be the link to the competitor's site.
-        url ? (
-          <a href={url} target="_blank" rel="noreferrer" className="sr-only">
-            {url}
-          </a>
-        ) : null
-      }
-    />
-  );
+  return {
+    id: competitor.id,
+    label: displayName,
+    meta: primaryDomain && primaryDomain !== displayName ? primaryDomain : undefined,
+    leading: <BrandMark name={displayName} websiteUrl={primaryDomain} />,
+    checked: competitor.selected,
+    disabled: limitReached,
+    editable: true,
+    // Kept for assistive tech and tests: the visible row is a control, so it
+    // cannot also be the link to the competitor's site.
+    extra: url ? (
+      <a href={url} target="_blank" rel="noreferrer" className="sr-only">
+        {url}
+      </a>
+    ) : null,
+  };
 }
 
 export function ReviewStep({
@@ -125,6 +55,8 @@ export function ReviewStep({
   onRemoveCompetitor,
   onAddCompetitor,
   maximumCompetitors,
+  domainNote,
+  competitorNote,
 }: Readonly<{
   domains: ReviewDomain[];
   competitors: ReviewCompetitor[];
@@ -134,67 +66,74 @@ export function ReviewStep({
   onRemoveCompetitor: (index: number) => void;
   onAddCompetitor: () => void;
   maximumCompetitors: number | undefined;
+  /** Why Create project waits on the websites. */
+  domainNote?: string;
+  /** Why Create project waits on the competitors. */
+  competitorNote?: string;
 }>) {
+  const [editing, setEditing] = useState<string | null>(null);
   const selectedDomains = domains.filter((item) => item.selected).length;
   const selectedCompetitors = competitors.filter((item) => item.selected).length;
   const competitorLimitReached =
     maximumCompetitors === undefined || selectedCompetitors >= maximumCompetitors;
+  const indexOf = (id: string) => competitors.findIndex((item) => item.id === id);
+  const editingId = editing ?? competitors.find(isBlank)?.id ?? null;
+
+  const editor: ChecklistEditor<'name' | 'domain'> = {
+    fields: [
+      { key: 'name', label: () => 'Competitor name', placeholder: 'Competitor name' },
+      { key: 'domain', label: (item) => `Website for ${item.label}`, placeholder: 'acme.com' },
+    ],
+    values: (item) => {
+      const competitor = competitors[indexOf(item.id)];
+      return {
+        name: competitor?.name ?? '',
+        domain: competitor?.domains.find(Boolean) ?? '',
+      };
+    },
+    onSave: (id, values) => onEditCompetitor(indexOf(id), values.name, values.domain),
+    // Cancelling a choice that was never named removes it, freeing its slot.
+    onCancel: (id) => {
+      const competitor = competitors[indexOf(id)];
+      if (competitor && isBlank(competitor)) onRemoveCompetitor(indexOf(id));
+    },
+    editLabel: (item) => `Edit website for ${item.label}`,
+  };
 
   return (
     <>
-      <FlowGroup
-        className="flow-review-card flow-review-wide flow-review-sites"
-        title="Your websites"
-        meta={domains.length > 0 ? `${selectedDomains} of ${domains.length}` : undefined}
+      <ChecklistField
+        label="Your websites"
         help="Auto-verified from your domain."
-      >
-        {domains.length === 0 ? (
-          <p className="flow-help">No websites were found.</p>
-        ) : (
-          <ul className="flow-entity-list flow-website-chips">
-            {domains.map((entry, index) => (
-              <EntityRow
-                key={entry.domain}
-                name={entry.domain}
-                selected={entry.selected}
-                onToggle={() => onToggleDomain(index)}
-              />
-            ))}
-          </ul>
-        )}
-      </FlowGroup>
+        count={domains.length > 0 ? `${selectedDomains} of ${domains.length}` : undefined}
+        note={domainNote}
+        empty="No websites were found."
+        items={domains.map((entry) => ({
+          id: entry.domain,
+          label: entry.domain,
+          checked: entry.selected,
+        }))}
+        onToggle={(id) => onToggleDomain(domains.findIndex((entry) => entry.domain === id))}
+      />
 
-      <FlowGroup
-        className="flow-review-card flow-review-wide"
-        title="Competitors"
-        meta={`${selectedCompetitors} of ${maximumCompetitors ?? '…'}`}
+      <ChecklistField
+        label="Competitors"
         help="Pick the brands to compare against in every answer."
-        action={
+        count={`${selectedCompetitors} of ${maximumCompetitors ?? '…'}`}
+        note={competitorNote}
+        empty="No competitors were confirmed. Add the companies you lose deals to."
+        items={competitors.map((competitor) => competitorItem(competitor, competitorLimitReached))}
+        onToggle={(id) => onToggleCompetitor(indexOf(id))}
+        editor={editor}
+        editingId={editingId}
+        onEditingChange={setEditing}
+        footer={
           <Button variant="ghost" onClick={onAddCompetitor} disabled={competitorLimitReached}>
             <Icon icon={Plus} />
             Add
           </Button>
         }
-      >
-        {competitors.length === 0 ? (
-          <p className="flow-help">
-            No competitors were confirmed. Add the companies you lose deals to.
-          </p>
-        ) : (
-          <ul className="flow-entity-list flow-competitor-chips">
-            {competitors.map((competitor, index) => (
-              <CompetitorRow
-                key={competitor.id}
-                competitor={competitor}
-                disabled={competitorLimitReached}
-                onToggle={() => onToggleCompetitor(index)}
-                onEdit={(name, domain) => onEditCompetitor(index, name, domain)}
-                onRemove={() => onRemoveCompetitor(index)}
-              />
-            ))}
-          </ul>
-        )}
-      </FlowGroup>
+      />
     </>
   );
 }

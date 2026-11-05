@@ -226,8 +226,10 @@ describe('Company facts', () => {
     const field = await screen.findByLabelText('Add to Products and services');
     await user.type(field, 'Golf nets, cages and mats{Enter}');
     // A duplicate, in any case, cannot be added twice.
-    await user.type(field, 'golf NETS, cages and mats');
-    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+    await user.type(field, 'golf NETS, cages and mats{Enter}');
+    expect(
+      within(screen.getByRole('list', { name: 'Products and services' })).getAllByRole('listitem'),
+    ).toHaveLength(2);
     await user.clear(field);
     await user.click(screen.getByRole('button', { name: 'Save brand knowledge' }));
 
@@ -375,12 +377,12 @@ describe('Competitors', () => {
     renderContext({ activeProject: withCompetitors, tab: 'competitors', handlers });
 
     const tracked = await screen.findByRole('list', { name: 'Tracked competitors' });
-    // Contoso has no cached logo, so its mark falls back to its initials.
+    // Contoso has no cached logo, so its mark falls back to its first letter.
     expect(
       within(tracked)
         .getAllByRole('listitem')
         .map((item) => item.textContent),
-    ).toEqual(['Northstar', 'COContoso']);
+    ).toEqual(['Northstar', 'CContoso']);
     expect(within(tracked).getAllByRole('listitem')[0]?.querySelector('img')).toHaveAttribute(
       'src',
       'https://assets.test/northstar.png',

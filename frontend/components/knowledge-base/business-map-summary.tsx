@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ChipList } from '@/components/ui/chip-list-field';
+import { ChipList } from '@/components/ui/chip-input';
 import { FactList, type Fact } from '@/components/ui/facts';
 import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';

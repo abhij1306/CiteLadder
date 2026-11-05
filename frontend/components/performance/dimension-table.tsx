@@ -52,9 +52,9 @@ import { cn } from '@/lib/utils';
  */
 
 const TONE_CLASS: Record<'up' | 'down' | 'flat', string> = {
-  up: 'text-secondary',
-  down: 'text-secondary',
-  flat: 'text-muted',
+  up: 'text-ink-secondary',
+  down: 'text-ink-secondary',
+  flat: 'text-ink-muted',
 };
 
 /**
@@ -334,7 +334,7 @@ export function DimensionTable({
             );
             return [
               selectedCell,
-              <TableCell key={`${metric.key}-comparison`} numeric className="text-muted">
+              <TableCell key={`${metric.key}-comparison`} numeric className="text-ink-muted">
                 {measured(formatMetric(metric.key, comparisonValue)) ?? <MissingValue />}
               </TableCell>,
               <TableCell

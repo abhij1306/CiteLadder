@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
-import { SegmentedControl } from '@/components/ui/segmented-control';
+import { SegmentedControl } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
 import type {
   SearchIntelligenceDataset,

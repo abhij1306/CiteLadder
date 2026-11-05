@@ -13,8 +13,8 @@ import { useFollowLatest } from '@/components/agent/use-follow-latest';
 import { useChatDetail } from '@/components/agent/use-chat-turns';
 import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { ComposerDock } from '@/components/ui/chat-dock';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -50,7 +50,7 @@ export function ChatScreen() {
   if (query.data.chat.project_id !== activeProjectId)
     return (
       <ListScreen>
-        <Alert tone="danger">This chat belongs to another project.</Alert>
+        <Callout tone="negative">This chat belongs to another project.</Callout>
       </ListScreen>
     );
   return (
@@ -65,13 +65,29 @@ function ChatView({
   const chatId = detail.chat.id;
   const canEdit = useWorkspaceCapability('run');
   const thread = useChatThread(workspaceId, detail);
-  const { endRef, showJump, jumpToLatest } = useFollowLatest(detail);
+  const { scrollRef, showJump, jumpToLatest } = useFollowLatest();
 
   return (
     <ListScreen
-      // Fill the viewport below the shell chrome so the composer sits at the
-      // bottom of a short thread. Kept identical in chat- and new-chat-screen.
+      // Fill the viewport below the shell chrome: only the thread scrolls and
+      // the composer stays under it. Kept identical in chat- and new-chat-screen.
       fill
+      scrollRef={scrollRef}
+      scrollLabel="Agent conversation"
+      dock={
+        <ComposerDock floating={showJump ? <JumpToLatest onJump={jumpToLatest} /> : null}>
+          <ReplyComposer
+            id="chat-message"
+            thread={thread}
+            detail={detail}
+            placeholder={
+              detail.outputs.length > 0
+                ? 'Ask about the work or request a change. / picks a skill, @ mentions an Action.'
+                : 'Ask a follow-up. / picks a skill, @ mentions an Action.'
+            }
+          />
+        </ComposerDock>
+      }
       actions={<ChatHeaderActions detail={detail} />}
     >
       <Stack gap="workspace" className="min-w-0 flex-1 content-start">
@@ -91,20 +107,6 @@ function ChatView({
           )}
         />
       </Stack>
-      {/* The composer stays at the bottom of the window while the thread scrolls. */}
-      <ComposerDock floating={showJump ? <JumpToLatest onJump={jumpToLatest} /> : null}>
-        <ReplyComposer
-          id="chat-message"
-          thread={thread}
-          detail={detail}
-          placeholder={
-            detail.outputs.length > 0
-              ? 'Ask about the work or request a change. / picks a skill, @ mentions an Action.'
-              : 'Ask a follow-up. / picks a skill, @ mentions an Action.'
-          }
-        />
-      </ComposerDock>
-      <div ref={endRef} />
     </ListScreen>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { ChipListField, type ChipItem } from '@/components/ui/chip-list-field';
+import { ChipInput, type ChipItem } from '@/components/ui/chip-input';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
@@ -43,7 +43,7 @@ function OfferingFacts({
   return (
     <Stack as="section" gap="workspace" className={panelClasses({ tone: 'well' })}>
       <h3 className={textRole('itemTitle')}>{map.offering}</h3>
-      <ChipListField
+      <ChipInput
         label="Who buys it"
         items={entryChips(map.audiences)}
         onChange={(items) => onChange({ ...map, audiences: entries(items) })}
@@ -51,7 +51,7 @@ function OfferingFacts({
         disabled={disabled}
         max={LIST_MAX}
       />
-      <ChipListField
+      <ChipInput
         label="Situations and constraints"
         items={entryChips(map.situations)}
         onChange={(items) => onChange({ ...map, situations: entries(items) })}
@@ -59,7 +59,7 @@ function OfferingFacts({
         disabled={disabled}
         max={LIST_MAX}
       />
-      <ChipListField
+      <ChipInput
         label="Attributes"
         items={entryChips(map.attributes)}
         onChange={(items) => onChange({ ...map, attributes: entries(items) })}
@@ -101,7 +101,7 @@ export function BuilderBusinessStep({
   const set = (next: Partial<BusinessDraft>) => business.setDraft({ ...draft, ...next });
   return (
     <Stack gap="section">
-      <ChipListField
+      <ChipInput
         label="What you sell"
         hint="One offering per entry, named as a buyer would."
         items={chips(draft.offerings)}
@@ -109,7 +109,7 @@ export function BuilderBusinessStep({
         placeholder="e.g. golf practice nets"
         disabled={disabled}
       />
-      <ChipListField
+      <ChipInput
         label="Buyer roles"
         hint="Who decides or pays, across everything you sell."
         items={chips(draft.buyerRoles)}
@@ -129,7 +129,7 @@ export function BuilderBusinessStep({
         />
       ))}
       {showsServiceAreas(profile.business_context) ? (
-        <ChipListField
+        <ChipInput
           label="Service areas"
           hint="Places you serve; prompts name them only for a local or regional business."
           items={chips(draft.serviceAreas)}
@@ -139,7 +139,7 @@ export function BuilderBusinessStep({
           max={LIST_MAX}
         />
       ) : null}
-      <ChipListField
+      <ChipInput
         label="Category terms"
         hint="Words buyers use for what you sell, never a product-line name."
         items={chips(draft.categoryTerms)}
@@ -148,7 +148,7 @@ export function BuilderBusinessStep({
         disabled={disabled}
         max={LIST_MAX}
       />
-      <ChipListField
+      <ChipInput
         label="Jobs to be done"
         hint="What buyers are trying to get done."
         items={chips(draft.jobs)}

@@ -58,7 +58,7 @@ export function ProjectMarkets({
   return (
     <Stack as="section" gap="compact" aria-label="Additional markets">
       <p className={textRole('label')}>Additional markets</p>
-      <p className="type-caption text-muted">
+      <p className="type-caption text-ink-muted">
         Measure the same prompts from other countries. Each market runs and reports separately.
       </p>
       {extra.length ? (

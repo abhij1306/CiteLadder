@@ -2,8 +2,9 @@
 
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
+import { SidebarNavGroup, sidebarNavRowClasses } from '@/components/ui/app-shell';
 import { Button } from '@/components/ui/button';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { SearchField } from '@/components/ui/search-field';
@@ -18,48 +19,38 @@ import { useProjectContext } from '@/lib/project/project-context';
 import { cn } from '@/lib/utils';
 
 import { NavLink } from './nav-link';
-import { AGENT_HOME, AGENT_NAV_ITEMS, isNavItemActive } from './nav-items';
+import { AGENT_HOME, AGENT_NAV_ITEMS } from './nav-items';
+import { StationLinks } from './sidebar-nav';
 
 /**
  * Agent mode: New chat, Actions (with the open count), Skills, Context, then
  * every chat in the project, newest activity first, searchable and paged.
  */
-export function AgentNav({ onNavigate }: Readonly<{ onNavigate?: () => void }>) {
+export function AgentNav() {
   const { activeProjectId, activeWorkspaceId } = useProjectContext();
   const scoped = (href: string) =>
     scopedNavigationDestination(href, 'project', activeProjectId, activeWorkspaceId);
   const pathname = useLocation().pathname ?? '';
-  const searchParams = useSearchParams()[0];
   const onIntent = useRouteIntent();
-  const NewChatIcon = ICONS.newChat;
 
   return (
-    <nav aria-label="Agent" className="flex min-h-0 flex-col gap-3">
-      <Button asChild size="md" className="w-full justify-start">
-        <Link to={scoped(AGENT_HOME)} onClick={onNavigate}>
-          <NewChatIcon className="size-4" aria-hidden />
-          New chat
-        </Link>
-      </Button>
-      <ul className="flex flex-col gap-[var(--sidebar-item-gap)]">
-        {AGENT_NAV_ITEMS.map((item) => (
-          <li key={item.href}>
-            <NavLink
-              item={{ ...item, href: scoped(item.href) }}
-              active={isNavItemActive(pathname, searchParams, item)}
-              onIntent={onIntent}
-              onNavigate={onNavigate}
-            />
-          </li>
-        ))}
-      </ul>
+    <nav aria-label="Agent" className="contents">
+      <SidebarNavGroup>
+        <li>
+          <NavLink
+            item={{ label: 'New chat', href: scoped(AGENT_HOME), icon: ICONS.newChat }}
+            active={pathname === AGENT_HOME}
+            onIntent={onIntent}
+          />
+        </li>
+        <StationLinks items={AGENT_NAV_ITEMS} />
+      </SidebarNavGroup>
       {activeProjectId && activeWorkspaceId ? (
         <ChatHistory
           workspaceId={activeWorkspaceId}
           projectId={activeProjectId}
           pathname={pathname}
           scoped={scoped}
-          onNavigate={onNavigate}
         />
       ) : null}
     </nav>
@@ -80,13 +71,11 @@ function ChatHistory({
   projectId,
   pathname,
   scoped,
-  onNavigate,
 }: Readonly<{
   workspaceId: string;
   projectId: string;
   pathname: string;
   scoped: (href: string) => string;
-  onNavigate?: () => void;
 }>) {
   const [search, setSearch] = useState('');
   const needle = useDebounced(search.trim());
@@ -101,8 +90,9 @@ function ChatHistory({
   const rows = chats.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
-    <section aria-labelledby="agent-chat-history" className="flex min-h-0 flex-col gap-2">
-      <h2 id="agent-chat-history" className={textRole('label', 'text-secondary px-3 pt-2')}>
+    // Recent chats are plain rows, which the rail drops.
+    <section aria-labelledby="agent-chat-history" className="shell:flex hidden flex-col gap-2">
+      <h2 id="agent-chat-history" className="type-caption flex h-7 items-center px-3">
         Chats
       </h2>
       <SearchField
@@ -118,7 +108,6 @@ function ChatHistory({
         state={chatListState(chats.isPending, chats.isError, needle)}
         pathname={pathname}
         scoped={scoped}
-        onNavigate={onNavigate}
       />
       {chats.hasNextPage ? (
         <Button
@@ -144,13 +133,11 @@ function ChatRows({
   state,
   pathname,
   scoped,
-  onNavigate,
 }: Readonly<{
   rows: AgentChatSummary[];
   state: 'loading' | 'error' | 'filtered' | 'ready';
   pathname: string;
   scoped: (href: string) => string;
-  onNavigate?: () => void;
 }>) {
   if (state === 'loading') return null;
   if (state === 'error')
@@ -162,7 +149,7 @@ function ChatRows({
       </p>
     );
   return (
-    <ul className="flex flex-col gap-[var(--sidebar-item-gap)]">
+    <ul className="flex flex-col gap-0.5">
       {rows.map((chat) => {
         const href = `/agent/chats/${chat.id}`;
         const active = pathname === href;
@@ -170,16 +157,13 @@ function ChatRows({
           <li key={chat.id}>
             <Link
               to={scoped(href)}
-              onClick={onNavigate}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'focus-ring grid gap-0.5 rounded-[var(--radius-control)] border px-3 py-2',
-                active
-                  ? 'border-transparent bg-selected text-foreground active:bg-active'
-                  : 'hover:bg-hover active:bg-active border-transparent text-secondary',
+                sidebarNavRowClasses(active, true),
+                'h-auto flex-col items-stretch gap-0.5 py-2',
               )}
             >
-              <span className={textRole('label', 'truncate text-foreground')}>{chat.title}</span>
+              <span className="truncate">{chat.title}</span>
               <ChatMeta chat={chat} />
             </Link>
           </li>
@@ -195,7 +179,7 @@ function ChatMeta({ chat }: Readonly<{ chat: AgentChatSummary }>) {
   if (chat.running)
     return (
       <span className={textRole('caption', 'flex items-center gap-2')}>
-        <Spinner className="text-muted" />
+        <Spinner className="text-ink-muted" />
         Working…
       </span>
     );

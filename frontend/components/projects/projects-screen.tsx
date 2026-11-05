@@ -75,6 +75,7 @@ export function ProjectsScreen() {
           action={
             mayCreate ? (
               <Button
+                variant="primary"
                 disabled={!canAddProject}
                 onClick={() => navigate(newProjectDestination(activeWorkspaceId))}
               >

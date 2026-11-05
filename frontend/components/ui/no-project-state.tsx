@@ -36,7 +36,7 @@ export function NoProjectState({
       headingLevel={headingLevel}
       action={
         createProjectHref ? (
-          <Button asChild>
+          <Button variant="primary" asChild>
             <Link to={createProjectHref}>
               <Plus className="size-4" aria-hidden />
               Create project

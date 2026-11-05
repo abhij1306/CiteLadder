@@ -41,7 +41,18 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [searchParams, vi.fn()],
 }));
 
-import { SidebarNav } from './sidebar-nav';
+import { ModeSwitch } from './mode-switch';
+import { SidebarNav as Destinations } from './sidebar-nav';
+
+/** The sidebar's mode switch and destinations, as the shell stacks them. */
+function SidebarNav() {
+  return (
+    <>
+      <ModeSwitch />
+      <Destinations />
+    </>
+  );
+}
 
 // The key the Performance screen's own landing selection reads, so a hover
 // warms exactly the entry the destination consumes.
@@ -93,13 +104,6 @@ describe('station navigation', () => {
     searchParams = new URLSearchParams('tab=members');
     render(<SidebarNav />);
     expect(screen.getByRole('link', { name: 'Integrations' })).not.toHaveAttribute('aria-current');
-  });
-
-  it('calls the compact drawer close owner after choosing a destination', () => {
-    const onNavigate = vi.fn();
-    render(<SidebarNav onNavigate={onNavigate} />);
-    fireEvent.click(screen.getByRole('link', { name: 'Website' }));
-    expect(onNavigate).toHaveBeenCalledOnce();
   });
 
   it('derives the Dashboard | Agent mode from the route', () => {

@@ -3,12 +3,11 @@
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 
-import { cn } from '@/lib/utils';
+import { SidebarNavGroup } from '@/components/ui/app-shell';
 import { useRouteIntent } from '@/lib/navigation/use-route-intent';
 import { scopedNavigationDestination } from '@/lib/navigation/project-destination';
 import { useProjectContext } from '@/lib/project/project-context';
 
-import { ModeSwitch } from './mode-switch';
 import { NavLink } from './nav-link';
 import {
   isNavItemActive,
@@ -22,78 +21,54 @@ import {
 // the shell needs before it can paint.
 const AgentNav = lazy(() => import('./agent-nav').then(({ AgentNav }) => ({ default: AgentNav })));
 
-function StationLinks({
-  items,
-  onNavigate,
-}: Readonly<{ items: readonly NavItem[]; onNavigate?: () => void }>) {
+/** One group's destinations, scoped to the active project or workspace. */
+export function StationLinks({ items }: Readonly<{ items: readonly NavItem[] }>) {
   const pathname = useLocation().pathname ?? '';
   const searchParams = useSearchParams()[0];
   const { activeProjectId, activeWorkspaceId } = useProjectContext();
   const onIntent = useRouteIntent();
-  return (
-    <ul className="flex flex-col gap-[var(--sidebar-item-gap)]">
-      {items.map((item) => {
-        const href = scopedNavigationDestination(
-          item.href,
-          item.scope ?? 'project',
-          activeProjectId,
-          activeWorkspaceId,
-        );
-        return (
-          <li key={item.href}>
-            <NavLink
-              item={{ ...item, href }}
-              active={isNavItemActive(pathname, searchParams, item)}
-              onIntent={onIntent}
-              onNavigate={onNavigate}
-            />
-          </li>
-        );
-      })}
-    </ul>
-  );
+  return items.map((item) => (
+    <li key={item.href}>
+      <NavLink
+        item={{
+          ...item,
+          href: scopedNavigationDestination(
+            item.href,
+            item.scope ?? 'project',
+            activeProjectId,
+            activeWorkspaceId,
+          ),
+        }}
+        active={isNavItemActive(pathname, searchParams, item)}
+        onIntent={onIntent}
+      />
+    </li>
+  ));
 }
 
-export function SidebarNav({
-  className,
-  onNavigate,
-}: Readonly<{ className?: string; onNavigate?: () => void }>) {
+/**
+ * The sidebar's destinations: Dashboard's groups in the order of the product
+ * loop, or Agent mode's (the mode comes from the route).
+ */
+export function SidebarNav() {
   const pathname = useLocation().pathname ?? '';
-  const agentMode = navigationMode(pathname) === 'agent';
-  // The mode switch stays put while the destinations scroll under it.
+  if (navigationMode(pathname) === 'agent') {
+    return (
+      <Suspense fallback={null}>
+        <AgentNav />
+      </Suspense>
+    );
+  }
   return (
-    <div className={cn('flex flex-col gap-3', className)}>
-      <ModeSwitch onNavigate={onNavigate} />
-      {/* A scroller clips everything outside its padding box, so this gutter
-          keeps the 1px control edges and 3px focus rings of full-width rows
-          visible; the negative margin keeps alignment. */}
-      <div className="-m-1 min-h-0 flex-1 overflow-y-auto p-1">
-        {agentMode ? (
-          <Suspense fallback={null}>
-            <AgentNav onNavigate={onNavigate} />
-          </Suspense>
-        ) : (
-          <DashboardNav onNavigate={onNavigate} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DashboardNav({ onNavigate }: Readonly<{ onNavigate?: () => void }>) {
-  return (
-    <nav aria-label="Primary" className="flex flex-col gap-[var(--sidebar-group-gap)]">
+    <nav aria-label="Primary" className="contents">
       {NAV_GROUPS.map((group) => (
-        <div key={group.title ?? 'overview'} className="flex flex-col gap-0">
-          {group.title ? (
-            <p className="type-caption text-muted px-3 pt-4 pb-2">{group.title}</p>
-          ) : null}
-          <StationLinks items={group.items} onNavigate={onNavigate} />
-        </div>
+        <SidebarNavGroup key={group.title ?? 'overview'} title={group.title}>
+          <StationLinks items={group.items} />
+        </SidebarNavGroup>
       ))}
-      <div className="pt-4">
-        <StationLinks items={SETUP_NAV_ITEMS} onNavigate={onNavigate} />
-      </div>
+      <SidebarNavGroup>
+        <StationLinks items={SETUP_NAV_ITEMS} />
+      </SidebarNavGroup>
     </nav>
   );
 }

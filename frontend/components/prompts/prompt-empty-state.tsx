@@ -23,7 +23,9 @@ export function PromptEmptyState({
       description="Generate buyer questions from your confirmed offerings, or add your own."
       action={
         <>
-          <Button onClick={onGenerate}>Generate prompts</Button>
+          <Button variant="primary" onClick={onGenerate}>
+            Generate prompts
+          </Button>
           <Button variant="secondary" onClick={onAdd}>
             Add prompt
           </Button>

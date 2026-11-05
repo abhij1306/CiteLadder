@@ -3,9 +3,12 @@
 import { lazy } from 'react';
 import { Link } from 'react-router-dom';
 
+import {
+  SidebarNavRowContent,
+  SidebarRowTooltip,
+  sidebarNavRowClasses,
+} from '@/components/ui/app-shell';
 import { LazyIsland } from '@/components/ui/lazy-island';
-import { textRole } from '@/components/ui/typography';
-import { cn } from '@/lib/utils';
 
 import type { NavItem } from './nav-items';
 
@@ -13,9 +16,8 @@ import type { NavItem } from './nav-items';
  * The count reads the Actions list, whose client and schemas (Actions,
  * Opportunities, Site Health) would otherwise ride in the boot download. It
  * arrives after the shell; until its read answers it renders nothing, which is
- * also what it renders while the code loads, and it sits after the
- * label's flexible cell at the row's fixed height, so its arrival moves
- * nothing but the label's truncation point.
+ * also what it renders while the code loads, and it sits in the row's fixed
+ * count slot, so its arrival moves nothing.
  */
 const OpenActionCount = lazy(() =>
   import('./open-action-count').then(({ OpenActionCount }) => ({ default: OpenActionCount })),
@@ -26,52 +28,39 @@ export function NavLink({
   item,
   active,
   onIntent,
-  onNavigate,
 }: Readonly<{
   item: NavItem;
   active: boolean;
   onIntent: (href: string) => void;
-  onNavigate?: () => void;
 }>) {
-  const Icon = item.icon;
   return (
-    <Link
-      to={item.href}
-      onMouseEnter={() => {
-        if (!active) onIntent(item.href);
-      }}
-      onFocus={() => {
-        if (!active) onIntent(item.href);
-      }}
-      onClick={onNavigate}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        'shell-link focus-ring group relative flex h-[var(--nav-item-height)] items-center gap-2 rounded-[var(--radius-control)] px-3 transition-colors duration-[var(--motion-fast)]',
-        // The current destination keeps the neutral tint and adds the 2px
-        // accent bar on its start edge (owner, 2026-11-03).
-        active
-          ? textRole('control', 'selection-bar bg-selected text-foreground active:bg-active')
-          : textRole(
-              'control',
-              'text-secondary hover:bg-hover active:bg-active hover:text-foreground',
-            ),
-      )}
-    >
-      <Icon
-        className={cn(
-          'size-4 shrink-0 transition-colors duration-[var(--motion-fast)]',
-          active ? 'text-foreground' : 'text-muted group-hover:text-foreground',
-        )}
-        aria-hidden
-      />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {item.badge === 'open-actions' ? (
-        // Chrome: a count that cannot load or render is reported and leaves the
-        // row as it was. It never takes the shell down, so defects are contained.
-        <LazyIsland failed={null} label="open-action-count" defects="contain">
-          <OpenActionCount />
-        </LazyIsland>
-      ) : null}
-    </Link>
+    <SidebarRowTooltip label={item.label}>
+      <Link
+        to={item.href}
+        onMouseEnter={() => {
+          if (!active) onIntent(item.href);
+        }}
+        onFocus={() => {
+          if (!active) onIntent(item.href);
+        }}
+        aria-current={active ? 'page' : undefined}
+        className={sidebarNavRowClasses(active)}
+      >
+        <SidebarNavRowContent
+          icon={item.icon}
+          label={item.label}
+          active={active}
+          count={
+            item.badge === 'open-actions' ? (
+              // Chrome: a count that cannot load or render is reported and
+              // leaves the row as it was; it never takes the shell down.
+              <LazyIsland failed={null} label="open-action-count" defects="contain">
+                <OpenActionCount />
+              </LazyIsland>
+            ) : null
+          }
+        />
+      </Link>
+    </SidebarRowTooltip>
   );
 }

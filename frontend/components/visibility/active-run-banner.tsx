@@ -1,4 +1,4 @@
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Inline } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
 import { auditStatusLabel } from '@/lib/runs/status';
@@ -13,7 +13,7 @@ import { TextLink } from '@/components/ui/text-link';
  */
 export function ActiveRunBanner({ run }: Readonly<{ run: ActiveRun }>) {
   return (
-    <Alert tone="info" hideIcon>
+    <Callout tone="info">
       <Inline className="flex-wrap">
         <Spinner />
         <span>
@@ -24,6 +24,6 @@ export function ActiveRunBanner({ run }: Readonly<{ run: ActiveRun }>) {
           Watch live progress →
         </TextLink>
       </Inline>
-    </Alert>
+    </Callout>
   );
 }

@@ -55,7 +55,7 @@ describe('discoveryActivity', () => {
   it('maps the persisted phase to step states without leaking backend tokens', () => {
     const steps = discoveryActivity(discovery('finding_competitors'));
 
-    expect(steps.map((step) => step.state)).toEqual(['complete', 'complete', 'active', 'pending']);
+    expect(steps.map((step) => step.status)).toEqual(['done', 'done', 'running', 'pending']);
     expect(JSON.stringify(steps)).not.toMatch(/finding_competitors|queue|provider/);
   });
 

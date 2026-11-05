@@ -177,8 +177,8 @@ function Trends({
       </div>
       <TrendChart
         label="Observed visibility history"
-        domainMax={1}
-        formatTick={rate}
+        yMax={1}
+        yFormat={rate}
         data={points.map((point, index) => {
           const previous = points[index - 1];
           return {

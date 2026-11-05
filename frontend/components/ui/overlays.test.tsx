@@ -7,13 +7,15 @@ import { Dialog } from './dialog';
 import { CopyButton } from './copy-button';
 import { Drawer } from './drawer';
 import {
-  Dropdown,
-  DropdownContent,
-  DropdownItem,
-  DropdownRadioGroup,
-  DropdownRadioItem,
-  DropdownTrigger,
-} from './dropdown';
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from './menu';
+import { Popover } from './popover';
 import { Tooltip, TooltipProvider } from './tooltip';
 import { ToastProvider, useToast } from './toast';
 
@@ -129,15 +131,15 @@ describe('Drawer', () => {
   });
 });
 
-describe('Dropdown', () => {
+describe('Menu', () => {
   it('exposes a trigger with menu semantics (closed by default)', () => {
     render(
-      <Dropdown>
-        <DropdownTrigger>Menu</DropdownTrigger>
-        <DropdownContent>
-          <DropdownItem>Edit</DropdownItem>
-        </DropdownContent>
-      </Dropdown>,
+      <Menu>
+        <MenuTrigger>Menu</MenuTrigger>
+        <MenuContent>
+          <MenuItem>Edit</MenuItem>
+        </MenuContent>
+      </Menu>,
     );
     const trigger = screen.getByRole('button', { name: 'Menu' });
     expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
@@ -148,35 +150,90 @@ describe('Dropdown', () => {
 
   it('marks the selected radio filter', () => {
     render(
-      <Dropdown open>
-        <DropdownTrigger>Range</DropdownTrigger>
-        <DropdownContent>
-          <DropdownRadioGroup value="month">
-            <DropdownRadioItem value="week">Week</DropdownRadioItem>
-            <DropdownRadioItem value="month">Month</DropdownRadioItem>
-          </DropdownRadioGroup>
-        </DropdownContent>
-      </Dropdown>,
+      <Menu open>
+        <MenuTrigger>Range</MenuTrigger>
+        <MenuContent>
+          <MenuRadioGroup value="month">
+            <MenuRadioItem value="week">Week</MenuRadioItem>
+            <MenuRadioItem value="month">Month</MenuRadioItem>
+          </MenuRadioGroup>
+        </MenuContent>
+      </Menu>,
     );
     expect(screen.getByRole('menuitemradio', { name: 'Month' })).toHaveAttribute(
       'data-state',
       'checked',
     );
   });
+
+  it('runs the item reached with the arrow keys and closes', async () => {
+    const user = userEvent.setup();
+    const onRename = vi.fn();
+    const onDelete = vi.fn();
+    render(
+      <Menu>
+        <MenuTrigger>Actions</MenuTrigger>
+        <MenuContent>
+          <MenuItem onSelect={onRename} shortcut="R">
+            Rename
+          </MenuItem>
+          <MenuSeparator />
+          <MenuItem danger onSelect={onDelete}>
+            Delete
+          </MenuItem>
+        </MenuContent>
+      </Menu>,
+    );
+    screen.getByRole('button', { name: 'Actions' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('menuitem', { name: /Rename/ })).toHaveTextContent('RenameR');
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onRename).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+});
+
+describe('Popover', () => {
+  it('opens from its trigger and closes on Escape and on a press outside', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Popover trigger={<button type="button">Filters</button>} title="Filters">
+          <p>Only cited answers</p>
+        </Popover>
+        <p>Outside</p>
+      </>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Filters' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Only cited answers')).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByText('Only cited answers')).not.toBeInTheDocument();
+
+    await user.click(trigger);
+    await user.click(screen.getByText('Outside'));
+    expect(screen.queryByText('Only cited answers')).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
 });
 
 describe('Tooltip', () => {
-  it('renders its content when opened', async () => {
+  it('renders its content when the trigger takes keyboard focus', async () => {
     render(
       <TooltipProvider>
-        <Tooltip content="Coming soon" delayDuration={0}>
+        <Tooltip content="Coming soon" shortcut="G">
           <button type="button">Generate</button>
         </Tooltip>
       </TooltipProvider>,
     );
     fireEvent.focus(screen.getByRole('button', { name: 'Generate' }));
     const tip = await screen.findByRole('tooltip');
-    expect(tip).toHaveTextContent('Coming soon');
+    expect(tip).toHaveTextContent('Coming soonG');
   });
 });
 
@@ -218,6 +275,43 @@ describe('ToastProvider', () => {
     );
     expect(screen.getByText('Second notification')).toBeInTheDocument();
     clock.mockRestore();
+  });
+
+  it('shows at most three notifications, dropping the oldest, and runs an action', async () => {
+    const user = userEvent.setup();
+    const onUndo = vi.fn();
+
+    function Harness() {
+      const { notify } = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            notify('Run queued');
+            notify('Crawl started');
+            notify('Prompt saved');
+            notify('Prompt deleted', undefined, {
+              tone: 'negative',
+              action: { label: 'Undo', onClick: onUndo },
+            });
+          }}
+        >
+          Notify four times
+        </button>
+      );
+    }
+
+    render(
+      <ToastProvider>
+        <Harness />
+      </ToastProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Notify four times' }));
+    expect(screen.queryByText('Run queued')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Dismiss notification' })).toHaveLength(3);
+
+    await user.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(onUndo).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -4,11 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { TrendingUp } from 'lucide-react';
 import type { z } from 'zod';
 
+import { AppGrid } from '@/components/ui/app-grid';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Delta } from '@/components/ui/delta';
 import { Stack } from '@/components/ui/layout';
-import { EditorialSectionHeader, splitPaneClasses } from '@/components/ui/workspace';
+import { EditorialSectionHeader } from '@/components/ui/workspace';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import { queryKeys } from '@/lib/api/query-keys';
 import { visibilityApi } from '@/lib/api/visibility';
@@ -139,7 +140,7 @@ function MoverTable({
           <TableCell>
             <ClampText lines={1}>{dimension === 'url' ? pathOf(mover.key) : mover.key}</ClampText>
           </TableCell>
-          <TableCell numeric className="text-secondary">
+          <TableCell numeric className="text-ink-secondary">
             {`${percent(mover.previous_share, 1)} → ${percent(mover.current_share, 1)}`}
           </TableCell>
           <TableCell numeric>
@@ -170,10 +171,10 @@ export function TopMoversCard({
         title="Top movers"
         description={`The ${dimension === 'url' ? 'pages' : 'domains'} whose share of citations changed most against the previous comparable period, in percentage points.`}
       />
-      <div className={splitPaneClasses('peers')}>
+      <AppGrid layout="halves">
         <MoverTable title="Rising" movers={query.data?.risers ?? []} {...shared} />
         <MoverTable title="Falling" movers={query.data?.fallers ?? []} {...shared} />
-      </div>
+      </AppGrid>
     </Stack>
   );
 }

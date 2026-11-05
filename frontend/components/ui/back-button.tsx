@@ -3,20 +3,20 @@ import { ArrowLeft } from 'lucide-react';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { cn } from '@/lib/utils';
 
-import { buttonVariants } from './button-variants';
+import { buttonClasses } from './button';
 import { Icon } from './icon';
+import { Tooltip } from './tooltip';
 
 /**
- * BackButton — a detail route's way up to its collection: a round 32px
- * control with the back arrow, set before the page title. The label ("Back to
- * runs") is its accessible name and hover hint; the route is scoped to the
- * active project (or `projectId`) like any app link.
+ * BackButton — a detail route's way up to its collection: the secondary
+ * IconButton face with the back arrow, set before the page title. The label
+ * ("Back to runs") is its accessible name and tooltip; the route is scoped to
+ * the active project (or `projectId`) like any app link.
  */
 export function BackButton({
   href,
   label,
   projectId,
-  className,
 }: Readonly<{
   /** The collection route, e.g. `/runs`. */
   href: string;
@@ -24,21 +24,17 @@ export function BackButton({
   label: string;
   /** Scope to this project rather than the active one. */
   projectId?: string | null;
-  className?: string;
 }>) {
   return (
-    <ProjectLink
-      href={href}
-      projectId={projectId}
-      aria-label={label}
-      title={label}
-      className={cn(
-        buttonVariants({ variant: 'secondary', size: 'icon' }),
-        'shrink-0 rounded-full',
-        className,
-      )}
-    >
-      <Icon icon={ArrowLeft} />
-    </ProjectLink>
+    <Tooltip content={label} describe={false}>
+      <ProjectLink
+        href={href}
+        projectId={projectId}
+        aria-label={label}
+        className={cn(buttonClasses('secondary'), 'w-[var(--control-md)] gap-0 px-0')}
+      >
+        <Icon icon={ArrowLeft} />
+      </ProjectLink>
+    </Tooltip>
   );
 }

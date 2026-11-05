@@ -10,7 +10,7 @@
  * `lib/visibility/use-visibility-dashboard.ts`.
  */
 import type { IntegrationSyncRun } from '@/lib/api/integrations';
-import type { RunStatusValue } from '@/components/ui/badge-variants';
+import type { RunStatusValue } from '@/components/ui/badge';
 
 type SyncRunStatus = IntegrationSyncRun['status'];
 
