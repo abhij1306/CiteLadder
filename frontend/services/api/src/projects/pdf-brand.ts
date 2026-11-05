@@ -25,24 +25,17 @@ import { create as parseFont } from 'fontkit';
 
 /** The tokens a document paints with, by the `globals.css` custom property that owns each. */
 const TOKENS = {
-  brandInk: '--color-brand-ink',
-  foreground: '--color-foreground',
-  secondary: '--color-secondary',
-  muted: '--color-muted',
+  ink: '--color-ink',
+  inkSecondary: '--color-ink-secondary',
+  inkMuted: '--color-ink-muted',
   accent: '--color-accent',
-  accentText: '--color-accent-text',
-  // The app has no public field colours, so the cover band and callouts take
-  // the soft accent and the first-run notice the stronger accent tint.
-  fieldMint: '--color-accent-soft',
-  fieldLime: '--color-accent-subtle',
-  backgroundAlt: '--color-background-alt',
-  well: '--color-well',
-  border: '--color-border',
-  borderStrong: '--color-border-strong',
-  dangerText: '--color-danger-text',
-  dangerBg: '--color-danger-bg',
-  warningText: '--color-warning-text',
-  warningBg: '--color-warning-bg',
+  accentInk: '--color-accent-ink',
+  surfaceSunken: '--color-surface-sunken',
+  line: '--color-line',
+  negative: '--color-negative',
+  negativeSoft: '--color-negative-soft',
+  warning: '--color-warning',
+  warningSoft: '--color-warning-soft',
 } as const;
 export type Tone = keyof typeof TOKENS;
 export type Palette = Readonly<Record<Tone, string>>;
@@ -194,22 +187,17 @@ function parsePalette(css: string): Palette {
   };
   const token = (tone: Tone) => resolve(TOKENS[tone], new Set());
   return {
-    brandInk: token('brandInk'),
-    foreground: token('foreground'),
-    secondary: token('secondary'),
-    muted: token('muted'),
+    ink: token('ink'),
+    inkSecondary: token('inkSecondary'),
+    inkMuted: token('inkMuted'),
     accent: token('accent'),
-    accentText: token('accentText'),
-    fieldMint: token('fieldMint'),
-    fieldLime: token('fieldLime'),
-    backgroundAlt: token('backgroundAlt'),
-    well: token('well'),
-    border: token('border'),
-    borderStrong: token('borderStrong'),
-    dangerText: token('dangerText'),
-    dangerBg: token('dangerBg'),
-    warningText: token('warningText'),
-    warningBg: token('warningBg'),
+    accentInk: token('accentInk'),
+    surfaceSunken: token('surfaceSunken'),
+    line: token('line'),
+    negative: token('negative'),
+    negativeSoft: token('negativeSoft'),
+    warning: token('warning'),
+    warningSoft: token('warningSoft'),
   };
 }
 
@@ -274,11 +262,11 @@ export function drawLogo(
     .save()
     .translate(x, y)
     .scale(height / 100);
-  document.path(LOGO_BUBBLE).fill(palette.brandInk);
+  document.path(LOGO_BUBBLE).fill(palette.ink);
   for (const bar of LOGO_BARS)
     document.roundedRect(bar.x, bar.y, bar.width, bar.height, 1.1).fill(palette.accent);
   for (const glyph of LOGO_GLYPHS) {
-    const color = glyph.tone === 'accent' ? palette.accent : palette.brandInk;
+    const color = glyph.tone === 'accent' ? palette.accent : palette.ink;
     // Stroke and fill share one colour, so the SVG's stroke-then-fill order is moot.
     document
       .save()

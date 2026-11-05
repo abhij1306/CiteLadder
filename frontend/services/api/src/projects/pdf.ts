@@ -33,9 +33,9 @@ export type Fact = { label: string; value: string | readonly string[] };
 type Chip = { label: string; x: number; width: number };
 
 const TAG_TONES: Record<Tag['tone'], { ink: Tone; fill: Tone }> = {
-  danger: { ink: 'dangerText', fill: 'dangerBg' },
-  warning: { ink: 'warningText', fill: 'warningBg' },
-  neutral: { ink: 'secondary', fill: 'well' },
+  danger: { ink: 'negative', fill: 'negativeSoft' },
+  warning: { ink: 'warning', fill: 'warningSoft' },
+  neutral: { ink: 'inkSecondary', fill: 'surfaceSunken' },
 };
 
 /** No HTML interpretation, remote fonts, scripts, attachments or interactive fields. */
@@ -178,7 +178,7 @@ export class PdfReport {
     return this.palette[tone];
   }
 
-  private rule(y: number, tone: Tone = 'border', width = 0.6): void {
+  private rule(y: number, tone: Tone = 'line', width = 0.6): void {
     this.document
       .moveTo(MARGIN, y)
       .lineTo(MARGIN + this.width, y)
@@ -200,7 +200,7 @@ export class PdfReport {
     if (this.y + height > this.bottom) this.newPage();
   }
 
-  /** The first page's brand band: logo, eyebrow, title and context lines on mint. */
+  /** The first page's brand band: logo, eyebrow, title and context lines on a sunken band. */
   cover({
     eyebrow,
     title,
@@ -209,18 +209,18 @@ export class PdfReport {
     const titleLines = this.wrap(title, 26, 'display', this.width);
     const contextLines = lines.flatMap((line) => this.wrap(line, 9.5, 'text', this.width));
     const height = 128 + titleLines.length * 31 + contextLines.length * 14;
-    this.document.rect(0, 0, this.document.page.width, height).fill(this.fill('fieldMint'));
+    this.document.rect(0, 0, this.document.page.width, height).fill(this.fill('surfaceSunken'));
     this.logo(MARGIN, 36, 20);
-    this.draw(eyebrow, MARGIN, 96, { size: 9, style: 'medium', tone: 'accentText' });
+    this.draw(eyebrow, MARGIN, 96, { size: 9, style: 'medium', tone: 'accentInk' });
     let baseline = 96;
     for (const line of titleLines) {
       baseline += 31;
-      this.draw(line, MARGIN, baseline, { size: 26, style: 'display', tone: 'brandInk' });
+      this.draw(line, MARGIN, baseline, { size: 26, style: 'display', tone: 'ink' });
     }
     baseline += 8;
     for (const line of contextLines) {
       baseline += 14;
-      this.draw(line, MARGIN, baseline, { size: 9.5, style: 'text', tone: 'secondary' });
+      this.draw(line, MARGIN, baseline, { size: 9.5, style: 'text', tone: 'inkSecondary' });
     }
     this.y = height + 22;
   }
@@ -230,7 +230,7 @@ export class PdfReport {
     this.logo(MARGIN, this.y, 16);
     this.y += 46;
     for (const line of this.wrap(text, 22, 'display', this.width)) {
-      this.draw(line, MARGIN, this.y, { size: 22, style: 'display', tone: 'brandInk' });
+      this.draw(line, MARGIN, this.y, { size: 22, style: 'display', tone: 'ink' });
       this.y += 28;
     }
   }
@@ -244,7 +244,7 @@ export class PdfReport {
       this.draw(line, MARGIN + 10, this.y + 12, {
         size: 13.5,
         style: 'display',
-        tone: 'foreground',
+        tone: 'ink',
       });
       this.y += 18;
     }
@@ -254,7 +254,7 @@ export class PdfReport {
   text(text: string, options: Readonly<{ size?: number; style?: Style; tone?: Tone }> = {}): void {
     const size = options.size ?? 9.5;
     const style = options.style ?? 'text';
-    const tone = options.tone ?? 'foreground';
+    const tone = options.tone ?? 'ink';
     const height = size * 1.45;
     for (const line of this.wrap(text, size, style, this.width)) {
       this.ensure(height);
@@ -264,23 +264,23 @@ export class PdfReport {
     this.y += 4;
   }
 
-  /** A one-time notice on a lime strip. */
+  /** A one-time notice on a sunken strip. */
   note(text: string): void {
     const lines = this.wrap(text, 9, 'medium', this.width - 24);
     const height = lines.length * 13 + 14;
     this.ensure(height + 10);
-    this.document.rect(MARGIN, this.y, this.width, height).fill(this.fill('fieldLime'));
+    this.document.rect(MARGIN, this.y, this.width, height).fill(this.fill('surfaceSunken'));
     lines.forEach((line, index) =>
       this.draw(line, MARGIN + 12, this.y + 19 + index * 13, {
         size: 9,
         style: 'medium',
-        tone: 'foreground',
+        tone: 'ink',
       }),
     );
     this.y += height + 10;
   }
 
-  /** The recommended step, on a mint field. */
+  /** The recommended step, on a sunken field. */
   callout({
     eyebrow,
     title,
@@ -294,22 +294,22 @@ export class PdfReport {
     this.y += 8;
     this.ensure(height + 10);
     const top = this.y;
-    this.document.rect(MARGIN, top, this.width, height).fill(this.fill('fieldMint'));
-    this.draw(eyebrow, MARGIN + 14, top + 22, { size: 8.5, style: 'medium', tone: 'accentText' });
+    this.document.rect(MARGIN, top, this.width, height).fill(this.fill('surfaceSunken'));
+    this.draw(eyebrow, MARGIN + 14, top + 22, { size: 8.5, style: 'medium', tone: 'accentInk' });
     let baseline = top + 26;
     for (const line of titleLines) {
       baseline += 16;
-      this.draw(line, MARGIN + 14, baseline, { size: 12, style: 'medium', tone: 'brandInk' });
+      this.draw(line, MARGIN + 14, baseline, { size: 12, style: 'medium', tone: 'ink' });
     }
     baseline += 2;
     for (const line of detailLines) {
       baseline += 12.5;
-      this.draw(line, MARGIN + 14, baseline, { size: 9, style: 'text', tone: 'secondary' });
+      this.draw(line, MARGIN + 14, baseline, { size: 9, style: 'text', tone: 'inkSecondary' });
     }
     this.y = top + height + 10;
   }
 
-  /** Headline figures in a row of equal cells under a signal-green rule. */
+  /** Headline figures in a row of equal cells under a Flare rule. */
   stats(stats: readonly Stat[]): void {
     if (!stats.length) return;
     const cell = this.width / stats.length;
@@ -328,18 +328,18 @@ export class PdfReport {
           .moveTo(MARGIN + index * cell, top + 12)
           .lineTo(MARGIN + index * cell, top + height - 8)
           .lineWidth(0.6)
-          .strokeColor(this.palette.border)
+          .strokeColor(this.palette.line)
           .stroke();
       this.draw(this.fit(stat.label, 8.5, 'medium', width), x, top + 20, {
         size: 8.5,
         style: 'medium',
-        tone: 'secondary',
+        tone: 'inkSecondary',
       });
       const figure = this.measure(stat.value, 24, 'figureMedium');
       const size = figure > width ? Math.max(12, (24 * width) / figure) : 24;
-      this.draw(stat.value, x, top + 50, { size, style: 'figureMedium', tone: 'brandInk' });
+      this.draw(stat.value, x, top + 50, { size, style: 'figureMedium', tone: 'ink' });
       notes[index]?.forEach((line, row) =>
-        this.draw(line, x, top + 66 + row * 10.5, { size: 8, style: 'text', tone: 'muted' }),
+        this.draw(line, x, top + 66 + row * 10.5, { size: 8, style: 'text', tone: 'inkMuted' }),
       );
     });
     this.y = top + height + 4;
@@ -368,10 +368,10 @@ export class PdfReport {
         this.draw(column.header, cellX(column, column.header, 8, 'medium'), this.y + 13, {
           size: 8,
           style: 'medium',
-          tone: 'secondary',
+          tone: 'inkSecondary',
         });
       this.y += TABLE_HEADER;
-      this.rule(this.y, 'borderStrong', 0.8);
+      this.rule(this.y, 'line', 0.8);
     };
     const wrapped = rows.map((row) => {
       if (row.length !== layout.length) throw new Error('Invalid PDF row');
@@ -406,7 +406,7 @@ export class PdfReport {
         const end = Math.min(count, start + room);
         const height = (end - start) * TABLE_LINE + CELL_Y_PAD * 2;
         if (rowIndex % 2 === 1)
-          this.document.rect(MARGIN, this.y, this.width, height).fill(this.fill('backgroundAlt'));
+          this.document.rect(MARGIN, this.y, this.width, height).fill(this.fill('surfaceSunken'));
         for (const { column, style, lines } of cells)
           lines
             .slice(start, end)
@@ -415,7 +415,7 @@ export class PdfReport {
                 line,
                 cellX(column, line, 9, style),
                 this.y + CELL_Y_PAD + 9.5 + offset * TABLE_LINE,
-                { size: 9, style, tone: 'foreground' },
+                { size: 9, style, tone: 'ink' },
               ),
             );
         this.y += height;
@@ -440,20 +440,20 @@ export class PdfReport {
       this.draw(item.rank, MARGIN, top + 20, {
         size: 12,
         style: 'figureMedium',
-        tone: 'accentText',
+        tone: 'accentInk',
       });
       titleLines.forEach((line, index) =>
         this.draw(line, textX, top + 20 + index * 13.5, {
           size: 10,
           style: 'medium',
-          tone: 'foreground',
+          tone: 'ink',
         }),
       );
       detailLines.forEach((line, index) =>
         this.draw(line, textX, top + 20 + titleLines.length * 13.5 + index * 12, {
           size: 8.5,
           style: 'text',
-          tone: 'muted',
+          tone: 'inkMuted',
         }),
       );
       if (item.tag) {
@@ -485,12 +485,12 @@ export class PdfReport {
       const height = chips ? chips.length * 22 + 12 : lines.length * 13.5 + 14;
       this.ensure(height);
       const top = this.y;
-      this.draw(fact.label, MARGIN, top + 18, { size: 8.5, style: 'medium', tone: 'secondary' });
+      this.draw(fact.label, MARGIN, top + 18, { size: 8.5, style: 'medium', tone: 'inkSecondary' });
       lines.forEach((line, index) =>
         this.draw(line, valueX, top + 18 + index * 13.5, {
           size: 9.5,
           style: 'text',
-          tone: 'foreground',
+          tone: 'ink',
         }),
       );
       chips?.forEach((row, index) =>
@@ -498,11 +498,11 @@ export class PdfReport {
           const y = top + 7 + index * 22;
           this.document
             .roundedRect(valueX + chip.x, y, chip.width, 17, 8.5)
-            .fill(this.fill('well'));
+            .fill(this.fill('surfaceSunken'));
           this.draw(chip.label, valueX + chip.x + 8, y + 12, {
             size: 8.5,
             style: 'text',
-            tone: 'foreground',
+            tone: 'ink',
           });
         }),
       );
@@ -533,7 +533,7 @@ export class PdfReport {
   async save(): Promise<Uint8Array> {
     const pages = this.document.bufferedPageRange();
     const height = this.document.page.height;
-    const ink: Ink = { size: 8, style: 'text', tone: 'muted' };
+    const ink: Ink = { size: 8, style: 'text', tone: 'inkMuted' };
     for (let index = pages.start; index < pages.start + pages.count; index++) {
       this.document.switchToPage(index);
       if (index > pages.start) this.logo(MARGIN, 28, 11);
