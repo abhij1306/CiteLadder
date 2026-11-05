@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -62,7 +62,7 @@ export function CompetitorSuggestions({
           onAdd={(candidateId) => acceptMutation.mutate(candidateId)}
         />
         {acceptMutation.isError ? (
-          <Alert tone="danger">Could not add that competitor. Try again.</Alert>
+          <Callout tone="negative">Could not add that competitor. Try again.</Callout>
         ) : null}
       </Stack>
     </Card>

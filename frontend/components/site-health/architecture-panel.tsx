@@ -11,8 +11,9 @@ import {
   orphanSegment,
 } from '@/components/site-health/architecture-orphans';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
-import { Alert } from '@/components/ui/alert';
+import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
+import { Callout } from '@/components/ui/callout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Icon } from '@/components/ui/icon';
@@ -24,7 +25,6 @@ import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import type {
   ArchitectureNode,
@@ -95,10 +95,10 @@ export function ArchitecturePanel({
     );
   if (!architecture.data || architecture.data.state === 'unavailable') {
     return (
-      <Alert tone="info">
+      <Callout tone="info">
         {architecture.data?.limitations[0] ??
           'Page kinds appear once a crawl has finished and its structure has been derived.'}
-      </Alert>
+      </Callout>
     );
   }
   return <ArchitectureLedger data={architecture.data} />;
@@ -246,7 +246,7 @@ function PageKindTable({
                   className="w-auto"
                 >
                   <Inline as="span">
-                    <Icon icon={open ? ChevronDown : ChevronRight} className="text-muted" />
+                    <Icon icon={open ? ChevronDown : ChevronRight} className="text-ink-muted" />
                     <PageKindBadge pageKind={pageKind.page_kind} />
                   </Inline>
                 </Pressable>
@@ -285,7 +285,7 @@ function PageKindPages({
   crawlId,
 }: Readonly<{ pages: ArchitectureNode[]; crawlId: string | null }>) {
   return (
-    <TableRow className="bg-panel-tonal hover:bg-panel-tonal">
+    <TableRow className="bg-surface-sunken hover:bg-surface-sunken">
       <TableCell colSpan={6}>
         {pages.length === 0 ? (
           <QueryState
@@ -310,7 +310,7 @@ function PageKindPages({
                     <ClampText lines={1}>{page.url}</ClampText>
                   </TextLink>
                 ) : (
-                  <ClampText lines={1} className="type-body text-foreground">
+                  <ClampText lines={1} className="type-body text-ink">
                     {page.url}
                   </ClampText>
                 )}
@@ -329,12 +329,12 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
   const linkedShare = linking.pages_with_incoming_percentage;
   return (
     <>
-      <div className={splitPaneClasses('peers')}>
+      <AppGrid layout="halves">
         <Card>
           <CardHeader>
             <CardTitle>
               <Inline as="span">
-                <Icon icon={Link2} className="text-muted" />
+                <Icon icon={Link2} className="text-ink-muted" />
                 Internal linking
               </Inline>
             </CardTitle>
@@ -374,7 +374,7 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
           <CardHeader>
             <CardTitle>
               <Inline as="span">
-                <Icon icon={ListTree} className="text-muted" />
+                <Icon icon={ListTree} className="text-ink-muted" />
                 Structure depth
               </Inline>
             </CardTitle>
@@ -399,7 +399,7 @@ function ArchitectureEvidence({ data }: Readonly<{ data: SiteArchitecture }>) {
             </Stack>
           </CardContent>
         </Card>
-      </div>
+      </AppGrid>
       <TextLink className="justify-self-start" href="/site?tab=internal-links">
         Review internal link suggestions
       </TextLink>

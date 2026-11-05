@@ -1,11 +1,10 @@
 import type { ReactNode } from 'react';
 import { Database } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Disclosure } from '@/components/ui/disclosure';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
-import { StatRow } from '@/components/ui/stat-row';
+import { KpiRow } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
 import type {
   SearchIntelligenceDataset,
@@ -24,17 +23,13 @@ export type SearchMetric = readonly [
 
 export function SearchMetrics({ metrics }: Readonly<{ metrics: readonly SearchMetric[] }>) {
   return (
-    <Card>
-      <CardContent>
-        <StatRow
-          segments={metrics.map(([label, dataset, field]) => ({
-            key: label,
-            label,
-            value: <SearchValue value={dataset?.summary[field]} fetched={Boolean(dataset)} />,
-          }))}
-        />
-      </CardContent>
-    </Card>
+    <KpiRow
+      segments={metrics.map(([label, dataset, field]) => ({
+        key: label,
+        label,
+        value: <SearchValue value={dataset?.summary[field]} fetched={Boolean(dataset)} />,
+      }))}
+    />
   );
 }
 

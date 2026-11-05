@@ -173,8 +173,8 @@ function rowsHandoff(
   const [first] = rows;
   const subject =
     rows.length === 1 && first
-      ? `the Search Intelligence row for "${first.keyword || first.url || first.domain}"`
-      : `these ${rows.length} ${title ?? 'Search Intelligence'} rows`;
+      ? `the Keyword Research row for "${first.keyword || first.url || first.domain}"`
+      : `these ${rows.length} ${title ?? 'Keyword Research'} rows`;
   return {
     searchIntelligence: { datasetId, rowIds: rows.map((row) => row.id) },
     prompt: `Help me act on ${subject}.`,
@@ -197,7 +197,7 @@ function EvidenceDrawer({
       {selected ? (
         <Inline className="flex-wrap">
           {selected.action_id ? (
-            <Button asChild className="w-fit">
+            <Button variant="primary" asChild className="w-fit">
               <ProjectLink href={`/agent/actions/${selected.action_id}`}>Open Action</ProjectLink>
             </Button>
           ) : null}
@@ -231,7 +231,7 @@ function RowFields({ row }: Readonly<{ row: SearchIntelligenceRow }>) {
     <dl className={ledgerClasses('open', 'type-body')}>
       {evidenceFields(row, labels, timeZone).map((field) => (
         <Stack key={field.key} gap="tight" className={ledgerItemClasses()}>
-          <dt className="text-muted">{field.label}</dt>
+          <dt className="text-ink-muted">{field.label}</dt>
           <dd className="break-all">{field.value ?? <MissingValue />}</dd>
         </Stack>
       ))}
@@ -245,7 +245,7 @@ function EmptyDataset({
 }: Readonly<{ dataset: SearchIntelligenceDataset; title: string }>) {
   return (
     <Card>
-      <CardHeader bordered>
+      <CardHeader>
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardContent>

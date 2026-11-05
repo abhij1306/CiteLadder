@@ -10,15 +10,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { FilterField, FilterTrigger } from '@/components/ui/filter-bar';
 import {
-  Dropdown,
-  DropdownContent,
-  DropdownItem,
-  DropdownLabel,
-  DropdownRadioGroup,
-  DropdownRadioItem,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
 import { Icon } from '@/components/ui/icon';
 type ControlProps = Readonly<{ model: ReturnType<typeof useTrafficData> }>;
 type TrafficControlsProps = ControlProps & Readonly<{ crawlAvailable: boolean }>;
@@ -140,36 +140,36 @@ function TrafficFilterMenu(props: TrafficControlsProps) {
   if (groups.length === 0 && !insight) return null;
   const count = groups.filter((group) => group.active).length + (insight ? 1 : 0);
   return (
-    <Dropdown>
-      <DropdownTrigger asChild>
+    <Menu>
+      <MenuTrigger asChild>
         <FilterTrigger label="Filter" count={count} />
-      </DropdownTrigger>
-      <DropdownContent align="start" width="panel">
+      </MenuTrigger>
+      <MenuContent align="start">
         {groups.map((group, index) => (
           <Fragment key={group.key}>
-            {index > 0 ? <DropdownSeparator /> : null}
-            <DropdownLabel>{group.label}</DropdownLabel>
-            <DropdownRadioGroup value={group.value}>
+            {index > 0 ? <MenuSeparator /> : null}
+            <MenuLabel>{group.label}</MenuLabel>
+            <MenuRadioGroup value={group.value}>
               {group.options.map((option) => (
-                <DropdownRadioItem
+                <MenuRadioItem
                   key={option.value || 'all'}
                   value={option.value}
                   onSelect={() => group.onChange(option.value)}
                 >
                   {option.label}
-                </DropdownRadioItem>
+                </MenuRadioItem>
               ))}
-            </DropdownRadioGroup>
+            </MenuRadioGroup>
           </Fragment>
         ))}
         {insight ? (
           <>
-            {groups.length ? <DropdownSeparator /> : null}
-            <DropdownItem onSelect={() => setPattern(null)}>Clear insight filter</DropdownItem>
+            {groups.length ? <MenuSeparator /> : null}
+            <MenuItem onSelect={() => setPattern(null)}>Clear insight filter</MenuItem>
           </>
         ) : null}
-      </DropdownContent>
-    </Dropdown>
+      </MenuContent>
+    </Menu>
   );
 }
 

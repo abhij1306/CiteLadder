@@ -64,7 +64,7 @@ export function UrlDetailView({
         <>
           {history}
           {detail.url_hash ? <TrafficUrlButton urlHash={detail.url_hash} /> : null}
-          <Button onClick={onRerun} disabled={rerunPending}>
+          <Button variant="primary" onClick={onRerun} disabled={rerunPending}>
             {rerunLabel(rerunPending, rerunQueued)}
           </Button>
         </>

@@ -5,10 +5,9 @@ import { useNavigate } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Callout } from '@/components/ui/callout';
 import { Dialog } from '@/components/ui/dialog';
 import { IntegrationSettings } from '@/components/settings/integration-settings';
 import { McpConnections } from '@/components/settings/mcp-connections';
@@ -99,18 +98,18 @@ function ProjectDeletionControls() {
           <>
             <IdentityRow
               media={
-                <BrandLogo
+                <BrandMark
                   name={activeProject.brand_name}
                   logoUrl={activeProject.brand?.logo_url}
                   websiteUrl={activeProject.website_url}
-                  placement="identity"
+                  placement="header"
                 />
               }
               title={<div className={textRole('itemTitle', 'truncate')}>{activeProject.name}</div>}
               caption={<p className="type-caption">Brand: {activeProject.brand_name}</p>}
               actions={
                 <Button
-                  variant="destructive"
+                  variant="danger"
                   onClick={() => setConfirmOpen(true)}
                   disabled={deleteMutation.isPending}
                 >
@@ -119,12 +118,12 @@ function ProjectDeletionControls() {
                 </Button>
               }
             />
-            <Alert tone="danger">
+            <Callout tone="negative">
               Deleting a project removes all of its prompts, topics, audits, visibility history, and
               generated content. This cannot be undone.
-            </Alert>
+            </Callout>
             {deleteMutation.isError ? (
-              <Alert tone="danger">{humanizeApiError(deleteMutation.error).message}</Alert>
+              <Callout tone="negative">{humanizeApiError(deleteMutation.error).message}</Callout>
             ) : null}
           </>
         ) : (
@@ -148,7 +147,7 @@ function ProjectDeletionControls() {
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="danger"
               onClick={() => activeProject && deleteMutation.mutate(activeProject.id)}
               disabled={deleteMutation.isPending || !activeProject}
             >
@@ -201,17 +200,11 @@ export function SettingsScreen() {
         }}
       >
         <TabPanel value="general" forceMount className="focus-ring data-[state=inactive]:hidden">
-          {/* One ruled list on one card, as the Providers tab is: every
-              section names itself on the left and starts its controls at the
-              same edge on the right, so the page reads top to bottom without
-              the ragged gaps of two loose columns or text set on the bare
-              page. */}
-          <Card>
-            <SettingsSections>
-              <TimeZoneSetting />
-              <ProjectDeletionControls />
-            </SettingsSections>
-          </Card>
+          {/* One card per section, the danger zone last. */}
+          <SettingsSections>
+            <TimeZoneSetting />
+            <ProjectDeletionControls />
+          </SettingsSections>
         </TabPanel>
 
         <TabPanel value="providers" forceMount className="focus-ring data-[state=inactive]:hidden">

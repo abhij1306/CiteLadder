@@ -79,7 +79,7 @@ export function ReferralSignal({
           </p>
         </Stack>
       ) : (
-        <p className="type-body text-secondary">
+        <p className="type-body text-ink-secondary">
           Connect GA4 and sync a source/medium report to measure referral sessions.
         </p>
       )}
@@ -150,7 +150,7 @@ export function CrawlSignalPanel({
   if (!available)
     return (
       <SignalCard title="Crawlers" status="Not available yet">
-        <p className="type-body text-secondary">
+        <p className="type-body text-ink-secondary">
           Crawl log collection is not available for this workspace yet. AI referrals and tracked
           citations are measured without it.
         </p>
@@ -184,7 +184,7 @@ function CrawlSignal({
       }
     >
       {data.requests === null ? (
-        <p className="type-body text-secondary">{emptyMessage}</p>
+        <p className="type-body text-ink-secondary">{emptyMessage}</p>
       ) : (
         <Stack as="dl">
           <Stack gap="tight">

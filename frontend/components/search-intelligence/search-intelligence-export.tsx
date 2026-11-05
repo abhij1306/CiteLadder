@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { downloadCsv } from '@/lib/csv/download';
 import {
   searchIntelligenceApi,
@@ -80,7 +80,7 @@ export function SearchIntelligenceExport({
       <Button variant="ghost" disabled={exporting} onClick={() => void exportSaved()}>
         {exporting ? 'Exporting…' : 'Export saved CSV'}
       </Button>
-      {exportError ? <Alert>{exportError}</Alert> : null}
+      {exportError ? <Callout tone="negative">{exportError}</Callout> : null}
     </>
   );
 }

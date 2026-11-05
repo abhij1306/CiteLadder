@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
@@ -80,11 +80,13 @@ export function TimeZoneSetting() {
               className="min-w-56 flex-1"
               aria-invalid={Boolean(error)}
             />
-            <Button onClick={saveNamedZone}>Save timezone</Button>
+            <Button variant="primary" onClick={saveNamedZone}>
+              Save timezone
+            </Button>
           </Inline>
         </Stack>
       ) : null}
-      {error ? <Alert tone="danger">{error}</Alert> : null}
+      {error ? <Callout tone="negative">{error}</Callout> : null}
     </SettingsSection>
   );
 }

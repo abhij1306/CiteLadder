@@ -64,7 +64,7 @@ function ChangeValue({ value, depth = 0 }: Readonly<{ value: unknown; depth?: nu
           </li>
         ))}
         {value.length > CHANGE_EVIDENCE_LIMIT ? (
-          <li className="text-muted">
+          <li className="text-ink-muted">
             {value.length - CHANGE_EVIDENCE_LIMIT} more items not shown
           </li>
         ) : null}
@@ -134,7 +134,7 @@ function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number 
     <dl className={treeBranchClasses()}>
       {fields.slice(0, CHANGE_EVIDENCE_LIMIT).map(([key, item]) => (
         <div key={key}>
-          <dt className="text-muted inline">{boundedText(key.replaceAll('_', ' '))}: </dt>
+          <dt className="text-ink-muted inline">{boundedText(key.replaceAll('_', ' '))}: </dt>
           <dd className="inline [overflow-wrap:anywhere]">
             {key === 'shingles' && Array.isArray(item) ? (
               `${item.length} text fingerprints`
@@ -147,7 +147,7 @@ function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number 
       {fields.length > CHANGE_EVIDENCE_LIMIT ? (
         <div>
           <dt className="sr-only">Additional evidence</dt>
-          <dd className="text-muted">
+          <dd className="text-ink-muted">
             {fields.length - CHANGE_EVIDENCE_LIMIT} more fields not shown
           </dd>
         </div>
@@ -159,31 +159,31 @@ function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number 
 function Evidence({ row }: Readonly<{ row: ChangeObservation }>) {
   return (
     <Stack as="details" gap="item">
-      <summary className={textRole('label', 'text-accent-text cursor-pointer')}>
+      <summary className={textRole('label', 'text-accent-ink cursor-pointer')}>
         View evidence
       </summary>
       <Stack as="dl" gap="tight" className="type-caption">
         <div>
-          <dt className="text-muted inline">Before: </dt>
+          <dt className="text-ink-muted inline">Before: </dt>
           <dd className="inline">
             <ChangeValue value={row.before_value} />
           </dd>
         </div>
         <div>
-          <dt className="text-muted inline">After: </dt>
+          <dt className="text-ink-muted inline">After: </dt>
           <dd className="inline">
             <ChangeValue value={row.after_value} />
           </dd>
         </div>
         <div>
-          <dt className="text-muted inline">Analyses: </dt>
+          <dt className="text-ink-muted inline">Analyses: </dt>
           <dd className="inline break-all">
             {row.source_analysis_a_id ?? 'none'} → {row.source_analysis_b_id ?? 'none'}
           </dd>
         </div>
         {row.implementation_event_id ? (
           <div>
-            <dt className="text-muted inline">Implementation event: </dt>
+            <dt className="text-ink-muted inline">Implementation event: </dt>
             <dd className="inline break-all">{row.implementation_event_id}</dd>
           </div>
         ) : null}

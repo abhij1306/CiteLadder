@@ -91,12 +91,12 @@ export function SortableTableHead({
       className={cn(
         'focus-ring inline-flex w-full flex-col gap-0.5 rounded-xs transition-colors',
         align.column,
-        !active && 'hover:text-foreground',
+        !active && 'hover:text-ink',
       )}
     >
       <span className={cn('inline-flex w-full items-center gap-1', align.row)}>
         <span className="truncate">{label}</span>
-        <Icon className={cn('size-3 shrink-0', !active && 'text-muted')} aria-hidden />
+        <Icon className={cn('size-3 shrink-0', !active && 'text-ink-muted')} aria-hidden />
       </span>
       {sublabel ? (
         <span className={textRole('caption', 'max-w-full truncate')} title={sublabel}>

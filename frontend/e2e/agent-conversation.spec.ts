@@ -221,11 +221,9 @@ for (const width of [1280, 390]) {
       await reply.fill('Draft kept while working');
       // While the turn runs, Stop takes Send's place and drafting continues.
       await expect(page.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0);
-      if (surface === 'panel')
-        await page
-          .getByRole('region', { name: 'Agent conversation' })
-          .evaluate((element) => element.scrollTo(0, 0));
-      else await page.evaluate(() => window.scrollTo(0, 0));
+      // Only the thread scrolls, in its own region on both surfaces.
+      const thread = page.getByRole('region', { name: 'Agent conversation' });
+      await thread.evaluate((element) => element.scrollTo(0, 0));
       await expect(page.getByRole('button', { name: 'Jump to latest' })).toBeAttached();
       const priorReads = reads;
       current.messages.push({
@@ -242,13 +240,7 @@ for (const width of [1280, 390]) {
             requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
           }),
       );
-      const position =
-        surface === 'panel'
-          ? await page
-              .getByRole('region', { name: 'Agent conversation' })
-              .evaluate((element) => element.scrollTop)
-          : await page.evaluate(() => window.scrollY);
-      expect(position).toBe(0);
+      expect(await thread.evaluate((element) => element.scrollTop)).toBe(0);
       await page.getByRole('button', { name: 'Jump to latest' }).click();
       await expect(page.getByText('Latest persisted answer.')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Jump to latest' })).not.toBeAttached();
@@ -260,17 +252,12 @@ for (const width of [1280, 390]) {
       });
       await expect(page.getByText(/Next persisted answer/)).toBeVisible();
       await expect(page.getByRole('button', { name: 'Jump to latest' })).not.toBeAttached();
-      const remaining =
-        surface === 'panel'
-          ? await page
-              .getByRole('region', { name: 'Agent conversation' })
-              .evaluate(
-                (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
-              )
-          : await page.evaluate(
-              () => document.documentElement.scrollHeight - window.scrollY - window.innerHeight,
-            );
-      expect(remaining).toBeLessThanOrEqual(surface === 'panel' ? 1 : 96);
+      const remaining = await thread.evaluate(
+        (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+      );
+      expect(remaining).toBeLessThanOrEqual(1);
+      // Following the thread never scrolls the window under the shell chrome.
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
       await expect(reply).toHaveValue('Draft kept while working');
       const stop = page.getByRole('button', { name: 'Stop', exact: true });
       await stop.focus();

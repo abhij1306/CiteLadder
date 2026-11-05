@@ -8,7 +8,7 @@ import { Icon } from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import type { StatusMessage } from '@/components/ui/status-line';
 import { FilterField } from '@/components/ui/filter-bar';
-import { SegmentedAction, SegmentedControl } from '@/components/ui/segmented-control';
+import { SegmentedAction, SegmentedControl } from '@/components/ui/tabs';
 import { Select } from '@/components/ui/select';
 import type { PerformanceGranularity } from '@/lib/api/performance';
 import {

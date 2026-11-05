@@ -1,6 +1,5 @@
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { Badge } from '@/components/ui/badge';
-import { badgeLinkClasses } from '@/components/ui/badge-variants';
 import { Inline } from '@/components/ui/layout';
 import { groupEvidence } from '@/lib/agent/evidence';
 
@@ -21,7 +20,7 @@ export function EvidenceChips({
         return (
           <li key={group.label}>
             {group.href ? (
-              <ProjectLink href={group.href} className={badgeLinkClasses}>
+              <ProjectLink href={group.href} className="underline-offset-2 hover:underline">
                 <Badge>{text}</Badge>
               </ProjectLink>
             ) : (

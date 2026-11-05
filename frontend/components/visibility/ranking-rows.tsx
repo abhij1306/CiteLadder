@@ -5,7 +5,7 @@ import { Users } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Inline } from '@/components/ui/layout';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Pressable } from '@/components/ui/pressable';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { RankingRow } from '@/lib/api/types';
@@ -18,7 +18,7 @@ import {
 } from '@/lib/visibility/dashboard';
 import { Delta } from '@/components/ui/delta';
 import { textRole } from '@/components/ui/typography';
-import { tagClasses } from '@/components/ui/tag-variants';
+import { TAG_FACE } from '@/components/ui/tag';
 
 /**
  * Where you stand against the brands you track.
@@ -131,7 +131,9 @@ function BrandName({
     <Pressable
       aria-pressed={selected}
       aria-label={selected ? `Stop plotting ${row.name} on its own` : `Plot ${row.name} on its own`}
-      className="hover:text-accent-text w-auto min-w-0"
+      // The name truncates inside its own box before the "You" tag beside it,
+      // never running under it.
+      className="hover:text-accent-ink w-auto min-w-0 overflow-hidden"
       onClick={(event) => {
         event.stopPropagation();
         onSelect(selected ? null : row.name);
@@ -221,18 +223,20 @@ export function RankingRowsTable({
         return (
           <TableRow
             key={`${row.is_brand}-${row.name}`}
-            highlight={row.is_brand || selected}
+            highlight={row.is_brand}
+            aria-selected={selected || undefined}
             {...selectionProps(row, selected, onSelect)}
           >
             <TableCell>
               <Inline as="span">
-                <BrandLogo name={row.name} logoUrl={row.logo_url} websiteUrl={row.website_url} />
+                <BrandMark name={row.name} logoUrl={row.logo_url} websiteUrl={row.website_url} />
                 <BrandName row={row} selected={selected} onSelect={onSelect} />
-                {row.is_brand ? (
-                  <span className={textRole('label', tagClasses('well', 'shrink-0'))}>You</span>
-                ) : null}
+                {row.is_brand ? <span className={textRole('label', TAG_FACE)}>You</span> : null}
               </Inline>
-              <ClampText lines={1} className={textRole('caption', 'text-secondary desktop:hidden')}>
+              <ClampText
+                lines={1}
+                className={textRole('caption', 'text-ink-secondary desktop:hidden')}
+              >
                 {formatRate(row.share_of_voice)} share of voice · {formatRate(row.citation_rate)}{' '}
                 citations
               </ClampText>

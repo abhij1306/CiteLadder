@@ -91,7 +91,7 @@ export function LazyIsland({
 export function IslandUnavailable({ message }: Readonly<{ message: string }>) {
   return (
     <div className="grid h-full place-items-center">
-      <p className={textRole('caption', 'text-muted')}>{message}</p>
+      <p className={textRole('caption', 'text-ink-muted')}>{message}</p>
     </div>
   );
 }

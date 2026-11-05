@@ -50,8 +50,10 @@ describe('what a cited page means for you', () => {
 
     expect(screen.getByText('Competitors are listed on this page and you are not.')).toBeVisible();
     const listed = screen.getByText('Listed here').parentElement!;
-    expect(within(listed).getByText('Globex')).toBeVisible();
-    expect(screen.getByText(/Globex leads the list for small teams\./)).toBeVisible();
+    expect(within(listed).getByText('Globex', { selector: '[data-badge-tone]' })).toBeVisible();
+    const quote = screen.getByRole('blockquote');
+    expect(quote).toHaveTextContent('Globex leads the list for small teams.');
+    expect(within(quote).getByText('Globex', { selector: 'mark' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
       'href',
       expect.stringContaining(`/agent/actions/${ACTION}`),

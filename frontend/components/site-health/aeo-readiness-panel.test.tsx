@@ -288,7 +288,8 @@ describe('AEO Readiness', () => {
   it('shows the persisted empty state rather than an empty grid', async () => {
     stubReadiness({ state: 'not_measured', crawl_id: null, limitations: ['Run a crawl first.'] });
     renderWithProviders(<AeoReadinessPanel projectId={PROJECT} crawlId={CRAWL} />);
-    expect(await screen.findByRole('alert')).toHaveTextContent('Run a crawl first.');
+    // An informational notice is a polite status, not an alert.
+    expect(await screen.findByRole('status')).toHaveTextContent('Run a crawl first.');
   });
 
   it('does not turn a rounded score into a claim that every check passed', async () => {

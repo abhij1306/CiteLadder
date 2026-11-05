@@ -24,7 +24,7 @@ export function InfoHint({ label, children }: Readonly<{ label: string; children
       <button
         type="button"
         aria-label={label}
-        className="focus-ring text-muted hover:text-foreground -m-2 inline-flex size-8 items-center justify-center align-middle"
+        className="focus-ring text-ink-muted hover:text-ink -m-2 inline-flex size-8 items-center justify-center align-middle"
       >
         <Info className="size-3" aria-hidden />
       </button>

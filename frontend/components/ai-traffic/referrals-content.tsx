@@ -1,7 +1,7 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 
 import { AiReferralsEmptyState } from '@/components/ai-traffic/empty-state';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { Stack } from '@/components/ui/layout';
@@ -92,9 +92,9 @@ function AiReferralsDataRegion({
  */
 function AiReferralsNoSnapshot({ range }: Readonly<{ range: AiReferralsRange }>) {
   return (
-    <Alert tone="info">
+    <Callout tone="info">
       No synced AI-referral snapshot covers {rangeLabel(range).toLowerCase()} yet. Switch to the
       latest synced window, or run a sync from Performance.
-    </Alert>
+    </Callout>
   );
 }

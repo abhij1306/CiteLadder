@@ -5,8 +5,8 @@ import { CalendarDays } from 'lucide-react';
 import { useState } from 'react';
 
 import { Calendar } from '@/components/ui/calendar';
-import { menuPanelClasses } from '@/components/ui/menu-variants';
-import { Pressable } from '@/components/ui/pressable';
+import { FIELD_BOX } from '@/components/ui/input';
+import { MENU_PANEL } from '@/components/ui/menu';
 import { cn } from '@/lib/utils';
 
 /**
@@ -53,12 +53,9 @@ export function DateField({
   return (
     <div
       className={cn(
-        'focus-frame bg-input flex h-[var(--control-height-md)] w-full items-center gap-2 rounded-[var(--radius-control)] px-3 transition-[border-color,background-color]',
-        // Invalid fields retain their semantic boundary on hover.
-        isInvalid
-          ? 'border border-danger hover:border-danger'
-          : 'border border-border-bold has-[:enabled]:hover:border-muted',
-        disabled && 'cursor-not-allowed bg-disabled border-border-subtle',
+        'focus-frame flex items-center gap-2 pe-1',
+        FIELD_BOX,
+        disabled && 'cursor-not-allowed opacity-45',
         className,
       )}
     >
@@ -73,25 +70,25 @@ export function DateField({
         disabled={disabled}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="text-foreground disabled:text-muted placeholder:text-muted text-field min-w-0 flex-1 bg-transparent tabular-nums"
+        className="text-ink placeholder:text-ink-muted text-body-sm h-full min-w-0 flex-1 bg-transparent font-mono tabular-nums disabled:cursor-not-allowed"
       />
       <DropdownPrimitive.Root open={open} onOpenChange={setOpen}>
         <DropdownPrimitive.Trigger asChild>
-          <Pressable
+          <button
             type="button"
             aria-label={`${ariaLabel}: open calendar`}
             disabled={disabled}
-            className="text-muted enabled:hover:text-foreground enabled:hover:bg-hover enabled:active:bg-active data-[state=open]:bg-selected inline-flex size-[var(--field-end-target)] shrink-0 items-center justify-center rounded-[var(--radius-control)]"
+            className="focus-ring text-ink-muted enabled:hover:text-ink enabled:hover:bg-surface-sunken data-[state=open]:bg-surface-sunken data-[state=open]:text-ink inline-flex size-[var(--field-end-target)] shrink-0 items-center justify-center rounded-xs transition-colors"
           >
             <CalendarDays className="size-4" aria-hidden />
-          </Pressable>
+          </button>
         </DropdownPrimitive.Trigger>
         <DropdownPrimitive.Portal>
           <DropdownPrimitive.Content
             align="end"
             sideOffset={6}
             collisionPadding={8}
-            className={cn(menuPanelClasses, 'p-2')}
+            className={cn(MENU_PANEL, 'p-2')}
           >
             <Calendar
               value={value}

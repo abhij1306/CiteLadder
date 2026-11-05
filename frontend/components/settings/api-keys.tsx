@@ -2,13 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DateField } from '@/components/ui/date-field';
-import { Dialog } from '@/components/ui/dialog';
+import { ConfirmDialog, Dialog } from '@/components/ui/dialog';
 import { DisplayTime, TableTime } from '@/components/ui/display-time';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -167,9 +166,16 @@ function CreateKeyDialog({
       title={created ? 'Copy your API key' : 'Create an API key'}
       footer={
         created ? (
-          <Button onClick={close}>Done</Button>
+          <Button variant="primary" onClick={close}>
+            Done
+          </Button>
         ) : (
-          <Button pending={create.isPending} disabled={!ready} onClick={() => create.mutate()}>
+          <Button
+            variant="primary"
+            pending={create.isPending}
+            disabled={!ready}
+            onClick={() => create.mutate()}
+          >
             Create key
           </Button>
         )
@@ -177,7 +183,9 @@ function CreateKeyDialog({
     >
       {created ? (
         <Stack gap="compact">
-          <Alert tone="warning">You won’t see this key again. Store it somewhere safe now.</Alert>
+          <Callout tone="warning">
+            You won’t see this key again. Store it somewhere safe now.
+          </Callout>
           <code className="type-caption break-all">{created.secret}</code>
           <div>
             <CopyButton value={created.secret}>Copy key</CopyButton>
@@ -244,7 +252,7 @@ function CreateKeyDialog({
             )}
           </Field>
           {create.isError ? (
-            <Alert tone="danger">{humanizeApiError(create.error).message}</Alert>
+            <Callout tone="negative">{humanizeApiError(create.error).message}</Callout>
           ) : null}
         </Stack>
       )}
@@ -256,7 +264,11 @@ function CreateKeyDialog({
 function keysToolbar({ live, onCreate }: Readonly<{ live: number; onCreate: () => void }>) {
   return {
     status: live === 1 ? '1 key in use' : `${live} keys in use`,
-    actions: <Button onClick={onCreate}>Create key</Button>,
+    actions: (
+      <Button variant="primary" onClick={onCreate}>
+        Create key
+      </Button>
+    ),
   };
 }
 
@@ -346,7 +358,7 @@ export function ApiKeys() {
               <Stack gap="compact">
                 <p>Requests with this key are refused at once. This cannot be undone.</p>
                 {revoke.isError ? (
-                  <Alert tone="danger">{humanizeApiError(revoke.error).message}</Alert>
+                  <Callout tone="negative">{humanizeApiError(revoke.error).message}</Callout>
                 ) : null}
               </Stack>
             ),

@@ -158,7 +158,7 @@ export function NearMissTable({
           <TableCell>
             <Pressable
               onClick={() => onOpenUrl(row.url)}
-              className="hover:text-accent-text flex max-w-full min-w-0 items-center transition-colors"
+              className="hover:text-accent-ink flex max-w-full min-w-0 items-center transition-colors"
             >
               <SourceName
                 name={row.title.trim() || pathOf(row.url)}

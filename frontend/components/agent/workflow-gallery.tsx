@@ -4,16 +4,16 @@ import { ArrowLeft } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
+import { AppGrid } from '@/components/ui/app-grid';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
-import { cardClasses } from '@/components/ui/card-variants';
+import { cardClasses } from '@/components/ui/card';
 import { Pressable } from '@/components/ui/pressable';
-import { SegmentedControl } from '@/components/ui/segmented-control';
+import { SegmentedControl } from '@/components/ui/tabs';
 import { textRole } from '@/components/ui/typography';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import { cn } from '@/lib/utils';
 import { missingInputs, workflowMessage, type WorkflowValues } from '@/lib/agent/workflows';
 import type { AgentWorkflow } from '@/lib/api/agent';
@@ -51,32 +51,40 @@ export function WorkflowGallery({
         {catalog.workflow_groups.map((option) => {
           const live = option.id === group;
           return (
-            <ul
+            <AppGrid
+              as="ul"
+              layout="halves"
               key={option.id}
               inert={!live}
               aria-hidden={!live || undefined}
-              className={splitPaneClasses(
-                'peers',
-                cn('col-start-1 row-start-1 content-start items-stretch', !live && 'invisible'),
-              )}
+              className={cn('col-start-1 row-start-1 content-start', !live && 'invisible')}
             >
               {catalog.workflows
                 .filter((workflow) => workflow.group === option.id)
                 .map((workflow) => (
                   <li key={workflow.id} className="flex">
+                    {/* Every card keeps the plain card's one fill (decision
+                        D17); hover underlines its title, as a link's does. */}
                     <Pressable
                       disabled={disabled}
                       onClick={() => onPick(workflow)}
-                      className={cn(cardClasses(), 'hover:bg-hover')}
+                      className={cn(cardClasses(), 'group')}
                     >
                       <Stack as="span" gap="tight">
-                        <span className={textRole('sectionTitle')}>{workflow.label}</span>
+                        <span
+                          className={textRole(
+                            'itemTitle',
+                            'decoration-1 underline-offset-3 group-hover:underline',
+                          )}
+                        >
+                          {workflow.label}
+                        </span>
                         <span className={textRole('caption')}>{workflow.description}</span>
                       </Stack>
                     </Pressable>
                   </li>
                 ))}
-            </ul>
+            </AppGrid>
           );
         })}
       </div>
@@ -119,7 +127,7 @@ export function WorkflowStart({
     >
       <Stack gap="workspace">
         <Stack gap="tight">
-          <h3 id="workflow-title" className={textRole('sectionTitle')}>
+          <h3 id="workflow-title" className={textRole('itemTitle')}>
             {workflow.label}
           </h3>
           <p className={textRole('caption')}>{workflow.description}</p>
@@ -152,7 +160,7 @@ export function WorkflowStart({
             <Icon icon={ArrowLeft} />
             All workflows
           </Button>
-          <Button type="submit" disabled={disabled || pending}>
+          <Button type="submit" variant="primary" disabled={disabled || pending}>
             {pending ? 'Starting…' : 'Start'}
           </Button>
         </Inline>

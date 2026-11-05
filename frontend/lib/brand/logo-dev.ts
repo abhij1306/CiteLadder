@@ -14,8 +14,8 @@
  * the trade for covering the sites that block us.
  *
  * `fallback=404` is deliberate. Logo.dev's default is a grey monogram at
- * 200 OK; we would rather 404 and let `<BrandLogo>`'s own initials show, since
- * those carry our accent colour and match the rest of the UI.
+ * 200 OK; we would rather 404 and let `<BrandMark>`'s own letter show, since
+ * that matches the rest of the UI.
  */
 
 import { getLogoDevPublishable } from '@/lib/config/env';

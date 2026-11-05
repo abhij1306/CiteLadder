@@ -1,3 +1,4 @@
+import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
 import { QueryState } from '@/components/ui/query-state';
 import { FactList } from '@/components/ui/facts';
@@ -5,7 +6,7 @@ import { TextLink } from '@/components/ui/text-link';
 import { Label, textRole } from '@/components/ui/typography';
 import type { PageDetail } from '@/lib/api/types';
 import { Inline, Stack } from '@/components/ui/layout';
-import { ledgerClasses, ledgerItemClasses, splitPaneClasses } from '@/components/ui/workspace';
+import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 
 /**
  * Internal links — the crawl's persisted link-graph projection for this page.
@@ -63,7 +64,7 @@ export function InternalLinksCard({
         {`Modelled over ${links.source_page_count} observed crawl page${links.source_page_count === 1 ? '' : 's'}${links.observed_crawl_incomplete ? '; this crawl is incomplete or sampled' : ''}`}
       </p>
       <FactList layout="ruled" label="Internal link measurements" facts={metrics} />
-      <div className={splitPaneClasses('peers')}>
+      <AppGrid layout="halves">
         <NeighbourList
           heading="Top linking pages"
           neighbours={links.top_inbound}
@@ -76,7 +77,7 @@ export function InternalLinksCard({
           crawlId={crawlId}
           emptyMessage="This page links to no other crawled page."
         />
-      </div>
+      </AppGrid>
     </Stack>
   );
 }
@@ -127,7 +128,7 @@ function NeighbourList({
               )}
               <Inline as="span" className="shrink-0">
                 {neighbour.main_content ? <Badge>Main</Badge> : null}
-                {neighbour.nofollow ? <Badge className="text-muted">nofollow</Badge> : null}
+                {neighbour.nofollow ? <Badge className="text-ink-muted">nofollow</Badge> : null}
                 <span className="type-caption tabular-nums">×{neighbour.anchor_count}</span>
               </Inline>
             </Inline>

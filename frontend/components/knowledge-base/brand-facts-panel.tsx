@@ -108,7 +108,7 @@ export function BrandFactsPanel({
         </Stack>
       )}
       {retired.length ? (
-        <p className={textRole('caption', 'text-muted')}>
+        <p className={textRole('caption', 'text-ink-muted')}>
           {retired.length} retired {retired.length === 1 ? 'fact is' : 'facts are'} kept for earlier
           runs and no longer checked.
         </p>
@@ -169,7 +169,7 @@ function AddFact({
         )}
       </Field>
       <div>
-        <Button type="submit" disabled={pending || !draft.statement.trim()}>
+        <Button type="submit" variant="primary" disabled={pending || !draft.statement.trim()}>
           Add draft fact
         </Button>
       </div>
@@ -216,7 +216,7 @@ function FactRow({
         />
       )}
       {fact.source_url ? (
-        <span className={textRole('caption', 'text-muted break-all')}>{fact.source_url}</span>
+        <span className={textRole('caption', 'text-ink-muted break-all')}>{fact.source_url}</span>
       ) : null}
       {mayEdit ? (
         <Inline as="span" className="flex-wrap">
@@ -224,6 +224,7 @@ function FactRow({
             <>
               {fact.status === 'draft' ? (
                 <Button
+                  variant="primary"
                   disabled={pending}
                   onClick={() => void onChange({ status: 'confirmed' }).catch(() => undefined)}
                 >
@@ -244,6 +245,7 @@ function FactRow({
           ) : (
             <>
               <Button
+                variant="primary"
                 disabled={pending || !editing.trim()}
                 onClick={() => {
                   // Keep the draft open until the save lands, so a failed save loses nothing.

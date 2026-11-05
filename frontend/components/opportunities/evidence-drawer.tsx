@@ -7,8 +7,8 @@ import { EarnedPageHandoff } from '@/components/opportunities/earned-page-handof
 import { OpportunityEvidenceSection } from '@/components/opportunities/opportunity-evidence-section';
 import { OpportunitySummarySection } from '@/components/opportunities/opportunity-summary-section';
 import { OpportunityTypeBadge } from '@/components/opportunities/opportunity-type-badge';
-import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Callout } from '@/components/ui/callout';
 import { Drawer } from '@/components/ui/drawer';
 import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -52,10 +52,10 @@ export function EvidenceDrawer({
     );
   } else if (detailQuery.data && !detail) {
     body = (
-      <Alert tone="danger">
+      <Callout tone="negative">
         This opportunity is unavailable in the selected project. Close this detail and choose a
         recommendation from the current project.
-      </Alert>
+      </Callout>
     );
   } else if (detailQuery.isLoading || !detail) {
     body = <QueryState kind="loading" />;
@@ -64,12 +64,7 @@ export function EvidenceDrawer({
   }
 
   return (
-    <Drawer
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Evidence detail"
-      className="desktop:max-w-160"
-    >
+    <Drawer open={open} onOpenChange={onOpenChange} title="Evidence detail" width="wide">
       {body}
     </Drawer>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronRight } from 'lucide-react';
+import { Check } from 'lucide-react';
 import type { FormEvent, ReactNode } from 'react';
 
 import { Icon } from '@/components/ui/icon';
@@ -14,10 +14,10 @@ import { cn } from '@/lib/utils';
  * The one selected-row treatment for a selectable list beside its detail
  * (catalog tree, issue list).
  *
- * Selected keeps the surface's own fill and takes a 2px accent bar at its
- * start edge and the foreground ink (owner, 2026-11-03: no lighter fill
- * blocks), so a selected row reads as part of its list rather than as a card
- * lifted off it. Unselected rows take the neutral hover and pressed tints. The state itself must also be in the markup — the caller
+ * Selected takes the shared selected tint and the foreground ink, the same
+ * filled face as a selected tab, segment or navigation row (owner,
+ * 2026-11-04: active states are buttons, not marks). Unselected rows take the
+ * neutral hover and pressed tints. The state itself must also be in the markup — the caller
  * sets `aria-current` (navigation-like lists), `aria-selected` (a
  * listbox/grid option) or `aria-pressed` (a toggle); colour is never the only
  * signal.
@@ -27,35 +27,15 @@ import { cn } from '@/lib/utils';
  */
 export function listRowClasses({ selected = false }: Readonly<{ selected?: boolean }> = {}) {
   return cn(
-    'relative rounded-[var(--radius-control)] transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
+    'relative rounded-md transition-[background-color,color] duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
     selected
-      ? "text-foreground after:bg-accent after:absolute after:inset-y-1 after:start-0 after:w-0.5 after:rounded-full after:content-['']"
-      : 'text-secondary hover:bg-hover hover:text-foreground active:bg-active',
+      ? 'bg-surface-sunken text-ink active:bg-surface-sunken'
+      : 'text-ink-secondary hover:bg-surface-sunken hover:text-ink active:bg-surface-sunken',
   );
 }
 
 /** A padded row's own geometry: 12 across, 8 down, its parts 12 apart. */
 const paddedRowClasses = 'focus-ring flex w-full items-center gap-3 px-3 py-2 text-start';
-
-/**
- * NavRow — a row that takes you somewhere (a workspace to enter): the
- * caller's text column, an optional trailing mark (a status badge) and the
- * chevron that says the row navigates. It owns the padded row's geometry and
- * the neutral row tints, like `OptionRow`.
- */
-export function NavRow({
-  children,
-  trailing,
-  onSelect,
-}: Readonly<{ children: ReactNode; trailing?: ReactNode; onSelect: () => void }>) {
-  return (
-    <Pressable type="button" onClick={onSelect} className={cn(listRowClasses(), paddedRowClasses)}>
-      <span className="grid min-w-0 flex-1">{children}</span>
-      {trailing}
-      <Icon icon={ChevronRight} />
-    </Pressable>
-  );
-}
 
 /**
  * One choice in a list where pressing the row IS the commit (a property to
@@ -87,7 +67,7 @@ export function OptionRow({
       className={cn(
         listRowClasses({ selected }),
         paddedRowClasses,
-        'disabled:pointer-events-none disabled:[&_.type-item-title]:text-muted',
+        'disabled:pointer-events-none disabled:[&_.type-item-title]:text-ink-muted',
       )}
     >
       <span className="min-w-0 flex-1">
@@ -96,7 +76,7 @@ export function OptionRow({
           <span className="type-caption block truncate tabular-nums">{caption}</span>
         ) : null}
       </span>
-      {pending ? <Spinner className="text-muted" /> : null}
+      {pending ? <Spinner className="text-ink-muted" /> : null}
       {selected && !pending ? <Icon icon={Check} className="text-accent" /> : null}
     </Pressable>
   );
@@ -143,7 +123,7 @@ export function RailItem({
         aria-label={accessibleName}
         aria-current={selected ? 'true' : undefined}
         className={cn(
-          'focus-ring flex h-[var(--nav-item-height)] min-w-0 flex-1 items-center gap-2 rounded-[var(--radius-control)] px-3 text-left type-control',
+          'focus-ring flex h-[var(--nav-item-height)] min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-left type-control',
           selected && textRole('emphasis'),
         )}
       >
@@ -151,7 +131,7 @@ export function RailItem({
           {label}
         </ClampText>
         {typeof count === 'number' ? (
-          <span className="type-caption font-numeric shrink-0">{count}</span>
+          <span className="type-caption shrink-0 font-mono">{count}</span>
         ) : null}
       </Pressable>
       {actions}

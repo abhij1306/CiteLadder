@@ -115,7 +115,7 @@ function CatalogRow({
           'group items-center',
           nested
             ? 'grid-cols-[auto_minmax(0,1fr)]'
-            : 'grid-cols-[var(--control-height-md)_auto_minmax(0,1fr)]',
+            : 'grid-cols-[var(--control-md)_auto_minmax(0,1fr)]',
           listRowClasses({ selected }),
         )}
       >
@@ -139,12 +139,12 @@ function CatalogRow({
           onClick={onSelect}
           aria-label={entry.label}
           aria-current={selected ? 'true' : undefined}
-          className="type-control flex min-h-[var(--control-height-md)] min-w-0 items-center text-left"
+          className="type-control flex min-h-[var(--control-md)] min-w-0 items-center text-left"
         >
           <Inline as="span" className="w-full justify-between">
             <span className="truncate">{entry.label}</span>
             {entry.count === undefined ? null : (
-              <span className="text-muted shrink-0 tabular-nums">{entry.count}</span>
+              <span className="text-ink-muted shrink-0 tabular-nums">{entry.count}</span>
             )}
           </Inline>
         </Pressable>
@@ -335,7 +335,7 @@ export function CatalogList({
     );
   return (
     <Stack className="min-w-0 content-start">
-      <Stack className="bg-panel sticky top-0 z-20">
+      <Stack className="bg-surface sticky top-0 z-20">
         <SearchField
           aria-label="Search the catalog"
           placeholder="Search categories and products"

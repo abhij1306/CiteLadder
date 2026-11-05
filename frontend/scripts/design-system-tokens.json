@@ -1,0 +1,670 @@
+{
+  "name": "CiteLadder",
+  "version": 1,
+  "color": {
+    "themes": [
+      {
+        "id": "light",
+        "name": "Light"
+      },
+      {
+        "id": "dark",
+        "name": "Dark"
+      }
+    ],
+    "tokens": [
+      {
+        "name": "paper",
+        "value": {
+          "light": "#f4f4f4",
+          "dark": "#0a0a0a"
+        },
+        "usage": "The app's page ground (white cards sit on it) and the inner well of every product frame on the website."
+      },
+      {
+        "name": "surface",
+        "value": {
+          "light": "#ffffff",
+          "dark": "#151515"
+        },
+        "usage": "The website and docs page ground; cards, panels, tables, inputs, menus and the selected tab everywhere."
+      },
+      {
+        "name": "surface-sunken",
+        "value": {
+          "light": "#ececec",
+          "dark": "#1e1e1e"
+        },
+        "usage": "Wells: the tab track, code blocks, table header rows, hover on secondary and ghost buttons, the muted card, skeletons."
+      },
+      {
+        "name": "nav-glass",
+        "value": {
+          "light": "rgba(244,244,244,0.78)",
+          "dark": "rgba(30,30,30,0.78)"
+        },
+        "usage": "The floating website navbar's translucent fill, always with a 16px backdrop blur. Used nowhere else."
+      },
+      {
+        "name": "line",
+        "value": {
+          "light": "#e5e5e5",
+          "dark": "#2a2a2a"
+        },
+        "usage": "Every soft edge: card and frame borders on the website, table rules, dividers, and (owner decision D5, 5 Nov 2026) the 1px edge of inputs, textareas, search fields, selects, chip inputs, checkbox and radio boxes and the Agent composer, always with shadow-edge under it. A divider inside a dialog or the search palette is line, never darker."
+      },
+      {
+        "name": "line-strong",
+        "value": {
+          "light": "#d4d4d4",
+          "dark": "#3a3a3a"
+        },
+        "usage": "One soft step darker than line: the hover edge of fields, checkbox boxes and linked website cards, and the dashed edge of reserved slots (Turnstile, the new-workspace tile). Never a resting control edge."
+      },
+      {
+        "name": "line-control",
+        "value": {
+          "light": "#858585",
+          "dark": "#747474"
+        },
+        "usage": "Marks that need 3:1 but are not borders: the chart crosshair, the Switch's off track, the ink TextLink underline, the StepList pending ring and a not-cited engine mark. Never the edge of a control, card or box (D5, 5 Nov 2026)."
+      },
+      {
+        "name": "ink",
+        "value": {
+          "light": "#111111",
+          "dark": "#f4f4f4"
+        },
+        "usage": "Headings, primary text and numbers on paper, surface, surface-sunken and every -soft tint (accent-soft, positive-soft, negative-soft, warning-soft, info-soft): callout bodies are ink. Also the primary button fill and the inverted tile."
+      },
+      {
+        "name": "ink-hover",
+        "value": {
+          "light": "#2a2a2a",
+          "dark": "#d6d6d6"
+        },
+        "usage": "Primary button fill on hover."
+      },
+      {
+        "name": "ink-secondary",
+        "value": {
+          "light": "#525252",
+          "dark": "#a6a6a6"
+        },
+        "usage": "Leads and body copy on the website, descriptions, unselected tabs, nav links. On paper, surface and surface-sunken."
+      },
+      {
+        "name": "ink-muted",
+        "value": {
+          "light": "#6b6b6b",
+          "dark": "#8c8c8c"
+        },
+        "usage": "Metadata, eyebrows, placeholders, timestamps, footer legal text. On paper, surface and surface-sunken."
+      },
+      {
+        "name": "on-ink",
+        "value": {
+          "light": "#ffffff",
+          "dark": "#111111"
+        },
+        "usage": "Text and icons on an ink fill: the primary button label, the inverted tile."
+      },
+      {
+        "name": "accent",
+        "value": {
+          "light": "#e8501a",
+          "dark": "#ff6a33"
+        },
+        "usage": "Flare, the only hue: the logo bars and \"Cite\", active rungs, your own brand's citation number and chart series, the selected nav marker in the app. A mark, never body text, a button fill or a background."
+      },
+      {
+        "name": "accent-ink",
+        "value": {
+          "light": "#b53a0c",
+          "dark": "#ff9466"
+        },
+        "usage": "Accent as text: inline links inside long reading copy (docs, blog, legal). On paper, surface and accent-soft."
+      },
+      {
+        "name": "accent-soft",
+        "value": {
+          "light": "#ffe6da",
+          "dark": "#3b1a0c"
+        },
+        "usage": "Tint behind ink: the highlighter mark and your own brand's citation pill or table row."
+      },
+      {
+        "name": "on-accent",
+        "value": {
+          "light": "#111111",
+          "dark": "#111111"
+        },
+        "usage": "Text on an accent fill (the own-brand citation number). Always dark: white on Flare fails contrast."
+      },
+      {
+        "name": "focus",
+        "value": {
+          "light": "{ink}",
+          "dark": "{ink}"
+        },
+        "usage": "Keyboard focus: a solid 2px ring, 2px offset, in ink. Passes 3:1 on paper, surface and surface-sunken in both themes."
+      },
+      {
+        "name": "positive",
+        "value": {
+          "light": "#0b6e69",
+          "dark": "#4fd1c5"
+        },
+        "usage": "Gains, healthy checks, \"cited\", success toasts. Teal, so it never relies on red versus green alone. Text on paper, surface and positive-soft; always beside an arrow, icon or word."
+      },
+      {
+        "name": "positive-soft",
+        "value": {
+          "light": "#d6f2ef",
+          "dark": "#0e2e2b"
+        },
+        "usage": "Background of positive badges and success callouts."
+      },
+      {
+        "name": "negative",
+        "value": {
+          "light": "#c4122f",
+          "dark": "#ff7387"
+        },
+        "usage": "Losses, failed checks, errors, destructive actions. Text on paper, surface and negative-soft; always beside an arrow, icon or word."
+      },
+      {
+        "name": "negative-soft",
+        "value": {
+          "light": "#ffe2e6",
+          "dark": "#3d0e16"
+        },
+        "usage": "Background of negative badges and error callouts."
+      },
+      {
+        "name": "warning",
+        "value": {
+          "light": "#8a5000",
+          "dark": "#f5b84a"
+        },
+        "usage": "Needs attention, partial data, stale results, trial ending. Text on paper, surface and warning-soft."
+      },
+      {
+        "name": "warning-soft",
+        "value": {
+          "light": "#fff0d1",
+          "dark": "#3a2a0a"
+        },
+        "usage": "Background of warning badges and callouts."
+      },
+      {
+        "name": "info",
+        "value": {
+          "light": "#1f5fbf",
+          "dark": "#7fb0ff"
+        },
+        "usage": "Neutral information callouts and \"note\" admonitions in docs. Text on paper, surface and info-soft; never decorative."
+      },
+      {
+        "name": "info-soft",
+        "value": {
+          "light": "#e3edfc",
+          "dark": "#14243d"
+        },
+        "usage": "Background of info callouts."
+      },
+      {
+        "name": "data-1",
+        "value": {
+          "light": "{accent}",
+          "dark": "{accent}"
+        },
+        "usage": "First chart series: your brand."
+      },
+      {
+        "name": "data-2",
+        "value": {
+          "light": "{ink}",
+          "dark": "{ink}"
+        },
+        "usage": "Second chart series: the leading competitor or the total."
+      },
+      {
+        "name": "data-3",
+        "value": {
+          "light": "#7a7a7a",
+          "dark": "#8c8c8c"
+        },
+        "usage": "Third chart series. Past three series, draw the rest as one \"Other\" series in line-control and label it."
+      },
+      {
+        "name": "data-other",
+        "value": {
+          "light": "#c2c2c2",
+          "dark": "#4a4a4a"
+        },
+        "usage": "The \"Other\" series and slice, always textured (dashed line, hatched area) and labelled, so it never reads as a fourth brand."
+      },
+      {
+        "name": "scrim",
+        "value": {
+          "light": "rgba(17,17,17,0.32)",
+          "dark": "rgba(0,0,0,0.64)"
+        },
+        "usage": "The backdrop behind dialogs, drawers and the command palette. Nothing else."
+      },
+      {
+        "name": "chart-grid",
+        "value": {
+          "light": "#ececec",
+          "dark": "#262626"
+        },
+        "usage": "Chart gridlines and axis baselines. Decorative."
+      }
+    ]
+  },
+  "type": {
+    "fonts": [],
+    "families": {
+      "display": "\"Cal Sans\", \"Geist\", system-ui, sans-serif",
+      "sans": "\"Geist\", system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "mono": "\"Geist Mono\", ui-monospace, \"SF Mono\", Menlo, monospace"
+    },
+    "groups": [
+      {
+        "name": "Display",
+        "family": "display",
+        "styles": [
+          {
+            "name": "display-2xl",
+            "fontSize": "44px",
+            "lineHeight": "48px",
+            "fontWeight": 400,
+            "letterSpacing": "-0.01em",
+            "sample": "Get cited when buyers ask AI",
+            "usage": "The docs H1, one per page; 36/42 from 768 to 1023px. The marketing H1 (landing hero, platform, pricing, articles) is the site title, 48/52 from 768px up and 32/38 below (D26), with no tracking on Cal Sans."
+          },
+          {
+            "name": "display-xl",
+            "fontSize": "36px",
+            "lineHeight": "42px",
+            "fontWeight": 400,
+            "letterSpacing": "-0.01em",
+            "sample": "Measure, diagnose, improve",
+            "usage": "Website section headings (h2). 28/34 below 768px."
+          },
+          {
+            "name": "display-lg",
+            "fontSize": "32px",
+            "lineHeight": "38px",
+            "fontWeight": 400,
+            "letterSpacing": "-0.01em",
+            "sample": "Every answer, every engine",
+            "usage": "Docs page titles and the website's CTA band heading. 26/32 below 768px. The website's pricing plan price sets this size in Geist 500 (D28)."
+          },
+          {
+            "name": "display-md",
+            "fontSize": "28px",
+            "lineHeight": "34px",
+            "fontWeight": 400,
+            "letterSpacing": "-0.01em",
+            "sample": "Every engine, one report",
+            "usage": "Article h2 and the heading of a section that is one feature split. On the website large feature tiles, stacked split titles and the PageHighlight title set this size in Geist 500 (D28)."
+          },
+          {
+            "name": "display-sm",
+            "fontSize": "24px",
+            "lineHeight": "32px",
+            "fontWeight": 400,
+            "letterSpacing": "-0.01em",
+            "sample": "Visibility",
+            "usage": "The app's PageHeader title, the only Cal Sans in the app (D7, D11), in a 40px title row with the actions centred on it."
+          },
+          {
+            "name": "title",
+            "fontSize": "22px",
+            "lineHeight": "28px",
+            "fontWeight": 400,
+            "sample": "Cited sources this week",
+            "usage": "Docs h2, reference titles and an article's Sources heading. Website card, step and form titles and article h3 are heading-lg in Geist 500 (D28). Never in the app: there Cal Sans is the PageHeader title only (D7)."
+          },
+          {
+            "name": "title-sm",
+            "fontSize": "18px",
+            "lineHeight": "24px",
+            "fontWeight": 400,
+            "sample": "Round robin",
+            "usage": "Captions under product frames and the docs h3. On the website FAQ questions, pricing plan names and the author's name set this size in Geist 500 (D28). Footer column heads are not this (they use label)."
+          }
+        ]
+      },
+      {
+        "name": "Text",
+        "family": "sans",
+        "styles": [
+          {
+            "name": "lead",
+            "fontSize": "20px",
+            "lineHeight": "30px",
+            "fontWeight": 400,
+            "sample": "CiteLadder runs the questions your buyers ask ChatGPT, Claude and Gemini, and shows which pages each answer cites.",
+            "usage": "The paragraph under a website hero or section heading, in ink-secondary. 18/28 below 768px."
+          },
+          {
+            "name": "body-lg",
+            "fontSize": "18px",
+            "lineHeight": "30px",
+            "fontWeight": 400,
+            "sample": "Each prompt runs every morning on every engine you track.",
+            "usage": "Article and blog body copy (prose)."
+          },
+          {
+            "name": "body",
+            "fontSize": "16px",
+            "lineHeight": "26px",
+            "fontWeight": 400,
+            "sample": "Three of your five product pages were cited last week.",
+            "usage": "Website body copy, docs prose, feature card descriptions."
+          },
+          {
+            "name": "body-sm",
+            "fontSize": "14px",
+            "lineHeight": "20px",
+            "fontWeight": 400,
+            "sample": "Updated 2 hours ago from 120 prompts.",
+            "usage": "The app's default text: tables, forms, cards, menus. Footer links."
+          },
+          {
+            "name": "label",
+            "fontSize": "14px",
+            "lineHeight": "20px",
+            "fontWeight": 500,
+            "sample": "Prompt set",
+            "usage": "Buttons, tabs, field labels, nav items, footer column heads."
+          },
+          {
+            "name": "label-lg",
+            "fontSize": "16px",
+            "lineHeight": "24px",
+            "fontWeight": 500,
+            "sample": "Start free trial",
+            "usage": "Large (control-lg) buttons and the website navbar links."
+          },
+          {
+            "name": "heading",
+            "fontSize": "16px",
+            "lineHeight": "24px",
+            "fontWeight": 500,
+            "sample": "Visibility by engine",
+            "usage": "App card titles, settings section titles and table group headings. Geist never goes above 500 (D6)."
+          },
+          {
+            "name": "heading-lg",
+            "fontSize": "22px",
+            "lineHeight": "28px",
+            "fontWeight": 500,
+            "letterSpacing": "-0.01em",
+            "sample": "Remove Northwind from tracking",
+            "usage": "Dialog and drawer titles and the billing plan name: the app's larger heading, in Geist because Cal Sans in the app is the PageHeader title only (D7). On the website, card, step, form and tool titles and article h3 (D28)."
+          },
+          {
+            "name": "stat",
+            "fontSize": "28px",
+            "lineHeight": "36px",
+            "fontWeight": 500,
+            "letterSpacing": "-0.02em",
+            "sample": "38.4%",
+            "usage": "The number in a Stat and a KpiRow card, and the plan price in the app, and the website PageHighlight's figures (D28). Geist 500 since D7 (5 Nov 2026), 28/36 since D15; the ScoreRing and DonutChart centres use the same face at 32/38."
+          },
+          {
+            "name": "caption",
+            "fontSize": "12px",
+            "lineHeight": "16px",
+            "fontWeight": 400,
+            "sample": "Source: 412 answers, 14–20 Oct",
+            "usage": "Chart axes and footnotes, helper text under fields."
+          }
+        ]
+      },
+      {
+        "name": "Mono",
+        "family": "mono",
+        "styles": [
+          {
+            "name": "eyebrow",
+            "fontSize": "11px",
+            "lineHeight": "16px",
+            "fontWeight": 500,
+            "letterSpacing": "0.08em",
+            "sample": "VISIBILITY",
+            "usage": "Uppercase label above a heading or a stat. Never a sentence."
+          },
+          {
+            "name": "data",
+            "fontSize": "13px",
+            "lineHeight": "20px",
+            "fontWeight": 400,
+            "sample": "+4.2 pts · 2026-11-04",
+            "usage": "Deltas, dates, IDs a person reads, citation numbers, inline code."
+          },
+          {
+            "name": "code",
+            "fontSize": "13px",
+            "lineHeight": "22px",
+            "fontWeight": 400,
+            "sample": "curl https://api.citeladder.com/v1/prompts",
+            "usage": "Code blocks in docs, blog and product frames."
+          }
+        ]
+      }
+    ]
+  },
+  "spacing": {
+    "tokens": [
+      {
+        "name": "space-1",
+        "value": "4px",
+        "usage": "Icon-to-label gap, badge dot gap."
+      },
+      {
+        "name": "space-2",
+        "value": "8px",
+        "usage": "Gap between related controls; product frame padding; navbar inset from the viewport top."
+      },
+      {
+        "name": "space-3",
+        "value": "12px",
+        "usage": "Button horizontal padding (md); list row padding; the app's card gap (D11)."
+      },
+      {
+        "name": "space-4",
+        "value": "16px",
+        "usage": "App card padding (D11); the app page's top padding and the header-to-controls gap; field stack gap."
+      },
+      {
+        "name": "space-5",
+        "value": "20px",
+        "usage": "Page gutter below 768px; frame caption padding."
+      },
+      {
+        "name": "space-6",
+        "value": "24px",
+        "usage": "Website card padding; gap between cards in a website grid; caption padding inside a feature card; the app page's side padding from 1280px."
+      },
+      {
+        "name": "space-8",
+        "value": "32px",
+        "usage": "Heading-to-content gap in a website section."
+      },
+      {
+        "name": "space-10",
+        "value": "40px",
+        "usage": "Page gutter 768–1279px."
+      },
+      {
+        "name": "space-12",
+        "value": "48px",
+        "usage": "Gap between a section header and its grid."
+      },
+      {
+        "name": "space-16",
+        "value": "64px",
+        "usage": "Page gutter from 1280px (so a 1440 viewport shows a 1320 container); hero top padding below the navbar."
+      },
+      {
+        "name": "space-24",
+        "value": "96px",
+        "usage": "Vertical gap between website sections below 1024px."
+      },
+      {
+        "name": "space-32",
+        "value": "128px",
+        "usage": "Vertical gap between website sections from 1024px."
+      }
+    ]
+  },
+  "radius": {
+    "tokens": [
+      {
+        "name": "radius-2xs",
+        "value": "2px",
+        "usage": "Chart bars, legend swatches, rungs."
+      },
+      {
+        "name": "radius-xs",
+        "value": "2px",
+        "usage": "Badges, favicons, checkboxes, the highlighter mark, meter and progress tracks. Only slightly rounded everywhere (D10, 5 Nov 2026)."
+      },
+      {
+        "name": "radius-sm",
+        "value": "4px",
+        "usage": "Tabs inside a track, menu items, small icon buttons, tooltips, citation pills, the announcement pill."
+      },
+      {
+        "name": "radius-md",
+        "value": "6px",
+        "usage": "Buttons, inputs, selects, the tab track, code blocks."
+      },
+      {
+        "name": "radius-lg",
+        "value": "8px",
+        "usage": "App cards and panels, menus, dialogs, the inner well of a product frame."
+      },
+      {
+        "name": "radius-xl",
+        "value": "8px",
+        "usage": "Website cards, product frames, the floating navbar, pricing cards. The largest radius in the system: nothing is rounded past 8px (D10)."
+      },
+      {
+        "name": "radius-full",
+        "value": "9999px",
+        "usage": "Only avatars, status dots, switch tracks (and their thumb), count pills (footnote numbers, nav counts) and the radio circle. Never a pill-shaped button, chip, citation or bar (D10)."
+      }
+    ]
+  },
+  "shadow": {
+    "note": "Depth is quiet: a hairline ring plus a short, soft drop. Website cards use a 1px line border with shadow-xs; app cards use shadow-card; fields and checkbox boxes use a 1px line border with shadow-edge.",
+    "tokens": [
+      {
+        "name": "shadow-edge",
+        "value": {
+          "light": "0 1px 2px rgba(17,17,17,0.05)",
+          "dark": "0 1px 2px rgba(0,0,0,0.40)"
+        },
+        "usage": "The faint smudge under a soft line edge (D5): inputs, textareas, search fields, select triggers, chip inputs, checkbox and radio boxes, the Agent composer. No ring of its own, so the 1px line border stays the only edge; shadow-xs would double it."
+      },
+      {
+        "name": "shadow-xs",
+        "value": {
+          "light": "0 0 0 1px rgba(17,17,17,0.08), 0 1px 2px rgba(17,17,17,0.06)",
+          "dark": "0 0 0 1px rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.5)"
+        },
+        "usage": "Secondary buttons, the selected tab, citation pills, website cards (with their line border)."
+      },
+      {
+        "name": "shadow-card",
+        "value": {
+          "light": "0 0 0 1px rgba(17,17,17,0.06), 0 1px 2px rgba(17,17,17,0.04), 0 6px 16px -4px rgba(17,17,17,0.06)",
+          "dark": "0 0 0 1px rgba(255,255,255,0.07), 0 1px 2px rgba(0,0,0,0.6)"
+        },
+        "usage": "App cards and panels on paper; screens inside a product frame."
+      },
+      {
+        "name": "shadow-pop",
+        "value": {
+          "light": "0 0 0 1px rgba(17,17,17,0.08), 0 2px 6px rgba(17,17,17,0.06), 0 16px 40px -8px rgba(17,17,17,0.14)",
+          "dark": "0 0 0 1px rgba(255,255,255,0.10), 0 16px 40px rgba(0,0,0,0.6)"
+        },
+        "usage": "Menus, popovers, dialogs, toasts, the mega menu, a floating card inside a product frame."
+      },
+      {
+        "name": "shadow-press",
+        "value": {
+          "light": "inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 1px #111111, 0 1px 2px rgba(17,17,17,0.24)",
+          "dark": "inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.6)"
+        },
+        "usage": "The primary (ink) button: a faint top highlight, an ink edge and a tight drop."
+      }
+    ]
+  },
+  "control": {
+    "note": "Control heights. Every interactive row in one view uses the same height.",
+    "tokens": [
+      {
+        "name": "control-sm",
+        "value": "28px",
+        "usage": "The app's compact controls: dense tables, toolbar buttons, citation pills."
+      },
+      {
+        "name": "control-md",
+        "value": "32px",
+        "usage": "App buttons, inputs, selects, the tab track, sidebar rows; navbar and docs top-bar buttons. 32 since D11 (5 Nov 2026), GitHub-style density; website CTAs stay control-lg."
+      },
+      {
+        "name": "row-app",
+        "value": "40px",
+        "usage": "App table rows, and the project switcher and PageHeader title row that align across the sidebar and the page (D11)."
+      },
+      {
+        "name": "control-lg",
+        "value": "48px",
+        "usage": "Website hero and CTA buttons, auth forms."
+      },
+      {
+        "name": "nav-height",
+        "value": "64px",
+        "usage": "The floating website navbar and the docs top bar."
+      },
+      {
+        "name": "sidebar-width",
+        "value": "248px",
+        "usage": "The app sidebar and the docs sidebar, expanded."
+      }
+    ]
+  },
+  "layout": {
+    "note": "Content widths. Gutters are space-5 below 768px, space-10 to 1279px, space-16 from 1280px.",
+    "tokens": [
+      {
+        "name": "container-site",
+        "value": "1320px",
+        "usage": "Max content width of every website section, the navbar and the footer."
+      },
+      {
+        "name": "container-app",
+        "value": "1440px",
+        "usage": "Max width of an app page's content inside the shell."
+      },
+      {
+        "name": "container-prose",
+        "value": "720px",
+        "usage": "Article, legal and docs body column."
+      },
+      {
+        "name": "container-narrow",
+        "value": "560px",
+        "usage": "Centred section headers, auth cards, onboarding steps, empty states."
+      }
+    ]
+  }
+}

@@ -15,7 +15,6 @@ import valueParser from 'postcss-value-parser';
  */
 
 const TOKEN_CSS = 'apps/app/src/globals.css';
-const WEBSITE_CSS = 'apps/app/src/website-type.css';
 const SCANNED_ROOTS = ['apps', 'components'];
 const IGNORED_DIRECTORIES = new Set(['node_modules', 'dist', 'build', '.dev', 'coverage']);
 
@@ -36,21 +35,13 @@ const EASING_KEYWORDS = new Set([
 const EASING_FUNCTIONS = new Set(['cubic-bezier', 'steps', 'linear']);
 const WIDE_KEYWORDS = new Set(['inherit', 'initial', 'unset', 'revert', 'revert-layer']);
 
-/**
- * The flow ladder owners: these roles define the onboarding type scale, so
- * their literal sizes are the scale itself, not a deviation from it.
- */
-const TYPE_ROLE_PART = /^\.flow-(?:title|group-title|help|meta)$/;
-// Only the flow surface may own a base size.
-const FLOW_SCALE_SELECTOR = ':where([data-flow-surface])';
-
 const RULE_MESSAGES = {
   'css-radius': 'radius must be var(--radius-*) or 0',
   'css-type': 'font-size and line-height must consume a var(--text-*) role',
   'css-spacing': 'spacing must sit on the 4px grid (2px and below only for hairline insets)',
   'css-motion': 'timing must consume var(--motion-*) and var(--ease-*)',
   'css-outline': 'focus outlines belong to the shared focus rule in globals.css',
-  'css-shadow': 'box-shadow must be var(--shadow-*), var(--elevation-*) or a 1px token hairline',
+  'css-shadow': 'box-shadow must be var(--shadow-edge|xs|card|pop|press) or a 1px token hairline',
   'css-cycle': 'a custom property must not reference itself',
 };
 
@@ -176,30 +167,13 @@ function shadowAllowed(value) {
     (nodes) =>
       (nodes.length === 1 &&
         isVar(nodes[0]) &&
-        /^--(?:shadow|elevation)-/.test(varName(nodes[0]))) ||
+        /^--shadow-(?:edge|xs|card|pop|press)$/.test(varName(nodes[0]))) ||
       hairlineLayer(nodes),
   );
 }
 
 function outlineAllowed(property, value) {
   return property === 'outline' && ['none', '0'].includes(value.trim());
-}
-
-/** True when every selector of the rule is a flow ladder owner. */
-function ownsTypeLadder(rule, label) {
-  if (label !== WEBSITE_CSS || !rule?.selector) return false;
-  if (rule.selector.replace(/\s+/g, ' ').trim() === FLOW_SCALE_SELECTOR) return true;
-  const unwrapped = rule.selector.replace(/^:where\(([\s\S]*)\)$/, '$1');
-  return unwrapped
-    .split(',')
-    .map((part) => part.trim())
-    .every((part) => TYPE_ROLE_PART.test(part));
-}
-
-function enclosingRule(node) {
-  let current = node.parent;
-  while (current && current.type !== 'rule') current = current.parent;
-  return current;
 }
 
 /** Every literal of a value that breaks its rule, as a finding detail. */
@@ -217,10 +191,8 @@ const PROPERTY_FAMILIES = [
   },
   {
     matches: (property) => property === 'font-size' || property === 'line-height',
-    finding: (property, value, decl, label) =>
-      typeAllowed(property, value) || ownsTypeLadder(enclosingRule(decl), label)
-        ? null
-        : ['css-type', `${property}: ${value}`],
+    finding: (property, value) =>
+      typeAllowed(property, value) ? null : ['css-type', `${property}: ${value}`],
   },
   {
     matches: (property) => SPACING_PROPERTY.test(property),

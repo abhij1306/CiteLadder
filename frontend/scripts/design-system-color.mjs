@@ -53,7 +53,7 @@ function linearToLab([red, green, blue]) {
 }
 
 const lab = (hex) => linearToLab(channels(hex).map(toLinear));
-export const lightness = (hex) => lab(hex)[0];
+const lightness = (hex) => lab(hex)[0];
 
 // Machado, Oliveira and Fernandes (2009), severity 1.0, applied in linear RGB.
 const DEFICIENCY = {

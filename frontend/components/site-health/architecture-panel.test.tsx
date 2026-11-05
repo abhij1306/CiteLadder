@@ -214,7 +214,8 @@ describe('Architecture panel', () => {
       limitations: ['This crawl has no observed architecture yet.'],
     });
     renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
-    expect(await screen.findByRole('alert')).toHaveTextContent(
+    // An informational notice is a polite status, not an alert.
+    expect(await screen.findByRole('status')).toHaveTextContent(
       'This crawl has no observed architecture yet.',
     );
   });

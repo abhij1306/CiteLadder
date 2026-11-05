@@ -85,7 +85,7 @@ function RecomputeAction({
 function RecomputeStatus({ mutation }: Readonly<{ mutation: RecomputeMutation }>) {
   if (mutation.isSuccess)
     return (
-      <span className="type-caption text-info-text">
+      <span className="type-caption text-info">
         {mutation.data.status === 'already_queued'
           ? 'A recompute for this window is already queued.'
           : 'Recompute queued. Signals refresh once the job finishes.'}
@@ -97,7 +97,7 @@ function RecomputeStatus({ mutation }: Readonly<{ mutation: RecomputeMutation }>
     });
     const support = [notice.code, notice.requestId].filter(Boolean).join(' · ');
     return (
-      <span role="alert" className="type-caption text-danger-text" title={support || undefined}>
+      <span role="alert" className="type-caption text-negative" title={support || undefined}>
         {notice.message}
       </span>
     );

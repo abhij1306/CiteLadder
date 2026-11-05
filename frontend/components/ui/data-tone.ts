@@ -1,8 +1,8 @@
 /**
  * The colour vocabulary a data mark may speak: an outcome family, a chart
- * series, or neutral. `Meter`, `LegendSwatch` and the chart series tokens all
- * resolve their fill here, so a bar and its legend key can never pick
- * different tokens for the same meaning.
+ * series, or neutral. `MeterRow` and the distribution bars resolve their fill
+ * here, so a bar and its key can never pick different tokens for the same
+ * meaning. A chart's own series take `ChartTone` (`chart.tsx`) by position.
  *
  *   - outcome (`success` … `neutral`) — a state: good, bad, mixed, informative.
  *     `success-soft` is the lighter good step, for a passing band that must
@@ -20,23 +20,23 @@ export type DataTone = OutcomeTone | { series: SeriesIndex };
 
 /** Static class strings, so Tailwind can see every one of them. */
 const OUTCOME_FILL: Record<OutcomeTone, string> = {
-  success: 'bg-success',
-  'success-soft': 'bg-success/55',
+  success: 'bg-positive',
+  'success-soft': 'bg-positive/55',
   warning: 'bg-warning',
-  danger: 'bg-danger',
+  danger: 'bg-negative',
   info: 'bg-info',
-  neutral: 'bg-neutral',
+  neutral: 'bg-line-control',
 };
 
 const SERIES_FILL: Record<SeriesIndex, string> = {
-  1: 'bg-chart-1',
-  2: 'bg-chart-2',
-  3: 'bg-chart-3',
-  4: 'bg-chart-4',
-  5: 'bg-chart-5',
-  6: 'bg-chart-6',
-  7: 'bg-chart-7',
-  8: 'bg-chart-8',
+  1: 'bg-data-1',
+  2: 'bg-data-2',
+  3: 'bg-data-3',
+  4: 'bg-data-other',
+  5: 'bg-data-other',
+  6: 'bg-data-other',
+  7: 'bg-data-other',
+  8: 'bg-data-other',
 };
 
 /** The fill class for a mark (bar, dot, rule) in the given tone. */

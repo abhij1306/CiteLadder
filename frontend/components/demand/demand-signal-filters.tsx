@@ -1,7 +1,7 @@
 'use client';
 
 import { InfoHint } from '@/components/ui/info-hint';
-import { SegmentedControl, type SegmentedOption } from '@/components/ui/segmented-control';
+import { SegmentedControl, type SegmentedOption } from '@/components/ui/tabs';
 import type { DemandSnapshot } from '@/lib/api/demand';
 import { DEMAND_DETECTORS } from '@/lib/config/demand';
 import { detectorStates, FILTER_TABS, type FilterTab } from '@/lib/demand/signals';

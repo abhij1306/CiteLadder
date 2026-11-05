@@ -5,7 +5,7 @@ import { Bot } from 'lucide-react';
 import type { z } from 'zod';
 
 import { Badge } from '@/components/ui/badge';
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -79,7 +79,7 @@ function SectionBody({
   children: ReactNode | null;
 }>) {
   if (errored) return null;
-  if (loading) return <Skeleton shape="block" />;
+  if (loading) return <Skeleton variant="block" />;
   if (children) return <>{children}</>;
   return <QueryState kind="empty" inline message={empty} />;
 }
@@ -123,7 +123,7 @@ export function EnginesCard({
                 {engineLabel(row.logical_engine) || row.logical_engine}
               </ClampText>
               {productModelLabel(row.logical_engine, row.transport_model) ? (
-                <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
+                <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
                   {productModelLabel(row.logical_engine, row.transport_model)}
                 </ClampText>
               ) : null}
@@ -169,7 +169,7 @@ export function BrandsCard({
         <Stack as="ul" gap="item">
           {brands.map((brand) => (
             <Inline as="li" key={`${brand.kind}:${brand.name}`}>
-              <BrandLogo name={brand.name} logoUrl={brand.logo_url} websiteUrl={brand.website} />
+              <BrandMark name={brand.name} logoUrl={brand.logo_url} websiteUrl={brand.website} />
               <span className="min-w-0 flex-1 truncate">{brand.name}</span>
               <Badge
                 className="shrink-0"

@@ -473,6 +473,12 @@ function tableRows(prefix: string, from: number, to: number) {
   }));
 }
 
+/** The pager's announced range, e.g. "1–10 of 30 pages", whose noun is set muted. */
+function pagerRange(text: string) {
+  return (_: string, element: Element | null) =>
+    element?.tagName === 'OUTPUT' && element.textContent === text;
+}
+
 describe('PerformanceScreen table interactions', () => {
   const measured = () =>
     dashboard({
@@ -520,7 +526,7 @@ describe('PerformanceScreen table interactions', () => {
     expect(within(table).getByText('query 1')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Previous page' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
-    expect(screen.getByText('11–12 of 12 queries')).toBeVisible();
+    expect(screen.getByText(pagerRange('11–12 of 12 queries'))).toBeVisible();
 
     await act(async () => releaseSecondPage());
 
@@ -601,7 +607,7 @@ describe('PerformanceScreen table interactions', () => {
     await user.click(screen.getByRole('tab', { name: 'Pages' }));
 
     // The pager is already where the loaded table puts it, naming the page to come.
-    expect(screen.getByText('1–10 of 30 pages')).toBeVisible();
+    expect(screen.getByText(pagerRange('1–10 of 30 pages'))).toBeVisible();
     expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled();
 
     await act(async () => releasePages());

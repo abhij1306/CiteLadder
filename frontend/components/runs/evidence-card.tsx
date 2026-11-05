@@ -46,7 +46,7 @@ function Outcome({
     <Inline className={panelClasses({ tone: 'well' }, 'items-start')}>
       <Icon
         icon={passed ? CheckCircle2 : XCircle}
-        className={passed ? 'text-success' : 'text-muted'}
+        className={passed ? 'text-positive' : 'text-ink-muted'}
       />
       <div className="min-w-0">
         <p className={textRole('itemTitle')}>{label}</p>
@@ -78,9 +78,9 @@ function EvidencePromptHeader({
   return (
     <Stack as="section" gap="item" className="min-w-0">
       <Inline className="flex-wrap justify-between">
-        <Badge variant="neutral">Prompt #{promptBadgeNumber}</Badge>
+        <Badge>Prompt #{promptBadgeNumber}</Badge>
         <Inline className="flex-wrap">
-          <Badge variant="neutral">
+          <Badge>
             {engineLabel(evidence.logical_engine)}
             {transport ? ` · ${transport}` : ''}
           </Badge>

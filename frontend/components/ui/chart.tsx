@@ -1,57 +1,303 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
-import { dataFillClass, type DataTone } from '@/components/ui/data-tone';
-import { IslandUnavailable, LazyIsland } from '@/components/ui/lazy-island';
-import { textRole } from '@/components/ui/typography';
+import { Card, CardEyebrow, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 /**
- * The frame every product chart draws inside.
+ * The chart kit every product chart draws with: plain SVG and the chart
+ * tokens, no chart library.
  *
- * Charts used to be hand-rolled SVG with a fixed viewBox stretched to fit,
- * which meant the drawing was scaled unevenly: `preserveAspectRatio="none"`
- * over a 640-unit box in a 900px column squashed every glyph horizontally
- * while leaving its height alone, and the gutters — sized in viewBox units for
- * a width nobody was rendering at — put the rotated axis title through the
- * tick values beside it. A real layout engine sizes to the container it is
- * actually given, so neither failure is expressible here.
- *
- * `config` names the series once. Its `color` is a CSS variable from the
- * chart ladder in `globals.css`, never a literal: the tokens are the only
- * place a series colour is decided, and `check:policy` enforces that.
+ * A series takes its colour from its POSITION, never from what it is:
+ *   1 your brand (`data-1`), 2 the leader (`data-2`), 3 the next (`data-3`),
+ *   4 an item flagged `other` (`data-other`, always textured — dashed as a
+ *   line, hatched as an area — because it sits close to `data-3`), and
+ *   5 a further named series (`data-3`, dotted).
  */
-export type ChartConfig = Record<string, { label: string; color: string }>;
+export type ChartTone = 1 | 2 | 3 | 4 | 5;
+
+export function chartTone(item: Readonly<{ other?: boolean }>, index: number): ChartTone {
+  if (item.other) return 4;
+  return index >= 3 ? 5 : ((index + 1) as ChartTone);
+}
+
+export const CHART_STROKE: Record<ChartTone, string> = {
+  1: 'stroke-data-1',
+  2: 'stroke-data-2',
+  3: 'stroke-data-3',
+  4: 'stroke-data-other',
+  5: 'stroke-data-3',
+};
+
+export const CHART_FILL: Record<ChartTone, string> = {
+  1: 'bg-data-1 fill-data-1',
+  2: 'bg-data-2 fill-data-2',
+  3: 'bg-data-3 fill-data-3',
+  4: 'bg-data-other fill-data-other',
+  5: 'bg-data-3 fill-data-3',
+};
+
+/** Axis text inside a chart's SVG: 12px mono figures in `ink-muted`. */
+export const CHART_AXIS_TEXT = 'fill-ink-muted text-caption font-mono tabular-nums';
+
+/** The plot's focusable box, read with the arrow keys; the focus ring follows its corners. */
+export const CHART_PLOT_FRAME = 'focus-ring relative w-full rounded-sm';
+
+/** A line's dash: Other is dashed, a fifth series dotted, the rest solid. */
+export const CHART_DASH: Record<ChartTone, string | undefined> = {
+  1: undefined,
+  2: undefined,
+  3: undefined,
+  4: '4 3',
+  5: '0.01 4.5',
+};
+
+/** One share of a whole, to one decimal: `12.5%`. A zero total is `0%`. */
+export function chartPercent(value: number, total: number): string {
+  if (!total) return '0%';
+  return `${((value / total) * 100).toFixed(1)}%`;
+}
+
+/** Whole-number counts in the product's grouping: `1,240`. */
+export const formatChartCount = (value: number) => value.toLocaleString('en-US');
 
 /**
- * The plot heights a chart may take, as roles rather than pixel values:
- * charts had settled at 200, 220, 240, 280 and 304px, so two trend charts side
- * by side never shared a baseline.
- *
- *   - `sm` (160px) — a compact chart inside a card beside other content.
- *   - `md` (240px) — the default trend or bar chart.
- *   - `lg` (320px) — the page's primary chart.
+ * Round tick values covering `min`–`max` in about `count` steps of 1, 2, 2.5
+ * or 5 times a power of ten, so an axis reads 0, 25, 50 rather than 0, 23, 46.
  */
-const chartHeightClasses = {
-  sm: 'h-[var(--chart-height-sm)]',
-  md: 'h-[var(--chart-height-md)]',
-  lg: 'h-[var(--chart-height-lg)]',
-} as const;
+export function chartTicks(min: number, max: number, count = 5): number[] {
+  const span = max - min || 1;
+  const raw = span / count;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = niceStep(raw / magnitude) * magnitude;
+  const low = Math.floor(min / step) * step;
+  const high = Math.ceil(max / step) * step;
+  const ticks: number[] = [];
+  for (let value = low; value <= high + step / 2; value += step) {
+    ticks.push(Math.round(value * 1e6) / 1e6);
+  }
+  return ticks;
+}
 
-export type ChartHeight = keyof typeof chartHeightClasses;
+function niceStep(normalised: number): number {
+  return [1, 2, 2.5, 5].find((step) => normalised <= step) ?? 10;
+}
 
+/** An SVG path through the points; a `null` lifts the pen, so a gap stays a gap. */
+export function chartPath(points: readonly (readonly [number, number] | null)[]): string {
+  let path = '';
+  let pen = false;
+  for (const point of points) {
+    if (!point) {
+      pen = false;
+      continue;
+    }
+    path += `${pen ? 'L' : 'M'}${point[0].toFixed(1)} ${point[1].toFixed(1)}`;
+    pen = true;
+  }
+  return path;
+}
+
+/**
+ * The plot's width in CSS pixels, measured, so the viewBox is the box: lines
+ * stretch and axis text stays 12px at every width. `fallback` holds until the
+ * first measurement (and in environments that cannot measure).
+ */
+export function useChartWidth<T extends HTMLElement>(fallback = 640) {
+  const ref = useRef<T>(null);
+  const [width, setWidth] = useState(fallback);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const measure = () => {
+      const measured = Math.round(element.getBoundingClientRect().width);
+      if (measured > 0) setWidth(measured);
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width] as const;
+}
+
+/** The Other texture: `data-other` stripes on the `chart-grid` ground. */
+export function ChartHatchPattern({ id }: Readonly<{ id: string }>) {
+  return (
+    <pattern
+      id={id}
+      width={4}
+      height={4}
+      patternUnits="userSpaceOnUse"
+      patternTransform="rotate(45)"
+    >
+      <rect width={4} height={4} className="fill-chart-grid" />
+      <line x1={1} y1={0} x2={1} y2={4} strokeWidth={2} className="stroke-data-other" />
+    </pattern>
+  );
+}
+
+/** A hatched fill for an HTML box (a bar, a swatch) standing for Other. */
+export function ChartHatch() {
+  const id = `chart-hatch-${useId().replaceAll(':', '')}`;
+  return (
+    <svg aria-hidden focusable="false" className="block size-full">
+      <defs>
+        <ChartHatchPattern id={id} />
+      </defs>
+      <rect width="100%" height="100%" fill={`url(#${id})`} />
+    </svg>
+  );
+}
+
+/**
+ * The key beside a series' name: an 8px square for an area, a 12 × 3 rule for
+ * a line. Decorative: the name beside it says which series it is.
+ */
+export function ChartSwatch({ tone, line = false }: Readonly<{ tone: ChartTone; line?: boolean }>) {
+  if (line && (tone === 4 || tone === 5)) {
+    return (
+      <svg
+        aria-hidden
+        focusable="false"
+        width={12}
+        height={3}
+        viewBox="0 0 12 3"
+        className="shrink-0"
+      >
+        <line
+          x1={0.5}
+          y1={1.5}
+          x2={11.5}
+          y2={1.5}
+          strokeWidth={3}
+          strokeLinecap={tone === 5 ? 'round' : undefined}
+          strokeDasharray={tone === 5 ? '0.01 3' : '3 1.5'}
+          className={CHART_STROKE[tone]}
+        />
+      </svg>
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'inline-block shrink-0 overflow-hidden',
+        line ? 'h-[3px] w-3 rounded-2xs' : 'rounded-2xs size-2',
+        tone === 4 ? undefined : CHART_FILL[tone],
+      )}
+    >
+      {tone === 4 ? <ChartHatch /> : null}
+    </span>
+  );
+}
+
+export type ChartLegendEntry = Readonly<{ name: string; tone: ChartTone; value?: string }>;
+
+/**
+ * A chart's key: one wrapping row of swatch, name and (for a trend) the latest
+ * value. Hidden from assistive technology: the chart's own table names every
+ * series and value.
+ */
+export function ChartLegend({
+  entries,
+  line = false,
+  markerLabel,
+}: Readonly<{
+  entries: readonly ChartLegendEntry[];
+  line?: boolean;
+  /** The key for event markers drawn across the plot (a dashed `line-control` rule). */
+  markerLabel?: string;
+}>) {
+  return (
+    <ul aria-hidden className="flex flex-wrap gap-x-6 gap-y-2">
+      {entries.map((entry) => (
+        <li
+          key={entry.name}
+          className="text-body-sm inline-flex items-center gap-2 whitespace-nowrap"
+        >
+          <ChartSwatch tone={entry.tone} line={line} />
+          <span className="text-ink-secondary">{entry.name}</span>
+          {entry.value === undefined ? null : (
+            <span className="text-ink font-medium tabular-nums">{entry.value}</span>
+          )}
+        </li>
+      ))}
+      {markerLabel ? (
+        <li className="text-body-sm inline-flex items-center gap-2 whitespace-nowrap">
+          <svg width={12} height={3} viewBox="0 0 12 3" className="shrink-0">
+            <line
+              x1={0}
+              y1={1.5}
+              x2={12}
+              y2={1.5}
+              strokeWidth={2}
+              strokeDasharray="2 3"
+              className="stroke-line-control"
+            />
+          </svg>
+          <span className="text-ink-secondary">{markerLabel}</span>
+        </li>
+      ) : null}
+    </ul>
+  );
+}
+
+/**
+ * The hover card every chart shares: `surface` lifted by `shadow-pop`, a mono
+ * caption naming the point, then one row per series.
+ */
+export function ChartTip({
+  title,
+  left,
+  top,
+  children,
+}: Readonly<{ title: string; left: number; top: number; children: ReactNode }>) {
+  return (
+    <div
+      aria-hidden
+      className="bg-surface shadow-pop pointer-events-none absolute z-20 flex w-54 flex-col gap-1 rounded-md p-3"
+      style={{ left, top }}
+    >
+      <p className="text-caption text-ink-muted mb-1 font-mono">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+export function ChartTipRow({
+  tone,
+  name,
+  value,
+}: Readonly<{ tone: ChartTone; name: string; value: string }>) {
+  return (
+    <div className="text-body-sm flex items-center gap-2">
+      <ChartSwatch tone={tone} line />
+      <span className="text-ink-secondary min-w-0 flex-1 truncate">{name}</span>
+      <span className="text-ink font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * The plot heights a chart may take, as roles: `sm` 160 (a compact chart
+ * beside other content), `md` 240 (the default), `lg` 320 (a page's primary
+ * chart).
+ */
 const chartFrameClasses = {
   sm: 'min-h-[var(--chart-height-sm)]',
   md: 'min-h-[var(--chart-height-md)]',
   lg: 'min-h-[var(--chart-height-lg)]',
 } as const;
 
+export type ChartHeight = keyof typeof chartFrameClasses;
+
 /**
  * The box a chart and every state standing in for it share: the chart's
  * height role as a floor, so loading, a read error or an empty selection
- * occupy the plot's footprint and nothing under the card moves. A state
- * inside is centred; the plot fills it.
+ * occupy the plot's footprint and nothing under the card moves.
  */
 export function ChartFrame({
   height,
@@ -60,230 +306,46 @@ export function ChartFrame({
   return <div className={cn('grid min-w-0 *:min-w-0', chartFrameClasses[height])}>{children}</div>;
 }
 
-/** `--color-<key>` for every series, so Recharts props can name the token. */
-function seriesVariables(config: ChartConfig): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(config).map(([key, entry]) => [`--color-${key}`, entry.color]),
-  );
-}
-
 /**
- * The plot's box: the description, the series tokens and the plot's height.
- *
- * Nothing here imports Recharts. The drawing is a lazy `ChartPlot` module
- * (`chart-plot.tsx` and the per-chart plots beside it), so the chart library
- * is fetched when a chart is drawn, not with every screen that shows one. The
- * box is sized by its height role before that code arrives, so the plot fills
- * a space already held and nothing around it moves. A drawing that cannot
- * load leaves a quiet notice in the same box rather than failing the screen.
+ * ChartCard — a Card framing one chart: the title (and an optional eyebrow)
+ * with a range or engine control on the right, optional stats above, the
+ * chart, and a footnote naming the source and period. 24 between summary,
+ * chart and footnote. One chart per card.
  */
-export function ChartContainer({
-  config,
+export function ChartCard({
+  title,
+  eyebrow,
+  controls,
+  summary,
+  footnote,
   children,
-  className,
-  size = 'md',
-  description,
+  ...props
 }: Readonly<{
-  config: ChartConfig;
-  /** The lazy plot: a component that renders one Recharts chart in a `ChartPlot`. */
+  title: ReactNode;
+  eyebrow?: ReactNode;
+  /** A range or engine control (Tabs); it keeps its width as the selection changes. */
+  controls?: ReactNode;
+  /** Stats or a Delta above the chart. */
+  summary?: ReactNode;
+  /** The source and period, e.g. "Source: 412 answers, 27 Oct – 2 Nov 2026". */
+  footnote?: ReactNode;
   children: ReactNode;
-  className?: string;
-  /** The plot's height role. */
-  size?: ChartHeight;
-  /**
-   * What the chart says to a reader who cannot see it.
-   *
-   * Required in practice: the drawing is `aria-hidden` because a screen
-   * reader handed a tree of `<path>` elements learns nothing from it, so this
-   * sentence is the only reading such a reader gets.
-   */
-  description: string;
+  'aria-labelledby'?: string;
+  'data-testid'?: string;
 }>) {
   return (
-    <div className={cn('w-full', className)} style={seriesVariables(config)}>
-      <p className="sr-only">{description}</p>
-      <div aria-hidden className={chartHeightClasses[size]}>
-        <LazyIsland
-          label="chart"
-          defects="surface"
-          failed={<IslandUnavailable message="Couldn't load chart." />}
-        >
-          {children}
-        </LazyIsland>
+    <Card {...props}>
+      <CardHeader actions={controls}>
+        <div className="grid min-w-0 gap-1">
+          {eyebrow ? <CardEyebrow>{eyebrow}</CardEyebrow> : null}
+          <CardTitle>{title}</CardTitle>
+        </div>
+      </CardHeader>
+      <div className="text-ink grid min-w-0 gap-y-6">
+        {summary ? <div className="flex flex-wrap gap-x-8 gap-y-4">{summary}</div> : null}
+        <div className="min-w-0">{children}</div>
+        {footnote ? <p className="text-caption text-ink-muted">{footnote}</p> : null}
       </div>
-    </div>
-  );
-}
-
-/** Exactly one paint: two would stack, and none renders an invisible swatch. */
-type SwatchPaint =
-  | { tone: DataTone; color?: never; fillClass?: never }
-  | {
-      /** A token value such as `var(--color-chart-2)`, for `ChartConfig` series. */
-      color: string;
-      tone?: never;
-      fillClass?: never;
-    }
-  | {
-      /** A fill utility the caller already resolved. */
-      fillClass: string;
-      tone?: never;
-      color?: never;
-    };
-
-/**
- * The key beside a legend entry: a dot (a series or point) or a short rule (a
- * line). Its colour is a `DataTone` — a series index for categorical identity
- * or an outcome family for a state — or, inside a Recharts frame, the
- * series' token `color` from `ChartConfig`. Decorative: the entry's text is
- * what names the series.
- */
-export function LegendSwatch({
-  tone,
-  color,
-  fillClass,
-  shape = 'dot',
-  className,
-}: Readonly<SwatchPaint & { shape?: 'dot' | 'line'; className?: string }>) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'inline-block shrink-0 rounded-full',
-        shape === 'dot' ? 'size-2' : 'h-0.5 w-4',
-        tone ? dataFillClass(tone) : fillClass,
-        className,
-      )}
-      style={color ? { background: color } : undefined}
-    />
-  );
-}
-
-/**
- * A static legend: the key under a chart whose series are not interactive (a
- * drawn SVG rather than a Recharts frame). One wrapping row of swatch-and-
- * caption entries, 16 apart and 4 between wrapped lines — the same rhythm as
- * the interactive `ChartLegend`, without the buttons.
- */
-export function ChartKey({
-  entries,
-}: Readonly<{
-  entries: ReadonlyArray<Readonly<{ label: string; tone: DataTone; shape?: 'dot' | 'line' }>>;
-}>) {
-  return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      {entries.map((entry) => (
-        <li key={entry.label} className="flex items-center gap-2">
-          <LegendSwatch tone={entry.tone} shape={entry.shape} />
-          <span className={textRole('caption')}>{entry.label}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** Axis defaults: no tick marks, one hairline, and room for the labels. */
-export const CHART_MARGIN = { top: 8, right: 8, bottom: 0, left: 0 } as const;
-
-export const axisProps = {
-  tickLine: false,
-  axisLine: false,
-  tickMargin: 8,
-  tick: { fontSize: 11, className: 'fill-muted' },
-} as const;
-
-/**
- * A legend whose entries are buttons, not swatches.
- *
- * Reading a specific value off a five-line chart is the legend's job: hovering
- * or focusing an entry brings its line forward and dims the rest. Hover and
- * focus do the same thing, so the comparison is available without a pointer.
- */
-export function ChartLegend({
-  config,
-  active,
-  onActivate,
-}: Readonly<{
-  config: ChartConfig;
-  active: string | null;
-  onActivate: (key: string | null) => void;
-}>) {
-  return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      {Object.entries(config).map(([key, entry]) => (
-        <li key={key}>
-          <button
-            type="button"
-            onMouseEnter={() => onActivate(key)}
-            onMouseLeave={() => onActivate(null)}
-            onFocus={() => onActivate(key)}
-            onBlur={() => onActivate(null)}
-            className={cn(
-              'focus-ring type-caption flex items-center gap-2 transition-opacity',
-              active && active !== key ? 'opacity-45' : 'opacity-100',
-            )}
-          >
-            <LegendSwatch color={entry.color} />
-            <span className={textRole('caption', 'max-w-[18ch] truncate')}>{entry.label}</span>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * The one chart hover-card surface: inverse ink on the inverse fill, so every
- * chart's tooltip reads as the same object. Its contents use `text-on-inverse`.
- */
-export function ChartTooltipPanel({
-  children,
-  className,
-}: Readonly<{ children: ReactNode; className?: string }>) {
-  return (
-    <div
-      className={cn(
-        'tooltip-panel bg-surface-inverse text-on-inverse shadow-overlay rounded-[var(--radius-card)] px-3 py-2',
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** The shared hover card: the bucket, then every series that has a value. */
-export function ChartTooltipContent({
-  active,
-  payload,
-  label,
-  formatValue,
-}: Readonly<{
-  active?: boolean;
-  payload?: readonly { name?: string; dataKey?: string; value?: number; color?: string }[];
-  label?: ReactNode;
-  formatValue: (value: number) => string;
-}>) {
-  if (!active || !payload?.length) return null;
-  // A series with no measurement in this bucket is ABSENT from the card, not
-  // listed at zero: the gap in the line and the gap here say the same thing.
-  const measured = payload.filter((entry) => typeof entry.value === 'number');
-  if (!measured.length) return null;
-  return (
-    <ChartTooltipPanel>
-      <p className="type-badge">{label}</p>
-      <ul className="grid gap-0.5">
-        {measured.map((entry) => (
-          <li
-            key={entry.dataKey ?? entry.name}
-            className="type-caption text-on-inverse flex items-center gap-2"
-          >
-            {entry.color ? <LegendSwatch color={entry.color} /> : null}
-            <span className="max-w-[16ch] truncate">{entry.name}</span>
-            <span className="font-numeric ml-auto">{formatValue(entry.value as number)}</span>
-          </li>
-        ))}
-      </ul>
-    </ChartTooltipPanel>
+    </Card>
   );
 }

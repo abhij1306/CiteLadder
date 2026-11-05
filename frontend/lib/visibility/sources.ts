@@ -8,7 +8,6 @@
  */
 import type { z } from 'zod';
 import { formatCount } from '@/lib/format';
-import { chartToken } from '@/lib/visibility/chart-tokens';
 
 import type {
   visibilitySourceSeriesSchema,
@@ -69,11 +68,10 @@ export function typeSlices(
   const source = totals ?? {};
   const catalog = dimension === 'url' ? URL_TYPES : DOMAIN_TYPES;
   return catalog
-    .map((type, index) => ({
+    .map((type) => ({
       key: type.token,
       label: type.label,
       value: source[type.token] ?? 0,
-      ...chartToken(index),
     }))
     .filter((slice) => slice.value > 0);
 }
@@ -102,10 +100,9 @@ export function typeLabel(token: string | null | undefined, dimension: 'domain' 
  */
 export function toChartSeries(data: SeriesData | undefined) {
   if (!data?.series.length) return [];
-  return data.series.map((series, index) => ({
+  return data.series.map((series) => ({
     key: series.key,
     label: series.key,
-    ...chartToken(index),
     points: series.points.map((point) => ({
       value: point.share === null ? null : point.share * 100,
       label: point.at,

@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users } from 'lucide-react';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
@@ -79,22 +79,22 @@ export function TargetCompetitors({
       <CardContent>
         <Stack>
           {tasks.map((task) => (
-            <Alert key={task.id} tone={task.status === 'failed' ? 'danger' : 'info'}>
+            <Callout key={task.id} tone={task.status === 'failed' ? 'negative' : 'info'}>
               {discoveryMessage(task.status, task.target.kind, task.error_code)}
-            </Alert>
+            </Callout>
           ))}
           {discovery.discover.isError ? (
-            <Alert tone="danger">
+            <Callout tone="negative">
               {
                 humanizeApiError(
                   discovery.discover.error,
                   'Competitor discovery could not start. Please try again.',
                 ).message
               }
-            </Alert>
+            </Callout>
           ) : null}
           {decide.isError ? (
-            <Alert tone="danger">The competitor decision failed. Please try again.</Alert>
+            <Callout tone="negative">The competitor decision failed. Please try again.</Callout>
           ) : null}
           <CompetitorRows
             query={query}
@@ -164,7 +164,11 @@ function CompetitorRows({
           </Badge>
           {row.state === 'pending' ? (
             <Inline>
-              <Button disabled={pending} onClick={() => onDecide(row.id, 'approved')}>
+              <Button
+                variant="primary"
+                disabled={pending}
+                onClick={() => onDecide(row.id, 'approved')}
+              >
                 Approve
               </Button>
               <Button

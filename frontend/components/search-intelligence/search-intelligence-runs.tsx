@@ -62,7 +62,7 @@ export function RunNotice({
         gap="compact"
         className={panelClasses(
           { tone: 'none' },
-          'type-body bg-info-bg text-info-text flex-wrap justify-between',
+          'type-body bg-info-soft text-info flex-wrap justify-between',
         )}
       >
         <Inline as="span">
@@ -76,12 +76,12 @@ export function RunNotice({
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
   return (
-    <output className={panelClasses({ tone: 'none' }, 'type-body bg-warning-bg block')}>
+    <output className={panelClasses({ tone: 'none' }, 'type-body bg-warning-soft block')}>
       <Stack gap="tight">
         <p className={textRole('itemTitle')}>
           Analysis {RUN_STATUS_LABELS[run.status]?.toLowerCase()}
         </p>
-        <p className="text-muted">
+        <p className="text-ink-muted">
           {STOP_REASONS[run.error_code] ||
             run.error_detail ||
             `${run.completed_calls} of ${run.planned_calls} requests completed.`}{' '}
@@ -156,7 +156,7 @@ export function CostDetails({
     content = (
       <ReadError error={error} fallback="Cost history could not be loaded." onRetry={onRetry} />
     );
-  if (pending) content = <Skeleton shape="block" />;
+  if (pending) content = <Skeleton variant="block" />;
   return (
     <Drawer
       open={open}

@@ -80,7 +80,7 @@ describe('AiReferralsScreen', () => {
     mswServer.use(http.get(endpoint, () => HttpResponse.json(dashboard)));
     renderWithProviders(<AiReferralsScreen />);
 
-    expect(await screen.findByText('AI-referred sessions')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI-referred sessions' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Share of GA4 sessions' })).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole('tab', { name: 'Sources' }));
     expect(screen.getByText('AI referral sources')).toBeInTheDocument();

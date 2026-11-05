@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef, ElementType } from 'react';
+import type { ComponentPropsWithoutRef, ComponentPropsWithRef, ElementType } from 'react';
 
 import { cn } from '@/lib/utils';
 
@@ -35,7 +35,7 @@ export function Stack({
   className,
   children,
   ...props
-}: Readonly<ComponentPropsWithoutRef<'div'> & { as?: ElementType; gap?: StackGap }>) {
+}: Readonly<ComponentPropsWithRef<'div'> & { as?: ElementType; gap?: StackGap }>) {
   const Component = as ?? 'div';
   return (
     <Component {...props} className={cn('grid', STACK_GAP[gap], className)}>

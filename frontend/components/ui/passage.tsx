@@ -1,27 +1,40 @@
-import type { ReactNode } from 'react';
-
-import { panelClasses } from '@/components/ui/panel';
-import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
 /**
- * Passage — a quoted line lifted verbatim from a page we do not own.
+ * Passage — a quoted line lifted verbatim from a page or an answer we do not
+ * own: the product's core evidence claim. A `surface-sunken` well
+ * (`radius-md`, 16 inset, 12 at the foot) inside a Card, the quote in 14/24
+ * `ink`; stack passages 12 apart. `highlight` marks the one phrase the
+ * claim rests on with the highlighter; if the phrase is not in the text,
+ * nothing is marked. Never paraphrase or trim mid-sentence.
  *
- * This is the product's core evidence claim: the reason a reader should
- * believe a competitor is on a page is that the page says so, in these words.
- * It was being rebuilt by hand at every site that makes such a claim, which is
- * how the same element already renders two different ways across the app.
- *
- * A `blockquote`, not a `div`: the text is somebody else's and the markup
- * should say so.
+ * A `blockquote`: the text is somebody else's and the markup says so.
  */
 export function Passage({
   children,
-  className,
-}: Readonly<{ children: ReactNode; className?: string }>) {
+  highlight,
+}: Readonly<{
+  /** The verbatim text. */
+  children: string;
+  /** The phrase inside the text the claim rests on, marked once. */
+  highlight?: string;
+}>) {
+  const at = highlight ? children.indexOf(highlight) : -1;
   return (
-    <blockquote className={panelClasses({ tone: 'well' }, className)}>
-      <p className={textRole('body')}>“{children}”</p>
+    <blockquote className="bg-surface-sunken rounded-md px-4 pt-4 pb-3">
+      <p className="text-body-sm text-ink leading-6">
+        “
+        {highlight && at >= 0 ? (
+          <>
+            {children.slice(0, at)}
+            <mark className="cl-mark">{highlight}</mark>
+            {children.slice(at + highlight.length)}
+          </>
+        ) : (
+          children
+        )}
+        ”
+      </p>
     </blockquote>
   );
 }
@@ -30,8 +43,7 @@ export function Passage({
  * Limitations — what a reader may NOT conclude from what they are looking at.
  *
  * One home, because the rule these carry is one rule: a finding is shown with
- * its caveats or it is not shown honestly. Five surfaces were each rendering
- * the same muted list by hand.
+ * its caveats or it is not shown honestly.
  */
 export function Limitations({
   items,
@@ -41,7 +53,7 @@ export function Limitations({
   return (
     <div className={cn('grid gap-1', className)}>
       {items.map((item) => (
-        <p key={item} className="type-caption">
+        <p key={item} className="text-caption text-ink-muted">
           {item}
         </p>
       ))}

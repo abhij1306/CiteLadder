@@ -17,10 +17,10 @@ export type StatusMessage = Readonly<{
 }>;
 
 const TONE_TEXT: Record<StatusTone, string> = {
-  info: 'text-info-text',
-  warning: 'text-warning-text',
-  danger: 'text-danger-text',
-  neutral: 'text-muted',
+  info: 'text-info',
+  warning: 'text-warning',
+  danger: 'text-negative',
+  neutral: 'text-ink-muted',
 };
 
 const TONE_ICON = {
@@ -58,7 +58,7 @@ export function StatusLine({
       data-testid={testId}
       data-status-tone={tone}
       className={cn(
-        'type-caption flex h-[var(--control-height-md)] min-w-0 items-center gap-2',
+        'type-caption flex h-[var(--control-md)] min-w-0 items-center gap-2',
         TONE_TEXT[tone],
       )}
     >

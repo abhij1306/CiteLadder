@@ -1,3 +1,4 @@
+import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
 import { Delta } from '@/components/ui/delta';
 import type { DataTone } from '@/components/ui/data-tone';
@@ -10,7 +11,6 @@ import type { CommandCenter, Opportunity } from '@/lib/api/types';
 import { availabilityLabel } from '@/lib/format';
 import { severityBadgeValue, severityLabel } from '@/lib/site-health/issues';
 import { textRole } from '@/components/ui/typography';
-import { splitPaneClasses } from '@/components/ui/workspace';
 
 /** A change against the previous comparable run, as every Command Center delta reads it. */
 export const VS_PREVIOUS_RUN = {
@@ -32,7 +32,7 @@ export function metricValue(value: number | null, suffix = '') {
  */
 export function MovementChart({ movements }: Readonly<{ movements: CommandCenter['movements'] }>) {
   return (
-    <div className={splitPaneClasses('peers')}>
+    <AppGrid layout="halves">
       {movements.map((row) => (
         <Stack key={row.label} gap="compact" className="min-w-0 content-start">
           <Inline className="justify-between">
@@ -48,7 +48,7 @@ export function MovementChart({ movements }: Readonly<{ movements: CommandCenter
           />
         </Stack>
       ))}
-    </div>
+    </AppGrid>
   );
 }
 
@@ -79,12 +79,15 @@ export function actionItem(action: Opportunity): ReorderItem {
   return {
     key: action.id,
     name: action.title,
-    figure: <span className={textRole('figureSm')}>{action.priority_score.toFixed(1)}</span>,
+    // The severity badge carries the priority; the score is not repeated
+    // (decision D14). The title truncates so the badge stays on its line.
     content: (
       <Stack gap="tight">
-        <Inline className="flex-wrap">
+        <Inline>
           <TextLink
             text="itemTitle"
+            className="min-w-0 truncate"
+            title={action.title}
             href={action.action_id ? `/agent/actions/${action.action_id}` : '/agent/actions'}
           >
             {action.title}

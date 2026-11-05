@@ -66,7 +66,7 @@ export function EvidencePerception({
             <Inline as="span" className="flex-wrap">
               <span className={textRole('emphasis')}>{entity.entity}</span>
               {entity.is_brand ? (
-                <span className={textRole('caption', 'text-muted')}>You</span>
+                <span className={textRole('caption', 'text-ink-muted')}>You</span>
               ) : null}
               <PerceptionChip entity={entity} />
             </Inline>
@@ -74,7 +74,7 @@ export function EvidencePerception({
               ? entity.aspects.map((aspect) => (
                   <span
                     key={`${aspect.start}:${aspect.end}`}
-                    className="type-caption text-secondary"
+                    className="type-caption text-ink-secondary"
                   >
                     {themeLabel(aspect.theme)} ({aspect.polarity}): “{aspect.quote}”
                   </span>

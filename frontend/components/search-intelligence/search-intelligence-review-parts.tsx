@@ -7,8 +7,8 @@ import {
   searchScopeLabel,
 } from '@/lib/config/search-intelligence';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Field } from '@/components/ui/field';
@@ -283,7 +283,7 @@ export function ReviewFooter({
         <Button variant="secondary" onClick={onBack}>
           Back
         </Button>
-        <Button disabled={busy} onClick={onConfirm}>
+        <Button variant="primary" disabled={busy} onClick={onConfirm}>
           Confirm {runEstimate(review)} analysis
         </Button>
       </Inline>
@@ -291,7 +291,7 @@ export function ReviewFooter({
   return (
     <Inline gap="compact" className="justify-between">
       <span className={textRole('caption')}>{pluralCount(selected, 'dataset')} selected</span>
-      <Button disabled={busy || !canReview} onClick={onReview}>
+      <Button variant="primary" disabled={busy || !canReview} onClick={onReview}>
         Review cost
       </Button>
     </Inline>
@@ -304,10 +304,10 @@ export function HistoryScopeNotice({
 }: Readonly<{ scope: ResearchScope; selections: DatasetSelection[] }>) {
   if (!historyScopeConflict(selections, scope)) return null;
   return (
-    <Alert>
+    <Callout tone="negative">
       Backlink history covers the whole domain. Deselect it or set the research scope to Domain +
       subdomains.
-    </Alert>
+    </Callout>
   );
 }
 
@@ -327,7 +327,8 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
     <Stack gap="workspace">
       <Stack as="section" gap="compact">
         <h3 className={textRole('sectionTitle')}>What will be fetched</h3>
-        <Stack as="dl" gap="compact" className="type-body grid-cols-2">
+        {/* The three figures share one row, never 2 × 2 (decision D9). */}
+        <Stack as="dl" gap="compact" className="type-body grid-cols-3">
           <div>
             <dt className="type-label">Requests</dt>
             <dd className="type-figure">{review.planned_calls}</dd>
@@ -340,7 +341,7 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
             <dt className="type-label">Estimated cost</dt>
             <dd className="type-figure">{runEstimate(review)}</dd>
           </div>
-          <div>
+          <div className="col-span-full">
             <dt className="type-label">Scope</dt>
             <dd>{searchScopeLabel(typeof scope === 'string' ? scope : undefined)}</dd>
           </div>
@@ -370,7 +371,7 @@ export function ReviewSummary({ review }: Readonly<{ review: SearchIntelligenceR
                     {comparison ? ` vs ${comparison}` : ''}
                   </span>
                   {call.estimated_cost_usd === undefined ? null : (
-                    <span className="text-muted">
+                    <span className="text-ink-muted">
                       ${estimateUsd(String(call.estimated_cost_usd))}
                     </span>
                   )}

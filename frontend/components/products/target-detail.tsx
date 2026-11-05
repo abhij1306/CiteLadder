@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { BusyBar } from '@/components/ui/busy-bar';
+import { BusyBar } from '@/components/ui/progress-bar';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import type { useCompetitorDiscovery } from '@/lib/products/competitor-discovery';
 

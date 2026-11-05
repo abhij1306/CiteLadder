@@ -4,19 +4,19 @@ import { ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { Button } from '@/components/ui/button';
-import {
-  Dropdown,
-  DropdownCheckboxItem,
-  DropdownContent,
-  DropdownItem,
-  DropdownLabel,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
 import { FilterTrigger, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Icon } from '@/components/ui/icon';
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuContent,
+  MenuItem,
+  MenuLabel,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
 import { SearchField } from '@/components/ui/search-field';
-import { SegmentedControl } from '@/components/ui/segmented-control';
+import { SegmentedControl } from '@/components/ui/tabs';
 import type { PromptStatus } from '@/lib/api/types';
 import {
   buyerStageLabels,
@@ -124,14 +124,14 @@ export function promptFilterControls({
       />
     ),
     filters: (
-      <Dropdown>
-        <DropdownTrigger asChild>
+      <Menu>
+        <MenuTrigger asChild>
           <FilterTrigger label="Filter" count={activeFilterCount} />
-        </DropdownTrigger>
-        <DropdownContent align="end" width="panel">
-          <DropdownLabel>Intent</DropdownLabel>
+        </MenuTrigger>
+        <MenuContent align="end">
+          <MenuLabel>Intent</MenuLabel>
           {intentValues.map((value) => (
-            <DropdownCheckboxItem
+            <MenuCheckboxItem
               key={value || 'unspecified'}
               checked={selectedIntents.has(value)}
               onSelect={(event) => {
@@ -140,12 +140,12 @@ export function promptFilterControls({
               }}
             >
               {intentLabels[value]}
-            </DropdownCheckboxItem>
+            </MenuCheckboxItem>
           ))}
-          <DropdownSeparator />
-          <DropdownLabel>Buyer stage</DropdownLabel>
+          <MenuSeparator />
+          <MenuLabel>Buyer stage</MenuLabel>
           {buyerStageValues.map((value) => (
-            <DropdownCheckboxItem
+            <MenuCheckboxItem
               key={value || 'unspecified'}
               checked={selectedStages.has(value)}
               onSelect={(event) => {
@@ -154,14 +154,14 @@ export function promptFilterControls({
               }}
             >
               {buyerStageLabels[value]}
-            </DropdownCheckboxItem>
+            </MenuCheckboxItem>
           ))}
-          <DropdownSeparator />
+          <MenuSeparator />
           {personas.length ? (
             <>
-              <DropdownLabel>Persona</DropdownLabel>
+              <MenuLabel>Persona</MenuLabel>
               {personas.map((value) => (
-                <DropdownCheckboxItem
+                <MenuCheckboxItem
                   key={value}
                   checked={selectedPersonas.has(value)}
                   onSelect={(event) => {
@@ -170,14 +170,14 @@ export function promptFilterControls({
                   }}
                 >
                   {value}
-                </DropdownCheckboxItem>
+                </MenuCheckboxItem>
               ))}
-              <DropdownSeparator />
+              <MenuSeparator />
             </>
           ) : null}
-          <DropdownLabel>Enabled</DropdownLabel>
+          <MenuLabel>Enabled</MenuLabel>
           {(['all', 'enabled', 'disabled'] as const).map((value) => (
-            <DropdownCheckboxItem
+            <MenuCheckboxItem
               key={value}
               checked={filters.enabled === value}
               onSelect={(event) => {
@@ -186,12 +186,12 @@ export function promptFilterControls({
               }}
             >
               {ENABLED_FILTER_LABEL[value]}
-            </DropdownCheckboxItem>
+            </MenuCheckboxItem>
           ))}
-          <DropdownSeparator />
-          <DropdownLabel>Branded</DropdownLabel>
+          <MenuSeparator />
+          <MenuLabel>Branded</MenuLabel>
           {(['all', 'enabled', 'disabled'] as const).map((value) => (
-            <DropdownCheckboxItem
+            <MenuCheckboxItem
               key={value}
               checked={filters.branded === value}
               onSelect={(event) => {
@@ -200,10 +200,10 @@ export function promptFilterControls({
               }}
             >
               {BRANDED_FILTER_LABEL[value]}
-            </DropdownCheckboxItem>
+            </MenuCheckboxItem>
           ))}
-        </DropdownContent>
-      </Dropdown>
+        </MenuContent>
+      </Menu>
     ),
   };
 }
@@ -227,29 +227,26 @@ export function PromptActions({
 }>) {
   return (
     <>
-      <Dropdown>
-        <DropdownTrigger asChild>
+      <Menu>
+        <MenuTrigger asChild>
           <Button variant="secondary">
             <Icon icon={Plus} />
             Add prompts
             <Icon icon={ChevronDown} className="opacity-80" />
           </Button>
-        </DropdownTrigger>
-        <DropdownContent align="end" width="panel">
-          <DropdownItem onSelect={onAdd}>
-            <Icon icon={Plus} />
+        </MenuTrigger>
+        <MenuContent align="end">
+          <MenuItem icon={<Icon icon={Plus} />} onSelect={onAdd}>
             Add prompt
-          </DropdownItem>
-          <DropdownItem onSelect={onGenerate}>
-            <Icon icon={Sparkles} />
+          </MenuItem>
+          <MenuItem icon={<Icon icon={Sparkles} />} onSelect={onGenerate}>
             Prompt Builder
-          </DropdownItem>
-          <DropdownItem onSelect={onImport}>
-            <Icon icon={Upload} />
+          </MenuItem>
+          <MenuItem icon={<Icon icon={Upload} />} onSelect={onImport}>
             Bulk upload
-          </DropdownItem>
-        </DropdownContent>
-      </Dropdown>
+          </MenuItem>
+        </MenuContent>
+      </Menu>
       <LaunchAuditButton variant="primary" disabled={!hasActivePrompts} />
     </>
   );

@@ -70,14 +70,14 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
       <Label>Evidence</Label>
       {promptText ? (
         <blockquote className={panelClasses({ tone: 'well' })}>
-          <p className="type-body text-foreground">“{promptText}”</p>
+          <p className="type-body text-ink">“{promptText}”</p>
         </blockquote>
       ) : null}
       {url ? (
         <p
           className={panelClasses(
             { tone: 'tonal' },
-            'type-caption text-foreground break-all tabular-nums',
+            'type-caption text-ink break-all tabular-nums',
           )}
         >
           {url}

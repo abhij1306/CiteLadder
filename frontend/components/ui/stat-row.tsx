@@ -3,53 +3,43 @@
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
+import { AppGrid, type AppGridLayout } from '@/components/ui/app-grid';
+import { cardClasses } from '@/components/ui/card';
 import { ComparisonValue, MetricValue } from '@/components/ui/metric-value';
-import { ScoreRing } from '@/components/ui/score-ring';
-import { textRole } from '@/components/ui/typography';
+import { clampScore, ScoreRing } from '@/components/ui/score-ring';
 import { availabilityLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /**
- * StatRow — the one KPI row: a band of equal segments divided by hairlines.
+ * StatRow — the one KPI row: up to four Stats in one Card, separated by
+ * 32px of space, never by rules.
  *
- * It replaced `StatGrid` (three surfaces, three column counts, two value
- * sizes), `MetricGroup`/`MetricItem`, the Site Health `AuditMetricStrip` and
- * the Command Center's `StateMetric`: five recipes for the same "label, value,
- * sub-line" fact, each with its own padding and value size. Now there is one
- * geometry, owned here:
+ *   - one row of up to four from the desktop breakpoint (982px included),
+ *     balanced across rows beyond that (five → 3 + 2, six → 3 + 3), stacked
+ *     below desktop; never 2 × 2, never 2 + 1;
+ *   - the Stats of a row share one height, so a sub-line under one value and
+ *     not its neighbour never staggers the row.
  *
- *   - segments are equal: one row of up to four on desktop, balanced across
- *     rows beyond that (five → 3 + 2, six → 3 + 3), stacked below desktop;
- *   - a hairline divides neighbouring segments and rows, never boxes them;
- *   - every segment is padded 12 above and below and 16 from its divider,
- *     with the row's outer edges (top and bottom included) flush to the
- *     containing card's own inset;
- *   - the segments of a row share one height, so a ring beside a figure, or a
- *     sub-line under one value and not its neighbour, never staggers the row.
- *
- * A segment's anatomy, in order: label (with an optional leading icon and a
- * trailing marker), an optional caption naming the value's period, the value
- * (the `figure` role), a delta, a sub-line, a comparison window's value, and
- * one action. A score ring takes the segment's top right instead of the value's place.
+ * A Stat's anatomy, in order: the mono eyebrow label (with an optional leading
+ * icon and a trailing marker), an optional caption naming the value's period,
+ * the value in Geist 500 (`stat` 28, decision D15), the change line (a `Delta`), a sub-line,
+ * a comparison window's value, and one action. A 0–100 score is its number
+ * in `stat` with a bare 48px `ScoreRing` (auto tone) centred on its right —
+ * never a bar (decision D8).
  *
  * `value: null` is the missing state — the muted dash with `missingLabel`
  * (default "Not measured") as its accessible name. A string or number is the
  * measured value; any other node (a `Badge`, an `UnavailableValue`) renders
- * as given.
+ * as given. A value always takes the foreground ink: colour means a state, so
+ * it goes on the delta beside a figure, never on the figure itself.
  *
- * A segment with `onSelect` is pressable: the whole segment is the target,
- * named by `actionLabel`; `selected` makes it a toggle (`aria-pressed`).
- */
-
-/*
- * A value always takes the foreground ink: colour means a state, so it goes
- * on the delta beside a figure, never on the figure itself (owner,
- * 2026-11-03). That is why a segment has no tone.
+ * A Stat with `onSelect` is pressable: the whole Stat is the target, named by
+ * `actionLabel`; `selected` makes it a toggle (`aria-pressed`).
  */
 
 type StatValue =
   | { value: ReactNode; score?: undefined }
-  /** A 0–100 score drawn as the ring, named by `label`. */
+  /** A 0–100 score: its number with a bare ScoreRing, named by `label`. */
   | { score: Readonly<{ value: number; label: string }>; value?: undefined };
 
 type StatAction =
@@ -72,18 +62,18 @@ export type StatSegment = Readonly<
     /** The sub-line under the value. */
     sub?: ReactNode;
     /**
-     * A second window's own value under the first (never a ratio): a hairline,
-     * the label naming that window, and its figure in the smaller numeral.
-     * It shares the segment's `loading` and `missingLabel`.
+     * A second window's own value under the first (never a ratio): the label
+     * naming that window, and its figure in the smaller numeral. It shares
+     * the Stat's `loading` and `missingLabel`.
      */
     comparison?: Readonly<{ label: ReactNode; value: string | null }>;
-    /** One link or button at the segment's foot. */
+    /** One link or button at the Stat's foot. */
     action?: ReactNode;
   } & StatValue &
     StatAction
 >;
 
-/** At most four segments a row; more are balanced across rows. */
+/** At most four Stats a row; more are balanced across rows. */
 const MAX_PER_ROW = 4;
 
 const DESKTOP_COLUMNS = {
@@ -93,14 +83,10 @@ const DESKTOP_COLUMNS = {
   4: 'desktop:grid-cols-4',
 } as const;
 
-function rowsOf(segments: readonly StatSegment[]) {
-  const rowCount = Math.ceil(segments.length / MAX_PER_ROW);
-  const perRow = Math.ceil(segments.length / Math.max(1, rowCount));
-  const rows: StatSegment[][] = [];
-  for (let start = 0; start < segments.length; start += perRow) {
-    rows.push(segments.slice(start, start + perRow));
-  }
-  return { rows, columns: Math.max(1, Math.min(MAX_PER_ROW, perRow)) as 1 | 2 | 3 | 4 };
+function columnsOf(count: number) {
+  const rowCount = Math.ceil(count / MAX_PER_ROW);
+  const perRow = Math.ceil(count / Math.max(1, rowCount));
+  return Math.max(1, Math.min(MAX_PER_ROW, perRow)) as 1 | 2 | 3 | 4;
 }
 
 export function StatRow({
@@ -113,94 +99,98 @@ export function StatRow({
   label?: string;
   testId?: string;
 }>) {
-  const { rows, columns } = rowsOf(segments);
   return (
-    <div
+    <dl // NOSONAR -- a <fieldset> would add form-group semantics and its own border, padding and min-width to a grid of figures
       role={label ? 'group' : undefined}
       aria-label={label}
       data-testid={testId}
       data-stat-row=""
-      // The row's outer edges are flush with its container's inset on all
-      // four sides: the segments keep their 12 above and below, and the row
-      // pulls back by that much so the first figure starts where the card's
-      // other content would.
-      className="divide-border-subtle -my-3 grid min-w-0 divide-y"
+      className={cn(
+        'grid min-w-0 grid-cols-1 gap-x-8 gap-y-6',
+        DESKTOP_COLUMNS[columnsOf(segments.length)],
+      )}
     >
-      {rows.map((row) => (
-        <dl
-          key={row.map((segment) => segment.key).join('|')}
-          className={cn(
-            'divide-border-subtle grid min-w-0 divide-y',
-            'desktop:divide-x desktop:divide-y-0',
-            DESKTOP_COLUMNS[columns],
-          )}
-        >
-          {row.map((segment) => (
-            <Segment key={segment.key} segment={segment} />
-          ))}
-        </dl>
+      {segments.map((segment) => (
+        <Stat key={segment.key} segment={segment} framed={false} />
       ))}
-    </div>
+    </dl>
   );
 }
 
-/** The ring spans exactly the rows beside it, so no empty row pads the segment's foot. */
-const ROW_SPAN = {
-  1: 'row-span-1',
-  2: 'row-span-2',
-  3: 'row-span-3',
-  4: 'row-span-4',
-  5: 'row-span-5',
-  6: 'row-span-6',
-} as const;
-
-function textRows(segment: StatSegment) {
-  const optional = [
-    segment.caption,
-    segment.delta,
-    segment.sub,
-    segment.comparison,
-    segment.action,
-  ];
-  return (1 + optional.filter(Boolean).length) as keyof typeof ROW_SPAN;
+/**
+ * The KPI row's grid by count: one row from the desktop breakpoint for up to
+ * five (decision D9: 4 across at 982px, never 2 × 2 or 2 + 1), stacked below.
+ */
+function kpiLayout(count: number): AppGridLayout {
+  if (count === 5) return 'fifths';
+  if (count === 3) return 'thirds';
+  if (count === 2) return 'pair';
+  return 'quarters';
 }
 
 /**
- * A pressable segment's state. Selected keeps the card's own fill and takes a
- * 2px accent bar along its foot and the foreground ink; there is no fill
- * block, so the first segment, flush with the card's inset, never shows a box
- * edge against its label.
+ * KpiRow — the row of numbers that opens a report page: each Stat in a Card
+ * of its own (`surface`, `shadow-card`, 24 inset), up to four in a row, the
+ * cards of a row at one height. A page's headline figures are a KpiRow; a
+ * group of figures inside a card that also holds other content is a
+ * `StatRow`.
+ */
+export function KpiRow({
+  segments,
+  label,
+  testId,
+}: Readonly<{
+  segments: readonly StatSegment[];
+  /** Accessible name for the group, when the section heading does not give one. */
+  label?: string;
+  testId?: string;
+}>) {
+  return (
+    <AppGrid
+      as="dl"
+      layout={kpiLayout(segments.length)}
+      role={label ? 'group' : undefined}
+      aria-label={label}
+      data-kpi-row=""
+      data-testid={testId}
+    >
+      {segments.map((segment) => (
+        <Stat key={segment.key} segment={segment} framed />
+      ))}
+    </AppGrid>
+  );
+}
+
+/**
+ * A pressable Stat's state: selected takes the shared selected fill and the
+ * foreground ink; unselected takes the neutral hover.
  */
 function statSelectionClasses(selected: boolean) {
   return cn(
     'transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
-    selected
-      ? "text-foreground after:bg-accent after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:content-['']"
-      : 'text-secondary hover:text-foreground',
+    selected ? 'bg-surface-sunken' : 'hover:bg-surface-sunken',
   );
 }
 
-function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
+function Stat({ segment, framed }: Readonly<{ segment: StatSegment; framed: boolean }>) {
   const pressable = Boolean(segment.onSelect);
-  // A score ring sits at the segment's top right; the rest stacks in the first column.
-  const main = segment.score ? 'col-start-1' : '';
   return (
     <div
-      data-stat-segment=""
+      data-stat-segment={framed ? undefined : ''}
       className={cn(
-        'grid min-w-0 content-start gap-1 py-3 desktop:px-4 desktop:first:ps-0 desktop:last:pe-0',
-        segment.score && 'grid-cols-[minmax(0,1fr)_auto] gap-x-4',
+        framed
+          ? // A KPI is its own card; a pressable one is pressed as a whole card.
+            cn(cardClasses(), 'relative grid min-w-0 content-start gap-1')
+          : // Every Stat in a row carries the inset a pressable one's fill
+            // needs, so its label never touches the selected fill's edge; the
+            // matching negative margin keeps the figures on the row's grid.
+            '-m-3 grid min-w-0 content-start gap-1 rounded-md p-3',
         pressable && cn('relative', statSelectionClasses(segment.selected ?? false)),
       )}
     >
-      {segment.score ? (
-        <dd className={cn('col-start-2 row-start-1', ROW_SPAN[textRows(segment)])}>
-          <ScoreRing value={segment.score.value} label={segment.score.label} />
-        </dd>
-      ) : null}
-      <SegmentLabel segment={segment} className={main} />
-      <SegmentBody segment={segment} className={main} />
-      <SegmentFoot segment={segment} className={main} />
+      <StatLabel segment={segment} />
+      <StatBody segment={segment} />
+      <StatFoot segment={segment} />
       {pressable ? (
         <button
           type="button"
@@ -214,25 +204,23 @@ function Segment({ segment }: Readonly<{ segment: StatSegment }>) {
   );
 }
 
-type SegmentPart = Readonly<{ segment: StatSegment; className: string }>;
+type StatPart = Readonly<{ segment: StatSegment }>;
 
-/** The label row: a label wraps to a second line rather than cutting a metric's name. */
-function SegmentLabel({ segment, className }: SegmentPart) {
+/** The eyebrow row: a label wraps to a second line rather than cutting a metric's name. */
+function StatLabel({ segment }: StatPart) {
   const Icon = segment.icon;
   return (
-    <dt
-      className={textRole(
-        'label',
-        cn('flex min-w-0 items-center justify-between gap-2', className),
-      )}
-    >
+    <dt className="type-eyebrow flex min-w-0 items-center justify-between gap-2">
       <span className="flex min-w-0 items-center gap-2">
-        {Icon ? <Icon className="text-muted size-4 shrink-0" aria-hidden /> : null}
+        {Icon ? <Icon className="size-4 shrink-0" aria-hidden /> : null}
         <span className="line-clamp-2 min-w-0">{segment.label}</span>
       </span>
       {segment.marker ? (
         <span
-          className={cn('flex shrink-0 items-center gap-2', segment.onSelect && 'relative z-10')}
+          className={cn(
+            'flex shrink-0 items-center gap-2 normal-case',
+            segment.onSelect && 'relative z-10',
+          )}
         >
           {segment.marker}
         </span>
@@ -241,60 +229,60 @@ function SegmentLabel({ segment, className }: SegmentPart) {
   );
 }
 
-/** The caption and value; a ring segment's value is the ring itself. */
-function SegmentBody({ segment, className }: SegmentPart) {
-  if (segment.score && !segment.caption) return null;
+/**
+ * The caption, then the value. A score's value is its number with the bare
+ * ring on its right, centred on the number; the ring carries the accessible
+ * "out of 100" name, so the drawn number is not read twice.
+ */
+function StatBody({ segment }: StatPart) {
   return (
-    <dd className={cn('grid min-w-0 gap-1', className)}>
-      {segment.caption ? <span className={textRole('caption')}>{segment.caption}</span> : null}
-      {segment.score ? null : <SegmentValue segment={segment} />}
+    <dd className="grid min-w-0 gap-1">
+      {segment.caption ? (
+        <span className="text-caption text-ink-muted">{segment.caption}</span>
+      ) : null}
+      {segment.score ? (
+        <span className="flex min-w-0 items-center justify-between gap-4">
+          <span aria-hidden className="type-figure min-w-0">
+            {clampScore(segment.score.value)}
+          </span>
+          <ScoreRing
+            value={segment.score.value}
+            label={segment.score.label}
+            tone="auto"
+            showValue={false}
+          />
+        </span>
+      ) : (
+        <StatValue segment={segment} />
+      )}
     </dd>
   );
 }
 
 /** Delta, sub-line, comparison and the one action, in that order. */
-function SegmentFoot({ segment, className }: SegmentPart) {
+function StatFoot({ segment }: StatPart) {
   return (
     <>
-      {segment.delta ? <dd className={cn('min-w-0', className)}>{segment.delta}</dd> : null}
-      {segment.sub ? (
-        <dd className={textRole('caption', cn('min-w-0', className))}>{segment.sub}</dd>
-      ) : null}
-      <SegmentComparison segment={segment} className={className} />
-      {segment.action ? (
-        <dd className={cn('min-w-0', className, segment.onSelect && 'relative z-10')}>
-          {segment.action}
+      {segment.delta ? <dd className="min-w-0">{segment.delta}</dd> : null}
+      {segment.sub ? <dd className="text-caption text-ink-muted min-w-0">{segment.sub}</dd> : null}
+      {segment.comparison ? (
+        <dd data-stat-comparison="" className="text-caption text-ink-muted grid min-w-0 pt-1">
+          <span>{segment.comparison.label}</span>
+          <ComparisonValue
+            value={segment.comparison.value}
+            label={segment.missingLabel ?? availabilityLabel('not_measured')}
+            loading={segment.loading ?? false}
+          />
         </dd>
+      ) : null}
+      {segment.action ? (
+        <dd className={cn('min-w-0', segment.onSelect && 'relative z-10')}>{segment.action}</dd>
       ) : null}
     </>
   );
 }
 
-/** A second window's value under the first, or nothing without one. */
-function SegmentComparison({
-  segment,
-  className,
-}: Readonly<{ segment: StatSegment; className: string }>) {
-  if (!segment.comparison) return null;
-  return (
-    <dd
-      data-stat-comparison=""
-      className={textRole(
-        'caption',
-        cn('border-border-subtle grid min-w-0 border-t pt-1', className),
-      )}
-    >
-      <span>{segment.comparison.label}</span>
-      <ComparisonValue
-        value={segment.comparison.value}
-        label={segment.missingLabel ?? availabilityLabel('not_measured')}
-        loading={segment.loading ?? false}
-      />
-    </dd>
-  );
-}
-
-function SegmentValue({ segment }: Readonly<{ segment: StatSegment }>) {
+function StatValue({ segment }: StatPart) {
   const { value } = segment;
   if (segment.loading || value == null || typeof value === 'string' || typeof value === 'number') {
     return (
@@ -306,5 +294,5 @@ function SegmentValue({ segment }: Readonly<{ segment: StatSegment }>) {
       />
     );
   }
-  return <div className={textRole('figure', 'min-w-0')}>{value}</div>;
+  return <div className="type-figure min-w-0">{value}</div>;
 }

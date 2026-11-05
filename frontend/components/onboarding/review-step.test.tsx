@@ -35,7 +35,7 @@ describe('ReviewStep competitor limit', () => {
     expect(container.querySelector('img')?.getAttribute('src')).toContain(
       'https://logos.example/summit-gear.example',
     );
-    expect(screen.getByRole('button', { name: 'Summit Gear' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: 'Summit Gear' })).toBeChecked();
     expect(screen.getByText('summit-gear.example')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'https://summit-gear.example' })).toHaveAttribute(
       'href',
@@ -96,7 +96,7 @@ describe('ReviewStep competitor limit', () => {
     expect(button).toBeDisabled();
     await userEvent.click(button);
     expect(add).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Competitor 1' })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: 'Competitor 1' })).toBeEnabled();
   });
 
   it('accepts a manual name and domain before the choice is submitted', async () => {

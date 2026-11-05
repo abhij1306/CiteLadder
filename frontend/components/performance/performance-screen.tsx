@@ -21,6 +21,7 @@ import { useRangeProjection } from './use-range-projection';
 import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import type { ChartTone } from '@/components/ui/chart';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
@@ -56,13 +57,13 @@ import {
  * browser. What the screen displays is always the window actually covered.
  */
 
-// Authentic Search Console colors: Blue for Clicks, Purple for Impressions,
-// Teal for CTR, Orange for Position. Shared by cards and chart lines.
-const METRIC_COLORS: Record<PerformanceMetricKey, string> = {
-  clicks: 'var(--color-chart-2)',
-  impressions: 'var(--color-chart-6)',
-  ctr: 'var(--color-chart-5)',
-  position: 'var(--color-chart-7)',
+// Each metric's chart position (its colour and texture), shared by the card
+// keys and the chart lines: `data-1` to `data-3`, then Position in `data-other`.
+const METRIC_TONES: Record<PerformanceMetricKey, ChartTone> = {
+  clicks: 1,
+  impressions: 2,
+  ctr: 3,
+  position: 4,
 };
 
 /** The drawn lines: one per selected metric, each with its comparison peer. */
@@ -74,7 +75,7 @@ function chartSeries(
   return METRIC_CARDS.filter((card) => active.has(card.key)).map((card) => ({
     key: card.key,
     label: card.label,
-    color: METRIC_COLORS[card.key],
+    tone: METRIC_TONES[card.key],
     selected: toChartPoints(selected.series[card.key]),
     comparison: comparison ? toChartPoints(comparison.series[card.key]) : null,
   }));
@@ -188,7 +189,7 @@ function SearchConsoleWorkspace({
   if (!available) return null;
   return (
     <Card className="overflow-hidden">
-      <CardHeader bordered>
+      <CardHeader>
         <MetricCards
           data-testid="metric-card-strip"
           className="min-w-0"
@@ -198,7 +199,7 @@ function SearchConsoleWorkspace({
           selectedLabel={selectedLabel}
           active={activeMetrics}
           onToggle={onToggleMetric}
-          colors={METRIC_COLORS}
+          tones={METRIC_TONES}
           loading={refreshing}
         />
       </CardHeader>

@@ -48,9 +48,9 @@ export function BackfillHistory({
 }: Readonly<{ workspaceId: string; connectionId: string }>) {
   const progressQuery = useBackfillProgressQuery(workspaceId, connectionId);
   const progress = progressQuery.data;
-  if (progressQuery.isError) return <span className="text-muted">Unavailable</span>;
-  if (!progress) return <span className="text-muted">Loading…</span>;
-  if (progress.state === 'not_started') return <span className="text-muted">Not started</span>;
+  if (progressQuery.isError) return <span className="text-ink-muted">Unavailable</span>;
+  if (!progress) return <span className="text-ink-muted">Loading…</span>;
+  if (progress.state === 'not_started') return <span className="text-ink-muted">Not started</span>;
   return <span className="truncate">{progressLabel(progress)}</span>;
 }
 

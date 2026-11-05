@@ -1,45 +1,52 @@
-import { textRole } from '@/components/ui/typography';
+'use client';
+
+import { useState } from 'react';
+
 import { cn, emailInitials } from '@/lib/utils';
 
 /**
- * Avatar — a person's initials on a neutral disc.
- *
- * The well fill with secondary ink (never accent — an avatar identifies, it
- * does not act), uppercase initials, a full circle.
- *
- * A placement, never a size: each context has one form.
- *
- *   - `inline`   (24px) — beside a name in a row, or inside the account
- *                         menu's 32px trigger.
- *   - `identity` (40px) — the identity row of a profile.
- *
- * The disc is decorative and hidden from assistive tech: the adjacent text (or
- * the control's own accessible name) names the person, so it is not read twice.
+ * A placement, never a size: `byline` (20px) inline in a byline, `row` (28px)
+ * in rows, menus and the account button, `profile` (40px) in a profile header.
  */
 const PLACEMENT = {
-  inline: textRole('caption', 'size-6'),
-  identity: textRole('itemTitle', 'size-10'),
+  byline: 'size-5 text-eyebrow tracking-normal',
+  row: 'size-7 text-caption',
+  profile: 'size-10 text-body-sm',
 } as const;
 
 export type AvatarPlacement = keyof typeof PLACEMENT;
 
+/**
+ * Avatar — a person's photo or initials in a circle: the first and last
+ * word's first letters in `ink` on `surface-sunken` with a `line` ring; a
+ * failed photo falls back to the initials. Never coloured per person, never
+ * a company (that is `BrandMark`). Decorative: the adjacent text or the
+ * control's name says who it is.
+ */
 export function Avatar({
   name,
-  placement = 'inline',
+  src,
+  placement = 'row',
 }: Readonly<{
   /** The person's name or email; the initials come from it. */
   name: string;
+  src?: string | null;
   placement?: AvatarPlacement;
 }>) {
+  const [failed, setFailed] = useState(false);
   return (
     <span
       aria-hidden
       className={cn(
-        'bg-well text-secondary flex shrink-0 items-center justify-center rounded-full uppercase',
+        'bg-surface-sunken text-ink grid shrink-0 place-items-center overflow-hidden rounded-full font-medium uppercase ring-1 ring-line ring-inset',
         PLACEMENT[placement],
       )}
     >
-      {emailInitials(name)}
+      {src && !failed ? (
+        <img src={src} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
+      ) : (
+        emailInitials(name)
+      )}
     </span>
   );
 }

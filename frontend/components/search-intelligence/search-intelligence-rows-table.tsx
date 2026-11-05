@@ -70,7 +70,7 @@ export function SearchIntelligenceRows({
       {columns.map((column) => (
         <TableCell key={column.field} numeric={column.numeric}>
           {column === columns[0] ? (
-            <TextLink asChild text="inherit">
+            <TextLink asChild text="body">
               <Pressable
                 type="button"
                 className="block max-w-full text-left"

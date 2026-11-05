@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SEARCH_MAX_DEPTH } from '@/lib/config/search-intelligence';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Drawer } from '@/components/ui/drawer';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -180,7 +180,7 @@ export function SearchIntelligenceReviewDrawer({
         />
       }
     >
-      {error ? <Alert>{error}</Alert> : null}
+      {error ? <Callout tone="negative">{error}</Callout> : null}
       {review ? (
         <ReviewSummary review={review} />
       ) : (
@@ -213,10 +213,10 @@ export function SearchIntelligenceReviewDrawer({
           />
           <HistoryScopeNotice scope={researchScope} selections={selections} />
           {comparisonOrderConflict(selections, researchScope, rankingOrder) ? (
-            <Alert>
+            <Callout tone="negative">
               Keyword comparisons on an exact host can be ordered by volume, cost per click or
               difficulty. Change the keyword order or the research scope in Advanced options.
-            </Alert>
+            </Callout>
           ) : null}
           <AdvancedOptions
             targets={readiness.owned_targets}

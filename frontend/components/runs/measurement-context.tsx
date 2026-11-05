@@ -37,15 +37,13 @@ export function MeasurementContext({
     <div className={className} data-measurement-context>
       <Inline as="span" className="flex-wrap">
         {aggregate ? (
-          <Badge variant="neutral" title={models.join(', ')}>
-            Multiple models ({models.length})
-          </Badge>
+          <Badge title={models.join(', ')}>Multiple models ({models.length})</Badge>
         ) : (
           <ModelBadge model={model ?? models[0] ?? null} />
         )}
 
         {retrieval === null || retrieval === undefined ? null : (
-          <Badge variant="neutral">{retrieval ? 'Retrieval on' : 'Retrieval off'}</Badge>
+          <Badge>{retrieval ? 'Retrieval on' : 'Retrieval off'}</Badge>
         )}
       </Inline>
     </div>
@@ -53,9 +51,9 @@ export function MeasurementContext({
 }
 
 function ModelBadge({ model }: Readonly<{ model: string | null }>) {
-  if (!model) return <Badge variant="neutral">Model not recorded</Badge>;
+  if (!model) return <Badge>Model not recorded</Badge>;
   return (
-    <Badge variant="neutral">
+    <Badge>
       <span className="tabular-nums">{model}</span>
     </Badge>
   );

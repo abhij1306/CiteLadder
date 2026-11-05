@@ -2,22 +2,19 @@ import type { ComponentPropsWithoutRef, ReactNode, Ref } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Icon } from '@/components/ui/icon';
-import { Pressable } from '@/components/ui/pressable';
 import { cn } from '@/lib/utils';
 
-/** Fields share a hairline boundary whose colour shows keyboard focus. */
-const inputClasses =
-  'focus-input h-[var(--control-height-md)] w-full rounded-[var(--radius-control)] border border-border-bold bg-input px-3 text-field text-foreground leading-[calc(var(--control-height-md)_-_2px)] transition-[border-color,background-color] placeholder:text-muted enabled:hover:border-muted aria-invalid:border-danger aria-invalid:enabled:hover:border-danger disabled:cursor-not-allowed disabled:bg-disabled disabled:text-muted disabled:border-border-subtle';
-
 /**
- * The roomier field of the public website's forms. The product field —
- * auth and onboarding included — is the 32px `md` everywhere; `lg` is the
- * website's rung only.
+ * The field box every text control shares (Input, SearchField, Select's
+ * trigger, ChipInput): `surface` with a soft 1px `line` edge and the faint
+ * `shadow-edge` smudge under it, never a dark hairline (decision D5),
+ * `radius-md`, `control-md` tall. Hover steps the edge to `line-strong`;
+ * focus turns it `focus` with a 3px `line` halo, and an invalid field turns
+ * it `negative` (globals.css `.focus-input`/`.focus-frame`, which win over hover).
  */
-const inputSizes = {
-  md: '',
-  lg: 'h-[var(--control-height-lg)] px-3 leading-[calc(var(--control-height-lg)_-_2px)]',
-} as const;
+export const FIELD_EDGE = 'bg-surface shadow-edge border border-line hover:border-line-strong';
+
+export const FIELD_BOX = `${FIELD_EDGE} h-[var(--control-md)] w-full rounded-md px-3 text-body-sm text-ink transition-[border-color,box-shadow] duration-[var(--motion-fast)]`;
 
 /**
  * A field fills its column (`fill`) unless its role is narrower: `quantity`
@@ -29,46 +26,45 @@ const inputWidths = {
   quantity: 'w-16 text-center tabular-nums',
 } as const;
 
-const adornedLineHeights = {
-  md: 'leading-[calc(var(--control-height-md)_-_2px)]',
-  lg: 'leading-[calc(var(--control-height-lg)_-_2px)]',
-} as const;
-
+/**
+ * Input — the single-line text field. One form: 36px. Leading and trailing
+ * content (a mono affix such as "https://", an icon, the end button) sits
+ * inside the same box.
+ */
 export function Input({
   className,
   containerClassName,
   startContent,
   endContent,
   endContentFlush = false,
-  size = 'md',
   width = 'fill',
   ref,
   ...props
 }: Readonly<
   Omit<ComponentPropsWithoutRef<'input'>, 'size' | 'width'> & {
-    size?: keyof typeof inputSizes;
     /** The field's width role; see `inputWidths`. */
     width?: keyof typeof inputWidths;
-    /** Leading content rendered inside the shared input frame. */
+    /** Leading content inside the field box. */
     startContent?: ReactNode;
-    /** Trailing content rendered inside the shared input frame. */
+    /** Trailing content inside the field box. */
     endContent?: ReactNode;
-    /** Let an interactive trailing target own most of the frame's end padding. */
+    /** Let an interactive trailing target own most of the box's end padding. */
     endContentFlush?: boolean;
-    /** Layout for the frame; `className` continues to target the native input. */
+    /** Layout for the box; `className` continues to target the native input. */
     containerClassName?: string;
     ref?: Ref<HTMLInputElement>;
   }
 >) {
   if (!startContent && !endContent) {
-    // A bare field is its own frame, so the frame's layout applies to it too:
-    // an adorned and a bare field given the same frame render the same height.
+    // A bare field is its own box, so an adorned and a bare field given the
+    // same layout render the same height.
     return (
       <input
         ref={ref}
         className={cn(
-          inputClasses,
-          inputSizes[size],
+          'focus-input',
+          FIELD_BOX,
+          'placeholder:text-ink-muted disabled:cursor-not-allowed disabled:opacity-45',
           inputWidths[width],
           containerClassName,
           className,
@@ -81,37 +77,40 @@ export function Input({
   return (
     <div
       className={cn(
-        'focus-frame bg-input has-[[aria-invalid=true]]:border-danger has-[[aria-invalid=true]]:has-[:enabled]:hover:border-danger flex h-[var(--control-height-md)] w-full items-center gap-2 rounded-[var(--radius-control)] px-3 border border-border-bold transition-[border-color,background-color] has-[:enabled]:hover:border-muted',
-        size === 'lg' && 'h-[var(--control-height-lg)] px-3',
-        props.disabled && 'cursor-not-allowed bg-disabled text-muted border-border-subtle',
+        'focus-frame flex items-center gap-2',
+        FIELD_BOX,
+        props.disabled && 'cursor-not-allowed opacity-45',
         endContentFlush && 'pe-1',
         containerClassName,
       )}
     >
       {startContent ? (
-        <span className="text-muted flex shrink-0 items-center">{startContent}</span>
+        <span className="text-ink-muted text-data flex shrink-0 items-center font-mono whitespace-nowrap">
+          {startContent}
+        </span>
       ) : null}
       <input
         ref={ref}
         className={cn(
-          'placeholder:text-muted min-w-0 flex-1 self-stretch bg-transparent text-field text-foreground disabled:cursor-not-allowed disabled:text-muted',
-          // Match the frame's control height so selections fill the pill.
-          adornedLineHeights[size],
+          'placeholder:text-ink-muted h-full min-w-0 flex-1 bg-transparent text-body-sm text-ink disabled:cursor-not-allowed',
           className,
         )}
         {...props}
       />
-      {endContent ? <span className="flex shrink-0 items-center">{endContent}</span> : null}
+      {endContent ? (
+        <span className="text-ink-muted text-data flex shrink-0 items-center font-mono whitespace-nowrap">
+          {endContent}
+        </span>
+      ) : null}
     </div>
   );
 }
 
 /**
  * FieldEndButton — the one icon target at a field's end (clear a search,
- * reveal a password): the field's height less its 2px inset, the control
- * radius, the neutral hover and pressed tints and the 16px `Icon`. Pass it as
- * an `Input`'s `endContent` with `endContentFlush`, so the target owns the
- * frame's end padding. `label` is its accessible name.
+ * reveal a password): SearchField's clear face, a 20px `radius-xs` square
+ * with the 16px glyph, `ink-muted` until hovered, its focus ring 1px out.
+ * Pass it as an `Input`'s `endContent`. `label` is its accessible name.
  */
 export function FieldEndButton({
   icon,
@@ -125,14 +124,15 @@ export function FieldEndButton({
   disabled?: boolean;
 }>) {
   return (
-    <Pressable
+    <button
+      type="button"
       data-field-end-target=""
-      className="text-muted enabled:hover:bg-hover enabled:hover:text-foreground enabled:active:bg-active grid size-[var(--field-end-target)] place-items-center"
+      className="focus-ring text-ink-muted enabled:hover:bg-surface-sunken enabled:hover:text-ink grid size-5 shrink-0 place-items-center rounded-xs transition-colors focus-visible:outline-offset-1"
       disabled={disabled}
       onClick={onClick}
       aria-label={label}
     >
       <Icon icon={icon} />
-    </Pressable>
+    </button>
   );
 }

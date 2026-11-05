@@ -3,80 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <meta name="robots" content="noindex" />
-    <!-- Apply a stored dark preference before first paint so a dark reader
-        never sees a light frame. Light is the default. The key must match
-        THEME_STORAGE_KEY in lib/theme/theme.ts, which owns the preference. -->
+    <!-- Apply the shared light/dark/system choice before first paint so a dark
+        reader never sees a light frame. The cookie name must match
+        THEME_COOKIE in lib/theme/theme.ts, which owns the preference. -->
     <script src="/theme-preference.js"></script>
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <title>CiteLadder</title>
     <style>
-      /* Switzer, TASA Orbiter and the figure face are used when the reader has
-         them installed; otherwise these metric-matched Arial faces stand in,
-         so the layout is the same either way. Every face is capped at 500. */
-      /* The figure face sets numbers only: digits and the marks that sit
-         inside a number (. , : % + - −). Letters and spaces fall through to
-         the text face, so a figure's unit or a "Not measured" in a figure cell
-         stays in the text face, and the line box keeps the text face's metrics
-         (the first family that covers the space). Keep this range in step
-         with the fallback below and the MCP app. */
+      /* Cal Sans, Geist and Geist Mono are used when the reader has them
+         installed; otherwise these metric-matched Arial faces stand in, so the
+         layout is the same either way. The vertical overrides carry each
+         face's hhea metrics divided by size-adjust. */
       @font-face {
-        font-family: 'JetBrains Mono Variable';
-        src: local('JetBrains Mono'), local('JetBrainsMono-Regular');
-        font-weight: 300 500;
-        font-style: normal;
-        unicode-range: U+0025, U+002B-002E, U+0030-003A, U+2212;
-      }
-
-      /* Match Arial's x-height to Switzer's. The vertical overrides carry
-         Switzer's hhea metrics divided by size-adjust. */
-      @font-face {
-        font-family: 'Switzer Fallback';
+        font-family: 'Cal Sans Fallback';
         src: local('Arial');
-        font-weight: 100 500;
-        size-adjust: 102.31%;
-        ascent-override: 95.79%;
-        descent-override: 24.44%;
-        line-gap-override: 8.8%;
-      }
-
-      /* Match Arial's x-height to TASA Orbiter's. The vertical overrides
-         carry TASA Orbiter's hhea metrics divided by size-adjust. */
-      @font-face {
-        font-family: 'TASA Orbiter Fallback';
-        src: local('Arial');
-        font-weight: 100 500;
-        size-adjust: 96.34%;
-        ascent-override: 97.57%;
-        descent-override: 26.99%;
+        font-weight: 400;
+        size-adjust: 100.19%;
+        ascent-override: 99.81%;
+        descent-override: 29.94%;
         line-gap-override: 0%;
       }
-
-      /* Scale Arial's tabular digits (0.556em) to JetBrains Mono's 0.600em
-         advance, so a figure column keeps its width either way. Vertical
-         overrides use JetBrains Mono's 1020/-300/0 hhea metrics (1000 UPM),
-         divided by size-adjust. */
       @font-face {
-        font-family: 'JetBrains Mono Fallback';
+        font-family: 'Geist Fallback';
         src: local('Arial');
         font-weight: 100 500;
-        size-adjust: 107.91%;
-        ascent-override: 94.52%;
-        descent-override: 27.8%;
+        size-adjust: 102.12%;
+        ascent-override: 98.41%;
+        descent-override: 28.89%;
         line-gap-override: 0%;
-        unicode-range: U+0025, U+002B-002E, U+0030-003A, U+2212;
       }
-
+      @font-face {
+        font-family: 'Geist Mono Fallback';
+        src: local('Courier New');
+        font-weight: 100 500;
+        size-adjust: 100%;
+        ascent-override: 100.5%;
+        descent-override: 29.5%;
+        line-gap-override: 0%;
+      }
       :root {
         font-synthesis-weight: none;
-        /* Switzer carries body, UI and data; TASA Orbiter carries display
-           headings; the figure face sets the digits of figures in data roles
-           (`--font-numeric` in globals.css), so a figure column keeps one
-           digit width. */
-        --font-text: 'Switzer Variable', 'Switzer', 'Switzer Fallback', Arial;
-        --font-heading: 'TASA Orbiter Variable', 'TASA Orbiter', 'TASA Orbiter Fallback', Arial;
-        --font-figure: 'JetBrains Mono Variable', 'JetBrains Mono Fallback';
+        /* Cal Sans sets the page title and display numbers, Geist everything
+           people read and click, Geist Mono eyebrows, dates and code
+           (globals.css reads these as --font-display, --font-sans and
+           --font-mono). */
+        --font-face-display: 'Cal Sans', 'Cal Sans Fallback';
+        --font-face-sans: 'Geist Variable', 'Geist', 'Geist Fallback';
+        --font-face-mono: 'Geist Mono Variable', 'Geist Mono', 'Geist Mono Fallback';
       }
     </style>
   </head>

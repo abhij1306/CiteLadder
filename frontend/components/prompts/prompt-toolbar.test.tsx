@@ -60,8 +60,8 @@ describe('promptFilterControls', () => {
 
     render(<Harness />);
     // jsdom drops the space the browser reads between label and count.
-    const archived = screen.getByRole('radio', { name: /^Archived\s*3$/ });
-    const active = screen.getByRole('radio', { name: /^Active\s*12$/ });
+    const archived = screen.getByRole('radio', { name: /^Archived\s*\(3\)$/ });
+    const active = screen.getByRole('radio', { name: /^Active\s*\(12\)$/ });
     expect(active).toBeChecked();
     await user.click(archived);
     expect(archived).toBeChecked();

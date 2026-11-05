@@ -6,7 +6,7 @@ import { Sparkles } from 'lucide-react';
 import type { NewChatInput } from '@/components/agent/use-chat-turns';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { cardClasses } from '@/components/ui/card-variants';
+import { cardClasses } from '@/components/ui/card';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { actionsQueries } from '@/lib/api/actions';
 import { AGENT_BRIEFING_ACTIONS } from '@/lib/config/agent';
@@ -47,6 +47,7 @@ export function BriefingCard({
         description={`${basis} Runs once when you ask; nothing is scheduled.`}
         actions={
           <Button
+            variant="primary"
             disabled={disabled || pending || actions.isPending}
             onClick={() =>
               onStart({

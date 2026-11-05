@@ -1,8 +1,7 @@
 'use client';
 
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { scoreTextClass } from '@/components/ui/score-band';
-import { TableCell, TableRow } from '@/components/ui/table';
+import { mutedWhenMissing, TableCell, TableRow } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ICONS } from '@/lib/icons';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
@@ -67,17 +66,17 @@ export function PageKindScores({
             <TableCell className="whitespace-nowrap">
               <PageKindBadge pageKind={row.page_kind} />
             </TableCell>
-            <TableCell numeric className="text-secondary">
+            <TableCell numeric className="text-ink-secondary">
               {row.analyzed_count}
             </TableCell>
-            <TableCell numeric className={scoreTextClass(row.web_fundamentals_score)}>
+            <TableCell numeric className={mutedWhenMissing(row.web_fundamentals_score)}>
               <MeasurementValue
                 score={row.web_fundamentals_score}
                 coverage={row.web_fundamentals_coverage}
                 state={row.web_fundamentals_state}
               />
             </TableCell>
-            <TableCell numeric className={scoreTextClass(row.aeo_readiness_score)}>
+            <TableCell numeric className={mutedWhenMissing(row.aeo_readiness_score)}>
               <MeasurementValue
                 score={row.aeo_readiness_score}
                 coverage={row.aeo_measurement_coverage}

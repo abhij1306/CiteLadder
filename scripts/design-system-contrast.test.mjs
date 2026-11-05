@@ -10,40 +10,38 @@ import {
 /**
  * A complete palette that passes every pair. Every ink the matrix reads is
  * `ink` and every surface `paper`, so a new matrix row needs no fixture edit;
- * the marks, chart series and state tints the other checks measure are set
+ * the labels on fills and the marks the separation check measures are set
  * explicitly.
  */
-function palette(ink, paper, marks, charts) {
+function palette({ ink, paper, positive, negative, series }) {
   const { inks, surfaces } = contrastRoles();
   return {
     ...Object.fromEntries(surfaces.map((token) => [token, paper])),
     ...Object.fromEntries(inks.map((token) => [token, ink])),
-    '--color-state-ink': ink,
-    '--color-hover': 'color-mix(in srgb, var(--color-panel), var(--color-state-ink) 4%)',
-    '--color-selected': 'color-mix(in srgb, var(--color-panel), var(--color-state-ink) 8%)',
-    '--color-active': 'color-mix(in srgb, var(--color-panel), var(--color-state-ink) 12%)',
-    ...Object.fromEntries(
-      ['success', 'warning', 'danger', 'info', 'neutral'].map((status, index) => [
-        `--color-${status}`,
-        marks[index],
-      ]),
-    ),
-    ...Object.fromEntries(charts.map((value, index) => [`--color-chart-${index + 1}`, value])),
+    // Fills carry the other end of the scale.
+    '--color-ink-hover': ink,
+    '--color-on-ink': paper,
+    '--color-on-accent': paper,
+    '--color-positive': positive,
+    '--color-negative': negative,
+    ...Object.fromEntries(series.map((value, index) => [`--color-data-${index + 1}`, value])),
   };
 }
 
-const LIGHT = palette(
-  '#000000',
-  '#ffffff',
-  ['#000000', '#303030', '#5e5e5e', '#919191', '#c6c6c6'],
-  ['#000000', '#767676', '#000000', '#767676', '#000000', '#767676', '#000000', '#767676'],
-);
-const DARK = palette(
-  '#ffffff',
-  '#000000',
-  ['#ffffff', '#c6c6c6', '#919191', '#5e5e5e', '#303030'],
-  ['#ffffff', '#777777', '#ffffff', '#777777', '#ffffff', '#777777', '#ffffff', '#777777'],
-);
+const LIGHT = palette({
+  ink: '#000000',
+  paper: '#ffffff',
+  positive: '#000000',
+  negative: '#5e5e5e',
+  series: ['#000000', '#595959', '#949494'],
+});
+const DARK = palette({
+  ink: '#ffffff',
+  paper: '#000000',
+  positive: '#ffffff',
+  negative: '#949494',
+  series: ['#ffffff', '#a0a0a0', '#5f5f5f'],
+});
 
 const block = (selector, values) =>
   `${selector} { ${Object.entries(values)
@@ -60,11 +58,11 @@ function css({ light = {}, dark = {}, extra = '' } = {}) {
 
 test('a scope keeps an unterminated last declaration and skips nested blocks', () => {
   const declarations = paletteDeclarations(
-    ':root { --color-panel: #ffffff; @media (min-width: 1px) { --color-nested: #000000; } --color-muted: #555555 }',
+    ':root { --color-paper: #ffffff; @media (min-width: 1px) { --color-nested: #000000; } --color-ink-muted: #555555 }',
     ':root',
   );
-  assert.equal(declarations.get('--color-panel'), '#ffffff');
-  assert.equal(declarations.get('--color-muted'), '#555555');
+  assert.equal(declarations.get('--color-paper'), '#ffffff');
+  assert.equal(declarations.get('--color-ink-muted'), '#555555');
   assert.equal(declarations.has('--color-nested'), false);
 });
 
@@ -72,40 +70,52 @@ test('a palette that meets every pair in every scope passes', () => {
   assert.deepEqual(paletteViolations(css()), []);
 });
 
-test('a translucent status background is composited onto the panel before measuring', () => {
+test('a dark rebinding fails the dark scope only', () => {
+  const violations = paletteViolations(css({ dark: { '--color-ink-muted': '#111111' } }));
+  assert.ok(violations.length > 0);
+  assert.ok(violations.every((violation) => violation.includes("data-theme='dark'")));
+  assert.ok(
+    violations.some((violation) => violation.includes('--color-ink-muted on --color-paper')),
+  );
+});
+
+test('a translucent soft is composited onto the surface before measuring', () => {
   const violations = paletteViolations(
-    css({ light: { '--color-success-bg': 'rgb(0 0 0 / 90%)' } }),
+    css({ light: { '--color-positive-soft': 'rgb(0 0 0 / 90%)' } }),
   );
   assert.ok(
     violations.some((violation) =>
-      violation.includes('--color-success-text on --color-success-bg'),
+      violation.includes('--color-positive on --color-positive-soft is 1.'),
     ),
   );
 });
 
-test('light charts must hold 3:1 on the panel', () => {
-  const violations = paletteViolations(css({ light: { '--color-chart-3': '#eeeeee' } }));
-  assert.ok(violations.some((violation) => violation.includes('--color-chart-3 on --color-panel')));
+test('a light chart series must hold 3:1 on every ground', () => {
+  const violations = paletteViolations(css({ light: { '--color-data-3': '#eeeeee' } }));
+  assert.ok(violations.some((violation) => violation.includes('--color-data-3 on --color-paper')));
+  assert.ok(
+    violations.some((violation) => violation.includes('--color-data-3 on --color-surface-sunken')),
+  );
 });
 
-test('outcome marks too close in lightness and under red-green loss fail', () => {
-  const violations = paletteViolations(css({ dark: { '--color-warning': '#f4f4f4' } }));
+test('positive and negative too close in lightness and under red-green loss fail', () => {
+  const violations = paletteViolations(css({ dark: { '--color-negative': '#f4f4f4' } }));
   assert.ok(
     violations.some(
       (violation) =>
         violation.includes("data-theme='dark'") &&
-        violation.includes('outcome marks --color-success / --color-warning'),
+        violation.includes('positive and negative --color-positive / --color-negative'),
     ),
   );
   // A hue difference that survives both deficiencies separates marks of
   // equal lightness: blue against amber.
   const hued = paletteViolations(
-    css({ light: { '--color-success': '#3b82f6', '--color-warning': '#b98a00' } }),
+    css({ light: { '--color-positive': '#3b82f6', '--color-negative': '#b98a00' } }),
   );
-  assert.ok(!hued.some((violation) => violation.includes('--color-success / --color-warning')));
+  assert.ok(!hued.some((violation) => violation.includes('--color-positive / --color-negative')));
 });
 
-test('state tints must step away from the panel in order', () => {
-  const violations = paletteViolations(css({ light: { '--color-selected': '#ffffff' } }));
-  assert.ok(violations.some((violation) => violation.includes('--color-selected must be darker')));
+test('a stylesheet without a dark mapping fails', () => {
+  const violations = paletteViolations(block('@theme', LIGHT));
+  assert.ok(violations.includes('apps/app/src/globals.css: dark theme token mapping is missing'));
 });

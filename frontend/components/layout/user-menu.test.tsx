@@ -62,7 +62,9 @@ describe('UserMenu', () => {
     const user = userEvent.setup();
     renderMenu(['sidebar', 'compact']);
 
-    const compactTrigger = screen.getByRole('button', { name: /account menu/i });
+    const triggers = screen.getAllByRole('button', { name: /account menu/i });
+    expect(triggers).toHaveLength(2);
+    const compactTrigger = triggers[1]!;
     await user.click(compactTrigger);
     expect(await screen.findByRole('menu')).toBeVisible();
     await user.keyboard('{Escape}');

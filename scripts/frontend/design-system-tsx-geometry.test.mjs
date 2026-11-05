@@ -15,10 +15,9 @@ test('arbitrary radii are raw, including inside cva recipes and constants', () =
     'tsx-radius',
   ]);
   assert.deepEqual(rules('export const frame = "md:rounded-t-[0.75rem]";'), ['tsx-radius']);
-  assert.deepEqual(
-    rules('<div className="rounded-[var(--radius-card)] rounded-[inherit] rounded-full" />'),
-    [],
-  );
+  // A var() is still an arbitrary value: radius is the rounded-* scale.
+  assert.deepEqual(rules('<div className="rounded-[var(--radius-lg)]" />'), ['tsx-radius']);
+  assert.deepEqual(rules('<div className="rounded-lg rounded-[inherit] rounded-full" />'), []);
 });
 
 test('literal dimensions belong to components/ui owners', () => {
@@ -80,19 +79,20 @@ test('a feature folder carries no geometry, sizes or breakpoints of its own', ()
   );
 });
 
-test('the product has one breakpoint, desktop:, in ui and layout too', () => {
-  const tokens = 'sm:grid-cols-2 max-[700px]:hidden lg:[&>li]:block desktop:grid-cols-2';
+test('the product breakpoints are desktop: and shell:, in ui and layout too', () => {
+  const tokens =
+    'sm:grid-cols-2 max-[700px]:hidden lg:[&>li]:block desktop:grid-cols-2 shell:grid-cols-4';
   assert.deepEqual(layering(`<div className="${tokens}" />`, 'components/ui/stat.tsx'), [
-    "components/ui/stat.tsx:1: sm:grid-cols-2 — the product's one breakpoint is desktop: [layer-breakpoint]",
-    "components/ui/stat.tsx:1: max-[700px]:hidden — the product's one breakpoint is desktop: [layer-breakpoint]",
-    "components/ui/stat.tsx:1: lg:[&>li]:block — the product's one breakpoint is desktop: [layer-breakpoint]",
+    "components/ui/stat.tsx:1: sm:grid-cols-2 — the product's breakpoints are desktop: and shell: [layer-breakpoint]",
+    "components/ui/stat.tsx:1: max-[700px]:hidden — the product's breakpoints are desktop: and shell: [layer-breakpoint]",
+    "components/ui/stat.tsx:1: lg:[&>li]:block — the product's breakpoints are desktop: and shell: [layer-breakpoint]",
   ]);
 });
 
 test('owners keep their geometry and public surfaces keep their ladder', () => {
   const source = '<div className="gap-2 p-4 md:grid-cols-2" />';
   assert.deepEqual(layering(source, 'components/ui/card.tsx'), [
-    "components/ui/card.tsx:1: md:grid-cols-2 — the product's one breakpoint is desktop: [layer-breakpoint]",
+    "components/ui/card.tsx:1: md:grid-cols-2 — the product's breakpoints are desktop: and shell: [layer-breakpoint]",
   ]);
   assert.deepEqual(layering(source, 'components/marketing/hero.tsx'), []);
   assert.deepEqual(layering(source, 'components/auth/sign-in.tsx'), [

@@ -1,8 +1,4 @@
 {
   "format_version": 1,
-  "files": {
-    "components/layout/app-shell.tsx": {
-      "tsx-size": 1
-    }
-  }
+  "files": {}
 }

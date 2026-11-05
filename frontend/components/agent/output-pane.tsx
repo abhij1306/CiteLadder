@@ -157,7 +157,7 @@ export function OutputPane({
 function PromptBuilderHandoff({ kind }: Readonly<{ kind: AgentOutput['kind'] }>) {
   if (kind !== 'prompt_plan') return null;
   return (
-    <Button asChild className="justify-self-start">
+    <Button asChild variant="primary" className="justify-self-start">
       <ProjectLink href={PROMPTS_GENERATE_HREF}>Open Prompt Builder</ProjectLink>
     </Button>
   );

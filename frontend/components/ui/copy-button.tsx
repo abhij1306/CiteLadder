@@ -42,7 +42,7 @@ export function CopyButton({
     try {
       await navigator.clipboard.writeText(value);
       setStatus('copied');
-      notify(copiedLabel);
+      notify(copiedLabel, undefined, { tone: 'positive' });
       resetTimer.current = setTimeout(() => setStatus('idle'), 1800);
     } catch {
       setStatus('error');

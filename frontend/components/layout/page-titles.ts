@@ -1,6 +1,6 @@
 /**
- * Route → page title map, and the resolver the shell's top bar uses; also each
- * route's content measure.
+ * Route → page title map, and the resolver the page header and the shell's
+ * route announcement use.
  *
  * Exact patterns first; everything else is a longest-prefix match. Titles live
  * here (not on the pages themselves) so there is a single title surface for the
@@ -26,7 +26,7 @@ const PAGE_TITLES: ReadonlyArray<readonly [prefix: string, title: string]> = [
   ['/projects', 'Overview'],
   ['/site', 'Website'],
   ['/demand', 'Search Demand'],
-  ['/search-intelligence', 'Search Intelligence'],
+  ['/search-intelligence', 'Keyword Research'],
   ['/issues', 'Issues'],
   ['/settings', 'Settings'],
 ];
@@ -37,26 +37,8 @@ const EXACT_OVERRIDES: ReadonlyArray<readonly [pattern: RegExp, title: string]> 
   [/^\/runs\/[^/]+$/, 'Run detail'],
 ];
 
-/**
- * Routes read at the narrower workflow measure (a conversation, a form);
- * every other route is analytical. A property of the route rather than of
- * whichever component happens to draw it, so the route's loading frame and its
- * loaded page agree on the content width.
- */
-const WORKFLOW_PREFIXES = ['/agent', '/settings'] as const;
-const ANALYTICAL_PREFIXES = ['/agent/actions'] as const;
-
-export type PageMeasure = 'analytical' | 'workflow';
-
 function matchesPrefix(pathname: string, prefix: string): boolean {
   return pathname === prefix || pathname.startsWith(`${prefix}/`);
-}
-
-export function resolveMeasure(pathname: string): PageMeasure {
-  if (ANALYTICAL_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))) return 'analytical';
-  return WORKFLOW_PREFIXES.some((prefix) => matchesPrefix(pathname, prefix))
-    ? 'workflow'
-    : 'analytical';
 }
 
 const FALLBACK_TITLE = 'CiteLadder';

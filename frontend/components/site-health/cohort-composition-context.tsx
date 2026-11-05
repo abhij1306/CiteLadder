@@ -22,8 +22,8 @@ export function CohortCompositionContext({
 
   return (
     <Stack gap="item" className={panelClasses({ tone: 'tonal' }, 'type-caption')}>
-      <p className={textRole('emphasis', 'text-foreground')}>Scored cohort composition changed.</p>
-      <p className="text-secondary">{clauses.join(' ')}</p>
+      <p className={textRole('emphasis', 'text-ink')}>Scored cohort composition changed.</p>
+      <p className="text-ink-secondary">{clauses.join(' ')}</p>
       <Stack as="dl" gap="item">
         <CompositionRow label="Previous counts" counts={composition.previous_page_count_by_kind} />
         <CompositionRow label="Current counts" counts={composition.current_page_count_by_kind} />
@@ -44,8 +44,8 @@ function CompositionRow({
   const rows = Object.entries(counts).sort(([left], [right]) => left.localeCompare(right));
   return (
     <Stack gap="tight">
-      <dt className="text-muted">{label}</dt>
-      <dd className="text-secondary tabular-nums">
+      <dt className="text-ink-muted">{label}</dt>
+      <dd className="text-ink-secondary tabular-nums">
         {rows.length === 0
           ? 'No scored page kinds'
           : rows.map(([kind, count]) => `${pageKindLabel(kind)} ${count}`).join(' · ')}

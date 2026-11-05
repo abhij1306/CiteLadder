@@ -595,9 +595,9 @@ describe('IssuesCatalog', () => {
           element.textContent === '47 issues · 94 occurrences · 50 pages',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /^Issues\s*47$/ })).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Issues\s*\(47\)$/ })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('radio', { name: /^Advisories\s*2$/ }));
+    await user.click(screen.getByRole('radio', { name: /^Advisories\s*\(2\)$/ }));
     expect(await screen.findAllByText('Title length outside recommended band')).not.toHaveLength(0);
     expect(screen.getAllByText('Advisory')).toHaveLength(2);
     expect(

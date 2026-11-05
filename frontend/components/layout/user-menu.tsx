@@ -4,19 +4,21 @@ import { Plug } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
+import { SidebarIdentButton, SidebarRowTooltip } from '@/components/ui/app-shell';
 import {
-  Dropdown,
-  DropdownContent,
-  DropdownItem,
-  DropdownLabel,
-  DropdownSeparator,
-  DropdownTrigger,
-} from '@/components/ui/dropdown';
+  Menu,
+  MenuContent,
+  MenuControlRow,
+  MenuLabel,
+  MenuLinkItem,
+  MenuSeparator,
+  MenuTrigger,
+} from '@/components/ui/menu';
+import { ThemeSwitch } from '@/components/ui/theme-switch';
 import { useSession } from '@/lib/auth/session-guard';
 import { ICONS } from '@/lib/icons';
 import { workspaceDestination } from '@/lib/navigation/project-destination';
 import { useProjectContext } from '@/lib/project/project-context';
-import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
 
 const SettingsIcon = ICONS.settings;
@@ -27,7 +29,7 @@ type UserMenuState = {
   setOpen: (presenter: UserMenuPresenter, open: boolean) => void;
 };
 
-type UserMenuPresenter = 'sidebar' | 'compact' | 'header';
+type UserMenuPresenter = 'sidebar' | 'compact';
 
 const UserMenuContext = createContext<UserMenuState | null>(null);
 
@@ -40,7 +42,7 @@ function useUserMenu() {
 function UserMenuContent({ presenter }: Readonly<{ presenter: UserMenuPresenter }>) {
   const { email } = useUserMenu();
   const { activeWorkspaceId } = useProjectContext();
-  const compact = presenter !== 'sidebar';
+  const sidebar = presenter === 'sidebar';
   const settingsHref = activeWorkspaceId
     ? workspaceDestination('/settings', null, activeWorkspaceId)
     : '/settings';
@@ -52,54 +54,62 @@ function UserMenuContent({ presenter }: Readonly<{ presenter: UserMenuPresenter 
       )
     : '/settings?tab=connections';
   return (
-    <DropdownContent
-      align={compact ? 'end' : 'start'}
-      side={compact ? 'bottom' : 'top'}
-      width="panel"
-    >
-      <DropdownLabel>{email}</DropdownLabel>
-      <DropdownSeparator />
-      <DropdownItem asChild>
+    <MenuContent align={sidebar ? 'start' : 'end'} side={sidebar ? 'top' : 'bottom'}>
+      <MenuLabel>{email}</MenuLabel>
+      <MenuSeparator />
+      <MenuLinkItem>
         <Link to={settingsHref}>
           <SettingsIcon className="size-4 shrink-0" aria-hidden />
           <span>Settings</span>
         </Link>
-      </DropdownItem>
-      <DropdownItem asChild>
+      </MenuLinkItem>
+      <MenuLinkItem>
         <Link to={connectHref}>
           <Plug className="size-4 shrink-0" aria-hidden />
           <span>Connect AI assistants</span>
         </Link>
-      </DropdownItem>
-    </DropdownContent>
+      </MenuLinkItem>
+      <MenuSeparator />
+      <MenuControlRow label="Theme">
+        <ThemeSwitch tooltipSide="top" />
+      </MenuControlRow>
+    </MenuContent>
   );
 }
 
-export function UserMenuTrigger({
-  className,
-  presenter,
-}: Readonly<{ className?: string; presenter: UserMenuPresenter }>) {
+/**
+ * The account trigger. In the sidebar it is the system's identity button
+ * (the email over the workspace, an avatar in the rail); in a signed-in flow
+ * bar it is the avatar alone.
+ */
+export function UserMenuTrigger({ presenter }: Readonly<{ presenter: UserMenuPresenter }>) {
   const { activePresenter, email, setOpen } = useUserMenu();
+  const { activeWorkspace } = useProjectContext();
   const open = activePresenter === presenter;
-  const compact = presenter !== 'sidebar';
+  const label = `Account menu for ${email}`;
   return (
-    <div className={cn('flex items-center gap-1', className)}>
-      <Dropdown open={open} onOpenChange={(next) => setOpen(presenter, next)}>
-        <DropdownTrigger
-          aria-label={compact ? `Account menu for ${email}` : undefined}
-          className={cn(
-            'focus-ring hover:bg-hover active:bg-active data-[state=open]:bg-selected hover:text-foreground flex min-w-0 items-center gap-2 rounded-[var(--radius-control)] text-left transition-colors',
-            compact
-              ? 'size-[var(--control-height-md)] shrink-0 justify-center'
-              : 'h-[var(--control-height-md)] flex-1 px-2',
-          )}
+    <Menu open={open} onOpenChange={(next) => setOpen(presenter, next)}>
+      {presenter === 'sidebar' ? (
+        <SidebarRowTooltip label={email}>
+          <MenuTrigger asChild>
+            <SidebarIdentButton
+              aria-label={label}
+              title={email}
+              meta={activeWorkspace?.name}
+              lead={<Avatar name={email} />}
+            />
+          </MenuTrigger>
+        </SidebarRowTooltip>
+      ) : (
+        <MenuTrigger
+          aria-label={label}
+          className="focus-ring hover:bg-surface-sunken data-[state=open]:bg-surface-sunken flex size-[var(--control-md)] shrink-0 items-center justify-center rounded-md transition-colors"
         >
           <Avatar name={email} />
-          {compact ? null : <span className="type-body min-w-0 flex-1 truncate">{email}</span>}
-        </DropdownTrigger>
-        {open ? <UserMenuContent presenter={presenter} /> : null}
-      </Dropdown>
-    </div>
+        </MenuTrigger>
+      )}
+      {open ? <UserMenuContent presenter={presenter} /> : null}
+    </Menu>
   );
 }
 

@@ -61,7 +61,7 @@ const FAMILY_LABEL: Record<string, string> = {
   ai_visibility: 'AI Visibility',
   sources: 'Sources',
   search_console: 'Search Console',
-  search_intelligence: 'Search Intelligence',
+  search_intelligence: 'Keyword Research',
   site_health: 'Site Health',
   link_graph: 'Link graph',
   site_changes: 'Site changes',
@@ -131,8 +131,8 @@ const CHECK_REASON: Record<string, string> = {
   no_traffic_snapshot: 'The Search Console window is no longer stored.',
   window_overlaps_declaration: 'That window includes the go-live day or earlier.',
   no_search_console_row: 'Search Console reported no row for this page or query.',
-  not_ranking_yet: 'A later Search Intelligence analysis does not show you ranking yet.',
-  still_missing: 'A later Search Intelligence analysis still lists this as a gap.',
+  not_ranking_yet: 'A later Keyword Research analysis does not show you ranking yet.',
+  still_missing: 'A later Keyword Research analysis still lists this as a gap.',
   provider_serp_predates_change:
     'DataForSEO last checked this search before the go-live date. A later analysis can answer it.',
 };

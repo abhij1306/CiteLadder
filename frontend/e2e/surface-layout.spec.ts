@@ -15,7 +15,11 @@ const overview = {
     industry: 'Software',
     description: 'Analytics for growth teams',
     positioning: 'Evidence-led analytics',
-    products_services: ['Analytics'],
+    // A long offering must cut inside its chip, never widen the page.
+    products_services: [
+      'AI Visibility tracking (brand mentions, position, sentiment and competitors across AI answers and search engines)',
+      'Analytics',
+    ],
     target_audience: 'Growth teams',
     competitors: [],
   },
@@ -77,7 +81,7 @@ const catalog = {
 
 test('working surfaces preserve their actions without viewport overflow', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  for (const width of [1440, 1024, 390]) {
+  for (const width of [1440, 1024, 982, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const route of ['/projects', '/onboarding', '/agent']) {
       await stubAuthedShell(
@@ -96,10 +100,8 @@ test('working surfaces preserve their actions without viewport overflow', async 
         await expect(page.getByText('No open Action — watch the trend')).toBeVisible();
       if (route === '/onboarding') {
         await expect(page.getByLabel(/^Brand name/)).toBeVisible();
-        const logo = await page.getByRole('link', { name: 'CiteLadder projects' }).boundingBox();
-        const progress = await page
-          .getByRole('navigation', { name: 'Setup progress' })
-          .boundingBox();
+        const logo = await page.getByRole('link', { name: 'CiteLadder home' }).boundingBox();
+        const progress = await page.getByRole('region', { name: 'Setup progress' }).boundingBox();
         expect(
           logo &&
             progress &&
@@ -228,7 +230,11 @@ test('invalid field edges survive keyboard focus in both themes', async ({ page 
   const field = page.getByLabel(/^Brand name/);
   await expect(field).toBeVisible();
   for (const theme of ['light', 'dark']) {
-    if (theme === 'dark') await page.getByRole('button', { name: /Switch to dark theme/ }).click();
+    if (theme === 'dark')
+      await page
+        .getByRole('radiogroup', { name: 'Theme' })
+        .getByRole('radio', { name: 'Dark' })
+        .click();
     await field.evaluate((node) => {
       node.removeAttribute('aria-invalid');
       node.blur();
@@ -252,17 +258,13 @@ test('invalid field edges survive keyboard focus in both themes', async ({ page 
     const focused = await field.evaluate(async (node) => {
       await Promise.all(node.getAnimations().map((animation) => animation.finished));
       const style = getComputedStyle(node);
-      return {
-        edge: style.borderColor,
-        ring: style.outlineColor,
-        offset: Number.parseFloat(style.outlineOffset),
-      };
+      return { edge: style.borderColor, outline: style.outlineStyle, halo: style.boxShadow };
     });
-    // The danger edge survives focus, and the focus ring inside it takes the
-    // same danger colour, drawn inside the field so its box never grows.
+    // The danger edge survives focus. Focus adds the field's halo, a shadow
+    // that never grows its box, and no outline ring of its own.
     expect(focused.edge).toBe(edge);
-    expect(focused.ring).toBe(edge);
-    expect(focused.offset).toBeLessThan(0);
+    expect(focused.outline).toBe('none');
+    expect(focused.halo).not.toBe('none');
   }
   await page.emulateMedia({ forcedColors: 'active' });
   await field.focus();
@@ -279,13 +281,15 @@ test('Agent text entry paints one focus boundary', async ({ page }) => {
   const inputEdge = await prompt.evaluate((node) => getComputedStyle(node).borderColor);
   await prompt.click();
   await expect(prompt).toBeFocused();
+  // The composer is the box: its frame takes the focus edge and the halo,
+  // like any framed field.
   await expect(async () => {
-    expect(await prompt.evaluate((node) => getComputedStyle(node).borderColor)).not.toBe(inputEdge);
+    expect(await form.evaluate((node) => getComputedStyle(node).borderColor)).not.toBe(outerEdge);
   }).toPass();
-  expect(await form.evaluate((node) => getComputedStyle(node).borderColor)).toBe(outerEdge);
-  // The composer's outer form draws no second ring around the field's own.
+  expect(await form.evaluate((node) => getComputedStyle(node).boxShadow)).not.toBe('none');
   expect(await form.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
-  expect(
-    await prompt.evaluate((node) => Number.parseFloat(getComputedStyle(node).outlineOffset)),
-  ).toBeLessThan(0);
+  // One boundary: the field inside draws no edge, halo or outline of its own.
+  expect(await prompt.evaluate((node) => getComputedStyle(node).borderColor)).toBe(inputEdge);
+  expect(await prompt.evaluate((node) => getComputedStyle(node).boxShadow)).toBe('none');
+  expect(await prompt.evaluate((node) => getComputedStyle(node).outlineStyle)).toBe('none');
 });

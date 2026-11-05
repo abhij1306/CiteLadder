@@ -21,7 +21,7 @@ export function IssueMetadata({ issue }: Readonly<{ issue: SiteIssue }>) {
       ) : (
         <Badge>Advisory</Badge>
       )}
-      <span className="text-secondary">{dimensionLabel(issue.dimension)}</span>
+      <span className="text-ink-secondary">{dimensionLabel(issue.dimension)}</span>
     </Inline>
   );
 }

@@ -4,31 +4,35 @@ import { describe, expect, it } from 'vite-plus/test';
 
 import { DetailScreen, ListScreen, RouteLoadingScreen } from './page-shell';
 
-function measureAt(path: string, screenElement: React.ReactNode) {
-  const { container, unmount } = render(
-    <MemoryRouter initialEntries={[path]}>{screenElement}</MemoryRouter>,
-  );
-  const measure = container.querySelector('[data-page-measure]')?.getAttribute('data-page-measure');
-  unmount();
-  return measure;
-}
-
-describe('ListScreen measure', () => {
-  it("takes the route's measure, so a route's loading frame and its page share one width", () => {
-    expect(measureAt('/settings', <RouteLoadingScreen />)).toBe('workflow');
-    expect(measureAt('/settings', <ListScreen>Settings</ListScreen>)).toBe('workflow');
-    expect(measureAt('/agent/chats/abc', <RouteLoadingScreen />)).toBe('workflow');
-    expect(measureAt('/agent/actions', <RouteLoadingScreen />)).toBe('analytical');
-    expect(measureAt('/site', <ListScreen>Website</ListScreen>)).toBe('analytical');
-  });
-
-  it("names the route in the loading frame's identity band", () => {
+describe('ListScreen', () => {
+  it("names the route in the loading frame's header", () => {
     render(
       <MemoryRouter initialEntries={['/performance']}>
         <RouteLoadingScreen label="Loading performance…" />
       </MemoryRouter>,
     );
     expect(screen.getByRole('heading', { level: 1, name: 'Performance' })).toBeInTheDocument();
+  });
+
+  it('draws the header, then the controls, then the content', () => {
+    render(
+      <MemoryRouter initialEntries={['/prompts']}>
+        <ListScreen
+          actions={<button type="button">Add prompts</button>}
+          controls={{ actions: <button type="button">Export</button> }}
+        >
+          <p>Table</p>
+        </ListScreen>
+      </MemoryRouter>,
+    );
+    const title = screen.getByRole('heading', { level: 1, name: 'Prompts' });
+    const filters = screen.getByRole('group', { name: 'Search and filters' });
+    const content = screen.getByText('Table');
+    expect(title.compareDocumentPosition(filters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      filters.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add prompts' })).toBeInTheDocument();
   });
 });
 

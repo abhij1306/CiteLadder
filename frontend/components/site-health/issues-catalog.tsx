@@ -15,7 +15,7 @@ import { ListDetailCard, ListDetailRow } from '@/components/ui/list-detail';
 import { Pager } from '@/components/ui/pager';
 import { QueryState } from '@/components/ui/query-state';
 import { SearchField } from '@/components/ui/search-field';
-import { SegmentedControl } from '@/components/ui/segmented-control';
+import { SegmentedControl } from '@/components/ui/tabs';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import { ICONS } from '@/lib/icons';
 import { ISSUE_OCCURRENCE_LIMIT } from '@/lib/config/site-health';

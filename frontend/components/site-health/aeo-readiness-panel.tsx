@@ -3,16 +3,15 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Drawer } from '@/components/ui/drawer';
 import { Dot } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
-import { ScoreBar } from '@/components/ui/score-bar';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
@@ -114,10 +113,10 @@ export function AeoReadinessPanel({
     );
   if (!readiness.data || readiness.data.crawl_id === null) {
     return (
-      <Alert tone="info">
+      <Callout tone="info">
         {readiness.data?.limitations[0] ??
           'AEO Readiness appears once a crawl has finished analyzing pages.'}
-      </Alert>
+      </Callout>
     );
   }
 
@@ -125,7 +124,9 @@ export function AeoReadinessPanel({
   const selected = data.dimensions.find((dimension) => dimension.key === detailKey) ?? null;
   return (
     <Stack gap="workspace" className="min-w-0" data-testid="aeo-readiness">
-      {data.limitations.length > 0 ? <Alert tone="info">{data.limitations.join(' ')}</Alert> : null}
+      {data.limitations.length > 0 ? (
+        <Callout tone="info">{data.limitations.join(' ')}</Callout>
+      ) : null}
       <ReadinessLedger dimensions={data.dimensions} onOpen={setDetailKey} />
       <DimensionDrawer dimension={selected} crawlId={crawlId} onClose={() => setDetailKey(null)} />
     </Stack>
@@ -152,10 +153,9 @@ function ReadinessLedger({
                 </ClampText>
               </div>
             </TableCell>
+            {/* The number only (decision D8); the State column says why a
+                dimension has none. */}
             <TableCell numeric>{formatScore(dimension.score)}</TableCell>
-            <TableCell>
-              <QualityCell dimension={dimension} state={state} />
-            </TableCell>
             <TableCell numeric>
               {dimension.coverage === null ? (
                 <UnavailableValue state="not_measured" />
@@ -183,7 +183,6 @@ function ReadinessLedger({
 const READINESS_COLUMNS: readonly DataTableColumn[] = [
   { key: 'dimension', label: 'Dimension' },
   { key: 'score', label: 'Score', width: 'figure', numeric: true },
-  { key: 'quality', label: 'Quality', width: 'status' },
   { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
   { key: 'state', label: 'State', width: 'status' },
   { key: 'actions', label: 'Actions', width: 'date', hideLabel: true },
@@ -268,26 +267,6 @@ function failingPagesCaption(shown: number, total: number): string {
   return `${total} ${noun} failed at least one check, worst first.`;
 }
 
-/**
- * The quality column: a bar when there is a score, and otherwise the reason.
- *
- * A dimension with no score is either one nothing measured or one the state
- * already explains, and those read differently — "not measured" is an absence
- * of evidence, the state is a finding.
- */
-function QualityCell({
-  dimension,
-  state,
-}: Readonly<{ dimension: ReadinessDimension; state: DimensionState }>) {
-  if (dimension.score !== null) {
-    return <ScoreBar value={dimension.score} label={`${dimension.label} score`} />;
-  }
-  if (dimension.dimension_measurement_state === 'not_measured') {
-    return <UnavailableValue state="not_measured" />;
-  }
-  return <span className="type-caption">{state}</span>;
-}
-
 function FailingPages({
   dimension,
   crawlId,
@@ -313,7 +292,7 @@ function FailingPages({
             <Stack as="ul" gap="tight">
               {page.failed_checks.map((check) => (
                 <Inline as="li" key={check.rule_id} className="type-caption items-baseline">
-                  <Dot className="bg-danger" />
+                  <Dot className="bg-negative" />
                   <span>
                     {check.title}: {check.expected_capability}
                   </span>

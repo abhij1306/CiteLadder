@@ -1,4 +1,4 @@
-import type { ClassificationValue } from '@/components/ui/badge-variants';
+import type { ClassificationValue } from '@/components/ui/badge';
 
 /**
  * Reader-side projection of the `source_pattern` block the backend embeds in a

@@ -25,6 +25,7 @@ export function LaunchAuditButton({
   return (
     <>
       <Button
+        variant="primary"
         {...buttonProps}
         disabled={!project || buttonProps.disabled}
         onClick={() => setOpen(true)}

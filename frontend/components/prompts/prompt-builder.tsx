@@ -4,8 +4,8 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Drawer } from '@/components/ui/drawer';
 import { Icon } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
@@ -118,9 +118,9 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
   const runNotices = (
     <>
       {isGenerating ? (
-        <Alert tone="info">
+        <Callout tone="info">
           Writing and quality-checking questions can take a minute or two. Keep this open.
-        </Alert>
+        </Callout>
       ) : null}
       {generateError ? <GenerateErrorAlert error={generateError} /> : null}
     </>
@@ -133,7 +133,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
       title="Prompt Builder"
       description="Shape what CiteLadder drafts. Suggestions wait for your review; only accepted ones are tracked."
       closeLabel="Close Prompt Builder"
-      width="review"
+      width="wide"
       footer={
         <BuilderFooter
           step={step}
@@ -226,7 +226,7 @@ function SeedsReadState({ read }: Readonly<{ read: UseQueryResult<SeedQueries> }
 
 /** Why the distribution settings cannot make a run, if they cannot. */
 function RunProblem({ built }: Readonly<{ built: ReturnType<typeof runRequest> }>) {
-  return built.ok ? null : <Alert tone="warning">{built.problem}</Alert>;
+  return built.ok ? null : <Callout tone="warning">{built.problem}</Callout>;
 }
 
 /** Edits from earlier steps that this run will not see until they are saved. */
@@ -241,9 +241,9 @@ function UnsavedNotice({
   if (!unsaved.length) return null;
   const sentence = unsaved.join(' and ');
   return (
-    <Alert tone="warning">
+    <Callout tone="warning">
       {sentence.charAt(0).toUpperCase() + sentence.slice(1)}, so this run will not use them.
-    </Alert>
+    </Callout>
   );
 }
 

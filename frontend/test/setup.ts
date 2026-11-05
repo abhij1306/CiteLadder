@@ -3,6 +3,7 @@ import { cleanup } from '@testing-library/react';
 import { transferableAbortController } from 'node:util';
 import { afterEach } from 'vite-plus/test';
 import { installIntersectionObserver } from './intersection-observer';
+import { installResizeObserver } from './resize-observer';
 
 // The jsdom environment installs jsdom's own AbortController/AbortSignal
 // globals, but `fetch` stays Node's undici implementation, which brand-checks
@@ -64,21 +65,10 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   })) as unknown as typeof window.matchMedia;
 }
 
-// Radix measures positioned content with ResizeObserver. jsdom does not
-// implement it, but component tests only need the observer contract, not
-// layout measurements.
-class ResizeObserverStub {
-  observe() {
-    return undefined;
-  }
-  unobserve() {
-    return undefined;
-  }
-  disconnect() {
-    return undefined;
-  }
-}
-globalThis.ResizeObserver ??= ResizeObserverStub as unknown as typeof ResizeObserver;
+// Radix measures positioned content with ResizeObserver and a chat follows
+// its thread's size. jsdom implements neither layout nor the observer, so
+// tests drive size changes through `emitResize`.
+installResizeObserver();
 
 // Chrome that is off-screen costs nothing to observe and a lot to poll, so
 // components ask IntersectionObserver instead of listening to scroll. Tests

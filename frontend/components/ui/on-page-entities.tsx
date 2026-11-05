@@ -42,7 +42,9 @@ export function OnPageEntities({
       </div>
       {quoted.map((entity) =>
         entity.passages.map((passage) => (
-          <Passage key={`${entity.entity_name}:${passage}`}>{passage}</Passage>
+          <Passage key={`${entity.entity_name}:${passage}`} highlight={entity.entity_name}>
+            {passage}
+          </Passage>
         )),
       )}
     </div>

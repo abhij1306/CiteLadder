@@ -5,9 +5,8 @@ import { useMemo } from 'react';
 
 import { AiReferralsContent } from '@/components/ai-traffic/referrals-content';
 import { FilterChoice, type FilterBarProps } from '@/components/ui/filter-bar';
-import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Spinner } from '@/components/ui/spinner';
-import type { TabRowProps } from '@/components/ui/tabs';
+import { SegmentedControl, type TabRowProps } from '@/components/ui/tabs';
 import { aiTrafficApi } from '@/lib/api/ai-traffic';
 import { queryKeys } from '@/lib/api/query-keys';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';

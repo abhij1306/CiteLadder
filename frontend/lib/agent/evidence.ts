@@ -22,9 +22,9 @@ const RECORD_KIND: Record<string, RecordKind> = {
   demand_snapshot: { label: 'Search Demand snapshot', screen: '/demand' },
   query_snapshot: { label: 'Search Console snapshot', screen: '/performance' },
   query_row: { label: 'Search Console query', screen: '/performance' },
-  search_run: { label: 'Search Intelligence run', screen: '/search-intelligence' },
-  search_dataset: { label: 'Search Intelligence dataset', screen: '/search-intelligence' },
-  search_row: { label: 'Search Intelligence row', screen: '/search-intelligence' },
+  search_run: { label: 'Keyword Research run', screen: '/search-intelligence' },
+  search_dataset: { label: 'Keyword Research dataset', screen: '/search-intelligence' },
+  search_row: { label: 'Keyword Research row', screen: '/search-intelligence' },
 };
 
 const FALLBACK_LABEL = 'CiteLadder record';

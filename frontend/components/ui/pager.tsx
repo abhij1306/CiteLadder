@@ -3,16 +3,18 @@
 import { useId, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { TABLE_PAGE_SIZE_OPTIONS } from '@/lib/config/tables';
 import { formatCount } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /**
- * Pager — the one footer for a paged list or table.
- *
- * What is shown on the left, the controls on the right.
+ * Pager — the one footer for a paged list or table: the rows-per-page select
+ * (when offered) on the left; the range ("1–25 of 120", tabular, the total in
+ * `ink-muted`) and the previous and next 36px secondary icon buttons on the
+ * right. An arrow at either end disables rather than disappearing, so the
+ * pager keeps its place.
  *
  * Two modes, one component — the difference is what the caller knows:
  *
@@ -59,8 +61,6 @@ type PagerProps = Readonly<{
   pageSize?: PagerPageSize;
   /** Disables navigation while a page is in flight. */
   busy?: boolean;
-  /** `table`: the footer of a table card (top rule, cell inset). */
-  frame?: 'table' | 'none';
   hideWhenSinglePage?: boolean;
   className?: string;
 }>;
@@ -86,22 +86,25 @@ function PagerSummary({
   page,
   pageCount,
 }: Readonly<{ range?: PagerRange; page?: number; pageCount?: number }>) {
+  // Tabular figures hold every digit to one width, so the range does not
+  // change width as the reader pages.
+  const face = 'text-body-sm text-ink pe-2 whitespace-nowrap tabular-nums';
   if (range) {
     return (
-      // The figure face holds every digit to one width, so the summary does
-      // not change width as the reader pages.
-      <span className="type-caption font-numeric" aria-live="polite">
+      <output className={face}>
         {range.from}–{range.to}
-        {range.total === undefined ? null : ` of ${formatCount(range.total)}`} {range.noun}
-      </span>
+        <span className="text-ink-muted">
+          {range.total === undefined ? null : ` of ${formatCount(range.total)}`} {range.noun}
+        </span>
+      </output>
     );
   }
-  if (!page) return <span />;
+  if (!page) return null;
   return (
-    <span className="type-caption font-numeric" aria-live="polite">
+    <output className={face}>
       Page {page}
-      {pageCount ? ` of ${pageCount}` : null}
-    </span>
+      {pageCount ? <span className="text-ink-muted">{` of ${pageCount}`}</span> : null}
+    </output>
   );
 }
 
@@ -109,7 +112,7 @@ function PageSizeSelect({ pageSize, noun }: Readonly<{ pageSize: PagerPageSize; 
   const id = useId();
   return (
     <div className="flex items-center gap-2">
-      <label className="type-caption" htmlFor={id}>
+      <label className="text-caption text-ink-muted" htmlFor={id}>
         Rows per page
       </label>
       <Select
@@ -121,7 +124,7 @@ function PageSizeSelect({ pageSize, noun }: Readonly<{ pageSize: PagerPageSize; 
           value: String(size),
           label: String(size),
         }))}
-        className="font-numeric w-20"
+        className="w-20 font-mono"
       />
     </div>
   );
@@ -138,25 +141,28 @@ function PagerSteps({
   Pick<PagerProps, 'canPrev' | 'canNext' | 'onPrev' | 'onNext' | 'onFirst'> & { busy: boolean }
 >) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
       {onFirst ? (
-        <Button variant="ghost" disabled={!canPrev || busy} onClick={onFirst}>
+        <Button variant="secondary" disabled={!canPrev || busy} onClick={onFirst}>
           First page
         </Button>
       ) : null}
-      <Button
-        variant="ghost"
-        aria-label="Previous page"
+      <IconButton
+        variant="secondary"
+        icon={ChevronLeft}
+        label="Previous page"
+        tooltip={false}
         disabled={!canPrev || busy}
         onClick={onPrev}
-      >
-        <ChevronLeft className="size-4" aria-hidden />
-        Previous
-      </Button>
-      <Button variant="ghost" aria-label="Next page" disabled={!canNext || busy} onClick={onNext}>
-        Next
-        <ChevronRight className="size-4" aria-hidden />
-      </Button>
+      />
+      <IconButton
+        variant="secondary"
+        icon={ChevronRight}
+        label="Next page"
+        tooltip={false}
+        disabled={!canNext || busy}
+        onClick={onNext}
+      />
     </div>
   );
 }
@@ -167,23 +173,16 @@ export function Pager({
   pageCount,
   pageSize,
   busy = false,
-  frame = 'none',
   hideWhenSinglePage = false,
   className,
   ...steps
 }: PagerProps) {
   if (hideWhenSinglePage && !steps.canPrev && !steps.canNext) return null;
   return (
-    <div
-      className={cn(
-        'flex flex-wrap items-center justify-between gap-3',
-        frame === 'table' && 'border-border border-t px-[var(--table-cell-padding-x)] py-2',
-        className,
-      )}
-    >
-      <PagerSummary range={range} page={page} pageCount={pageCount} />
-      <div className="flex flex-wrap items-center gap-3">
-        {pageSize ? <PageSizeSelect pageSize={pageSize} noun={range?.noun ?? 'rows'} /> : null}
+    <div className={cn('flex flex-wrap items-center justify-between gap-3', className)}>
+      {pageSize ? <PageSizeSelect pageSize={pageSize} noun={range?.noun ?? 'rows'} /> : <span />}
+      <div className="flex items-center gap-2">
+        <PagerSummary range={range} page={page} pageCount={pageCount} />
         <PagerSteps {...steps} busy={busy} />
       </div>
     </div>

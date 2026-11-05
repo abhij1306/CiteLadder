@@ -4,8 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -115,7 +115,7 @@ export function PromptFormDialog({
     >
       <form noValidate onSubmit={submit}>
         <Stack gap="workspace">
-          {error ? <Alert tone="danger">{error}</Alert> : null}
+          {error ? <Callout tone="negative">{error}</Callout> : null}
 
           <Field label="Topic">
             {(props) => (

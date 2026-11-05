@@ -4,7 +4,7 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
 import {
   ExecutionEvidenceDrawer,
@@ -28,7 +28,7 @@ import { EVIDENCE_LIMIT } from '@/lib/visibility/use-visibility-dashboard';
 
 /** A counted nought in a column of chips, kept apart from an absent one. */
 function ObservedNone() {
-  return <span className={textRole('caption', 'text-secondary tabular-nums')}>0</span>;
+  return <span className={textRole('caption', 'text-ink-secondary tabular-nums')}>0</span>;
 }
 
 /** Chips a cell carries before it stops being a cell; the rest become "+N". */
@@ -163,10 +163,10 @@ function PromptRow({
     <TableRow>
       <TableCell>
         <Inline as="span" className="items-start">
-          <BrandLogo name={engineLabel(item.logical_engine) || item.logical_engine} />
+          <BrandMark name={engineLabel(item.logical_engine) || item.logical_engine} />
           <span className="grid min-w-0">
             <ClampText lines={1}>{item.prompt_text || 'Untitled prompt'}</ClampText>
-            <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
+            <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
               {productModelLabel(item.logical_engine, item.transport_model) ||
                 engineLabel(item.logical_engine) ||
                 item.logical_engine}
@@ -223,7 +223,7 @@ function MentionChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>)
       {named.slice(0, MAX_CHIPS).map((mention) => (
         <Tooltip key={`${mention.kind}:${mention.name}`} content={mention.name}>
           <span className="inline-flex">
-            <BrandLogo name={mention.name || 'Brand'} placement="mark" />
+            <BrandMark name={mention.name || 'Brand'} placement="inline" />
           </span>
         </Tooltip>
       ))}
@@ -242,7 +242,7 @@ function SourceChips({ item }: Readonly<{ item: VisibilityExecutionEvidence }>) 
       {hosts.slice(0, MAX_CHIPS).map((host) => (
         <Tooltip key={host} content={host}>
           <span className="inline-flex">
-            <BrandLogo name={host} websiteUrl={`https://${host}`} placement="mark" />
+            <BrandMark name={host} websiteUrl={`https://${host}`} placement="inline" />
           </span>
         </Tooltip>
       ))}
@@ -255,7 +255,7 @@ function ChipRow({ children, overflow }: Readonly<{ children: ReactNode; overflo
     <Inline as="span" gap="tight">
       {children}
       {overflow > 0 ? (
-        <span className={textRole('caption', 'text-secondary tabular-nums')}>+{overflow}</span>
+        <span className={textRole('caption', 'text-ink-secondary tabular-nums')}>+{overflow}</span>
       ) : null}
     </Inline>
   );

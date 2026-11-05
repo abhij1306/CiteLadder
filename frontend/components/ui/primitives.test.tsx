@@ -1,18 +1,23 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
 import { describe, expect, it } from 'vite-plus/test';
 
-import { Alert } from './alert';
 import { Button } from './button';
+import { Callout } from './callout';
 import { Card, CardContent, CardHeader, CardTitle } from './card';
-import { Field } from './field';
+import { Citation } from './citation';
+import { EmptyState } from './empty-state';
+import { EngineMark } from './engine-mark';
+import { Field, FormRow } from './field';
 import { Input } from './input';
-import { ScoreBar } from './score-bar';
-import { ScoreRing } from './score-ring';
+import { Kbd } from './kbd';
+import { BusyBar, ProgressBar } from './progress-bar';
+import { Rungs } from './rungs';
+import { ScoreRing, scoreFill } from './score-ring';
 import { Skeleton } from './skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
 import { TrendChart } from './trend-chart';
-import { scoreBand } from './score-band';
 
 describe('Button', () => {
   it('defaults to a non-submitting button', () => {
@@ -86,165 +91,273 @@ describe('Input + Field', () => {
   });
 });
 
-describe('Alert', () => {
-  it('announces feedback in an alert region', () => {
-    render(<Alert tone="danger">Something failed</Alert>);
-    const alert = screen.getByRole('alert');
-    expect(alert).toHaveTextContent('Something failed');
+describe('FormRow', () => {
+  it('names its control by the row label', () => {
+    render(
+      <FormRow label="Workspace name" description="Shown on invoices" htmlFor="workspace-name">
+        <Input id="workspace-name" />
+      </FormRow>,
+    );
+    expect(screen.getByRole('textbox', { name: 'Workspace name' })).toBeInTheDocument();
+    expect(screen.getByText('Shown on invoices')).toBeInTheDocument();
+  });
+});
+
+describe('Callout', () => {
+  it('announces negative and warning callouts as alerts and the rest as status, with the tone word', () => {
+    const { rerender } = render(
+      <Callout tone="negative" title="Crawl failed">
+        The site returned 503.
+      </Callout>,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Error: Crawl failedThe site returned 503.',
+    );
+
+    rerender(<Callout tone="positive">Saved</Callout>);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+  });
+
+  it('renders nothing without a title or body', () => {
+    const { container } = render(<Callout tone="info" />);
+    expect(container).toBeEmptyDOMElement();
+    render(<Callout tone="info">Data refreshes nightly</Callout>);
+    expect(screen.getByRole('status')).toHaveTextContent('Data refreshes nightly');
+  });
+});
+
+describe('EmptyState', () => {
+  it('names the empty view with a heading at the requested level and offers its actions', () => {
+    render(
+      <EmptyState
+        title="No prompts yet"
+        description="Add a prompt to start measuring."
+        headingLevel={2}
+        primary={<Button variant="primary">Add prompt</Button>}
+      />,
+    );
+    expect(screen.getByRole('heading', { level: 2, name: 'No prompts yet' })).toBeInTheDocument();
+    expect(screen.getByText('Add a prompt to start measuring.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add prompt' })).toBeInTheDocument();
   });
 });
 
 describe('Skeleton', () => {
-  it('hides loading decoration from assistive technology', () => {
-    render(<Skeleton data-testid="loading-placeholder" />);
-    const el = screen.getByTestId('loading-placeholder');
-    expect(el).toHaveAttribute('aria-hidden', 'true');
+  it('announces one busy status by its label while the bars stay hidden', () => {
+    render(<Skeleton variant="row" rows={3} label="Loading prompts" />);
+    const status = screen.getByRole('status', { name: 'Loading prompts' });
+    expect(status).toHaveAttribute('aria-busy', 'true');
+    expect(status).toHaveTextContent('');
   });
 });
 
-describe('scoreBand mapping', () => {
-  it('maps values to the four bands', () => {
-    expect(scoreBand(10)).toBe('low');
-    expect(scoreBand(30)).toBe('mid');
-    expect(scoreBand(60)).toBe('good');
-    expect(scoreBand(90)).toBe('high');
+describe('ProgressBar', () => {
+  it('reports its value in the product units and goes busy without one', () => {
+    const { rerender } = render(
+      <ProgressBar label="Running prompts" value={48} max={120} valueLabel="48 of 120 prompts" />,
+    );
+    const bar = screen.getByRole('progressbar', { name: 'Running prompts' });
+    expect(bar).toHaveAttribute('value', '48');
+    expect(bar).toHaveAttribute('max', '120');
+    expect(screen.getByText('48 of 120 prompts')).toBeInTheDocument();
+
+    rerender(<ProgressBar label="Running prompts" />);
+    const busy = screen.getByRole('progressbar', { name: 'Running prompts' });
+    expect(busy).toHaveAttribute('aria-busy', 'true');
+    expect(busy).not.toHaveAttribute('value');
+  });
+
+  it('shows a background refresh only while active', () => {
+    const { rerender } = render(<BusyBar active={false} label="Updating usage" />);
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+    rerender(<BusyBar active label="Updating usage" />);
+    expect(screen.getByRole('progressbar', { name: 'Updating usage' })).toBeInTheDocument();
+  });
+});
+
+describe('Kbd', () => {
+  it('renders a combination as one key cap per key', () => {
+    render(<Kbd keys={['⌘', 'K']} />);
+    expect([...document.querySelectorAll('kbd')].map((key) => key.textContent)).toEqual(['⌘', 'K']);
+  });
+});
+
+describe('Rungs', () => {
+  it('always carries the citation level as words', () => {
+    const { rerender } = render(<Rungs level={2} />);
+    expect(screen.getByText('Cited')).toHaveClass('sr-only');
+    rerender(<Rungs level={3} showLabel />);
+    expect(screen.getByText('Top source')).not.toHaveClass('sr-only');
+  });
+});
+
+describe('Citation', () => {
+  it('links to the cited page in a new tab under its footnote and bare domain', () => {
+    render(
+      <Citation
+        index={2}
+        domain="www.example.com"
+        title="Best running shoes"
+        href="https://www.example.com/shoes"
+      />,
+    );
+    const link = screen.getByRole('link', { name: /example\.com/ });
+    expect(link).toHaveAttribute('href', 'https://www.example.com/shoes');
+    expect(link).toHaveTextContent('2Eexample.comBest running shoes');
+  });
+});
+
+describe('EngineMark', () => {
+  it('draws the named engine as decoration only', () => {
+    const { container } = render(<EngineMark engine="claude" />);
+    const mark = container.querySelector('svg');
+    expect(mark).toHaveAttribute('data-engine-mark', 'claude');
+    expect(mark).toHaveAttribute('aria-hidden', 'true');
+  });
+});
+
+describe('scoreFill', () => {
+  it('keeps one ink, or bands a compared score at 80 and 50', () => {
+    expect(scoreFill('ink', 20)).toBe('ink');
+    expect(scoreFill('auto', 80)).toBe('positive');
+    expect(scoreFill('auto', 79)).toBe('warning');
+    expect(scoreFill('auto', 50)).toBe('warning');
+    expect(scoreFill('auto', 49)).toBe('negative');
   });
 });
 
 describe('ScoreRing', () => {
-  it('announces the score and renders its value', () => {
-    render(<ScoreRing value={82} />);
-    const ring = screen.getByRole('img', { name: 'Visibility score: 82%' });
-    expect(ring).toBeInTheDocument();
-    expect(screen.getByText('82')).toBeInTheDocument();
-  });
-
-  it('clamps out-of-range values', () => {
-    render(<ScoreRing value={140} label="Overflow" />);
-    expect(screen.getByRole('img', { name: 'Overflow' })).toBeInTheDocument();
-    expect(screen.getByText('100')).toBeInTheDocument();
-  });
-
-  it('announces the score once, not again through its numeral', () => {
-    render(<ScoreRing value={82} />);
-    const numeral = screen.getByText('82');
-    expect(numeral).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByRole('img', { name: 'Visibility score: 82%' })).toBeInTheDocument();
+  it('announces the clamped score once, not again through its numeral', () => {
+    render(<ScoreRing value={140} label="Site Health score" />);
+    expect(screen.getByRole('img', { name: 'Site Health score: 100 out of 100' })).toBeVisible();
+    expect(screen.getByText('100')).toHaveAttribute('aria-hidden', 'true');
   });
 });
 
-describe('ScoreBar', () => {
-  it('renders a clamped accessible meter', () => {
-    render(<ScoreBar value={140} label="Readiness score" />);
-    const meter = screen.getByRole('meter', { name: 'Readiness score' });
-    expect(meter).toHaveAttribute('aria-valuenow', '100');
-    expect(meter).toHaveAttribute('aria-valuetext', '100 out of 100');
-  });
-});
+describe('TrendChart', () => {
+  const rows = () =>
+    within(screen.getByRole('table', { name: 'Visibility trend' }))
+      .getAllByRole('row')
+      .map((row) => row.textContent);
+  /** The drawn runs of the first line: each `M` lifts the pen after a gap. */
+  const runsOf = (container: HTMLElement) =>
+    container.querySelector('[data-trend-line="1"] path')?.getAttribute('d')?.split('M').length ??
+    1;
 
-describe('TrendChart (cross-run Visibility trend)', () => {
-  it('renders with an ARIA label describing the trend', () => {
+  it('tabulates every line and value, with a missing value named rather than zero', () => {
     render(
+      <TrendChart
+        label="Visibility trend"
+        name="You"
+        data={[
+          { label: 'Jun', value: 40 },
+          { label: 'Jul', value: null },
+        ]}
+        series={[{ label: 'Globex', values: [30, 35] }]}
+        yFormat={(value) => `${value}%`}
+      />,
+    );
+    expect(rows()).toEqual(['SeriesJunJul', 'You40%Not measured', 'Globex30%35%']);
+  });
+
+  it('keys each line with its latest value, and reads any point with the arrow keys', async () => {
+    const user = userEvent.setup();
+    render(
+      <TrendChart
+        label="Visibility trend"
+        name="You"
+        data={[
+          { label: '1 Jun 2026', value: 40 },
+          { label: '1 Jul 2026', value: 70 },
+        ]}
+        yFormat={(value) => `${value}%`}
+      />,
+    );
+    expect(screen.getAllByText('70%').length).toBeGreaterThan(0);
+
+    await user.tab();
+    expect(
+      screen.getByRole('group', {
+        name: 'Visibility trend. Use the left and right arrow keys to read each point.',
+      }),
+    ).toHaveFocus();
+    await user.keyboard('{ArrowLeft}');
+    expect(screen.getByText('1 Jun 2026', { selector: 'p' })).toBeVisible();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByText('1 Jun 2026', { selector: 'p' })).toBeNull();
+  });
+
+  it('breaks the line at a missing value and at a point measured under changed conditions', () => {
+    const { container, rerender } = render(
       <TrendChart
         label="Visibility trend"
         data={[
           { label: 'Jun', value: 40 },
-          { label: 'Jul', value: 70 },
+          { label: 'Jul', value: 50 },
+          { label: 'Aug', value: 60 },
         ]}
       />,
     );
-    const chart = screen.getByRole('img', {
-      name: 'Visibility trend: Trend from Jun (40) to Jul (70)',
-    });
-    expect(chart).toBeInTheDocument();
-  });
+    expect(runsOf(container)).toBe(2);
 
-  it('renders a single point without a misleading slope or area', () => {
-    render(<TrendChart label="Visibility trend" data={[{ label: 'Jul', value: 55 }]} />);
-    const chart = screen.getByRole('img', {
-      name: 'Visibility trend: Single point Jul (55)',
-    });
-    expect(chart).toBeInTheDocument();
-    expect(chart.querySelector(':scope > path')).toBeNull();
-    expect(chart.querySelectorAll(':scope > circle')).toHaveLength(1);
-  });
-
-  it('draws no axes, ticks or gridlines unless an axis is named', () => {
-    render(
+    rerender(
       <TrendChart
         label="Visibility trend"
         data={[
           { label: 'Jun', value: 40 },
-          { label: 'Jul', value: 70 },
+          { label: 'Jul', value: null },
+          { label: 'Aug', value: 60, breakBefore: true },
+          { label: 'Sep', value: 70 },
         ]}
       />,
     );
-    const chart = screen.getByRole('img', { name: /Visibility trend/ });
-    expect(chart.querySelector('text')).toBeNull();
-    expect(chart.querySelector('line')).toBeNull();
+    expect(runsOf(container)).toBe(3);
   });
 
-  it('labels both axes and scales the y ticks to the domain', () => {
-    render(
+  it('dots a value standing alone between gaps, so it is not drawn as nothing', () => {
+    const { container } = render(
       <TrendChart
         label="Visibility trend"
         data={[
-          { label: '1 Jun', value: 40 },
-          { label: '1 Jul', value: 55 },
-          { label: '1 Aug', value: 70 },
+          { label: 'Jun', value: null },
+          { label: 'Jul', value: 55 },
+          { label: 'Aug', value: null },
         ]}
-        xAxisLabel="Run date"
-        yAxisLabel="Visibility"
-        formatTick={(value) => `${Math.round(value)}%`}
       />,
     );
-    const chart = screen.getByRole('img', { name: /Visibility trend/ });
-    const text = [...chart.querySelectorAll('text')].map((node) => node.textContent);
-    expect(text).toContain('Run date');
-    expect(text).toContain('Visibility');
-    // Floor, midpoint and ceiling of the 0–100 domain.
-    expect(text).toContain('0%');
-    expect(text).toContain('50%');
-    expect(text).toContain('100%');
-    // First, middle and last point, so a reader can place the x positions.
-    expect(text).toContain('1 Jun');
-    expect(text).toContain('1 Jul');
-    expect(text).toContain('1 Aug');
+    expect(container.querySelectorAll('[data-trend-line="1"] circle')).toHaveLength(1);
   });
 
-  it('ticks the x axis with the short label, not the full point description', () => {
-    render(
+  it('dates the axis with the short label and ticks the scale with the y format', () => {
+    const { container } = render(
       <TrendChart
         label="Visibility trend"
         data={[
           { label: '1 Jun 2026 · 40%', axisLabel: '1 Jun', value: 40 },
           { label: '1 Jul 2026 · 70%', axisLabel: '1 Jul', value: 70 },
         ]}
-        xAxisLabel="Run date"
-        yAxisLabel="Visibility"
+        yMax={100}
+        yFormat={(value) => `${value}%`}
       />,
     );
-    const chart = screen.getByRole('img', { name: /Visibility trend/ });
-    const text = [...chart.querySelectorAll('text')].map((node) => node.textContent);
-    expect(text).toContain('1 Jun');
-    expect(text).not.toContain('1 Jun 2026 · 40%');
+    const text = [...container.querySelectorAll('svg text')].map((node) => node.textContent);
+    expect(text).toEqual(['0%', '20%', '40%', '60%', '80%', '100%', '1 Jun', '1 Jul']);
   });
 
-  it('renders an empty state with no data points', () => {
-    render(<TrendChart label="Visibility trend" data={[]} />);
-    expect(
-      screen.getByRole('img', { name: 'Visibility trend: No trend data' }),
-    ).toBeInTheDocument();
-  });
-
-  it('marks events inside the plotted time span and names them to a screen reader', () => {
+  it('marks only the events inside the plotted span, and names method changes and events', () => {
     const day = (date: string) => new Date(`${date}T00:00:00Z`).getTime();
-    render(
+    const { container } = render(
       <TrendChart
         label="Mention rate"
         data={[
           { label: '1 Mar', value: 40, timestamp: day('2026-03-01') },
-          { label: '15 Mar', value: 70, timestamp: day('2026-03-15') },
+          {
+            label: '15 Mar',
+            value: 70,
+            timestamp: day('2026-03-15'),
+            versionChange: { note: 'Scoring rule scoring-v2 applied' },
+          },
         ]}
         events={[
           { key: 'inside', timestamp: day('2026-03-05'), label: 'Implemented: reviews page' },
@@ -252,105 +365,15 @@ describe('TrendChart (cross-run Visibility trend)', () => {
         ]}
       />,
     );
-    const chart = screen.getByRole('img', {
-      name: 'Mention rate: Trend from 1 Mar (40) to 15 Mar (70) Marked: Implemented: reviews page.',
-    });
-    expect(chart.querySelectorAll('[data-event-marker]')).toHaveLength(1);
-  });
-
-  it('marks a version boundary with an accessible warning marker', () => {
-    render(
-      <TrendChart
-        label="Visibility trend"
-        data={[
-          { label: 'Jun', value: 40 },
-          { label: 'Jul', value: 70, versionChange: { note: 'Scoring rule scoring-v2 applied' } },
-        ]}
-      />,
-    );
-    const chart = screen.getByRole('img');
-    const marker = chart.querySelector('[data-version-marker]');
-    expect(marker).not.toBeNull();
+    expect(container.querySelectorAll('[data-event-marker]')).toHaveLength(1);
+    expect(container.querySelectorAll('[data-version-marker]')).toHaveLength(1);
     expect(
-      within(chart as unknown as HTMLElement).getByText(/Scoring rule scoring-v2 applied/),
-    ).toBeInTheDocument();
-  });
-
-  it('renders null values as gaps, announces them, and never draws a zero dot', () => {
-    render(
-      <TrendChart
-        label="Visibility trend"
-        data={[
-          { label: 'Jun', value: 40 },
-          { label: 'Jul', value: 50 },
-          { label: 'Aug', value: null },
-          { label: 'Sep', value: 60 },
-          { label: 'Oct', value: 70 },
-        ]}
-      />,
-    );
-    const chart = screen.getByRole('img');
-    expect(chart).toHaveAttribute(
-      'aria-label',
-      'Visibility trend: Trend from Jun (40) to Oct (70) Some points are unavailable and shown as gaps.',
-    );
-    expect(chart.querySelectorAll(':scope > circle')).toHaveLength(4);
-    expect(chart.querySelectorAll(':scope > path')).toHaveLength(2);
-  });
-
-  it('announces an unavailable endpoint value as "unavailable"', () => {
-    render(
-      <TrendChart
-        label="Visibility trend"
-        data={[
-          { label: 'Jun', value: null },
-          { label: 'Jul', value: 55 },
-        ]}
-      />,
-    );
-    expect(
-      screen.getByRole('img', {
-        name: 'Visibility trend: Trend from Jun (unavailable) to Jul (55) Some points are unavailable and shown as gaps.',
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it('renders a single available point among nulls as a lone dot (no slope)', () => {
-    render(
-      <TrendChart
-        label="Visibility trend"
-        data={[
-          { label: 'Jun', value: null },
-          { label: 'Jul', value: 55 },
-          { label: 'Aug', value: null },
-        ]}
-      />,
-    );
-    const chart = screen.getByRole('img');
-    expect(chart.querySelectorAll(':scope > circle')).toHaveLength(1);
-    expect(chart.querySelector(':scope > path')).toBeNull();
-  });
-
-  it('scales count metrics against a custom domainMax instead of clamping to 100', () => {
-    const data = [
-      { label: 'Jun', value: 250 },
-      { label: 'Jul', value: 500 },
-    ];
-    const { unmount } = render(<TrendChart label="Clicks trend" data={data} domainMax={500} />);
-    let chart = screen.getByRole('img', {
-      name: 'Clicks trend: Trend from Jun (250) to Jul (500)',
-    });
-    let dots = chart.querySelectorAll(':scope > circle');
-    expect(Number(dots[0]?.getAttribute('cy'))).toBeGreaterThan(
-      Number(dots[1]?.getAttribute('cy')),
-    );
-    unmount();
-
-    render(<TrendChart label="Clicks trend" data={data} />);
-    chart = screen.getByRole('img', {
-      name: 'Clicks trend: Trend from Jun (250) to Jul (500)',
-    });
-    dots = chart.querySelectorAll(':scope > circle');
-    expect(dots[0]!.getAttribute('cy')).toBe(dots[1]!.getAttribute('cy'));
+      within(screen.getByRole('list', { name: 'Mention rate: marked' }))
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual([
+      'Method changed at 15 Mar: Scoring rule scoring-v2 applied',
+      'Implemented: reviews page',
+    ]);
   });
 });

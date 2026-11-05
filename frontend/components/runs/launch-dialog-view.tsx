@@ -178,9 +178,9 @@ function MarketsField({
   return (
     <Stack as="fieldset" gap="item">
       <legend className={textRole('label')}>
-        Markets <span className="text-muted">*</span>
+        Markets <span className="text-ink-muted">*</span>
       </legend>
-      <p className="type-caption text-muted">
+      <p className="type-caption text-ink-muted">
         Each market runs separately. An engine that cannot measure a market is skipped there.
       </p>
       <Inline className="flex-wrap">
@@ -275,7 +275,7 @@ export function LaunchDialogView({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={onLaunch} disabled={!selectionReady || launchPending}>
+          <Button variant="primary" onClick={onLaunch} disabled={!selectionReady || launchPending}>
             {launchPending ? 'Launching…' : 'Launch audit'}
           </Button>
         </>
@@ -294,7 +294,7 @@ export function LaunchDialogView({
         <BatchField batches={batches} batchIndex={batchIndex} setBatchIndex={setBatchIndex} />
         <Stack as="fieldset" gap="item">
           <legend className={textRole('label')}>
-            Engines <span className="text-muted">*</span>
+            Engines <span className="text-ink-muted">*</span>
           </legend>
           {noEngines ? (
             <Stack gap="item">
@@ -363,11 +363,11 @@ export function LaunchDialogView({
         </Field>
         {estimate ? (
           <Stack gap="tight" className={panelClasses({ tone: 'well' }, 'type-caption')}>
-            <span className={textRole('emphasis', 'text-foreground')}>
+            <span className={textRole('emphasis', 'text-ink')}>
               {estimate.execution_count} {estimate.execution_count === 1 ? 'response' : 'responses'}{' '}
               planned
             </span>
-            <span className="text-muted">
+            <span className="text-ink-muted">
               Maximum wall-clock budget {estimate.maximum_wall_clock_seconds}s · cost{' '}
               {estimate.cost_status}
               {estimate.estimated_total_cost_microusd !== null
@@ -376,7 +376,7 @@ export function LaunchDialogView({
             </span>
           </Stack>
         ) : null}
-        <p className="type-caption text-muted">
+        <p className="type-caption text-ink-muted">
           Answers that mention you or a competitor are also classified for sentiment, using your
           connected providers.
         </p>

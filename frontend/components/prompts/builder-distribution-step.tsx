@@ -3,6 +3,7 @@
 import { Search, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { AppGrid } from '@/components/ui/app-grid';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -10,7 +11,6 @@ import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { textRole } from '@/components/ui/typography';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import type { SeedQueries, Topic } from '@/lib/api/types';
 import { MAX_GENERATION_COUNT, PROMPT_BUILDER } from '@/lib/config/prompts';
 import {
@@ -27,7 +27,7 @@ const INTENT_LABELS = {
 } as const satisfies Record<(typeof INTENT_KEYS)[number], string>;
 const SOURCE_LABELS: Record<SeedChoice, string> = {
   search_console: 'Search Console',
-  search_intelligence: 'Search Intelligence',
+  search_intelligence: 'Keyword Research',
   none: 'None',
 };
 
@@ -215,7 +215,7 @@ export function BuilderDistributionStep({
           />
         )}
       </Field>
-      <div className={splitPaneClasses('peers')}>
+      <AppGrid layout="halves">
         <PercentField
           label="Branded share"
           hint={
@@ -237,9 +237,9 @@ export function BuilderDistributionStep({
           disabled={!hasCompetitors}
           onChange={(comparisonPercent) => onChange({ ...settings, comparisonPercent })}
         />
-      </div>
+      </AppGrid>
       <Section title="Intent mix">
-        <div className={splitPaneClasses('thirds')}>
+        <AppGrid layout="thirds">
           {INTENT_KEYS.map((key) => (
             <PercentField
               key={key}
@@ -251,7 +251,7 @@ export function BuilderDistributionStep({
               }
             />
           ))}
-        </div>
+        </AppGrid>
       </Section>
       <Section title="Personas to balance across">
         <PersonaChoices
@@ -264,7 +264,8 @@ export function BuilderDistributionStep({
         {seeds.data ? (
           <>
             <RadioGroup<SeedChoice>
-              variant="chip"
+              variant="cards"
+              columns={sources.length >= 3 ? 3 : 2}
               ariaLabel="Search data source"
               value={seedSourceOf(settings, seeds.data)}
               options={sources.map((source) => ({ value: source, label: SOURCE_LABELS[source] }))}
@@ -275,7 +276,7 @@ export function BuilderDistributionStep({
             <span className="type-caption">
               {sources.length > 1
                 ? 'Searches steer wording only: a query is never copied into a prompt, and no search volume is shown as AI volume.'
-                : 'No search data is connected. Connect Search Console or run Search Intelligence to ground wording in real searches.'}
+                : 'No search data is connected. Connect Search Console or run Keyword Research to ground wording in real searches.'}
             </span>
             <SeedList seeds={seeds.data} settings={settings} topics={topics} onChange={onChange} />
           </>

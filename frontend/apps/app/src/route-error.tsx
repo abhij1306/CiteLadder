@@ -5,8 +5,8 @@ import { isRouteErrorResponse, useRouteError } from 'react-router-dom';
 import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectLink } from '@/components/layout/scoped-link';
 import { ShellFallback } from '@/components/layout/shell-fallback';
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
 import { isChunkLoadError, reportClientError } from '@/lib/client-errors';
@@ -26,7 +26,7 @@ function useReportedRouteError(kind: 'render' | 'route') {
 
 function OverviewLink({ variant }: Readonly<{ variant?: 'secondary' }>) {
   return (
-    <Button asChild variant={variant}>
+    <Button asChild variant={variant ?? 'primary'}>
       <ProjectLink href="/projects">Go to Overview</ProjectLink>
     </Button>
   );
@@ -48,7 +48,9 @@ export function ScreenError() {
         description="Reload to try again, or go back to Overview."
         action={
           <>
-            <Button onClick={() => window.location.reload()}>Reload page</Button>
+            <Button variant="primary" onClick={() => window.location.reload()}>
+              Reload page
+            </Button>
             <OverviewLink variant="secondary" />
           </>
         }
@@ -78,15 +80,15 @@ export function RouteError() {
   return (
     <ShellFallback>
       <main id="main" className="grid min-h-[60vh] place-items-center p-[var(--page-section-gap)]">
-        <Alert tone="warning" className="max-w-lg">
+        <Callout tone="warning" className="max-w-lg">
           <div className="grid gap-4">
             <h1 className={textRole('sectionTitle')}>This page could not be opened</h1>
             <p>Reload this page to try again.</p>
-            <Button className="w-fit" onClick={() => window.location.reload()}>
+            <Button variant="primary" className="w-fit" onClick={() => window.location.reload()}>
               Reload page
             </Button>
           </div>
-        </Alert>
+        </Callout>
       </main>
     </ShellFallback>
   );

@@ -1,16 +1,16 @@
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 
 /**
- * The shared mutation-failure notice (A4/A6).
+ * The shared mutation-failure notice (A4/A6): a negative Callout.
  *
  * Renders the A4 policy copy (`mutationNoticeForError`): the backend message
  * verbatim for 4xx preconditions, transient "try again" copy for
  * 5xx/network/timeout failures. When the failure is retryable and `onRetry`
- * is given, a Try again control provides the retry affordance. The support
- * line always surfaces the machine `code` / `X-Request-ID` when the API sent
- * them, so a user report maps straight to backend logs (A6).
+ * is given, Try again is the callout's action. The support line always
+ * surfaces the machine `code` / `X-Request-ID` when the API sent them, so a
+ * user report maps straight to backend logs (A6).
  */
 export function MutationNotice({
   notice,
@@ -28,19 +28,19 @@ export function MutationNotice({
   ]
     .filter(Boolean)
     .join(' · ');
+  let action = null;
+  if (notice.retryable && onRetry)
+    action = (
+      <Button type="button" onClick={onRetry}>
+        Try again
+      </Button>
+    );
   return (
-    <Alert tone="danger" className={className}>
-      <div className="grid gap-1">
-        <span>{notice.message}</span>
-        {notice.retryable && onRetry ? (
-          <div>
-            <Button type="button" variant="ghost" onClick={onRetry}>
-              Try again
-            </Button>
-          </div>
-        ) : null}
-        {correlation ? <span className="type-caption">Support: {correlation}</span> : null}
-      </div>
-    </Alert>
+    <Callout tone="negative" className={className} action={action}>
+      <span className="block">{notice.message}</span>
+      {correlation ? (
+        <span className="text-ink-secondary text-caption block">Support: {correlation}</span>
+      ) : null}
+    </Callout>
   );
 }

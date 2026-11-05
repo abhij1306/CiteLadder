@@ -3,8 +3,8 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -243,26 +243,26 @@ export function PropertyPicker({
       >
         <Stack gap="compact">
           {!activeProject ? (
-            <Alert tone="warning">
+            <Callout tone="warning">
               No active project. Create or select a project first — a property must be imported into
               one.
-            </Alert>
+            </Callout>
           ) : null}
 
           {discovery.isPending ? <QueryState kind="loading" label={`Loading ${noun}s…`} /> : null}
 
           {discovery.isError ? (
-            <Alert tone="danger">
+            <Callout tone="negative">
               Could not load your properties from the provider.{' '}
               {humanizeApiError(discovery.error).message}
-            </Alert>
+            </Callout>
           ) : null}
 
           {discovery.data?.length === 0 ? (
-            <Alert tone="neutral">
+            <Callout tone="neutral">
               This account has no {noun} available. Verify the property in the provider&rsquo;s own
               console first, then reopen this dialog.
-            </Alert>
+            </Callout>
           ) : null}
 
           <Stack gap="tight">
@@ -276,7 +276,7 @@ export function PropertyPicker({
           </Stack>
 
           {selectMutation.isError ? (
-            <Alert tone="danger">{humanizeApiError(selectMutation.error).message}</Alert>
+            <Callout tone="negative">{humanizeApiError(selectMutation.error).message}</Callout>
           ) : null}
         </Stack>
       </Dialog>

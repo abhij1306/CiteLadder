@@ -54,7 +54,7 @@ export function EngineComparison({
             ) : (
               <ClampText lines={1}>{engineLabel(engine.logical_engine)}</ClampText>
             )}
-            <ClampText lines={1} className={textRole('caption', 'text-secondary')}>
+            <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
               {visibility.model_provenance
                 .filter((item) => item.logical_engine === engine.logical_engine)
                 .map((item) => item.transport_model)

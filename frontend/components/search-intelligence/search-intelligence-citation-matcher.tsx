@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
@@ -67,6 +67,7 @@ export function SearchIntelligenceCitationMatcher({
       notify(
         'Citation matches saved',
         `${pluralCount(dataset.unique_rows_saved, 'citation')} came from sites that link to you. Open Citation matches in Backlinks.`,
+        { tone: 'positive' },
       );
       await onDerived();
     },
@@ -76,7 +77,7 @@ export function SearchIntelligenceCitationMatcher({
     return (
       <ReadError {...readErrorProps(audits)} fallback="Visibility audits could not be loaded." />
     );
-  if (audits.isPending) return <Skeleton shape="block" />;
+  if (audits.isPending) return <Skeleton variant="block" />;
   // Only an audit with answers can have cited sources.
   const answered = audits.data.filter((audit) => audit.completed_count > 0);
   if (!answered.length)
@@ -99,7 +100,7 @@ export function SearchIntelligenceCitationMatcher({
         Choose the Visibility audits whose cited sources to compare with the domains that link to
         you.
       </p>
-      {derive.isError ? <Alert>{derive.error.message}</Alert> : null}
+      {derive.isError ? <Callout tone="negative">{derive.error.message}</Callout> : null}
       {lists.length > 1 ? (
         <Select
           ariaLabel="Website"
@@ -121,12 +122,13 @@ export function SearchIntelligenceCitationMatcher({
               onCheckedChange={() => toggle(audit.id)}
               label={formatDisplayTimestamp(audit.created_at, timeZone)}
             />
-            <span className="text-muted">{pluralCount(audit.completed_count, 'answer')}</span>
+            <span className="text-ink-muted">{pluralCount(audit.completed_count, 'answer')}</span>
           </Inline>
         ))}
       </div>
       <div>
         <Button
+          variant="primary"
           disabled={!selectedAudits.length || derive.isPending}
           onClick={() => derive.mutate()}
         >

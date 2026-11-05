@@ -4,8 +4,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, Sparkles } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -58,7 +58,7 @@ export function OutputCanvas({
               section.heading === null ? null : (
                 <li key={section.start}>
                   <Pressable
-                    className={textRole('caption', 'hover:text-accent-text w-auto')}
+                    className={textRole('caption', 'hover:text-accent-ink w-auto')}
                     onClick={() =>
                       document.getElementById(sectionId(revision.id, index))?.scrollIntoView?.({
                         block: 'start',
@@ -196,7 +196,7 @@ function ReviseForm({
         placeholder="e.g. Add a pricing comparison table"
         onChange={(event) => setInstruction(event.target.value)}
       />
-      <Button type="submit" disabled={!instruction.trim()}>
+      <Button type="submit" variant="primary" disabled={!instruction.trim()}>
         Ask agent
       </Button>
       <Button type="button" variant="ghost" onClick={onCancel}>
@@ -262,12 +262,18 @@ function SectionEditor({
         rows={Math.min(Math.max(text.split('\n').length + 1, 4), 16)}
         onChange={(event) => setText(event.target.value)}
       />
-      {save.isError ? <Alert tone="danger">{agentWriteFailure(save.error).message}</Alert> : null}
+      {save.isError ? (
+        <Callout tone="negative">{agentWriteFailure(save.error).message}</Callout>
+      ) : null}
       <Inline className="justify-end">
         <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>
           Cancel
         </Button>
-        <Button type="submit" disabled={body === revision.body || !body.trim() || save.isPending}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={body === revision.body || !body.trim() || save.isPending}
+        >
           Save section
         </Button>
       </Inline>

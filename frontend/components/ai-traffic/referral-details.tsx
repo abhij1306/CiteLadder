@@ -3,7 +3,7 @@ import { SearchX } from 'lucide-react';
 import type { AiReferrals } from '@/lib/api/ai-traffic';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { formatCount, formatPercent } from '@/lib/format';
 import { aiSourceLabel } from '@/lib/ai-traffic/series';
 import { reasonLabel } from '@/lib/ai-traffic/vocabulary';
@@ -113,10 +113,10 @@ export function ReferralQuality({ data }: Readonly<{ data: AiReferrals }>) {
         {excluded} landing rows excluded for out-of-scope hosts.
       </p>
       {flags.length ? (
-        <Alert tone="info">
+        <Callout tone="info">
           GA4 quality: {flags.map(reasonLabel).join('; ')}. Missing or flagged observations are
           unavailable.
-        </Alert>
+        </Callout>
       ) : null}
     </>
   );

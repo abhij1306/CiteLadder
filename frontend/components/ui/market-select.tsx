@@ -101,7 +101,7 @@ export function MarketSelect({
       renderLeading={showCountryFlags ? (option) => <CountryFlag code={option.value} /> : undefined}
       renderOptionEnd={(option) =>
         option.value.trim().toLowerCase() === option.label.trim().toLowerCase() ? null : (
-          <span className="text-muted max-w-24 truncate tabular-nums">{option.value}</span>
+          <span className="text-ink-muted max-w-24 truncate tabular-nums">{option.value}</span>
         )
       }
     />
@@ -115,7 +115,7 @@ function CountryFlag({ code }: Readonly<{ code: string }>) {
       // than an emoji that renders differently on every platform.
       <span
         data-country-flag="GLOBAL"
-        className="text-muted flex size-5 shrink-0 items-center justify-center"
+        className="text-ink-muted flex size-5 shrink-0 items-center justify-center"
         aria-hidden
       >
         <Icon icon={Globe} />

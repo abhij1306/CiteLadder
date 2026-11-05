@@ -1,51 +1,69 @@
 'use client';
 
 import { X } from 'lucide-react';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent, ReactNode, RefObject } from 'react';
 
 import { Icon } from '@/components/ui/icon';
-import { menuItemVariants, menuPanelClasses } from '@/components/ui/menu-variants';
+import { FIELD_EDGE } from '@/components/ui/input';
+import { LogoMark } from '@/components/ui/logo-mark';
+import { MENU_PANEL, menuItemClasses } from '@/components/ui/menu';
 import { Pressable } from '@/components/ui/pressable';
 import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
 /**
- * The chat template: a thread that scrolls and a composer docked to the
- * bottom edge of whatever scrolls it (the window on a chat route, the drawer
- * body in the panel — give that `Drawer` the `dock` body).
+ * The chat template: a thread that scrolls in its own region and a composer
+ * docked under that region, so only the thread moves while a reply streams.
+ * A chat route gets it from `ListScreen fill` with a `ComposerDock` as its
+ * `dock`; the panel uses `DockedThread` (give that `Drawer` the `dock` body).
  *
- * `DockedThread` is the panel's column: the thread's parts 16 apart, the
- * dock under them, and `end` (the follow-latest sentinel) after the dock.
- * A chat route lays its thread out in its screen template and closes it with
- * `ComposerDock` alone.
+ * `DockedThread` is the panel's column: the thread's parts 16 apart in a
+ * region that scrolls (`scrollRef`, named by `label`), the dock under it.
  */
 export function DockedThread({
   children,
   dock,
   floating,
-  end,
-}: Readonly<{ children: ReactNode; dock: ReactNode; floating?: ReactNode; end?: ReactNode }>) {
+  label,
+  scrollRef,
+}: Readonly<{
+  children: ReactNode;
+  /** The composer; omitted while the chat loads or cannot be shown. */
+  dock?: ReactNode;
+  floating?: ReactNode;
+  label?: string;
+  scrollRef?: RefObject<HTMLElement | null>;
+}>) {
   return (
-    <div className="flex min-h-full flex-1 flex-col gap-4">
-      <div className="flex min-w-0 flex-1 flex-col gap-4">{children}</div>
-      <ComposerDock floating={floating}>{dock}</ComposerDock>
-      {end}
+    <div className="flex min-h-0 flex-1 flex-col">
+      <section
+        ref={scrollRef}
+        aria-label={label}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-[var(--modal-padding)]"
+      >
+        <div className="flex min-h-full min-w-0 flex-col gap-4 py-4">{children}</div>
+      </section>
+      {dock ? (
+        <div className="px-[var(--modal-padding)]">
+          <ComposerDock floating={floating}>{dock}</ComposerDock>
+        </div>
+      ) : null}
     </div>
   );
 }
 
 /**
- * The composer's dock: sticky to the bottom edge on the surface's own fill,
- * 8 above the composer and 16 under it. `floating` (a "Jump to latest"
- * control) floats centred just above the dock, out of flow, so showing it
- * never moves the composer or changes the page height while a reply streams.
+ * The composer's dock: under the thread's scrolling region, 8 above the
+ * composer and 16 under it. `floating` (a "Jump to latest" control) floats
+ * centred just above the dock, over the end of the thread and out of flow,
+ * so showing it never moves the composer or resizes the thread.
  */
 export function ComposerDock({
   children,
   floating,
 }: Readonly<{ children: ReactNode; floating?: ReactNode }>) {
   return (
-    <div className="surface-fill z-sticky sticky bottom-0 pt-2 pb-4">
+    <div className="z-sticky relative shrink-0 pt-2 pb-4">
       {floating ? (
         <div className="pointer-events-none absolute inset-x-0 bottom-full flex justify-center pb-2">
           <div className="pointer-events-auto">{floating}</div>
@@ -57,10 +75,14 @@ export function ComposerDock({
 }
 
 /**
- * The message box: one framed field with its context chips above it and its
- * tools and send control under it. The frame is the box (radius 12, the strong
- * edge, an 8 inset); the field inside is a `Textarea` with the `composer`
- * placement. Chips render only when there are any.
+ * AgentComposer's frame: one framed field (three lines) with its context
+ * chips above it and one 36px control row under it, the tools on the left
+ * and Send or Stop always at the right end. The frame is the box (`surface`,
+ * `radius-lg`, the soft xs ring a field wears, an 8 inset), as wide as the
+ * thread above it (`max-w-thread`, 1040); while the field has focus
+ * the frame takes the field focus (a `focus` edge and a 3px `line` halo).
+ * The field inside is a `Textarea` with the `composer` placement. Chips
+ * render only when there are any.
  */
 export function ComposerFrame({
   onSubmit,
@@ -80,7 +102,10 @@ export function ComposerFrame({
 }>) {
   return (
     <form
-      className="bg-input border-border-bold grid gap-1 rounded-[var(--radius-card)] border p-2"
+      className={cn(
+        'focus-frame max-w-thread mx-auto grid w-full gap-1 rounded-lg p-2 transition-[border-color,box-shadow] duration-[var(--motion-fast)]',
+        FIELD_EDGE,
+      )}
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
         onSubmit();
@@ -92,11 +117,69 @@ export function ComposerFrame({
         </ul>
       ) : null}
       {field}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1">{tools}</div>
-        {submit}
+      <div className="flex min-h-[var(--control-md)] flex-wrap items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">{tools}</div>
+        <div className="ms-auto shrink-0">{submit}</div>
       </div>
     </form>
+  );
+}
+
+/**
+ * AgentThread — the conversation's column: the thread measure (1040), centred
+ * in the page or panel, its turns 24 apart.
+ */
+export function AgentThread({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <div className="max-w-thread mx-auto flex w-full min-w-0 flex-col gap-[var(--card-padding)]">
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The person's turn: a right-aligned bubble (`surface`, `shadow-xs`,
+ * `radius-lg`) at most 80% of the column, the message as written (its line
+ * breaks kept) over its `footer` (mentions, a sending state).
+ */
+export function UserTurn({ text, footer }: Readonly<{ text: string; footer?: ReactNode }>) {
+  return (
+    <div className="flex justify-end">
+      <div className="bg-surface flex max-w-[80%] min-w-0 flex-col gap-2 rounded-lg px-4 py-3 shadow-xs">
+        <p className={textRole('body', 'whitespace-pre-wrap')}>{text}</p>
+        {footer}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The agent's turn, with no bubble: the logo mark, "Agent", the time and any
+ * `meta` (the skill it used) on one line, then the reply's parts 12 apart.
+ * `inProgress` marks the reply still being written.
+ */
+export function AgentTurn({
+  time,
+  meta,
+  inProgress = false,
+  children,
+}: Readonly<{ time?: ReactNode; meta?: ReactNode; inProgress?: boolean; children: ReactNode }>) {
+  return (
+    <article
+      aria-label={inProgress ? 'Agent reply in progress' : 'Agent reply'}
+      aria-busy={inProgress || undefined}
+      className="flex min-w-0 flex-col gap-3"
+    >
+      <div className="flex min-h-6 flex-wrap items-center gap-2">
+        <LogoMark wordmark={false} variant="compact" />
+        <span className={textRole('label')}>Agent</span>
+        {time ? (
+          <span className={textRole('caption', 'font-mono tabular-nums')}>{time}</span>
+        ) : null}
+        {meta ? <span className={textRole('caption')}>{meta}</span> : null}
+      </div>
+      {children}
+    </article>
   );
 }
 
@@ -110,11 +193,11 @@ export function RemovableChip({
   onRemove,
 }: Readonly<{ label: string; onRemove?: () => void }>) {
   return (
-    <li className="border-border text-secondary inline-flex max-w-full items-center gap-1 rounded-full border px-3 py-0.5">
-      <span className={textRole('caption', 'truncate text-secondary')}>{label}</span>
+    <li className="border-line text-ink-secondary inline-flex max-w-full items-center gap-1 rounded-sm border px-3 py-0.5">
+      <span className={textRole('caption', 'truncate text-ink-secondary')}>{label}</span>
       {onRemove ? (
         <Pressable
-          className="focus-ring hover:text-foreground flex w-auto rounded-full"
+          className="focus-ring hover:text-ink flex w-auto rounded-xs"
           aria-label={`Remove ${label}`}
           onClick={onRemove}
         >
@@ -156,7 +239,7 @@ export function SuggestionList({
       role="listbox"
       aria-label={label}
       hidden={!open}
-      className={cn(menuPanelClasses, 'absolute inset-x-0 bottom-full mb-0.5 grid')}
+      className={cn(MENU_PANEL, 'absolute inset-x-0 bottom-full mb-0.5 grid')}
     >
       {options.map((option, index) => (
         <li
@@ -166,7 +249,7 @@ export function SuggestionList({
           role="option"
           aria-selected={index === selected}
           data-active={index === selected}
-          className={cn(menuItemVariants(), 'grid gap-0.5 py-2')}
+          className={menuItemClasses({ className: 'grid h-auto gap-0.5 py-2' })}
           onMouseDown={(event) => {
             event.preventDefault();
             onPick(index);

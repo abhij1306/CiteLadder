@@ -64,6 +64,12 @@ function pagesBody(items: unknown[], nextCursor: string | null = null) {
     items,
   };
 }
+/** The pager's announced range, e.g. "1–10 paths", whose noun is set muted. */
+function pagerRange(text: string) {
+  return (_: string, element: Element | null) =>
+    element?.tagName === 'OUTPUT' && element.textContent === text;
+}
+
 function renderPages() {
   return renderWithProviders(
     <TrafficPages workspaceId={WORKSPACE} projectId={PROJECT} filters={{ range: '30d' }} />,
@@ -141,7 +147,7 @@ it('keeps the rows and the pager on screen while the next page loads', async () 
     name: 'Path-level AI Traffic with separate signal units',
   });
   expect(await within(table).findByRole('row', { name: /first-1\b/ })).toBeVisible();
-  expect(screen.getByText('1–10 paths')).toBeVisible();
+  expect(screen.getByText(pagerRange('1–10 paths'))).toBeVisible();
 
   await user.click(screen.getByRole('button', { name: 'Next page' }));
   await waitFor(() => expect(asked).toEqual(['first:10', 'page-2:10']));
@@ -155,7 +161,7 @@ it('keeps the rows and the pager on screen while the next page loads', async () 
   releaseSecond();
   expect(await within(table).findByRole('row', { name: /second-1\b/ })).toBeVisible();
   expect(within(table).queryByRole('row', { name: /first-1\b/ })).not.toBeInTheDocument();
-  expect(screen.getByText('11–11 paths')).toBeVisible();
+  expect(screen.getByText(pagerRange('11–11 paths'))).toBeVisible();
   expect(screen.getByRole('button', { name: 'Previous page' })).toBeEnabled();
 });
 

@@ -10,8 +10,9 @@ export type Fact = Readonly<{ label: ReactNode; value: ReactNode; key?: string }
 /**
  * How a list of facts lays out — a role, never a gap:
  *
- *   `ruled`  — read-only settings facts: one ruled row per fact, the labels in
- *              a narrow column so every value starts at the same edge.
+ *   `ruled`  — the system's FactList, for detail panes: table-row-height rows divided by
+ *              `line`, the labels in a fixed 160px `ink-secondary` column so
+ *              every value starts at the same edge.
  *   `inline` — a record's summary facts on one wrapping line, each label
  *              beside its value (an Action's status, priority and target).
  *   `spread` — a short ledger read down the page, each label at the start and
@@ -25,34 +26,34 @@ export type Fact = Readonly<{ label: ReactNode; value: ReactNode; key?: string }
 export type FactLayout = 'ruled' | 'inline' | 'spread' | 'columns';
 
 const LIST = {
-  ruled: 'divide-border-subtle grid divide-y',
+  ruled: 'divide-line grid divide-y',
   inline: 'flex flex-wrap items-center gap-x-6 gap-y-3',
   spread: 'grid gap-2',
   columns: 'grid gap-3 desktop:grid-flow-col desktop:auto-cols-fr',
 } as const;
 
 const ROW = {
-  // Baseline-aligned, so a label sits on the line of a value drawn as chips.
+  // A fixed 160px label column, so every value starts at the same edge.
   ruled:
-    'grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-baseline gap-4 py-2 first:pt-0 last:pb-0',
+    'grid min-h-[var(--table-row-height)] grid-cols-[160px_minmax(0,1fr)] items-center gap-x-4 py-2',
   inline: 'flex items-center gap-2',
   spread: 'flex flex-wrap items-center justify-between gap-x-4 gap-y-1',
   columns: 'grid min-w-0 gap-1',
 } as const;
 
 const TERM = {
-  ruled: textRole('label'),
+  ruled: 'text-body-sm text-ink-secondary',
   inline: textRole('label'),
-  spread: textRole('body', 'text-muted'),
+  spread: textRole('body', 'text-ink-muted'),
   columns: textRole('label'),
 } as const;
 
 const DETAIL = {
-  ruled: textRole('body', 'text-foreground tabular-nums'),
+  ruled: 'text-body-sm text-ink min-w-0 tabular-nums [overflow-wrap:anywhere]',
   inline: textRole('body'),
   // A spread row's value is a right-aligned amount or count (a quote line),
   // so its digits take the figure face and line up with the total under it.
-  spread: textRole('body', 'text-foreground font-numeric'),
+  spread: textRole('body', 'text-ink font-mono'),
   columns: textRole(
     'caption',
     'flex h-[var(--badge-height-sm)] min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap tabular-nums',
@@ -86,9 +87,9 @@ export function FactList({
         </div>
       ))}
       {total && layout === 'spread' ? (
-        <div className={cn(ROW.spread, 'border-border border-t pt-2')}>
+        <div className={cn(ROW.spread, 'border-line border-t pt-2')}>
           <dt className={textRole('emphasis')}>{total.label}</dt>
-          <dd className={textRole('emphasis', 'font-numeric')}>{total.value}</dd>
+          <dd className={textRole('emphasis', 'font-mono')}>{total.value}</dd>
         </div>
       ) : null}
     </dl>
@@ -118,14 +119,14 @@ export function ValueLedger({
       {items.map((item) => (
         <li
           key={item.key}
-          className="flex h-[var(--control-height-md)] items-center justify-between gap-3"
+          className="flex h-[var(--control-md)] items-center justify-between gap-3"
         >
           <span className={textRole('body', 'min-w-0 truncate')}>{item.label}</span>
-          <span className={textRole('label', 'shrink-0 font-numeric')}>{item.value}</span>
+          <span className={textRole('label', 'shrink-0 font-mono')}>{item.value}</span>
         </li>
       ))}
       {padding.map((slot) => (
-        <li key={slot} aria-hidden className="h-[var(--control-height-md)]" />
+        <li key={slot} aria-hidden className="h-[var(--control-md)]" />
       ))}
     </ol>
   );

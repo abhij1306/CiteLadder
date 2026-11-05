@@ -30,7 +30,7 @@ export function DemandLatentDemand({ snapshot }: Readonly<{ snapshot: DemandSnap
         </>
       ) : (
         <>
-          <InlineFigure className="text-foreground">
+          <InlineFigure className="text-ink">
             {formatCount(known.reduce((sum, value) => sum + value, 0))}
           </InlineFigure>
           {partial ? (

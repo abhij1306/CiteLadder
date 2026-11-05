@@ -6,8 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { scoreTextClass } from '@/components/ui/score-band';
+import { ClampText, mutedWhenMissing, TableCell, TableRow } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { TextLink } from '@/components/ui/text-link';
 import { cn } from '@/lib/utils';
@@ -180,7 +179,7 @@ export function PagesTable({
                 fixed column and carry the full value in a tooltip when cut. */}
           <TableCell>
             <span className="flex min-w-0 flex-col">
-              <ClampText lines={1} className={textRole('emphasis', 'text-foreground')}>
+              <ClampText lines={1} className={textRole('emphasis', 'text-ink')}>
                 {pageDisplayTitle(page.title, page.display_url)}
               </ClampText>
               <ClampText lines={1} className="type-caption tabular-nums">
@@ -200,14 +199,14 @@ export function PagesTable({
           <TableCell numeric className="tabular-nums">
             <Measured value={formatIssueCount(page.issue_count)} />
           </TableCell>
-          <TableCell numeric className={scoreTextClass(page.web_fundamentals_score)}>
+          <TableCell numeric className={mutedWhenMissing(page.web_fundamentals_score)}>
             <MeasurementValue
               score={page.web_fundamentals_score}
               coverage={page.web_fundamentals_coverage}
               state={page.web_fundamentals_state}
             />
           </TableCell>
-          <TableCell numeric className={scoreTextClass(page.aeo_readiness_score)}>
+          <TableCell numeric className={mutedWhenMissing(page.aeo_readiness_score)}>
             <MeasurementValue
               score={page.aeo_readiness_score}
               coverage={page.aeo_measurement_coverage}
@@ -225,7 +224,10 @@ export function PagesTable({
               <TableCell
                 key={column.sort}
                 numeric
-                className={cn('tabular-nums', value === null ? 'type-caption' : 'text-secondary')}
+                className={cn(
+                  'tabular-nums',
+                  value === null ? 'type-caption' : 'text-ink-secondary',
+                )}
               >
                 {value ?? <UnavailableValue state="not_measured" />}
               </TableCell>

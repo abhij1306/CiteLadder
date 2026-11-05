@@ -8,7 +8,7 @@ import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { SessionUser } from '@/lib/api/types';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { Button } from '@/components/ui/button';
 import { textRole } from '@/components/ui/typography';
 
@@ -69,21 +69,23 @@ export function SessionGuard({
     if (isError) {
       const notice = (
         <div className="grid min-h-[60vh] place-items-center p-[var(--page-section-gap)]">
-          <Alert tone="warning" className="max-w-lg">
-            <div className="grid gap-4">
-              <h1 className={textRole('sectionTitle')}>CiteLadder could not reach its API</h1>
-              <p>{humanizeApiError(error, 'Please try again.').message}</p>
+          <Callout
+            tone="warning"
+            className="max-w-lg"
+            action={
               <Button
                 variant="secondary"
-                className="w-fit"
                 onClick={() => void refetch()}
                 pending={isFetching}
                 pendingLabel="Retrying…"
               >
                 Retry
               </Button>
-            </div>
-          </Alert>
+            }
+          >
+            <h1 className={textRole('sectionTitle')}>CiteLadder could not reach its API</h1>
+            <p>{humanizeApiError(error, 'Please try again.').message}</p>
+          </Callout>
         </div>
       );
       return <>{renderSessionFallback(fallback, notice)}</>;

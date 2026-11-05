@@ -8,11 +8,10 @@
  * projects persisted values for display. Average position stays
  * the not-measured placeholder when no ranked answer exists.
  */
-import type { TrendPoint } from '@/components/ui/trend-chart';
+import type { TrendPoint, TrendSeries } from '@/components/ui/trend-chart';
 import type { LogicalEngine, VisibilityTrendPoint } from '@/lib/api/types';
 import { ENGINE_ORDER } from '@/lib/providers/catalog';
 import { formatDisplayDate, formatDisplayShortDate } from '@/lib/format';
-import { comparisonSeries, TREND_COMPARISON_SERIES } from '@/lib/visibility/chart-tokens';
 
 /** Trend granularity — mirrors the backend `granularity=run|week|month`. */
 export type TrendGranularity = 'run' | 'day' | 'week' | 'month';
@@ -130,12 +129,12 @@ function versionChangeNote(point: VisibilityTrendPoint): string {
 /**
  * Comparison lines drawn by default.
  *
- * Five, plus the tracked brand, is six lines sharing one 360-unit plot — about
- * as many as stay tellable apart at this size before the key becomes the only
- * way to read the chart. The roster is not truncated as a result: the table
- * beside the chart lists every brand, and selecting one there plots it alone.
+ * Three, plus the tracked brand: a TrendChart draws at most four lines, the
+ * most that stay tellable apart by colour and dash. The roster is not
+ * truncated as a result: the table beside the chart lists every brand, and
+ * selecting one there plots it alone.
  */
-const TREND_SERIES_LIMIT = 5;
+const TREND_SERIES_LIMIT = 3;
 
 /** Each metric reads its OWN column; the table is what keeps them paired. */
 const RANKING_METRIC_COLUMN: Record<TrendMetric, (row: RankingMetricRow) => number | null> = {
@@ -193,22 +192,15 @@ export function toCompetitorSeries(
   points: readonly VisibilityTrendPoint[],
   metric: TrendMetric,
   limit = TREND_SERIES_LIMIT,
-): {
-  label: string;
-  values: (number | null)[];
-  strokeClass: string;
-  /** The chart series the line is drawn in, for its legend key. */
-  series: (typeof TREND_COMPARISON_SERIES)[number];
-}[] {
+): TrendSeries[] {
   const latest = points.at(-1);
   const names = (latest?.rankings ?? [])
     .filter((row) => !row.is_brand)
     .sort((a, b) => (b.mention_rate ?? -1) - (a.mention_rate ?? -1))
     .slice(0, limit)
     .map((row) => row.name);
-  return names.map((name, index) => ({
+  return names.map((name) => ({
     label: name,
-    ...comparisonSeries(index),
     values: points.map((point) => {
       const row = point.rankings.find((entry) => entry.name === name);
       return row ? rankingMetricValue(row, metric) : null;

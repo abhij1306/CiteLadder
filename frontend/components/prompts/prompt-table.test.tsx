@@ -138,7 +138,7 @@ describe('PromptTable pagination', () => {
     expect(
       screen.getByText(
         (_, el) =>
-          el?.tagName === 'SPAN' &&
+          el?.tagName === 'OUTPUT' &&
           el.textContent?.replace(/\s+/g, ' ').trim() === '1–10 of 12 prompts',
       ),
     ).toBeInTheDocument();
@@ -150,7 +150,7 @@ describe('PromptTable pagination', () => {
     expect(
       screen.getByText(
         (_, el) =>
-          el?.tagName === 'SPAN' &&
+          el?.tagName === 'OUTPUT' &&
           el.textContent?.replace(/\s+/g, ' ').trim() === '11–12 of 12 prompts',
       ),
     ).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe('PromptTable pagination', () => {
     expect(
       screen.getByText(
         (_, el) =>
-          el?.tagName === 'SPAN' &&
+          el?.tagName === 'OUTPUT' &&
           el.textContent?.replace(/\s+/g, ' ').trim() === '1–10 of 12 prompts',
       ),
     ).toBeInTheDocument();
@@ -188,7 +188,7 @@ describe('PromptTable pagination', () => {
     expect(
       screen.getByText(
         (_, el) =>
-          el?.tagName === 'SPAN' &&
+          el?.tagName === 'OUTPUT' &&
           el.textContent?.replace(/\s+/g, ' ').trim() === '11–12 of 12 prompts',
       ),
     ).toBeInTheDocument();

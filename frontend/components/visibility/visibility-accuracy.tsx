@@ -9,10 +9,10 @@ import {
 import { Globe, ShieldCheck } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
-import { BusyBar } from '@/components/ui/busy-bar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
+import { BusyBar } from '@/components/ui/progress-bar';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -66,8 +66,8 @@ export function VisibilityAccuracy({
   if (!query.data)
     return (
       <Stack gap="workspace" aria-busy>
-        <Skeleton shape="block" />
-        <Skeleton shape="chart" />
+        <Skeleton variant="block" />
+        <Skeleton variant="chart" />
       </Stack>
     );
   return (
@@ -125,7 +125,7 @@ function AccuracyState({
 }
 
 function CoverageNote({ coverage }: Readonly<{ coverage: AccuracyCoverage }>) {
-  return <p className={textRole('caption', 'text-muted')}>{accuracyCoverageLine(coverage)}</p>;
+  return <p className={textRole('caption', 'text-ink-muted')}>{accuracyCoverageLine(coverage)}</p>;
 }
 
 function Headline({ data }: Readonly<{ data: AccuracyResponse }>) {
@@ -197,11 +197,11 @@ function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
               <Stack as="li" gap="tight" key={`${claim.execution_id}:${claim.quote}`}>
                 <ClaimLink claim={claim} />
                 {claim.facts.map((fact) => (
-                  <span key={fact.statement} className="type-caption text-secondary">
+                  <span key={fact.statement} className="type-caption text-ink-secondary">
                     Your fact: {fact.statement}
                   </span>
                 ))}
-                <Inline as="span" className={textRole('caption', 'text-muted flex-wrap')}>
+                <Inline as="span" className={textRole('caption', 'text-ink-muted flex-wrap')}>
                   <Badge variant="sentiment" value="negative">
                     {TOPIC_LABELS[claim.topic]}
                   </Badge>

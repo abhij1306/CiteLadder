@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
+import { Callout } from '@/components/ui/callout';
 import { CrawlLogConnections } from '@/components/ai-traffic/crawl-log-connections';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -71,33 +71,33 @@ function CallbackNotice({
         : null;
     if (family === 'google') {
       return (
-        <Alert tone="success">
+        <Callout tone="positive">
           <strong>Google connected.</strong> Search Console and Analytics 4 are now linked on one
           shared OAuth grant. Select a property for each below to start importing — nothing syncs
           until a property is chosen.
-        </Alert>
+        </Callout>
       );
     }
     if (family === 'microsoft') {
       return (
-        <Alert tone="success">
+        <Callout tone="positive">
           <strong>Bing connected.</strong> Bing Webmaster Tools is now linked. Select a property
           below to start importing — nothing syncs until a property is chosen.
-        </Alert>
+        </Callout>
       );
     }
     return (
-      <Alert tone="success">
+      <Callout tone="positive">
         <strong>Integration connected.</strong> Select a property below to start importing — nothing
         syncs until a property is chosen.
-      </Alert>
+      </Callout>
     );
   }
   if (notice.error) {
     return (
-      <Alert tone="danger">
+      <Callout tone="negative">
         <strong>Connection failed.</strong> {oauthErrorMessage(notice.error)}
-      </Alert>
+      </Callout>
     );
   }
   return null;
@@ -147,7 +147,7 @@ export function IntegrationSettings() {
   const connections = connectionsQuery.data ?? [];
   const grants = groupIntoGrants(connections);
 
-  if (!workspaceId) return <Alert tone="info">Loading your workspace…</Alert>;
+  if (!workspaceId) return <Callout tone="info">Loading your workspace…</Callout>;
 
   return (
     <Stack gap="workspace">

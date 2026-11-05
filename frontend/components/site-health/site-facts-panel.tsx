@@ -1,8 +1,8 @@
 'use client';
 import { Fragment, useState, type ReactNode } from 'react';
-import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Disclosure } from '@/components/ui/disclosure';
@@ -84,14 +84,14 @@ function SiteFactsViewPanel({ crawl, view }: Readonly<{ crawl: SiteCrawl; view: 
       <CardContent>
         <Stack className="min-w-0">
           {unknown ? (
-            <Alert tone="warning">
+            <Callout tone="warning">
               robots.txt could not be read. Root access and robots policy are unknown.
-            </Alert>
+            </Callout>
           ) : null}
           {view.robots.status === 'not_found' ? (
-            <Alert tone="info">
+            <Callout tone="info">
               No robots.txt was found. No robots rules restrict these known URLs.
-            </Alert>
+            </Callout>
           ) : null}
           <Disclosure title={crawlerSummary(view)}>
             <CrawlerTable

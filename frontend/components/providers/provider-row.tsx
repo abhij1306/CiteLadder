@@ -3,7 +3,7 @@
 import { useId, useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
@@ -51,9 +51,7 @@ function StatusBadge({
       </Badge>
     );
   }
-  return (
-    <Badge variant="neutral">{isConfigured(connection) ? 'Not verified' : 'Not connected'}</Badge>
-  );
+  return <Badge>{isConfigured(connection) ? 'Not verified' : 'Not connected'}</Badge>;
 }
 
 /** "ChatGPT API · gpt-6.1-terra" for an API; the bare surface name for a consumer app. */
@@ -68,7 +66,7 @@ function LastFailure({ group }: Readonly<{ group: ProviderGroup }>) {
   )?.latest_probe;
   if (!probe) return null;
   return (
-    <p className="type-caption text-danger-text">
+    <p className="type-caption text-negative">
       Last test failed
       {probe.safe_reason ? `: ${probe.safe_reason}` : ''}
       {probe.model ? ` (model ${probe.model})` : ''}.
@@ -102,6 +100,7 @@ function CredentialForm({ id, state }: Readonly<{ id: string; state: ConnectionS
         </Button>
         <Button
           type="button"
+          variant="primary"
           onClick={() => saveMutation.mutate()}
           disabled={busy || hasPartialCredentialInput || (!hasCredentialInput && !configured)}
         >
@@ -135,7 +134,7 @@ export function ProviderRow({
     <Stack as="li" gap="compact" className={ledgerItemClasses()}>
       <Inline gap="workspace" className="flex-wrap">
         <Inline gap="compact" className="flex-1">
-          <BrandLogo
+          <BrandMark
             name={group.label}
             logoUrl={TRANSPORT_LOGOS[group.transport]}
             websiteUrl={TRANSPORT_DOMAINS[group.transport]}

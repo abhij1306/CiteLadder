@@ -17,7 +17,7 @@ function Snippet({ label, value }: Readonly<{ label: string; value: string }>) {
       <pre
         className={panelClasses(
           { tone: 'well' },
-          'type-caption overflow-x-auto font-mono whitespace-pre',
+          'type-code overflow-x-auto border-0 whitespace-pre',
         )}
       >
         {/* Block, so the first line sits on the well's inset, not a line-height below it. */}

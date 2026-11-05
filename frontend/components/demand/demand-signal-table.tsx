@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 import { ProjectLink } from '@/components/layout/scoped-link';
+import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -13,7 +14,6 @@ import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { splitPaneClasses } from '@/components/ui/workspace';
 import type { DemandSignal } from '@/lib/api/demand';
 import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
 import {
@@ -58,7 +58,7 @@ export function SignalLegend({ signals }: Readonly<{ signals: readonly DemandSig
   if (types.length === 0) return null;
   return (
     <section aria-label="Signal types">
-      <dl className={splitPaneClasses('peers')}>
+      <AppGrid as="dl" layout="halves">
         {types.map((type) => (
           <Inline key={type} className="items-start">
             <dt className="shrink-0">
@@ -67,7 +67,7 @@ export function SignalLegend({ signals }: Readonly<{ signals: readonly DemandSig
             <dd className={textRole('caption')}>{signalTypeMeta(type).definition}</dd>
           </Inline>
         ))}
-      </dl>
+      </AppGrid>
     </section>
   );
 }

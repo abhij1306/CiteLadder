@@ -9,7 +9,7 @@ import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/
  * `check:policy` guards the inputs (tokens, classes). It cannot see a 28px
  * button beside a 32px tab, a toolbar rebinding a token, or an error block
  * that is 88px on one route and 152px on the next — and those are what made
- * the app look inconsistent (docs/design.md, Data and geometry). So this
+ * the app look inconsistent (docs/design.md, Behaviour every surface keeps). So this
  * walks every product route at the owner's viewport (982×900, DPR 1) and at
  * 1280×900, in light and dark, measures every visible control, badge, tab,
  * band, box and query state, and asserts ONE value per role — the same
@@ -44,43 +44,71 @@ const ROUTES = [
   '/agent/context',
 ] as const;
 
-/** One control height for the product. */
+/** One control height for the product: control-md, 32 in the app (decision D11). */
 const CONTROL_HEIGHT = 32;
+/** The ThemeSwitch is the system's one control-sm atom. */
+const THEME_SWITCH_HEIGHT = 28;
 /** One badge height. */
-const BADGE_HEIGHT = 20;
+const BADGE_HEIGHT = 22;
 /** Text controls and tabs share one horizontal padding; icon-only controls have none. */
 const TEXT_CONTROL_PADDING_X = 12;
 const ICON_CONTROL_PADDING_X = 0;
-/** The control band: 8 + a 32px row + 8, closed by a 1px rule. */
-const CONTROL_BAND_HEIGHT = 49;
-/** Sections in the content region stand 24 apart; cards inside a section 16. */
-const SECTION_GAP = 24;
-const CARD_GAP = 16;
-/** One box recipe: padding 16 on the box element, radius 12, a 1px border. */
+/**
+ * The sidebar's project and account buttons: as tall as the PageHeader's
+ * title row (row-app, 40) in the full column and in the 57px rail,
+ * so the sidebar and the page share their first line (decision D11).
+ */
+const SIDEBAR_IDENT_HEIGHT_FULL = 40;
+const SIDEBAR_IDENT_HEIGHT_RAIL = 40;
+/**
+ * The sticky top bar: the switcher cell and the PageHeader are one 56px bar
+ * from the top of the window, the 40 title row with 8 above and below (D12).
+ */
+const TOP_BAR_HEIGHT = 56;
+/** The rail stacks the Dashboard | Agent track: one control wide. */
+const RAIL_MODE_TRACK_WIDTH = 32;
+/** The shell's breakpoint (`shell:`): the full sidebar from here, the rail below. */
+const SHELL_MIN_WIDTH = 1280;
+/** The page template: header → 16 → controls → 8 → content; 16 with no controls (D11). */
+const HEADER_BAND_GAP = 16;
+const CONTROL_BAND_GAP = 8;
+/** The content band's children (cards, sections) stand 12 apart, as do cards inside them. */
+const CONTENT_GAP = 12;
+const CARD_GAP = 12;
+/**
+ * One box recipe: padding 16 on the box element (D11), radius 8 (rounded-lg,
+ * D10), and no border: a box is lifted by its shadow.
+ */
 const CARD_INSET = 16;
-const BOX_RADIUS = 12;
-const BOX_BORDER = 1;
-/** Loading, read-error and first-use empty share one footprint. */
-const QUERY_STATE_HEIGHT = 160;
-const TABLE_ROW_HEIGHT = 36;
-const TABLE_CELL_PADDING_Y = 6;
-/** A DataTable's header row is the control band again: 8 + 32 + 8 and its rule. */
-const DATA_TABLE_HEADER_HEIGHT = 49;
-/** That header row (or the column header) starts at the card's top edge. */
-const DATA_TABLE_PADDING_TOP = 0;
-/** A StatRow segment is padded 12 above and below; a row's segments share one height. */
+const BOX_RADIUS = 8;
+const BOX_BORDER = 0;
+/**
+ * Loading, read-error and first-use empty share one footprint: the block
+ * EmptyState's. The state draws no box of its own (its Skeleton, Callout or
+ * EmptyState does), so it has no padding.
+ */
+const QUERY_STATE_HEIGHT = 200;
+const QUERY_STATE_PADDING = 0;
+const TABLE_ROW_HEIGHT = 40;
+const TABLE_CELL_PADDING_Y = 8;
+/** A DataTable's title-and-toolbar row is one control high; the card's 16 insets it. */
+const DATA_TABLE_HEADER_HEIGHT = 32;
+/**
+ * A StatRow segment is padded 12 above and below (cancelled by its margin, so
+ * a pressable segment's fill has room); a row's segments share one height.
+ */
 const STAT_SEGMENT_PADDING_Y = 12;
 const STAT_ROW_HEIGHT_SPREAD = 0;
 /** The Icon atom's one glyph size. */
 const ICON_SIZE = 16;
 /** A row's kind mark (an IconTile) is a control-sized square. */
 const ICON_TILE_SIZE = 32;
-/** A ControlRow and an IdentityRow hold their parts 12 apart. */
-const ROW_PART_GAP = 12;
+/** A ControlRow and an IdentityRow hold their parts 8 apart (compact-gap). */
+const ROW_PART_GAP = 8;
 /** A ruled fact list pads each fact 8 above and below. */
 const FACT_ROW_PADDING_Y = 8;
-/** A field's end target (clear, reveal) is the field less its 2px inset each side. */
-const FIELD_END_TARGET_SIZE = 28;
+/** A field's end target (clear, reveal) is SearchField's 20px clear square. */
+const FIELD_END_TARGET_SIZE = 20;
 /** An inline code token is padded 8 across and 4 down. */
 const CODE_TOKEN_PADDING_X = 8;
 const CODE_TOKEN_PADDING_Y = 4;
@@ -88,7 +116,8 @@ const CODE_TOKEN_PADDING_Y = 4;
 type Box = Readonly<{ route: string; role: string; label: string; value: number }>;
 
 /** Everything the census measures on one settled page, as role/value records. */
-function measure(route: string) {
+function measure({ route, shellMinWidth }: { route: string; shellMinWidth: number }) {
+  const rail = window.innerWidth < shellMinWidth;
   const round = (value: number) => Math.round(value * 2) / 2;
   const visible = (element: Element) => {
     if (element.closest('[hidden]')) return false;
@@ -116,6 +145,8 @@ function measure(route: string) {
     if (element.closest('[role="tablist"], [role="radiogroup"], [role="menu"], [role="dialog"]'))
       continue;
     if (element.closest(':has(> input)')) continue;
+    // The sidebar's project and account rows are their own role below.
+    if (element.matches('[data-sidebar-ident]')) continue;
     const style = getComputedStyle(element);
     if (Number.parseFloat(style.marginTop) < 0) continue;
     if (
@@ -152,45 +183,73 @@ function measure(route: string) {
   }
   for (const element of all('select, [role="combobox"], button[aria-haspopup="listbox"]'))
     add('select.height', element, element.getBoundingClientRect().height);
-  for (const element of all('[role="tab"]')) {
+  // Tabs and segmented switches are measured by their track: the tabs and
+  // segments sit inside it.
+  for (const element of all('[role="tablist"]'))
     add('tab.height', element, element.getBoundingClientRect().height);
+  for (const element of all('[role="tab"]'))
     add('tab.padding-x', element, px(getComputedStyle(element).paddingLeft));
+  for (const element of all(
+    '[data-segmented-track], [role="radiogroup"]:not([data-segmented-track] *, [data-theme-switch])',
+  )) {
+    // In the icon rail the Dashboard | Agent track stands on end: one control wide.
+    if (rail && element.closest('aside'))
+      add('rail-mode-track.width', element, element.getBoundingClientRect().width);
+    else add('segmented.height', element, element.getBoundingClientRect().height);
   }
-  // A segmented switch is measured by its track: segments sit inside it.
-  for (const element of all('[role="radiogroup"], .segmented-track'))
-    add('segmented.height', element, element.getBoundingClientRect().height);
+  for (const element of all('[data-sidebar-ident]'))
+    add(
+      rail ? 'sidebar-ident.height.rail' : 'sidebar-ident.height.full',
+      element,
+      element.getBoundingClientRect().height,
+    );
+  // The sticky top bar (D12): the sidebar's switcher cell and the PageHeader
+  // end on one line, the rule under both, scrolled or not.
+  for (const element of all('[data-top-bar], [data-page-header]'))
+    add('top-bar.bottom', element, element.getBoundingClientRect().bottom);
+  for (const element of all('[data-theme-switch]'))
+    add('theme-switch.height', element, element.getBoundingClientRect().height);
   for (const element of all('aside a, nav a')) {
-    if (element.closest('[role="radiogroup"], [role="tablist"], .segmented-track')) continue;
+    if (element.closest('[role="radiogroup"], [role="tablist"], [data-segmented-track]')) continue;
     if (!hasText(element)) continue;
     add('nav-row.height', element, element.getBoundingClientRect().height);
   }
   // Badges: status and count objects in text or cells, never inside a control.
-  for (const element of all('.type-badge')) {
+  for (const element of all('[data-badge-tone]')) {
     if (element.closest('button, a, [role="radiogroup"], [role="tab"]')) continue;
     const display = getComputedStyle(element).display;
     if (!display.includes('flex')) continue;
     add('badge.height', element, element.getBoundingClientRect().height);
   }
   // The header cluster: every control on the identity band's row, the
-  // shell's own glyphs included.
+  // shell's own glyphs included; the ThemeSwitch is its own role above.
   const identity = document.querySelector('[data-page-band="identity"]');
   if (identity && visible(identity)) {
     const band = identity.getBoundingClientRect();
     for (const element of all('button, a[role="button"]')) {
+      if (element.closest('[data-theme-switch]')) continue;
       const rect = element.getBoundingClientRect();
       if (rect.top >= band.top && rect.bottom <= band.bottom && rect.left >= band.left)
         add('header-cluster.height', element, rect.height);
     }
   }
-  for (const element of all('[data-page-band="control"]'))
-    add('control-band.height', element, element.getBoundingClientRect().height);
-  // Section rhythm: the gap between consecutive sections of the content region.
-  for (const region of all('[data-page-measure]')) {
+  // Band rhythm: from each band to whatever band follows it.
+  const bandGap = (selector: string, role: string) => {
+    for (const band of all(selector)) {
+      const next = band.nextElementSibling;
+      if (next && visible(next))
+        add(role, next, next.getBoundingClientRect().top - band.getBoundingClientRect().bottom);
+    }
+  };
+  bandGap('[data-page-band="identity"]', 'band.gap.header');
+  bandGap('[data-page-band="control"]', 'band.gap.controls');
+  // Content rhythm: the gap between consecutive children of the content band.
+  for (const region of all('[data-page-content]')) {
     let previous: Element | undefined;
     for (const child of Array.from(region.children).filter(visible)) {
       if (previous) {
         const above = previous.getBoundingClientRect().bottom;
-        add('section.gap', child, child.getBoundingClientRect().top - above);
+        add('content.gap', child, child.getBoundingClientRect().top - above);
       }
       previous = child;
     }
@@ -199,11 +258,14 @@ function measure(route: string) {
   // section, and where their content starts — the ink, not the CSS, because
   // the same 16 can sit on the box or on a child.
   const boxes = '.surface-card, .surface-panel';
+  // A Callout is a drawn box of its own: its edge is the ink, not its text.
   const isContent = (element: Element) =>
-    element.matches('button, input, select, textarea, svg, img, [role="combobox"]') ||
-    Array.from(element.childNodes).some(
-      (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
-    );
+    element.matches('[data-callout-tone]') ||
+    (!element.parentElement?.closest('[data-callout-tone]') &&
+      (element.matches('button, input, select, textarea, svg, img, [role="combobox"]') ||
+        Array.from(element.childNodes).some(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+        )));
   // A state nested in a container shares that container's surface and inset
   // (globals.css), so it is not a box of its own.
   const nestedState = (element: Element) =>
@@ -212,19 +274,14 @@ function measure(route: string) {
   for (const box of all(boxes)) {
     if (nestedState(box)) continue;
     const boxStyle = getComputedStyle(box);
-    // A record table's first row is its own top inset (data-table.tsx).
-    add(
-      box.matches('[data-data-table]') ? 'data-table.padding-top' : 'box.padding',
-      box,
-      px(boxStyle.paddingTop),
-    );
+    add('box.padding', box, px(boxStyle.paddingTop));
     add('box.radius', box, px(boxStyle.borderTopLeftRadius));
     add('box.border', box, px(boxStyle.borderTopWidth));
     const next = box.nextElementSibling;
     if (
       next?.matches(boxes) &&
       visible(next) &&
-      !box.parentElement?.matches('[data-page-measure]')
+      !box.parentElement?.matches('[data-page-content]')
     ) {
       const a = box.getBoundingClientRect();
       const b = next.getBoundingClientRect();
@@ -263,7 +320,7 @@ function measure(route: string) {
   // height (the spread between the tallest and the shortest).
   for (const element of all('[data-stat-segment]'))
     add('stat-segment.padding-y', element, px(getComputedStyle(element).paddingTop));
-  for (const row of all('[data-stat-row] > dl')) {
+  for (const row of all('dl[data-stat-row]')) {
     const heights = Array.from(row.children)
       .filter(visible)
       .map((segment) => segment.getBoundingClientRect().height);
@@ -354,7 +411,12 @@ async function census(
         }),
     );
     await expect(page.locator('[data-query-state="loading"]')).toHaveCount(0);
-    records.push(...(await page.evaluate(measure, `${label} @${width}`)));
+    records.push(
+      ...(await page.evaluate(measure, {
+        route: `${label} @${width}`,
+        shellMinWidth: SHELL_MIN_WIDTH,
+      })),
+    );
   }
   return records;
 }
@@ -456,11 +518,7 @@ for (const theme of ['light', 'dark'] as const) {
 
     test('every product route renders one value per geometric role', async ({ page }) => {
       test.setTimeout(240_000);
-      // The product theme is a stored per-device choice, not the OS scheme.
-      await page.addInitScript(
-        (value) => window.localStorage.setItem('citeladder.theme', value),
-        theme,
-      );
+      // With no stored choice the theme follows the emulated device scheme.
       await expectOneGeometry(page);
     });
   });
@@ -516,6 +574,17 @@ async function expectOneGeometry(page: Page) {
     })),
   );
 
+  // The account menu open, so its ThemeSwitch (the one control-sm atom) is drawn.
+  records.push(
+    ...(await census(page, '/projects', {
+      label: '/projects (account menu)',
+      prepare: async (current) => {
+        await current.getByRole('button', { name: /^Account menu/ }).click();
+        await expect(current.getByRole('radiogroup', { name: 'Theme' })).toBeVisible();
+      },
+    })),
+  );
+
   expectOneValue(records, 'button.height', CONTROL_HEIGHT);
   expectOneValue(records, 'input.height', CONTROL_HEIGHT);
   expectOneValue(records, 'select.height', CONTROL_HEIGHT);
@@ -523,22 +592,27 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'segmented.height', CONTROL_HEIGHT);
   expectOneValue(records, 'nav-row.height', CONTROL_HEIGHT);
   expectOneValue(records, 'header-cluster.height', CONTROL_HEIGHT);
+  expectOneValue(records, 'theme-switch.height', THEME_SWITCH_HEIGHT);
   expectOneValue(records, 'control.font-size', 14);
   expectOneValue(records, 'badge.height', BADGE_HEIGHT);
   expectOneValue(records, 'button.padding-x.text', TEXT_CONTROL_PADDING_X);
   expectOneValue(records, 'button.padding-x.icon', ICON_CONTROL_PADDING_X);
   expectOneValue(records, 'tab.padding-x', TEXT_CONTROL_PADDING_X);
-  expectOneValue(records, 'control-band.height', CONTROL_BAND_HEIGHT);
-  expectOneValue(records, 'section.gap', SECTION_GAP);
+  expectOneValue(records, 'sidebar-ident.height.full', SIDEBAR_IDENT_HEIGHT_FULL);
+  expectOneValue(records, 'sidebar-ident.height.rail', SIDEBAR_IDENT_HEIGHT_RAIL);
+  expectOneValue(records, 'rail-mode-track.width', RAIL_MODE_TRACK_WIDTH);
+  expectOneValue(records, 'top-bar.bottom', TOP_BAR_HEIGHT);
+  expectOneValue(records, 'band.gap.header', HEADER_BAND_GAP);
+  expectOneValue(records, 'band.gap.controls', CONTROL_BAND_GAP);
+  expectOneValue(records, 'content.gap', CONTENT_GAP);
   expectOneValue(records, 'card.gap', CARD_GAP);
   expectOneValue(records, 'box.padding', CARD_INSET);
-  expectOneValue(records, 'data-table.padding-top', DATA_TABLE_PADDING_TOP);
   expectOneValue(records, 'box.radius', BOX_RADIUS);
   expectOneValue(records, 'box.border', BOX_BORDER);
   expectOneValue(records, 'card.inset-top', CARD_INSET);
   expectOneValue(records, 'card.inset-left', CARD_INSET);
   expectOneValue(records, 'query-state.height', QUERY_STATE_HEIGHT);
-  expectOneValue(records, 'query-state.padding', CARD_INSET);
+  expectOneValue(records, 'query-state.padding', QUERY_STATE_PADDING);
   expectOneValue(records, 'table-row.height', TABLE_ROW_HEIGHT);
   expectOneValue(records, 'table-cell.padding-y', TABLE_CELL_PADDING_Y);
   expectOneValue(records, 'data-table-header.height', DATA_TABLE_HEADER_HEIGHT);
@@ -551,7 +625,4 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'field-end-target.size', FIELD_END_TARGET_SIZE);
   expectOneValue(records, 'code-token.padding-x', CODE_TOKEN_PADDING_X);
   expectOneValue(records, 'code-token.padding-y', CODE_TOKEN_PADDING_Y);
-
-  // The account menu is a 32px control like every other one in its row.
-  await expect(page.getByRole('button', { name: /^Account menu/ })).toHaveCSS('height', '32px');
 }

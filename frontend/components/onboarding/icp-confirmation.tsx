@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { FlowGroup } from '@/components/onboarding/flow-shell';
+import { FieldGroup } from '@/components/ui/checklist-field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { RadioGroup } from '@/components/ui/radio-group';
@@ -71,7 +71,11 @@ type IcpPart = Readonly<{
  * reason they are a ruled list: as chips, the long one became a two-line box
  * beside a set of small ones and the set stopped reading as a set.
  */
-export function IcpCategory({ profile, onChange }: IcpPart) {
+export function IcpCategory({
+  profile,
+  onChange,
+  note,
+}: IcpPart & Readonly<{ /** Why Create project waits on this answer. */ note?: string }>) {
   const update = <K extends keyof DiscoveryProfile>(key: K, value: DiscoveryProfile[K]) =>
     onChange({ ...profile, [key]: value });
 
@@ -80,15 +84,13 @@ export function IcpCategory({ profile, onChange }: IcpPart) {
   const [isOther, setIsOther] = useState(() => !choices.includes(profile.category));
 
   return (
-    <FlowGroup
-      className="flow-review-card"
-      title="What you sell"
+    <FieldGroup
+      label="What you sell"
       help="Your competitors and tracked questions are built from this."
+      note={note}
     >
-      <Stack gap="tight">
+      <Stack gap="compact">
         <RadioGroup
-          variant="row"
-          className="border-y-0"
           ariaLabel="What you sell"
           value={isOther ? OTHER_CATEGORY : profile.category}
           options={[
@@ -122,11 +124,10 @@ export function IcpCategory({ profile, onChange }: IcpPart) {
             value={choices.includes(profile.category) ? '' : profile.category}
             onChange={(event) => update('category', event.target.value)}
             placeholder="e.g. ecommerce implementation agency"
-            className="max-w-md"
           />
         ) : null}
       </Stack>
-    </FlowGroup>
+    </FieldGroup>
   );
 }
 
@@ -137,9 +138,10 @@ export function IcpAudience({ profile, onChange }: IcpPart) {
 
   return (
     <>
-      <FlowGroup title="Who buys it">
+      <FieldGroup label="Who buys it">
         <RadioGroup
-          variant="chip"
+          variant="cards"
+          columns={3}
           ariaLabel="Who buys it"
           value={profile.business_type ?? ''}
           options={BUYER_TYPE_CHOICES}
@@ -147,11 +149,13 @@ export function IcpAudience({ profile, onChange }: IcpPart) {
             if (value) update('business_type', value);
           }}
         />
-      </FlowGroup>
+      </FieldGroup>
 
-      <FlowGroup title="Where they buy it">
+      {/* Four answers: two by two, never three and one. */}
+      <FieldGroup label="Where they buy it">
         <RadioGroup
-          variant="chip"
+          variant="cards"
+          columns={2}
           ariaLabel="Where they buy it"
           value={profile.market_scope ?? ''}
           options={MARKET_SCOPE_CHOICES}
@@ -159,7 +163,7 @@ export function IcpAudience({ profile, onChange }: IcpPart) {
             if (value) update('market_scope', value);
           }}
         />
-      </FlowGroup>
+      </FieldGroup>
     </>
   );
 }

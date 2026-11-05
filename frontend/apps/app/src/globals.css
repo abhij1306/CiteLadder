@@ -1,217 +1,202 @@
 /*
- * The design system itself — tokens, base, and every hand-written rule.
+ * The design system's tokens, base, and every hand-written shared rule.
+ *
+ * The system itself is the CiteLadder Design System artifact (docs/design.md):
+ * monochrome with one flare of orange. Every token here carries the system's
+ * name and value from its tokens.json, in both themes; nothing else declares a
+ * colour, a face, a radius or a shadow.
  *
  * It does NOT import Tailwind. The app's entry does that, with its own
  * `@source` list, and then imports this.
  */
 @import "./ui-motion.css";
 
-/* The product's one breakpoint (docs/design.md §Data and geometry): the
-   sidebar shell appears at 981px, the same edge as the `max-width: 980px`
-   rules below. Product components change layout only through `desktop:`;
-   `sm:`/`md:`/`lg:`/`xl:` belong to the flow. */
+/* The product's two layout variants. `shell:` is the system's one shell
+   breakpoint (1280px): from it the sidebar shows its labels, the main gutter
+   is 32, AppGrid and KPI rows take their full columns and the FilterBar is one
+   row; below it the sidebar is a 61px icon rail. `desktop:` (981px) is the
+   width at which a component's own internals (a form's two columns, a
+   table's secondary columns, a list beside its detail) stop stacking.
+   `sm:`/`md:`/`lg:`/`xl:` (640, 768, 1024, 1280) and `2xl:` (1440) are the
+   website's. */
+@custom-variant shell (@media (min-width: 1280px));
 @custom-variant desktop (@media (min-width: 981px));
 
-/* CiteLadder's single design-system owner across the product and onboarding
-   surfaces. */
 @theme {
-  --font-sans:
-    var(--font-text), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: var(--font-heading), sans-serif;
-  /* Numbers in data roles: the runtime's figure face sets the digits (it
-     covers nothing else) and the text stack the rest. Only the figure roles
-     below and shared components in components/ui use it. */
-  --font-numeric:
-    var(--font-figure), var(--font-text), -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  /* Faces. Cal Sans (display) sets headings and big numbers at weight 400
+     only; Geist (sans) everything people read and click; Geist Mono (mono)
+     eyebrows, deltas, dates, citation numbers and code. index.html names the
+     faces and their metric-matched fallbacks as `--font-face-*`. */
+  --font-*: initial;
+  --font-sans: var(--font-face-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-face-display), var(--font-face-sans), system-ui, sans-serif;
+  --font-mono: var(--font-face-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* One palette for every surface (owner decision, 2026-10-07): a calm pure
-     neutral ground with white paper, near-black ink and hairlines, so
-     onboarding and the product read as one system. The neutrals
-     carry no tint (owner, 2026-11-03); green is the accent alone. At most
-     three levels show on any screen: canvas, card, one inset. A box inside an
-     inset is a border or a divider, never another fill.
+  /* Colour. Black, white and grey do the work; `accent` (Flare) is a mark
+     only — the logo, active rungs, your own brand's citations and series, the
+     highlighter and the selected-nav marker — never a button, a background or
+     a heading. Status hues appear only in badges, deltas, callouts and errors,
+     always beside an arrow, icon or word. Dark values are below. */
+  --color-*: initial;
+  --color-paper: #f4f4f4;
+  --color-surface: #ffffff;
+  --color-surface-sunken: #ececec;
+  --color-nav-glass: rgb(244 244 244 / 78%);
+  --color-line: #e5e5e5;
+  --color-line-strong: #d4d4d4;
+  --color-line-control: #858585;
+  --color-ink: #111111;
+  --color-ink-hover: #2a2a2a;
+  --color-ink-secondary: #525252;
+  --color-ink-muted: #6b6b6b;
+  --color-on-ink: #ffffff;
+  --color-accent: #e8501a;
+  --color-accent-ink: #b53a0c;
+  --color-accent-soft: #ffe6da;
+  --color-on-accent: #111111;
+  --color-focus: var(--color-ink);
+  --color-positive: #0b6e69;
+  --color-positive-soft: #d6f2ef;
+  --color-negative: #c4122f;
+  --color-negative-soft: #ffe2e6;
+  --color-warning: #8a5000;
+  --color-warning-soft: #fff0d1;
+  --color-info: #1f5fbf;
+  --color-info-soft: #e3edfc;
+  --color-data-1: var(--color-accent);
+  --color-data-2: var(--color-ink);
+  --color-data-3: #7a7a7a;
+  --color-data-other: #c2c2c2;
+  --color-scrim: rgb(17 17 17 / 32%);
+  --color-chart-grid: #ececec;
 
-     The product shows three levels (owner, 2026-11-03):
-       panel       — the rail, the ground around the sheet, and every card,
-                     table or panel on the sheet: one fill;
-       sheet       — the floating workspace sheet and its page bands, one
-                     step darker than the cards on it;
-       well/input  — the one inset inside a card: fields and code wells.
-     `background` is the document ground outside the app shell (gate notices,
-     the flow stage). `panel-tonal` remains for hover-level tints and the
-     skeleton; a box inside a card is a border or a divider, never a fill. */
-  --color-background: #f5f5f5;
-  --color-sheet: #f4f4f4;
-  --color-panel: #ffffff;
-  /* Hover, a selected row, a segmented track, a progress track. */
-  --color-panel-tonal: #f2f2f2;
-  --color-background-alt: var(--color-panel-tonal);
-  /* Menus, popovers, tooltips and dialogs, lifted by `--shadow-overlay`. */
-  --color-elevated: #ffffff;
-  /* Inset areas: code, "how to fix" boxes, empty chart areas. */
-  --color-well: #f7f7f7;
-  /* Interaction tints mix the ink into the surface that receives them. */
-  --color-state-ink: var(--color-foreground);
-  --color-hover: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 4%);
-  --color-selected: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 8%);
-  --color-active: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 12%);
-  --color-disabled: color-mix(in srgb, var(--color-panel), var(--color-state-ink) 3%);
-  /* Recessed selection track; state tints follow their enclosing surface. */
-  --color-track: var(--color-panel-tonal);
-  --color-input: #ffffff;
-  --color-surface-inverse: var(--color-brand-ink);
+  /* Type. Each role owns size, leading, weight and tracking; on the website
+     and docs the display roles (display-*, title, title-sm, stat) pair with
+     `font-display`. In the app only the page title is Cal Sans (D7): its other
+     titles and figures set these sizes in Geist 500. The mono roles (eyebrow,
+     data, code) pair with `font-mono`, the rest are Geist, never above 500. */
+  --text-*: initial;
+  --text-display-2xl: 44px;
+  --text-display-2xl--line-height: 48px;
+  --text-display-2xl--font-weight: 400;
+  --text-display-2xl--letter-spacing: -0.01em;
+  --text-display-xl: 36px;
+  --text-display-xl--line-height: 42px;
+  --text-display-xl--font-weight: 400;
+  --text-display-xl--letter-spacing: -0.01em;
+  --text-display-lg: 32px;
+  --text-display-lg--line-height: 38px;
+  --text-display-lg--font-weight: 400;
+  --text-display-lg--letter-spacing: -0.01em;
+  --text-display-md: 28px;
+  --text-display-md--line-height: 34px;
+  --text-display-md--font-weight: 400;
+  --text-display-md--letter-spacing: -0.01em;
+  --text-display-sm: 24px;
+  --text-display-sm--line-height: 32px;
+  --text-display-sm--font-weight: 400;
+  --text-display-sm--letter-spacing: -0.01em;
+  --text-title: 22px;
+  --text-title--line-height: 28px;
+  --text-title--font-weight: 400;
+  --text-title-sm: 18px;
+  --text-title-sm--line-height: 24px;
+  --text-title-sm--font-weight: 400;
+  --text-stat: 28px;
+  --text-stat--line-height: 36px;
+  /* Geist 500 since D7: an app number is never Cal Sans; 28 since D15. */
+  --text-stat--font-weight: 500;
+  --text-stat--letter-spacing: -0.02em;
+  --text-lead: 20px;
+  --text-lead--line-height: 30px;
+  --text-lead--font-weight: 400;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 30px;
+  --text-body-lg--font-weight: 400;
+  --text-body: 16px;
+  --text-body--line-height: 26px;
+  --text-body--font-weight: 400;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 20px;
+  --text-body-sm--font-weight: 400;
+  --text-label: 14px;
+  --text-label--line-height: 20px;
+  --text-label--font-weight: 500;
+  --text-label-lg: 16px;
+  --text-label-lg--line-height: 24px;
+  --text-label-lg--font-weight: 500;
+  --text-heading: 16px;
+  --text-heading--line-height: 24px;
+  /* Geist never sets above 500 (decision D6). */
+  --text-heading--font-weight: 500;
+  /* Dialog and drawer titles and the plan name: Geist 500 22/28 (D7). */
+  --text-heading-lg: 22px;
+  --text-heading-lg--line-height: 28px;
+  --text-heading-lg--font-weight: 500;
+  --text-heading-lg--letter-spacing: -0.01em;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-caption--font-weight: 400;
+  --text-eyebrow: 11px;
+  --text-eyebrow--line-height: 16px;
+  --text-eyebrow--font-weight: 500;
+  --text-eyebrow--letter-spacing: 0.08em;
+  --text-data: 13px;
+  --text-data--line-height: 20px;
+  --text-data--font-weight: 400;
+  --text-code: 13px;
+  --text-code--line-height: 22px;
+  --text-code--font-weight: 400;
 
-  /* The separation ladder. Four rungs that must each be visibly different
-     from the one above it, because they carry the whole hierarchy: the app
-     draws structure with edges and tone, not with elevation.
+  /* Spacing is Tailwind's 4px step, so `p-N` is the system's `space-N`. The
+     system's steps are 1 2 3 4 5 6 8 10 12 16 24 32 (4 to 128px). */
+  --spacing: 4px;
 
-       subtle  — a RULE inside a surface: row hairlines, the divides between
-                 peers in a band, a menu separator, a chart gridline. Reads as
-                 a fold in one sheet, not as an edge.
-       border  — the EDGE of a bounded control, inset panel, ledger or page
-                 band. Cards and table wrappers separate by fill and keep
-                 only a `subtle` edge; a table header row keeps a `subtle` rule.
-       strong  — a deliberate emphasis: a selected edge, a section the reader
-                 is being pointed at.
-       bold    — field, select and composer boundaries (3:1 against the
-                 field and the surface around it, WCAG 1.4.11) and anything
-                 that must survive on a tinted fill. */
-  --color-border: #e5e5e5;
-  --color-border-subtle: #efefef;
-  --color-border-strong: #d4d4d4;
-  --color-border-bold: #8a8a8a;
-
-  /* Three reading inks and nothing else (owner decision, 2026-10-09):
-     foreground is a softened ~80% black for titles, values and anything that
-     must lead; secondary is a very dark grey for sentences and labels; muted
-     is the light grey for captions and metadata, the lightest step that still
-     holds 4.5:1 on every surface. Faint is placeholder and disabled ink only.
-     The focused flow prints darker inks (below). */
-  --color-ink-faint: #a3a3a3;
-  --color-foreground: #212121;
-  --color-secondary: #525252;
-  --color-muted: #636363;
-  --color-on-inverse: #ffffff;
-  /* The logo's ink and the inverse surface keep full strength; the logo's
-     drawing (public/citeladder-logo.svg) carries this exact value. */
-  --color-brand-ink: #0b0f0d;
-
-  /* Signal green is the one action and brand colour (owner decision,
-     2026-10-21): selection markers, tracks and the bars of the mark, holding
-     3:1 on white; links and focus take the deeper `accent-text`. Success is
-     the same green family (owner, 2026-11-03). Accent marks only the primary
-     action, the active tab, focus, links, toggles and a selection bar.
-     Anything that carries ink on green (buttons, the selected day, a checked
-     mark) fills with the deeper `accent-fill` and white ink. */
-  --color-accent: #00a650;
-  --color-accent-hover: #00b85a;
-  --color-accent-active: #009447;
-  --color-accent-fill: #15803d;
-  --color-accent-fill-hover: #166534;
-  --color-accent-fill-active: #14532d;
-  --color-accent-fg: #ffffff;
-  --color-accent-subtle: #d3f6df;
-  --color-accent-soft: #ecf8f0;
-  --color-accent-border: #7fdca7;
-  --color-accent-text: #067a3c;
-  --color-selection: #b5efca;
-  --color-selection-fg: var(--color-foreground);
-
-  /* The outcome scale. Five families carry every state in the product: run
-     status, score bands, sentiment, alerts and badges all resolve here. Each
-     family is a mark (dots, rings, icons), a text ink that passes 4.5:1 on its
-     background and on paper, and a quiet background. Colour means state only:
-     status badges, up/down deltas and issue severity. A score, count or KPI
-     keeps the foreground ink; the delta beside it carries the colour.
-
-     Success is the accent's green family (owner, 2026-11-03): one green.
-     Colour is never the only cue — every mark ships with a label or an icon. */
-  /* The marks stay apart by lightness for red–green colour vision: good is
-     the accent's own mid green, mixed is light amber, bad is dark red. */
-  --color-success: var(--color-accent);
-  --color-success-bg: var(--color-accent-soft);
-  --color-success-text: var(--color-accent-text);
-  --color-warning: #f2b33d;
-  --color-warning-bg: #fff5db;
-  --color-warning-text: #8a4600;
-  --color-danger: #b42332;
-  --color-danger-solid: var(--color-danger);
-  --color-danger-solid-hover: #8f1d29;
-  --color-danger-fg: #ffffff;
-  --color-danger-bg: #fff0f1;
-  --color-danger-border: #f2c6cb;
-  --color-danger-text: var(--color-danger);
-  --color-info: #2f6fdb;
-  --color-info-bg: #eef4fd;
-  --color-info-text: #1d4fae;
-  --color-neutral: var(--color-ink-faint);
-  --color-neutral-bg: var(--color-panel-tonal);
-
-  /* The categorical chart ladder: series identity only, never a state or an
-     action. Each step holds 3:1 on paper, and each neighbour stays apart
-     under red–green colour-vision loss, so series are assigned in order. */
-  --color-chart-1: #16a34a;
-  --color-chart-2: #2563eb;
-  --color-chart-3: #d97706;
-  --color-chart-4: #db2777;
-  --color-chart-5: #0891b2;
-  --color-chart-6: #7c3aed;
-  --color-chart-7: #ea580c;
-  --color-chart-8: #737373;
-
-  /* Citation classes are series, so they take chart identities and mean the
-     same thing in both themes: you, the competitor, everyone else. */
-  --color-citation-owned: var(--color-chart-1);
-  --color-citation-competitor: var(--color-chart-2);
-  --color-citation-third-party: var(--color-chart-8);
-  --color-overlay-scrim: rgb(10 10 10 / 32%);
-
-  /* Tailwind's default radius scale is cleared so the ladder cannot be
-     side-stepped by reaching for a size name. The whole ladder, on every
-     surface, is 4 / 8 / 12 / 16 / full: the micro rung here (chart bars,
-     skeletons, inline code, badges), the pill, and the three semantic roles
-     declared in :root below. */
+  /* Radius, only slightly rounded and never over 8 (decision D10). 2xs chart
+     bars, swatches and rungs; xs badges, favicons and checkboxes; sm tabs in
+     a track, menu items and chips; md buttons, inputs and code; lg app cards,
+     menus and dialogs; xl website cards, frames and the navbar; full only
+     avatars, status dots, switch tracks and count pills. */
   --radius-*: initial;
-  --radius-xs: 4px;
+  --radius-2xs: 2px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 8px;
   --radius-full: 9999px;
 
-  /* Detached elevation; resting objects use the surface recipes below. */
+  /* Shadows are declared in :root below (they change with the theme) and
+     applied by the `shadow-*` utilities after this block. */
   --shadow-*: initial;
-  --shadow-none: none;
-  /* The menu and frame shadows: a hairline ring, a close contact
-     shadow and one long soft ambient layer. */
-  --shadow-overlay:
-    0 0 0 1px rgb(10 10 10 / 7%), 0 4px 16px rgb(0 0 0 / 6%);
-  --shadow-modal:
-    0 0 0 1px rgb(10 10 10 / 7%), 0 1px 2px rgb(10 10 10 / 4%),
-    0 12px 32px -8px rgb(10 10 10 / 12%), 0 40px 80px -24px rgb(10 10 10 / 20%);
 
-  /* One type scale for every surface (owner decision, 2026-10-09), on the
-     4px rhythm the large design systems share (Atlassian, Primer, Carbon):
-     14 is the baseline everywhere, 12 the one smaller rung, and every rung
-     above it at least 2px from the next. No surface rebinds these. */
-  --text-xs: 0.75rem;
-  --text-xs--line-height: 1rem;
-  --text-sm: 0.875rem;
-  --text-sm--line-height: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-2xl--line-height: 2rem;
-  /* Field text: 14px on every surface. */
-  --text-field: 0.875rem;
-  --text-field--line-height: 1.25rem;
+  /* Containers: `max-w-site` (website sections, navbar, footer), `max-w-app`
+     (an app page's content), `max-w-thread` (the Agent thread and its
+     composer), `max-w-prose` (articles, legal, docs) and `max-w-narrow`
+     (section headers, auth cards, onboarding, empty states). */
+  --container-site: 1320px;
+  --container-app: 1440px;
+  --container-thread: 1040px;
+  --container-prose: 720px;
+  --container-narrow: 560px;
 
-  /* Restrained enterprise motion: quick controls, slightly longer spatial
-     transitions, one shared easing curve. */
-  --motion-fast: 110ms;
+  --breakpoint-2xl: 1440px;
+
+  /* Motion: 120ms ease-out for hover and colour, 200ms ease-out for menus,
+     dialogs and sheets entering, 150ms ease-in for leaving. */
+  --motion-fast: 120ms;
   --motion-normal: 150ms;
-  --motion-slow: 240ms;
-  /* The beat between siblings that settle in sequence. */
-  --motion-stagger: 60ms;
-  --ease-standard: cubic-bezier(0.33, 1, 0.68, 1);
-  --ease-exit: cubic-bezier(0.2, 0, 1, 0.9);
+  --motion-slow: 200ms;
+  --ease-standard: ease-out;
+  --ease-exit: ease-in;
   --default-transition-duration: var(--motion-fast);
   --default-transition-timing-function: var(--ease-standard);
+  /* Loops that say "working": the Spinner turns in 800ms, a Skeleton pulses
+     in 1.6s and a busy ProgressBar slides in 1.4s. Reduced motion slows the
+     spinner and the bar (below) and holds the skeleton still. */
+  --animate-spinner: spinner-turn 800ms linear infinite;
+  --animate-skeleton-pulse: skeleton-pulse 1.6s ease-in-out infinite;
+  --animate-progress-busy: progress-busy 1.4s ease-in-out infinite;
   --z-index-sticky: 20;
   --z-index-overlay: 40;
   --z-index-modal: 50;
@@ -220,209 +205,177 @@
 
 :root {
   color-scheme: light;
-  /* Category tags are labels, never evidence status or action colours. */
-  --tag-blue-bg: #edf4ff;
-  --tag-blue-border: #c6d8f4;
-  --tag-blue-text: #244b83;
-  --tag-purple-bg: #f3efff;
-  --tag-purple-border: #d8ccf4;
-  --tag-purple-text: #60428b;
-  --tag-green-bg: #ecf7ef;
-  --tag-green-border: #c3dfcd;
-  --tag-green-text: #285b3a;
-  --tag-moss-bg: #f0f5e8;
-  --tag-moss-border: #d0dec0;
-  --tag-moss-text: #435c2c;
-  --tag-red-bg: #fff0f1;
-  --tag-red-border: #f0cbd0;
-  --tag-red-text: #8b3541;
-  --tag-orange-bg: #fff2e9;
-  --tag-orange-border: #edcfb9;
-  --tag-orange-text: #83461f;
-  --tag-amber-bg: #fff5e5;
-  --tag-amber-border: #e8d3ad;
-  --tag-amber-text: #755119;
-  --tag-teal-bg: #e9f6f4;
-  --tag-teal-border: #bfddd7;
-  --tag-teal-text: #275f57;
-  --tag-yellow-bg: #faf6dd;
-  --tag-yellow-border: #e3daa4;
-  --tag-yellow-text: #685914;
-  /* Neutral tags (Homepage, Other, FAQ, "+N") are the neutral badge: its
-     fill in secondary ink in both themes; the edge matches the fill, so it
-     keeps the tag's box. One neutral pill everywhere (2026-11-03 review). */
-  --tag-neutral-bg: var(--color-neutral-bg);
-  --tag-neutral-border: var(--color-neutral-bg);
-  --tag-neutral-text: var(--color-secondary);
-  --state-surface: var(--color-panel);
-  --sidebar-width: 240px;
-  --compact-topbar-height: 56px;
-  --sticky-header-offset: 0px;
-  --nav-item-height: var(--control-height-md);
-  /* Sidebar rhythm. The rail's four bands share one inset so no band invents
-     its own; the group gap is small because the section label carries the
-     separation between groups. */
-  --sidebar-pad-x: 12px;
-  --sidebar-pad-y: 8px;
-  --sidebar-group-gap: 4px;
-  --sidebar-item-gap: 4px;
+
+  /* Depth is quiet: a hairline ring plus a short, soft drop. xs on secondary
+     buttons, the selected tab, pills and website cards; card on app cards and
+     screens inside a frame; pop on menus, popovers, dialogs and toasts; press
+     on the primary button. Never two shadows on nested surfaces. edge is the
+     faint smudge, with no ring, under every soft field edge (decision D5). */
+  --shadow-edge: 0 1px 2px rgba(17, 17, 17, 0.05);
+  --shadow-xs: 0 0 0 1px rgb(17 17 17 / 8%), 0 1px 2px rgb(17 17 17 / 6%);
+  --shadow-card:
+    0 0 0 1px rgb(17 17 17 / 6%), 0 1px 2px rgb(17 17 17 / 4%),
+    0 6px 16px -4px rgb(17 17 17 / 6%);
+  --shadow-pop:
+    0 0 0 1px rgb(17 17 17 / 8%), 0 2px 6px rgb(17 17 17 / 6%),
+    0 16px 40px -8px rgb(17 17 17 / 14%);
+  --shadow-press:
+    inset 0 1px 0 rgb(255 255 255 / 16%), 0 0 0 1px var(--color-ink),
+    0 1px 2px rgb(17 17 17 / 24%);
+
+  /* Controls. Every interactive row in one view uses one height: 32 (D11),
+     28 compact, 48 for website calls to action. `row-app` is the app's
+     table and fact row, its header title row and the sidebar's ident row. */
+  --control-sm: 28px;
+  --control-md: 32px;
+  --control-lg: 48px;
+  --row-app: 40px;
+  --nav-height: 64px;
+  --sidebar-width: 248px;
+  /* The sidebar below 1280px: one control wide inside its 12px inset, plus
+     its 1px edge (61px, decision D3). */
+  --sidebar-rail-width: calc(var(--control-md) + 24px + 1px);
+
+  /* Component geometry the components read. Each derives from a system token. */
+  /* What sticks under the app's top bar starts below it (D12). */
+  --sticky-header-offset: var(--page-header-band);
+  --nav-item-height: var(--control-md);
+  /* The main column's gutter: 32 from 1280px, 24 below (rebound below). */
   --content-gutter: 32px;
-  --content-max-width: 1392px;
-  --workflow-max-width: 1040px;
-  /* The sanctioned two-column split. A screen picks a role, never a ratio. */
+  --content-max-width: var(--container-app);
+  /* A list beside its selected item's detail. */
   --pane-list-detail: minmax(18rem, 0.9fr) minmax(0, 2fr);
-  --pane-main-aside: minmax(0, 2fr) minmax(18rem, 1fr);
-  /* The spacing scale is the 4px grid: 4 8 12 16 20 24 32 40 48 64, plus 2px
-     for hairline insets only. Each rhythm role below names one step. */
-  --page-section-gap: 24px;
+  /* App rhythm: header → 32 → controls → 16 → content; cards gap 16; card
+     padding 24. */
+  --page-section-gap: 32px;
   --workspace-gap: 16px;
   --compact-gap: 12px;
-  --card-padding: 16px;
-  /* The workspace sheet carries the `sheet` fill; cards and tables on it carry
-     the `panel` fill one step up. The focused flow pane stays paper. */
+  --card-padding: 24px;
   --modal-padding: 24px;
-  /* The product has one control height, 32. The 36 and 44 rungs are the
-     public website's and the auth/onboarding flow's only. */
-  --control-height-md: 32px;
-  --control-height-lg: 36px;
-  /* The touch and hero rung of the control ladder (32 / 36 / 44). */
-  --control-height-xl: 44px;
-  /* The product material: every raised object is a
-     hairline ring plus a close contact shadow, and larger objects add one long
-     soft ambient layer. Nothing glows and nothing carries an inset bevel; the
-     only sheen is the primary action's faint top highlight. The ring is a
-     shadow, so it never changes an object's box geometry. */
-  --surface-ring: rgb(10 10 10 / 8%);
-  --surface-drop: rgb(10 10 10 / 5%);
-  --elevation-sheet: 0 0 0 1px var(--color-border);
-  /* An icon target inside a 32px field (clear, calendar): the field's height
-     less its 2px border inset on each side. It is part of the field, not a
-     control of its own. */
-  --field-end-target: calc(var(--control-height-md) - 4px);
-  /* The one width of a filter field (FilterField): a typed or picked filter
-     value beside the band's triggers. */
-  --filter-width: 160px;
-  --menu-item-height: 32px;
-  --badge-height-sm: 20px;
+  /* DateField's calendar trigger: the field's height less its 2px border
+     inset on each side. */
+  --field-end-target: calc(var(--control-md) - 4px);
+  /* A FilterBar filter trigger: one width whatever its value says. */
+  --filter-width: 224px;
+  --menu-item-height: var(--control-md);
+  --badge-height-sm: 22px;
   --textarea-min-height: 112px;
   /* The one footprint a read's loading, error and first-use empty states
-     share (QueryState), so a read changing state never moves the page. */
-  --query-state-height: 160px;
-  /* Chart plot heights: a sparkline-scale summary, the default analytical
-     chart and a page's primary history. */
+     share (QueryState), so a read changing state never moves the page: the
+     block EmptyState's height (48 + 40 icon + 16 + title + line + 48). */
+  --query-state-height: 200px;
   --chart-height-sm: 160px;
   --chart-height-md: 240px;
   --chart-height-lg: 320px;
-  --tab-height: var(--control-height-md);
-  /* A tab is padded like a button (12), so labels sit 28px apart: two
-     paddings and the gap. The padding is the tab's hover box and underline
-     inset. */
+  --tab-height: var(--control-md);
   --tab-pad-x: 12px;
   --tab-gap: 4px;
-  /* The page grammar's rows. Every route draws the same bands in the same
-     order, each closed by a full-bleed hairline: identity, then tabs, then
-     controls. A route with no tabs and no controls still closes its identity
-     band, so content always begins one rule below a row of known height. */
-  --page-band-identity: var(--compact-topbar-height);
-  --page-header-padding-top: 24px;
-  --page-header-padding-bottom: 24px;
-  --page-header-gap: 16px;
-  /* The page title's floor beside a long action row. */
-  --page-title-min-width: 10rem;
-  --table-row-height: 36px;
-  --table-header-height: var(--control-height-md);
-  /* A DataTable's title-and-toolbar row: the FilterBar's 8 + 32 + 8 and the
-     hairline under it — the same 49 as the page's control band, whether the
-     row holds a title alone or a toolbar too. */
-  --data-table-header-height: calc(var(--control-height-md) + 17px);
+  --table-row-height: 44px;
+  --table-header-height: var(--control-md);
   --table-cell-padding-x: 12px;
-  /* Every row, one line or two, keeps the same breathing room above and below. */
-  --table-cell-padding-y: 6px;
-  /* A wide table keeps readable columns and scrolls inside its frame below
-     its minimum width. A table picks the rung its columns need. */
+  --table-cell-padding-y: 8px;
+  /* The row's 1px rule comes out of the row, not on top of it: a cell
+     holding a 24px title line is still `table-row-height` tall. */
+  --table-cell-padding-bottom: calc(var(--table-cell-padding-y) - 1px);
   --table-min-width-sm: 36rem;
   --table-min-width-md: 48rem;
   --table-min-width-lg: 64rem;
   --table-min-width-xl: 76rem;
-  /* Geometry roles, shared by every surface. Components consume the role,
-     never a route-local radius: control 8 (buttons, fields, rows, chips),
-     card 12 (cards, menus, dialogs, popovers), large 16 (the workspace and
-     flow sheets). */
-  --radius-control: 8px;
-  --radius-card: 12px;
-  --radius-lg: 16px;
-  /* The workspace sheet's inset from the viewport and the sidebar. */
-  --workspace-inset: 8px;
-  /* Shell chrome above a route's content, for screens that fill the viewport
-     (the Agent thread): on desktop the identity band, its rule and the sheet's
-     inset above and below. Rebound below for the compact layouts. */
-  --route-chrome-height: calc(var(--page-band-identity) + 1px + 2 * var(--workspace-inset));
-  /* The dot lattice: one recipe on the 4px grid for the flow stage. Used as a
-     background; the phone gutter is the base and the media queries below step
-     it up. */
-  --lattice: radial-gradient(var(--color-border-strong) 1px, transparent 1px) 0 0 / 16px 16px;
-  --site-gutter: 20px;
-  --skeleton-base: var(--color-well);
-  --value-placeholder: var(--color-muted);
+  /* The app shell's top bar (D12): the sidebar's project switcher cell and
+     the PageHeader are one sticky 56px bar at the top of the window, the
+     `row-app` title row with space-2 above and below and a 1px `line` rule
+     under it. Below it the mode switch is level with the page's tabs or
+     filters. The controls band's rows sit `page-band-gap` apart (tabs →
+     filters → content). */
+  --page-header-band: calc(var(--row-app) + 16px);
+  --page-band-gap: 8px;
+  /* What a screen that fills the viewport (the Agent thread) leaves for the
+     header: the top bar, the gap under it and the bottom gutter. */
+  --route-chrome-height: calc(
+    var(--page-header-band) + var(--page-section-gap) + var(--content-gutter)
+  );
+  --value-placeholder: var(--color-ink-muted);
 }
 
-/* The product material: crisp hairlines,
-   not lift. Cards and the workspace sheet are a one-pixel edge; secondary
-   controls add only a one-pixel contact shadow so they still read as pressable;
-   the primary action is one flat fill. Onboarding is flat (owner decision,
-   2026-10-16), so it binds these to none. */
-:root {
-  --elevation-control:
-    0 0 0 1px var(--color-border), 0 1px 1px var(--surface-drop);
-  --elevation-primary: 0 0 0 1px var(--color-accent-fill);
-  /* The workspace sheet and focused task sheets. */
-  --elevation-flow:
-    0 0 0 1px rgb(10 10 10 / 6%), 0 1px 2px rgb(10 10 10 / 4%),
-    0 8px 24px -6px rgb(10 10 10 / 8%), 0 32px 64px -24px rgb(10 10 10 / 12%);
+/* Dark. The same roles with the system's dark values; no token is added or
+   removed here. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-paper: #0a0a0a;
+  --color-surface: #151515;
+  --color-surface-sunken: #1e1e1e;
+  --color-nav-glass: rgb(30 30 30 / 78%);
+  --color-line: #2a2a2a;
+  --color-line-strong: #3a3a3a;
+  --color-line-control: #747474;
+  --color-ink: #f4f4f4;
+  --color-ink-hover: #d6d6d6;
+  --color-ink-secondary: #a6a6a6;
+  --color-ink-muted: #8c8c8c;
+  --color-on-ink: #111111;
+  --color-accent: #ff6a33;
+  --color-accent-ink: #ff9466;
+  --color-accent-soft: #3b1a0c;
+  --color-on-accent: #111111;
+  --color-positive: #4fd1c5;
+  --color-positive-soft: #0e2e2b;
+  --color-negative: #ff7387;
+  --color-negative-soft: #3d0e16;
+  --color-warning: #f5b84a;
+  --color-warning-soft: #3a2a0a;
+  --color-info: #7fb0ff;
+  --color-info-soft: #14243d;
+  --color-data-3: #8c8c8c;
+  --color-data-other: #4a4a4a;
+  --color-scrim: rgb(0 0 0 / 64%);
+  --color-chart-grid: #262626;
+  --shadow-edge: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-xs: 0 0 0 1px rgb(255 255 255 / 8%), 0 1px 2px rgb(0 0 0 / 50%);
+  --shadow-card: 0 0 0 1px rgb(255 255 255 / 7%), 0 1px 2px rgb(0 0 0 / 60%);
+  --shadow-pop: 0 0 0 1px rgb(255 255 255 / 10%), 0 16px 40px rgb(0 0 0 / 60%);
+  --shadow-press: inset 0 1px 0 rgb(255 255 255 / 60%), 0 1px 2px rgb(0 0 0 / 60%);
 }
 
-/* Flat onboarding: nothing at rest casts a
-   shadow, fields included. Surfaces separate by a tone step or by space; only
-   detached layers (menus, the consent bar) keep their overlay shadow. Dark
-   mode keeps its edge rings, which are the only edge a dark surface has. */
-:root:not([data-theme='dark']) [data-flow-surface] {
-  --elevation-control: none;
-  --elevation-primary: none;
-  --elevation-flow: none;
+/* Tailwind folds a theme shadow into its own variable at build time, which
+   would freeze the light value; these read the live token instead. */
+@utility shadow-edge {
+  box-shadow: var(--shadow-edge);
+}
+@utility shadow-xs {
+  box-shadow: var(--shadow-xs);
+}
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+@utility shadow-pop {
+  box-shadow: var(--shadow-pop);
+}
+@utility shadow-press {
+  box-shadow: var(--shadow-press);
 }
 
-/* State tints are derived from the surface receiving the interaction. */
-:where(.bg-background, .bg-sheet, .app-pane-workspace, .bg-panel, .bg-panel-tonal,
-  .bg-background-alt, .bg-well, .bg-input, .bg-elevated, .bg-track) {
-  --color-hover: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 4%);
-  --color-selected: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 8%);
-  --color-active: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 12%);
-  --color-disabled: color-mix(in srgb, var(--state-surface), var(--color-state-ink) 3%);
-}
-.bg-background { --state-surface: var(--color-background); }
-.bg-sheet,
-.app-pane-workspace { --state-surface: var(--color-sheet); }
-.bg-panel { --state-surface: var(--color-panel); }
-.bg-panel-tonal { --state-surface: var(--color-panel-tonal); }
-.bg-background-alt { --state-surface: var(--color-background-alt); }
-.bg-well { --state-surface: var(--color-well); }
-.bg-input { --state-surface: var(--color-input); }
-.bg-elevated { --state-surface: var(--color-elevated); }
-.bg-track { --state-surface: var(--color-track); }
-
-/* A sticky layer (a docked composer) paints the fill of the surface it sits
-   on — the sheet on a route, the overlay in a drawer — so it never shows a
-   second tone over its own container. */
-.surface-fill { background-color: var(--state-surface); }
-
-@media (min-width: 981px) and (max-width: 1200px) {
+/* Below the shell breakpoint the sidebar is the rail and the main gutter
+   narrows to space-6. */
+@media (max-width: 1279px) {
   :root {
-    --sidebar-width: 224px;
     --content-gutter: 24px;
   }
 }
 
-@media (max-width: 980px) {
+/* The app's density (decision D11): compact and technical, like GitHub or
+   Claude Code, not airy. One value per role still holds inside the app: table and fact rows `row-app` (40), card and dialog padding 16,
+   header → controls 16, the controls band's rows 8 apart, peers 12 apart. */
+:root {
+  --content-gutter: 24px;
+  --page-section-gap: 16px;
+  --workspace-gap: 12px;
+  --compact-gap: 8px;
+  --card-padding: 16px;
+  --modal-padding: 16px;
+  --table-row-height: var(--row-app);
+}
+
+@media (max-width: 1279px) {
   :root {
     --content-gutter: 16px;
   }
@@ -442,12 +395,10 @@
   scrollbar-color: transparent transparent;
 }
 
-/* Firefox + modern browsers supporting scrollbar-color */
 *:hover {
-  scrollbar-color: color-mix(in srgb, var(--color-ink-faint) 35%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-ink-muted) 35%, transparent) transparent;
 }
 
-/* Chromium / Safari fallback */
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -459,29 +410,28 @@
 
 *::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background-color: transparent;
   background-clip: padding-box;
 }
 
 *:hover::-webkit-scrollbar-thumb {
-  background-color: color-mix(in srgb, var(--color-ink-faint) 35%, transparent);
+  background-color: color-mix(in srgb, var(--color-ink-muted) 35%, transparent);
 }
 
-/* Slightly stronger feedback when the thumb itself is hovered */
 *::-webkit-scrollbar-thumb:hover {
-  background-color: color-mix(in srgb, var(--color-muted) 50%, transparent);
+  background-color: color-mix(in srgb, var(--color-ink-muted) 50%, transparent);
 }
 
-/* Wide content scrolls in its owning region; document overflow stays observable. */
+/* The app and onboarding sit on `paper`. Wide content scrolls in its
+   owning region; document overflow stays observable. */
 html {
   min-height: 100%;
-  background: var(--color-background);
+  background: var(--color-paper);
   /* Reserve the scrollbar track always, so short pages and long pages line up
-     and locking body scroll for a modal doesn't shift layout sideways.
-     No-op where the OS uses overlay scrollbars. */
+     and locking body scroll for a modal doesn't shift layout sideways. */
   scrollbar-gutter: stable;
-  scrollbar-color: color-mix(in srgb, var(--color-muted) 35%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--color-ink-muted) 35%, transparent) transparent;
   scrollbar-width: thin;
 }
 
@@ -498,10 +448,11 @@ html {
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--color-background);
-  color: var(--color-foreground);
-  font-size: var(--text-sm);
-  line-height: var(--text-sm--line-height);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
   letter-spacing: normal;
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
@@ -510,182 +461,196 @@ body {
   text-size-adjust: 100%;
 }
 
-/* The product type roles. Eleven styles and one modifier are the whole
-   product ladder: every product text element takes exactly one, and the role
-   owns size, leading, weight, tracking and ink together. Weights are 400
-   (sentences) and 500 (labels, controls, titles, figures); titles separate
-   from labels by size, not by a heavier weight.
-
-   They sit in the components layer so a status utility (`text-success-text`,
-   `text-danger-text`) still overrides the ink where the value's meaning is its
-   colour. Edit a role here and every screen moves with it. */
+/* The product type roles, each one of the system's styles (docs/design.md):
+   page title display-md, section title, card title heading, default text
+   body-sm, controls label, footnotes caption, numbers stat. They sit in the
+   components layer so a status utility still overrides the ink where the
+   value's meaning is its colour. */
 @layer components {
-  /* Titles take the display treatment at product scale: 500 at the
-     display face's own spacing, untracked. */
   .type-page-title {
     font-family: var(--font-display);
-    font-size: 1.25rem;
-    line-height: 1.75rem;
-    font-weight: 500;
-    letter-spacing: 0;
-    color: var(--color-foreground);
+    font-size: var(--text-display-sm);
+    line-height: var(--text-display-sm--line-height);
+    font-weight: 400;
+    letter-spacing: var(--text-display-sm--letter-spacing);
+    color: var(--color-ink);
   }
+  /* In the app Cal Sans is the page title's alone (decision D7): every other
+     title and number is Geist, never above 500 (D6). */
   .type-section-title {
     font-family: var(--font-sans);
-    font-size: 1rem;
-    line-height: 1.5rem;
-    font-weight: 500;
-    letter-spacing: -0.011em;
-    color: var(--color-foreground);
+    font-size: var(--text-heading-lg);
+    line-height: var(--text-heading-lg--line-height);
+    font-weight: var(--text-heading-lg--font-weight);
+    letter-spacing: var(--text-heading-lg--letter-spacing);
+    color: var(--color-ink);
   }
   .type-item-title {
     font-family: var(--font-sans);
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    font-size: var(--text-heading);
+    line-height: var(--text-heading--line-height);
     font-weight: 500;
     letter-spacing: 0;
-    color: var(--color-foreground);
+    color: var(--color-ink);
   }
   .type-body {
     font-family: var(--font-sans);
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    font-size: var(--text-body-sm);
+    line-height: var(--text-body-sm--line-height);
     font-weight: 400;
     letter-spacing: 0;
-    color: var(--color-secondary);
+    color: var(--color-ink-secondary);
   }
   /* Buttons, navigation, tabs, links: the ink belongs to the control's state. */
   .type-control,
   .type-control-file::file-selector-button {
     font-family: var(--font-sans);
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
     font-weight: 500;
     letter-spacing: 0;
   }
   .type-label {
     font-family: var(--font-sans);
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
     font-weight: 500;
     letter-spacing: 0;
-    color: var(--color-secondary);
+    color: var(--color-ink-secondary);
   }
   .type-caption {
     font-family: var(--font-sans);
-    font-size: 0.75rem;
-    line-height: 1rem;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
     font-weight: 400;
     letter-spacing: 0;
-    color: var(--color-muted);
+    color: var(--color-ink-muted);
   }
-  /* Figures and deltas set their digits in the figure face, whose
-     digits share one width, so stacked metrics align place by place; a unit
-     or word beside them stays in the text face. */
+  /* The number in a Stat, a ScoreRing or a donut's centre: Geist 500 with
+     digits of one width. */
   .type-figure {
-    font-family: var(--font-numeric);
-    font-size: 1.5rem;
-    line-height: 2rem;
+    font-family: var(--font-sans);
+    font-size: var(--text-stat);
+    line-height: var(--text-stat--line-height);
     font-weight: 500;
-    letter-spacing: -0.02em;
-    color: var(--color-foreground);
+    letter-spacing: var(--text-stat--letter-spacing);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
   }
+  /* A number inside a row: the card-title size with digits of one width. */
+  /* The ScoreRing's and the DonutChart's centre: Geist 500 32/38 (D7). */
+  .type-figure-ring {
+    font-family: var(--font-sans);
+    font-size: var(--text-display-lg);
+    line-height: var(--text-display-lg--line-height);
+    font-weight: 500;
+    letter-spacing: var(--text-display-lg--letter-spacing);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+  }
+
   .type-figure-sm {
-    font-family: var(--font-numeric);
-    font-size: 1rem;
-    line-height: 1.5rem;
+    font-family: var(--font-sans);
+    font-size: var(--text-heading);
+    line-height: var(--text-heading--line-height);
     font-weight: 500;
     letter-spacing: 0;
-    color: var(--color-foreground);
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
   }
-  /* A change indicator: caption size, label weight; the caller's tone is the ink. */
+  /* A change indicator: the mono data role; the caller's tone is the ink. */
   .type-delta {
-    font-family: var(--font-numeric);
-    font-size: 0.75rem;
-    line-height: 1rem;
-    font-weight: 500;
+    font-family: var(--font-mono);
+    font-size: var(--text-data);
+    line-height: var(--text-data--line-height);
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  /* A block of code or a copyable command: the mono code role. */
+  .type-code {
+    font-family: var(--font-mono);
+    font-size: var(--text-code);
+    line-height: var(--text-code--line-height);
+    font-weight: 400;
     letter-spacing: 0;
   }
   /* Badges, chips, counts and key hints: caption size at label weight; the
      badge's tone supplies the ink. */
   .type-badge {
     font-family: var(--font-sans);
-    font-size: 0.75rem;
-    line-height: 1rem;
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
     font-weight: 500;
     letter-spacing: 0;
   }
-  /* Rendered Markdown (Agent output, evidence answers). Built from the same
-     rungs as the roles above: reading text 16/24 (14/20 compact), headings
-     24 / 16 / 14 at 500. Code and quotes are filled, never outlined; tables
-     draw row dividers only. Generated headings start at h2 (see markdown.tsx). */
+  /* Rendered Markdown (Agent output, evidence answers): body text, headings
+     in the title and heading roles, code on `surface-sunken` in Geist Mono.
+     Generated headings start at h2 (see markdown.tsx). */
   .prose-content {
     font-family: var(--font-sans);
-    font-size: 1rem;
-    line-height: 1.5rem;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
     font-weight: 400;
-    color: var(--color-secondary);
+    color: var(--color-ink-secondary);
   }
   .prose-content > :last-child { margin-bottom: 0; }
   .prose-content :where(h2, h3, h4, h5, h6) {
     font-family: var(--font-sans);
     font-weight: 500;
     letter-spacing: 0;
-    color: var(--color-foreground);
+    color: var(--color-ink);
     margin: 1.5rem 0 0.75rem;
   }
   .prose-content > :where(h2, h3, h4, h5, h6):first-child { margin-top: 0; }
   .prose-content h2 {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
-    line-height: 2rem;
-    letter-spacing: normal;
+    font-size: var(--text-title);
+    line-height: var(--text-title--line-height);
   }
-  .prose-content h3 { font-size: 1rem; line-height: 1.5rem; }
-  .prose-content :where(h4, h5, h6) { font-size: 0.875rem; line-height: 1.25rem; }
+  .prose-content h3 { font-size: var(--text-heading); line-height: var(--text-heading--line-height); }
+  .prose-content :where(h4, h5, h6) { font-size: var(--text-label); line-height: var(--text-label--line-height); }
   .prose-content :where(p, ul, ol, pre, table, blockquote) { margin: 0 0 1rem; }
   .prose-content :where(ul, ol) { margin-left: 1.5rem; }
   .prose-content ul { list-style: disc; }
   .prose-content ol { list-style: decimal; }
   .prose-content li + li { margin-top: 0.5rem; }
-  .prose-content strong { font-weight: 500; color: var(--color-foreground); }
+  .prose-content strong { font-weight: 500; color: var(--color-ink); }
   .prose-content a {
-    color: var(--color-accent-text);
+    color: var(--color-accent-ink);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
-  .prose-content a:hover { color: var(--color-accent-hover); }
+  .prose-content a:hover { color: var(--color-ink); }
   .prose-content blockquote {
     padding: 0.75rem 1rem;
-    border-radius: var(--radius-control);
-    background: var(--color-background-alt);
-    color: var(--color-secondary);
-    font-style: italic;
+    border-radius: var(--radius-md);
+    background: var(--color-surface-sunken);
+    color: var(--color-ink-secondary);
   }
   .prose-content code {
-    font-size: 0.75rem;
-    line-height: 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--text-data);
+    line-height: var(--text-data--line-height);
     padding: 0.125rem 0.25rem;
     border-radius: var(--radius-xs);
-    background: var(--color-well);
-    font-variant-numeric: tabular-nums;
+    background: var(--color-surface-sunken);
   }
   .prose-content pre {
     max-width: 100%;
     white-space: pre-wrap;
     padding: 1rem;
-    border-radius: var(--radius-control);
-    background: var(--color-well);
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    border-radius: var(--radius-md);
+    background: var(--color-surface-sunken);
+    font-family: var(--font-mono);
+    font-size: var(--text-code);
+    line-height: var(--text-code--line-height);
   }
   .prose-content pre code { padding: 0; background: transparent; font-size: inherit; line-height: inherit; }
   .prose-content .prose-table-frame {
     max-width: 100%;
     overflow-x: auto;
     margin: 0 0 1rem;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-control);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-md);
   }
   .prose-content .prose-table-frame table { margin: 0; }
   /* A table keeps readable columns and scrolls inside its frame; it never
@@ -695,22 +660,23 @@ body {
     min-width: 100%;
     table-layout: auto;
     border-collapse: collapse;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    font-size: var(--text-body-sm);
+    line-height: var(--text-body-sm--line-height);
   }
   .prose-content th {
     padding: 0.75rem 1rem;
     text-align: left;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
     font-weight: 500;
-    color: var(--color-muted);
-    border-bottom: 1px solid var(--color-border);
+    color: var(--color-ink-muted);
+    background: var(--color-surface-sunken);
+    border-bottom: 1px solid var(--color-line);
   }
   .prose-content td {
     padding: 0.75rem 1rem;
-    color: var(--color-foreground);
-    border-bottom: 1px solid var(--color-border-subtle);
+    color: var(--color-ink);
+    border-bottom: 1px solid var(--color-line);
   }
   .prose-content tr:last-child td { border-bottom: 0; }
   .prose-content :is(th, td) {
@@ -719,22 +685,44 @@ body {
     overflow-wrap: normal;
     vertical-align: top;
   }
-  .prose-compact { font-size: 0.875rem; line-height: 1.25rem; }
+  .prose-compact { font-size: var(--text-body-sm); line-height: var(--text-body-sm--line-height); }
   .prose-compact :where(h2, h3, h4, h5, h6) { margin: 1rem 0 0.5rem; }
-  .prose-compact h2 { font-family: var(--font-sans); font-size: 1rem; line-height: 1.5rem; letter-spacing: 0; }
-  .prose-compact :is(h3, h4, h5, h6) { font-size: 0.875rem; line-height: 1.25rem; }
+  .prose-compact h2 { font-size: var(--text-heading); line-height: var(--text-heading--line-height); }
+  .prose-compact :is(h3, h4, h5, h6) { font-size: var(--text-label); line-height: var(--text-label--line-height); }
   .prose-compact :where(p, ul, ol, pre, table, blockquote) { margin-bottom: 0.75rem; }
-  .prose-compact pre { padding: 0.75rem; font-size: 0.75rem; line-height: 1rem; }
+  .prose-compact pre { padding: 0.75rem; }
   .prose-compact :is(th, td) { padding: 0.5rem 0.75rem; }
 
   /* Modifier: a value or name inside text that owns its size. */
   .type-emphasis {
     font-weight: 500;
-    color: var(--color-foreground);
+    color: var(--color-ink);
+  }
+
+  /* The eyebrow: uppercase mono, one to three words above a heading or stat. */
+  .type-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--text-eyebrow);
+    line-height: var(--text-eyebrow--line-height);
+    font-weight: 500;
+    letter-spacing: var(--text-eyebrow--letter-spacing);
+    text-transform: uppercase;
+    color: var(--color-ink-muted);
+  }
+
+  /* The highlighter: the phrase an engine said about a brand. */
+  .cl-mark {
+    background: var(--color-accent-soft);
+    color: var(--color-ink);
+    padding: 0 0.2em;
+    border-radius: var(--radius-xs);
+    box-decoration-break: clone;
   }
 }
 
 @layer base {
+  /* Headings are Geist at the heading weight unless a display role sets Cal
+     Sans: Cal Sans is opt-in, so it never lands under 18px by default. */
   h1,
   h2,
   h3,
@@ -742,85 +730,31 @@ body {
   h5,
   h6 {
     margin: 0;
-    font-family: var(--font-display);
-    /* App headings sit at body weight; the flow roles in
-       website-type.css carry the one emphasis rung above (500). */
-    font-weight: 400;
+    font-family: var(--font-sans);
+    font-weight: 500;
     letter-spacing: normal;
-    line-height: 1.2;
-    color: var(--color-foreground);
+    line-height: 1.25;
+    color: var(--color-ink);
   }
 
   p {
     margin: 0;
   }
 
-  /* Inline emphasis inside a sentence, and the one step up a table header
-     gets. font-bold is retired, so 500 is the whole ladder above regular and
-     it is declared here rather than restated at call sites. */
   strong,
   b,
   th {
     font-weight: 500;
   }
 
-  /* Icon stroke ladder — the single weight contract for lucide glyphs.
-     lucide draws on a 24-unit grid, so `stroke-width` is scaled by the
-     rendered size: a flat 2 paints a 1px stem at 12px and a 2px stem at
-     24px, which is why large icons currently read heavier than small ones.
-     These rungs compensate so every glyph lands near a 1.3px stem, in step
-     with the text face at body sizes. Compensation is partial on purpose: an
-     identical absolute stem at 12px closes up the counters and muddies the
-     glyph.
-
-     A call site sets the size class and nothing else — `strokeWidth` props
-     are redundant, and a class rule beats an SVG presentation attribute, so
-     they are overridden here rather than honoured. A deliberate outlier uses
-     inline `style={{ strokeWidth: n }}`, which outranks a layered rule. */
+  /* Lucide icons draw at one stroke, 1.75, at every size. */
   .lucide {
-    stroke-width: 2;
-  }
-
-  /* A rung exists for each size lucide is actually rendered at. Add one when
-     a new size gets its first call site — an unlisted size falls back to the
-     chrome weight above, which is a reasonable default, not a lost contract. */
-
-  /* Dense — tables, toolbars, inline chips (12-14px). */
-  .lucide.size-3,
-  .lucide.size-3\.5 {
-    stroke-width: 2.25;
-  }
-
-  /* Well — landing wells and empty states (18-20px). */
-  .lucide.size-4\.5,
-  .lucide.size-5 {
     stroke-width: 1.75;
   }
 
-  /* Display (24px). */
-  .lucide.size-6 {
-    stroke-width: 1.5;
-  }
-
-  /* Oversized decorative marks (32px). */
-  .lucide.size-8 {
-    stroke-width: 1.25;
-  }
-
-  /* The pointer affordance, declared once for the whole app.
-
-     Tailwind v4's preflight leaves `button` at the browser default
-     `cursor: default`, so every button-based control pointed at nothing:
-     tab strips, segmented radios, sortable column headers, menu items,
-     dropdown triggers. A `cursor-pointer` class at each call site is the
-     same rule written a few hundred times and forgotten at the few hundred
-     and first, which is exactly how the gaps appeared.
-
-     Keyed on ROLE as well as tag, because the same control is a `button`
-     in one primitive and a `div` in another — a reader hovering a tab must
-     get the hand either way. Anchors are listed for the same reason: the
-     router Link renders one, and stating it here keeps the whole affordance in
-     one place rather than half here and half in the UA sheet. */
+  /* The pointer affordance, declared once for the whole app. Keyed on ROLE as
+     well as tag, because the same control is a `button` in one primitive and a
+     `div` in another. */
   button,
   summary,
   select,
@@ -840,11 +774,6 @@ body {
     cursor: pointer;
   }
 
-  /* A hand over a control that will not respond is a promise the interface
-     cannot keep, so the disabled forms are excluded in the same breath.
-     `aria-disabled` is here alongside `:disabled` because a control that
-     stays focusable while inert says so that way and carries no attribute
-     the UA sheet knows about. */
   button:disabled,
   select:disabled,
   input:disabled,
@@ -853,45 +782,38 @@ body {
   }
 }
 
-/* Primary metadata ink keeps current/pressed navigation readable on its tint. */
+/* Primary metadata ink keeps current/pressed navigation readable. */
 .focus-ring[aria-current='page'] .type-caption,
 a.focus-ring:active .type-caption {
-  color: var(--color-foreground);
+  color: var(--color-ink);
 }
 
-/* One focus ring everywhere (2026-11-03 app review): a 2px `accent-text`
-   ring inside the control's edge, so it never changes its size or gets
-   clipped by a scrolling frame. A field paints its border plus one inset
-   pixel; a filled action, where green on green would vanish, takes the same
-   ring 2px outside its fill. */
+/* Keyboard focus is a solid 2px `focus` ring (ink) with a 2px offset. A field
+   instead turns its border `focus` and adds a 3px `line` halo. */
 :focus-visible,
 .focus-ring:focus-visible {
-  outline: 2px solid var(--color-accent-text);
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* A whole-row control inside a bordered list that clips its corners: the
+   same ring, drawn 2px inside the row. */
+.focus-ring-inset:focus-visible {
+  outline: 2px solid var(--color-focus);
   outline-offset: -2px;
 }
 
 .focus-input:focus-visible,
 .focus-frame:has(:where(input:focus-visible, textarea:focus-visible, select:focus-visible)) {
-  border-color: var(--color-accent-text);
-  outline: 1px solid var(--color-accent-text);
-  outline-offset: -2px;
+  border-color: var(--color-focus);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-line);
 }
 
-.focus-ring:is([data-button-variant='primary'], [data-button-variant='destructive']):focus-visible {
-  outline-offset: 2px;
-}
-
-/* Shared material recipes. No extra DOM, clipping or hitbox changes. The card
-   and the panel draw their edge as a real one-pixel `border` (cardClasses,
-   panelClasses), so every box has the same geometry: radius 12, border 1,
-   padding 16. `.surface-card` and `.surface-panel` only mark a container for
-   the nested rules below. */
-
-/* A bare table's boundary on the sheet: its paper fill plus the card's one
-   `border` ring, no lift. A table inside a card or a sheet shares that container's
-   edge instead. */
+/* A bare table's boundary: the `line` ring. A table inside a card or dialog
+   shares that container's edge instead. */
 .table-frame {
-  box-shadow: 0 0 0 1px var(--color-border);
+  box-shadow: 0 0 0 1px var(--color-line);
 }
 
 :where(.surface-card, [role='dialog']) .table-frame {
@@ -899,8 +821,7 @@ a.focus-ring:active .type-caption {
 }
 
 /* Inside a card a query state shares the card's surface and its padding
-   (the container already insets it), but keeps its reserved height: the
-   footprint is the same either way. */
+   (the container already insets it), but keeps its reserved height. */
 :where(.surface-card, .surface-panel, [role='dialog'], .table-frame) .query-state {
   background: transparent;
   border: 0;
@@ -908,83 +829,17 @@ a.focus-ring:active .type-caption {
   padding: 0;
 }
 
-.flow-content.app-pane {
-  box-shadow: var(--elevation-flow);
-}
-
-.flow-step-mark-current {
-  box-shadow: var(--elevation-primary);
-}
-
-.control-raised {
-  box-shadow: 0 0 0 1px var(--surface-ring);
-}
-
-.control-raised:not(:disabled, [aria-disabled='true']) {
-  box-shadow: var(--elevation-control);
-}
-
-/* Filled actions are one flat fill whose edge is the fill itself, so they sit
-   on the same box as a ringed secondary beside them. */
-.control-raised:is([data-button-variant='primary'], [data-button-variant='destructive']):not(:disabled, [aria-disabled='true']) {
-  box-shadow: var(--elevation-primary);
-}
-
-.control-raised[data-button-variant='destructive']:not(:disabled, [aria-disabled='true']) {
-  box-shadow: 0 0 0 1px var(--color-danger-solid);
-}
-
-.control-raised:not(:disabled, [aria-disabled='true']):active {
-  box-shadow: 0 0 0 1px var(--surface-ring);
-}
-
-/* Selection is a 2px accent bar plus foreground ink, never a fill block
-   (owner, 2026-11-03): the start edge for a current navigation row, the foot
-   for a selected segment or filter chip. The item keeps its own fill. */
-.selection-bar,
-.selection-bar-foot {
-  position: relative;
-}
-.selection-bar::before,
-.selection-bar-foot::before {
-  content: '';
-  position: absolute;
-  background: var(--color-accent);
-  border-radius: var(--radius-full);
-  pointer-events: none;
-}
-.selection-bar::before {
-  inset-block: 0;
-  inset-inline-start: 0;
-  width: 2px;
-}
-.selection-bar-foot::before {
-  inset-inline: var(--tab-pad-x);
-  bottom: 0;
-  height: 2px;
-}
-
-/* The rail shares the card fill (owner, 2026-11-03): the darker workspace
-   sheet beside it is the separation, so the rail draws no edge of its own. */
-.shell-rail {
-  background-color: var(--color-panel);
-}
-
-/* Flow buttons are flat: one fill, no ring. The alternate action is a tone
-   step from the page rather than an outline. */
-:root:not([data-theme='dark']) [data-flow-surface] .control-raised[data-button-variant='secondary']:not([data-ui] *, :disabled, [aria-disabled='true']) {
-  background-color: var(--color-background-alt);
-  color: var(--color-foreground);
-  border-color: transparent;
-}
-
-:root:not([data-theme='dark']) [data-flow-surface] .control-raised[data-button-variant='secondary']:not([data-ui] *, :disabled, [aria-disabled='true']):hover {
-  background-color: var(--color-well);
-}
-
 /* Text entry belongs to the field frame. Auxiliary buttons keep their own
    focus edge and do not also highlight the surrounding frame. */
 .focus-frame :is(input, textarea, select):focus-visible {
+  outline: none;
+}
+
+/* A palette's search row (the command palette, docs search): the input is
+   the dialog's only field and holds focus while it is open, so the caret is
+   the focus cue and the row's divider stays the soft `line` rule, never a
+   dark edge. */
+.palette-field input:focus-visible {
   outline: none;
 }
 
@@ -999,16 +854,13 @@ a.focus-ring:active .type-caption {
 
 @media (prefers-contrast: more) {
   :focus-visible,
-  .focus-ring:focus-visible,
-  .focus-input:focus-visible,
-  .focus-frame:has(:where(input:focus-visible, textarea:focus-visible, select:focus-visible)) {
+  .focus-ring:focus-visible {
     outline-style: dotted;
   }
 
   .focus-input:focus-visible,
   .focus-frame:has(:where(input:focus-visible, textarea:focus-visible, select:focus-visible)) {
     border-style: dotted;
-    outline: none;
   }
 
   .focus-frame :is(input, textarea, select):focus-visible {
@@ -1017,7 +869,6 @@ a.focus-ring:active .type-caption {
 }
 
 @media (forced-colors: active) {
-  .focus-ring:is([data-button-variant='primary'], [data-button-variant='destructive']):focus-visible,
   :focus-visible,
   .focus-ring:focus-visible,
   .focus-input:focus-visible,
@@ -1034,170 +885,25 @@ a.focus-ring:active .type-caption {
 }
 
 ::selection {
-  background: var(--color-selection);
-  color: var(--color-selection-fg);
+  background: var(--color-accent-soft);
+  color: var(--color-ink);
 }
 
-/* Chrome paints autofilled inputs with its own blue, and on a composed control
-   (eye button beside the field) that fill lands only on the inner text box — a
-   blue patch inside the pill. Override both the paint and the transition
-   Chrome uses to make the override stick, so the whole control keeps the
-   shared input surface. */
+/* Chrome paints autofilled inputs with its own blue; keep the field surface. */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--color-foreground);
-  -webkit-box-shadow: 0 0 0 1000px var(--color-input) inset;
-  caret-color: var(--color-foreground);
+  -webkit-text-fill-color: var(--color-ink);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-surface) inset;
+  caret-color: var(--color-ink);
   transition: background-color 9999s ease-out;
 }
 
-/* Onboarding prints on white rather than the app's neutral ground; every other
-   token is the product's own, so onboarding and the app share one ink, one
-   edge ladder and one material. Dark mode keeps the app's own rebinds. */
-:root:not([data-theme='dark']) [data-flow-surface] {
-  --color-background: #ffffff;
-  /* Darker reading inks for onboarding (owner
-     decision, 2026-10-11), each at least 20% darker than the product's and
-     spaced like IBM Carbon and GitHub Primer: near-black foreground (17.4:1
-     on white), dark-grey secondary for sentences (10.4:1) and a mid-grey
-     muted for captions and metadata (8.1:1). No light grey carries text.
-     Pure greys, no tint (2026-11-03 review, after the owner's no-tint rule). */
-  --color-foreground: #1a1a1a;
-  --color-secondary: #404040;
-  --color-muted: #505050;
-}
-
-/* Light is the default. Dark is a per-device reader preference applied to the
-   app document only (lib/theme/theme.ts). */
-:root[data-theme='light'] {
-  color-scheme: light;
-}
-
-:root[data-theme='dark'] {
-  color-scheme: dark;
-  --tag-blue-bg: #1d2b3e;
-  --tag-blue-border: #23354c;
-  --tag-blue-text: #bfdbfe;
-  --tag-purple-bg: #231f3a;
-  --tag-purple-border: #4b437b;
-  --tag-purple-text: #c9bff3;
-  --tag-green-bg: #1f3a2d;
-  --tag-green-border: #275137;
-  --tag-green-text: #b1ebc5;
-  --tag-moss-bg: #23451d;
-  --tag-moss-border: #2e5029;
-  --tag-moss-text: #b1ebc5;
-  --tag-red-bg: #3e1d1e;
-  --tag-red-border: #4c2324;
-  --tag-red-text: #febfc6;
-  --tag-orange-bg: #3e291d;
-  --tag-orange-border: #764d35;
-  --tag-orange-text: #eeb390;
-  --tag-amber-bg: #31221b;
-  --tag-amber-border: #6c4830;
-  --tag-amber-text: #fed7aa;
-  --tag-teal-bg: #102a27;
-  --tag-teal-border: #3b6149;
-  --tag-teal-text: #a2ded2;
-  --tag-yellow-bg: #33301a;
-  --tag-yellow-border: #5a5228;
-  --tag-yellow-text: #fde68a;
-  /* The dark ramp keeps the light system's order in pure neutral near-blacks
-     (no tint, owner 2026-11-03): ground and rail #111111 → sheet #161616 →
-     card #1c1c1c → nested #242424, with overlays at #262626. Wells and fields
-     sink below the sheet. */
-  --color-background: #111111;
-  --color-sheet: #161616;
-  --color-panel: #1c1c1c;
-  --color-panel-tonal: #242424;
-  --color-background-alt: var(--color-panel-tonal);
-  --color-elevated: #262626;
-  --color-well: #141414;
-  --color-input: var(--color-well);
-  /* The same three inks in white: a soft white so long reading on the dark
-     ground does not glare, a light grey for sentences and labels, and a dim
-     grey for captions and metadata that holds 4.5:1 on a card's pressed tint.
-     Faint is placeholder and disabled ink only. */
-  --color-foreground: #e9e9e9;
-  --color-secondary: #a3a3a3;
-  --color-muted: #939393;
-  --color-ink-faint: #6b6b6b;
-  --color-brand-ink: #fafafa;
-  /* The segmented track is the nested step in dark: a lighter inset that the
-     selected segment's card fill and ring sit in. */
-  --color-track: var(--color-panel-tonal);
-  --color-border-subtle: #222222;
-  --color-border: #2a2a2a;
-  --color-border-strong: #3a3a3a;
-  --color-border-bold: #727272;
-  --color-accent: #76df9c;
-  --color-accent-hover: #94ebb0;
-  --color-accent-active: #b2f4c6;
-  /* Dark keeps the bright fill with its dark ink; white on it would fail. */
-  --color-accent-fill: var(--color-accent);
-  --color-accent-fill-hover: var(--color-accent-hover);
-  --color-accent-fill-active: var(--color-accent-active);
-  --color-accent-fg: #0d2618;
-  --color-accent-text: #86e5a6;
-  --color-accent-subtle: rgb(118 223 156 / 18%);
-  --color-accent-soft: rgb(118 223 156 / 12%);
-  --color-accent-border: rgb(118 223 156 / 45%);
-  --color-selection: rgb(118 223 156 / 35%);
-  --color-selection-fg: var(--color-foreground);
-  /* The secondary ink tints hover, selected and pressed: hover lands near
-     the nested step, and muted ink still holds 4.5:1 on a pressed card. */
-  --color-state-ink: var(--color-secondary);
-  --color-on-inverse: #111111;
-  --color-success: #47c27a;
-  --color-success-bg: rgb(91 214 138 / 12%);
-  --color-success-text: var(--color-accent-text);
-  /* Marks keep a lightness step apart for red–green colour vision: light
-     amber over mid green over a deeper red. */
-  --color-warning: var(--color-warning-text);
-  --color-warning-bg: rgb(242 200 121 / 12%);
-  --color-warning-text: #f7d99e;
-  --color-danger: var(--color-danger-solid);
-  --color-danger-solid: #d95767;
-  --color-danger-solid-hover: #eb7481;
-  --color-danger-bg: rgb(239 107 115 / 12%);
-  --color-danger-border: rgb(239 107 115 / 38%);
-  --color-danger-text: #f6abb1;
-  --color-danger-fg: #350b10;
-  --color-info: #7aa7f5;
-  --color-info-bg: rgb(122 167 245 / 12%);
-  --color-info-text: #a9c6f8;
-  --color-neutral: #525252;
-  --color-neutral-bg: var(--color-elevated);
-  --color-chart-1: #4ade80;
-  --color-chart-2: #60a5fa;
-  --color-chart-3: #fbbf24;
-  --color-chart-4: #f472b6;
-  --color-chart-5: #22d3ee;
-  --color-chart-6: #a78bfa;
-  --color-chart-7: #fb923c;
-  --color-chart-8: var(--color-secondary);
-  --color-overlay-scrim: rgb(0 0 0 / 72%);
-  --skeleton-base: var(--color-panel-tonal);
-  /* On near-black a drop shadow carries no edge, so dark material leads with
-     a light hairline ring and keeps a deep shadow only for detached layers. */
-  --shadow-overlay: 0 0 0 1px rgb(255 255 255 / 8%), 0 16px 40px -8px rgb(0 0 0 / 60%);
-  --shadow-modal: 0 0 0 1px rgb(255 255 255 / 8%), 0 40px 80px -24px rgb(0 0 0 / 70%);
-  --surface-ring: rgb(255 255 255 / 8%);
-  --surface-drop: rgb(0 0 0 / 30%);
-  --elevation-flow: 0 0 0 1px rgb(255 255 255 / 7%), 0 24px 48px -24px rgb(0 0 0 / 60%);
-}
-
-/* Detached surfaces resolve their elevation in the current theme. */
-@layer utilities {
-  .shadow-overlay { box-shadow: var(--shadow-overlay); }
-  .shadow-modal { box-shadow: var(--shadow-modal); }
-}
 .focus-input[aria-invalid='true'],
 .focus-ring[aria-invalid='true'],
 .focus-frame:has([aria-invalid='true']) {
-  border: 1px solid var(--color-danger);
-  outline-color: var(--color-danger);
+  border: 1px solid var(--color-negative);
+  outline-color: var(--color-negative);
 }
 @media (forced-colors: active) {
   .focus-input[aria-invalid='true'],
@@ -1208,15 +914,8 @@ input:-webkit-autofill:focus {
   }
 }
 
-/* A spinner is a promise that the wait is long enough to be worth explaining.
-   Most of these waits are not: a cached screen resolves in well under the time
-   it takes to read a spinner, so drawing one only to remove it is the churn
-   people describe as flicker. The loader is therefore held back — the reader
-   sees nothing for a moment, and either the content arrives and no loader ever
-   existed, or the wait is real and the loader appears once and stays.
-
-   Reduced motion collapses the fade to 1ms but leaves the delay alone: the
-   pause is not motion, it is a decision about when to speak. */
+/* A loader is held back 300ms: either the content arrives and no loader ever
+   existed, or the wait is real and the loader appears once and stays. */
 @keyframes citeladder-loading-appear {
   to {
     opacity: 1;
@@ -1228,69 +927,14 @@ input:-webkit-autofill:focus {
   animation: citeladder-loading-appear var(--motion-fast) var(--ease-standard) 300ms forwards;
 }
 
-/* The focused onboarding task column stays paper against shell ground. */
-.app-pane {
-  background: var(--color-panel);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--elevation-flow);
-}
-
-/* The floating sheet (owner decision, 2026-10-07): the work lives on one sheet
-   inset from the viewport and the rail on every side, so all four corners
-   have ground behind them. Its `sheet` fill sits one step below the cards on
-   it, so cards read as raised without leaning on their edges. The document
-   still scrolls; the sheet grows with its content and fills the viewport when
-   the content is short. */
-.app-pane-workspace {
-  background: var(--color-sheet);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--elevation-sheet);
-  margin: var(--workspace-inset) var(--workspace-inset) var(--workspace-inset) 0;
-  min-height: calc(100dvh - 2 * var(--workspace-inset));
-  /* Full-bleed page bands paint paper to the sheet's edges; clipping keeps
-     the corners round without creating a scroll container, so sticky bands
-     and the document's own scrolling are unchanged. */
-  overflow: clip;
-}
-
-/* A 16px corner against the viewport edge reads as a rendering artefact rather
-   than as a sheet, so on a phone the paper runs edge to edge and gives up its
-   radius and its lift. The radius ladder is a role, not a call-site choice, so
-   this cannot be a utility at the consumer. */
-@media (max-width: 980px) {
-  :root {
-    --sticky-header-offset: var(--compact-topbar-height);
-    /* The compact topbar, then the identity band in its padded compact form. */
-    --route-chrome-height: calc(
-      var(--compact-topbar-height) + var(--page-header-padding-top) +
-        var(--page-header-padding-bottom) + var(--control-height-md) + 1px
-    );
-  }
-  .app-pane,
-  .app-pane-workspace {
-    border-radius: 0;
-    box-shadow: none;
-  }
-  .app-pane-workspace {
-    margin: 0;
-    min-height: 0;
-  }
-}
-
 /* Box shadows disappear in forced colours; retain a system-colour boundary. */
 @media (forced-colors: active) {
-  .control-raised,
-  .shell-link[aria-current='page'] {
+  [data-button-variant='primary'],
+  [data-button-variant='secondary'],
+  [data-button-variant='danger'],
+  [data-app-surface] a[aria-current='page'] {
     outline: 1px solid ButtonText;
     outline-offset: -1px;
-  }
-}
-
-@media (max-width: 700px) {
-  :root {
-    --page-header-padding-top: 20px;
-    --page-header-padding-bottom: 16px;
-    --page-header-gap: 12px;
   }
 }
 
@@ -1298,24 +942,23 @@ code,
 pre,
 kbd,
 samp {
-  font-family: var(--font-sans);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
   font-synthesis: none;
 }
 
 .value-placeholder {
   color: var(--value-placeholder);
   font-family: var(--font-sans);
-  font-size: var(--text-xs);
+  font-size: var(--text-caption);
   font-weight: 400;
-  line-height: var(--text-xs--line-height);
+  line-height: var(--text-caption--line-height);
   letter-spacing: 0;
 }
 
 .menu-panel {
   transition:
-    opacity var(--motion-normal) var(--ease-standard),
-    transform var(--motion-normal) var(--ease-standard);
+    opacity var(--motion-slow) var(--ease-standard),
+    transform var(--motion-slow) var(--ease-standard);
 }
 
 .menu-panel[data-state="closed"] {
@@ -1400,7 +1043,7 @@ samp {
 }
 
 .drawer-panel[data-state="closed"] {
-  animation: drawer-panel-out var(--motion-slow) var(--ease-exit) both;
+  animation: drawer-panel-out var(--motion-normal) var(--ease-exit) both;
 }
 
 .drawer-panel[data-side="left"][data-state="open"] {
@@ -1419,35 +1062,31 @@ samp {
   }
 }
 
-/*
- * A placeholder is a flat bar at the size of the value it stands for: no
- * shimmer, so a loading screen holds still and costs no paint while the reads
- * take (Site Health's issues placeholder puts about thirty on screen).
- */
-.skeleton {
-  border-radius: var(--radius-xs);
-  background-color: var(--skeleton-base);
-}
-
-@media (min-width: 768px) {
-  :root {
-    --site-gutter: 32px;
+/* Skeleton bars pulse their opacity (never a shimmer); reduced motion holds
+   them still through the global rule below. */
+@keyframes spinner-turn {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-@media (min-width: 1280px) {
-  :root {
-    --site-gutter: 40px;
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.5;
   }
 }
 
-/* Live-activity marker. Owned here so features never hand-roll a pulse.
+/* ProgressBar's busy state: a 36% segment slides across the track. */
+@keyframes progress-busy {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(280%);
+  }
+}
 
-   The dot itself holds still at full strength and a ring expands out of it and
-   fades. Fading the dot in and out was the first version, and a marker that
-   dims to a third of itself twice a second reads as a fault light rather than
-   as work in progress — the eye is drawn to the disappearance, which is the
-   one thing here that means nothing. */
+/* Live-activity marker: the dot holds still and a ring expands out of it. */
 .activity-dot {
   position: relative;
   border-radius: var(--radius-full);
@@ -1459,7 +1098,7 @@ samp {
   inset: 0;
   border-radius: inherit;
   background: inherit;
-  animation: activity-ping calc(var(--motion-slow) * 7.5) var(--ease-standard) infinite;
+  animation: activity-ping calc(var(--motion-slow) * 9) var(--ease-standard) infinite;
 }
 
 @keyframes activity-ping {
@@ -1473,89 +1112,46 @@ samp {
   }
 }
 
-/* The completion mark, drawn rather than swapped in.
-
-   A step finishing is the only event on this screen, and a tick that simply
-   appears does not read as one. The stroke draws along its own length and a
-   ring opens out behind it once, so the moment has a shape. Both are one-shot:
-   a check that keeps animating would compete with the step still running. */
-.activity-check {
-  position: relative;
-  display: grid;
-  place-items: center;
-}
-
-.activity-check::before {
-  content: "";
-  position: absolute;
-  inset: -0.25rem;
-  border-radius: var(--radius-full);
-  border: 1px solid currentcolor;
-  animation: activity-check-ring var(--motion-slow) var(--ease-standard) both;
-}
-
-.activity-check svg path {
-  stroke-dasharray: 24;
-  stroke-dashoffset: 24;
-  animation: activity-check-draw var(--motion-normal) var(--ease-standard) var(--motion-fast) both;
-}
-
-@keyframes activity-check-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes activity-check-ring {
-  from {
-    opacity: 0.6;
-    transform: scale(0.4);
-  }
-  to {
-    opacity: 0;
-    transform: scale(1.15);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  /* Everything but the two "still working" marks below, which slow down
+     instead of stopping. */
+  :not(.animate-spinner, .animate-progress-busy),
+  ::before,
+  ::after {
     scroll-behavior: auto !important;
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
-  /* The expanding rings carry no information the static mark does not, and at
-     1ms they would flash rather than settle. The drawn check keeps its final
-     frame through the global clamp. */
-  .activity-dot::after,
-  .activity-check::before {
+  .activity-dot::after {
     display: none;
+  }
+  /* "Still working" must keep moving, at half speed. These rules sit outside
+     Tailwind's layers, so they win over the utilities' own timing. */
+  .animate-spinner {
+    animation-duration: 1600ms;
+    animation-iteration-count: infinite;
+  }
+  .animate-progress-busy {
+    animation-duration: 2800ms;
+    animation-iteration-count: infinite;
   }
 }
 
-
-
-
-
-
-/* Skip link — the first tab stop in AppShell. Off-screen
-   until focused, then it lands as a normal control against the panel fill. */
+/* Skip link — the first tab stop. Off-screen until focused. */
 .skip-link {
   position: fixed;
   top: 0.5rem;
   left: 0.5rem;
   z-index: 100;
   transform: translateY(-200%);
-  border-radius: var(--radius-control);
-  background: var(--color-panel);
-  border: 1px solid var(--color-accent);
-  color: var(--color-accent-text);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
   padding: 0.5rem 0.875rem;
-  font-size: var(--text-sm);
+  font-size: var(--text-label);
   font-weight: 500;
-  box-shadow: var(--shadow-overlay);
+  box-shadow: var(--shadow-pop);
 }
 .skip-link:focus-visible {
   transform: translateY(0);
@@ -1569,6 +1165,9 @@ samp {
 /* Fixed chrome respects the home indicator and notch on mobile. */
 .safe-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 /* Removes the 300ms tap delay without disabling pinch zoom. */

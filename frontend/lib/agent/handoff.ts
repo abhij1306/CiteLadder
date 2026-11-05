@@ -218,7 +218,7 @@ export function contextChips(context: AgentContextRefs): ContextChip[] {
     const count = context.search_intelligence_reference.row_ids.length;
     chips.push({
       key: 'search_intelligence_reference',
-      label: `${count} Search Intelligence ${count === 1 ? 'row' : 'rows'}`,
+      label: `${count} Keyword Research ${count === 1 ? 'row' : 'rows'}`,
     });
   }
   return chips;

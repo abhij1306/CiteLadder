@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
-import { lazy } from 'react';
-import { ChartContainer, LegendSwatch } from '@/components/ui/chart';
-import { Inline, Stack } from '@/components/ui/layout';
-import { splitPaneClasses } from '@/components/ui/workspace';
+import { AppGrid } from '@/components/ui/app-grid';
+import { formatChartCount } from '@/components/ui/chart';
+import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TrendChart, type TrendPoint } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
 import {
   searchIntelligenceApi,
@@ -13,20 +13,14 @@ import {
 } from '@/lib/api/search-intelligence';
 import { searchIntelligenceKeys } from '@/lib/api/query-keys/search-intelligence';
 import { useProjectContext } from '@/lib/project/project-context';
-import type { HistoryRow } from './search-intelligence-history-plot';
 
-// The drawings are fetched when the history is drawn; each plot's box renders
-// at once, so a plot arrives in a space already held.
-const BacklinkTotalPlot = lazy(() =>
-  import('./search-intelligence-history-plot').then(({ BacklinkTotalPlot }) => ({
-    default: BacklinkTotalPlot,
-  })),
-);
-const BacklinkChangesPlot = lazy(() =>
-  import('./search-intelligence-history-plot').then(({ BacklinkChangesPlot }) => ({
-    default: BacklinkChangesPlot,
-  })),
-);
+/** One month of saved history; a null value is an unobserved month and draws as a gap. */
+type HistoryRow = {
+  date: string;
+  backlinks: number | null;
+  new: number | null;
+  lost: number | null;
+};
 
 export function SearchIntelligenceHistory({
   dataset,
@@ -48,7 +42,7 @@ export function SearchIntelligenceHistory({
   });
   if (query.isError)
     return <ReadError {...readErrorProps(query)} fallback="Saved history could not be loaded." />;
-  if (query.isPending) return <Skeleton shape="chart" />;
+  if (query.isPending) return <Skeleton variant="chart" />;
   const rows = query.data.rows;
   const observations = rows
     .map((row) => ({
@@ -70,51 +64,60 @@ export function SearchIntelligenceHistory({
       />
     );
   const data = fillMonths(observations, first.date, last.date);
+  const points = (value: (row: HistoryRow) => number | null): TrendPoint[] =>
+    data.map((row) => ({
+      label: longMonth(row.date),
+      axisLabel: shortMonth(row.date),
+      value: value(row),
+    }));
   return (
-    <section className={splitPaneClasses('peers')} aria-label="Saved backlink history">
-      <p className={textRole('caption', 'desktop:col-span-2')}>
+    <AppGrid as="section" layout="halves" aria-label="Saved backlink history">
+      <p className={textRole('caption', 'shell:col-span-2')}>
         Monthly domain-level history for {dataset.target_domain}, {first.date} to {last.date}.
         Coverage includes the provider’s historical link population and may differ from the live
         summary. Missing observations are gaps.
       </p>
       <Stack gap="compact" className="min-w-0 content-start">
-        <Inline as="h3" className={textRole('itemTitle', 'min-h-6')}>
-          <LegendSwatch color="var(--color-chart-1)" shape="line" />
-          Total backlinks
-        </Inline>
-        <ChartContainer
-          config={{ backlinks: { label: 'Backlinks', color: 'var(--color-chart-1)' } }}
-          description="Saved monthly backlink totals; missing observations break the line."
-        >
-          <BacklinkTotalPlot data={data} />
-        </ChartContainer>
+        <h3 className={textRole('itemTitle', 'min-h-6')}>Total backlinks</h3>
+        <TrendChart
+          label="Saved monthly backlink totals"
+          name="Backlinks"
+          data={points((row) => row.backlinks)}
+          yFormat={compactCount}
+          format={formatChartCount}
+        />
       </Stack>
       <Stack gap="compact" className="min-w-0 content-start">
-        <Inline gap="meta" className="min-h-6">
-          <h3 className={textRole('itemTitle')}>Monthly changes</h3>
-          <Inline gap="meta" className="type-caption">
-            <Inline as="span">
-              <LegendSwatch color="var(--color-chart-2)" shape="line" />
-              New backlinks
-            </Inline>
-            <Inline as="span">
-              <LegendSwatch color="var(--color-chart-3)" shape="line" />
-              Lost backlinks
-            </Inline>
-          </Inline>
-        </Inline>
-        <ChartContainer
-          config={{
-            new: { label: 'New backlinks', color: 'var(--color-chart-2)' },
-            lost: { label: 'Lost backlinks', color: 'var(--color-chart-3)' },
-          }}
-          description="Saved monthly new and lost backlinks, shown as separate labelled lines."
-        >
-          <BacklinkChangesPlot data={data} />
-        </ChartContainer>
+        <h3 className={textRole('itemTitle', 'min-h-6')}>Monthly changes</h3>
+        <TrendChart
+          label="Saved monthly new and lost backlinks"
+          name="New backlinks"
+          data={points((row) => row.new)}
+          series={[{ label: 'Lost backlinks', values: data.map((row) => row.lost) }]}
+          yFormat={compactCount}
+          format={formatChartCount}
+        />
       </Stack>
-    </section>
+    </AppGrid>
   );
+}
+
+/** `2026-07` → `07/26`, under the axis. */
+function shortMonth(date: string): string {
+  return `${date.slice(5, 7)}/${date.slice(2, 4)}`;
+}
+
+/** `2026-07` → `Jul 2026`, in the hover card and the table. */
+function longMonth(date: string): string {
+  return new Date(`${date.slice(0, 7)}-01T00:00:00Z`).toLocaleDateString('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+function compactCount(value: number): string {
+  return Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 0 }).format(value);
 }
 
 function numeric(value: unknown): number | null {

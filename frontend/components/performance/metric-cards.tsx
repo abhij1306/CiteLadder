@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
-import { LegendSwatch } from '@/components/ui/chart';
+import { ChartSwatch, type ChartTone } from '@/components/ui/chart';
 import { InfoHint } from '@/components/ui/info-hint';
 import { Stack } from '@/components/ui/layout';
 import { StatRow } from '@/components/ui/stat-row';
@@ -71,17 +71,19 @@ function metricComparison(
 function MetricMarker({
   metricKey,
   label,
-  color,
+  tone,
   plotted,
 }: Readonly<{
   metricKey: PerformanceMetricKey;
   label: string;
-  color: string;
+  tone: ChartTone;
   plotted: boolean;
 }>) {
   return (
     <>
-      <LegendSwatch color={color} shape="line" className={plotted ? undefined : 'invisible'} />
+      <span className={plotted ? 'inline-flex' : 'invisible inline-flex'}>
+        <ChartSwatch tone={tone} line />
+      </span>
       <InfoHint label={label}>{METRIC_HELP[metricKey]}</InfoHint>
     </>
   );
@@ -94,7 +96,7 @@ export function MetricCards({
   compareLabel,
   active,
   onToggle,
-  colors,
+  tones,
   loading = false,
   className,
   'data-testid': testId,
@@ -105,7 +107,8 @@ export function MetricCards({
   compareLabel: string;
   active: ReadonlySet<PerformanceMetricKey>;
   onToggle: (key: PerformanceMetricKey) => void;
-  colors: Record<PerformanceMetricKey, string>;
+  /** Each metric's chart position, shared with its line on the chart. */
+  tones: Record<PerformanceMetricKey, ChartTone>;
   /** A read is in flight. The cards spin rather than claiming a value is absent. */
   loading?: boolean;
   className?: string;
@@ -134,7 +137,7 @@ export function MetricCards({
               <MetricMarker
                 metricKey={card.key}
                 label={card.label}
-                color={colors[card.key]}
+                tone={tones[card.key]}
                 plotted={plotted}
               />
             ),

@@ -34,7 +34,7 @@ export function SourceUrlPageCard({
   page,
   loading,
 }: Readonly<{ url: string; page: Page | undefined; loading: boolean }>) {
-  if (loading) return <Skeleton shape="block" />;
+  if (loading) return <Skeleton variant="block" />;
   if (page === undefined) return null;
   const standing = page?.standing ?? 'untracked';
   const brand = brandVerdict(page?.entities);
@@ -71,7 +71,7 @@ function GetListed({ url, actionId }: Readonly<{ url: string; actionId: string |
     <Inline className="flex-wrap">
       {actionId ? (
         <>
-          <Button asChild>
+          <Button variant="primary" asChild>
             <ProjectLink href={`/agent/actions/${actionId}`}>Open the Action</ProjectLink>
           </Button>
           <Button variant="secondary" asChild>

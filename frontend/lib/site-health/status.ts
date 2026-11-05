@@ -21,7 +21,7 @@ import type {
   SiteCrawl,
 } from '@/lib/api/types';
 import type { PagesSort } from '@/lib/api/site-health';
-import type { RunStatusValue, StatusValue } from '@/components/ui/badge-variants';
+import type { RunStatusValue, StatusValue } from '@/components/ui/badge';
 import type { InternalLinkAnalysis } from '@citeladder/contracts/site-health';
 import { availabilityLabel, formatCount, formatDisplayTimestamp } from '@/lib/format';
 import { titleCaseStatus } from '@/lib/utils';

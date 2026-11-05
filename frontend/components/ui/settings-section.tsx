@@ -1,50 +1,49 @@
 import { useId, type ReactNode } from 'react';
 
-import { Stack } from '@/components/ui/layout';
+import { cardClasses } from '@/components/ui/card';
 import { textRole } from '@/components/ui/typography';
+import { cn } from '@/lib/utils';
 
 /**
- * A settings page as a ruled list of sections: each section names itself in a
- * narrow column (title and one line of help) and holds its controls in the
- * wide one, so every field on the page starts at the same edge. In a narrow
- * container (a dialog, a phone) the two columns stack.
+ * SettingsSection — one card of settings: its title and one line of help,
+ * then its rows (FormRows, or the controls that act at once), 16 apart.
  *
- * Put the sections inside `SettingsSections`, which owns the rules between
- * them and the container the columns respond to. Read-only facts inside a
- * section are a `FactList` with the `ruled` layout.
+ * The danger zone is its own section, last, with a `danger` Button and the
+ * consequence in its description. Stack sections in `SettingsSections`.
  */
 export function SettingsSection({
   title,
   description,
+  action,
   children,
 }: Readonly<{
   title: string;
   description?: ReactNode;
+  /** A header button such as Invite member. */
+  action?: ReactNode;
   children: ReactNode;
 }>) {
   const headingId = useId();
   return (
     <section
       aria-labelledby={headingId}
-      className="grid gap-4 py-[var(--page-section-gap)] first:pt-0 last:pb-0 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] @2xl:gap-[var(--page-section-gap)]"
+      className={cn(cardClasses(), 'flex min-w-0 flex-col gap-[var(--card-padding)]')}
     >
-      <Stack gap="tight" className="content-start">
-        <h2 id={headingId} className={textRole('sectionTitle')}>
-          {title}
-        </h2>
-        {description ? <p className={textRole('caption')}>{description}</p> : null}
-      </Stack>
-      <Stack gap="workspace" className="min-w-0 content-start">
-        {children}
-      </Stack>
+      <header className="flex items-start justify-between gap-4">
+        <div className="grid min-w-0 gap-1">
+          <h2 id={headingId} className={textRole('itemTitle')}>
+            {title}
+          </h2>
+          {description ? <p className={textRole('body')}>{description}</p> : null}
+        </div>
+        {action}
+      </header>
+      <div className="flex min-w-0 flex-col gap-4">{children}</div>
     </section>
   );
 }
 
+/** A page's settings sections, stacked at the card gap. */
 export function SettingsSections({ children }: Readonly<{ children: ReactNode }>) {
-  return (
-    <div className="@container">
-      <div className="divide-border-subtle grid divide-y">{children}</div>
-    </div>
-  );
+  return <div className="flex min-w-0 flex-col gap-[var(--workspace-gap)]">{children}</div>;
 }

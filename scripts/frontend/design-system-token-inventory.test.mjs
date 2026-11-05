@@ -7,22 +7,22 @@ import {
   zeroConsumerTokens,
 } from '../../frontend/scripts/audit-design-tokens.mjs';
 
-test('token inventory resolves scoped aliases and neutral state derivation in both themes', () => {
+test('token inventory resolves scoped aliases in both themes', () => {
   const rows = tokenInventory(`
     @theme {
-      --color-panel: #ffffff;
-      --color-foreground: #000000;
-      --color-active: color-mix(in srgb, var(--color-panel), var(--color-foreground) 10%);
-      --color-secondary: var(--color-foreground);
+      --color-surface: #ffffff;
+      --color-ink: #111111;
+      --color-focus: var(--color-ink);
+      --color-scrim: rgb(17 17 17 / 40%);
     }
-    :root[data-theme='dark'] { --color-panel: #000000; --color-foreground: #ffffff; }
+    :root[data-theme='dark'] { --color-surface: #151515; --color-ink: #f4f4f4; }
   `);
-  const active = rows.find(({ token }) => token === '--color-active');
-  assert.equal(active.light, '#e6e6e6');
-  assert.equal(active.dark, '#1a1a1a');
-  const secondary = rows.find(({ token }) => token === '--color-secondary');
-  assert.equal(secondary.light, '#000000');
-  assert.equal(secondary.dark, '#ffffff');
+  assert.deepEqual(rows, [
+    { token: '--color-focus', light: '#111111', dark: '#f4f4f4' },
+    { token: '--color-ink', light: '#111111', dark: '#f4f4f4' },
+    { token: '--color-scrim', light: 'rgb(17 17 17 / 40%)', dark: 'rgb(17 17 17 / 40%)' },
+    { token: '--color-surface', light: '#ffffff', dark: '#151515' },
+  ]);
 });
 
 test('two tokens with one value fail unless aliased or declared the same', () => {
@@ -53,11 +53,11 @@ test('two tokens with one value fail unless aliased or declared the same', () =>
   );
 });
 
-test('a chart series may never wear a status or action value, allowlisted or not', () => {
-  const source = '@theme { --color-chart-1: #0d9488; --color-success: #0d9488; }';
+test('a chart series may never wear a status value, allowlisted or not', () => {
+  const source = '@theme { --color-data-3: #0d9488; --color-positive: #0d9488; }';
   const sameAs = ['light', 'dark'].map((theme) => ({
     theme,
-    tokens: ['--color-chart-1', '--color-success'],
+    tokens: ['--color-data-3', '--color-positive'],
     reason: 'x',
   }));
   const findings = duplicateTokenFindings(source, sameAs);
@@ -82,4 +82,6 @@ test('a token is consumed by var(), by a utility class or by its size companion'
     { path: 'd.css', text: ':root { --color-unused: #ffffff; }' },
   ];
   assert.deepEqual(zeroConsumerTokens(source, files), ['--color-unused']);
+  // A token the system's contract requires is not dead before a page uses it.
+  assert.deepEqual(zeroConsumerTokens(source, files, new Set(['--color-unused'])), []);
 });

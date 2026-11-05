@@ -3,8 +3,8 @@
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
@@ -80,12 +80,12 @@ export function PropertyChoice({
   const properties = ownPropertiesFirst(discovery.data);
   if (properties.length === 0)
     return (
-      <Alert tone="neutral">
+      <Callout tone="neutral">
         This account has no {source.noun}. Add and verify the site in {source.console}, then{' '}
         <Button variant="ghost" onClick={() => discovery.mutate()}>
           check again
         </Button>
-      </Alert>
+      </Callout>
     );
   const suggested = suggestedProperty(provider, properties);
   return (
@@ -93,6 +93,7 @@ export function PropertyChoice({
       {suggested ? (
         <Inline className="flex-wrap">
           <Button
+            variant="primary"
             onClick={() => select.mutate(suggested.property_ref)}
             pending={select.isPending && select.variables === suggested.property_ref}
             pendingLabel="Importing…"
@@ -117,7 +118,7 @@ export function PropertyChoice({
         />
       )}
       {select.isError ? (
-        <Alert tone="danger">{humanizeApiError(select.error).message}</Alert>
+        <Callout tone="negative">{humanizeApiError(select.error).message}</Callout>
       ) : null}
     </Stack>
   );
@@ -146,12 +147,12 @@ function DiscoveryStatus({
       </Inline>
     );
   return (
-    <Alert tone="danger">
+    <Callout tone="negative">
       Could not load your {noun}s. {humanizeApiError(discovery.error).message}{' '}
       <Button variant="ghost" onClick={() => discovery.mutate()}>
         Try again
       </Button>
-    </Alert>
+    </Callout>
   );
 }
 

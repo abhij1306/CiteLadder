@@ -52,11 +52,11 @@ export function EvidenceClaims({ claims }: Readonly<{ claims: readonly Execution
               <span className={textRole('emphasis')}>“{claim.quote}”</span>
               <VerdictChip claim={claim} />
             </Inline>
-            <span className="type-caption text-secondary">
+            <span className="type-caption text-ink-secondary">
               {TOPIC_LABELS[claim.topic]}: {claim.claim}
             </span>
             {claim.facts.map((fact) => (
-              <span key={fact.statement} className="type-caption text-secondary">
+              <span key={fact.statement} className="type-caption text-ink-secondary">
                 Your fact: {fact.statement}
               </span>
             ))}
