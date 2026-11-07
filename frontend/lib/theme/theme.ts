@@ -34,8 +34,8 @@ function storedPreference(): ThemePreference {
 }
 
 /**
- * The cookie's Domain: the parent of a subdomain (`app.example.com` →
- * `example.com`), the host itself for an apex, and none (host-only) for
+ * The cookie's Domain: the parent of a subdomain (`app.citeladder.com` →
+ * `citeladder.com`), the host itself for an apex, and none (host-only) for
  * localhost and IP addresses, where a Domain attribute would be rejected.
  */
 export function themeCookieDomain(hostname: string): string | null {
