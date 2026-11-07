@@ -146,9 +146,9 @@ export function DiscoveryStage({
         stagger
       />
       {found.length > 0 ? <StepFindings title="Found so far" items={found} /> : null}
-      {warnings.map((warning) => (
-        <Callout key={warning} tone="warning" action={warning === rerunWarning ? rerun : undefined}>
-          {warningMessage(warning)}
+      {warningCallouts(warnings, rerunWarning).map(({ message, rerunnable }) => (
+        <Callout key={message} tone="warning" action={rerunnable ? rerun : undefined}>
+          {message}
         </Callout>
       ))}
       {failed ? (
@@ -391,6 +391,16 @@ function failureMessage(code: string): string {
   if (SITE_FAILURES.has(code))
     return 'We could not open this website. Check the address, or run discovery again.';
   return 'Research did not finish. Run discovery again; your brand details are kept.';
+}
+
+/** One callout per distinct message: several codes share the same reader-facing text. */
+export function warningCallouts(warnings: readonly string[], rerunWarning: string | undefined) {
+  const callouts = new Map<string, boolean>();
+  for (const code of warnings) {
+    const message = warningMessage(code);
+    callouts.set(message, (callouts.get(message) ?? false) || code === rerunWarning);
+  }
+  return [...callouts].map(([message, rerunnable]) => ({ message, rerunnable }));
 }
 
 function warningMessage(code: string): string {
