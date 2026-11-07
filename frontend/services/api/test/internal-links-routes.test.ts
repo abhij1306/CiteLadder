@@ -10,7 +10,7 @@ import { record } from '../src/db/json.ts';
 import { publishInternalLinks } from '../src/site-health/internal-link-publish.ts';
 import { recomputeOpportunities } from '../src/opportunities/refresh.ts';
 import type { LinkCandidate } from '../src/site-health/internal-link-candidates.ts';
-import { enqueueTask } from '../src/referrals/enqueue.ts';
+import { enqueueTask } from '../src/queue/enqueue.ts';
 import { loadLinkPages } from '../src/site-health/internal-link-pages.ts';
 import { policy } from '../src/config.ts';
 

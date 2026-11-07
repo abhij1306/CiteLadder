@@ -42,13 +42,8 @@ export const traffic = {
     ]),
   ),
 };
-const tasks = { ...analyticsRuntime.tasks };
-const taskKinds = Object.values(tasks).sort(compareText);
 export const analytics = {
   ...analyticsRuntime,
-  tasks,
-  task_kinds: taskKinds,
-  ts_owned_task_kinds: taskKinds,
   worker_settings: { ...analyticsRuntime.worker_settings },
   default_granularity: traffic.TRAFFIC_GRANULARITY_DAY,
   snapshot_granularities: traffic.TRAFFIC_SNAPSHOT_GRANULARITIES,

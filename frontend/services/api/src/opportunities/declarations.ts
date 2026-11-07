@@ -1,7 +1,7 @@
 /** One atomic declaration per Action. Replays never resolve evidence again. */
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
-import { loadWorkerSettings, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
 import { resolveOwnedPages } from '../demand/page-equivalence.ts';
 import { ApiError } from '../errors.ts';
@@ -208,7 +208,6 @@ async function verifyExistingEvidence(
             triggerKind,
             triggerId: source.id,
             revision: `declaration-${row.id}`,
-            maxAttempts: loadWorkerSettings().taskMaxAttempts,
           },
         ]
       : [],

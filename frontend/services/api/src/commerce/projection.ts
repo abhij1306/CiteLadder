@@ -2,12 +2,12 @@ import { sql, type Updateable } from 'kysely';
 import { z } from 'zod';
 import { commerceCategoryRoleSchema } from '@citeladder/contracts/commerce-suite';
 
-import { loadWorkerSettings, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import type { CommerceProducts } from '../generated/db-schema.ts';
-import { TerminalExecutorError, type Executor } from '../workers/executor.ts';
+import { TerminalExecutorError, type Executor } from '../queue/executor.ts';
 import {
   addMembership,
   appendObservation,
@@ -357,6 +357,5 @@ export async function enqueueCatalogProjection(
     payload: { source_analysis_id: analysisId },
     keyParts: [],
     idempotencyKey: `commerce:project:${analysisId}:${policy.commerce.projector_version}`,
-    maxAttempts: loadWorkerSettings().taskMaxAttempts,
   });
 }

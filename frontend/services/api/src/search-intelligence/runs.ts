@@ -13,7 +13,7 @@ import { loadWorkerSettings, policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObjects } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
-import { enqueueTask, taskKey } from '../referrals/enqueue.ts';
+import { enqueueTask, taskKey } from '../queue/enqueue.ts';
 import type { Preferences } from '../routes/search-intelligence-contracts.ts';
 import type { Scope } from './reads.ts';
 import { runConnection } from './credentials.ts';
@@ -85,7 +85,6 @@ async function enqueueAcquisition(trx: Database, scope: Scope, runId: string): P
     kind: si.task_kind,
     payload: { run_id: runId },
     keyParts: [runId],
-    maxAttempts: loadWorkerSettings().taskMaxAttempts,
   });
   if (created !== null) return created;
   const existing = await scope.workspace

@@ -21,8 +21,8 @@ import type { ModelGateway } from '../models/gateway.ts';
 import { parseUuid } from '../http/uuid.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { scalarText } from '../text-order.ts';
-import { payloadString, taskProject, type Executor } from '../workers/executor.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { payloadString, taskProject, type Executor } from '../queue/executor.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import {
   checkedTopics,
   frozenFactCheck,

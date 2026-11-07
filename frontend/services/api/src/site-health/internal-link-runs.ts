@@ -11,7 +11,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import { linkCandidates, linkRequests } from './internal-link-candidates.ts';
 import { loadLinkPages, type LinkScope } from './internal-link-pages.ts';
 

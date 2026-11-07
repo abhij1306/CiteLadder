@@ -13,7 +13,7 @@ import {
   taskProject,
   payloadString,
   type Executor,
-} from '../workers/executor.ts';
+} from '../queue/executor.ts';
 import { getLogger } from '../logging.ts';
 import { FetchError, type FetchedPage, type WebsiteFetcher } from '../projects/safe-fetch.ts';
 import { PageAcquirer, authorizeAcquisition } from '../web-evidence/acquisition.ts';

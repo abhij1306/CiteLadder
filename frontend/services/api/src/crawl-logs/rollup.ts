@@ -10,7 +10,7 @@ import type { Database } from '../db/database.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { record, strings } from '../db/json.ts';
 import { lockCrawlState, type CrawlScope } from './state.ts';
-import type { Executor } from '../workers/executor.ts';
+import type { Executor } from '../queue/executor.ts';
 import { enqueueTrafficInsights } from './insights-enqueue.ts';
 import { gapMinutes, pullCoverage } from './pull-coverage.ts';
 import { isLiveKind } from './sources.ts';

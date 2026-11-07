@@ -8,14 +8,14 @@ import { randomUUID } from 'node:crypto';
 import { sql, type AliasNode, type OperationNode, type SelectQueryNode } from 'kysely';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { policy } from '../src/config.ts';
-import { claimStatement, TaskQueue } from '../src/queue/task-queue.ts';
+import { ANALYTICS_LANE, claimStatement, TaskQueue } from '../src/queue/task-queue.ts';
+import { ANALYTICS_KIND_NAMES } from '../src/workers/analytics-kinds.ts';
 import { Fixtures, testDatabase } from './support.ts';
 
 const db = testDatabase();
 const fixtures = new Fixtures(db);
-const queue = new TaskQueue(db, { leaseTtlSeconds: 120 });
-const TS_KINDS = policy.analytics.ts_owned_task_kinds;
+const queue = new TaskQueue(db, ANALYTICS_LANE, { leaseTtlSeconds: 120 });
+const TS_KINDS = ANALYTICS_KIND_NAMES;
 let workspaces: string[] = [];
 
 async function task(workspaceId: string, kind: string, priority = 0): Promise<string> {
@@ -124,7 +124,7 @@ describe('TaskQueue', () => {
         .set({ available_at: new Date(0) })
         .where('id', '=', id)
         .execute();
-      const skewed = new TaskQueue(db, {
+      const skewed = new TaskQueue(db, ANALYTICS_LANE, {
         leaseTtlSeconds: 120,
         now: () => new Date(Date.now() + skew),
       });
@@ -150,17 +150,17 @@ describe('TaskQueue', () => {
       expect(await skewed.heartbeat(claimed!.id, 'skewed', claimed!.workspace_id)).toBe(false);
     },
   );
-  it('re-checks eligibility on the locked relation, not only in the ranking', () => {
-    const node = claimStatement(db, {
+  it('re-checks eligibility on the locked relation and ranks only a capped due set', () => {
+    const node = claimStatement(db, ANALYTICS_LANE, {
       now: new Date(),
       limit: 1,
       kinds: TS_KINDS,
     }).toOperationNode();
     expect(referencedColumns(node.where)).toEqual(new Set(['status', 'available_at']));
     const ranked = (node.joins![0]!.table as AliasNode).node as SelectQueryNode;
-    expect(referencedColumns(ranked.where)).toEqual(
-      new Set(['status', 'available_at', 'task_kind']),
-    );
+    const due = (ranked.from!.froms[0] as AliasNode).node as SelectQueryNode;
+    expect(referencedColumns(due.where)).toEqual(new Set(['status', 'available_at', 'task_kind']));
+    expect(due.limit?.limit).toMatchObject({ value: 500 });
     expect(node.endModifiers?.map((item) => item.modifier)).toEqual(['ForUpdate', 'SkipLocked']);
   });
 

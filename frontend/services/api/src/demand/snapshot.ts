@@ -9,7 +9,7 @@ import {
   requireProject,
   taskProject,
   type Executor,
-} from '../workers/executor.ts';
+} from '../queue/executor.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { record, strings } from '../db/json.ts';

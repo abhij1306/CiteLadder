@@ -1,13 +1,13 @@
 /** The exactly-once analytics handoff owed by a terminal crawl's persisted evidence. */
 import { sql } from 'kysely';
-import { loadWorkerSettings, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import {
   enqueueImplementationVerification,
   enqueueOpportunityRefresh,
 } from '../opportunities/enqueue.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import type { Crawl } from './task-fence.ts';
 import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
 
@@ -22,11 +22,7 @@ export async function enqueueTerminalAnalyticsRefresh(
   crawl: Crawl,
   changeSnapshotId: string | null,
 ) {
-  const scope = {
-    workspaceId: crawl.workspace_id,
-    projectId: crawl.project_id,
-    maxAttempts: loadWorkerSettings().taskMaxAttempts,
-  };
+  const scope = { workspaceId: crawl.workspace_id, projectId: crawl.project_id };
   const triggerKind = changeSnapshotId ? 'site_change' : 'site_crawl';
   await enqueueTrafficInsights(db, scope);
   const triggerId = changeSnapshotId ?? crawl.id;

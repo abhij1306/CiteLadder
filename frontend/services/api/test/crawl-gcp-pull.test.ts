@@ -10,8 +10,8 @@ import { gcpLogFilter } from '../src/crawl-logs/gcp-filter.ts';
 import { GcpError, pubSubReader } from '../src/crawl-logs/gcp-client.ts';
 import { crawlLogPull, enqueueDuePulls } from '../src/crawl-logs/pull.ts';
 import { refreshCrawlLogs } from '../src/crawl-logs/rollup.ts';
-import { TaskQueue } from '../src/queue/task-queue.ts';
-import { enqueueTask } from '../src/referrals/enqueue.ts';
+import { ANALYTICS_LANE, TaskQueue } from '../src/queue/task-queue.ts';
+import { enqueueTask } from '../src/queue/enqueue.ts';
 
 /** An in-memory Google: metadata, IAM Credentials and one Pub/Sub subscription. */
 function fakeGoogle(
@@ -534,7 +534,7 @@ describe('pull task', () => {
   });
   it('leases a pull for its own longer TTL', async () => {
     const tenant = await fixtures.tenant();
-    const queue = new TaskQueue(db, {
+    const queue = new TaskQueue(db, ANALYTICS_LANE, {
       leaseTtlSeconds: 120,
       leaseTtlSecondsByKind: { crawl_log_pull: 300 },
     });

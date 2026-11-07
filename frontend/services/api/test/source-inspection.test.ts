@@ -3,7 +3,7 @@ import { afterAll, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
-import { enqueueTask } from '../src/referrals/enqueue.ts';
+import { enqueueTask } from '../src/queue/enqueue.ts';
 import { createWebsiteFetcher } from '../src/projects/safe-fetch.ts';
 import { authorizeAcquisition } from '../src/web-evidence/acquisition.ts';
 import { canonicalIdentity } from '../src/site-health/url-identity.ts';

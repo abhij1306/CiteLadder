@@ -2,7 +2,7 @@ import { sql } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import type { CrawlScope } from './state.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import { aiTraffic } from '../config/ai-traffic.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { ga4Mapped } from './pages.ts';

@@ -11,7 +11,7 @@
 import type { Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { CrawlLogSources } from '../generated/db-schema.ts';
-import type { Executor } from '../workers/executor.ts';
+import type { Executor } from '../queue/executor.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
@@ -25,8 +25,8 @@ import { gcpLogLine } from './gcp-entry.ts';
 import { recordVerification, verifyPullSource } from './gcp-verify.ts';
 import { ingest } from './ingest.ts';
 import { crawlLogAvailability, findLivePullSource } from './sources.ts';
-import { CHECK_HELD_STALLS } from './stall.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { CHECK_HELD_STALLS, markStalled } from './stall.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 
 type Source = Selectable<CrawlLogSources>;
 const settings = crawlLogs.gcp_pull;

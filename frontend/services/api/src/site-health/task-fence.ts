@@ -3,7 +3,7 @@ import { sql, type Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { SiteCrawls } from '../generated/db-schema.ts';
 import type { SiteTask } from '../queue/task-queue.ts';
-import { TaskCancelledError } from '../workers/executor.ts';
+import { TaskCancelledError } from '../queue/executor.ts';
 
 export type Crawl = Selectable<SiteCrawls>;
 /**

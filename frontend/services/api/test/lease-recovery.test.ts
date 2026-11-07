@@ -19,8 +19,7 @@ const scope = (seed: SiteSeed) =>
   sql<boolean>`workspace_id = ${seed.workspaceId} and crawl_id = ${seed.crawlId}`;
 const reclaim = (seed: SiteSeed, charge: 0 | 1, database: Database = db) =>
   reclaimExpiredLeases(database, {
-    table: 'site_crawl_tasks',
-    charge,
+    lane: { table: 'site_crawl_tasks', recoveryCharge: charge },
     batchSize: 10,
     at,
     scope: scope(seed),
@@ -202,8 +201,7 @@ describe('expired lease reclaim', () => {
         .execute();
     const batch = () =>
       reclaimExpiredLeases(db, {
-        table: 'site_crawl_tasks',
-        charge: 1,
+        lane: { table: 'site_crawl_tasks', recoveryCharge: 1 },
         batchSize: 1,
         scope: scope(seed),
       });

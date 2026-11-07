@@ -21,7 +21,7 @@ import { factTopicOrder } from '../config/perception.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import type { DB } from '../generated/db-schema.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import { namesAnyEntity } from './passages.ts';
 
 const versionsSchema = z.object({

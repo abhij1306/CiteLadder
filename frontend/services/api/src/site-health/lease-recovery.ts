@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
 import { reclaimExpiredLeases } from '../queue/recovery.ts';
+import { SITE_HEALTH_LANE } from '../queue/task-queue.ts';
 
 const logger = getLogger('app.workers.site_health_worker');
 
@@ -13,8 +14,7 @@ export async function recoverExpiredLeases(
   scope?: { workspaceId: string; crawlId: string },
 ) {
   const rows = await reclaimExpiredLeases(db, {
-    table: 'site_crawl_tasks',
-    charge: 1,
+    lane: SITE_HEALTH_LANE,
     batchSize,
     at: now,
     scope:

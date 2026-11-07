@@ -2,7 +2,7 @@ import { afterAll, expect, it, vi } from 'vitest';
 import { buildLinkMetrics, type LinkPage } from '../src/site-health/link-graph.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
-import { TaskQueue } from '../src/queue/task-queue.ts';
+import { SITE_HEALTH_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { record } from '../src/db/json.ts';
 import { testDatabase } from './support.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
@@ -232,7 +232,7 @@ it('parallel claims are disjoint and give each workspace a turn before another r
     fixtures.task(first, 'link_metrics', { priority: 50 }),
   ]);
   const secondId = await fixtures.task(second, 'link_metrics', { priority: 0 });
-  const queue = new TaskQueue(db, { leaseTtlSeconds: 60 }, 'site_crawl_tasks');
+  const queue = new TaskQueue(db, SITE_HEALTH_LANE, { leaseTtlSeconds: 60 });
   const batch = await queue.claim({ owner: 'fair', kinds: ['link_metrics'], limit: 2 });
   expect(new Set(batch.map((task) => task.workspace_id))).toEqual(
     new Set([first.workspaceId, second.workspaceId]),

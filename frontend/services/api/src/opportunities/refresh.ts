@@ -33,7 +33,7 @@ import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { notFound } from '../errors.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
-import { taskProject, type Executor } from '../workers/executor.ts';
+import { taskProject, type Executor } from '../queue/executor.ts';
 import { syncActions } from './action-sync.ts';
 import { earnedPageHits } from './earned-page-hits.ts';
 import {

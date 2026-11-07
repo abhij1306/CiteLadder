@@ -6,7 +6,7 @@ import * as lifecycle from '../src/site-health/lifecycle.ts';
 import { recoverExpiredLeases } from '../src/site-health/lease-recovery.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
-import { TaskCancelledError } from '../src/workers/executor.ts';
+import { TaskCancelledError } from '../src/queue/executor.ts';
 import { lockSiteTask } from '../src/site-health/task-fence.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 import { testDatabase } from './support.ts';

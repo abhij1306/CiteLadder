@@ -1,10 +1,10 @@
 import { sql } from 'kysely';
-import { activeJobRetrySeconds, loadWorkerSettings, policy } from '../config.ts';
+import { activeJobRetrySeconds, policy } from '../config.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { ApiError } from '../errors.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import { demandSourceRevision } from './source.ts';
 import type { DemandScope } from './query-evidence.ts';
 
@@ -38,7 +38,6 @@ export async function enqueueManualDemand(
       manual: true,
     },
     keyParts: [scope.projectId, scope.windowStart, scope.windowEnd, 0, revision],
-    maxAttempts: loadWorkerSettings().taskMaxAttempts,
   });
   if (!id) return null;
   const active = await workspace

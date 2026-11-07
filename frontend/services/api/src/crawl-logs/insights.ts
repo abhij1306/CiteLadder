@@ -17,7 +17,7 @@ import { ga4Mapped, insightSnapshot, pageContext, pageComparable } from './pages
 import { aiTraffic } from '../config/ai-traffic.ts';
 import { policy } from '../config.ts';
 import { strings, record, numberRecord } from '../db/json.ts';
-import { taskProject, type Executor } from '../workers/executor.ts';
+import { taskProject, type Executor } from '../queue/executor.ts';
 
 type Pattern = z.infer<typeof aiTrafficInsightsSchema>['patterns'][number];
 function verifiedErrorCounts(rows: JoinedPage[]) {

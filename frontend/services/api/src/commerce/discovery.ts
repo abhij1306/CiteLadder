@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { commerceTargetSchema, commerceTargetsSchema } from '@citeladder/contracts/commerce-suite';
 import { z } from 'zod';
 import { dailyWorkspaceLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { loadWorkerSettings, policy, resolveSettingSpec } from '../config.ts';
+import { policy, resolveSettingSpec } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { meterFor } from '../models/metering.ts';
 import { jsonObject } from '../db/json.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
-import { taskProject, TerminalExecutorError, type Executor } from '../workers/executor.ts';
+import { taskProject, TerminalExecutorError, type Executor } from '../queue/executor.ts';
 import { PageAcquirer, authorizeAcquisition } from '../web-evidence/acquisition.ts';
 import { fetchWebsite, type WebsiteFetcher } from '../projects/safe-fetch.ts';
 import { commerceMissing, type CommerceScope } from './reads.ts';
@@ -109,7 +109,6 @@ export function enqueueDiscoveries(
               payload: { target, target_context: context, locale, run_id: runId },
               keyParts: [],
               idempotencyKey: `commerce:competitors:${runId}:${key}`,
-              maxAttempts: loadWorkerSettings().taskMaxAttempts,
             })) ?? undefined;
           if (!id) throw new Error('Competitor discovery task was not persisted');
           return [key, id] as const;

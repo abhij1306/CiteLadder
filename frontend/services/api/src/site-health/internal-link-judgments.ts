@@ -10,9 +10,9 @@ import { record } from '../db/json.ts';
 import { createJevClient, type JevClient } from '../models/jev.ts';
 import { meterFor } from '../models/metering.ts';
 import { ModelError, providerErrorCode } from '../models/http.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
-import { payloadString, taskProject, type Executor } from '../workers/executor.ts';
+import { payloadString, taskProject, type Executor } from '../queue/executor.ts';
 
 const requestSchema = z.object({
   id: z.uuid(),

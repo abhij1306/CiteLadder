@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { policy } from '../src/config.ts';
 import { refreshTrafficSnapshot, projectPerformanceRange } from '../src/traffic/snapshot.ts';
 import { buildTrafficProjection, TrafficProjectionBuilder } from '../src/traffic/projection.ts';
-import { TaskCancelledError } from '../src/workers/executor.ts';
+import { TaskCancelledError } from '../src/queue/executor.ts';
 import { Fixtures, testDatabase } from './support.ts';
 import {
   importSeed,

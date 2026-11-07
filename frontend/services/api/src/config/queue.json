@@ -1,6 +1,7 @@
 {
   "max_attempts_error": "max_attempts_exceeded",
   "max_drain_batches": 1000,
+  "claim_candidate_limit": 500,
   "statuses": {
     "awaiting_provider_result": "awaiting_provider_result",
     "cancelled": "cancelled",

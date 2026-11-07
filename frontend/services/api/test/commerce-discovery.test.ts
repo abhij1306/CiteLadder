@@ -7,8 +7,8 @@ import { discoveryQuery } from '../src/commerce/discovery-validation.ts';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { importCatalog } from '../src/commerce/import.ts';
 import type { WebsiteFetcher } from '../src/projects/safe-fetch.ts';
-import { AnalyticsWorker, EXECUTORS } from '../src/workers/analytics-worker.ts';
-import { TaskQueue } from '../src/queue/task-queue.ts';
+import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
+import { ANALYTICS_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { recoverAnalyticsLeases } from '../src/queue/analytics-recovery.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
@@ -348,7 +348,7 @@ it('discards publication after cancellation or reclaim even if the same owner is
           .where('id', '=', id)
           .execute();
         expect(await recoverAnalyticsLeases(db, 10)).toBe(1);
-        const queue = new TaskQueue(db, {
+        const queue = new TaskQueue(db, ANALYTICS_LANE, {
           leaseTtlSeconds: 120,
           now: () => new Date(Date.now() + 1000),
         });
@@ -403,7 +403,6 @@ it('recovers exhausted tasks in bounded batches, preserves errors, and drains an
     error_code: 'prior_error',
     error_detail: 'Prior failure',
   });
-  expect(Object.keys(EXECUTORS).sort()).toEqual([...policy.analytics.task_kinds].sort());
 });
 
 it('requires target-compatible structural evidence rather than schema claims alone', async () => {

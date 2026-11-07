@@ -12,7 +12,7 @@ import { AnalyticsWorker } from '../workers/analytics-worker.ts';
 import { projectPerformanceRange } from '../traffic/snapshot.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { revalidatable } from '../http/revalidate.ts';
-import { enqueueTask, taskKey } from '../referrals/enqueue.ts';
+import { enqueueTask, taskKey } from '../queue/enqueue.ts';
 import {
   clampedCustomWindow,
   getPerformance,
@@ -185,7 +185,6 @@ export const performanceRoutes = [
         kind,
         payload: { window_start: from, window_end: to },
         keyParts,
-        maxAttempts: loadWorkerSettings().taskMaxAttempts,
       });
       const row = await tasks()
         .where('idempotency_key', '=', taskKey(kind, keyParts))

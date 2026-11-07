@@ -3,7 +3,7 @@ import { policy, resolveSettingSpec } from '../config.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { ProviderError } from '../answer-engines/contracts.ts';
 import { acquireCapacity, releaseCapacity, type CapacityRequest } from '../providers/capacity.ts';
-import type { Executor } from '../workers/executor.ts';
+import type { Executor } from '../queue/executor.ts';
 import { record } from '../db/json.ts';
 import { AcquisitionState, type PreparedResearch, type ResearchPlan } from './acquisition-state.ts';
 import { connectionSecret } from './credentials.ts';

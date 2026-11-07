@@ -22,7 +22,7 @@ import { parseUuid } from '../http/uuid.ts';
 import type { ModelGateway } from '../models/gateway.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { scalarText } from '../text-order.ts';
-import { payloadString, taskProject, type Executor } from '../workers/executor.ts';
+import { payloadString, taskProject, type Executor } from '../queue/executor.ts';
 import {
   checkedTopics,
   factScope,

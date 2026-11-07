@@ -9,7 +9,7 @@ import { parseUuid } from '../http/uuid.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { record } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
-import { taskProject, type Executor } from '../workers/executor.ts';
+import { taskProject, type Executor } from '../queue/executor.ts';
 import {
   MAX_WINDOW_DAYS,
   mergeOutcomes,

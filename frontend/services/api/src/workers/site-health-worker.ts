@@ -9,7 +9,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
-import { TaskQueue, type SiteTask } from '../queue/task-queue.ts';
+import { SITE_HEALTH_LANE, TaskQueue, type SiteTask } from '../queue/task-queue.ts';
 import { maintainLease, leaseSignal } from '../queue/heartbeat.ts';
 import { persistLinkMetrics } from '../site-health/link-metrics.ts';
 import { persistArchitecture } from '../site-health/architecture.ts';
@@ -21,7 +21,7 @@ import { SitePageFetcher } from '../site-health/page-fetch.ts';
 import { runChangeIntel } from '../site-health/change-snapshot.ts';
 import { siteWorkerSettings } from '../site-health/runtime.ts';
 import { lockSiteTask, type Crawl } from '../site-health/task-fence.ts';
-import { TaskCancelledError } from './executor.ts';
+import { TaskCancelledError } from '../queue/executor.ts';
 import { recoverExpiredLeases } from '../site-health/lease-recovery.ts';
 import {
   publishCancelledCrawls,
@@ -84,7 +84,7 @@ export class SiteHealthWorker {
     this.owner = options.owner ?? `site-worker-ts-${randomUUID().slice(0, 12)}`;
     this.settings = options.settings ?? siteWorkerSettings();
     this.executors = options.executors ?? executors;
-    this.queue = new TaskQueue(db, { leaseTtlSeconds: this.settings.lease }, 'site_crawl_tasks');
+    this.queue = new TaskQueue(db, SITE_HEALTH_LANE, { leaseTtlSeconds: this.settings.lease });
     this.#cadence = new ScoreRefreshCadence(this.settings.scoreRefresh);
     // Each acquisition checks twice; a short-lived grant spares four queries per check.
     // One fetcher for the worker: robots caching and per-host pacing span every task.

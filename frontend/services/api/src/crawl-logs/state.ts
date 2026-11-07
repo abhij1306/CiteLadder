@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { policy } from '../config.ts';
 import { record, strings } from '../db/json.ts';

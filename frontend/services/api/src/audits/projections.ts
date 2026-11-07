@@ -6,7 +6,7 @@ import { finalizeCommerceShelf } from '../commerce/shelf-metrics.ts';
 import type { MeterableShelfResolver } from '../commerce/shelf.ts';
 import type { ExecutionContext } from './execution-context.ts';
 import type { ExecutionResult } from './result-persistence.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import { policy, resolveSettingSpec } from '../config.ts';
 import { getLogger } from '../logging.ts';
 import { prepareSavedShelf } from '../commerce/shelf-recovery.ts';

@@ -16,7 +16,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
-import { payloadWindow, requireProject, type Executor } from '../workers/executor.ts';
+import { payloadWindow, requireProject, type Executor } from '../queue/executor.ts';
 import {
   addDays,
   bucketStart,

@@ -5,15 +5,17 @@ import { queueRecovery } from '../config/queue-recovery.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
 import { leasedStatuses } from './next-due.ts';
+import type { LaneDescriptor } from './task-queue.ts';
 
 const { statuses } = policy.task_queue;
 type Queue = 'brand_discovery_tasks' | 'integration_sync_runs';
 
 export type LeaseRecovery = {
-  table: Queue | 'analytics_tasks' | 'site_crawl_tasks';
+  /** The lane's table and the attempts one reclaim charges (0 when its claim already charged it). */
+  lane: Pick<LaneDescriptor, 'recoveryCharge'> & {
+    table: Queue | LaneDescriptor['table'];
+  };
   batchSize: number;
-  /** Attempts one reclaim charges: 0 when the lane's claim already charged it. */
-  charge: 0 | 1;
   /** Narrows the expired rows, such as task kinds or one workspace's run. */
   scope?: RawBuilder<boolean>;
   /** The time the reclaim records; the database clock unless the lane keeps its own. */
@@ -43,7 +45,8 @@ export function reclaimExpiredLeases(
 }
 
 async function reclaim(db: Database, recovery: LeaseRecovery): Promise<ReclaimedLease[]> {
-  const { table, charge, scope } = recovery;
+  const { scope } = recovery;
+  const { table, recoveryCharge: charge } = recovery.lane;
   const expired = await db
     .selectFrom(table)
     .select(['id', 'workspace_id'])
@@ -104,8 +107,7 @@ export async function recoverDiscoveryLeases(db: Database, batchSize = queueReco
   const tasks = await db.transaction().execute(async (trx) => {
     // Discovery counts the attempt on completion or recovery, never on claim.
     const tasks = await reclaimExpiredLeases(trx, {
-      table: 'brand_discovery_tasks',
-      charge: 1,
+      lane: { table: 'brand_discovery_tasks', recoveryCharge: 1 },
       batchSize,
     });
     const cfg = policy.discovery.constants;
@@ -155,8 +157,7 @@ export async function recoverIntegrationLeases(
 ) {
   // Integration claims already charge the attempt. Reclaiming must not charge it twice.
   const tasks = await reclaimExpiredLeases(db, {
-    table: 'integration_sync_runs',
-    charge: 0,
+    lane: { table: 'integration_sync_runs', recoveryCharge: 0 },
     batchSize,
     scope: scope && sql<boolean>`workspace_id = ${scope.workspaceId} and id = ${scope.runId}`,
   });

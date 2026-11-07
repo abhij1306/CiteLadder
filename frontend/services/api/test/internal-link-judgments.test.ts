@@ -9,7 +9,7 @@ import {
 } from '../src/site-health/internal-link-judgments.ts';
 import { compensateTerminalTasks } from '../src/workers/terminal-compensation.ts';
 import { ModelError } from '../src/models/http.ts';
-import { enqueueTask } from '../src/referrals/enqueue.ts';
+import { enqueueTask } from '../src/queue/enqueue.ts';
 import { seedProject } from './referral-fixtures.ts';
 import { Fixtures, testDatabase } from './support.ts';
 

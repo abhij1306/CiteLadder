@@ -5,7 +5,7 @@
  * simply finds less to delete.
  */
 import { policy } from '../config.ts';
-import { payloadString, type Executor } from '../workers/executor.ts';
+import { payloadString, type Executor } from '../queue/executor.ts';
 
 const BATCH_SIZE = 500;
 const DAY_MS = 86_400_000;
