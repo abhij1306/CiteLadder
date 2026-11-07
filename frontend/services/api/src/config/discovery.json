@@ -58,12 +58,19 @@
       "minimum": 1,
       "maximum": 3
     },
-    "research_model_timeout_seconds": {
-      "env": ["BRAND_DISCOVERY_RESEARCH_MODEL_TIMEOUT_SECONDS"],
+    "identity_model_timeout_seconds": {
+      "env": ["BRAND_DISCOVERY_IDENTITY_MODEL_TIMEOUT_SECONDS"],
       "type": "float",
-      "default": 40.0,
+      "default": 90.0,
       "exclusive_minimum": 0,
-      "maximum": 40.0
+      "maximum": 180
+    },
+    "identity_max_output_tokens": {
+      "env": ["BRAND_DISCOVERY_IDENTITY_MAX_OUTPUT_TOKENS"],
+      "type": "int",
+      "default": 8192,
+      "minimum": 1024,
+      "maximum": 32000
     },
     "keenable_api_key": {
       "env": ["KEENABLE_API_KEY"],
@@ -157,6 +164,9 @@
     "discovery_status_ready": "ready",
     "discovery_status_project_created": "project_created",
     "error_brand_discovery": "brand_discovery_failed",
+    "error_brand_identity_unavailable": "brand_identity_unavailable",
+    "first_party_evidence_confidence": 0.9,
+    "external_evidence_confidence": 0.7,
     "discovery_idempotency_key_min_chars": 1,
     "discovery_idempotency_key_max_chars": 128,
     "price_tiers": ["budget", "mid_market", "premium", "luxury", "unknown"],

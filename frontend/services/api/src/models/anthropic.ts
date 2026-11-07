@@ -1,4 +1,9 @@
-import Anthropic, { APIConnectionError, APIError, APIUserAbortError } from '@anthropic-ai/sdk';
+import Anthropic, {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  APIError,
+  APIUserAbortError,
+} from '@anthropic-ai/sdk';
 import type {
   BetaMessage,
   BetaMessageParam,
@@ -21,6 +26,7 @@ import {
 } from './conversation.ts';
 import type { GatewaySettings } from './gateway.ts';
 import {
+  abortCode,
   callDeadline,
   ModelError,
   providerErrorCode,
@@ -40,11 +46,15 @@ type Settings = Pick<
   'apiKey' | 'model' | 'timeoutSeconds' | 'maxOutputTokens' | 'attempts'
 >;
 
-/** The SDK's failures as the gateway's own codes: no provider body or credential enters them. */
-function modelError(error: unknown) {
+/**
+ * The SDK's failures as the gateway's own codes: no provider body or credential enters them.
+ * A passed deadline is a timeout, distinct from a dropped connection or a caller's cancellation.
+ */
+function modelError(error: unknown, signal: AbortSignal) {
   if (error instanceof ModelError) return error;
-  if (error instanceof APIUserAbortError || error instanceof APIConnectionError)
-    return new ModelError('connection');
+  if (error instanceof APIConnectionTimeoutError) return new ModelError('timeout');
+  if (error instanceof APIUserAbortError) return new ModelError(abortCode(signal));
+  if (error instanceof APIConnectionError) return new ModelError('connection');
   if (error instanceof APIError && error.status !== undefined) {
     logger.warning('default agent call failed', {
       status: error.status,
@@ -87,6 +97,7 @@ export function anthropicCompletion(
     const started = performance.now();
     let text = '';
     let message;
+    const callSignal = deadline(settings, signal);
     try {
       const stream = client.messages.stream(
         {
@@ -96,7 +107,7 @@ export function anthropicCompletion(
           messages: [{ role: 'user', content: user }],
           ...(schema ? { output_config: { format: { type: 'json_schema', schema } } } : {}),
         },
-        { signal: deadline(settings, signal) },
+        { signal: callSignal },
       );
       if (onText)
         stream.on('text', (delta) => {
@@ -105,7 +116,7 @@ export function anthropicCompletion(
         });
       message = await stream.finalMessage();
     } catch (error) {
-      throw modelError(error);
+      throw modelError(error, callSignal);
     }
     const content = message.content
       .flatMap((block) => (block.type === 'text' ? [block.text] : []))
@@ -297,6 +308,7 @@ export function anthropicConversation(
   return async (request, signal, listener) => {
     const started = performance.now();
     let message;
+    const callSignal = deadline(settings, signal);
     try {
       const stream = client.beta.messages.stream(
         {
@@ -329,7 +341,7 @@ export function anthropicConversation(
             ],
           },
         },
-        { signal: deadline(settings, signal) },
+        { signal: callSignal },
       );
       if (listener?.text) stream.on('text', (delta) => listener.text?.(delta));
       if (listener?.thinking) stream.on('thinking', (delta) => listener.thinking?.(delta));
@@ -355,7 +367,7 @@ export function anthropicConversation(
         });
       message = await stream.finalMessage();
     } catch (error) {
-      throw modelError(error);
+      throw modelError(error, callSignal);
     }
     const blocks = parseBlocks(message.content);
     const latency = Math.round(performance.now() - started);

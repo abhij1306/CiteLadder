@@ -24,6 +24,12 @@ export function callDeadline(timeoutSeconds: number, signal?: AbortSignal) {
   return AbortSignal.any([AbortSignal.timeout(timeoutSeconds * 1000), ...(signal ? [signal] : [])]);
 }
 
+/** A deadline that passed is a timeout; any other abort, such as a caller's cancellation, is not. */
+export function abortCode(signal?: AbortSignal) {
+  const reason: unknown = signal?.reason;
+  return reason instanceof Error && reason.name === 'TimeoutError' ? 'timeout' : 'connection';
+}
+
 /** The chat-completions URL of an OpenAI-compatible endpoint, given either form. */
 export function chatCompletionsUrl(endpoint: URL) {
   const base = stripTrailing(endpoint.href, '/');
@@ -38,7 +44,7 @@ export function endpointUrl(base: string, path: string) {
 }
 
 export class ModelError extends Error {
-  readonly code: 'not_configured' | 'parse' | 'http' | 'connection';
+  readonly code: 'not_configured' | 'parse' | 'http' | 'connection' | 'timeout';
   readonly status: number | undefined;
   readonly retryAfter: string | undefined;
   /** Tokens the provider reported for a call that still failed, such as an unparseable answer. */
@@ -119,9 +125,10 @@ function requireRetryableConnection(
   signal?: AbortSignal,
 ) {
   if (error instanceof ModelError && error.code !== 'connection') throw error;
-  if (signal?.aborted) throw new ModelError('connection');
+  if (signal?.aborted) throw new ModelError(abortCode(signal));
   const timedOut = error instanceof Error && error.name === 'TimeoutError';
-  if ((!timedOut && !policy.retryConnection) || last) throw new ModelError('connection');
+  if ((!timedOut && !policy.retryConnection) || last)
+    throw new ModelError(timedOut ? 'timeout' : 'connection');
 }
 
 /** No provider body, credential, or customer text enters an error. */
@@ -158,7 +165,7 @@ async function backoff(transport: Transport, milliseconds: number, signal?: Abor
   try {
     await transport.sleep(milliseconds, signal);
   } catch {
-    throw new ModelError('connection');
+    throw new ModelError(abortCode(signal));
   }
 }
 

@@ -16,6 +16,7 @@ import { ApiError, notFound } from '../errors.ts';
 import type { BrandDiscoveries } from '../generated/db-schema.ts';
 import { cleanList, projectCreate } from './inputs.ts';
 import {
+  discoveryCreate,
   discoverySettings,
   type DiscoveryCompletion,
   type DiscoveryInput,
@@ -204,6 +205,25 @@ export function createDiscovery(
       .execute();
     return discoveryView(inserted);
   });
+}
+/**
+ * A new discovery from a finished one's input, for a failed or degraded run.
+ * The finished task is never reset: the new discovery has its own key, task
+ * and attempts, and spends a daily admission like any other.
+ */
+export async function rerunDiscovery(db: Database, workspaceId: string, id: string, key: string) {
+  const source = await discoveryRow(db, workspaceId, id);
+  // A replayed key returns its run even after the source moved on.
+  const replay = await db
+    .selectFrom('brand_discoveries')
+    .selectAll()
+    .where('workspace_id', '=', workspaceId)
+    .where('idempotency_key', '=', key)
+    .executeTakeFirst();
+  if (replay) return discoveryView(replay);
+  if (![cfg.discovery_status_ready, cfg.discovery_status_failed].includes(source.status))
+    throw new ApiError(409, 'Only a finished discovery can be run again');
+  return createDiscovery(db, workspaceId, discoveryCreate.parse(source.input_data), key);
 }
 function confirmedCompetitors(input: DiscoveryCompletion, brandName: string, owned: string[]) {
   const names = new Set([brandName.toLowerCase()]);

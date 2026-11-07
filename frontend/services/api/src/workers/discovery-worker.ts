@@ -11,7 +11,12 @@ import { jsonObject } from '../db/json.ts';
 import { getLogger } from '../logging.ts';
 import { discoveryProgress, discoveryRow } from '../projects/discovery.ts';
 import { discoveryCreate, discoverySettings } from '../projects/discovery-inputs.ts';
-import { researchBrand, type ResearchDependencies } from '../projects/research.ts';
+import {
+  failureFields,
+  researchBrand,
+  ResearchFailure,
+  type ResearchDependencies,
+} from '../projects/research.ts';
 import { resolveSite } from '../projects/site-resolution.ts';
 import { FetchError, fetchWebsite } from '../projects/safe-fetch.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
@@ -35,7 +40,13 @@ function siteFailure(error: unknown): error is FetchError {
   );
 }
 function retryable(error: unknown, attempt: number, maximum: number) {
+  if (error instanceof ResearchFailure && !error.retryable) return false;
   return error != null && !siteFailure(error) && attempt < maximum;
+}
+/** The code a failed discovery settles with, so the UI can offer the right recovery. */
+function failureCode(error: unknown) {
+  if (siteFailure(error)) return error.code;
+  return error instanceof ResearchFailure ? error.code : cfg.error_brand_discovery;
 }
 function terminalStatus(retry: boolean, error: unknown) {
   if (retry) return policy.task_queue.statuses.retry_wait;
@@ -55,6 +66,9 @@ export class DiscoveryWorker {
     this.queue = new DiscoveryQueue(db, this.settings.lease_seconds);
   }
   async runOnce(owner: string, target?: DiscoveryTarget, signal?: AbortSignal): Promise<boolean> {
+    // One run's budget, matching the interactive deadline the request applies.
+    const started = performance.now();
+    const budgetEndsAt = started + this.settings.interactive_timeout_seconds * 1000;
     // Interactive admission touches only its authorized discovery. The runner
     // and periodic recovery retain ownership of sweeping expired leases.
     if (!target) await recoverDiscoveryLeases(this.db);
@@ -75,6 +89,7 @@ export class DiscoveryWorker {
         signal: leaseSignal(executionSignal, options?.signal),
       });
     };
+    let phase = 'claimed';
     try {
       const row = await discoveryRow(this.db, task.workspace_id, task.discovery_id);
       if ([cfg.discovery_status_ready, cfg.discovery_status_project_created].includes(row.status)) {
@@ -82,11 +97,13 @@ export class DiscoveryWorker {
         return true;
       }
       const input = discoveryCreate.parse(row.input_data);
-      await this.progress(task, owner, 'opening_website', 0);
+      phase = 'opening_website';
+      await this.progress(task, owner, phase, 0);
       const site = await resolveSite(input.website_url, fetcher);
       checkCancelled();
       const homepageRead = site.page ? 1 : 0;
-      await this.progress(task, owner, 'understanding_business', 1, homepageRead, site);
+      phase = 'understanding_business';
+      await this.progress(task, owner, phase, 1, homepageRead, site);
       const result = await researchBrand(input, site, {
         ...this.dependencies,
         meter: (this.dependencies.meter ?? ((workspaceId) => meterFor(this.db, workspaceId)))(
@@ -94,6 +111,7 @@ export class DiscoveryWorker {
         ),
         fetcher,
         signal: executionSignal,
+        budgetEndsAt,
         checkCancelled,
         transport: async (url, options) => {
           checkCancelled();
@@ -104,17 +122,28 @@ export class DiscoveryWorker {
         },
         onCompetitors: async () => {
           checkCancelled();
-          await this.progress(task, owner, 'finding_competitors', 2, homepageRead);
+          phase = 'finding_competitors';
+          await this.progress(task, owner, phase, 2, homepageRead);
         },
       });
       checkCancelled();
       await this.finish(task, owner, result, null);
     } catch (error) {
-      if (heartbeat.signal.aborted) return true;
-      logger.warning('brand discovery task failed', {
+      const fields = {
         task_id: task.id,
         workspace_id: task.workspace_id,
-        error_code: error instanceof FetchError ? error.code : cfg.error_brand_discovery,
+        attempt: task.attempt_count + 1,
+        phase,
+        elapsed_ms: Math.round(performance.now() - started),
+      };
+      if (heartbeat.signal.aborted) {
+        logger.warning('brand_discovery.lease_lost', fields);
+        return true;
+      }
+      logger.warning('brand_discovery.task_failed', {
+        ...fields,
+        ...failureFields(error),
+        error_code: error instanceof FetchError ? error.code : failureCode(error),
       });
       await this.finish(task, owner, null, error);
     } finally {
@@ -217,7 +246,7 @@ export class DiscoveryWorker {
           .set({
             status: cfg.discovery_status_failed,
             stage: 'failed',
-            error_code: siteFailure(error) ? error.code : cfg.error_brand_discovery,
+            error_code: failureCode(error),
             error_detail: 'Brand research could not complete',
             warnings: JSON.stringify(['research_degraded']),
             updated_at: now,
@@ -237,7 +266,7 @@ export class DiscoveryWorker {
             : now,
           lease_owner: null,
           lease_expires_at: null,
-          error_code: error != null ? cfg.error_brand_discovery : '',
+          error_code: error != null ? failureCode(error) : '',
           error_detail: error != null ? 'Brand research could not complete' : '',
           updated_at: now,
         })

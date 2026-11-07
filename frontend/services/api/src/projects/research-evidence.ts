@@ -10,7 +10,9 @@ import type { ResolvedSite } from './site-resolution.ts';
 import type { Meter } from '../models/metering.ts';
 import type { MeteredFeature } from '../models/pricing.ts';
 import { assertMetered } from '../models/meter-scope.ts';
+import { getLogger } from '../logging.ts';
 
+const logger = getLogger('app.projects.research');
 export type ResearchEvidence = {
   source_id: string;
   processing_version: string;
@@ -266,6 +268,20 @@ export function createResearchClient(
   };
 }
 export type ResearchClient = ReturnType<typeof createResearchClient>;
+/** Research continues without a failed call, but the failure stays diagnosable. */
+function logRejected(event: string, outcomes: readonly PromiseSettledResult<unknown>[]) {
+  const failures = outcomes.flatMap((outcome) =>
+    outcome.status === 'rejected' ? [outcome.reason] : [],
+  );
+  if (!failures.length) return;
+  logger.warning(event, {
+    failed: failures.length,
+    attempted: outcomes.length,
+    error_classes: [
+      ...new Set(failures.map((error) => (error instanceof Error ? error.name : typeof error))),
+    ],
+  });
+}
 export async function collectIdentityResearch(
   client: ResearchClient,
   settings: ResearchSettings,
@@ -287,6 +303,7 @@ export async function collectIdentityResearch(
         client.search(query, site, settings.identity_search_max_results, `ki-search-${index + 1}`),
       ),
   );
+  logRejected('brand_discovery.identity_search_failed', outcomes);
   const searches = outcomes.flatMap((outcome) =>
     outcome.status === 'fulfilled' ? outcome.value : [],
   );
@@ -299,13 +316,15 @@ export async function collectIdentityResearch(
   const selected = searches.slice(0, settings.identity_fetch_max_pages);
   // Await each batch so provider requests never exceed the configured concurrency.
   for (let offset = 0; offset < selected.length; offset += settings.keenable_concurrency) {
-    const fetched = await Promise.allSettled(
-      selected
-        .slice(offset, offset + settings.keenable_concurrency)
-        .map((item) =>
-          client.page(item, new URL(item.source_url).hostname.replace(/^www\./u, '') === domain),
-        ),
-    );
+    const fetched =
+      await /* NOSONAR -- Batches cap provider requests at the configured concurrency. */ Promise.allSettled(
+        selected
+          .slice(offset, offset + settings.keenable_concurrency)
+          .map((item) =>
+            client.page(item, new URL(item.source_url).hostname.replace(/^www\./u, '') === domain),
+          ),
+      );
+    logRejected('brand_discovery.identity_fetch_failed', fetched);
     for (const result of fetched) if (result.status === 'fulfilled') pages.push(result.value);
   }
   return {

@@ -17,6 +17,9 @@ import {
   testConfig,
   testDatabase,
 } from './support.ts';
+import { gatewayCalls } from '../src/models/gateway.ts';
+import { ModelError } from '../src/models/http.ts';
+import { recordingMeter } from './meter-fixtures.ts';
 
 const input = discoveryCreate.parse({
   brand_name: 'Acme',
@@ -391,6 +394,63 @@ describe('durable onboarding', () => {
     expect((await complete(queued.id, a.userId, completion)).status).toBe(409);
     expect((await discoveryRow(db, a.workspaceId, reviewed.id)).project_id).toBeNull();
   });
+  it('runs a finished discovery again as a new workspace-scoped discovery without resetting the old task', async () => {
+    const a = await tenant(),
+      b = await tenant();
+    const app = createApp(testConfig(), db);
+    const rerun = async (id: string, userId: string, key = randomUUID()) =>
+      app.request(`/api/v1/brand-discoveries/${id}/rerun`, {
+        method: 'POST',
+        headers: {
+          cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: userId, ver: 0 })}`,
+          'idempotency-key': key,
+        },
+      });
+    const failed = await createDiscovery(db, a.workspaceId, input, randomUUID());
+    await db
+      .updateTable('brand_discoveries')
+      .set({ status: 'failed', error_code: 'brand_identity_unavailable' })
+      .where('id', '=', failed.id)
+      .execute();
+    await db
+      .updateTable('brand_discovery_tasks')
+      .set({ status: 'failed', attempt_count: 3, completed_at: new Date() })
+      .where('discovery_id', '=', failed.id)
+      .execute();
+    expect((await rerun(failed.id, b.userId)).status).toBe(404);
+    const key = randomUUID();
+    const response = await rerun(failed.id, a.userId, key);
+    expect(response.status).toBe(202);
+    const started = (await response.json()) as { id: string; status: string };
+    expect(started.status).toBe('queued');
+    expect(started.id).not.toBe(failed.id);
+    // A replayed key returns the same run even once the source can no longer be rerun.
+    await db
+      .updateTable('brand_discoveries')
+      .set({ status: 'project_created' })
+      .where('id', '=', failed.id)
+      .execute();
+    expect(((await (await rerun(failed.id, a.userId, key)).json()) as { id: string }).id).toBe(
+      started.id,
+    );
+    expect((await discoveryRow(db, a.workspaceId, started.id)).input_data).toMatchObject({
+      brand_name: 'Acme',
+      website_url: 'https://acme.com/',
+      primary_market: 'US',
+    });
+    expect(
+      await db
+        .selectFrom('brand_discovery_tasks')
+        .select(['discovery_id', 'status', 'attempt_count'])
+        .where('discovery_id', 'in', [failed.id, started.id])
+        .orderBy('created_at')
+        .execute(),
+    ).toEqual([
+      { discovery_id: failed.id, status: 'failed', attempt_count: 3 },
+      { discovery_id: started.id, status: 'queued', attempt_count: 0 },
+    ]);
+    expect((await rerun(started.id, a.userId)).status).toBe(409);
+  });
   it('completes once atomically without prompts or a crawl and freezes reviewed input', async () => {
     const t = await tenant();
     const row = await ready(t.workspaceId);
@@ -478,6 +538,59 @@ describe('durable onboarding', () => {
       ]),
     });
     expect(await worker.runOnce('test-worker')).toBe(false);
+  });
+  it('retries a timed-out identity and then fails with its own code, never an empty ready review', async () => {
+    const t = await tenant();
+    const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
+    const complete = vi.fn(async () => {
+      throw new ModelError('timeout');
+    });
+    const gateway = {
+      model: 'test-model',
+      maxOutputTokens: 100,
+      baseUrlHost: 'model.example',
+      adapter: 'openai_compatible' as const,
+      converse: vi.fn(),
+      ...gatewayCalls(complete),
+    };
+    const worker = new DiscoveryWorker(db, {
+      fetcher,
+      gateway,
+      env: {},
+      meter: () => recordingMeter().meter,
+    });
+    const target = { workspaceId: t.workspaceId, discoveryId: row.id };
+    await worker.runOnce('identity-timeout', target);
+    const task = await db
+      .selectFrom('brand_discovery_tasks')
+      .selectAll()
+      .where('discovery_id', '=', row.id)
+      .executeTakeFirstOrThrow();
+    expect(task).toMatchObject({
+      status: 'retry_wait',
+      attempt_count: 1,
+      error_code: 'brand_identity_unavailable',
+    });
+    expect((await discoveryRow(db, t.workspaceId, row.id)).status).toBe('running');
+    await db
+      .updateTable('brand_discovery_tasks')
+      .set({ available_at: new Date(0), max_attempts: 2 })
+      .where('id', '=', task.id)
+      .execute();
+    await worker.runOnce('identity-timeout-final', target);
+    expect(await discoveryRow(db, t.workspaceId, row.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'brand_identity_unavailable',
+      competitors: [],
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(
+      await db
+        .selectFrom('brand_research_snapshots')
+        .select('id')
+        .where('discovery_id', '=', row.id)
+        .execute(),
+    ).toEqual([]);
   });
   it('claimers do not share a task and expired owners cannot write terminal results', async () => {
     const t = await tenant();

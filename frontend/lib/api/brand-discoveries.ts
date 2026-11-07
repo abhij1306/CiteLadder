@@ -65,6 +65,15 @@ export const brandDiscoveriesApi = {
     });
     return strictValidate(brandDiscoverySchema, value, 'brandDiscovery.run');
   },
+  /** A new discovery from a finished one's input; the finished one is left as it is. */
+  rerun: async (id: string, idempotencyKey: string, options?: ApiRequestOptions) => {
+    const value = await apiClient.post(`/brand-discoveries/${id}/rerun`, undefined, {
+      ...options,
+      idempotencyKey,
+      retryNetworkFailures: true,
+    });
+    return strictValidate(brandDiscoverySchema, value, 'brandDiscovery.rerun');
+  },
   complete: async (
     id: string,
     input: BrandDiscoveryCompletion,
