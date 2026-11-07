@@ -322,11 +322,11 @@ it('pages prompts stably while context includes only active prompts and foreign 
   expect(searched.results).toEqual([]);
 });
 
-it('excludes system tenants and reevaluates an already loaded credential after account or grant changes', async () => {
-  const system = await fixtures.systemWorkspace();
+it('excludes granted workspaces the user does not belong to and reevaluates an already loaded credential after account or grant changes', async () => {
+  const foreign = await fixtures.ownedWorkspace(await fixtures.user());
   await db
     .updateTable('mcp_oauth_grants')
-    .set({ workspace_ids: JSON.stringify([tenant.workspaceId, system]) })
+    .set({ workspace_ids: JSON.stringify([tenant.workspaceId, foreign]) })
     .where('id', '=', principal.grantId)
     .execute();
   expect(await authorizedWorkspaceIds(db, principal)).toEqual([tenant.workspaceId]);

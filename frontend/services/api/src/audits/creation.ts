@@ -130,7 +130,6 @@ async function createMarketAudit(
       completed_count: 0,
       failed_count: 0,
       error_message: '',
-      funded_budget_period_start: null,
       created_at: at,
       updated_at: at,
       started_at: null,

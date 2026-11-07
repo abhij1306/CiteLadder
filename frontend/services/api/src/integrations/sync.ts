@@ -53,7 +53,6 @@ export function enqueueSyncRun(db: Database, input: SyncInput) {
       .selectFrom('workspaces')
       .select('id')
       .where('id', '=', input.workspaceId)
-      .where('is_system', '=', false)
       .forUpdate()
       .executeTakeFirst();
     if (!workspace) throw notFound('Workspace');

@@ -172,16 +172,19 @@ export async function crawlLogTick(
   now = new Date(),
   canAdmit: () => boolean = () => true,
 ) {
-  const system = await db
+  // Bot IP range snapshots are global; the refresh task is owned by the oldest workspace.
+  const owner = await db
     .selectFrom('workspaces')
     .select('id')
-    .where('is_system', '=', true)
+    .orderBy('created_at')
+    .orderBy('id')
+    .limit(1)
     .executeTakeFirst();
-  if (system && crawlLogs.ingestion_enabled)
+  if (owner && crawlLogs.ingestion_enabled)
     for (const bot of crawlers.bots.filter((b) => b.verification.method === 'ip_ranges')) {
       if (!canAdmit()) return;
       await enqueueTask(db, {
-        workspaceId: system.id,
+        workspaceId: owner.id,
         projectId: null,
         kind: 'bot_ip_range_refresh',
         payload: { bot_id: bot.bot_id },

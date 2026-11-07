@@ -44,7 +44,6 @@ export async function lockAuthorizedWorkspace(
     .selectFrom('workspaces')
     .selectAll()
     .where('id', '=', workspaceId)
-    .where('is_system', '=', false)
     .forUpdate()
     .executeTakeFirst();
   if (!workspace) throw notFound('Workspace');

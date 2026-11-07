@@ -152,7 +152,6 @@ describe('DataForSEO account identity compatibility', () => {
   const byok = (encrypted: string) => ({
     credential_source: 'byok',
     transport_provider: 'dataforseo',
-    platform_credential_ref: '',
     api_key_encrypted: encrypted,
   });
   it('retains the opaque pool through case normalization, Unicode and password rotation', () => {

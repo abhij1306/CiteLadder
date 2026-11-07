@@ -1,9 +1,4 @@
 {
-  "system_workspace_name": "CiteLadder Platform (system)",
-  "platform_credential_reference": {
-    "max_chars": 255,
-    "secret_pattern": "sk-|secret|password"
-  },
   "scraper_reconciliation_capacity_engine": "llm_scraper_reconciliation",
   "errors": {
     "timeout": "timeout",
