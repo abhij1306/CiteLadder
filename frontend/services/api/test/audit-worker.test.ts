@@ -4,7 +4,10 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant, auditTestKey } from './audit-fixtures.ts';
-import { auditRuntime } from '../src/audits/config.ts';
+import { sql } from 'kysely';
+import { auditPolicy, auditRuntime } from '../src/audits/config.ts';
+import { providerPolicy } from '../src/providers/config.ts';
+import { searchPolicy } from '../src/search-surfaces/dataforseo.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { AuditWorker } from '../src/audits/worker.ts';
@@ -634,6 +637,74 @@ describe('leased audit worker phases', () => {
         .where('task_id', '=', t.task.id)
         .executeTakeFirstOrThrow(),
     ).toEqual({ outcome: 'execution_failure', error_code: 'poll_ceiling_exceeded' });
+  });
+  it('records a retrieval whose credential is gone with its full failure code', async () => {
+    const t = await seed(true, [], 'google_ai_overview');
+    const connectionId = record(t.task.provider_route_snapshot).connection_id as string;
+    await db
+      .updateTable('audit_tasks')
+      .set({
+        provider_submission_ref: 'paid-intent',
+        provider_task_submitted_at: new Date(Date.now() - 60000),
+        provider_task_id: 'aio-task',
+        attempt_count: 1,
+        provider_connection_id: connectionId,
+      })
+      .where('id', '=', t.task.id)
+      .execute();
+    await db
+      .updateTable('provider_connections')
+      .set({ active: false })
+      .where('id', '=', connectionId)
+      .execute();
+    let calls = 0;
+    await worker(t, async () => {
+      calls++;
+      throw new Error('Unexpected provider call');
+    }).runOnce();
+    expect(calls).toBe(0);
+    expect(await stored(t.task.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'credential_unavailable_for_retrieval',
+    });
+    expect(
+      await db
+        .selectFrom('aio_observations')
+        .select(['outcome', 'error_code'])
+        .where('task_id', '=', t.task.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ outcome: 'execution_failure', error_code: 'credential_unavailable_for_retrieval' });
+  });
+});
+describe('audit failure codes', () => {
+  it('fit every column that records them', async () => {
+    const declared = [
+      ...searchPolicy.surface.execution_failure_codes,
+      ...searchPolicy.surface.terminal_outcomes,
+      searchPolicy.surface.error_poll_ceiling_exceeded,
+      searchPolicy.surface.error_submission_unreconciled,
+      searchPolicy.surface.error_credential_unavailable,
+      searchPolicy.constants.error_account_unavailable,
+      auditPolicy.constants.error_run_deadline,
+      auditPolicy.constants.error_cancelled,
+      auditPolicy.constants.error_no_connection,
+      ...Object.values(providerPolicy.errors),
+    ];
+    const { rows: widths } = await sql<{ table_name: string; character_maximum_length: number }>`
+      select table_name, character_maximum_length from information_schema.columns
+      where table_schema = 'public' and column_name = 'error_code'
+        and table_name in ('audit_tasks', 'provider_attempts', 'aio_observations')
+      order by table_name`.execute(db);
+    expect(widths.map((column) => column.table_name)).toEqual([
+      'aio_observations',
+      'audit_tasks',
+      'provider_attempts',
+    ]);
+    for (const { table_name, character_maximum_length } of widths)
+      expect({
+        table_name,
+        tooLong: declared.filter((code) => code.length > character_maximum_length),
+      }).toEqual({ table_name, tooLong: [] });
   });
 });
 describe('audit runner lane', () => {
