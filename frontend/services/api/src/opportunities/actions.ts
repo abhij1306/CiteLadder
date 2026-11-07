@@ -23,7 +23,7 @@ import { refreshActionStatus, validateStatus } from './action-status.ts';
 import { OPPORTUNITY_COLUMNS, projectItem } from './projection.ts';
 import type { Scope } from './sources.ts';
 import { declarationView } from './declaration-view.ts';
-import { memberMeasurementLeg } from './declaration-checks.ts';
+import { memberMeasurementLeg } from './checks/registry.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import { normalizeDomain } from '../analysis/domains.ts';
 import { pageGroupKey, plannedPageKey, selectApproach } from '../analysis/opportunities/actions.ts';

@@ -13,6 +13,7 @@ import {
 } from './scoring.ts';
 import { summarizeSourcePattern } from './source-patterns.ts';
 import { compareText } from '../../text-order.ts';
+import { targetKey } from './targets.ts';
 const p = policy.opportunity.opportunities;
 export const rules = p.OPPORTUNITY_RULES_BY_ID as Record<
   string,
@@ -38,13 +39,15 @@ function gapHit(
   const engines = sortedUnique(rows.map((a) => a.logical_engine).filter(Boolean));
   return {
     rule_id: rule,
-    target_key:
+    target:
       snapshot?.prompt_id != null
-        ? `prompt:${snapshot.prompt_id}`
-        : `prompt-index:${e.audit_id}:${index}`,
-    target_prompt_id: snapshot?.prompt_id ?? null,
-    target_url: null,
-    target_theme: snapshot?.theme || null,
+        ? { kind: 'prompt', prompt_id: snapshot.prompt_id, theme: snapshot.theme || null }
+        : {
+            kind: 'prompt_index',
+            audit_id: e.audit_id,
+            prompt_index: index,
+            theme: snapshot?.theme || null,
+          },
     evidence: {
       prompt_text: snapshot?.text ?? '',
       prompt_intent: snapshot?.intent ?? '',
@@ -119,10 +122,7 @@ export function detectSiteIssueOpportunities(e: SiteEvidence): DetectorHit[] {
       issueId: issue.issue_id,
       hit: {
         rule_id: rule,
-        target_key: `url:${url}`,
-        target_prompt_id: null,
-        target_url: url,
-        target_theme: null,
+        target: { kind: 'site_page', url },
         evidence: {
           issue_rule_id: issue.rule_id,
           issue_severity: issue.severity,
@@ -146,7 +146,7 @@ export function detectSiteIssueOpportunities(e: SiteEvidence): DetectorHit[] {
     .toSorted(
       (a, b) =>
         compareText(a.hit.rule_id, b.hit.rule_id) ||
-        compareText(a.hit.target_key, b.hit.target_key) ||
+        compareText(targetKey(a.hit.target), targetKey(b.hit.target)) ||
         compareText(a.issueId, b.issueId),
     )
     .map(({ hit }) => hit);

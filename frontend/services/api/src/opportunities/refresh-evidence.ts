@@ -130,13 +130,10 @@ export function declineGap(delta: number | null): number {
 function declineHit(row: DeclineRow, auditId: string): DetectorHit {
   return {
     rule_id: 'confirmed_prompt_decline',
-    target_key:
+    target:
       row.prompt_id !== null
-        ? `prompt:${row.prompt_id}`
-        : `prompt-index:${auditId}:${row.prompt_index}`,
-    target_prompt_id: row.prompt_id,
-    target_url: null,
-    target_theme: null,
+        ? { kind: 'prompt', prompt_id: row.prompt_id, theme: null }
+        : { kind: 'prompt_index', audit_id: auditId, prompt_index: row.prompt_index, theme: null },
     evidence: {
       prompt: row.prompt_text,
       rolling_four: row.rolling_four,

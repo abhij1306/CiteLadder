@@ -1,18 +1,18 @@
 import { policy } from '../../config.ts';
 import { roundScaled } from '../../numbers.ts';
 import { normalizedUrlForCompare } from '../url-compare.ts';
-import { rules } from './detectors.ts';
 import { compareText } from '../../text-order.ts';
 import type { NonEmpty } from '../../lists.ts';
+import { targetColumns, targetKey, type TargetRef } from './targets.ts';
 const p = policy.opportunity.actions;
+const MEASUREMENT_LEG_ORDER = [p.LEG_VISIBILITY_RUN, p.LEG_SEARCH_CONSOLE_WINDOW, p.LEG_CRAWL];
 export type ActionMember = {
   opportunity_id: string;
   rule_id: string;
-  target_key: string;
-  target_url: string | null;
-  target_prompt_id: string | null;
-  target_theme: string | null;
+  target: TargetRef;
   label_hint: string | null;
+  /** The reading a declaration would freeze for this member; null when none can. */
+  measured_by: string | null;
   title: string;
   priority_score: number;
   source_analysis_ids: string[];
@@ -37,39 +37,56 @@ function target(
   url: string | null = null,
   prompt: string | null = null,
 ) {
+  const theme = targetColumns(member.target).target_theme;
   return {
     group_key: key,
     kind,
-    label: [...(url || member.label_hint || member.target_theme || member.title)]
+    label: [...(url || member.label_hint || theme || member.title)]
       .slice(0, p.ACTION_LABEL_MAX_CHARS)
       .join(''),
     url,
     prompt_id: prompt,
   };
 }
+const pageTarget = (member: ActionMember, url: string) =>
+  target(pageGroupKey(url), p.TARGET_PAGE, member, url);
+/** The Action a member groups into: one per page, prompt, query, product or listing. */
 export function targetFor(member: ActionMember) {
-  const key = member.target_key;
-  if (rules[member.rule_id]!.action_path === policy.opportunity.earned_actions.ACTION_PATH_EARNED)
-    return target(`earned:${key}`, p.TARGET_EARNED_PAGE, member, member.target_url);
-  if (key.startsWith('product:')) return target(key, p.TARGET_PRODUCT, member);
-  if (key.startsWith('category:')) return target(key, p.TARGET_CATEGORY, member);
-  if (member.target_url)
-    return target(pageGroupKey(member.target_url), p.TARGET_PAGE, member, member.target_url);
-  if (member.target_prompt_id !== null)
-    return target(
-      `prompt:${member.target_prompt_id}`,
-      p.TARGET_PROMPT,
-      member,
-      null,
-      member.target_prompt_id,
-    );
-  if (key.startsWith('prompt')) return target(key, p.TARGET_PROMPT, member);
-  // A keyword gap no existing page covers is a page to create.
-  const planned = key.startsWith('search-gap:') ? plannedPageKey(member.target_theme ?? '') : null;
-  if (planned) return target(planned, p.TARGET_PLANNED_PAGE, member);
-  if (key.startsWith('demand:') && member.target_theme)
-    return target(`query:${member.target_theme.toLowerCase().trim()}`, p.TARGET_QUERY, member);
-  return target(key, p.TARGET_QUERY, member);
+  const ref = member.target;
+  const key = targetKey(ref);
+  switch (ref.kind) {
+    case 'earned_page':
+      return target(`earned:${key}`, p.TARGET_EARNED_PAGE, member, ref.url);
+    case 'product':
+      return target(key, p.TARGET_PRODUCT, member);
+    case 'category':
+      return target(key, p.TARGET_CATEGORY, member);
+    case 'prompt':
+      return target(key, p.TARGET_PROMPT, member, null, ref.prompt_id);
+    case 'prompt_index':
+      return target(key, p.TARGET_PROMPT, member);
+    case 'site_page':
+    case 'site_change':
+    case 'link_source':
+      return pageTarget(member, ref.url);
+    case 'demand':
+      if (ref.url) return pageTarget(member, ref.url);
+      return ref.query
+        ? target(`query:${ref.query.toLowerCase().trim()}`, p.TARGET_QUERY, member)
+        : target(key, p.TARGET_QUERY, member);
+    case 'search_gap': {
+      if (ref.url) return pageTarget(member, ref.url);
+      // A keyword gap no existing page covers is a page to create.
+      const planned = plannedPageKey(ref.keyword);
+      return planned
+        ? target(planned, p.TARGET_PLANNED_PAGE, member)
+        : target(key, p.TARGET_QUERY, member);
+    }
+    default: {
+      const unknownTarget: never = ref;
+      throw new Error(`Unknown Opportunity target: ${JSON.stringify(unknownTarget)}`);
+    }
+  }
 }
 export function selectApproach(ids: string[], kind: string) {
   return (
@@ -89,12 +106,11 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
       compareText(a.opportunity_id, b.opportunity_id),
   );
   const familyMap: Record<string, string> = p.RULE_EVIDENCE_FAMILY;
-  // A family with no frozen check (null) promises no reading.
-  const legMap: Record<string, string | null> = p.FAMILY_MEASUREMENT_LEG;
   const families = p.EVIDENCE_FAMILIES.filter((f) =>
     ordered.some((m) => familyMap[m.rule_id] === f),
   );
-  const legs = families.flatMap((f) => legMap[f] ?? []);
+  // The readings the members would freeze; a member nothing measures promises none.
+  const legs = MEASUREMENT_LEG_ORDER.filter((leg) => ordered.some((m) => m.measured_by === leg));
   const branch = selectApproach(
     ordered.map((m) => m.rule_id),
     t.kind,
@@ -122,7 +138,7 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
       approach: branch.approach,
       skill_id: branch.skill_id,
       donts: [...branch.donts],
-      measure_with: [...new Set(legs)],
+      measure_with: legs,
       versions: {
         grouping: p.ACTION_GROUPING_VERSION,
         diagnosis: p.ACTION_DIAGNOSIS_VERSION,

@@ -387,10 +387,7 @@ function gapHit({
   const sources = rows.map(({ dataset }) => dataset);
   return {
     rule_id: g.RULE_ID,
-    target_key: `search-gap:${terms}`,
-    target_prompt_id: null,
-    target_url: page?.url ?? null,
-    target_theme: lead.keyword,
+    target: { kind: 'search_gap', terms, keyword: lead.keyword, url: page?.url ?? null },
     evidence: {
       keyword: lead.keyword,
       normalized_keyword: normalized,

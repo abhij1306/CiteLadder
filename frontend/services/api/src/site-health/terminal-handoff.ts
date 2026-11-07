@@ -3,10 +3,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
-import {
-  enqueueImplementationVerification,
-  enqueueOpportunityRefresh,
-} from '../opportunities/enqueue.ts';
+import { announceEvidence } from '../opportunities/evidence-announcement.ts';
 import { enqueueTask, enqueueCoalesced } from '../queue/enqueue.ts';
 import type { Crawl } from './site-task.ts';
 import { insightsRefresh } from '../config/ai-traffic.ts';
@@ -26,11 +23,6 @@ export async function enqueueTerminalAnalyticsRefresh(
   const triggerKind = changeSnapshotId ? 'site_change' : 'site_crawl';
   await enqueueCoalesced(db, { ...insightsRefresh, ...scope });
   const triggerId = changeSnapshotId ?? crawl.id;
-  await enqueueImplementationVerification(db, {
-    ...scope,
-    triggerKind: 'site_crawl',
-    triggerId: crawl.id,
-  });
   const traffic = await db
     .selectFrom('traffic_snapshots')
     .select([
@@ -45,10 +37,14 @@ export async function enqueueTerminalAnalyticsRefresh(
     .orderBy('id', 'desc')
     .limit(1)
     .executeTakeFirst();
-  if (!traffic) {
-    await enqueueOpportunityRefresh(db, { ...scope, triggerKind, triggerId });
-    return;
-  }
+  await announceEvidence(
+    db,
+    scope,
+    { kind: 'site_crawl', id: crawl.id },
+    // With Traffic evidence, Demand re-interprets first and carries the refresh.
+    { refresh: traffic ? null : { kind: triggerKind, id: triggerId } },
+  );
+  if (!traffic) return;
   // Demand keys a revision by its first 24 characters.
   const revision = `${triggerKind}:${triggerId}`.slice(0, 24);
   await enqueueTask(db, {

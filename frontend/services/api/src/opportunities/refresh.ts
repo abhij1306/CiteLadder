@@ -9,33 +9,19 @@
  * already describes loads no evidence. Evidence loads outside the project
  * lock; under it the identity is resolved again, and a refresh whose sources
  * moved meanwhile writes nothing and fails for a retry over the newer state.
- * No provider or network I/O happens anywhere in the refresh.
+ * No provider or network I/O happens anywhere in the refresh. Each evidence
+ * family is one entry in `refresh-families.ts`.
  */
 import { randomUUID } from 'node:crypto';
 
 import { sql } from 'kysely';
 import { record } from '../db/json.ts';
-import { policy } from '../config.ts';
-
-const o = policy.opportunity.opportunities;
-
-import {
-  detectSiteIssueOpportunities,
-  detectBrandAbsentHighValuePrompt,
-  detectOwnedPageNotCited,
-} from '../analysis/opportunities/detectors.ts';
-import type { DetectorHit } from '../analysis/opportunities/evidence.ts';
-import {
-  buildSourceProjection,
-  emptySourceProjection,
-} from '../analysis/opportunities/source-mix.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { notFound } from '../errors.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import { taskProject, type Executor } from '../queue/executor.ts';
 import { syncActions } from './action-sync.ts';
-import { earnedPageHits } from './earned-page-hits.ts';
 import {
   buildSnapshot,
   newOpportunity,
@@ -44,167 +30,27 @@ import {
   scoreHits,
   snapshotIsCurrent,
   type SourceIdentity,
-  stampSourceMix,
   type NewOpportunity,
   type Scored,
 } from './refresh-compute.ts';
 import {
-  confirmedDeclineHits,
-  loadSiteEvidence,
-  loadVisibilityEvidence,
-} from './refresh-evidence.ts';
-import { changeHits, commerceHits, demandHits } from './refresh-hits.ts';
-import { internalLinkHits, internalLinkRunId } from './internal-link-hits.ts';
-import { searchGapHits, searchGapSource, type SearchGapSource } from './search-gap-hits.ts';
-import {
-  currentDemandSnapshot,
-  latestSnapshot,
-  resolveAudit,
-  resolveCommerceAuditId,
-  resolveCrawl,
-  type AuditSource,
-  type CrawlSource,
-  type DemandSource,
-  type Scope,
-} from './sources.ts';
+  collectFamilies,
+  resolveSources,
+  sourceIdentity,
+  type Sources,
+} from './refresh-families.ts';
+import { latestSnapshot, type Scope } from './sources.ts';
 import { firstOf } from '../lists.ts';
 
-type Collected = {
-  /** Evidence a load cap left out, carried onto the snapshot. */
-  limitations: string[];
-  audit: AuditSource | null;
-  demand: DemandSource | null;
-  hits: DetectorHit[];
-  sourceMix: Record<string, unknown>;
-};
-type Sources = {
-  audit: AuditSource | null;
-  crawl: CrawlSource | null;
-  demand: DemandSource | null;
-  gaps: SearchGapSource | null;
-  identity: SourceIdentity;
-};
+type Collected = Awaited<ReturnType<typeof collectFamilies>>;
+type Resolved = Sources & { identity: SourceIdentity };
 
 const INSERT_BATCH = 500;
 
-async function auditHits(
-  db: Database,
-  scope: Scope,
-  audit: AuditSource,
-): Promise<{
-  audit: AuditSource | null;
-  hits: DetectorHit[];
-  sourceMix: Record<string, unknown>;
-  limitations: string[];
-}> {
-  const [visibility, metricId, limitations] = await loadVisibilityEvidence(
-    db,
-    scope.workspaceId,
-    audit,
-  );
-  if (metricId === null)
-    return { audit: null, hits: [], sourceMix: emptySourceProjection(), limitations: [] };
-  let hits = [
-    ...detectBrandAbsentHighValuePrompt(visibility),
-    ...detectOwnedPageNotCited(visibility),
-  ];
-  const gaps = [
-    ...new Set(
-      hits.flatMap((hit) =>
-        'prompt_index' in hit.evidence ? [Number(hit.evidence.prompt_index)] : [],
-      ),
-    ),
-  ];
-  const sourceMix: Record<string, unknown> = buildSourceProjection(visibility.analyses, gaps);
-  stampSourceMix(audit.id, visibility.prompt_snapshots, gaps, sourceMix);
-  // Page-keyed, over the FULL eligible answer set rather than the gap prompts.
-  hits.push(...(await earnedPageHits(db, scope, audit, visibility)));
-  hits = hits.map((hit) => ({ ...hit, source_metric_ids: [metricId] }));
-  hits.push(...(await confirmedDeclineHits(db, scope.workspaceId, audit.id)));
-  return { audit, hits, sourceMix, limitations };
-}
-
-/**
- * The source-page state earned-page hits read: the newest inspected reading
- * (older readings are immutable) and the latest change to any page's state,
- * which a failed or blocked inspection moves without a new reading.
- */
-async function sourcePagesRevision(db: Database, scope: Scope) {
-  const { rows } = await sql<{ reading: string | null; pages: string | null }>`
-    select
-      (select id from source_page_snapshots
-        where workspace_id = ${scope.workspaceId} and project_id = ${scope.projectId}
-          and outcome = ${policy.opportunity.refresh.source_page_outcome_inspected}
-        order by fetched_at desc, id desc limit 1)::text as reading,
-      (select max(updated_at) from source_pages
-        where workspace_id = ${scope.workspaceId} and project_id = ${scope.projectId})::text as pages
-  `.execute(db);
-  const { reading = null, pages = null } = rows[0] ?? {};
-  return reading === null && pages === null ? null : `${reading ?? ''}@${pages ?? ''}`;
-}
-
-/**
- * The sources a refresh would read now, without loading their evidence. `at`
- * is the one instant a refresh judges dataset age by, so both resolutions agree.
- */
-async function resolveSources(db: Database, scope: Scope, at: Date): Promise<Sources> {
-  const audit = await resolveAudit(db, scope);
-  const commerceAuditId = await resolveCommerceAuditId(db, scope);
-  const crawl = await resolveCrawl(db, scope);
-  const demand = await currentDemandSnapshot(db, scope);
-  const gaps = await searchGapSource(db, scope, at);
-  return {
-    audit,
-    crawl,
-    demand,
-    gaps,
-    identity: {
-      audit_id: audit?.id ?? null,
-      commerce_audit_id: commerceAuditId,
-      site_crawl_id: crawl?.id ?? null,
-      demand_snapshot_id: demand?.id ?? null,
-      demand_source_revision: demand?.source_hash ?? null,
-      internal_link_run_id: crawl ? await internalLinkRunId(db, scope, crawl.id) : null,
-      source_pages_revision: await sourcePagesRevision(db, scope),
-      search_gap_revision: gaps?.revision ?? null,
-    },
-  };
-}
-
-async function collectHits(db: Database, scope: Scope, sources: Sources): Promise<Collected> {
-  const collected: Collected = {
-    limitations: [],
-    audit: sources.audit,
-    demand: sources.demand,
-    hits: await demandHits(db, scope, sources.demand),
-    sourceMix: emptySourceProjection(),
-  };
-  if (sources.audit !== null) {
-    const found = await auditHits(db, scope, sources.audit);
-    collected.audit = found.audit;
-    collected.hits.push(...found.hits);
-    collected.sourceMix = found.sourceMix;
-    collected.limitations.push(...found.limitations);
-  }
-  // Commerce reads its own latest run, so brand and Commerce Actions never replace each other.
-  if (sources.identity.commerce_audit_id !== null)
-    collected.hits.push(...(await commerceHits(db, scope, sources.identity.commerce_audit_id)));
-  if (sources.crawl !== null) {
-    const site = await loadSiteEvidence(db, scope.workspaceId, sources.crawl);
-    collected.hits.push(...detectSiteIssueOpportunities(site));
-    if (site.truncated)
-      collected.limitations.push(
-        `Only the first ${o.RECOMPUTE_MAX_ISSUES} Site Health findings were ranked; later ones are not shown.`,
-      );
-    collected.hits.push(
-      ...(await internalLinkHits(db, scope, sources.identity.internal_link_run_id)),
-      ...(await changeHits(db, scope.workspaceId, sources.crawl)),
-    );
-  }
-  const gaps = await searchGapHits(db, scope, sources.gaps, sources.demand, sources.crawl);
-  collected.hits.push(...gaps.hits);
-  collected.limitations.push(...gaps.limitations);
-  return collected;
+/** The shared sources and every family's identity over them. */
+async function resolve(db: Database, scope: Scope, at: Date): Promise<Resolved> {
+  const sources = await resolveSources(db, scope, at);
+  return { ...sources, identity: await sourceIdentity(db, scope, sources) };
 }
 
 const idsJson = (values: string[]) => JSON.stringify(values);
@@ -242,7 +88,7 @@ async function writeRefresh(
   trx: Database,
   scope: Scope,
   collected: Collected,
-  sources: Sources,
+  sources: Resolved,
   scored: Scored[],
 ) {
   const crawl = sources.crawl;
@@ -280,7 +126,7 @@ async function writeRefresh(
   const snapshot = {
     id: randomUUID(),
     ...buildSnapshot(
-      { auditId: collected.audit?.id ?? null, crawl, demand: collected.demand },
+      { auditId: collected.audit?.id ?? null, crawl, demand: sources.demand },
       rows,
       scored,
       collected.sourceMix,
@@ -305,7 +151,12 @@ async function writeRefresh(
       created_at: now,
     })
     .execute();
-  const actions = await syncActions(trx, scope, rows, snapshot.id);
+  const actions = await syncActions(
+    trx,
+    scope,
+    rows.map((row, index) => ({ ...row, target: scored[index]![0].target })),
+    snapshot.id,
+  );
   await insertOpportunities(trx, scope, rows, actions, now);
   const links = live.flatMap((row) => {
     const successor = successors.get(JSON.stringify([row.rule_id, row.target_key]));
@@ -340,16 +191,16 @@ export async function recomputeOpportunities(
     .executeTakeFirst();
   if (!project) throw notFound('Project');
   const at = new Date();
-  const sources = await resolveSources(db, scope, at);
+  const sources = await resolve(db, scope, at);
   const prior = await latestSnapshot(db, scope);
   if (options.skipIfCurrent && snapshotIsCurrent(prior, sources.identity))
     return projectSnapshot(prior!);
-  const collected = await collectHits(db, scope, sources);
+  const collected = await collectFamilies(db, scope, sources, sources.identity);
   const scored = scoreHits(collected.hits);
   return db.transaction().execute(async (trx) => {
     await acquireProjectLock(trx, scope.projectId);
     const current = await latestSnapshot(trx, scope);
-    const latest = await resolveSources(trx, scope, at);
+    const latest = await resolve(trx, scope, at);
     // Writing a reading older than a source committed during the load would
     // supersede what that source says; the retry reads the newer state.
     if (!sameIdentity(latest.identity, sources.identity))
@@ -359,7 +210,7 @@ export async function recomputeOpportunities(
     const readGaps = Boolean(record(record(current?.coverage).source_identity).search_gap_revision);
     const empty =
       collected.audit === null &&
-      sources.identity.commerce_audit_id === null &&
+      sources.commerceAuditId === null &&
       sources.crawl === null &&
       sources.demand === null &&
       sources.gaps === null &&

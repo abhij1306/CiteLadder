@@ -19,28 +19,25 @@ import { groupMembers, type ActionMember } from '../analysis/opportunities/actio
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import type { NewOpportunity } from './refresh-compute.ts';
+import type { TargetRef } from '../analysis/opportunities/targets.ts';
+import { memberMeasurementLeg } from './checks/registry.ts';
 import type { Scope } from './sources.ts';
 
 const a = policy.opportunity.actions;
 
+/** A new row with the target its producer named. */
+type NewMember = NewOpportunity & { target: TargetRef };
+
 /** One new row as the grouping reads it. */
-function actionMember(
-  row: Omit<NewOpportunity, 'source_analysis_ids' | 'source_issue_ids' | 'source_metric_ids'> & {
-    source_analysis_ids: string[] | null;
-    source_issue_ids: string[] | null;
-    source_metric_ids: string[] | null;
-  },
-): ActionMember {
+function actionMember(row: NewMember): ActionMember {
   const evidence = record(row.evidence);
   const prompt = evidence.prompt_text || evidence.prompt;
   return {
     opportunity_id: row.id,
     rule_id: row.rule_id,
-    target_key: row.target_key,
-    target_url: row.target_url,
-    target_prompt_id: row.target_prompt_id,
-    target_theme: row.target_theme,
+    target: row.target,
     label_hint: typeof prompt === 'string' ? prompt : null,
+    measured_by: memberMeasurementLeg(row),
     title: row.title || row.rule_id,
     priority_score: row.priority_score || 0,
     source_analysis_ids: [...(row.source_analysis_ids ?? [])],
@@ -134,7 +131,7 @@ async function updateActionBatch(
 export async function syncActions(
   trx: Database,
   scope: Scope,
-  rows: NewOpportunity[],
+  rows: NewMember[],
   snapshotId: string,
 ): Promise<Map<string, string>> {
   const groups = groupMembers(rows.map(actionMember));

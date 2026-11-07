@@ -12,7 +12,9 @@ import { parseUuid } from '../http/uuid.ts';
 import { record } from '../db/json.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import { actionMembers, recordStatus, requireAction, type ActionRow } from './actions.ts';
+import { rules } from '../analysis/opportunities/detectors.ts';
 import { declarationChecks } from './declaration-checks.ts';
+import { ruleCheckKind } from './checks/registry.ts';
 import { enqueueImplementationVerification } from './enqueue.ts';
 import { DASHBOARD_AUDIT_STATUSES } from './sources.ts';
 import type { OpportunityRow } from './projection.ts';
@@ -94,7 +96,10 @@ async function targets(
 ) {
   if (
     action.target_kind === a.TARGET_EARNED_PAGE ||
-    members.some((member) => o.EARNED_RULE_IDS.includes(member.rule_id))
+    members.some(
+      (member) =>
+        rules[member.rule_id]?.action_path === policy.opportunity.earned_actions.ACTION_PATH_EARNED,
+    )
   ) {
     if (!action.target_url) throw declarationConflict('Implementation target is unresolved');
     return { target_site_url_ids: [], target_external_url: action.target_url };
@@ -281,7 +286,7 @@ export function declareAction(
     // Every finding is declared; contextual links only as far as selected.
     const linked = new Set(checks.map(({ member }) => member.id));
     const declaredMembers = members.filter(
-      (member) => member.rule_id !== 'site_contextual_links' || linked.has(member.id),
+      (member) => ruleCheckKind(member.rule_id) !== 'contextual_link' || linked.has(member.id),
     );
     const resolved = await targets(trx, action, declaredMembers, project.website_url);
     const row = await trx

@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { groupMembers, plannedPageKey } from '../src/analysis/opportunities/actions.ts';
+import type { TargetRef } from '../src/analysis/opportunities/targets.ts';
+import { opportunityEvidenceSchemas } from '@citeladder/contracts/opportunity-evidence';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { WorkspaceScope } from '../src/db/workspace-scope.ts';
 import { attachOrCreateAction } from '../src/opportunities/actions.ts';
@@ -293,15 +295,70 @@ describe('keyword gaps become Actions', () => {
     expect(plannedPageKey('जूते खरीदें')).toBe('planned:जूते-खरीदें');
   });
 
+  it('groups each kind of target into the Action it names', () => {
+    const promptId = randomUUID();
+    const member = (rule_id: string, target: TargetRef) => ({
+      opportunity_id: randomUUID(),
+      rule_id,
+      target,
+      label_hint: null,
+      measured_by: null,
+      title: rule_id,
+      priority_score: 10,
+      source_analysis_ids: [],
+      source_issue_ids: [],
+      source_metric_ids: [],
+    });
+    const groups = groupMembers([
+      member('emerging_query', { kind: 'demand', identity_hash: 'h', url: null, query: ' Shoes ' }),
+      member('earned_page_acquire_listing', {
+        kind: 'earned_page',
+        url_hash: 'abc',
+        url: 'https://review.example/best',
+        theme: null,
+      }),
+      member('confirmed_prompt_decline', { kind: 'prompt', prompt_id: promptId, theme: null }),
+      member('search_keyword_gap', {
+        kind: 'search_gap',
+        terms: 'socks trail',
+        keyword: 'Trail Socks',
+        url: null,
+      }),
+      member('missing_structured_data', { kind: 'site_page', url: `${OWNED}/a` }),
+      member('site_change_critical_regression', {
+        kind: 'site_change',
+        site_url_id: randomUUID(),
+        field: 'title',
+        url: `${OWNED}/a`,
+      }),
+    ]);
+    expect(
+      groups
+        .map((group) => [group.target.kind, group.target.group_key, group.members.length])
+        .sort(),
+    ).toEqual(
+      [
+        ['earned_page', 'earned:earned-page:abc', 1],
+        ['page', 'page:https://www.example.com/a', 2],
+        ['planned_page', 'planned:trail-socks', 1],
+        ['prompt', `prompt:${promptId}`, 1],
+        ['query', 'query:shoes', 1],
+      ].sort(),
+    );
+  });
+
+  it('names an evidence shape for every rule in the catalog', () => {
+    const rules = Object.keys(policy.opportunity.opportunities.OPPORTUNITY_RULES_BY_ID).sort();
+    expect(Object.keys(opportunityEvidenceSchemas).sort()).toEqual(rules);
+  });
+
   it('ranks a page by its strongest finding, with no bonus for a second source', () => {
     const member = (rule_id: string, priority_score: number) => ({
       opportunity_id: randomUUID(),
       rule_id,
-      target_key: `${rule_id}:page`,
-      target_url: `${OWNED}/shoes`,
-      target_prompt_id: null,
-      target_theme: null,
+      target: { kind: 'site_page' as const, url: `${OWNED}/shoes` },
       label_hint: null,
+      measured_by: null,
       title: rule_id,
       priority_score,
       source_analysis_ids: [],

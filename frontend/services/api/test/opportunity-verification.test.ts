@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, it } from 'vitest';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { verifyImplementationEvents } from '../src/opportunities/verification.ts';
 import { enqueueImplementationVerification } from '../src/opportunities/enqueue.ts';
+import { announceEvidence } from '../src/opportunities/evidence-announcement.ts';
 import {
   buildVerificationResult,
   type Declaration,
@@ -157,6 +158,65 @@ it('queues no verification for a project with nothing declared in the window', a
       maxAttempts: 3,
     });
     expect(queued).toBeNull();
+  } finally {
+    await db.deleteFrom('workspaces').where('id', '=', bare.workspace_id).execute();
+    await db.deleteFrom('users').where('id', '=', bare.user_id).execute();
+  }
+});
+
+it('announces evidence once: a refresh, and a re-check only where declared work is measured', async () => {
+  const declared = await seedVerification(db);
+  seeds.push(declared);
+  const bare = await seedOpportunityScenario(db);
+  const keys = async (workspaceId: string) =>
+    (
+      await db
+        .selectFrom('analytics_tasks')
+        .select(['task_kind', 'idempotency_key'])
+        .where('workspace_id', '=', workspaceId)
+        .orderBy('task_kind')
+        .orderBy('idempotency_key')
+        .execute()
+    ).map((row) => [row.task_kind, row.idempotency_key]);
+  try {
+    const audit = randomUUID();
+    const scope = { workspaceId: declared.workspaceId, projectId: declared.projectId };
+    // A replayed announcement adds nothing.
+    for (let attempt = 0; attempt < 2; attempt++)
+      await announceEvidence(db, scope, { kind: 'audit', id: audit });
+    const traffic = randomUUID();
+    await announceEvidence(
+      db,
+      scope,
+      { kind: 'traffic_snapshot', id: traffic },
+      { refresh: null, revision: 'task-1' },
+    );
+    expect(await keys(declared.workspaceId)).toEqual([
+      [
+        'opportunity_refresh',
+        `opportunity:audit:${audit}:opp-analyzer-1:opp-rules-1:opp-formula-1`,
+      ],
+      [
+        'opportunity_verification',
+        `implementation-verification:audit:${audit}:implementation-verifier-1:terminal`,
+      ],
+      [
+        'opportunity_verification',
+        `implementation-verification:traffic_snapshot:${traffic}:implementation-verifier-1:task-1`,
+      ],
+    ]);
+    // Another workspace's declarations never make this project's evidence a re-check.
+    await announceEvidence(
+      db,
+      { workspaceId: bare.workspace_id, projectId: bare.project_id },
+      { kind: 'audit', id: bare.audit_id },
+    );
+    expect(await keys(bare.workspace_id)).toEqual([
+      [
+        'opportunity_refresh',
+        `opportunity:audit:${bare.audit_id}:opp-analyzer-1:opp-rules-1:opp-formula-1`,
+      ],
+    ]);
   } finally {
     await db.deleteFrom('workspaces').where('id', '=', bare.workspace_id).execute();
     await db.deleteFrom('users').where('id', '=', bare.user_id).execute();

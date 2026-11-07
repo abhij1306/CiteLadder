@@ -13,7 +13,7 @@ import {
 } from '../src/site-health/internal-link-candidates.ts';
 import { projectLinks } from '../src/site-health/internal-link-publish.ts';
 import { policy } from '../src/config.ts';
-import { contextualLinkObserved } from '../src/opportunities/internal-link-verification.ts';
+import { contextualLinkObserved } from '../src/opportunities/checks/contextual-link.ts';
 import { linkUrl } from '../src/site-health/internal-link-pages.ts';
 import { sourcePassages, sourcePlacements } from '../src/site-health/internal-link-placements.ts';
 

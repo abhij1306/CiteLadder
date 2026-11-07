@@ -15,7 +15,8 @@ import type { Database } from '../db/database.ts';
 import { latestReadings, pageEntities, readAt, readingPresences } from '../source-pages/reading.ts';
 import { wireUtcOrNull, utcText } from '../db/timestamps.ts';
 import { brandIdentities, identityKey } from './brand-identities.ts';
-import { earnedPageActions, pageStanding } from './page-standing.ts';
+import { pageStanding } from './page-standing.ts';
+import { earnedPageActions } from '../opportunities/earned-page-actions.ts';
 import { authorizedSelection, evidenceScope, observedAt, type RunSelection } from './selection.ts';
 import { compareText } from '../text-order.ts';
 
@@ -203,7 +204,9 @@ async function pageSection(
   const presences = reading
     ? ((await readingPresences(db, scope, [reading.id])).get(reading.id) ?? [])
     : [];
-  const actionId = (await earnedPageActions(db, selection, [page.url_hash])).get(page.url_hash);
+  const actionId = (await earnedPageActions(db, scope, [page.url_hash])).get(
+    page.url_hash,
+  )?.action_id;
   return {
     state: page.inspection_state,
     reason: page.inspection_reason,

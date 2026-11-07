@@ -122,6 +122,8 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
       expected_outcome: 'partial',
       target_site_url_id: issue.site_url_id,
     };
+    // Frozen checks carry the contract's shape (`expectedCheckSchema`); one that
+    // does not parse reads as `malformed_check`.
     const checks: Record<string, Record<string, unknown>[]> = {
       site: [siteRule],
       traffic: [pageClicks('https://acme.test/b')],
@@ -134,6 +136,7 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
           target_prompt_id: scn.prompt0_id,
           baseline_value: 40,
           min_delta: 1,
+          tolerance: 0,
           direction: 'increase',
         },
       ],
@@ -142,8 +145,10 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
         {
           kind: 'visibility_metric',
           metric: 'visibility_score',
+          target_prompt_id: null,
           baseline_value: 40,
           min_delta: 1,
+          tolerance: 0,
           direction: 'increase',
         },
       ],
@@ -154,9 +159,11 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
       missing_prompt: [
         {
           kind: 'visibility_metric',
+          metric: 'prompt_score',
           target_prompt_id: randomUUID(),
           baseline_value: 40,
           min_delta: 1,
+          tolerance: 0,
           direction: 'increase',
         },
       ],
@@ -168,6 +175,7 @@ export async function seedVerification(db: Database): Promise<VerificationSeed> 
           target_prompt_id: scn.prompt0_id,
           baseline_value: 40,
           min_delta: 1,
+          tolerance: 0,
           direction: 'increase',
         },
       ],

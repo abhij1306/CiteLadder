@@ -4,10 +4,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { parseUuid } from '../http/uuid.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
-import {
-  enqueueImplementationVerification,
-  enqueueOpportunityRefresh,
-} from '../opportunities/enqueue.ts';
+import { announceEvidence } from '../opportunities/evidence-announcement.ts';
 import {
   TaskCancelledError,
   taskProject,
@@ -55,9 +52,7 @@ async function handoff(
 ) {
   await db.transaction().execute(async (trx) => {
     await fenceInspectionTask(trx, task);
-    const trigger = { ...scope, triggerKind: 'audit', triggerId: audit, maxAttempts };
-    await enqueueOpportunityRefresh(trx, trigger);
-    await enqueueImplementationVerification(trx, trigger);
+    await announceEvidence(trx, scope, { kind: 'audit', id: audit }, { maxAttempts });
   });
 }
 export async function compensateInspection(db: Database, task: QueueTask) {

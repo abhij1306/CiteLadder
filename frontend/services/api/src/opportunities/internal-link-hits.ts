@@ -46,10 +46,7 @@ export async function internalLinkHits(
     const source = links[0].source;
     return {
       rule_id: 'site_contextual_links',
-      target_key: `internal-links:${id}`,
-      target_prompt_id: null,
-      target_url: source.url,
-      target_theme: null,
+      target: { kind: 'link_source', site_url_id: id, url: source.url },
       evidence: {
         site_url_id: id,
         crawl_id: result.crawl_id,

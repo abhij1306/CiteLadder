@@ -50,6 +50,7 @@ export const opportunities = {
       remediation:
         'Publish or update an owned page that directly answers this prompt: lead with a clear, quotable definition, then add structured data so answer engines can attribute it. Re-run an audit to confirm owned citations appear.',
       rule_id: 'brand_absent_high_value_prompt',
+      check_kind: 'visibility_metric',
       severity: 'high',
       title: 'Brand absent on high-value prompt',
     },
@@ -60,6 +61,7 @@ export const opportunities = {
       remediation:
         'Strengthen the owned page that should win this prompt: align its title, headings, and opening answer with the prompt intent so answer engines have a citable owned source.',
       rule_id: 'owned_page_not_cited',
+      check_kind: 'visibility_metric',
       severity: 'medium',
       title: 'Owned page not cited for target prompt',
     },
@@ -70,6 +72,7 @@ export const opportunities = {
       remediation:
         'Refresh the owned page that best answers this prompt. Lead with a direct answer, close the measured visibility or citation gap, and use this opportunity as evidence context for Content generation.',
       rule_id: 'confirmed_prompt_decline',
+      check_kind: 'visibility_metric',
       severity: 'high',
       title: 'Prompt visibility has a confirmed decline',
     },
@@ -80,6 +83,7 @@ export const opportunities = {
       remediation:
         "Add schema.org structured data (JSON-LD preferred) so answer engines can parse and attribute the page's content.",
       rule_id: 'missing_structured_data',
+      check_kind: 'site_rule',
       severity: 'medium',
       title: 'Missing structured data on owned page',
     },
@@ -90,6 +94,7 @@ export const opportunities = {
       remediation:
         "Complete the required and recommended properties for the page's expected schema type, using the exact missing-property evidence as the implementation checklist.",
       rule_id: 'schema_properties_incomplete',
+      check_kind: 'site_rule',
       severity: 'medium',
       title: 'Schema properties are incomplete',
     },
@@ -100,6 +105,7 @@ export const opportunities = {
       remediation:
         'Align the visible title, headings, and page claims with the corresponding schema.org values; do not leave competing facts for answer engines to resolve.',
       rule_id: 'schema_visible_content_conflict',
+      check_kind: 'site_rule',
       severity: 'high',
       title: 'Visible content conflicts with schema',
     },
@@ -110,6 +116,7 @@ export const opportunities = {
       remediation:
         "Strengthen the page's substantive content, answer-first opening, and question-led headings using the persisted rule evidence.",
       rule_id: 'content_structure_incomplete',
+      check_kind: 'site_rule',
       severity: 'low',
       title: 'Answer-oriented content structure is incomplete',
     },
@@ -120,6 +127,7 @@ export const opportunities = {
       remediation:
         'Add the missing author, date, source, or organization identity signals so readers and answer engines can assess provenance.',
       rule_id: 'citability_trust_incomplete',
+      check_kind: 'site_rule',
       severity: 'medium',
       title: 'Citability and trust signals are incomplete',
     },
@@ -130,6 +138,7 @@ export const opportunities = {
       remediation:
         "No answer engine mentioned this product anywhere in the latest audit. Add product-named prompts that mirror how buyers ask, and strengthen the product's owned pages with quotable specs, pricing, and comparisons so engines have a citable source.",
       rule_id: 'product_not_mentioned',
+      check_kind: null,
       severity: 'high',
       title: 'Catalog product never mentioned by answer engines',
     },
@@ -140,6 +149,7 @@ export const opportunities = {
       remediation:
         'Third-party sources were cited for this category while no uploaded product or uploaded product destination appeared. Strengthen the uploaded product pages with clear, citable comparison evidence.',
       rule_id: 'cited_alternatives_without_uploaded_presence',
+      check_kind: null,
       severity: 'high',
       title: 'Cited alternatives appear without uploaded products',
     },
@@ -150,6 +160,7 @@ export const opportunities = {
       remediation:
         'Complete the named catalog fields so product identity, availability, and destination evidence are explicit.',
       rule_id: 'catalog_fields_missing',
+      check_kind: null,
       severity: 'medium',
       title: 'Catalog fields are missing',
     },
@@ -160,6 +171,7 @@ export const opportunities = {
       remediation:
         'Improve the matching owned page and search snippet for this measured query or page. Keep the answer aligned with the observed intent and verify the later GSC window.',
       rule_id: 'search_demand_content_gap',
+      check_kind: 'traffic_metric',
       severity: 'medium',
       title: 'Search demand is not earning expected clicks',
     },
@@ -170,6 +182,7 @@ export const opportunities = {
       remediation:
         'Strengthen the resolved page for this non-branded query and verify its next GSC window.',
       rule_id: 'striking_distance_query',
+      check_kind: 'traffic_metric',
       severity: 'medium',
       title: 'Query is within striking distance',
     },
@@ -180,6 +193,7 @@ export const opportunities = {
       remediation:
         'Consolidate or differentiate the qualifying resolved pages, then verify which page earns the query.',
       rule_id: 'query_cannibalization',
+      check_kind: 'traffic_metric',
       severity: 'medium',
       title: 'Multiple pages compete for one query',
     },
@@ -190,6 +204,7 @@ export const opportunities = {
       remediation:
         'Improve the page title and snippet against its property-relative position cohort, then verify CTR.',
       rule_id: 'property_relative_ctr_gap',
+      check_kind: 'traffic_metric',
       severity: 'medium',
       title: 'CTR trails comparable property queries',
     },
@@ -200,6 +215,7 @@ export const opportunities = {
       remediation:
         'Expand the owned answer while demand is rising and verify the next adjacent GSC window.',
       rule_id: 'emerging_query',
+      check_kind: 'traffic_metric',
       severity: 'low',
       title: 'Search demand is emerging',
     },
@@ -210,6 +226,7 @@ export const opportunities = {
       remediation:
         'Refresh the owned answer for the declining query and verify recovery in a later GSC window.',
       rule_id: 'declining_query',
+      check_kind: 'traffic_metric',
       severity: 'medium',
       title: 'Search demand is declining',
     },
@@ -220,6 +237,7 @@ export const opportunities = {
       remediation:
         'Add the suggested contextual links from this page to the related destination pages, using descriptive anchor text.',
       rule_id: 'site_contextual_links',
+      check_kind: 'contextual_link',
       severity: 'low',
       title: 'Add useful contextual links',
     },
@@ -230,6 +248,7 @@ export const opportunities = {
       remediation:
         'Add relevant followed internal links from the suggested source pages to make this page easier to discover and reach.',
       rule_id: 'site_link_near_orphan',
+      check_kind: 'site_rule',
       severity: 'medium',
       title: 'Indexable page has too few followed internal links',
     },
@@ -240,6 +259,7 @@ export const opportunities = {
       remediation:
         'Strengthen this page with relevant followed links from the suggested higher-authority pages.',
       rule_id: 'site_link_weak_authority',
+      check_kind: 'site_rule',
       severity: 'low',
       title: 'Page has weak internal-link authority',
     },
@@ -250,6 +270,7 @@ export const opportunities = {
       remediation:
         'Review the exact before/after evidence, restore the intended page signal, and verify it in a later comparable crawl.',
       rule_id: 'site_change_potential_regression',
+      check_kind: 'site_rule',
       severity: 'high',
       title: 'A crawl-observed page signal regressed',
     },
@@ -260,6 +281,7 @@ export const opportunities = {
       remediation:
         'Review the exact before/after evidence and restore the critical page signal before verifying it in a later comparable crawl.',
       rule_id: 'site_change_critical_regression',
+      check_kind: 'site_rule',
       severity: 'critical',
       title: 'A critical crawl-observed page signal regressed',
     },
@@ -270,6 +292,7 @@ export const opportunities = {
       remediation:
         'Review the inspected text change and update the modification date only when it accurately describes the published content.',
       rule_id: 'site_change_metadata_inconsistency',
+      check_kind: 'site_rule',
       severity: 'medium',
       title: 'Content change and modification date disagree',
     },
@@ -280,6 +303,7 @@ export const opportunities = {
       remediation:
         'Confirm whether non-text content changed; otherwise restore an accurate modification date.',
       rule_id: 'site_change_cosmetic_refresh',
+      check_kind: 'site_rule',
       severity: 'low',
       title: 'Modification date moved without inspected text change',
     },
@@ -290,6 +314,7 @@ export const opportunities = {
       remediation:
         'Competitors rank for this search and you have no ranking page for it. Improve the page that already covers it or publish one that answers it directly, then confirm in Search Console or a later Keyword Research analysis. DataForSEO rankings are provider estimates.',
       rule_id: 'search_keyword_gap',
+      check_kind: 'keyword_presence',
       severity: 'medium',
       title: 'Competitors rank for a search you do not',
     },
@@ -300,6 +325,7 @@ export const opportunities = {
       remediation:
         "Increase owned coverage across this theme: publish answer-oriented pages for the theme's highest-value prompts.",
       rule_id: 'low_share_of_voice_theme',
+      check_kind: null,
       severity: 'medium',
       title: 'Low share of voice in theme',
     },
@@ -310,6 +336,7 @@ export const opportunities = {
       remediation:
         'Prioritize this high-traffic page for AEO improvements: add quotable answers and structured data where engines already send visitors.',
       rule_id: 'high_traffic_low_visibility',
+      check_kind: 'traffic_metric',
       severity: 'medium',
       title: 'High-traffic page with low answer-engine visibility',
     },
@@ -320,11 +347,16 @@ export const opportunities = {
       remediation:
         'This page was read and your brand is not on it while a competitor is. Approach the publisher with the facts this brief carries and ask to be included. Once listed, the prompts that cite this page show whether your visibility moved.',
       rule_id: 'earned_page_acquire_listing',
+      check_kind: 'visibility_metric',
       severity: 'high',
       title: 'Competitors listed on a cited page you are absent from',
     },
-  },
-  EARNED_RULE_IDS: ['earned_page_acquire_listing'],
+    // `check_kind`: what a declaration freezes for the rule's findings; null
+    // when nothing can isolate the work (`opportunities/checks/`).
+  } satisfies Record<
+    string,
+    Record<string, unknown> & { check_kind: ExpectedCheck['kind'] | null }
+  >,
   DEMAND_SIGNAL_RULE_IDS: {
     high_impression_low_ctr: 'search_demand_content_gap',
     striking_distance: 'striking_distance_query',

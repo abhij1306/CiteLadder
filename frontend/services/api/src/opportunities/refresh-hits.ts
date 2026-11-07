@@ -6,6 +6,7 @@
 import { policy } from '../config.ts';
 import { rules } from '../analysis/opportunities/detectors.ts';
 import type { DetectorHit } from '../analysis/opportunities/evidence.ts';
+import { targetKey, type TargetRef } from '../analysis/opportunities/targets.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { record } from '../db/json.ts';
@@ -131,10 +132,12 @@ function changeHit(pair: ChangePair, row: ChangeRow): DetectorHit | null {
   if (rule === null) return null;
   return {
     rule_id: rule,
-    target_key: `site-change:${row.site_url_id}:${row.field}`,
-    target_prompt_id: null,
-    target_url: row.normalized_url,
-    target_theme: null,
+    target: {
+      kind: 'site_change',
+      site_url_id: row.site_url_id,
+      field: row.field,
+      url: row.normalized_url,
+    },
     evidence: {
       change_snapshot_id: pair.id,
       change_observation_id: row.id,
@@ -160,9 +163,6 @@ function changeHit(pair: ChangePair, row: ChangeRow): DetectorHit | null {
 // ---------------------------------------------------------------------------
 // Demand
 // ---------------------------------------------------------------------------
-/** The Opportunity target key of a promoted signal, stable across snapshots. */
-const demandTargetKey = (identityHash: string) => `demand:${identityHash}`;
-
 type DemandSignal = {
   id: string;
   signal_type: string;
@@ -190,7 +190,7 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
   const text = (value: unknown) => (typeof value === 'string' ? value : '');
   const target = text(evidence.target);
   if (!target) return null;
-  const [targetUrl, targetTheme] = demandTargets(
+  const [url, query] = demandTargets(
     text(evidence.target_kind),
     target,
     text(evidence.resolved_page_url),
@@ -199,10 +199,8 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
   const metricIds = evidence.source_metric_row_ids;
   return {
     rule_id: ruleIds[signal.signal_type]!,
-    target_key: demandTargetKey(signal.identity_hash),
-    target_prompt_id: null,
-    target_url: targetUrl,
-    target_theme: targetTheme,
+    // The signal's identity is stable across snapshots.
+    target: { kind: 'demand', identity_hash: signal.identity_hash, url, query },
     evidence: {
       demand_snapshot_id: snapshotId,
       demand_signal_id: signal.id,
@@ -246,17 +244,14 @@ export async function demandHits(
 // ---------------------------------------------------------------------------
 function commerceHit(
   rule: string,
-  targetKey: string,
+  target: Extract<TargetRef, { kind: 'product' | 'category' }>,
   evidence: Json,
   metricIds: string[],
   analysisIds: string[] = [],
 ): DetectorHit {
   return {
     rule_id: rule,
-    target_key: targetKey,
-    target_prompt_id: null,
-    target_url: null,
-    target_theme: null,
+    target,
     evidence,
     source_analysis_ids: analysisIds,
     source_issue_ids: [],
@@ -281,7 +276,7 @@ function unmentionedHits(snapshots: ShelfSnapshot[], auditId: string): DetectorH
     .map((row) =>
       commerceHit(
         rule.rule_id,
-        `product:${row.target_id}`,
+        { kind: 'product', product_id: row.target_id },
         { product_id: row.target_id, product_visibility: 0, audit_id: auditId },
         [row.id],
       ),
@@ -299,7 +294,7 @@ function missingFieldHit(product: CatalogProduct, observationIds: string[]): Det
   if (!missing.length || !observationIds.length) return null;
   return commerceHit(
     o.RULE_CATALOG_FIELDS_MISSING,
-    `product:${product.id}`,
+    { kind: 'product', product_id: product.id },
     { product_id: product.id, product_name: product.name, missing_fields: missing },
     observationIds,
   );
@@ -368,7 +363,7 @@ async function alternativeHits(
     results.push(
       commerceHit(
         rule.rule_id,
-        `category:${snapshot.target_id}`,
+        { kind: 'category', category_id: snapshot.target_id },
         {
           category_id: snapshot.target_id,
           third_party_citation_count: citations.length,
@@ -404,6 +399,7 @@ export async function commerceHits(
     ...(await alternativeHits(db, scope.workspaceId, snapshots, auditId)),
   ];
   return hits.sort(
-    (a, b) => compareText(a.rule_id, b.rule_id) || compareText(a.target_key, b.target_key),
+    (a, b) =>
+      compareText(a.rule_id, b.rule_id) || compareText(targetKey(a.target), targetKey(b.target)),
   );
 }

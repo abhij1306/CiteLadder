@@ -26,10 +26,7 @@ import { isDataError } from '../db/errors.ts';
 import { rolesWith } from '../auth/workspace.ts';
 import { scalarText } from '../text-order.ts';
 import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
-import {
-  enqueueImplementationVerification,
-  enqueueOpportunityRefresh,
-} from '../opportunities/enqueue.ts';
+import { announceEvidence } from '../opportunities/evidence-announcement.ts';
 
 /** Datasets whose rows say whether the project ranks for a search. */
 const KEYWORD_EVIDENCE_KINDS = new Set(['missing_keywords', 'ranking_keywords', 'shared_keywords']);
@@ -801,14 +798,11 @@ export class AcquisitionState {
   }
   /** A published keyword dataset can open or close keyword-gap Actions. */
   private async announce(trx: Database, datasetId: string) {
-    const trigger = {
-      workspaceId: this.task.workspace_id,
-      projectId: this.projectId,
-      triggerKind: 'search_intelligence_dataset',
-      triggerId: datasetId,
-    };
-    await enqueueOpportunityRefresh(trx, trigger);
-    await enqueueImplementationVerification(trx, trigger);
+    await announceEvidence(
+      trx,
+      { workspaceId: this.task.workspace_id, projectId: this.projectId },
+      { kind: 'search_intelligence_dataset', id: datasetId },
+    );
   }
   /** Publish a saved receipt; one the schema refuses fails its dataset instead of blocking the run. */
   async settle(

@@ -70,7 +70,7 @@ describe('earned page opportunities', () => {
     const [hit] = detect([page()]);
     expect(hit).toMatchObject({
       rule_id: 'earned_page_acquire_listing',
-      target_key: 'earned-page:hash-a',
+      target: { kind: 'earned_page', url_hash: 'hash-a' },
       source_analysis_ids: ['analysis-1'],
       value_factor: 1.5,
       gap_factor: 1.4,

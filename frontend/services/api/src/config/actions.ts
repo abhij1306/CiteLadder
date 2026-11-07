@@ -156,29 +156,10 @@ export const actions = {
     target_kinds: [],
   },
   AGENT_ORIGIN_DEFAULT_SKILL: 'content_create',
-  LEG_VISIBILITY_RUN: 'next_visibility_run',
-  LEG_SEARCH_CONSOLE_WINDOW: 'next_search_console_window',
-  LEG_CRAWL: 'next_crawl',
-  FAMILY_MEASUREMENT_LEG: {
-    ai_visibility: 'next_visibility_run',
-    // An earned listing is measured on the prompts that cite the page.
-    sources: 'next_visibility_run',
-    search_console: 'next_search_console_window',
-    // A later paid analysis may also read it, but the scheduled reading is Search Console.
-    search_intelligence: 'next_search_console_window',
-    site_health: 'next_crawl',
-    link_graph: 'next_crawl',
-    site_changes: 'next_crawl',
-    // No check is frozen for a Commerce Action, so nothing promises a reading.
-    commerce: null,
-  },
-  CHECK_KIND_MEASUREMENT_LEG: {
-    site_rule: 'next_crawl',
-    contextual_link: 'next_crawl',
-    visibility_metric: 'next_visibility_run',
-    traffic_metric: 'next_search_console_window',
-    keyword_presence: 'next_search_console_window',
-  },
+  // Each check kind names its reading (`opportunities/checks/`).
+  LEG_VISIBILITY_RUN: 'next_visibility_run' as const,
+  LEG_SEARCH_CONSOLE_WINDOW: 'next_search_console_window' as const,
+  LEG_CRAWL: 'next_crawl' as const,
   LEG_STATE_WAITING: 'waiting',
   LEG_STATE_NOT_SCHEDULED: 'not_scheduled',
   LEG_STATE_SYNC_NEEDED: 'sync_needed',

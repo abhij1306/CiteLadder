@@ -18,7 +18,6 @@ import type { visibilitySourcesSchema } from '@citeladder/contracts/visibility-e
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
-import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { wireUtcOf, wireUtcOrNull, utcText } from '../db/timestamps.ts';
@@ -31,7 +30,8 @@ import {
 import { latestReadings, readingPresences } from '../source-pages/reading.ts';
 import { compareText } from '../text-order.ts';
 import { brandIdentities, identityKey } from './brand-identities.ts';
-import { earnedPageActions, gapPageHashes, pageStanding } from './page-standing.ts';
+import { gapPageHashes, pageStanding } from './page-standing.ts';
+import { earnedPageActions } from '../opportunities/earned-page-actions.ts';
 import { ratio } from './metrics.ts';
 import { runSetComparisonStatus } from './run-sets.ts';
 import { attachRetrieved, retrievalCoverage } from './source-retrieval.ts';
@@ -51,7 +51,6 @@ type SourceRow = SourcesResponse['items'][number];
 
 // Chips a cell holds before the rest become the "+N" overflow.
 const SOURCE_ROW_MAX_BRANDS = 3;
-const PAGE_TARGET_PREFIX = policy.opportunity.earned_actions.EARNED_PAGE_TARGET_PREFIX;
 
 export type SourceQuery = {
   domain: string | null;
@@ -392,17 +391,11 @@ async function attachPageLinks(
   }
   if (byHash.size === 0) return;
   const hashes = [...byHash.keys()];
+  const scope = { workspaceId: selection.workspaceId, projectId: selection.projectId };
   // The Action lookup needs only the hashes, so it runs beside the page read.
   const [pages, actions] = await Promise.all([
     db
       .selectFrom('source_pages as page')
-      .leftJoin('opportunities as opportunity', (join) =>
-        join
-          .on('opportunity.target_key', '=', sql<string>`${PAGE_TARGET_PREFIX} || page.url_hash`)
-          .on('opportunity.workspace_id', '=', selection.workspaceId)
-          .onRef('opportunity.project_id', '=', 'page.project_id')
-          .on('opportunity.superseded_at', 'is', null),
-      )
       .leftJoin('source_page_snapshots as snapshot', 'snapshot.id', 'page.latest_snapshot_id')
       .select([
         'page.id',
@@ -412,18 +405,14 @@ async function attachPageLinks(
         'page.page_format',
         'page.page_format_method',
         'snapshot.page_facts',
-        'opportunity.id as opportunity_id',
       ])
       .where('page.workspace_id', '=', selection.workspaceId)
       .where('page.project_id', '=', selection.projectId)
       .where('page.url_hash', 'in', hashes)
-      // The highest-priority live action first, should a page ever have two.
       .orderBy('page.url_hash')
-      .orderBy(sql`opportunity.priority_score desc nulls last`)
       .execute(),
-    earnedPageActions(db, selection, hashes),
+    earnedPageActions(db, scope, hashes),
   ]);
-  const scope = { workspaceId: selection.workspaceId, projectId: selection.projectId };
   const readings = await latestReadings(db, scope, [...new Set(pages.map((page) => page.id))]);
   const presences = await readingPresences(
     db,
@@ -439,9 +428,10 @@ async function attachPageLinks(
     const standing = pageStanding(page, reading, reading ? (presences.get(reading.id) ?? []) : []);
     for (const row of byHash.get(page.url_hash) ?? []) {
       row.inspection_state = page.inspection_state;
-      row.opportunity_id = page.opportunity_id;
+      const listing = actions.get(page.url_hash);
+      row.opportunity_id = listing?.opportunity_id ?? null;
       row.standing = standing;
-      row.action_id = actions.get(page.url_hash) ?? null;
+      row.action_id = listing?.action_id ?? null;
       row.title = typeof title === 'string' && title ? title : null;
       row.page_format = page.page_format;
       row.page_format_method = page.page_format_method;

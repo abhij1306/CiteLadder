@@ -8,7 +8,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
-import { enqueueImplementationVerification } from '../opportunities/enqueue.ts';
+import { announceEvidence } from '../opportunities/evidence-announcement.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
 import { addDays, inclusiveDays } from '../calendar-days.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
@@ -418,14 +418,13 @@ function executor(displayOnly: boolean): Executor {
       }
       await Promise.all(
         verifying.map((snapshotId) =>
-          enqueueImplementationVerification(trx, {
-            workspaceId: task.workspace_id,
-            projectId,
-            triggerKind: 'traffic_snapshot',
-            triggerId: snapshotId,
-            revision: task.id,
-            maxAttempts,
-          }),
+          announceEvidence(
+            trx,
+            { workspaceId: task.workspace_id, projectId },
+            { kind: 'traffic_snapshot', id: snapshotId },
+            // Demand re-interprets the window first and carries the refresh.
+            { refresh: null, revision: task.id, maxAttempts },
+          ),
         ),
       );
       if (!displayOnly)
