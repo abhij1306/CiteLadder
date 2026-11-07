@@ -8,7 +8,6 @@
 /build
 /dist
 /apps/*/dist/
-/apps/marketing/.dev/
 /apps/*/.astro/
 **/.astro/
 

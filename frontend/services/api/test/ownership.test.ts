@@ -30,7 +30,7 @@ describe('route-ownership gate', () => {
   });
   it('rejects a manifest family without a route', () => {
     expect(
-      routeOwnershipFailures(ownershipInputs({ families: ['executions', 'billing'] })),
+      routeOwnershipFailures(ownershipInputs({ families: ['executions', 'reports'] })),
     ).toContainEqual(expect.stringContaining('has no declared route'));
   });
   it('refuses a family listed twice', () => {
@@ -55,7 +55,7 @@ describe('route-ownership gate', () => {
   });
   it('refuses ambiguous family tags', () => {
     const input = ownershipInputs();
-    input.document.paths['/api/v1/executions/{item_id}']!.get!.tags = ['executions', 'billing'];
+    input.document.paths['/api/v1/executions/{item_id}']!.get!.tags = ['executions', 'reports'];
     expect(routeOwnershipFailures(input)).toContainEqual(
       expect.stringContaining('exactly one family tag'),
     );

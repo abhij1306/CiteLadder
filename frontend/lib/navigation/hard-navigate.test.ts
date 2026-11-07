@@ -20,13 +20,13 @@ describe('hardNavigate', () => {
       assign,
     } as unknown as Location);
 
-    hardNavigate('https://checkout.example/session/abc');
+    hardNavigate('https://provider.example/oauth/authorize?state=abc');
 
     expect(assign).toHaveBeenCalledTimes(1);
-    expect(assign).toHaveBeenCalledWith('https://checkout.example/session/abc');
+    expect(assign).toHaveBeenCalledWith('https://provider.example/oauth/authorize?state=abc');
   });
 
-  it('passes a relative auth bounce through unchanged', () => {
+  it('passes a relative URL through unchanged', () => {
     const assign = vi.fn();
     vi.spyOn(window, 'location', 'get').mockReturnValue({
       ...window.location,
@@ -35,8 +35,8 @@ describe('hardNavigate', () => {
 
     // A relative URL must NOT be rewritten here: the whole point is a full
     // document load so session state is re-read on return.
-    hardNavigate('/login?next=/pricing');
+    hardNavigate('/api/v1/integrations/callback?next=/settings');
 
-    expect(assign).toHaveBeenCalledWith('/login?next=/pricing');
+    expect(assign).toHaveBeenCalledWith('/api/v1/integrations/callback?next=/settings');
   });
 });

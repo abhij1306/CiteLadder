@@ -4,7 +4,6 @@ import { extname, join, relative, resolve } from 'node:path';
 
 import {
   appSourceViolations,
-  editorialTypographyViolations,
   cardHeaderLayoutViolations,
   nestedCardViolations,
   directRadixImportViolations,
@@ -94,14 +93,10 @@ for (const path of files(root)) {
     ...directRadixImportViolations(source, label),
     ...styleAssertionViolations(source, label),
   );
-  const ownsWebsiteEditorialCopy =
-    !label.includes('.test.') && label.startsWith('components/marketing/');
   // Sign-in and onboarding are product UI: they compose the system's
   // AuthShell, AuthCard and OnboardingStep (components/ui).
   const ownsProductUi =
     !label.includes('.test.') &&
-    !label.startsWith('components/marketing/') &&
-    !label.startsWith('lib/marketing-content/') &&
     (label.startsWith('apps/app/src/') ||
       label.startsWith('components/') ||
       label.startsWith('lib/'));
@@ -111,7 +106,6 @@ for (const path of files(root)) {
   violations.push(
     ...textRoleBackgroundViolations(source, label),
     ...rawRadiusViolations(source, label),
-    ...editorialTypographyViolations(source, label, ownsWebsiteEditorialCopy),
     ...standalonePlaceholderViolations(source, label, ownsProductUi),
     ...productUiSourceViolations(source, label, ownsProductUi),
     ...motionRoleViolations(source, label, ownsProductUi),

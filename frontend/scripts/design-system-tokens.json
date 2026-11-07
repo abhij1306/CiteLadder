@@ -19,7 +19,7 @@
           "light": "#f4f4f4",
           "dark": "#0a0a0a"
         },
-        "usage": "The app's page ground (white cards sit on it) and the inner well of every product frame on the website."
+        "usage": "The app's page ground (white cards sit on it) and the inner well of every product frame."
       },
       {
         "name": "surface",
@@ -27,7 +27,7 @@
           "light": "#ffffff",
           "dark": "#151515"
         },
-        "usage": "The website and docs page ground; cards, panels, tables, inputs, menus and the selected tab everywhere."
+        "usage": "Cards, panels, tables, inputs, menus and the selected tab everywhere; the setup and onboarding page ground."
       },
       {
         "name": "surface-sunken",
@@ -36,14 +36,6 @@
           "dark": "#1e1e1e"
         },
         "usage": "Wells: the tab track, code blocks, table header rows, hover on secondary and ghost buttons, the muted card, skeletons."
-      },
-      {
-        "name": "nav-glass",
-        "value": {
-          "light": "rgba(244,244,244,0.78)",
-          "dark": "rgba(30,30,30,0.78)"
-        },
-        "usage": "The floating website navbar's translucent fill, always with a 16px backdrop blur. Used nowhere else."
       },
       {
         "name": "line",
@@ -91,7 +83,7 @@
           "light": "#525252",
           "dark": "#a6a6a6"
         },
-        "usage": "Leads and body copy on the website, descriptions, unselected tabs, nav links. On paper, surface and surface-sunken."
+        "usage": "Leads and secondary copy, descriptions, unselected tabs, nav links. On paper, surface and surface-sunken."
       },
       {
         "name": "ink-muted",
@@ -99,7 +91,7 @@
           "light": "#6b6b6b",
           "dark": "#8c8c8c"
         },
-        "usage": "Metadata, eyebrows, placeholders, timestamps, footer legal text. On paper, surface and surface-sunken."
+        "usage": "Metadata, eyebrows, placeholders, timestamps, footnotes. On paper, surface and surface-sunken."
       },
       {
         "name": "on-ink",
@@ -123,7 +115,7 @@
           "light": "#b53a0c",
           "dark": "#ff9466"
         },
-        "usage": "Accent as text: inline links inside long reading copy (docs, blog, legal). On paper, surface and accent-soft."
+        "usage": "Accent as text: inline links inside long reading copy (reports, rendered Markdown). On paper, surface and accent-soft."
       },
       {
         "name": "accent-soft",
@@ -187,7 +179,7 @@
           "light": "#8a5000",
           "dark": "#f5b84a"
         },
-        "usage": "Needs attention, partial data, stale results, trial ending. Text on paper, surface and warning-soft."
+        "usage": "Needs attention, partial data, stale results, expiring credentials. Text on paper, surface and warning-soft."
       },
       {
         "name": "warning-soft",
@@ -203,7 +195,7 @@
           "light": "#1f5fbf",
           "dark": "#7fb0ff"
         },
-        "usage": "Neutral information callouts and \"note\" admonitions in docs. Text on paper, surface and info-soft; never decorative."
+        "usage": "Neutral information callouts and \"note\" admonitions. Text on paper, surface and info-soft; never decorative."
       },
       {
         "name": "info-soft",
@@ -282,7 +274,7 @@
             "fontWeight": 400,
             "letterSpacing": "-0.01em",
             "sample": "Get cited when buyers ask AI",
-            "usage": "The docs H1, one per page; 36/42 from 768 to 1023px. The marketing H1 (landing hero, platform, pricing, articles) is the site title, 48/52 from 768px up and 32/38 below (D26), with no tracking on Cal Sans."
+            "usage": "The largest display heading, one per page; 36/42 from 768 to 1023px, with no tracking on Cal Sans."
           },
           {
             "name": "display-xl",
@@ -291,7 +283,7 @@
             "fontWeight": 400,
             "letterSpacing": "-0.01em",
             "sample": "Measure, diagnose, improve",
-            "usage": "Website section headings (h2). 28/34 below 768px."
+            "usage": "Display section headings (h2). 28/34 below 768px."
           },
           {
             "name": "display-lg",
@@ -309,7 +301,7 @@
             "fontWeight": 400,
             "letterSpacing": "-0.01em",
             "sample": "Every engine, one report",
-            "usage": "Article h2 and the heading of a section that is one feature split. On the website large feature tiles, stacked split titles and the PageHighlight title set this size in Geist 500 (D28)."
+            "usage": "Long-form h2 and the heading of a section that is one split."
           },
           {
             "name": "display-sm",
@@ -334,7 +326,7 @@
             "lineHeight": "24px",
             "fontWeight": 400,
             "sample": "Round robin",
-            "usage": "Captions under product frames and the docs h3. On the website FAQ questions, pricing plan names and the author's name set this size in Geist 500 (D28). Footer column heads are not this (they use label)."
+            "usage": "Captions under product frames and long-form h3."
           }
         ]
       },
@@ -348,7 +340,7 @@
             "lineHeight": "30px",
             "fontWeight": 400,
             "sample": "CiteLadder runs the questions your buyers ask ChatGPT, Claude and Gemini, and shows which pages each answer cites.",
-            "usage": "The paragraph under a website hero or section heading, in ink-secondary. 18/28 below 768px."
+            "usage": "The lead paragraph under a display or section heading, in ink-secondary. 18/28 below 768px."
           },
           {
             "name": "body-lg",
@@ -356,7 +348,7 @@
             "lineHeight": "30px",
             "fontWeight": 400,
             "sample": "Each prompt runs every morning on every engine you track.",
-            "usage": "Article and blog body copy (prose)."
+            "usage": "Long-form body copy (prose)."
           },
           {
             "name": "body",
@@ -364,7 +356,7 @@
             "lineHeight": "26px",
             "fontWeight": 400,
             "sample": "Three of your five product pages were cited last week.",
-            "usage": "Website body copy, docs prose, feature card descriptions."
+            "usage": "Body copy in reading surfaces and card descriptions."
           },
           {
             "name": "body-sm",
@@ -372,7 +364,7 @@
             "lineHeight": "20px",
             "fontWeight": 400,
             "sample": "Updated 2 hours ago from 120 prompts.",
-            "usage": "The app's default text: tables, forms, cards, menus. Footer links."
+            "usage": "The app's default text: tables, forms, cards, menus."
           },
           {
             "name": "label",
@@ -380,7 +372,7 @@
             "lineHeight": "20px",
             "fontWeight": 500,
             "sample": "Prompt set",
-            "usage": "Buttons, tabs, field labels, nav items, footer column heads."
+            "usage": "Buttons, tabs, field labels, nav items, group heads."
           },
           {
             "name": "label-lg",
@@ -414,7 +406,7 @@
             "fontWeight": 500,
             "letterSpacing": "-0.02em",
             "sample": "38.4%",
-            "usage": "The number in a Stat and a KpiRow card, and the plan price in the app, and the website PageHighlight's figures (D28). Geist 500 since D7 (5 Nov 2026), 28/36 since D15; the ScoreRing and DonutChart centres use the same face at 32/38."
+            "usage": "The number in a Stat and a KpiRow card. Geist 500 since D7 (5 Nov 2026), 28/36 since D15; the ScoreRing and DonutChart centres use the same face at 32/38."
           },
           {
             "name": "caption",
@@ -469,7 +461,7 @@
       {
         "name": "space-2",
         "value": "8px",
-        "usage": "Gap between related controls; product frame padding; navbar inset from the viewport top."
+        "usage": "Gap between related controls; product frame padding."
       },
       {
         "name": "space-3",
@@ -489,12 +481,12 @@
       {
         "name": "space-6",
         "value": "24px",
-        "usage": "Website card padding; gap between cards in a website grid; caption padding inside a feature card; the app page's side padding from 1280px."
+        "usage": "The app page's side padding from 1280px; caption padding inside a product frame."
       },
       {
         "name": "space-8",
         "value": "32px",
-        "usage": "Heading-to-content gap in a website section."
+        "usage": "Heading-to-content gap in a display section."
       },
       {
         "name": "space-10",
@@ -509,17 +501,17 @@
       {
         "name": "space-16",
         "value": "64px",
-        "usage": "Page gutter from 1280px (so a 1440 viewport shows a 1320 container); hero top padding below the navbar."
+        "usage": "Page gutter from 1280px."
       },
       {
         "name": "space-24",
         "value": "96px",
-        "usage": "Vertical gap between website sections below 1024px."
+        "usage": "Vertical gap between display sections below 1024px."
       },
       {
         "name": "space-32",
         "value": "128px",
-        "usage": "Vertical gap between website sections from 1024px."
+        "usage": "Vertical gap between display sections from 1024px."
       }
     ]
   },
@@ -553,7 +545,7 @@
       {
         "name": "radius-xl",
         "value": "8px",
-        "usage": "Website cards, product frames, the floating navbar, pricing cards. The largest radius in the system: nothing is rounded past 8px (D10)."
+        "usage": "Product frames. The largest radius in the system: nothing is rounded past 8px (D10)."
       },
       {
         "name": "radius-full",
@@ -563,7 +555,7 @@
     ]
   },
   "shadow": {
-    "note": "Depth is quiet: a hairline ring plus a short, soft drop. Website cards use a 1px line border with shadow-xs; app cards use shadow-card; fields and checkbox boxes use a 1px line border with shadow-edge.",
+    "note": "Depth is quiet: a hairline ring plus a short, soft drop. App cards use shadow-card; fields and checkbox boxes use a 1px line border with shadow-edge.",
     "tokens": [
       {
         "name": "shadow-edge",
@@ -579,7 +571,7 @@
           "light": "0 0 0 1px rgba(17,17,17,0.08), 0 1px 2px rgba(17,17,17,0.06)",
           "dark": "0 0 0 1px rgba(255,255,255,0.08), 0 1px 2px rgba(0,0,0,0.5)"
         },
-        "usage": "Secondary buttons, the selected tab, citation pills, website cards (with their line border)."
+        "usage": "Secondary buttons, the selected tab, citation pills."
       },
       {
         "name": "shadow-card",
@@ -618,7 +610,7 @@
       {
         "name": "control-md",
         "value": "32px",
-        "usage": "App buttons, inputs, selects, the tab track, sidebar rows; navbar and docs top-bar buttons. 32 since D11 (5 Nov 2026), GitHub-style density; website CTAs stay control-lg."
+        "usage": "App buttons, inputs, selects, the tab track, sidebar rows. 32 since D11 (5 Nov 2026), GitHub-style density."
       },
       {
         "name": "row-app",
@@ -628,28 +620,23 @@
       {
         "name": "control-lg",
         "value": "48px",
-        "usage": "Website hero and CTA buttons, auth forms."
+        "usage": "The command palette's search row and large setup controls."
       },
       {
         "name": "nav-height",
         "value": "64px",
-        "usage": "The floating website navbar and the docs top bar."
+        "usage": "The setup and onboarding top bar."
       },
       {
         "name": "sidebar-width",
         "value": "248px",
-        "usage": "The app sidebar and the docs sidebar, expanded."
+        "usage": "The app sidebar, expanded."
       }
     ]
   },
   "layout": {
     "note": "Content widths. Gutters are space-5 below 768px, space-10 to 1279px, space-16 from 1280px.",
     "tokens": [
-      {
-        "name": "container-site",
-        "value": "1320px",
-        "usage": "Max content width of every website section, the navbar and the footer."
-      },
       {
         "name": "container-app",
         "value": "1440px",
@@ -658,12 +645,12 @@
       {
         "name": "container-prose",
         "value": "720px",
-        "usage": "Article, legal and docs body column."
+        "usage": "A long reading column."
       },
       {
         "name": "container-narrow",
         "value": "560px",
-        "usage": "Centred section headers, auth cards, onboarding steps, empty states."
+        "usage": "Centred section headers, setup cards, onboarding steps, empty states."
       }
     ]
   }

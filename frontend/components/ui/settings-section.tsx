@@ -19,7 +19,7 @@ export function SettingsSection({
 }: Readonly<{
   title: string;
   description?: ReactNode;
-  /** A header button such as Invite member. */
+  /** A header button such as Add connection. */
   action?: ReactNode;
   children: ReactNode;
 }>) {

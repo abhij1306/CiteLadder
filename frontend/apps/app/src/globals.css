@@ -17,8 +17,8 @@
    row; below it the sidebar is a 61px icon rail. `desktop:` (981px) is the
    width at which a component's own internals (a form's two columns, a
    table's secondary columns, a list beside its detail) stop stacking.
-   `sm:`/`md:`/`lg:`/`xl:` (640, 768, 1024, 1280) and `2xl:` (1440) are the
-   website's.
+   `sm:`/`md:`/`lg:`/`xl:` (640, 768, 1024, 1280) and `2xl:` (1440) are
+   Tailwind's general breakpoints.
 
    The shell's navigation has two more states (owner, 2026-11-06): from
    `rail:` (900px) the sidebar column shows, as the icon rail below `shell:`;
@@ -50,7 +50,6 @@
   --color-paper: #f4f4f4;
   --color-surface: #ffffff;
   --color-surface-sunken: #ececec;
-  --color-nav-glass: rgb(244 244 244 / 78%);
   --color-line: #e5e5e5;
   --color-line-strong: #d4d4d4;
   --color-line-control: #858585;
@@ -79,10 +78,10 @@
   --color-scrim: rgb(17 17 17 / 32%);
   --color-chart-grid: #ececec;
 
-  /* Type. Each role owns size, leading, weight and tracking; on the website
-     and docs the display roles (display-*, title, title-sm, stat) pair with
-     `font-display`. In the app only the page title and the auth card titles
-     are Cal Sans (D7, D37): its other
+  /* Type. Each role owns size, leading, weight and tracking. The display
+     roles (display-*, title, title-sm, stat) can pair with `font-display`,
+     but in the app only the page title and the setup card titles are Cal
+     Sans (D7, D37): its other
      titles and figures set these sizes in Geist 500. The mono roles (eyebrow,
      data, code) pair with `font-mono`, the rest are Geist, never above 500. */
   --text-*: initial;
@@ -167,7 +166,7 @@
   /* Radius, only slightly rounded and never over 8 (decision D10). 2xs chart
      bars, swatches and rungs; xs badges, favicons and checkboxes; sm tabs in
      a track, menu items and chips; md buttons, inputs and code; lg app cards,
-     menus and dialogs; xl website cards, frames and the navbar; full only
+     menus and dialogs; xl product frames; full only
      avatars, status dots, switch tracks and count pills. */
   --radius-*: initial;
   --radius-2xs: 2px;
@@ -182,11 +181,10 @@
      applied by the `shadow-*` utilities after this block. */
   --shadow-*: initial;
 
-  /* Containers: `max-w-site` (website sections, navbar, footer), `max-w-app`
-     (an app page's content), `max-w-thread` (the Agent thread and its
-     composer), `max-w-prose` (articles, legal, docs) and `max-w-narrow`
-     (section headers, auth cards, onboarding, empty states). */
-  --container-site: 1320px;
+  /* Containers: `max-w-app` (an app page's content), `max-w-thread` (the
+     Agent thread and its composer), `max-w-prose` (long reading copy) and
+     `max-w-narrow` (section headers, setup cards, onboarding, empty
+     states). */
   --container-app: 1440px;
   --container-thread: 1040px;
   --container-prose: 720px;
@@ -219,7 +217,7 @@
   color-scheme: light;
 
   /* Depth is quiet: a hairline ring plus a short, soft drop. xs on secondary
-     buttons, the selected tab, pills and website cards; card on app cards and
+     buttons, the selected tab and pills; card on app cards and
      screens inside a frame; pop on menus, popovers, dialogs and toasts; press
      on the primary button. Never two shadows on nested surfaces. edge is the
      faint smudge, with no ring, under every soft field edge (decision D5). */
@@ -238,7 +236,7 @@
     0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -6px rgb(17 17 17 / 35%);
 
   /* Controls. Every interactive row in one view uses one height: 32 (D11),
-     28 compact, 48 for website calls to action. `row-app` is the app's
+     28 compact, 48 for large controls. `row-app` is the app's
      table and fact row, its header title row and the sidebar's ident row. */
   --control-sm: 28px;
   --control-md: 32px;
@@ -318,7 +316,6 @@
   --color-paper: #0a0a0a;
   --color-surface: #151515;
   --color-surface-sunken: #1e1e1e;
-  --color-nav-glass: rgb(30 30 30 / 78%);
   --color-line: #2a2a2a;
   --color-line-strong: #3a3a3a;
   --color-line-control: #747474;
@@ -856,7 +853,7 @@ a.focus-ring:active .type-caption {
   outline: none;
 }
 
-/* A palette's search row (the command palette, docs search): the input is
+/* A palette's search row (the command palette): the input is
    the dialog's only field and holds focus while it is open, so the caret is
    the focus cue and the row's divider stays the soft `line` rule, never a
    dark edge. */
