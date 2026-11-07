@@ -69,11 +69,15 @@ const providerCatalogRouteSchema = responseObject({
   surface_kind: surfaceKindSchema,
 });
 
+// The catalogue's display name for the engine. Engines arrive in display order.
 const providerCatalogEngineSchema = responseObject({
   logical_engine: logicalEngineSchema,
+  label: z.string().min(1),
   routes: z.array(providerCatalogRouteSchema),
 });
 
+// The one engine catalogue the browser reads: which engines exist, their labels,
+// their display order (the array order) and each route's surface kind.
 export const providerCatalogSchema = responseObject({
   transports: z.array(transportProviderSchema),
   engines: z.array(providerCatalogEngineSchema),

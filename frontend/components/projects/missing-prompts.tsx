@@ -14,7 +14,7 @@ import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { missingPrompts, promptHistoryHref, type MissingPrompt } from '@/lib/prompts/history';
 import { resolveProjectRequestScope } from '@/lib/project/request-scope';
-import { engineLabel } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 
 import { useLatestPromptMetrics } from '@/components/prompts/use-latest-prompt-measurements';
 
@@ -79,12 +79,13 @@ export function MissingPrompts({
 }
 
 function MissingRow({ row }: Readonly<{ row: MissingPrompt }>) {
+  const engines = useEngineCatalog();
   return (
     <Inline as="li" gap="compact" className={ledgerItemClasses('flex-wrap justify-between')}>
       <Stack gap="tight" className="min-w-0">
         <TextLink href={promptHistoryHref(row.promptId)}>{row.text}</TextLink>
         <span className="type-caption">
-          {row.engines.map(engineLabel).join(', ')} named {row.competitors.join(', ')}
+          {row.engines.map(engines.label).join(', ')} named {row.competitors.join(', ')}
         </span>
       </Stack>
       {row.actionId ? (

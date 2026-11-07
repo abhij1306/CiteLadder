@@ -27,11 +27,13 @@ import {
   directRequest,
   frozenSurfaceRequest,
   loadExecutionContext,
+  surfaceTimeoutSeconds,
   pauseExecutionCredential,
   pauseUnavailableAccount,
   type ExecutionContext,
 } from '../audits/execution-context.ts';
 import { commitSubmissionIntent, surfaceRecoveryDeadline } from '../audits/submission-intent.ts';
+import { readFrozenSearchRequest } from '../audits/frozen-configuration.ts';
 import {
   persistExecutionFailure,
   persistExecutionSuccess,
@@ -331,27 +333,20 @@ export class AuditWorker {
     const task = context?.task ?? claimed;
     const recovery = surfaceRecoveryDeadline(
       task,
-      Number(
-        record(task.request_snapshot).recovery_deadline_hours ??
-          this.#runtime.search.recoveryDeadlineHours,
-      ),
+      readFrozenSearchRequest(task.request_snapshot).recovery_deadline_hours,
     );
     if (recovery && this.#now() >= recovery) {
       await this.#failSurface(claimed, context ?? null, 'submission_unreconciled', false);
       return { expired: true, recovery };
     }
-    const audit = context?.audit;
+    const startedAt = context?.audit.started_at;
     // Once a paid submission may exist, retrieval is free and bounded by the poll ceiling
     // (Google AI Overview) or the recovery deadline (scrapers), never by the run cap.
     const runExpired =
       !recovery &&
       !task.provider_submission_ref &&
-      audit?.started_at &&
-      this.#now().getTime() - audit.started_at.getTime() >=
-        Number(
-          record(audit.configuration).max_run_seconds ?? this.#runtime.audits.max_run_seconds,
-        ) *
-          1000;
+      startedAt &&
+      this.#now().getTime() - startedAt.getTime() >= context.maxRunSeconds * 1000;
     if (!runExpired) return { expired: false, recovery };
     if (task.transport_provider === 'dataforseo')
       await this.#failSurface(claimed, context ?? null, 'poll_ceiling_exceeded', false);
@@ -404,7 +399,7 @@ export class AuditWorker {
     const client = createDataforseoClient(
       { secret: context.secret, base_url: context.endpoint },
       this.#runtime.providers,
-      Number(record(task.request_snapshot).timeout_seconds ?? this.#runtime.search.timeoutSeconds),
+      surfaceTimeoutSeconds(context),
       this.#send,
       signal,
     );
@@ -489,11 +484,7 @@ export class AuditWorker {
       await this.#reconcile({ ...context, task: intent.task }, client);
       return;
     }
-    const request = frozenSurfaceRequest(
-      context,
-      intent.task.provider_submission_ref,
-      this.#runtime,
-    );
+    const request = frozenSurfaceRequest(context, intent.task.provider_submission_ref);
     try {
       const submission = await client.submit(engine, request);
       await persistSurfaceExchange(

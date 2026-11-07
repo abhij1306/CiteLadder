@@ -8,6 +8,7 @@ import { UserMenuController } from '@/components/layout/user-menu';
 import { ToastProvider } from '@/components/ui/toast';
 import { SessionGuard } from '@/lib/auth/session-guard';
 import { ProjectProvider } from '@/lib/project/project-context';
+import { useEngineCatalog } from '@/lib/providers/engines';
 
 /**
  * Application route root.
@@ -22,6 +23,9 @@ import { ProjectProvider } from '@/lib/project/project-context';
  * the state lives.
  */
 export function PrivateRouteLayout() {
+  // Engine names and order come from the provider catalogue; read it alongside
+  // the workspace bootstrap so screens render with labels already cached.
+  useEngineCatalog();
   return (
     <Suspense fallback={<ShellFallback />}>
       <ProjectProvider>

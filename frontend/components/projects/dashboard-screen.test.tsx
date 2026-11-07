@@ -129,6 +129,7 @@ vi.mock('@/components/runs/launch-dialog', () => ({
 vi.mock('@tanstack/react-query', () => ({
   queryOptions: <T,>(options: T) => options,
   useQuery: (options: { queryKey: readonly unknown[] }) => {
+    if (options.queryKey[0] === 'providers') return { data: providerCatalogFixture };
     if (options.queryKey[1] === 'overview-layout') return layoutResult;
     return options.queryKey[0] === 'visibility' ? promptsResult : queryResult;
   },
@@ -168,6 +169,7 @@ vi.mock('@/lib/api/opportunities', () => ({
   opportunitiesApi: { updateOrder: vi.fn() },
 }));
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { providerCatalogFixture } from '@/test/provider-catalog-fixture';
 import { DashboardScreen } from './dashboard-screen';
 
 function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {

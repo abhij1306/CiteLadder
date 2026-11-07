@@ -20,6 +20,7 @@ import {
 import { brandPosition, competitorPosition } from '../analysis/position.ts';
 import { classifyCitation, scoringConfig } from '../analysis/scoring.ts';
 import { policy } from '../config.ts';
+import { surfaceKindOf } from '../config/providers.ts';
 import type { Database } from '../db/database.ts';
 import { wireUtcOrNull, utcText } from '../db/timestamps.ts';
 import { authorizeRunSet, isLogicalEngine, selectedCohorts, unknownEngine } from './selection.ts';
@@ -262,7 +263,7 @@ export async function surfaceRates(
   scope: RateScope & { logicalEngine: string },
 ): Promise<SurfaceRatesResponse> {
   if (!isLogicalEngine(scope.logicalEngine)) throw unknownEngine(scope.logicalEngine);
-  if (!policy.visibility.search_surface_engines.includes(scope.logicalEngine)) {
+  if (surfaceKindOf(scope.logicalEngine) !== 'search_ai') {
     return {
       logical_engine: scope.logicalEngine,
       successful: 0,

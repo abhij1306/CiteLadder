@@ -258,21 +258,21 @@
       "issuable": false
     },
     {
-      "key": "claude",
-      "label": "Claude API",
-      "availability": "available",
-      "unavailable_reason": null,
-      "adapter_shipped": true,
-      "grant_key": "provider.claude",
-      "issuable": false
-    },
-    {
       "key": "gemini",
       "label": "Gemini API",
       "availability": "available",
       "unavailable_reason": null,
       "adapter_shipped": true,
       "grant_key": "provider.gemini",
+      "issuable": false
+    },
+    {
+      "key": "claude",
+      "label": "Claude API",
+      "availability": "available",
+      "unavailable_reason": null,
+      "adapter_shipped": true,
+      "grant_key": "provider.claude",
       "issuable": false
     },
     {

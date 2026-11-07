@@ -289,7 +289,6 @@
     "error_no_connection": "provider_connection_missing",
     "localized_instruction": "Answer for a shopper in the market identified by ISO country code {country_code}, using language {language_code}. Prioritize retailers that serve that market and sources relevant to that market.",
     "forced_grounded_instruction": "Answer the shopping question using current web information. Cite the sources supporting your recommendations.",
-    "measurement_policy_key": "measurement_policy",
     "audit_scope_brand": "brand",
     "audit_status_draft": "draft"
   },

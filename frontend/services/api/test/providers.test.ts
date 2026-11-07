@@ -299,6 +299,26 @@ describe('provider credential custody', () => {
     expect(await state()).toMatchObject({ state: 'failed', safe_reason: 'auth_failure' });
   });
 
+  it('publishes every routed engine with its label, display order and surface kind', async () => {
+    const response = await createApp(config, db).request('/api/v1/provider-catalog');
+    const body = (await response.json()) as {
+      engines: { logical_engine: string; label: string; routes: { surface_kind: string }[] }[];
+    };
+    expect(
+      body.engines.map((engine) => [
+        engine.logical_engine,
+        engine.label,
+        engine.routes[0]?.surface_kind,
+      ]),
+    ).toEqual([
+      ['chatgpt_search', 'ChatGPT Search', 'llm_scraper'],
+      ['gemini_consumer', 'Gemini', 'llm_scraper'],
+      ['chatgpt', 'ChatGPT API', 'llm'],
+      ['gemini', 'Gemini API', 'llm'],
+      ['claude', 'Claude API', 'llm'],
+      ['google_ai_overview', 'Google AI Overview', 'search_ai'],
+    ]);
+  });
   it('enforces credential administration at the HTTP boundary', async () => {
     const app = createApp(config, db);
     const request = (session: string, method: string, path = '/api/v1/provider-connections') =>

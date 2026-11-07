@@ -15,7 +15,7 @@ import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { visibilitySourceUrlSchema } from '@citeladder/contracts/visibility-evidence';
-import { engineLabel, productModelLabel } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { count } from '@/lib/visibility/sources';
 
 type UrlDetail = z.infer<typeof visibilitySourceUrlSchema>;
@@ -97,6 +97,7 @@ export function EnginesCard({
   // "we could not find out" are different answers, and the page's own alert
   // already reports the failure, so rows kept from an earlier read are not
   // shown as current either. Only a returned, empty list is "no engine".
+  const catalog = useEngineCatalog();
   const rows = errored ? [] : (engines ?? []);
   let state: DataTableState | undefined;
   if (!errored && loading) state = { kind: 'loading', label: 'Loading retrievals…' };
@@ -119,12 +120,10 @@ export function EnginesCard({
         <TableRow key={`${row.logical_engine}:${row.transport_model ?? ''}`}>
           <TableCell>
             <span className="grid min-w-0">
-              <ClampText lines={1}>
-                {engineLabel(row.logical_engine) || row.logical_engine}
-              </ClampText>
-              {productModelLabel(row.logical_engine, row.transport_model) ? (
+              <ClampText lines={1}>{catalog.label(row.logical_engine)}</ClampText>
+              {catalog.modelLabel(row.logical_engine, row.transport_model) ? (
                 <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
-                  {productModelLabel(row.logical_engine, row.transport_model)}
+                  {catalog.modelLabel(row.logical_engine, row.transport_model)}
                 </ClampText>
               ) : null}
             </span>

@@ -9,6 +9,7 @@ import type {
   SearchIntelligenceCalls,
   SearchIntelligenceDatasets,
 } from '../generated/db-schema.ts';
+import { policy } from '../config.ts';
 import { runConnection } from './credentials.ts';
 import {
   datasetKind,
@@ -48,6 +49,11 @@ export type PreparedResearch =
       ordinal: number;
       connection: Selectable<ProviderConnections>;
     };
+/** Provider refusals that every later call on the same connection would repeat. */
+const REFUSED_CODES = new Set([
+  'auth_failure',
+  policy.dataforseo.constants.error_account_unavailable,
+]);
 const terminal = new Set(['succeeded', 'failed', 'partial', 'cancelled', 'uncertain']);
 /** What one failed send means for the call and the run. */
 function failureStates(error: ProviderError, ordinal: number) {
@@ -60,8 +66,9 @@ function failureStates(error: ProviderError, ordinal: number) {
   let callStatus = 'failed';
   if (retry) callStatus = 'intent';
   else if (uncertain) callStatus = 'uncertain';
-  // Every remaining call would use the same refused credential.
-  return { uncertain, retry, refused: error.code === 'auth_failure', attempt, callStatus };
+  // Every remaining call would use the same refused credential or account.
+  const refused = REFUSED_CODES.has(error.code);
+  return { uncertain, retry, refused, attempt, callStatus };
 }
 /** When a rate-limited call may be sent again: the provider's wait, bounded. */
 const retryAt = (error: ProviderError, at: Date) =>

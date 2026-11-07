@@ -13,7 +13,8 @@ import {
 } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { formatCount } from '@/lib/format';
-import { engineLabel, productTransportLabel } from '@/lib/providers/catalog';
+import { productTransportLabel } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import type { Execution } from '@citeladder/contracts';
 import {
   executionBadgeValue,
@@ -49,6 +50,7 @@ export function ExecutionsTable({
   state?: DataTableState;
   onSelectEvidence: (execution: Execution) => void;
 }>) {
+  const engines = useEngineCatalog();
   return (
     <DataTable title="Executions" columns={COLUMNS} state={state}>
       {executions.map((execution) => (
@@ -62,7 +64,7 @@ export function ExecutionsTable({
             {/* The engine over the transport that reached it, each on its own line. */}
             <TableCellLines
               title
-              primary={engineLabel(execution.logical_engine)}
+              primary={engines.label(execution.logical_engine)}
               secondary={productTransportLabel(execution.transport_provider)}
             />
           </TableCell>
@@ -101,7 +103,8 @@ export function ExecutionsTable({
 
 /** The execution's state; a label longer than the column is cut, whole in its title. */
 function StatusBadge({ execution }: Readonly<{ execution: Execution }>) {
-  const label = executionStatusLabel(execution.status, engineLabel(execution.logical_engine));
+  const engines = useEngineCatalog();
+  const label = executionStatusLabel(execution.status, engines.label(execution.logical_engine));
   return (
     <Badge
       variant="status"

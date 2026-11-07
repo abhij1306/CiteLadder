@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import { enginesOfKind } from '../config/providers.ts';
 
 /** An execution consumes frozen request policy; it never supplies a policy default. */
 export const answerRequestSchema = z.object({
-  logical_engine: z.enum(['chatgpt', 'gemini', 'claude']),
+  // Only engines whose provider route is asked (`llm`) take an answer request.
+  logical_engine: z.enum(enginesOfKind('llm')),
   transport_provider: z.enum(['openai', 'google', 'anthropic']),
   transport_model: z.string().min(1),
   prompt: z.string().min(1),

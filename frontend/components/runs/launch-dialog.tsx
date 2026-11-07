@@ -8,7 +8,6 @@ import { promptsQueries } from '@/lib/api/prompts';
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi, runsQueries } from '@/lib/api/runs';
 import type { Audit, LogicalEngine, PromptSet } from '@citeladder/contracts';
-import { isConsumerEngine } from '@/lib/providers/catalog';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import {
@@ -83,7 +82,7 @@ export function LaunchDialog({
     ...promptsQueries.sets({ workspaceId, projectId }),
     enabled: open && workspaceId !== null,
   });
-  const { configuredEngines, unverifiedEngines, enginesReady } = useConfiguredEngines(
+  const { configuredEngines, unverifiedEngines, enginesReady, catalog } = useConfiguredEngines(
     open,
     workspaceId,
   );
@@ -107,9 +106,9 @@ export function LaunchDialog({
     }
     if (!initialized.current && enginesReady) {
       initialized.current = true;
-      setEngines(configuredEngines.filter(isConsumerEngine));
+      setEngines(configuredEngines.filter(catalog.isObserved));
     }
-  }, [open, enginesReady, configuredEngines]);
+  }, [open, enginesReady, configuredEngines, catalog]);
   const [repetitions, setRepetitions] = useState(DEFAULT_REPETITIONS);
   const markets = useProjectMarkets(projectId, workspaceId, open);
   // The default market alone until the reader picks more.

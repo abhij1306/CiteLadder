@@ -7,6 +7,8 @@ import { vi } from 'vite-plus/test';
 import { UserMenuController } from '@/components/layout/user-menu';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { createAppQueryClient } from '@/lib/api/query-client';
+import { queryKeys } from '@/lib/api/query-keys';
+import { providerCatalogFixture } from './provider-catalog-fixture';
 import { SessionProvider } from '@/lib/auth/session-guard';
 import { ProjectSelectionProvider, type ProjectContextValue } from '@/lib/project/project-scope';
 
@@ -79,6 +81,17 @@ export function testProjectSelection(
   };
 }
 
+/**
+ * The app's query client as a screen finds it. The authenticated shell reads
+ * the engine catalogue before any screen (see `PrivateRouteLayout`), so a
+ * screen under test starts with it cached too.
+ */
+export function testQueryClient() {
+  const queryClient = createAppQueryClient();
+  queryClient.setQueryData(queryKeys.providers.catalog(), providerCatalogFixture);
+  return queryClient;
+}
+
 type ProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
   /**
    * Override the resolved workspace/project context for this render, or pass
@@ -108,7 +121,7 @@ type ProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
  * renders inside a valid context here.
  */
 export function renderWithProviders(ui: ReactElement, options?: ProvidersOptions) {
-  const queryClient = createAppQueryClient();
+  const queryClient = testQueryClient();
   const { projectSelection, initialEntries, ...renderOptions } = options ?? {};
   const selection = projectSelection === null ? null : testProjectSelection(projectSelection);
 

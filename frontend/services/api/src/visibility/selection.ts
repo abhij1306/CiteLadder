@@ -10,6 +10,7 @@
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
+import { surfaceKindOf } from '../config/providers.ts';
 import type { Database } from '../db/database.ts';
 import { timestamptz } from '../db/timestamps.ts';
 import { epochMicros, toUtc, type ParsedDatetime } from '../http/datetimes.ts';
@@ -54,7 +55,7 @@ export type RunSelection = {
 };
 
 export function isLogicalEngine(engine: string): boolean {
-  return visibility.logical_engines.includes(engine);
+  return surfaceKindOf(engine) !== null;
 }
 
 export function unknownEngine(engine: string): TrendQueryError {

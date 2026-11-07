@@ -7,6 +7,7 @@ import { providerPolicy, type Engine, type ProviderSettings } from '../providers
 import { approvedEndpoint } from '../providers/connections.ts';
 import { auditPolicy, auditSettings } from './config.ts';
 import type { AuditInput } from './inputs.ts';
+import { frozenConfiguration } from './frozen-configuration.ts';
 import { freezeCommerceContext } from '../commerce/audit-context.ts';
 import { frozenEntityMatching, projectEntityMatching } from '../analysis/entity-matching.ts';
 import { strings } from '../db/json.ts';
@@ -412,7 +413,7 @@ export async function prepareAudit(
   const panelHash = promptPanelHash(promptRows);
   const seed = parseSeed(input.random_seed);
   const brandName = brand?.name ?? project.brand_name;
-  const configuration = {
+  const configuration = frozenConfiguration({
     brand_name: brandName,
     brand_aliases: aliases.map((row) => row.alias),
     owned_domains: owned.map((row) => row.domain),
@@ -471,7 +472,7 @@ export async function prepareAudit(
           ),
         }
       : {}),
-  };
+  });
   return {
     project,
     prompts,

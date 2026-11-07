@@ -32,6 +32,7 @@ import {
   SourceName,
   sortProps,
 } from '@/components/visibility/source-cells';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { standingLabel } from '@/lib/visibility/source-pages';
 import { pageFormatBasis } from '@/lib/visibility/vocabulary';
 import type { useVisibilityFilters } from '@/lib/visibility/use-visibility-dashboard';
@@ -89,6 +90,7 @@ function domainColumns(
   sort: SortState,
   onSort: (column: string) => void,
   retrieval: SourcesData['retrieval'] | undefined,
+  engineLabel: (key: string) => string,
 ): DataTableColumn[] {
   return [
     // Every figure takes the `metric` role: a sortable header with its hint
@@ -119,6 +121,7 @@ function domainColumns(
       hint: retrievedHint(
         'Answers that read at least one page from this domain, cited or not, as a share of the answers whose engine exposes what it read.',
         retrieval,
+        engineLabel,
       ),
     },
     {
@@ -184,10 +187,11 @@ export function DomainTable({
   frame?: SourceTableFrame;
 }>) {
   const observed = retrieval?.responses ?? 0;
+  const engines = useEngineCatalog();
   return (
     <DataTable
       label="Cited domains"
-      columns={domainColumns(sort, onSort, retrieval)}
+      columns={domainColumns(sort, onSort, retrieval, engines.label)}
       minWidth="xl"
       pinFirstColumn
       rowCount={rows.length}
@@ -290,6 +294,7 @@ function urlColumns(
   sort: SortState,
   onSort: (column: string) => void,
   retrieval: SourcesData['retrieval'] | undefined,
+  engineLabel: (key: string) => string,
 ): DataTableColumn[] {
   return [
     { key: 'url', label: 'URL', width: 'lead', sort: sortProps(sort, onSort, 'key') },
@@ -321,6 +326,7 @@ function urlColumns(
       hint: retrievedHint(
         'Answers that read this URL, cited or not, among those whose engine exposes what it read.',
         retrieval,
+        engineLabel,
       ),
     },
     {
@@ -378,10 +384,11 @@ export function UrlTable({
   retrieval?: SourcesData['retrieval'];
   frame?: SourceTableFrame;
 }>) {
+  const engines = useEngineCatalog();
   return (
     <DataTable
       label="Cited URLs"
-      columns={urlColumns(sort, onSort, retrieval)}
+      columns={urlColumns(sort, onSort, retrieval, engines.label)}
       rowCount={rows.length}
       {...frame}
     >

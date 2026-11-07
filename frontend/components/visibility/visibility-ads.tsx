@@ -24,7 +24,7 @@ import {
   landingLabel,
   presenceLine,
 } from '@/lib/visibility/ads';
-import { engineLabel } from '@/lib/visibility/dashboard';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { mergedAdPages, useAds } from '@/lib/visibility/use-ads';
 import { AdOwnershipChip } from '@/components/visibility/ad-ownership-chip';
 import type { SourceFilters } from '@/components/visibility/source-rows';
@@ -103,6 +103,7 @@ function AdsState({
   engines?: VisibilityAdsResponse['engines'];
 }>) {
   const copy = adsStateCopy(state);
+  const { label: engineLabel } = useEngineCatalog();
   // One state box at the shared footprint: each engine's applicability is
   // part of the same sentence, not a footer that grows the box.
   const applicability = engines
@@ -120,6 +121,7 @@ function AdsState({
 }
 
 function EngineApplicability({ engines }: Readonly<{ engines: VisibilityAdsResponse['engines'] }>) {
+  const { label: engineLabel } = useEngineCatalog();
   if (!engines.length) return null;
   return (
     <Inline as="ul" gap="meta" className={textRole('caption', 'text-ink-muted')}>

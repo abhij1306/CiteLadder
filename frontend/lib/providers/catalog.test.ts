@@ -7,19 +7,17 @@ import { describe, expect, it } from 'vite-plus/test';
 import type { ProviderConnection } from '@citeladder/contracts';
 
 import {
-  ENGINE_LABELS,
-  ENGINE_ORDER,
   TRANSPORT_LABELS,
   buildEngineCards,
   buildProviderGroups,
   connectionForTransport,
-  engineLabel,
   isConfigured,
   isVerified,
   mergeRoutePayload,
   transportForEngine,
   transportLabel,
 } from './catalog';
+import { engineCatalog } from './engines';
 import { providerCatalogFixture } from '@/test/provider-catalog-fixture';
 
 /**
@@ -45,18 +43,36 @@ function connection(overrides: Partial<ProviderConnection> = {}): ProviderConnec
   } as ProviderConnection;
 }
 
-describe('catalog labels', () => {
-  it('labels every engine in the display order', () => {
-    for (const engine of ENGINE_ORDER) {
-      expect(ENGINE_LABELS[engine]).toBeTruthy();
-      expect(engineLabel(engine)).toBe(ENGINE_LABELS[engine]);
-    }
+describe('engine catalogue', () => {
+  const engines = engineCatalog(providerCatalogFixture as never);
+
+  it('orders and labels engines as the catalogue serves them', () => {
+    expect(engines.order.map((engine) => [engine, engines.label(engine)])).toEqual([
+      ['chatgpt_search', 'ChatGPT Search'],
+      ['gemini_consumer', 'Gemini'],
+      ['chatgpt', 'ChatGPT API'],
+      ['gemini', 'Gemini API'],
+      ['claude', 'Claude API'],
+      ['google_ai_overview', 'Google AI Overview'],
+    ]);
   });
 
-  it('falls back to the raw key for an unknown engine', () => {
+  it('falls back to the raw key for an engine the catalogue does not list', () => {
     // A new backend engine must render as its key rather than "undefined".
-    expect(engineLabel('perplexity')).toBe('perplexity');
-    expect(engineLabel('')).toBe('');
+    expect(engines.label('perplexity')).toBe('perplexity');
+    expect(engineCatalog(undefined).label('chatgpt')).toBe('chatgpt');
+  });
+
+  it('tells observed surfaces from asked engines by their route', () => {
+    expect(engines.order.filter(engines.isObserved)).toEqual([
+      'chatgpt_search',
+      'gemini_consumer',
+      'google_ai_overview',
+    ]);
+    expect(engines.order.filter(engines.isSearchSurface)).toEqual(['google_ai_overview']);
+    expect(engines.modelLabel('chatgpt', 'gpt-6.1-terra')).toBe('gpt-6.1-terra');
+    expect(engines.modelLabel('chatgpt_search', 'chat_gpt-llm-scraper')).toBeNull();
+    expect(engines.modelLabel('uncatalogued', 'some-model')).toBeNull();
   });
 
   it('labels known transports and falls back for unknown ones', () => {
@@ -154,24 +170,7 @@ describe('mergeRoutePayload', () => {
 });
 
 describe('buildProviderGroups', () => {
-  const catalog = {
-    ...providerCatalogFixture,
-    engines: [
-      ...providerCatalogFixture.engines,
-      ...(['chatgpt_search', 'gemini_consumer'] as const).map((logical_engine) => ({
-        logical_engine,
-        routes: [
-          {
-            transport_provider: 'dataforseo',
-            transport_model: `${logical_engine}-scraper`,
-            retrieval_enabled: null,
-            reasoning_effort: null,
-            surface_kind: 'llm_scraper',
-          },
-        ],
-      })),
-    ],
-  } as unknown as Parameters<typeof buildEngineCards>[0];
+  const catalog = providerCatalogFixture as unknown as Parameters<typeof buildEngineCards>[0];
 
   it('asks for each credential once, with every engine it measures', () => {
     const groups = buildProviderGroups(buildEngineCards(catalog));
@@ -192,9 +191,15 @@ describe('buildProviderGroups', () => {
   });
 
   it('omits an engine the catalog publishes no route for', () => {
-    const groups = buildProviderGroups(buildEngineCards(providerCatalogFixture as never));
+    const withoutScrapers = {
+      ...providerCatalogFixture,
+      engines: providerCatalogFixture.engines.filter(
+        (engine) => engine.routes[0]?.surface_kind !== 'llm_scraper',
+      ),
+    };
+    const groups = buildProviderGroups(buildEngineCards(withoutScrapers as never));
 
-    // The fixture has no consumer-app routes: DataForSEO measures only AIO.
+    // Without consumer-app routes, DataForSEO measures only AIO.
     expect(groups.find((group) => group.transport === 'dataforseo')?.engines).toHaveLength(1);
     expect(transportForEngine(groups, 'chatgpt_search')).toBeNull();
   });

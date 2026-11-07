@@ -32,12 +32,8 @@ import {
   stringUrlCodec,
   useUrlState,
 } from '@/lib/navigation/url-state';
-import {
-  rangeToFrom,
-  TREND_ENGINES,
-  type TrendGranularity,
-  type TrendRange,
-} from '@/lib/visibility/trends';
+import { logicalEngineSchema } from '@citeladder/contracts/providers';
+import { rangeToFrom, type TrendGranularity, type TrendRange } from '@/lib/visibility/trends';
 
 export { EVIDENCE_LIMIT } from '@/lib/config/operational';
 
@@ -54,7 +50,8 @@ const tabCodec = stringUrlCodec(
   VISIBILITY_TABS.map(({ id }) => id),
   'trends' as VisibilityTab,
 );
-const engineCodec = stringUrlCodec(['all', ...TREND_ENGINES], 'all');
+// The URL accepts any engine the wire contract names; the toolbar offers the catalogue's.
+const engineCodec = stringUrlCodec(['all', ...logicalEngineSchema.options], 'all');
 const rangeCodec = stringUrlCodec<TrendRange>(['all', '30d', '90d', '1y'], '90d');
 const granularityCodec = stringUrlCodec<TrendGranularity>(['run', 'day', 'week', 'month'], 'run');
 

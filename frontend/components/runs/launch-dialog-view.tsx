@@ -12,7 +12,7 @@ import { Select } from '@/components/ui/select';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import type { LogicalEngine, Prompt, PromptSet } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
-import { ENGINE_LABELS, ENGINE_ORDER, isConsumerEngine } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import {
   batchLabel,
   clampRepetitions,
@@ -262,6 +262,7 @@ export function LaunchDialogView({
   promptSelectionLabel?: string;
   selectionReady: boolean;
 }>) {
+  const catalog = useEngineCatalog();
   const noEngines = !configuredEngines.length;
   const selected = new Set(engines);
   return (
@@ -300,7 +301,7 @@ export function LaunchDialogView({
             <Stack gap="item">
               <p className="type-body">
                 {unverifiedEngines.length
-                  ? `A key is stored for ${unverifiedEngines.map((engine) => ENGINE_LABELS[engine]).join(', ')}, but it has not passed a connection test yet. Test it to launch an audit with it.`
+                  ? `A key is stored for ${unverifiedEngines.map(catalog.label).join(', ')}, but it has not passed a connection test yet. Test it to launch an audit with it.`
                   : 'No configured engines. Connect a provider to launch an audit.'}
               </p>
               <div>
@@ -317,8 +318,9 @@ export function LaunchDialogView({
             <Stack key={String(consumer)} gap="item">
               <p className={textRole('label')}>{consumer ? 'Consumer experiences' : 'APIs'}</p>
               <Inline className="flex-wrap">
-                {ENGINE_ORDER.filter((engine) => isConsumerEngine(engine) === consumer).map(
-                  (engine) => (
+                {catalog.order
+                  .filter((engine) => catalog.isObserved(engine) === consumer)
+                  .map((engine) => (
                     <Button
                       key={engine}
                       variant="secondary"
@@ -330,13 +332,12 @@ export function LaunchDialogView({
                       }
                     >
                       {configuredEngines.includes(engine) ? null : <Icon icon={Plus} />}
-                      {ENGINE_LABELS[engine]}
+                      {catalog.label(engine)}
                       {configuredEngines.includes(engine) ? null : (
                         <span className="sr-only">, not connected</span>
                       )}
                     </Button>
-                  ),
-                )}
+                  ))}
               </Inline>
             </Stack>
           ))}

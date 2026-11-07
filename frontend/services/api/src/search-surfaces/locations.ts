@@ -12,11 +12,31 @@ import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/market
 import { z } from 'zod';
 
 import reference from '../config/dataforseo-locations.json' with { type: 'json' };
+import { ConfigError } from '../config/config-error.ts';
+import { dataforseo, enginesOfKind } from '../config/providers.ts';
 
-export const SEARCH_SURFACES = ['google_ai_overview', 'chatgpt_search', 'gemini_consumer'] as const;
-export type SearchSurface = (typeof SEARCH_SURFACES)[number];
-const surfaces: readonly string[] = SEARCH_SURFACES;
-export const isSearchSurface = (value: string): value is SearchSurface => surfaces.includes(value);
+const locationPaths = dataforseo.constants.locations_paths;
+/** A routed engine DataForSEO observes: one with a DataForSEO locations list. */
+export type SearchSurface = keyof typeof locationPaths;
+const hasLocationPaths = (engine: string): engine is SearchSurface =>
+  Object.hasOwn(locationPaths, engine);
+const observedEngines: readonly string[] = enginesOfKind('search_ai', 'llm_scraper');
+/**
+ * The observed surfaces: the provider routes whose surface kind is observed,
+ * in the reviewed locations file's order.
+ */
+export const searchSurfaces: readonly SearchSurface[] = Object.keys(locationPaths)
+  .filter(hasLocationPaths)
+  .filter((surface) => observedEngines.includes(surface));
+if (
+  searchSurfaces.length !== observedEngines.length ||
+  searchSurfaces.length !== Object.keys(locationPaths).length
+)
+  throw new ConfigError(
+    'Every observed provider route needs exactly one DataForSEO locations list',
+  );
+export const isSearchSurface = (value: string): value is SearchSurface =>
+  hasLocationPaths(value) && searchSurfaces.includes(value);
 
 /** The DataForSEO language for a market language tag: its primary subtag (`pt-BR` is `pt`). */
 export const searchLanguageOf = (language: string) =>
@@ -29,14 +49,10 @@ const languageList = z.array(z.string().refine((code) => languages.has(code)));
 export const locationsFileSchema = z.object({
   source: z.string(),
   generated_at: z.string().nullable(),
-  languages: z.object({
-    google_ai_overview: languageList,
-    chatgpt_search: languageList,
-    gemini_consumer: languageList,
-  }),
+  languages: z.record(z.enum(searchSurfaces), languageList),
   countries: z.record(
     z.string().refine((code) => countries.has(code), 'Not a market country'),
-    z.object({ location_code: z.int().positive(), surfaces: z.array(z.enum(SEARCH_SURFACES)) }),
+    z.object({ location_code: z.int().positive(), surfaces: z.array(z.enum(searchSurfaces)) }),
   ),
 });
 export type LocationsFile = z.infer<typeof locationsFileSchema>;

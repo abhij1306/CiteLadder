@@ -30,7 +30,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
-import { ENGINE_LABELS } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
 import { schedulePauseReason } from '@/lib/runs/status';
 
@@ -83,7 +83,7 @@ function WorkspaceSchedules({
   const [cadence, setCadence] = useState<AuditScheduleCadence>('weekly');
   const [intervalMinutes, setIntervalMinutes] = useState('60');
   // Only engines with a tested connection can run; until someone picks, the first of them.
-  const { configuredEngines, enginesReady } = useConfiguredEngines(true, workspaceId);
+  const { configuredEngines, enginesReady, catalog } = useConfiguredEngines(true, workspaceId);
   const [picked, setPicked] = useState<LogicalEngine[] | null>(null);
   const engines = (picked ?? configuredEngines.slice(0, 1)).filter((engine) =>
     configuredEngines.includes(engine),
@@ -113,7 +113,12 @@ function WorkspaceSchedules({
       });
     },
   });
-  const canCreate = !createMutation.isPending && scheduleReady(promptSetId, engines, marketIds);
+  // The engine choices come from the catalogue; until it loads none are shown,
+  // so nothing may be scheduled against an engine the user cannot see.
+  const canCreate =
+    !createMutation.isPending &&
+    catalog.order.length > 0 &&
+    scheduleReady(promptSetId, engines, marketIds);
   const resumeMutation = useMutation({
     mutationFn: (scheduleId: string) =>
       runsApi.updateSchedule(projectId, scheduleId, { enabled: true }, { workspaceId }),
@@ -217,7 +222,7 @@ function WorkspaceSchedules({
                     {configuredEngines.map((engine) => (
                       <Checkbox
                         key={engine}
-                        label={ENGINE_LABELS[engine]}
+                        label={catalog.label(engine)}
                         checked={engines.includes(engine)}
                         onCheckedChange={() =>
                           setPicked(
@@ -325,12 +330,13 @@ function ScheduleRow({
   resuming: boolean;
   onResume: () => void;
 }>) {
+  const catalog = useEngineCatalog();
   return (
     <Inline as="li" className={ledgerItemClasses('type-body flex-wrap justify-between')}>
       <span className={textRole('emphasis', 'text-ink')}>{CADENCE_LABELS[schedule.cadence]}</span>
       {schedule.enabled ? (
         <span className="text-ink-secondary">
-          {schedule.engines.map((engine) => ENGINE_LABELS[engine] ?? engine).join(', ')} · next{' '}
+          {schedule.engines.map((engine) => catalog.label(engine)).join(', ')} · next{' '}
           {schedule.next_run_at ? (
             <DisplayTime value={schedule.next_run_at} />
           ) : (

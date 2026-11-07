@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { createAppQueryClient } from '@/lib/api/query-client';
+import { testQueryClient } from '@/test/render';
 import type { PromptHistory } from '@citeladder/contracts';
 
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -133,7 +133,7 @@ function history(latestStates: PromptHistory['points'][number]['answer_states'])
 function renderScreen(path = `/prompts/${PROMPT}`) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <QueryClientProvider client={createAppQueryClient()}>
+      <QueryClientProvider client={testQueryClient()}>
         <TooltipProvider>
           <Routes>
             <Route path="/prompts/:promptId" element={<PromptDetailScreen />} />

@@ -25,7 +25,8 @@ import {
 import type { Scope } from './reads.ts';
 import { runView } from './views.ts';
 import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
-import { connectionIdentity, reviewConnection } from './credentials.ts';
+import { reviewConnection } from './credentials.ts';
+import { connectionPoolIdentity } from '../providers/dataforseo-identity.ts';
 
 const error = (code: string, message: string) =>
   new ApiError(422, message, { code: asApiErrorCode(code) });
@@ -150,7 +151,7 @@ async function frozenConnection(
   encryptionKey: string,
 ) {
   const connection = await reviewConnection(trx, scope.workspace, connectionId);
-  const identity = connectionIdentity(connection, encryptionKey);
+  const identity = connectionPoolIdentity(connection, encryptionKey);
   return { connection, identity };
 }
 function assertSupportedMarket(payload: Review, location: number | null, language: string) {

@@ -5,6 +5,7 @@ import { ApiError, notFound } from '../errors.ts';
 import { policy } from '../config.ts';
 import { getLogger } from '../logging.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';
+import { surfaceKindOf } from '../providers/config.ts';
 import { ownedAuditTask, type AuditTask } from '../queue/audit-queue.ts';
 import { leasedStatuses } from '../queue/next-due.ts';
 import { auditPolicy } from './config.ts';
@@ -24,7 +25,7 @@ export function repairOwnedCompletion(db: Database, claimed: AuditTask, owner: s
     if (!locked) return false;
     const { task, audit } = locked;
     const observation =
-      task.logical_engine === 'google_ai_overview'
+      surfaceKindOf(task.logical_engine) === 'search_ai'
         ? await trx
             .selectFrom('aio_observations')
             .select(['outcome', 'error_code'])

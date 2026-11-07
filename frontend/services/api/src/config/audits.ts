@@ -41,7 +41,6 @@ export const visibility = {
   in_flight_audit_statuses: audits.constants.audit_active_statuses.filter(
     (status) => status !== audits.constants.audit_status_draft,
   ),
-  measurement_policy_key: audits.constants.measurement_policy_key,
   overview_present_outcome: dataforseo.surface.outcome_ai_overview_present,
   successful_outcomes: dataforseo.surface.successful_outcomes,
 };

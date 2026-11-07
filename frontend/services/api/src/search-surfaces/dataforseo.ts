@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import { surfaceSupports, type SearchSurface } from './locations.ts';
 import { policy, resolveSettingSpec, ConfigError } from '../config.ts';
-import { providerErrorCode } from '../models/http.ts';
-import { approvedEndpoint, basicAuthorization } from '../providers/connections.ts';
 import { type ProviderSettings } from '../providers/config.ts';
+import {
+  acceptedStatus,
+  costMicrousd,
+  dataforseoClient,
+  envelopeStatusError,
+} from '../providers/dataforseo.ts';
 import { ProviderError } from '../providers/errors.ts';
-import { round } from '../numbers.ts';
-import { boundedJson } from '../providers/response.ts';
 
 export const searchPolicy = policy.dataforseo;
 export type SearchEngine = SearchSurface;
@@ -24,7 +26,7 @@ export type SearchRequest = {
 const providerTaskSchema = z.looseObject({
   id: z.string().nullable().optional(),
   status_code: z.number().int(),
-  cost: z.number().nonnegative().nullable().optional(),
+  cost: z.unknown().optional(),
   result: z.array(z.unknown()).nullable().optional(),
   data: z.record(z.string(), z.unknown()).optional(),
 });
@@ -56,10 +58,16 @@ export function searchSettings(env: Record<string, string | undefined> = process
   );
   return { timeoutSeconds, recoveryDeadlineHours, accountPauseMinutes };
 }
-export function providerCharge(cost: unknown): number | null {
-  if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0) return null;
-  const result = round(cost * searchPolicy.microusd_per_usd, 0);
-  return Number.isSafeInteger(result) ? result : null;
+/** A consumer-app surface's DataForSEO product and request settings, frozen with each task. */
+export function scraperConfiguration(engine: string) {
+  const products: Record<string, string | undefined> = searchPolicy.scraper.products;
+  const settings: Record<string, Record<string, unknown> | undefined> =
+    searchPolicy.scraper.request_settings;
+  const product = products[engine],
+    requestSettings = settings[engine];
+  if (!product || !requestSettings)
+    throw new ConfigError(`Scraper surface ${engine} has no DataForSEO product`);
+  return { provider_product: product, request_settings: requestSettings };
 }
 function providerPath(
   engine: SearchEngine,
@@ -104,17 +112,8 @@ export function searchPayload(engine: SearchEngine, input: SearchRequest) {
       }
     : { ...input.request_settings, ...market };
 }
-function rejectStatus(status: number) {
-  const c = searchPolicy.constants;
-  if (status === c.status_unauthorized) return new ProviderError('auth_failure');
-  // A paused, unfunded or unsubscribed account refuses every request until it is restored.
-  if (c.account_unavailable_status_codes.includes(status))
-    return new ProviderError(c.error_account_unavailable);
-  return new ProviderError('client_error');
-}
 function requireAccepted(envelope: Envelope) {
-  if (!searchPolicy.constants.accepted_submission_status_codes.includes(envelope.status_code))
-    throw rejectStatus(envelope.status_code);
+  if (!acceptedStatus(envelope.status_code)) throw envelopeStatusError(envelope.status_code);
 }
 
 /** No internal retries. Paid POST, free retrieval and reconciliation are separate operations. */
@@ -125,58 +124,23 @@ export function createDataforseoClient(
   send: typeof fetch = globalThis.fetch,
   externalSignal?: AbortSignal,
 ) {
-  let pair: { login: string; password: string };
-  try {
-    pair = z
-      .object({ login: z.string().min(1), password: z.string().min(1) })
-      .parse(JSON.parse(credential.secret));
-  } catch {
-    throw new ProviderError('auth_failure');
-  }
-  const base = approvedEndpoint('dataforseo', credential.base_url, providerSettings);
-  const maxBytes = Number(
-    resolveSettingSpec(searchPolicy.settings.max_response_bytes, process.env),
+  const transport = dataforseoClient(
+    { secret: credential.secret, baseUrl: credential.base_url },
+    {
+      settings: providerSettings,
+      timeoutSeconds,
+      maxResponseBytes: Number(
+        resolveSettingSpec(searchPolicy.settings.max_response_bytes, process.env),
+      ),
+      send,
+      ...(externalSignal ? { signal: externalSignal } : {}),
+    },
   );
-  const authorization = basicAuthorization(pair);
-  async function call(
-    path: string,
-    payload?: unknown,
-    timeout = timeoutSeconds,
-  ): Promise<Envelope> {
-    const signal = AbortSignal.any([
-      AbortSignal.timeout(timeout * 1000),
-      ...(externalSignal ? [externalSignal] : []),
-    ]);
-    let response: Response;
-    try {
-      response = await send(`${base}${path}`, {
-        method: payload === undefined ? 'GET' : 'POST',
-        headers: { authorization, 'content-type': 'application/json' },
-        signal,
-        redirect: 'error',
-        ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
-      });
-    } catch {
-      throw new ProviderError(signal.aborted ? 'timeout' : 'connection', true);
-    }
-    if (!response.ok) {
-      await response.body?.cancel();
-      throw new ProviderError(
-        providerErrorCode(response.status),
-        response.status === 429 || response.status >= 500,
-      );
-    }
-    let responsePayload: unknown;
-    try {
-      responsePayload = await boundedJson(response, maxBytes, signal);
-      const status = z.object({ status_code: z.number().int() }).parse(responsePayload).status_code;
-      if (!searchPolicy.constants.accepted_submission_status_codes.includes(status))
-        throw rejectStatus(status);
-      return envelopeSchema.parse(responsePayload);
-    } catch (error) {
-      if (error instanceof ProviderError) throw error;
-      throw new ProviderError(signal.aborted ? 'timeout' : 'parse_error', signal.aborted);
-    }
+  /** The shared envelope, read with the task shape search surfaces rely on. */
+  async function call(path: string, payload?: unknown, timeout?: number): Promise<Envelope> {
+    const parsed = envelopeSchema.safeParse(await transport.call(path, payload, timeout));
+    if (!parsed.success) throw new ProviderError('parse_error');
+    return parsed.data;
   }
   return {
     async submit(engine: SearchEngine, input: SearchRequest) {
@@ -195,11 +159,10 @@ export function createDataforseoClient(
       requireAccepted(envelope);
       const task = envelope.tasks?.[0];
       if (!task) throw new SubmissionUncertain();
-      if (!searchPolicy.constants.accepted_submission_status_codes.includes(task.status_code))
-        throw rejectStatus(task.status_code);
+      if (!acceptedStatus(task.status_code)) throw envelopeStatusError(task.status_code);
       const submission = {
         taskId: task.id?.trim() || null,
-        chargeMicrousd: providerCharge(task.cost),
+        chargeMicrousd: costMicrousd(task.cost),
       };
       if (!submission.taskId) throw new SubmissionUncertain(submission);
       return { ...submission, taskId: submission.taskId, envelope };

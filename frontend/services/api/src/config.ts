@@ -102,7 +102,6 @@ export const policy = {
   },
   opportunity: {
     ...opportunityDefaults,
-    measurement_policy_key: audits.constants.measurement_policy_key,
     opportunities: { ...opportunities },
     actions: { ...actions },
     earned_actions: earnedActions,

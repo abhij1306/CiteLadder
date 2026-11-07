@@ -5,7 +5,7 @@ import {
   releaseCapacity,
   type CapacityRequest,
 } from '../src/providers/capacity.ts';
-import { dataforseoAccountIdentity } from '../src/providers/dataforseo-identity.ts';
+import { connectionPoolIdentity } from '../src/providers/dataforseo-identity.ts';
 import { createSecretCipher } from '../src/integrations/fernet.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditRuntime } from '../src/audits/config.ts';
@@ -149,16 +149,22 @@ describe('DataForSEO account identity compatibility', () => {
       'db2d32a0ea9b0bb27db6abc634da419cabcb84cb0864ac7833ada2873219c432',
     ],
   ];
+  const byok = (encrypted: string) => ({
+    credential_source: 'byok',
+    transport_provider: 'dataforseo',
+    platform_credential_ref: '',
+    api_key_encrypted: encrypted,
+  });
   it('retains the opaque pool through case normalization, Unicode and password rotation', () => {
     for (const [login, identity] of vectors)
       for (const password of ['old-password', 'rotated-password'])
         expect(
-          dataforseoAccountIdentity(cipher.encrypt(JSON.stringify({ login, password })), key),
+          connectionPoolIdentity(byok(cipher.encrypt(JSON.stringify({ login, password }))), key),
         ).toBe(identity);
   });
   it('refuses malformed stored credentials with a safe error', () => {
     const corrupt = cipher.encrypt('a-sensitive-credential-value');
-    expect(() => dataforseoAccountIdentity(corrupt, key)).toThrow(
+    expect(() => connectionPoolIdentity(byok(corrupt), key)).toThrow(
       'Stored DataForSEO credential is unreadable',
     );
   });

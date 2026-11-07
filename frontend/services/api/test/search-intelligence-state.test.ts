@@ -302,6 +302,17 @@ describe('durable paid acquisition boundaries', () => {
     });
     expect((await remote.state.run().executeTakeFirst())?.error_code).toBe('auth_failure');
   });
+  it('stops the run when the provider account refuses every request', async () => {
+    const t = await run(),
+      sent = dispatched(await t.state.prepare(t.plans[0]!, 0));
+    await t.state.dispatch(sent);
+    expect(
+      await t.state.fail(sent, new ProviderError('provider_account_unavailable')),
+    ).toMatchObject({ stop: true, wait: null });
+    expect((await t.state.run().executeTakeFirst())?.error_code).toBe(
+      'provider_account_unavailable',
+    );
+  });
   it('recovers a saved response with exact row provenance and settles it once', async () => {
     const t = await run(),
       plan = t.plans[0]!,

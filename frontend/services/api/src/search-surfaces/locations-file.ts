@@ -10,7 +10,7 @@ import { compareText } from '../text-order.ts';
 
 import {
   locationsFileSchema,
-  SEARCH_SURFACES,
+  searchSurfaces,
   searchLanguageOf,
   type LocationsFile,
   type SearchSurface,
@@ -68,19 +68,17 @@ export function buildLocationsFile(
   lists: Record<SearchSurface, SurfaceLists>,
   generatedAt: string,
 ): LocationsFile {
-  const languages = {
-    google_ai_overview: offeredLanguages(lists.google_ai_overview),
-    chatgpt_search: offeredLanguages(lists.chatgpt_search),
-    gemini_consumer: offeredLanguages(lists.gemini_consumer),
-  };
+  const languages = new Map(
+    searchSurfaces.map((surface) => [surface, offeredLanguages(lists[surface])]),
+  );
   const countries: LocationsFile['countries'] = {};
   for (const { value: country } of [...MARKET_COUNTRIES].sort((a, b) =>
     compareText(a.value, b.value),
   )) {
     const entry: LocationsFile['countries'][string] = { location_code: 0, surfaces: [] };
-    for (const surface of SEARCH_SURFACES) {
+    for (const surface of searchSurfaces) {
       const code = countryCode(lists[surface], country);
-      if (code === null || !languages[surface].length) continue;
+      if (code === null || !languages.get(surface)?.length) continue;
       if (entry.location_code && entry.location_code !== code)
         throw new Error(`Surfaces disagree on the location code for ${country}`);
       entry.location_code = code;
@@ -91,7 +89,7 @@ export function buildLocationsFile(
   return locationsFileSchema.parse({
     source: 'DataForSEO locations and languages lists, fetched by `pnpm dataforseo:locations`.',
     generated_at: generatedAt,
-    languages,
+    languages: Object.fromEntries(languages),
     countries,
   });
 }

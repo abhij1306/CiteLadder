@@ -4,14 +4,16 @@ import { useMemo } from 'react';
 import { providersApi } from '@/lib/api/providers';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { LogicalEngine } from '@citeladder/contracts';
-import { ENGINE_ORDER, isConfigured, isVerified } from '@/lib/providers/catalog';
+import { isConfigured, isVerified } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 
 /**
  * The engines an audit can measure, from the workspace's own provider routes:
  * `configuredEngines` passed a connection test, `unverifiedEngines` hold a key
- * that has not passed one yet.
+ * that has not passed one yet. Both follow the catalogue's display `order`.
  */
 export function engineAvailability(
+  order: readonly LogicalEngine[],
   connections: Awaited<ReturnType<typeof providersApi.listConnections>> | undefined,
 ) {
   const verified = new Set<LogicalEngine>();
@@ -25,8 +27,8 @@ export function engineAvailability(
     }
   }
   return {
-    configuredEngines: ENGINE_ORDER.filter((engine) => verified.has(engine)),
-    unverifiedEngines: ENGINE_ORDER.filter((engine) => stored.has(engine) && !verified.has(engine)),
+    configuredEngines: order.filter((engine) => verified.has(engine)),
+    unverifiedEngines: order.filter((engine) => stored.has(engine) && !verified.has(engine)),
   };
 }
 
@@ -37,6 +39,14 @@ export function useConfiguredEngines(enabled: boolean, workspaceId: string | nul
     queryFn: ({ signal }) => providersApi.listConnections({ signal, workspaceId }),
     enabled: enabled && workspaceId !== null,
   });
-  const engines = useMemo(() => engineAvailability(connectionsQuery.data), [connectionsQuery.data]);
-  return { ...engines, enginesReady: connectionsQuery.isSuccess };
+  const catalog = useEngineCatalog();
+  const engines = useMemo(
+    () => engineAvailability(catalog.order, connectionsQuery.data),
+    [catalog.order, connectionsQuery.data],
+  );
+  return {
+    ...engines,
+    catalog,
+    enginesReady: catalog.order.length > 0 && connectionsQuery.isSuccess,
+  };
 }

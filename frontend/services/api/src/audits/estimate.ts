@@ -4,7 +4,7 @@ import { auditEstimateRequestSchema } from '@citeladder/contracts/audit-requests
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { auditRuntime, type AuditRuntime } from './config.ts';
-import { providerPolicy } from '../providers/config.ts';
+import { providerPolicy, surfaceKindOf } from '../providers/config.ts';
 import { resolveMarkets } from '../projects/markets.ts';
 import { searchContext } from '../search-surfaces/locations.ts';
 import { marketEngines } from './freeze.ts';
@@ -91,7 +91,8 @@ export async function estimateAudit(
         execution_count: executions,
         pricing_version: costPolicy.pricing_version,
       };
-      if (route.transport_provider === 'dataforseo')
+      // An observed surface has no tokens or search calls to estimate.
+      if (surfaceKindOf(engine) !== 'llm')
         return {
           ...common,
           retrieval_enabled: null,
@@ -135,7 +136,7 @@ export async function estimateAudit(
     execution_count: engines.reduce((sum, engine) => sum + engine.execution_count, 0),
     maximum_attempt_count: attempts,
     maximum_wall_clock_seconds: Math.ceil(
-      input.engines.some((engine) => ['chatgpt_search', 'gemini_consumer'].includes(engine))
+      input.engines.some((engine) => surfaceKindOf(engine) === 'llm_scraper')
         ? runtime.search.recoveryDeadlineHours * 3600
         : (attempts * settings.audit_timeout_seconds) / Math.max(1, settings.worker_concurrency),
     ),

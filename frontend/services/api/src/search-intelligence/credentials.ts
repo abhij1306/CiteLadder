@@ -5,14 +5,11 @@
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import type { Selectable } from 'kysely';
 
-import { ProviderError } from '../providers/errors.ts';
 import type { Database } from '../db/database.ts';
 import type { WorkspaceScope } from '../db/workspace-scope.ts';
 import { ApiError } from '../errors.ts';
 import type { ProviderConnections, SearchIntelligenceRuns } from '../generated/db-schema.ts';
-import { createSecretCipher } from '../integrations/fernet.ts';
 import { onlyOf } from '../lists.ts';
-import { dataforseoSecretIdentity } from '../providers/dataforseo-identity.ts';
 import { si } from './requests.ts';
 
 type Connection = Selectable<ProviderConnections>;
@@ -63,21 +60,4 @@ export function runConnection(db: Database, run: Run) {
     .where('active', '=', true)
     .where('credential_revision', '=', run.connection_revision)
     .executeTakeFirst();
-}
-
-/** The connection's DataForSEO login pair as JSON; refused as an auth failure when unreadable. */
-export function connectionSecret(connection: Connection, encryptionKey: string) {
-  let secret: string | null;
-  try {
-    secret = createSecretCipher(encryptionKey).decrypt(connection.api_key_encrypted);
-  } catch {
-    secret = null;
-  }
-  if (secret === null) throw new ProviderError('auth_failure');
-  return secret;
-}
-
-/** The quota-pool identity of the connection's DataForSEO account. */
-export function connectionIdentity(connection: Connection, encryptionKey: string) {
-  return dataforseoSecretIdentity(connectionSecret(connection, encryptionKey), encryptionKey);
 }

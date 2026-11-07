@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ProviderError } from '../providers/errors.ts';
-import { providerCharge, searchPolicy, type Envelope, type SearchEngine } from './dataforseo.ts';
+import { costMicrousd } from '../providers/dataforseo.ts';
+import { searchPolicy, type Envelope, type SearchEngine } from './dataforseo.ts';
 
 export type ReconciliationState = {
   offset: number;
@@ -14,7 +15,7 @@ export type Reconciliation = {
 };
 const rowSchema = z.object({
   id: z.string().min(1),
-  cost: z.number().nonnegative().nullable().optional(),
+  cost: z.unknown().optional(),
   metadata: z.object({
     tag: z.string(),
     api: z.string().optional(),
@@ -48,7 +49,7 @@ export function reconcilePage(
         row.metadata.function !== 'llm_scraper')
     )
       continue;
-    matches[row.id] = providerCharge(row.cost);
+    matches[row.id] = costMicrousd(row.cost);
   }
   const entries = Object.entries(matches);
   if (entries.length > 1) return { state: { ...state, matches }, ambiguous: true, match: null };

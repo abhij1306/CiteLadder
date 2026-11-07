@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { inTransaction, type Database } from '../db/database.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import { ApiError, notFound } from '../errors.ts';
-import { searchPolicy } from '../search-surfaces/dataforseo.ts';
-import type { Engine } from '../providers/config.ts';
+import { scraperConfiguration, searchPolicy } from '../search-surfaces/dataforseo.ts';
+import { surfaceKindOf, type Engine } from '../providers/config.ts';
 import { auditSlots, prepareAudit } from './freeze.ts';
 import { reserveAuditCapacity, type FrozenAudit } from './admission.ts';
 import { auditEvent, transitionAudit } from './state.ts';
@@ -207,8 +207,9 @@ async function persistSnapshots(db: Database, auditId: string, plan: FrozenAudit
   return { prompts, engines: new Map(engines.map((row) => [row.logical_engine, row])) };
 }
 function frozenSearch(plan: FrozenAudit, engine: Engine) {
-  if (!['google_ai_overview', 'chatgpt_search', 'gemini_consumer'].includes(engine)) return null;
-  const scraper = engine === 'chatgpt_search' || engine === 'gemini_consumer';
+  const kind = surfaceKindOf(engine);
+  if (kind !== 'search_ai' && kind !== 'llm_scraper') return null;
+  const scraper = kind === 'llm_scraper';
   return {
     timeout_seconds: plan.searchTimeoutSeconds,
     location_code: plan.project.serp_location_code,
@@ -216,8 +217,7 @@ function frozenSearch(plan: FrozenAudit, engine: Engine) {
     device: plan.project.serp_device || searchPolicy.constants.default_device,
     ...(scraper
       ? {
-          provider_product: searchPolicy.scraper.products[engine],
-          request_settings: searchPolicy.scraper.request_settings[engine],
+          ...scraperConfiguration(engine),
           recovery_deadline_hours: plan.recoveryDeadlineHours,
         }
       : {}),

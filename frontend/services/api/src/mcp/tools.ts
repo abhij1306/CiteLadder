@@ -5,6 +5,7 @@ import { analyticsSelectionSchema } from '@citeladder/contracts/mcp-app';
 import { performanceDimensionSchema } from '@citeladder/contracts/performance';
 import { policy } from '../config.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
+import { logicalEngines } from '../config/providers.ts';
 import type { Database } from '../db/database.ts';
 import { plainJson } from '../db/json.ts';
 import { resolutionOutcome } from '../routes/demand-contracts.ts';
@@ -71,9 +72,7 @@ const crawl_id = optional(
 );
 const project = { project_id: uuid.describe('A project id that list_projects returned.') };
 const engine = optional(
-  z
-    .enum(policy.visibility.logical_engines)
-    .describe('Read one engine only; omit for every engine.'),
+  z.enum(logicalEngines).describe('Read one engine only; omit for every engine.'),
 );
 const cohort = z
   .enum(['core', 'comparison', 'all'])

@@ -18,7 +18,8 @@ import {
   provisionRoutes,
 } from '../providers/connections.ts';
 import { createConnectionInput, updateConnectionInput } from '../providers/inputs.ts';
-import { providerPolicy, providerSettings } from '../providers/config.ts';
+import { logicalEngines, providerPolicy, providerSettings } from '../providers/config.ts';
+import { engineLabel } from '../config/providers.ts';
 import { connectionStates } from '../providers/states.ts';
 import { probeConnection } from '../providers/probes.ts';
 import { defineGetRoute, definePostRoute, definePatchRoute, defineDeleteRoute } from './define.ts';
@@ -45,10 +46,11 @@ export const providerRoutes = [
           | 'google'
           | 'dataforseo'
         )[],
-        engines: Object.entries(providerPolicy.routes)
-          .sort(([a], [b]) => a.localeCompare(b))
+        engines: logicalEngines
+          .map((engine) => [engine, providerPolicy.routes[engine]] as const)
           .map(([engine, route]) => ({
-            logical_engine: engine as keyof typeof providerPolicy.routes,
+            logical_engine: engine,
+            label: engineLabel(engine),
             routes: [
               {
                 transport_provider: route.transport_provider as

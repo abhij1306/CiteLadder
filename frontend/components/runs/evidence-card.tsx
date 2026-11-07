@@ -9,7 +9,8 @@ import { QueryState } from '@/components/ui/query-state';
 import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { Label, textRole } from '@/components/ui/typography';
-import { engineLabel, productModelLabel, productTransportLabel } from '@/lib/providers/catalog';
+import { productTransportLabel } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import type { ExecutionEvidence } from '@citeladder/contracts';
 import { classificationBadgeValue, classificationLabel } from '@/lib/runs/status';
 
@@ -65,6 +66,7 @@ function EvidencePromptHeader({
   promptText?: string | null;
   promptIndex?: number;
 }>) {
+  const engines = useEngineCatalog();
   const displayPrompt =
     promptText ||
     (promptIndex !== undefined
@@ -81,12 +83,12 @@ function EvidencePromptHeader({
         <Badge>Prompt #{promptBadgeNumber}</Badge>
         <Inline className="flex-wrap">
           <Badge>
-            {engineLabel(evidence.logical_engine)}
+            {engines.label(evidence.logical_engine)}
             {transport ? ` · ${transport}` : ''}
           </Badge>
           <MeasurementContext
             retrieval={evidence.retrieval_enabled}
-            model={productModelLabel(evidence.logical_engine, evidence.transport_model)}
+            model={engines.modelLabel(evidence.logical_engine, evidence.transport_model)}
           />
         </Inline>
       </Inline>

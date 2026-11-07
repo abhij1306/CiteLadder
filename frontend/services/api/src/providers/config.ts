@@ -1,5 +1,7 @@
 import { policy, resolveSettingSpec } from '../config.ts';
 
+export { logicalEngines, surfaceKindOf } from '../config/providers.ts';
+
 export const providerPolicy = policy.providers;
 export type Engine = keyof typeof providerPolicy.routes;
 export type ProviderTransport = 'openai' | 'google' | 'anthropic' | 'dataforseo';

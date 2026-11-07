@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { MeasurementContext } from '@/components/runs/measurement-context';
-import { ENGINE_LABELS } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { marketLabel } from '@citeladder/contracts/markets';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -113,6 +113,7 @@ export function RunActions({
 }
 
 function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: boolean }>) {
+  const engines = useEngineCatalog();
   return (
     <Inline className="flex-wrap">
       <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
@@ -122,8 +123,7 @@ function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: bo
       <MeasurementContext provenance={audit.model_provenance} />
       {audit.not_applicable_engines.length ? (
         <Badge>
-          Not available in this market:{' '}
-          {audit.not_applicable_engines.map((engine) => ENGINE_LABELS[engine]).join(', ')}
+          Not available in this market: {audit.not_applicable_engines.map(engines.label).join(', ')}
         </Badge>
       ) : null}
       {polling ? (
