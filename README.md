@@ -17,13 +17,18 @@ they name, and which pages they cite. Then find out why, fix it, and measure whe
 ![MCP server](https://img.shields.io/badge/MCP-server-6E56CF?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-Node%2026-3178C6?logo=typescript&logoColor=white&style=flat-square)
 
-[Why CiteLadder](#why-citeladder) · [Quick start](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [MCP](#connect-an-ai-assistant-mcp) · [Contributing](CONTRIBUTING.md)
+[Why CiteLadder](#why-citeladder) · [Quick start](#quick-start) · [Features](#features) · [Screenshots](#screenshots) · [MCP](#connect-an-ai-assistant-mcp) · [Hosted version](https://citeladder.com) · [Docs](https://docs.citeladder.com) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
 ---
 
-CiteLadder is self-hosted (AGPL-3.0): everything stays on your machine and runs with your own keys.
+> **Don't want to run it yourself?** [CiteLadder Cloud](https://citeladder.com) is the hosted
+> version with a 7-day free trial, team workspaces and managed engine access. Product guides live at
+> [docs.citeladder.com](https://docs.citeladder.com).
+
+**Self-host or Cloud?** Self-host (this repo, AGPL-3.0) to keep everything on your machine with your own
+keys. Use [CiteLadder Cloud](https://citeladder.com) if you would rather not run anything.
 
 ## Screenshots
 
