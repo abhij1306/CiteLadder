@@ -89,15 +89,14 @@ test('the product breakpoints are desktop: and shell:, in ui and layout too', ()
   ]);
 });
 
-test('owners keep their geometry and public surfaces keep their ladder', () => {
+test('owners keep their geometry and flows keep their ladder', () => {
   const source = '<div className="gap-2 p-4 md:grid-cols-2" />';
   assert.deepEqual(layering(source, 'components/ui/card.tsx'), [
     "components/ui/card.tsx:1: md:grid-cols-2 — the product's breakpoints are desktop: and shell: [layer-breakpoint]",
   ]);
-  assert.deepEqual(layering(source, 'components/marketing/hero.tsx'), []);
-  assert.deepEqual(layering(source, 'components/auth/sign-in.tsx'), [
-    'components/auth/sign-in.tsx:1: gap-2 — geometry belongs to a components/ui organism [layer-geometry]',
-    'components/auth/sign-in.tsx:1: p-4 — geometry belongs to a components/ui organism [layer-geometry]',
+  assert.deepEqual(layering(source, 'components/onboarding/step.tsx'), [
+    'components/onboarding/step.tsx:1: gap-2 — geometry belongs to a components/ui organism [layer-geometry]',
+    'components/onboarding/step.tsx:1: p-4 — geometry belongs to a components/ui organism [layer-geometry]',
   ]);
   assert.deepEqual(layering(source, 'components/example/view.test.tsx'), []);
 });

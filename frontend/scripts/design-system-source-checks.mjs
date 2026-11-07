@@ -14,38 +14,6 @@ import {
   walk,
 } from './source-ast.mjs';
 
-const EDITORIAL_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p']);
-/** Size utilities an editorial heading or paragraph must take from its role instead. */
-const EDITORIAL_SIZES = [
-  '2xs',
-  'xs',
-  'sm',
-  'base',
-  'lg',
-  'xl',
-  '2xl',
-  '3xl',
-  '4xl',
-  '5xl',
-  'caption',
-  'body',
-  'body-sm',
-  'body-lg',
-  'lead',
-  'label',
-  'label-lg',
-  'heading',
-  'title',
-  'title-sm',
-  'display-md',
-  'display-lg',
-  'display-xl',
-  'display-2xl',
-  'stat',
-];
-const EDITORIAL_SIZE = new RegExp(
-  String.raw`(?<![\w-])text-(?:${EDITORIAL_SIZES.join('|')})(?![\w-])`,
-);
 const TOKEN_CSS = 'apps/app/src/globals.css';
 
 const LINE_TERMINATOR = /[\n\r\p{Zl}\p{Zp}]/u;
@@ -580,19 +548,6 @@ export function styleAssertionViolations(source, label) {
   return violations;
 }
 
-export function editorialTypographyViolations(source, label, ownsWebsiteEditorialCopy) {
-  if (!ownsWebsiteEditorialCopy || !label.endsWith('.tsx')) return [];
-  return jsxClassData(source, label)
-    .filter((entry) => EDITORIAL_TAGS.has(entry.tag) && EDITORIAL_SIZE.test(entry.classes))
-    .map(
-      (entry) =>
-        label +
-        ':' +
-        entry.line +
-        ': editorial headings and paragraphs must use named website roles',
-    );
-}
-
 /** Product data absence must name its state instead of rendering punctuation alone. */
 export function standalonePlaceholderViolations(source, label, ownsProductUi) {
   if (!ownsProductUi) return [];
@@ -895,7 +850,7 @@ const TEXT_ROLE_BACKGROUND_MESSAGE =
  * Radius is the system's scale and nothing else: `rounded-2xs` (2, chart bars,
  * rungs), `-xs` (6, badges, checkboxes), `-sm` (8, tabs in a track, menu
  * items), `-md` (12, buttons, inputs, code), `-lg` (14, app cards, menus,
- * dialogs), `-xl` (20, website cards, frames, the navbar) and `-full`. No
+ * dialogs), `-xl` (20, product frames) and `-full`. No
  * arbitrary value, not even a `var()`.
  *
  * This applies to every surface, not just product UI: the app, login and
@@ -1070,10 +1025,10 @@ export function tsxGeometryFindings(source, label) {
  * Atomic layering (docs/design.md §Component recipes, app geometry decision 8).
  * Geometry lives in `components/ui` (atoms, organisms, templates) and the
  * shell in `components/layout`; a feature folder composes them and chooses
- * none of its own. The website (`components/marketing`) keeps its own ladder,
- * and so do the auth and onboarding flows for breakpoints.
+ * none of its own. The auth and onboarding flows keep their own ladder for
+ * breakpoints.
  */
-const LAYERING_OWNERS = new Set(['ui', 'layout', 'marketing']);
+const LAYERING_OWNERS = new Set(['ui', 'layout']);
 const FLOW_FOLDERS = new Set(['auth', 'onboarding']);
 const LAYER_SPACING = /^-?(?:p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy])-(?:\d|px\b|\[|\()/;
 const LAYER_SIZE = /^-?(?:h|w|size)-(?:\d|px\b|\[|\()/;
@@ -1116,7 +1071,7 @@ function componentFolder(label) {
  */
 export function featureLayeringViolations(source, label) {
   const folder = componentFolder(label);
-  if (!folder || folder === 'marketing') return [];
+  if (!folder) return [];
   const feature = !LAYERING_OWNERS.has(folder);
   const product = !FLOW_FOLDERS.has(folder);
   if (!feature && !product) return [];

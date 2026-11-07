@@ -76,10 +76,10 @@ export function useProjectContext(): ProjectContextValue {
 /**
  * The active-project context, or `null` when there is no provider above.
  *
- * For the few components that render on BOTH sides of the authenticated
- * shell — the public pricing page renders the same checkout controller the
- * account screens do — where "no selection exists" is a real, renderable
- * state rather than a programming error. Everything inside the shell should
+ * For the few hooks and components that may render outside the provider
+ * (project-aware links and navigation, and tests that mount a screen alone),
+ * where "no selection exists" is a real, renderable state rather than a
+ * programming error. Everything inside the shell should
  * use `useProjectContext`, whose throw is what keeps a missing provider from
  * being mistaken for an unresolved one.
  */

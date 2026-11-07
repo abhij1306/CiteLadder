@@ -6,8 +6,8 @@ import { availabilityLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /**
- * Meter — a labelled value against a maximum on a thin bar: plan usage,
- * credits, a brand's share of answers. The label (14/20 `ink`) sits left and
+ * Meter — a labelled value against a maximum on a thin bar: prompts tracked,
+ * pages crawled, a brand's share of answers. The label (14/20 `ink`) sits left and
  * the value (14/20 `ink-secondary`, tabular) right, over a 6px `chart-grid`
  * track; `hint` says the consequence under it.
  *
@@ -81,9 +81,9 @@ export function Meter({
   /** The measured value, or null when it was not measured. */
   value: number | null;
   max?: number;
-  /** The shown and spoken value, e.g. "1,240 of 5,000 credits"; defaults to "N / max". */
+  /** The shown and spoken value, e.g. "124 of 500 prompts"; defaults to "N / max". */
   valueLabel?: string;
-  /** The consequence, e.g. "Runs pause at the limit". */
+  /** The consequence, e.g. "New prompts wait at the limit". */
   hint?: ReactNode;
   tone?: MeterTone;
 }>) {

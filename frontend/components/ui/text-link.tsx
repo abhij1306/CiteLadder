@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
  *
  *   tone `ink` (default, the app): `ink`; in a sentence a `line-control`
  *     underline that turns `ink` on hover.
- *   tone `prose` (docs, blog and legal copy): `accent-ink` with a solid
+ *   tone `prose` (long reading copy): `accent-ink` with a solid
  *     underline that thickens on hover.
  *   tone `muted` (footers, metadata): `ink-secondary`, underlined on hover.
  *

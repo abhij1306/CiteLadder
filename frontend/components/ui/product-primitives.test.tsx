@@ -197,18 +197,18 @@ describe('Meter', () => {
 
     rerender(
       <Meter
-        label="AI credits"
-        value={1240}
-        max={5000}
-        valueLabel="1,240 of 5,000 credits"
-        hint="Runs pause at the limit"
+        label="Prompts tracked"
+        value={124}
+        max={500}
+        valueLabel="124 of 500 prompts"
+        hint="New prompts wait at the limit"
       />,
     );
-    expect(screen.getByRole('meter', { name: 'AI credits' })).toHaveAttribute(
+    expect(screen.getByRole('meter', { name: 'Prompts tracked' })).toHaveAttribute(
       'aria-valuetext',
-      '1,240 of 5,000 credits',
+      '124 of 500 prompts',
     );
-    expect(screen.getByText('Runs pause at the limit')).toBeVisible();
+    expect(screen.getByText('New prompts wait at the limit')).toBeVisible();
   });
 
   it('announces an unmeasured value instead of drawing it as zero', () => {
