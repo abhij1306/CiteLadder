@@ -351,7 +351,7 @@ const CLASS_ATTRIBUTES = new Set([
 ]);
 
 /** Every JSX element's class attributes as `{ tag, classes, line }`. */
-export function jsxClassData(source, label) {
+function jsxClassData(source, label) {
   const program = parseSource(source, label);
   const lineOf = lineIndex(source);
   const bindings = staticBindings(program);

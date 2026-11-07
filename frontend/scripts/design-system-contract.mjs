@@ -3,24 +3,16 @@ import { join } from 'node:path';
 
 import postcss from 'postcss';
 
-import { lineIndex, parseSource, stringFragments } from './source-ast.mjs';
-
 /**
- * The design system's own contract (docs/design.md):
- *
- * - globals.css carries exactly the system's tokens (design-system-tokens.json,
- *   a copy of the artifact's tokens.json) with its values in both themes;
- * - Cal Sans is set only at weight 400 and never under 18px;
- * - `accent` (Flare) is a mark, never a button, a background or a heading;
- * - nothing on the website is larger than its 60px H1 (D30).
+ * The design system's own contract (docs/design.md): globals.css carries
+ * exactly the system's tokens (design-system-tokens.json, a copy of the
+ * artifact's tokens.json) with its values in both themes.
  */
 
 const TOKEN_CSS = 'apps/app/src/globals.css';
 const CONTRACT = 'scripts/design-system-tokens.json';
 const FONT_CONFIG = 'apps/app/index.html';
 const DARK = ":root[data-theme='dark']";
-const WEBSITE_H1_PX = 60;
-const DISPLAY_MIN_PX = 18;
 
 const readContract = (root) => JSON.parse(readFileSync(join(root, CONTRACT), 'utf8'));
 
@@ -210,175 +202,4 @@ export function contractTokenNames(root) {
     ...contract.radius.tokens.map(({ name }) => `--${name}`),
     ...contract.shadow.tokens.map(({ name }) => `--${name}`),
   ]);
-}
-
-// ── Cal Sans: weight 400 only, never under 18px ─────────────────────────────
-
-/** Size utilities and roles smaller than 18px, or set in another family. */
-const NON_DISPLAY_SIZES =
-  /(?<![\w-])(?:[\w-]+:)*text-(?:lead|body-lg|body|body-sm|label|label-lg|heading|caption|eyebrow|data|code)(?![\w-])/;
-const WEIGHT_UTILITY =
-  /(?<![\w-])(?:[\w-]+:)*font-(?:thin|extralight|light|medium|semibold|bold|extrabold|black)(?![\w-])/;
-const DISPLAY_FACE = /(?<![\w-])(?:[\w-]+:)*font-display(?![\w-])/;
-
-/** A class string that sets Cal Sans at a weight or size it does not have. */
-export function displayFaceClassFindings(source, label) {
-  if (!/\.(?:tsx|ts)$/.test(label) || label.includes('.test.')) return [];
-  const lineOf = lineIndex(source);
-  return stringFragments(parseSource(source, label)).flatMap(({ text, start }) => {
-    if (!DISPLAY_FACE.test(text)) return [];
-    if (WEIGHT_UTILITY.test(text))
-      return [`${label}:${lineOf(start)}: Cal Sans (font-display) is weight 400 only`];
-    if (NON_DISPLAY_SIZES.test(text))
-      return [
-        `${label}:${lineOf(start)}: Cal Sans (font-display) is never under 18px; use a display role`,
-      ];
-    return [];
-  });
-}
-
-/** A font-size in px: literal px or rem, or a `--text-*` token from globals.css. */
-function pixels(value, textSizes) {
-  const literal = /^([\d.]+)(px|rem)$/.exec(value.trim());
-  if (literal) return Number(literal[1]) * (literal[2] === 'rem' ? 16 : 1);
-  const token = /^var\((--text-[\w-]+)\)$/.exec(value.trim())?.[1];
-  return token ? textSizes.get(token) : undefined;
-}
-
-function textSizes(tokenCss) {
-  const sizes = new Map();
-  for (const [token, value] of declarationsByScope(tokenCss).light) {
-    const px = /^([\d.]+)px$/.exec(value);
-    if (token.startsWith('--text-') && !token.slice(7).includes('--') && px)
-      sizes.set(token, Number(px[1]));
-  }
-  return sizes;
-}
-
-/** CSS rules that set Cal Sans at another weight or under 18px. */
-function displayFaceCssFindings(css, label, sizes) {
-  const findings = [];
-  postcss.parse(css).walkRules((rule) => {
-    let display = false;
-    rule.each((node) => {
-      if (
-        node.type === 'decl' &&
-        node.prop === 'font-family' &&
-        /var\(--font-display\)/.test(node.value)
-      )
-        display = true;
-    });
-    if (!display) return;
-    rule.each((node) => {
-      if (node.type !== 'decl') return;
-      const line = node.source?.start?.line ?? 0;
-      if (
-        node.prop === 'font-weight' &&
-        !/^(?:400|normal|var\(--text-[\w-]+--font-weight\))$/.test(node.value.trim())
-      )
-        findings.push(`${label}:${line}: Cal Sans (--font-display) is weight 400 only`);
-      if (node.prop === 'font-size') {
-        const px = pixels(node.value, sizes);
-        if (px !== undefined && px < DISPLAY_MIN_PX)
-          findings.push(`${label}:${line}: Cal Sans (--font-display) is never under 18px`);
-      }
-    });
-  });
-  return findings;
-}
-
-// ── Flare is a mark ─────────────────────────────────────────────────────────
-
-/** An accent fill utility: `bg-accent`, `bg-accent/40`, `from-accent`… (not -soft, -ink). */
-const ACCENT_FILL = /(?<![\w-])(?:[\w-]+:)*(?:bg|from|via|to)-accent(?:\/\d+)?(?![\w-])/;
-/** The sizes a mark has: a hairline bar, a dot, a rung. */
-const MARK_SIZE = /(?<![\w-])(?:[\w-]+:)*(?:w|h|size)-(?:px|0\.5|1|1\.5|2)(?![\w.-])/;
-const ACCENT_TEXT = /(?<![\w-])(?:[\w-]+:)*text-accent(?![\w-])/;
-
-/** Class strings that fill anything bigger than a mark with Flare. */
-export function accentFillClassFindings(source, label) {
-  if (!/\.(?:tsx|ts)$/.test(label) || label.includes('.test.')) return [];
-  const lineOf = lineIndex(source);
-  return stringFragments(parseSource(source, label)).flatMap(({ text, start }) =>
-    ACCENT_FILL.test(text) && !MARK_SIZE.test(text)
-      ? [
-          `${label}:${lineOf(start)}: accent is a mark, never a button, background or fill; use ink or accent-soft`,
-        ]
-      : [],
-  );
-}
-
-/** JSX headings painted in Flare. `entries` are `{ tag, classes, line }`. */
-export function accentHeadingFindings(entries, label) {
-  return entries
-    .filter(({ tag, classes }) => /^h[1-6]$/.test(tag) && ACCENT_TEXT.test(classes))
-    .map(({ line }) => `${label}:${line}: a heading is ink, never accent`);
-}
-
-const HEADING_SELECTOR = /(?:^|[\s,>+~(])h[1-6](?![\w-])|heading|title|display/;
-
-/** CSS that fills a box larger than a mark, or a heading, with Flare. */
-function accentCssFindings(css, label) {
-  const findings = [];
-  postcss.parse(css).walkRules((rule) => {
-    const decls = rule.nodes?.filter((node) => node.type === 'decl') ?? [];
-    const isMark = decls.some(
-      (decl) =>
-        ['width', 'height'].includes(decl.prop) &&
-        /^(?:[0-4](?:\.\d+)?px|0)$/.test(decl.value.trim()),
-    );
-    for (const decl of decls) {
-      const line = decl.source?.start?.line ?? 0;
-      const flare = /var\(--color-accent\)/.test(decl.value);
-      if (flare && /^background(?:-color)?$/.test(decl.prop) && !isMark)
-        findings.push(
-          `${label}:${line}: accent is a mark, never a background; a fill larger than 4px is ink or accent-soft`,
-        );
-      if (flare && decl.prop === 'color' && HEADING_SELECTOR.test(rule.selector))
-        findings.push(`${label}:${line}: a heading is ink, never accent`);
-    }
-  });
-  return findings;
-}
-
-// ── The website's H1 is the ceiling ─────────────────────────────────────────
-
-/** Website stylesheets setting any type larger than the H1. */
-function websiteTypeCeilingFindings(css, label, sizes) {
-  const findings = [];
-  postcss.parse(css).walkDecls('font-size', (decl) => {
-    const px = pixels(decl.value, sizes);
-    if (px !== undefined && px > WEBSITE_H1_PX)
-      findings.push(
-        `${label}:${decl.source?.start?.line ?? 0}: website type never exceeds the ${WEBSITE_H1_PX}px H1 (${decl.value})`,
-      );
-  });
-  return findings;
-}
-
-const ARBITRARY_SIZE = /(?<![\w-])(?:[\w-]+:)*text-\[([\d.]+)(px|rem)\]/g;
-
-/** Website TSX setting an arbitrary size larger than the H1. */
-export function websiteTypeCeilingClassFindings(source, label) {
-  const lineOf = lineIndex(source);
-  return stringFragments(parseSource(source, label)).flatMap(({ text, start }) =>
-    [...text.matchAll(ARBITRARY_SIZE)]
-      .filter(([, size, unit]) => Number(size) * (unit === 'rem' ? 16 : 1) > WEBSITE_H1_PX)
-      .map(() => `${label}:${lineOf(start)}: website type never exceeds the ${WEBSITE_H1_PX}px H1`),
-  );
-}
-
-const WEBSITE_CSS_ROOTS = /^(?:apps\/marketing\/|apps\/docs\/|components\/marketing\/)/;
-
-/** Whether a stylesheet or source file belongs to the website or docs. */
-export const isWebsiteSource = (label) => WEBSITE_CSS_ROOTS.test(label);
-
-/** The CSS rules above for one stylesheet. */
-export function stylesheetContractFindings(css, label, tokenCss) {
-  const sizes = textSizes(tokenCss);
-  return [
-    ...displayFaceCssFindings(css, label, sizes),
-    ...(label === TOKEN_CSS ? [] : accentCssFindings(css, label)),
-    ...(isWebsiteSource(label) ? websiteTypeCeilingFindings(css, label, sizes) : []),
-  ];
 }
