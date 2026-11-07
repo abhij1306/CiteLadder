@@ -46,8 +46,6 @@ const ROUTES = [
 
 /** One control height for the product: control-md, 32 in the app (decision D11). */
 const CONTROL_HEIGHT = 32;
-/** The ThemeSwitch is the system's one control-sm atom. */
-const THEME_SWITCH_HEIGHT = 28;
 /** One badge height. */
 const BADGE_HEIGHT = 22;
 /** Text controls and tabs share one horizontal padding; icon-only controls have none. */
@@ -190,7 +188,7 @@ function measure({ route, shellMinWidth }: { route: string; shellMinWidth: numbe
   for (const element of all('[role="tab"]'))
     add('tab.padding-x', element, px(getComputedStyle(element).paddingLeft));
   for (const element of all(
-    '[data-segmented-track], [role="radiogroup"]:not([data-segmented-track] *, [data-theme-switch])',
+    '[data-segmented-track], [role="radiogroup"]:not([data-segmented-track] *)',
   )) {
     // In the icon rail the Dashboard | Agent track stands on end: one control wide.
     if (rail && element.closest('aside'))
@@ -207,8 +205,6 @@ function measure({ route, shellMinWidth }: { route: string; shellMinWidth: numbe
   // end on one line, the rule under both, scrolled or not.
   for (const element of all('[data-top-bar], [data-page-header]'))
     add('top-bar.bottom', element, element.getBoundingClientRect().bottom);
-  for (const element of all('[data-theme-switch]'))
-    add('theme-switch.height', element, element.getBoundingClientRect().height);
   for (const element of all('aside a, nav a')) {
     if (element.closest('[role="radiogroup"], [role="tablist"], [data-segmented-track]')) continue;
     if (!hasText(element)) continue;
@@ -222,12 +218,11 @@ function measure({ route, shellMinWidth }: { route: string; shellMinWidth: numbe
     add('badge.height', element, element.getBoundingClientRect().height);
   }
   // The header cluster: every control on the identity band's row, the
-  // shell's own glyphs included; the ThemeSwitch is its own role above.
+  // shell's own glyphs included.
   const identity = document.querySelector('[data-page-band="identity"]');
   if (identity && visible(identity)) {
     const band = identity.getBoundingClientRect();
     for (const element of all('button, a[role="button"]')) {
-      if (element.closest('[data-theme-switch]')) continue;
       const rect = element.getBoundingClientRect();
       if (rect.top >= band.top && rect.bottom <= band.bottom && rect.left >= band.left)
         add('header-cluster.height', element, rect.height);
@@ -580,7 +575,9 @@ async function expectOneGeometry(page: Page) {
       label: '/projects (account menu)',
       prepare: async (current) => {
         await current.getByRole('button', { name: /^Account menu/ }).click();
-        await expect(current.getByRole('radiogroup', { name: 'Theme' })).toBeVisible();
+        await expect(
+          current.getByRole('button', { name: /^Switch to (?:light|dark) theme$/ }),
+        ).toBeVisible();
       },
     })),
   );
@@ -592,7 +589,6 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'segmented.height', CONTROL_HEIGHT);
   expectOneValue(records, 'nav-row.height', CONTROL_HEIGHT);
   expectOneValue(records, 'header-cluster.height', CONTROL_HEIGHT);
-  expectOneValue(records, 'theme-switch.height', THEME_SWITCH_HEIGHT);
   expectOneValue(records, 'control.font-size', 14);
   expectOneValue(records, 'badge.height', BADGE_HEIGHT);
   expectOneValue(records, 'button.padding-x.text', TEXT_CONTROL_PADDING_X);

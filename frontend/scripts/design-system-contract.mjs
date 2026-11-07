@@ -12,14 +12,14 @@ import { lineIndex, parseSource, stringFragments } from './source-ast.mjs';
  *   a copy of the artifact's tokens.json) with its values in both themes;
  * - Cal Sans is set only at weight 400 and never under 18px;
  * - `accent` (Flare) is a mark, never a button, a background or a heading;
- * - nothing on the website is larger than its 48px H1 (D26).
+ * - nothing on the website is larger than its 60px H1 (D30).
  */
 
 const TOKEN_CSS = 'apps/app/src/globals.css';
 const CONTRACT = 'scripts/design-system-tokens.json';
 const FONT_CONFIG = 'apps/app/index.html';
 const DARK = ":root[data-theme='dark']";
-const WEBSITE_H1_PX = 48;
+const WEBSITE_H1_PX = 60;
 const DISPLAY_MIN_PX = 18;
 
 const readContract = (root) => JSON.parse(readFileSync(join(root, CONTRACT), 'utf8'));
@@ -343,7 +343,7 @@ function accentCssFindings(css, label) {
 
 // ── The website's H1 is the ceiling ─────────────────────────────────────────
 
-/** Website stylesheets setting any type larger than the 48px H1. */
+/** Website stylesheets setting any type larger than the H1. */
 function websiteTypeCeilingFindings(css, label, sizes) {
   const findings = [];
   postcss.parse(css).walkDecls('font-size', (decl) => {

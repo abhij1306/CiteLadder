@@ -53,19 +53,19 @@ test('Flare is a mark, never a fill or a heading', () => {
   ]);
 });
 
-test('website type never exceeds the 48px H1', () => {
-  const css = '.a { font-size: var(--text-display-2xl); } .b { font-size: 3.5rem; }';
+test('website type never exceeds the 60px H1', () => {
+  const css = '.a { font-size: 3.5rem; } .b { font-size: 4rem; }';
   assert.deepEqual(stylesheetContractFindings(css, 'apps/marketing/src/x.css', tokenCss), [
-    'apps/marketing/src/x.css:1: website type never exceeds the 48px H1 (3.5rem)',
+    'apps/marketing/src/x.css:1: website type never exceeds the 60px H1 (4rem)',
   ]);
   // The product is not the website: its stylesheets are judged by other rules.
   assert.deepEqual(stylesheetContractFindings(css, 'components/x.css', tokenCss), []);
   assert.deepEqual(
     websiteTypeCeilingClassFindings(
-      'const a = "text-[56px]"; const b = "text-[48px]";',
+      'const a = "text-[64px]"; const b = "text-[60px]";',
       'components/marketing/hero.tsx',
     ),
-    ['components/marketing/hero.tsx:1: website type never exceeds the 48px H1'],
+    ['components/marketing/hero.tsx:1: website type never exceeds the 60px H1'],
   );
 });
 
