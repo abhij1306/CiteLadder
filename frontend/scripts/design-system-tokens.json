@@ -600,10 +600,10 @@
       {
         "name": "shadow-press",
         "value": {
-          "light": "inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 1px #111111, 0 1px 2px rgba(17,17,17,0.24)",
-          "dark": "inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.6)"
+          "light": "inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 0 rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -6px rgba(17,17,17,0.35)",
+          "dark": "inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -2px 0 rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.6), 0 8px 24px -6px rgba(0,0,0,0.6)"
         },
-        "usage": "The primary (ink) button: a faint top highlight, an ink edge and a tight drop."
+        "usage": "The primary (ink) button, a raised key (D29): a top highlight, a bottom inner shade, a tight drop and a soft lift."
       }
     ]
   },

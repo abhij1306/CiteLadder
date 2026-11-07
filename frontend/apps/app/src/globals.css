@@ -219,9 +219,11 @@
   --shadow-pop:
     0 0 0 1px rgb(17 17 17 / 8%), 0 2px 6px rgb(17 17 17 / 6%),
     0 16px 40px -8px rgb(17 17 17 / 14%);
+  /* press (D29): a top highlight, a bottom inner shade, a tight drop and a
+     soft lift, so the primary button reads as a raised key. */
   --shadow-press:
-    inset 0 1px 0 rgb(255 255 255 / 16%), 0 0 0 1px var(--color-ink),
-    0 1px 2px rgb(17 17 17 / 24%);
+    inset 0 1px 0 rgb(255 255 255 / 35%), inset 0 -2px 0 rgb(0 0 0 / 20%),
+    0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -6px rgb(17 17 17 / 35%);
 
   /* Controls. Every interactive row in one view uses one height: 32 (D11),
      28 compact, 48 for website calls to action. `row-app` is the app's
@@ -333,7 +335,9 @@
   --shadow-xs: 0 0 0 1px rgb(255 255 255 / 8%), 0 1px 2px rgb(0 0 0 / 50%);
   --shadow-card: 0 0 0 1px rgb(255 255 255 / 7%), 0 1px 2px rgb(0 0 0 / 60%);
   --shadow-pop: 0 0 0 1px rgb(255 255 255 / 10%), 0 16px 40px rgb(0 0 0 / 60%);
-  --shadow-press: inset 0 1px 0 rgb(255 255 255 / 60%), 0 1px 2px rgb(0 0 0 / 60%);
+  --shadow-press:
+    inset 0 1px 0 rgb(255 255 255 / 60%), inset 0 -2px 0 rgb(0 0 0 / 20%),
+    0 1px 2px rgb(0 0 0 / 60%), 0 8px 24px -6px rgb(0 0 0 / 60%);
 }
 
 /* Tailwind folds a theme shadow into its own variable at build time, which
@@ -1184,4 +1188,10 @@ label {
     background: white !important;
     color: black !important;
   }
+}
+
+/* The primary button is a raised key (D29): a faint light-to-shade sheen over
+   its ink fill, under the press shadow; pressed, it drops to the edge shadow. */
+.button-key {
+  background-image: linear-gradient(rgb(255 255 255 / 14%), rgb(0 0 0 / 8%));
 }

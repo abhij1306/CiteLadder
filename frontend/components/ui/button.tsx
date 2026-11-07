@@ -23,7 +23,7 @@ const BUTTON_BASE =
 
 const BUTTON_VARIANT: Record<ButtonVariant, string> = {
   primary:
-    'bg-ink text-on-ink shadow-press not-disabled:hover:bg-ink-hover not-disabled:active:translate-y-px aria-disabled:hover:bg-ink',
+    'button-key bg-ink text-on-ink shadow-press not-disabled:hover:bg-ink-hover not-disabled:active:translate-y-px not-disabled:active:shadow-edge aria-disabled:hover:bg-ink',
   secondary:
     'bg-surface text-ink shadow-xs not-disabled:hover:bg-surface-sunken not-disabled:active:translate-y-px aria-pressed:bg-surface-sunken data-[state=open]:bg-surface-sunken',
   ghost:
