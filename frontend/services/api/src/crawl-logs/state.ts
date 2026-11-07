@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
-import { enqueueTask } from '../queue/enqueue.ts';
+import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
-import { policy } from '../config.ts';
-import { record, strings } from '../db/json.ts';
+import { strings } from '../db/json.ts';
 
 export type CrawlScope = { workspaceId: string; projectId: string };
 const dayFormats = new Map<string, Intl.DateTimeFormat>();
@@ -59,7 +58,7 @@ export async function lockCrawlState(db: Database, scope: CrawlScope) {
     .forUpdate()
     .executeTakeFirstOrThrow();
 }
-/** A queued successor is reusable; leased/running work always gets a new successor. */
+/** Rollups coalesce: queued work merges the affected reporting days; leased work gets a successor. */
 export async function enqueueRollup(
   db: Database,
   scope: CrawlScope,
@@ -79,44 +78,17 @@ export async function enqueueRollup(
     ),
     state.reporting_timezone,
   );
-  const pending = await db
-    .selectFrom('analytics_tasks')
-    .select(['id', 'payload'])
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('task_kind', '=', 'crawl_log_rollup_refresh')
-    .where('status', '=', policy.task_queue.statuses.queued)
-    .forUpdate()
-    .executeTakeFirst();
-  const reportingDates = [
-    ...new Set([...strings(record(pending?.payload).reporting_dates), ...dates]),
-  ]
-    .filter((day) => day >= floor)
-    .sort((a, b) => a.localeCompare(b));
-  if (pending) {
-    await db
-      .updateTable('analytics_tasks')
-      .set({ payload: JSON.stringify({ reporting_dates: reportingDates }) })
-      .where('workspace_id', '=', scope.workspaceId)
-      .where('project_id', '=', scope.projectId)
-      .where('id', '=', pending.id)
-      .execute();
-    return;
-  }
-  const id = await enqueueTask(db, {
+  const reportingDates = (queued: readonly string[]) =>
+    [...new Set([...queued, ...dates])]
+      .filter((day) => day >= floor)
+      .sort((a, b) => a.localeCompare(b));
+  await enqueueCoalesced(db, {
     ...scope,
     kind: 'crawl_log_rollup_refresh',
-    payload: { reporting_dates: reportingDates },
-    keyParts: [scope.projectId, randomUUID()],
+    payload: { reporting_dates: reportingDates([]) },
+    merge: (queued) => ({ reporting_dates: reportingDates(strings(queued.reporting_dates)) }),
+    delaySeconds: crawlLogs.refresh_delay_seconds,
     maxAttempts: crawlLogs.task_max_attempts,
+    now,
   });
-  if (id)
-    await db
-      .updateTable('analytics_tasks')
-      .set({
-        available_at: new Date(now.getTime() + crawlLogs.refresh_delay_seconds * 1000),
-      })
-      .where('id', '=', id)
-      .where('workspace_id', '=', scope.workspaceId)
-      .execute();
 }

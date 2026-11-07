@@ -14,7 +14,8 @@ import { persistObservedCompetitors } from './observed-competitors.ts';
 import { round } from '../numbers.ts';
 import { getLogger } from '../logging.ts';
 import { compareText } from '../text-order.ts';
-import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
+import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { persistComparisonBaselines } from '../visibility/baselines.ts';
 import { persistSourceAggregates } from '../visibility/source-aggregates.ts';
 
@@ -361,7 +362,12 @@ export function finalizeAudit(
     // surface that reads it. It runs once the run reads as measured, so later
     // runs it refreshes find it among their candidates.
     await persistComparisonBaselines(trx, { workspaceId, auditId });
-    await enqueueTrafficInsights(trx, { workspaceId, projectId: audit.project_id }, at);
+    await enqueueCoalesced(trx, {
+      ...insightsRefresh,
+      workspaceId,
+      projectId: audit.project_id,
+      now: at,
+    });
     await auditEvent(
       trx,
       auditId,

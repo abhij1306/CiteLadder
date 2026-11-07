@@ -10,7 +10,8 @@ import {
 } from '@citeladder/contracts/integrations';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { z } from 'zod';
-import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
+import { enqueueCoalesced } from '../queue/enqueue.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { readBody, readOptionalBody } from '../http/body.ts';
@@ -503,7 +504,7 @@ export const integrationRoutes = [
           .returning('project_id')
           .execute();
         for (const projectId of new Set(retired.map((row) => row.project_id)))
-          await enqueueTrafficInsights(trx, { workspaceId, projectId }); // NOSONAR -- One transaction runs one statement at a time.
+          await enqueueCoalesced(trx, { ...insightsRefresh, workspaceId, projectId }); // NOSONAR -- One transaction runs one statement at a time.
         await trx
           .insertInto('integration_events')
           .values({
@@ -543,7 +544,8 @@ export const integrationRoutes = [
           .where('id', '=', path.mapping_id)
           .where('workspace_id', '=', c.get('workspace').workspaceId)
           .execute();
-        await enqueueTrafficInsights(trx, {
+        await enqueueCoalesced(trx, {
+          ...insightsRefresh,
           workspaceId: c.get('workspace').workspaceId,
           projectId: mapping.project_id,
         });
@@ -613,7 +615,7 @@ export const integrationRoutes = [
           .where('status', '=', 'active')
           .forUpdate()
           .executeTakeFirst();
-        await enqueueTrafficInsights(trx, { workspaceId, projectId: project.id });
+        await enqueueCoalesced(trx, { ...insightsRefresh, workspaceId, projectId: project.id });
         if (existing)
           return {
             ...existing,

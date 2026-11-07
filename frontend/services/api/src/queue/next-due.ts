@@ -5,6 +5,7 @@ import type { Database } from '../db/database.ts';
 export const leasedStatuses = ['leased', 'running'] as const;
 
 type QueueTableName =
+  | 'agent_runs'
   | 'analytics_tasks'
   | 'audit_tasks'
   | 'brand_discovery_tasks'

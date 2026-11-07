@@ -23,7 +23,7 @@ import {
   selectedItemDataset,
 } from '../integrations/sync-state.ts';
 import { enqueuePostSyncProjections } from '../integrations/projections.ts';
-import { nextDueAt } from '../queue/next-due.ts';
+import { INTEGRATION_LANE, TaskQueue, type TaskFor } from '../queue/task-queue.ts';
 
 const logger = getLogger('workers.integrations');
 const statuses = policy.task_queue.statuses;
@@ -54,22 +54,31 @@ function valueDate(value: string): string {
 }
 
 type Artifact = { dataset: string; query_snapshot: unknown; row_count: number };
-type Lease = { status: string; lease_owner: string | null; lease_live: boolean | null };
-
-function ownsLease(current: Lease | undefined, owner: string): boolean {
-  return (
-    current?.status === statuses.running &&
-    current.lease_owner === owner &&
-    current.lease_live === true
-  );
-}
-
 function failureDetail(failure: unknown): string {
   try {
     return JSON.stringify(failure) ?? 'Unknown integration failure';
   } catch {
     return 'Unserializable integration failure';
   }
+}
+
+function startedEvents(trx: Database, runs: readonly TaskFor<'integration_sync_runs'>[]) {
+  return trx
+    .insertInto('integration_events')
+    .values(
+      runs.map((run) => ({
+        id: randomUUID(),
+        workspace_id: run.workspace_id,
+        connection_id: run.connection_id,
+        grant_id: null,
+        event_type: 'integration.sync_started',
+        message: 'Integration sync started',
+        payload: JSON.stringify({ sync_run_id: run.id }),
+        created_at: new Date(),
+      })),
+    )
+    .execute()
+    .then(() => undefined);
 }
 
 export class IntegrationWorker {
@@ -79,6 +88,7 @@ export class IntegrationWorker {
   readonly #settings: ReturnType<typeof integrationSettings>;
   readonly #tokenResolver: typeof freshAccessToken;
   readonly #scope?: { workspaceId: string; runId: string };
+  readonly #queue: TaskQueue<'integration_sync_runs'>;
   /** Pages this attempt committed; a deadline stop with progress is not charged. */
   #committedPages = 0;
   /** When this claim's first provider request started; null until one has. */
@@ -96,6 +106,9 @@ export class IntegrationWorker {
     this.#settings = settings;
     this.#tokenResolver = tokenResolver;
     this.#scope = scope;
+    this.#queue = new TaskQueue(db, INTEGRATION_LANE, {
+      leaseTtlSeconds: settings.lease_ttl_seconds,
+    });
   }
 
   async runOnce(signal?: AbortSignal): Promise<boolean> {
@@ -105,20 +118,7 @@ export class IntegrationWorker {
     const run = await this.#claim();
     if (!run) return false;
     const heartbeat = maintainLease(
-      () =>
-        this.#db
-          .updateTable('integration_sync_runs')
-          .set({
-            heartbeat_at: new Date(),
-            lease_expires_at: sql<Date>`clock_timestamp() + ${this.#settings.lease_ttl_seconds} * interval '1 second'`,
-            updated_at: new Date(),
-          })
-          .where('id', '=', run.id)
-          .where('lease_owner', '=', this.#owner)
-          .where('status', '=', statuses.running)
-          .where('lease_expires_at', '>', sql<Date>`clock_timestamp()`)
-          .executeTakeFirst()
-          .then((result) => result.numUpdatedRows > 0n),
+      () => this.#queue.heartbeat(run.id, this.#owner, run.workspace_id, run.attempt_count),
       this.#settings.heartbeat_interval_seconds * 1000,
       (error) => logger.exception('integration_heartbeat_failed', error, { sync_run_id: run.id }),
     );
@@ -135,94 +135,44 @@ export class IntegrationWorker {
     return true;
   }
 
-  #claim(): Promise<Run | null> {
-    return this.#db.transaction().execute(async (trx) => {
-      // Least recently served workspace first, so one workspace's backlog cannot starve another's.
-      const row = await trx
-        .selectFrom('integration_sync_runs as run')
-        .leftJoin('queue_workspace_turns as turns', (join) =>
-          join
-            .onRef('turns.workspace_id', '=', 'run.workspace_id')
-            .on('turns.queue_name', '=', 'integration_sync_runs'),
-        )
-        .selectAll('run')
-        .where('run.status', 'in', [statuses.queued, statuses.retry_wait])
-        .where('run.available_at', '<=', sql<Date>`clock_timestamp()`)
-        .whereRef('run.attempt_count', '<', 'run.max_attempts')
-        .$if(this.#scope !== undefined, (q) =>
-          q
-            .where('run.workspace_id', '=', this.#scope!.workspaceId)
-            .where('run.id', '=', this.#scope!.runId),
-        )
-        .orderBy(sql`turns.last_claimed_at asc nulls first`)
-        .orderBy('run.priority', 'desc')
-        .orderBy('run.available_at', 'asc')
-        .orderBy('run.randomized_position', 'asc')
-        .forUpdate('run')
-        .skipLocked()
-        .limit(1)
-        .executeTakeFirst();
-      if (!row) return null;
-      const claimedAt = new Date();
-      const updated = await trx
-        .updateTable('integration_sync_runs')
-        .set({
-          status: statuses.running,
-          lease_owner: this.#owner,
-          lease_expires_at: sql<Date>`clock_timestamp() + ${this.#settings.lease_ttl_seconds} * interval '1 second'`,
-          heartbeat_at: new Date(),
-          attempt_count: row.attempt_count + 1,
-          updated_at: new Date(),
-        })
-        .where('id', '=', row.id)
-        .where('status', 'in', [statuses.queued, statuses.retry_wait])
-        .returningAll()
-        .returning([
-          sql<string>`window_start::text`.as('window_start'),
-          sql<string>`window_end::text`.as('window_end'),
-        ])
-        .executeTakeFirst();
-      if (updated) {
-        await trx
-          .insertInto('queue_workspace_turns')
-          .values({
-            id: randomUUID(),
-            queue_name: 'integration_sync_runs',
-            workspace_id: updated.workspace_id,
-            last_claimed_at: claimedAt,
-            created_at: claimedAt,
-          })
-          .onConflict((conflict) =>
-            conflict.constraint('uq_queue_workspace_turn').doUpdateSet({
-              last_claimed_at: sql`greatest(queue_workspace_turns.last_claimed_at, ${claimedAt})`,
-            }),
-          )
-          .execute();
-        await trx
-          .insertInto('integration_events')
-          .values({
-            id: randomUUID(),
-            workspace_id: updated.workspace_id,
-            connection_id: updated.connection_id,
-            grant_id: null,
-            event_type: 'integration.sync_started',
-            message: 'Integration sync started',
-            payload: JSON.stringify({ sync_run_id: updated.id }),
-            created_at: new Date(),
-          })
-          .execute();
-      }
-      return (updated ?? null) as Run | null;
+  async #claim(): Promise<Run | null> {
+    const scope = this.#scope;
+    let window: Pick<Run, 'window_start' | 'window_end'> | undefined;
+    const [row] = await this.#queue.claim({
+      owner: this.#owner,
+      where:
+        scope &&
+        ((column) =>
+          sql<boolean>`${column('workspace_id')} = ${scope.workspaceId} and ${column('id')} = ${scope.runId}`),
+      // The started event and the run's date bounds commit with the claim, so
+      // a failed read rolls the claim (and its attempt charge) back.
+      onClaimed: async (trx, claimed) => {
+        await startedEvents(trx, claimed);
+        const [run] = claimed;
+        if (!run) return;
+        // Window bounds as the session renders them: the run is read by date.
+        window = await trx
+          .selectFrom('integration_sync_runs')
+          .select([
+            sql<string>`window_start::text`.as('window_start'),
+            sql<string>`window_end::text`.as('window_end'),
+          ])
+          .where('id', '=', run.id)
+          .where('workspace_id', '=', run.workspace_id)
+          .executeTakeFirstOrThrow();
+      },
     });
+    return row && window ? { ...row, ...window } : null;
   }
 
   /** Earliest claimable run or lease expiry, so an idle runner stays for a retry, history chunk or recovery due soon. */
   nextDue(): Promise<Date | null> {
-    return nextDueAt(this.#db, {
-      table: 'integration_sync_runs',
-      claimable: [statuses.queued, statuses.retry_wait],
-      ready: sql`attempt_count < max_attempts`,
-    });
+    return this.#queue.nextDue();
+  }
+
+  /** The fenced run lock every sync write takes first. */
+  #held(db: Database, run: Run) {
+    return this.#queue.fence(db, run, this.#owner, [statuses.running]);
   }
 
   async #execute(run: Run, signal: AbortSignal): Promise<void> {
@@ -568,18 +518,7 @@ export class IntegrationWorker {
   }
 
   async #ownedTarget(db: Database, run: Run) {
-    const current = await db
-      .selectFrom('integration_sync_runs')
-      .select([
-        'status',
-        'lease_owner',
-        sql<boolean>`lease_expires_at > clock_timestamp()`.as('lease_live'),
-      ])
-      .where('id', '=', run.id)
-      .where('workspace_id', '=', run.workspace_id)
-      .forUpdate()
-      .executeTakeFirst();
-    if (!ownsLease(current, this.#owner))
+    if (!(await this.#held(db, run)))
       throw new IntegrationError('provider_api_error', 'Integration sync lease was lost');
     return activeSyncTarget(db, run);
   }
@@ -618,18 +557,7 @@ export class IntegrationWorker {
   async #finish(run: Run, failure: unknown): Promise<void> {
     const now = new Date();
     await this.#db.transaction().execute(async (trx) => {
-      const current = await trx
-        .selectFrom('integration_sync_runs')
-        .select([
-          'status',
-          'lease_owner',
-          sql<boolean>`lease_expires_at > clock_timestamp()`.as('lease_live'),
-        ])
-        .where('id', '=', run.id)
-        .where('workspace_id', '=', run.workspace_id)
-        .forUpdate()
-        .executeTakeFirst();
-      if (!ownsLease(current, this.#owner)) return;
+      if (!(await this.#held(trx, run))) return;
       if (failure === null) {
         try {
           await this.#ownedTarget(trx, run);

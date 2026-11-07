@@ -20,11 +20,10 @@ import {
 import { resolveSite } from '../projects/site-resolution.ts';
 import { FetchError, fetchWebsite } from '../safe-fetch.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
-import {
-  DiscoveryQueue,
-  type DiscoveryTask,
-  type DiscoveryTarget,
-} from '../queue/discovery-queue.ts';
+import { DISCOVERY_LANE, TaskQueue, type TaskFor } from '../queue/task-queue.ts';
+
+type DiscoveryTask = TaskFor<'brand_discovery_tasks'>;
+type DiscoveryTarget = { workspaceId: string; discoveryId: string };
 
 const cfg = policy.discovery.constants;
 const logger = getLogger('app.workers.brand_discovery_worker');
@@ -53,7 +52,7 @@ function terminalStatus(retry: boolean, error: unknown) {
   return error != null ? policy.task_queue.statuses.failed : policy.task_queue.statuses.succeeded;
 }
 export class DiscoveryWorker {
-  readonly queue: DiscoveryQueue;
+  readonly queue: TaskQueue<'brand_discovery_tasks'>;
   readonly settings: ReturnType<typeof discoverySettings>;
   readonly db: Database;
   readonly dependencies: WorkerDependencies;
@@ -63,7 +62,29 @@ export class DiscoveryWorker {
     this.settings = discoverySettings(dependencies.env);
     if (this.settings.heartbeat_interval_seconds >= this.settings.lease_seconds)
       throw new Error('Discovery heartbeat must be shorter than the lease');
-    this.queue = new DiscoveryQueue(db, this.settings.lease_seconds);
+    this.queue = new TaskQueue(db, DISCOVERY_LANE, {
+      leaseTtlSeconds: this.settings.lease_seconds,
+    });
+  }
+  /** Claim the next brand-discovery task, or `target`'s, committed before any research. */
+  async claim(owner: string, target?: DiscoveryTarget): Promise<DiscoveryTask | null> {
+    const [task] = await this.queue.claim({
+      owner,
+      kinds: [cfg.task_kind_brand_discovery],
+      where:
+        target &&
+        ((column) =>
+          sql<boolean>`${column('workspace_id')} = ${target.workspaceId} and ${column('discovery_id')} = ${target.discoveryId}`),
+    });
+    return task ?? null;
+  }
+  /** Earliest claimable time or lease expiry, so an idle runner stays for a retry or recovery due soon. */
+  nextDue(): Promise<Date | null> {
+    return this.queue.nextDue([cfg.task_kind_brand_discovery]);
+  }
+  /** The fenced task lock every discovery write takes first. */
+  #held(trx: Database, task: DiscoveryTask, owner: string) {
+    return this.queue.fence(trx, task, owner, [policy.task_queue.statuses.running]);
   }
   async runOnce(owner: string, target?: DiscoveryTarget, signal?: AbortSignal): Promise<boolean> {
     // One run's budget, matching the interactive deadline the request applies.
@@ -73,10 +94,10 @@ export class DiscoveryWorker {
     // and periodic recovery retain ownership of sweeping expired leases.
     if (!target) await recoverDiscoveryLeases(this.db);
     signal?.throwIfAborted();
-    const task = await this.queue.claim(owner, target);
+    const task = await this.claim(owner, target);
     if (!task) return false;
     const heartbeat = maintainLease(
-      () => this.queue.heartbeat(task, owner),
+      () => this.queue.heartbeat(task.id, owner, task.workspace_id),
       this.settings.heartbeat_interval_seconds * 1000,
       (error) => logger.exception('discovery_heartbeat_failed', error, { task_id: task.id }),
     );
@@ -160,9 +181,9 @@ export class DiscoveryWorker {
     site?: { url: string; domain: string },
   ) {
     await this.db.transaction().execute(async (trx) => {
-      if (!(await this.queue.lockedTask(trx, task, owner))) throw new Error('lease_lost');
+      if (!(await this.#held(trx, task, owner))) throw new Error('lease_lost');
       const row = await discoveryRow(trx, task.workspace_id, task.discovery_id, true);
-      if (!(await this.queue.lockedTask(trx, task, owner))) throw new Error('lease_lost');
+      if (!(await this.#held(trx, task, owner))) throw new Error('lease_lost');
       await trx
         .updateTable('brand_discoveries')
         .set({
@@ -187,10 +208,10 @@ export class DiscoveryWorker {
   }
   async finish(task: DiscoveryTask, owner: string, result: Result | null, error: unknown) {
     await this.db.transaction().execute(async (trx) => {
-      const held = await this.queue.lockedTask(trx, task, owner);
+      const held = await this.#held(trx, task, owner);
       if (!held) return;
       const row = await discoveryRow(trx, task.workspace_id, task.discovery_id, true);
-      if (!(await this.queue.lockedTask(trx, task, owner))) return;
+      if (!(await this.#held(trx, task, owner))) return;
       const now = new Date();
       const attempt = held.attempt_count + 1;
       const retry = retryable(error, attempt, held.max_attempts);

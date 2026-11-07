@@ -15,8 +15,8 @@ import { integrationSettings } from '../src/integrations/config.ts';
 import { createDiscovery } from '../src/projects/discovery.ts';
 import { discoveryCreate } from '../src/projects/discovery-inputs.ts';
 import { AuditQueue, type AuditClaimScope } from '../src/queue/audit-queue.ts';
-import { DiscoveryQueue } from '../src/queue/discovery-queue.ts';
 import { ANALYTICS_LANE, SITE_HEALTH_LANE, TaskQueue } from '../src/queue/task-queue.ts';
+import { DiscoveryWorker } from '../src/workers/discovery-worker.ts';
 import { IntegrationWorker } from '../src/workers/integration-worker.ts';
 import { AgentFixtures } from './agent-support.ts';
 import { auditTenant } from './audit-fixtures.ts';
@@ -147,7 +147,7 @@ function auditLane(): Lane {
 }
 
 function discoveryLane(): Lane {
-  const queue = new DiscoveryQueue(db, 120);
+  const worker = new DiscoveryWorker(db, { gateway: null, env: {} });
   const input = discoveryCreate.parse({
     brand_name: 'Acme',
     website_url: 'acme.com',
@@ -166,7 +166,7 @@ function discoveryLane(): Lane {
       return workspaceId;
     },
     async claimNext() {
-      return (await queue.claim('fairness'))?.workspace_id ?? null;
+      return (await worker.claim('fairness'))?.workspace_id ?? null;
     },
   };
 }

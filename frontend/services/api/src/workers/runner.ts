@@ -372,7 +372,7 @@ export async function runnerOwners(db: Database, config: ServiceConfig) {
         name: 'discovery',
         group: crawler,
         run: () => discovery.runOnce(owner),
-        nextDue: () => discovery.queue.nextDue(),
+        nextDue: () => discovery.nextDue(),
       },
       {
         name: 'integrations',

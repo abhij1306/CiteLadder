@@ -10,6 +10,7 @@ import type { AuditRuntime } from '../audits/config.ts';
 import { nextRunAfter } from '../audits/schedule-cadence.ts';
 import { getLogger } from '../logging.ts';
 import { ApiError } from '../errors.ts';
+import { claimDueSchedules } from '../queue/audit-queue.ts';
 
 export function schedulerSettings(env: Record<string, string | undefined> = process.env) {
   return Object.fromEntries(
@@ -19,7 +20,7 @@ export function schedulerSettings(env: Record<string, string | undefined> = proc
     ]),
   ) as Record<keyof typeof policy.audit_schedules.settings, number>;
 }
-type ScheduleClaim = { id: string; workspaceId: string; projectId: string; scheduledFor: Date };
+type ScheduleClaim = Awaited<ReturnType<typeof claimDueSchedules>>[number];
 const logger = getLogger('workers.audit_scheduler');
 export class AuditScheduler {
   readonly db: Database;
@@ -40,44 +41,11 @@ export class AuditScheduler {
     this.now = options.now ?? (() => new Date());
   }
   claimDue(at: Date, limit = this.settings.claim_batch_size): Promise<ScheduleClaim[]> {
-    return this.db.transaction().execute(async (trx) => {
-      const schedules = await trx
-        .selectFrom('audit_schedules')
-        .selectAll()
-        .where('enabled', '=', true)
-        .where('next_run_at', '<=', at)
-        .where((eb) =>
-          eb.or([
-            eb('lease_expires_at', 'is', null),
-            eb('lease_expires_at', '<=', sql<Date>`clock_timestamp()`),
-          ]),
-        )
-        .orderBy('next_run_at')
-        .orderBy('id')
-        .limit(limit)
-        .forUpdate()
-        .skipLocked()
-        .execute();
-      if (schedules.length)
-        await trx
-          .updateTable('audit_schedules')
-          .set({
-            lease_owner: this.owner,
-            lease_expires_at: sql<Date>`clock_timestamp() + ${this.settings.lease_ttl_seconds} * interval '1 second'`,
-            updated_at: at,
-          })
-          .where(
-            'id',
-            'in',
-            schedules.map((schedule) => schedule.id),
-          )
-          .execute();
-      return schedules.map((schedule) => ({
-        id: schedule.id,
-        workspaceId: schedule.workspace_id,
-        projectId: schedule.project_id,
-        scheduledFor: schedule.next_run_at!,
-      }));
+    return claimDueSchedules(this.db, {
+      owner: this.owner,
+      at,
+      limit,
+      leaseSeconds: this.settings.lease_ttl_seconds,
     });
   }
   planClaim(claim: ScheduleClaim, at = this.now()) {

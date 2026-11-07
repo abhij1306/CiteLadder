@@ -1,9 +1,7 @@
 /** Dataset-aware successor admission, inside the sync completion transaction. */
-import { sql } from 'kysely';
 import { policy } from '../config.ts';
-import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
-import { enqueueTask } from '../queue/enqueue.ts';
+import { enqueueCoalesced, enqueueTask } from '../queue/enqueue.ts';
 
 type CompletedSync = {
   id: string;
@@ -22,26 +20,13 @@ type CompletedSync = {
 async function enqueueTrafficRefresh(trx: Database, run: CompletedSync) {
   const start = run.window_start.slice(0, 10);
   const end = run.window_end.slice(0, 10);
-  await subjectXactLock(trx, `traffic_snapshot_enqueue:${run.project_id}`);
-  const pending = await trx
-    .selectFrom('analytics_tasks')
-    .select('id')
-    .where('workspace_id', '=', run.workspace_id)
-    .where('project_id', '=', run.project_id)
-    .where('task_kind', '=', 'traffic_snapshot_refresh')
-    .where('status', '=', policy.task_queue.statuses.queued)
-    .where(sql<string>`payload->>'window_start'`, '=', start)
-    .where(sql<string>`payload->>'window_end'`, '=', end)
-    // Held until this run commits, so a worker cannot claim and finish the
-    // refresh before this run's rows are visible to it.
-    .forUpdate()
-    .executeTakeFirst();
-  if (pending) return;
-  await enqueueTask(trx, {
+  await enqueueCoalesced(trx, {
     workspaceId: run.workspace_id,
     projectId: run.project_id,
     kind: 'traffic_snapshot_refresh',
     payload: { window_start: start, window_end: end, source_revision: run.id },
+    coalesceOn: ['window_start', 'window_end'],
+    delaySeconds: 0,
     keyParts: [run.project_id, start, end, run.resync_seq, run.id],
   });
 }

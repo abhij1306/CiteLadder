@@ -1,70 +1,81 @@
-import { randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { AuditTasks } from '../generated/db-schema.ts';
 import { policy } from '../config.ts';
 import { auditPolicy } from '../audits/config.ts';
 import { auditEvent, transitionAudit } from '../audits/state.ts';
-import { compareText } from '../text-order.ts';
-import { nextDueAt } from './next-due.ts';
+import { AUDIT_LANE, TaskQueue, type ClaimFilter } from './task-queue.ts';
 
 export type AuditTask = Selectable<AuditTasks>;
 const table = 'audit_tasks';
-const { claimable, statuses, terminal } = policy.task_queue;
+const { statuses } = policy.task_queue;
 
 export type AuditClaimScope = { workspaceId: string; auditId: string };
-function auditClaimStatement(
-  db: Database,
-  at: Date,
-  limit: number,
-  scope?: AuditClaimScope | AuditClaimScope[],
-) {
-  let scopes: AuditClaimScope[] = [];
-  if (Array.isArray(scope)) scopes = scope;
-  else if (scope) scopes = [scope];
-  const candidates = db
-    .selectFrom(table)
-    .select([
-      'id as task_id',
-      sql<number>`row_number() over (partition by workspace_id order by priority desc, available_at asc, randomized_position asc)`.as(
-        'workspace_position',
-      ),
-    ])
-    .where('status', 'in', claimable)
-    .where('available_at', '<=', at)
-    .$if(Boolean(scope), (query) =>
-      query.where((eb) =>
-        eb.or(
-          scopes.map(({ workspaceId, auditId }) =>
-            eb.and([eb('workspace_id', '=', workspaceId), eb('audit_id', '=', auditId)]),
+
+/** Claims only these audits' tasks, each in its own workspace. */
+function auditScope(scope: AuditClaimScope | readonly AuditClaimScope[]): ClaimFilter {
+  const scopes: readonly AuditClaimScope[] = 'auditId' in scope ? [scope] : scope;
+  return (column) =>
+    scopes.length
+      ? sql<boolean>`(${sql.join(
+          scopes.map(
+            ({ workspaceId, auditId }) =>
+              sql`(${column('workspace_id')} = ${workspaceId} and ${column('audit_id')} = ${auditId})`,
           ),
-        ),
-      ),
-    )
-    .as('candidates');
-  return (
-    db
-      .selectFrom(table)
-      .innerJoin(candidates, 'candidates.task_id', 'audit_tasks.id')
-      .leftJoin('queue_workspace_turns as turns', (join) =>
-        join
-          .on('turns.queue_name', '=', table)
-          .onRef('turns.workspace_id', '=', 'audit_tasks.workspace_id'),
+          sql` or `,
+        )})`
+      : sql<boolean>`false`;
+}
+
+/**
+ * Lease the earliest due audit schedules, committed before planning: an
+ * expired lease is due again, and a held one is skipped, so two schedulers
+ * never plan the same occurrence.
+ */
+export function claimDueSchedules(
+  db: Database,
+  options: { owner: string; at: Date; limit: number; leaseSeconds: number },
+) {
+  return db.transaction().execute(async (trx) => {
+    const schedules = await trx
+      .selectFrom('audit_schedules')
+      .selectAll()
+      .where('enabled', '=', true)
+      .where('next_run_at', '<=', options.at)
+      .where((eb) =>
+        eb.or([
+          eb('lease_expires_at', 'is', null),
+          eb('lease_expires_at', '<=', sql<Date>`clock_timestamp()`),
+        ]),
       )
-      .selectAll(table)
-      // READ COMMITTED rechecks these predicates on the locked relation after a concurrent update.
-      .where('audit_tasks.status', 'in', claimable)
-      .where('audit_tasks.available_at', '<=', at)
-      .orderBy('candidates.workspace_position')
-      .orderBy(sql`turns.last_claimed_at asc nulls first`)
-      .orderBy('audit_tasks.priority', 'desc')
-      .orderBy('audit_tasks.available_at')
-      .orderBy('audit_tasks.randomized_position')
-      .orderBy('audit_tasks.id')
-      .limit(limit)
-      .forUpdate(table)
+      .orderBy('next_run_at')
+      .orderBy('id')
+      .limit(options.limit)
+      .forUpdate()
       .skipLocked()
-  );
+      .execute();
+    if (schedules.length)
+      await trx
+        .updateTable('audit_schedules')
+        .set({
+          lease_owner: options.owner,
+          lease_expires_at: sql<Date>`clock_timestamp() + ${options.leaseSeconds} * interval '1 second'`,
+          updated_at: options.at,
+        })
+        .where(
+          'id',
+          'in',
+          schedules.map((schedule) => schedule.id),
+        )
+        .execute();
+    return schedules.map((schedule) => ({
+      id: schedule.id,
+      workspaceId: schedule.workspace_id,
+      projectId: schedule.project_id,
+      // The due filter excludes schedules without a next run.
+      scheduledFor: schedule.next_run_at ?? options.at,
+    }));
+  });
 }
 
 /** Lock order for every worker write: scoped parent audit, then the owned task. */
@@ -116,67 +127,31 @@ export function parkAuditTask(
     .execute();
 }
 
+/**
+ * The audit lane's domain side on the shared queue owner: claims are scoped
+ * to audits, and every write after the claim takes the parent audit lock
+ * first (`ownedAuditTask`).
+ */
 export class AuditQueue {
   readonly db: Database;
-  readonly leaseSeconds: number;
   readonly now: () => Date;
-  constructor(db: Database, leaseSeconds: number, now = () => new Date()) {
+  readonly #tasks: TaskQueue<'audit_tasks'>;
+  constructor(db: Database, leaseSeconds: number, now?: () => Date) {
     this.db = db;
-    this.leaseSeconds = leaseSeconds;
-    this.now = now;
+    this.now = now ?? (() => new Date());
+    this.#tasks = new TaskQueue(db, AUDIT_LANE, { leaseTtlSeconds: leaseSeconds, now });
   }
   /** The claim and fairness cursor commit before any provider dispatch. */
   claim(
     owner: string,
     limit = 1,
-    scope?: AuditClaimScope | AuditClaimScope[],
+    scope?: AuditClaimScope | readonly AuditClaimScope[],
   ): Promise<AuditTask[]> {
-    if (!Number.isSafeInteger(limit) || limit < 1) throw new Error('Invalid audit claim limit');
-    const at = this.now();
-    return this.db.transaction().execute(async (trx) => {
-      const locked = await auditClaimStatement(trx, at, limit, scope).execute();
-      if (!locked.length) return [];
-      const rows = await trx
-        .updateTable(table)
-        .set({
-          status: statuses.leased,
-          lease_owner: owner,
-          lease_expires_at: sql<Date>`clock_timestamp() + ${this.leaseSeconds} * interval '1 second'`,
-          heartbeat_at: at,
-          updated_at: at,
-        })
-        .where(
-          'id',
-          'in',
-          locked.map((task) => task.id),
-        )
-        .returningAll()
-        .execute();
-      const workspaces = [...new Set(rows.map((task) => task.workspace_id))].sort(compareText);
-      await trx
-        .insertInto('queue_workspace_turns')
-        .values(
-          workspaces.map((workspaceId) => ({
-            id: randomUUID(),
-            queue_name: table,
-            workspace_id: workspaceId,
-            last_claimed_at: at,
-            created_at: at,
-          })),
-        )
-        .onConflict((conflict) =>
-          conflict.constraint('uq_queue_workspace_turn').doUpdateSet({
-            last_claimed_at: sql`greatest(queue_workspace_turns.last_claimed_at, ${at})`,
-          }),
-        )
-        .execute();
-      const byId = new Map(rows.map((task) => [task.id, task]));
-      return locked.map((task) => byId.get(task.id)!);
-    });
+    return this.#tasks.claim({ owner, limit, where: scope && auditScope(scope) });
   }
   /** Earliest claimable time or lease expiry, so an idle runner stays for a retry, provider poll or recovery due soon. */
   nextDue(): Promise<Date | null> {
-    return nextDueAt(this.db, { table, claimable });
+    return this.#tasks.nextDue();
   }
   markRunning(claimed: AuditTask, owner: string, startTask = true) {
     const at = this.now();
@@ -218,32 +193,10 @@ export class AuditQueue {
       };
     });
   }
-  async heartbeat(task: AuditTask, owner: string) {
-    const at = this.now();
-    const result = await this.db
-      .updateTable(table)
-      .set({
-        heartbeat_at: at,
-        updated_at: at,
-        lease_expires_at: sql<Date>`clock_timestamp() + ${this.leaseSeconds} * interval '1 second'`,
-      })
-      .where('id', '=', task.id)
-      .where('workspace_id', '=', task.workspace_id)
-      .where('audit_id', '=', task.audit_id)
-      .where('lease_owner', '=', owner)
-      .where('status', 'in', [statuses.leased, statuses.running])
-      .where('lease_expires_at', '>', sql<Date>`clock_timestamp()`)
-      .executeTakeFirst();
-    return result.numUpdatedRows > 0n;
+  heartbeat(task: AuditTask, owner: string) {
+    return this.#tasks.heartbeat(task.id, owner, task.workspace_id);
   }
-  async isTerminal(task: AuditTask) {
-    const row = await this.db
-      .selectFrom(table)
-      .select('status')
-      .where('id', '=', task.id)
-      .where('audit_id', '=', task.audit_id)
-      .where('workspace_id', '=', task.workspace_id)
-      .executeTakeFirst();
-    return !row || terminal.includes(row.status);
+  isTerminal(task: AuditTask) {
+    return this.#tasks.isTerminal(task.id, task.workspace_id);
   }
 }

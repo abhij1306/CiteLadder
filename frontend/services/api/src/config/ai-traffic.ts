@@ -1,5 +1,6 @@
 import config from './ai-traffic.json' with { type: 'json' };
 import { z } from 'zod';
+import { crawlLogs } from './crawl-logs.ts';
 export const aiTraffic = z
   .object({
     formula_version: z.string().min(1),
@@ -12,3 +13,14 @@ export const aiTraffic = z
     max_timeline_items: z.number().int().positive(),
   })
   .parse(config);
+
+/**
+ * The AI Traffic insights refresh every producer requests through
+ * `enqueueCoalesced`: debounced, earliest deadline wins. Projects without GA4
+ * settle it as a no-op in the executor.
+ */
+export const insightsRefresh = {
+  kind: 'ai_traffic_insights_refresh',
+  delaySeconds: aiTraffic.refresh_delay_seconds,
+  maxAttempts: crawlLogs.task_max_attempts,
+} as const;

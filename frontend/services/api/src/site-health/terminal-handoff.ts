@@ -7,9 +7,9 @@ import {
   enqueueImplementationVerification,
   enqueueOpportunityRefresh,
 } from '../opportunities/enqueue.ts';
-import { enqueueTask } from '../queue/enqueue.ts';
+import { enqueueTask, enqueueCoalesced } from '../queue/enqueue.ts';
 import type { Crawl } from './task-fence.ts';
-import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
 
 /**
  * Enqueue analytics after change persistence, or with the crawl's own identity
@@ -24,7 +24,7 @@ export async function enqueueTerminalAnalyticsRefresh(
 ) {
   const scope = { workspaceId: crawl.workspace_id, projectId: crawl.project_id };
   const triggerKind = changeSnapshotId ? 'site_change' : 'site_crawl';
-  await enqueueTrafficInsights(db, scope);
+  await enqueueCoalesced(db, { ...insightsRefresh, ...scope });
   const triggerId = changeSnapshotId ?? crawl.id;
   await enqueueImplementationVerification(db, {
     ...scope,

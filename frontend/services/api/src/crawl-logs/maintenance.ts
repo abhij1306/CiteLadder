@@ -5,12 +5,12 @@ import { crawlers } from '../config/crawlers.ts';
 import { fetchWebsite, type WebsiteFetcher } from '../safe-fetch.ts';
 import { hash } from '../crypto-text.ts';
 import { record } from '../db/json.ts';
-import { enqueueTask } from '../queue/enqueue.ts';
+import { enqueueTask, enqueueCoalesced } from '../queue/enqueue.ts';
 import type { Database } from '../db/database.ts';
 import type { Executor } from '../queue/executor.ts';
 import { sql } from 'kysely';
 import { enqueueRollup, lockCrawlState, type CrawlScope } from './state.ts';
-import { enqueueTrafficInsights } from './insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
 import { stallQuietSources } from './stall.ts';
 import { enqueueDuePulls } from './pull.ts';
 
@@ -151,7 +151,9 @@ async function refreshDailyInsights(db: Database, now: Date, canAdmit: () => boo
   for (const scope of due.rows) {
     if (!canAdmit()) return false;
     // One project at a time keeps each enqueue inside the tick's admission budget.
-    await db.transaction().execute((trx) => enqueueTrafficInsights(trx, scope, now)); // NOSONAR
+    await db
+      .transaction()
+      .execute((trx) => enqueueCoalesced(trx, { ...insightsRefresh, ...scope, now })); // NOSONAR
   }
   if (due.rows.length < crawlLogs.sweep_batch_size) insightsSweptDay = day;
   return true;

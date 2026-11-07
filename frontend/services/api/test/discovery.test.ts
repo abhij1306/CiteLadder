@@ -7,7 +7,7 @@ import { createApp } from '../src/app.ts';
 import { completeDiscovery, createDiscovery, discoveryRow } from '../src/projects/discovery.ts';
 import { discoveryComplete, discoveryCreate } from '../src/projects/discovery-inputs.ts';
 import { FetchError, type WebsiteFetcher } from '../src/safe-fetch.ts';
-import { DiscoveryQueue } from '../src/queue/discovery-queue.ts';
+import { DISCOVERY_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { recoverDiscoveryLeases } from '../src/queue/recovery.ts';
 import { DiscoveryWorker } from '../src/workers/discovery-worker.ts';
 import {
@@ -104,20 +104,18 @@ describe('durable onboarding', () => {
     const selected = await createDiscovery(db, a.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
     const target = { workspaceId: a.workspaceId, discoveryId: selected.id };
-    expect(
-      await worker.queue.claim('foreign', { ...target, workspaceId: b.workspaceId }),
-    ).toBeNull();
+    expect(await worker.claim('foreign', { ...target, workspaceId: b.workspaceId })).toBeNull();
     // Keep the other row leased so the background claimant competes for the
     // exact interactive task rather than legitimately taking unrelated work.
-    const held = await worker.queue.claim('other-workspace', {
+    const held = await worker.claim('other-workspace', {
       workspaceId: b.workspaceId,
       discoveryId: older.id,
     });
     expect(held?.discovery_id).toBe(older.id);
     const claims = await Promise.all([
-      worker.queue.claim('interactive', target),
-      worker.queue.claim('second-tab', target),
-      worker.queue.claim('background'),
+      worker.claim('interactive', target),
+      worker.claim('second-tab', target),
+      worker.claim('background'),
     ]);
     expect(claims.filter(Boolean)).toHaveLength(1);
     const claimed = claims.find((task) => task !== null)!;
@@ -165,7 +163,7 @@ describe('durable onboarding', () => {
       .where('discovery_id', '=', selected.id)
       .executeTakeFirstOrThrow();
     expect(task).toMatchObject({ status: 'retry_wait', attempt_count: 1, lease_owner: null });
-    expect(await worker.queue.claim('too-early', target)).toBeNull();
+    expect(await worker.claim('too-early', target)).toBeNull();
     await db
       .updateTable('brand_discovery_tasks')
       .set({ available_at: new Date(0) })
@@ -303,9 +301,12 @@ describe('durable onboarding', () => {
     expect(await discoveryRow(db, second.workspaceId, completed.id)).toMatchObject({
       status: 'ready',
     });
-    const queue = new DiscoveryQueue(db, 30, () => new Date(Date.now() - 86400000));
-    expect(await queue.heartbeat(stale, 'dead-worker')).toBe(false);
-    expect(await queue.lockedTask(db, stale, 'dead-worker')).toBeUndefined();
+    const queue = new TaskQueue(db, DISCOVERY_LANE, {
+      leaseTtlSeconds: 30,
+      now: () => new Date(Date.now() - 86400000),
+    });
+    expect(await queue.heartbeat(stale.id, 'dead-worker', stale.workspace_id)).toBe(false);
+    expect(await queue.fence(db, stale, 'dead-worker')).toBeUndefined();
   });
   it('rejects completion without persisted research and overlapping competitor domains', async () => {
     const t = await tenant();
@@ -595,18 +596,17 @@ describe('durable onboarding', () => {
   it('claimers do not share a task and expired owners cannot write terminal results', async () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
-    const queue = new DiscoveryQueue(db, 30);
-    const claimed = await Promise.all([queue.claim('one'), queue.claim('two')]);
+    const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
+    const claimed = await Promise.all([worker.claim('one'), worker.claim('two')]);
     const task = claimed.find((item) => item?.discovery_id === row.id)!;
     expect(claimed.filter((item) => item?.id === task.id)).toHaveLength(1);
-    expect(await queue.heartbeat(task, task.lease_owner!)).toBe(true);
+    expect(await worker.queue.heartbeat(task.id, task.lease_owner!, task.workspace_id)).toBe(true);
     await db
       .updateTable('brand_discovery_tasks')
       .set({ lease_expires_at: new Date(Date.now() - 1) })
       .where('id', '=', task.id)
       .execute();
-    expect(await queue.heartbeat(task, task.lease_owner!)).toBe(false);
-    const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
+    expect(await worker.queue.heartbeat(task.id, task.lease_owner!, task.workspace_id)).toBe(false);
     await worker.finish(task, task.lease_owner!, null, new FetchError('site_not_found'));
     expect((await discoveryRow(db, t.workspaceId, row.id)).status).toBe('queued');
   });
@@ -614,7 +614,7 @@ describe('durable onboarding', () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
-    const task = (await worker.queue.claim('blocked-worker'))!;
+    const task = (await worker.claim('blocked-worker'))!;
     await db
       .updateTable('brand_discovery_tasks')
       .set({ lease_expires_at: new Date(Date.now() + 400) })
@@ -642,7 +642,7 @@ describe('durable onboarding', () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
-    const task = (await worker.queue.claim('retry-worker', {
+    const task = (await worker.claim('retry-worker', {
       workspaceId: t.workspaceId,
       discoveryId: row.id,
     }))!;
@@ -654,14 +654,14 @@ describe('durable onboarding', () => {
       .executeTakeFirstOrThrow();
     expect(retry).toMatchObject({ status: 'retry_wait', attempt_count: 1, lease_owner: null });
     // The runner lane waits for a retry due soon instead of idling until the tick.
-    const due = await worker.queue.nextDue();
+    const due = await worker.nextDue();
     expect(due!.getTime()).toBeLessThanOrEqual(retry.available_at.getTime());
     await db
       .updateTable('brand_discovery_tasks')
       .set({ available_at: new Date(), max_attempts: 2 })
       .where('id', '=', task.id)
       .execute();
-    const final = (await worker.queue.claim('final-worker', {
+    const final = (await worker.claim('final-worker', {
       workspaceId: t.workspaceId,
       discoveryId: row.id,
     }))!;

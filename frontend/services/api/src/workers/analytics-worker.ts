@@ -179,7 +179,7 @@ export class AnalyticsWorker {
     try {
       // Cooperative cancel at the boundary: a row that turned terminal between
       // enqueue and claim is never dispatched.
-      if (await this.#queue.isTerminal(claimed.id)) return;
+      if (await this.#queue.isTerminal(claimed.id, claimed.workspace_id)) return;
       if (!(await this.#queue.markRunning(claimed.id, this.owner, claimed.attempt_count))) return;
       started = true;
       await this.#finalize(claimed, await this.#run(claimed));
@@ -213,7 +213,10 @@ export class AnalyticsWorker {
         db: this.#db,
         maxAttempts: this.#settings.taskMaxAttempts,
         checkCancelled: async (boundary) => {
-          if (heartbeat.signal.aborted || (await this.#queue.isTerminal(claimed.id))) {
+          if (
+            heartbeat.signal.aborted ||
+            (await this.#queue.isTerminal(claimed.id, claimed.workspace_id))
+          ) {
             throw new TaskCancelledError(
               `analytics task ${claimed.id} reached a terminal status; stopping at the ${boundary} boundary`,
             );

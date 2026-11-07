@@ -25,7 +25,7 @@ import { gcpLogLine } from './gcp-entry.ts';
 import { recordVerification, verifyPullSource } from './gcp-verify.ts';
 import { ingest } from './ingest.ts';
 import { crawlLogAvailability, findLivePullSource } from './sources.ts';
-import { CHECK_HELD_STALLS, markStalled } from './stall.ts';
+import { CHECK_HELD_STALLS } from './stall.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
 
 type Source = Selectable<CrawlLogSources>;
