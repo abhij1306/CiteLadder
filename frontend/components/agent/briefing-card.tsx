@@ -32,7 +32,7 @@ export function BriefingCard({
   pending: boolean;
   disabled: boolean;
 }>) {
-  const actions = useQuery(actionsQueries.list(workspaceId, projectId));
+  const actions = useQuery(actionsQueries.list({ workspaceId, projectId }));
   const top = actions.data?.items.slice(0, AGENT_BRIEFING_ACTIONS) ?? [];
   const actionLabel = top.length === 1 ? 'Action' : 'Actions';
   const basis =

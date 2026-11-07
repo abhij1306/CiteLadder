@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,6 @@ import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { diffLines } from '@/lib/agent/diff';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { agentMutations, agentQueries, type AgentRevision } from '@/lib/api/agent';
-import { queryKeys } from '@/lib/api/query-keys';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
 
 type View = { id: string; mode: 'view' | 'compare' } | null;
@@ -39,21 +38,7 @@ export function OutputHistory({
 }>) {
   const query = useQuery(agentQueries.revisions(workspaceId, chatId, outputId, latestRevisionId));
   const [viewing, setViewing] = useState<View>(null);
-  const queryClient = useQueryClient();
-  const restore = useMutation({
-    ...agentMutations.restoreRevision(workspaceId),
-    onSuccess: async () => {
-      setViewing(null);
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agent.chat(chatId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agent.revisions(chatId),
-        }),
-      ]);
-    },
-  });
+  const restore = useMutation(agentMutations.restoreRevision(workspaceId));
 
   if (query.isError)
     return (
@@ -85,7 +70,12 @@ export function OutputHistory({
               onToggle={(mode) => toggle(revision.id, mode)}
               restoring={restore.isPending}
               canRestore={canRestore}
-              onRestore={() => restore.mutate({ chatId, outputId, revisionId: revision.id })}
+              onRestore={() =>
+                restore.mutate(
+                  { chatId, outputId, revisionId: revision.id },
+                  { onSuccess: () => setViewing(null) },
+                )
+              }
             />
           </Stack>
         ))}

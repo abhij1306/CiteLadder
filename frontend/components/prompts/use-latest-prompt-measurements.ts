@@ -12,7 +12,7 @@ import type { PromptMeasurement } from './prompt-table';
  */
 export function useLatestPromptMetrics(scope: ProjectRequestScope) {
   return useQuery({
-    ...visibilityQueries.latestPrompts(scope.workspaceId, scope.projectId),
+    ...visibilityQueries.prompts(scope),
     enabled: scope.enabled,
   });
 }

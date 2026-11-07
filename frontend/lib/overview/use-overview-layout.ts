@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
-import type { OverviewLayout, OverviewWidget } from '@citeladder/contracts/overview';
-import { projectQueries, projectsApi } from '@/lib/api/projects';
+import type { OverviewWidget } from '@citeladder/contracts/overview';
+import { projectMutations, projectQueries } from '@/lib/api/projects';
 import type { Project } from '@citeladder/contracts';
 
 /**
@@ -10,27 +10,9 @@ import type { Project } from '@citeladder/contracts';
  * failed save rolls back and refetches the layout that won.
  */
 export function useOverviewLayout(project: Project) {
-  const queryClient = useQueryClient();
-  const layoutQuery = projectQueries.overviewLayout(project.workspace_id, project.id);
-  const { queryKey } = layoutQuery;
-  const options = { workspaceId: project.workspace_id };
-  const query = useQuery(layoutQuery);
-  const mutation = useMutation({
-    mutationFn: ({ widgets, version }: { widgets: OverviewWidget[] | null; version: number }) =>
-      projectsApi.updateOverviewLayout(project.id, { widgets, expected_version: version }, options),
-    onMutate: async ({ widgets }) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<OverviewLayout>(queryKey);
-      if (widgets && previous)
-        queryClient.setQueryData<OverviewLayout>(queryKey, { ...previous, widgets });
-      return { previous };
-    },
-    onSuccess: (layout) => queryClient.setQueryData(queryKey, layout),
-    onError: (_error, _input, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
-      void queryClient.invalidateQueries({ queryKey });
-    },
-  });
+  const scope = { workspaceId: project.workspace_id, projectId: project.id };
+  const query = useQuery(projectQueries.overviewLayout(scope));
+  const mutation = useMutation(projectMutations.saveOverviewLayout(scope));
   return {
     query,
     pending: mutation.isPending,

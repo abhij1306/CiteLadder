@@ -11,8 +11,7 @@ import { TableCell, TableRow } from '@/components/ui/table';
 import { NumericCell, SourceName } from '@/components/visibility/source-cells';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { count, hostOf, pathOf, sinceLabel } from '@/lib/visibility/sources';
 import { selectionParams, type SourceQueries } from '@/lib/visibility/use-source-analysis';
@@ -29,12 +28,10 @@ export function useSourceNearMisses(
   const params = { ...selectionParams(filters, queries), limit: input.limit };
   const enabled = input.enabled && Boolean(queries.projectId && queries.activeRunId);
   return useQuery({
-    queryKey: queryKeys.visibility.sourceNearMisses(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getSourceNearMisses(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
+    ...visibilityQueries.sourceNearMisses(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId ?? '' },
+      params,
+    ),
     enabled,
     // A filter or page-size change keeps the rows until the next ones land,
     // so the table never drops to a loading state; a selection with no run

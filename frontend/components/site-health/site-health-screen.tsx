@@ -22,8 +22,8 @@ import { ReadError } from '@/components/ui/read-error';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { httpErrorStatus } from '@/lib/api/errors';
 import { warmQuery } from '@/lib/api/query-client';
-import { siteHealthQueries } from '@/lib/api/site-health';
-import { internalLinksQuery } from '@/lib/api/site-health-internal-links';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
+import { internalLinksQueries } from '@/lib/api/site-health-internal-links';
 import { useProjectContext } from '@/lib/project/project-context';
 import { useSiteHealthScreen } from '@/lib/site-health/use-site-health-screen';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
@@ -176,17 +176,17 @@ function useSiteHealthTabPrefetch(
   const queryClient = useQueryClient();
   return (nextTab: AnalysisTab) => {
     if (!projectId || !workspaceId) return;
+    const scope = { workspaceId, projectId };
     if (nextTab === 'overview') {
-      if (terminal)
-        warmQuery(queryClient, siteHealthQueries.overview(workspaceId, projectId, crawlId));
+      if (terminal) warmQuery(queryClient, siteHealthQueries.overview(scope, crawlId));
     } else if (nextTab === 'architecture') {
-      warmQuery(queryClient, siteHealthQueries.architecture(workspaceId, projectId, crawlId));
+      warmQuery(queryClient, siteHealthQueries.architecture(scope, crawlId));
     } else if (nextTab === 'aeo-readiness') {
-      warmQuery(queryClient, siteHealthQueries.aeoReadiness(workspaceId, projectId, crawlId));
+      warmQuery(queryClient, siteHealthQueries.aeoReadiness(scope, crawlId));
     } else if (nextTab === 'internal-links') {
-      warmQuery(queryClient, internalLinksQuery(workspaceId, projectId));
+      warmQuery(queryClient, internalLinksQueries.analysis(scope));
     } else if (nextTab === 'changes') {
-      warmQuery(queryClient, siteHealthQueries.changesSummary(workspaceId, projectId));
+      warmQuery(queryClient, siteHealthQueries.changesSummary(scope));
     }
   };
 }

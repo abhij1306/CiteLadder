@@ -11,6 +11,7 @@ import { isMetricsPending, visibilityQueries } from './visibility-queries';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const SCOPE = { workspaceId: WORKSPACE_ID, projectId: PROJECT_ID };
 const PROJECTION = `/api/v1/projects/${PROJECT_ID}/visibility`;
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
@@ -22,9 +23,7 @@ const notFound = (code: string, message: string) =>
 
 /** Reads the landing selection the way the Visibility screen does, naming each state. */
 function LandingProjection() {
-  const query = useQuery(
-    visibilityQueries.project(WORKSPACE_ID, PROJECT_ID, INITIAL_VISIBILITY_PARAMS),
-  );
+  const query = useQuery(visibilityQueries.project(SCOPE, INITIAL_VISIBILITY_PARAMS));
   if (query.isPending) return <p>Loading</p>;
   if (isMetricsPending(query.error)) return <p>Being prepared</p>;
   if (query.isError) return <p>Failed</p>;
@@ -50,11 +49,7 @@ describe('the Visibility landing projection', () => {
       }),
     );
     const client = createAppQueryClient();
-    const { queryKey } = visibilityQueries.project(
-      WORKSPACE_ID,
-      PROJECT_ID,
-      INITIAL_VISIBILITY_PARAMS,
-    );
+    const { queryKey } = visibilityQueries.project(SCOPE, INITIAL_VISIBILITY_PARAMS);
 
     prefetchRoute(client, '/visibility', { projectId: PROJECT_ID, workspaceId: WORKSPACE_ID });
     // The warmup's answer has landed before the screen mounts, as it does in the app.

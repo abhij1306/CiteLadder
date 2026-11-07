@@ -11,8 +11,27 @@ export const workspaceKeys = {
   list: () => ['workspaces', 'list'] as const,
 };
 
+/**
+ * Reads that serve access recovery: the session, the memberships and each
+ * workspace's access. A workspace without access keeps these and drops the rest.
+ */
+export function isAccessRecoveryKey(key: readonly unknown[]): boolean {
+  const [domain, resource] = key;
+  return (
+    domain === 'auth' || (domain === 'workspaces' && (resource === 'list' || resource === 'access'))
+  );
+}
+
+const projects = scopedKeys('projects');
+/**
+ * The project shell's own reads (`list`, `detail`) are keyed outside the
+ * scoped shape: the list is one workspace's, and the detail is authorized
+ * from its path before any workspace is known. A project's resources use the
+ * scoped shape, so `project(projectId)` refreshes them all (but not the list
+ * or the detail), and `all` covers every one.
+ */
 export const projectKeys = {
-  all: ['projects'] as const,
+  ...projects,
   /**
    * Prefix over every workspace's project list. Use it to INVALIDATE from a
    * caller that has no workspace in hand; never as a query key.
@@ -29,12 +48,14 @@ export const projectKeys = {
    */
   list: (workspaceId: string) => ['projects', 'list', workspaceId] as const,
   detail: (projectId: string) => ['projects', 'detail', projectId] as const,
-  commandCenter: (projectId: string) => ['projects', 'command-center', projectId] as const,
-  overviewLayout: (projectId: string) => ['projects', 'overview-layout', projectId] as const,
-  brandProfile: (projectId: string) => ['projects', 'brand-profile', projectId] as const,
-  businessMap: (projectId: string) => ['projects', 'business-map', projectId] as const,
-  brandFacts: (projectId: string) => ['projects', 'brand-facts', projectId] as const,
-  markets: (projectId: string) => ['projects', 'markets', projectId] as const,
+  /** Whether a key is a project's detail read (the read that resolves the project itself). */
+  isDetail: (key: readonly unknown[]) => key[0] === 'projects' && key[1] === 'detail',
+  commandCenter: (scope: ProjectScope) => projects.read('command-center', scope),
+  overviewLayout: (scope: ProjectScope) => projects.read('overview-layout', scope),
+  brandProfile: (scope: ProjectScope) => projects.read('brand-profile', scope),
+  businessMap: (scope: ProjectScope) => projects.read('business-map', scope),
+  brandFacts: (scope: ProjectScope) => projects.read('brand-facts', scope),
+  markets: (scope: ProjectScope) => projects.read('markets', scope),
 };
 
 const prompts = scopedKeys('prompts');

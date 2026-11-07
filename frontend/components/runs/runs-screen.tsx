@@ -62,7 +62,7 @@ export function RunsScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const runsQuery = useQuery({
-    ...runsQueries.list(scope.workspaceId, projectId),
+    ...runsQueries.list({ workspaceId: scope.workspaceId, projectId }),
     enabled: scope.enabled,
     refetchInterval: (query) => {
       const audits = query.state.data;

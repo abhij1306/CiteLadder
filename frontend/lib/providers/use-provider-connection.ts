@@ -3,9 +3,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { providersApi } from '@/lib/api/providers';
+import { providersApi, refreshProviderReads } from '@/lib/api/providers';
 import { humanizeApiError } from '@/lib/api/errors';
-import { queryKeys } from '@/lib/api/query-keys';
 import type { ProviderConnection } from '@citeladder/contracts';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import {
@@ -96,11 +95,6 @@ export function useProviderConnection({
 
   const connection = connectionForTransport(connections, transport);
 
-  const invalidateProviderReads = () =>
-    Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.providers.allConnections() }),
-      queryClient.invalidateQueries({ queryKey: queryKeys.providers.allStates() }),
-    ]);
   const configured = isConfigured(connection);
 
   /**
@@ -163,7 +157,7 @@ export function useProviderConnection({
     },
     onSuccess: async ({ verified }) => {
       clearCredentialInput();
-      await invalidateProviderReads();
+      await refreshProviderReads(queryClient);
       if (verified?.status === 'ok') onSaved?.();
     },
   });
@@ -175,7 +169,7 @@ export function useProviderConnection({
     },
     // The probe denormalizes its outcome onto the connection, and that outcome
     // is what gates launching and the status badge — so both reads are stale.
-    onSuccess: () => invalidateProviderReads(),
+    onSuccess: () => refreshProviderReads(queryClient),
     onError: (error) => setTestResult({ status: 'failed', message: errorMessage(error) }),
   });
 

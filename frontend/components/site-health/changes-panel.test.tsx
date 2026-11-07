@@ -4,6 +4,7 @@ import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
+import { queryKeys } from '@/lib/api/query-keys';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import { ChangesPanel as ScopedChangesPanel } from './changes-panel';
@@ -226,7 +227,11 @@ describe('Website Changes', () => {
     );
 
     head = CRAWL_C;
-    await act(() => client.invalidateQueries({ queryKey: ['site-health', 'changes-summary'] }));
+    await act(() =>
+      client.invalidateQueries({
+        queryKey: queryKeys.siteHealth.resource(PROJECT, 'changes-summary'),
+      }),
+    );
 
     // The old pair's row would now link under the new head crawl: it must not stay.
     const table = screen.getByRole('region', { name: 'Website changes' });

@@ -14,7 +14,15 @@ import {
 import { siteHealthDashboardSchema } from '@citeladder/contracts/site-health';
 
 import { actionsQueries } from '@/lib/api/actions';
-import { siteHealthQueries } from '@/lib/api/site-health';
+import { agentQueries } from '@/lib/api/agent';
+import { commerceQueries } from '@/lib/api/commerce';
+import { demandApi, demandQueries } from '@/lib/api/demand';
+import { projectQueries } from '@/lib/api/projects';
+import { queryKeys } from '@/lib/api/query-keys';
+import { searchIntelligenceQueries } from '@/lib/api/search-intelligence';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
+import { INITIAL_VISIBILITY_PARAMS } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { pendingOverviewHandlers, recordedProjectRead } from '@/test/fixtures/overview';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { mswServer } from '@/test/msw-server';
@@ -57,12 +65,6 @@ const previewKey = siteHealthQueries.pages(PROJECT.workspaceId, CRAWL_ID, {
   sort: 'status',
 }).queryKey;
 
-vi.mock('@/lib/api/demand', () => ({
-  demandApi: { getLatest: vi.fn(async () => ({ id: 'snapshot' })) },
-}));
-
-import { demandApi } from '@/lib/api/demand';
-
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
@@ -71,7 +73,8 @@ describe('prefetchRoute', () => {
   let client: QueryClient;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
+    vi.spyOn(demandApi, 'getLatest').mockResolvedValue({ id: 'snapshot' } as never);
     client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 } } });
   });
 
@@ -91,10 +94,7 @@ describe('prefetchRoute', () => {
    * replaced by the full-page skeleton for the length of the repeat request.
    */
   it('warms the Website page preview under a cached dashboard’s crawl', async () => {
-    client.setQueryData(
-      siteHealthQueries.dashboard(PROJECT.workspaceId, PROJECT_ID).queryKey,
-      DASHBOARD,
-    );
+    client.setQueryData(siteHealthQueries.dashboard(PROJECT).queryKey, DASHBOARD);
     const asked: string[] = [];
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT_ID}/site-health`, () => {
@@ -198,25 +198,19 @@ describe('prefetchRoute', () => {
   });
 
   it.each([
-    [
-      '/search-intelligence',
-      [['search-intelligence', PROJECT.workspaceId, PROJECT_ID, 'readiness']],
-    ],
-    ['/agent', [actionsQueries.list(PROJECT.workspaceId, PROJECT_ID).queryKey]],
-    ['/agent/skills', [['agent', 'skills']]],
+    ['/search-intelligence', [searchIntelligenceQueries.readiness(PROJECT).queryKey]],
+    ['/agent', [actionsQueries.list(PROJECT).queryKey]],
+    ['/agent/skills', [agentQueries.skills(PROJECT.workspaceId).queryKey]],
     [
       '/agent/context',
-      [
-        ['projects', 'brand-facts', PROJECT_ID],
-        ['projects', 'brand-profile', PROJECT_ID],
-      ],
+      [projectQueries.brandFacts(PROJECT).queryKey, projectQueries.brandProfile(PROJECT).queryKey],
     ],
     [
       '/products',
       [
-        ['commerce', PROJECT_ID, 'buyer-prompts'],
-        ['commerce', PROJECT_ID, 'catalog'],
-        ['commerce', PROJECT_ID, 'competitors'],
+        commerceQueries.buyerPrompts(PROJECT).queryKey,
+        commerceQueries.catalog(PROJECT).queryKey,
+        commerceQueries.competitors(PROJECT).queryKey,
       ],
     ],
   ])('warms %s under the exact keys its screen reads', async (href, keys) => {
@@ -271,7 +265,7 @@ describe('prefetchRoute', () => {
       expect(
         client
           .getQueryCache()
-          .findAll({ queryKey: ['site-health', 'issues', CRAWL_ID] })
+          .findAll({ queryKey: queryKeys.siteHealth.crawlIssues(CRAWL_ID) })
           .map((query) => query.state.data),
       ).toEqual([page]),
     );
@@ -328,12 +322,8 @@ describe('prefetchRoute', () => {
 
     prefetchRoute(client, '/projects', PROJECT);
 
-    const latest = ['visibility', 'project', PROJECT_ID, 'latest'];
-    await vi.waitFor(() =>
-      expect(
-        client.getQueryData([...latest, { cohort: 'core', selection_mode: 'latest' }]),
-      ).toBeNull(),
-    );
+    const latest = visibilityQueries.project(PROJECT, INITIAL_VISIBILITY_PARAMS).queryKey;
+    await vi.waitFor(() => expect(client.getQueryData(latest)).toBeNull());
     await new Promise((resolve) => {
       setTimeout(resolve, 0);
     });
@@ -342,14 +332,10 @@ describe('prefetchRoute', () => {
 
   it('leaves an already-failed query untouched so a settled error cannot flicker', async () => {
     vi.mocked(demandApi.getLatest).mockRejectedValueOnce(new Error('404'));
-    await client
-      .fetchQuery({
-        queryKey: ['demand', PROJECT_ID, 'latest'],
-        queryFn: () => demandApi.getLatest(PROJECT_ID),
-      })
-      .catch(() => undefined);
+    const latest = demandQueries.latest(PROJECT);
+    await client.fetchQuery(latest).catch(() => undefined);
 
-    const query = client.getQueryCache().find({ queryKey: ['demand', PROJECT_ID, 'latest'] });
+    const query = client.getQueryCache().find({ queryKey: latest.queryKey });
     expect(query?.state.status).toBe('error');
     const callsAfterFailure = vi.mocked(demandApi.getLatest).mock.calls.length;
 

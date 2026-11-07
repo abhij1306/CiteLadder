@@ -18,6 +18,9 @@ export function scopedKeys<const Domain extends string>(domain: Domain) {
     all: [domain] as const,
     /** Every read of the domain for one project: the invalidation prefix. */
     project: (projectId: string) => [domain, projectId] as const,
+    /** One project resource in every workspace: a narrower invalidation prefix. */
+    resource: <const Resource extends string>(projectId: string, resource: Resource) =>
+      [domain, projectId, resource] as const,
     /** One workspace's read of a project resource. */
     read: <const Resource extends string, const Args extends readonly unknown[]>(
       resource: Resource,

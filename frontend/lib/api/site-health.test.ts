@@ -1,3 +1,4 @@
+import { QueryClient } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 import { waitFor } from '@testing-library/react';
@@ -18,6 +19,11 @@ import {
 } from '@citeladder/contracts/site-health';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { siteHealthApi } from './site-health';
+import {
+  refreshCrawlViews,
+  refreshMonitoredUrls,
+  refreshSiteHealthDashboard,
+} from './site-health-queries';
 import { mswServer } from '@/test/msw-server';
 import {
   SITE_HEALTH_CRAWL as crawl,
@@ -564,46 +570,125 @@ describe('siteIssueSchema + siteHealthErrorSchema', () => {
 });
 
 describe('query key isolation (project / crawl / filter)', () => {
+  const p1 = { workspaceId: 'ws-1', projectId: 'p1' };
+
   it('isolates inventory by crawl', () => {
-    expect(queryKeys.siteHealth.inventory('c1', 'ws-1')).not.toEqual(
-      queryKeys.siteHealth.inventory('c2', 'ws-1'),
+    expect(queryKeys.siteHealth.inventory('ws-1', 'c1')).not.toEqual(
+      queryKeys.siteHealth.inventory('ws-1', 'c2'),
     );
   });
 
   it('isolates inventory by workspace', () => {
-    expect(queryKeys.siteHealth.inventory('c1', 'ws-1')).not.toEqual(
-      queryKeys.siteHealth.inventory('c1', 'ws-2'),
+    expect(queryKeys.siteHealth.inventory('ws-1', 'c1')).not.toEqual(
+      queryKeys.siteHealth.inventory('ws-2', 'c1'),
     );
   });
 
   it('isolates inventory by filter', () => {
-    const a = queryKeys.siteHealth.inventory('c1', 'ws-1', { query: 'foo' });
-    const b = queryKeys.siteHealth.inventory('c1', 'ws-1', { query: 'bar' });
+    const a = queryKeys.siteHealth.inventory('ws-1', 'c1', { query: 'foo' });
+    const b = queryKeys.siteHealth.inventory('ws-1', 'c1', { query: 'bar' });
     expect(a).not.toEqual(b);
   });
 
-  it('isolates dashboard by project and crawl', () => {
-    expect(queryKeys.siteHealth.dashboard('p1')).toEqual([
+  it('isolates dashboard by workspace, project and crawl', () => {
+    expect(queryKeys.siteHealth.dashboard(p1)).toEqual([
       'site-health',
-      'dashboard',
       'p1',
+      'dashboard',
+      'ws-1',
       'latest',
     ]);
-    expect(queryKeys.siteHealth.dashboard('p1', 'c1')).not.toEqual(
-      queryKeys.siteHealth.dashboard('p1'),
+    expect(queryKeys.siteHealth.dashboard(p1, 'c1')).not.toEqual(
+      queryKeys.siteHealth.dashboard(p1),
+    );
+    expect(queryKeys.siteHealth.dashboard({ ...p1, workspaceId: 'ws-2' })).not.toEqual(
+      queryKeys.siteHealth.dashboard(p1),
     );
   });
 
   it('isolates issues by crawl and filter', () => {
-    const a = queryKeys.siteHealth.issues('c1', { severity: 'high' });
-    const b = queryKeys.siteHealth.issues('c1', { severity: 'low' });
-    const c = queryKeys.siteHealth.issues('c2', { severity: 'high' });
+    const a = queryKeys.siteHealth.issues('ws-1', 'c1', { severity: 'high' });
+    const b = queryKeys.siteHealth.issues('ws-1', 'c1', { severity: 'low' });
+    const c = queryKeys.siteHealth.issues('ws-1', 'c2', { severity: 'high' });
     expect(a).not.toEqual(b);
     expect(a).not.toEqual(c);
   });
 
   it('keeps monitored keyed per project', () => {
-    expect(queryKeys.siteHealth.monitored('p1')).not.toEqual(queryKeys.siteHealth.monitored('p2'));
+    expect(queryKeys.siteHealth.monitored(p1)).not.toEqual(
+      queryKeys.siteHealth.monitored({ ...p1, projectId: 'p2' }),
+    );
+  });
+});
+
+describe('what a crawl change refreshes', () => {
+  const CRAWL = '11111111-1111-4111-8111-111111111111';
+  const PROJECT = '22222222-2222-4222-8222-222222222222';
+  const scope = { workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', projectId: PROJECT };
+  const FIRST_PAGE = queryKeys.siteHealth.pages(scope.workspaceId, CRAWL, {
+    cursor: null,
+    monitored: true,
+  });
+  const DEEP_PAGE = queryKeys.siteHealth.pages(scope.workspaceId, CRAWL, {
+    cursor: 'abc',
+    monitored: true,
+  });
+  const FIRST_INVENTORY = queryKeys.siteHealth.inventory(scope.workspaceId, CRAWL, {
+    cursor: null,
+  });
+  const DASHBOARD = queryKeys.siteHealth.dashboard(scope);
+  const MONITORED = queryKeys.siteHealth.monitored(scope);
+
+  function seeded() {
+    const client = new QueryClient();
+    // A first page and a deep cursor page of the same list, plus another filter
+    // combination — all three exist simultaneously in the real screen.
+    client.setQueryData(FIRST_PAGE, { items: [] });
+    client.setQueryData(DEEP_PAGE, { items: [] });
+    client.setQueryData(FIRST_INVENTORY, { items: [] });
+    client.setQueryData(DASHBOARD, { crawl: null });
+    client.setQueryData(MONITORED, { monitored_urls: [] });
+    return client;
+  }
+
+  const invalidated = (client: QueryClient, key: readonly unknown[]) =>
+    client.getQueryState(key)?.isInvalidated ?? false;
+
+  it('refreshes the first page of every crawl-derived list, across filters', () => {
+    const client = seeded();
+
+    void refreshCrawlViews(client, CRAWL);
+
+    expect(invalidated(client, FIRST_PAGE)).toBe(true);
+    expect(invalidated(client, FIRST_INVENTORY)).toBe(true);
+  });
+
+  it('leaves deeper cursor pages and the dashboard alone', () => {
+    const client = seeded();
+
+    void refreshCrawlViews(client, CRAWL);
+
+    // The rows under review must not shift, and the dashboard is the poll trigger.
+    expect(invalidated(client, DEEP_PAGE)).toBe(false);
+    expect(invalidated(client, DASHBOARD)).toBe(false);
+  });
+
+  it('refreshes the project dashboard in every workspace', () => {
+    const client = seeded();
+
+    void refreshSiteHealthDashboard(client, PROJECT);
+
+    expect(invalidated(client, DASHBOARD)).toBe(true);
+    expect(invalidated(client, MONITORED)).toBe(false);
+  });
+
+  it('refreshes the project monitored projection without invalidating the dashboard', () => {
+    const client = seeded();
+
+    void refreshMonitoredUrls(client, PROJECT);
+
+    expect(invalidated(client, MONITORED)).toBe(true);
+    expect(invalidated(client, DASHBOARD)).toBe(false);
   });
 });
 

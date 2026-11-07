@@ -18,9 +18,8 @@ import { MarketFilter } from '@/components/visibility/visibility-toolbar';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate } from '@/lib/format';
 import { formatWholePercent } from '@/lib/visibility/dashboard';
-import { queryKeys } from '@/lib/api/query-keys';
 import type { PromptHistory } from '@citeladder/contracts';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
@@ -42,16 +41,9 @@ export function PromptDetailScreen() {
   const [market, setMarket] = useUrlState('market', optionalStringUrlCodec);
   const markets = useProjectMarkets(projectId, activeWorkspaceId);
   const query = useQuery({
-    queryKey: queryKeys.visibility.promptHistory(projectId, promptId, {
-      market,
+    ...visibilityQueries.promptHistory({ workspaceId: activeWorkspaceId, projectId }, promptId, {
+      market: market ?? undefined,
     }),
-    queryFn: ({ signal }) =>
-      visibilityApi.getPromptHistory(
-        projectId,
-        promptId,
-        { market: market ?? undefined },
-        { signal, workspaceId: activeWorkspaceId },
-      ),
     enabled: Boolean(projectId && activeWorkspaceId && promptId),
   });
 

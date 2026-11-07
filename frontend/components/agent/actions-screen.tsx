@@ -120,7 +120,10 @@ function ActionsList({
     scopeId: projectId,
     scope: [status, targetKind],
     query: (request) =>
-      actionsQueries.list(workspaceId, projectId, { status, target_kind: targetKind, ...request }),
+      actionsQueries.list(
+        { workspaceId, projectId },
+        { status, target_kind: targetKind, ...request },
+      ),
     noun: 'Actions',
     loading: 'Loading Actions…',
     error: 'Actions could not be loaded.',

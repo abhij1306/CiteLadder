@@ -143,18 +143,18 @@ const snapshot = {
   ],
 };
 
-vi.mock('@/lib/api/demand', () => ({
-  demandApi: {
-    getLatest: vi.fn(async () => snapshot),
-    // Recompute is a queued job: 202 + `queued`, never a finished snapshot.
-    recompute: vi.fn(async () => ({
-      task_id: '55555555-5555-4555-8555-555555555555',
-      status: 'queued',
-    })),
-  },
-}));
-
 import { demandApi } from '@/lib/api/demand';
+
+// The transport stands in for the API; the screen's reads and writes go
+// through the real query and mutation descriptors that call it.
+beforeEach(() => {
+  vi.spyOn(demandApi, 'getLatest').mockResolvedValue(snapshot);
+  // Recompute is a queued job: 202 + `queued`, never a finished snapshot.
+  vi.spyOn(demandApi, 'recompute').mockResolvedValue({
+    task_id: '55555555-5555-4555-8555-555555555555',
+    status: 'queued',
+  });
+});
 
 /** The summary line's count, whose figure is its own element inside the line. */
 const findSignalCount = (text: string) =>

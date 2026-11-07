@@ -1,5 +1,8 @@
-/** Demand query keys shared by the projection and content workflow consumers. */
+/** Demand query keys, on the shared scoped-key builder. */
+import { scopedKeys, type ProjectScope } from './scope';
+
+const demand = scopedKeys('demand');
 export const demandKeys = {
-  all: ['demand'] as const,
-  latest: (projectId: string | null | undefined) => ['demand', projectId, 'latest'] as const,
+  ...demand,
+  latest: (scope: ProjectScope) => demand.read('latest', scope),
 };

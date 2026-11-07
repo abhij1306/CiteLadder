@@ -7,6 +7,7 @@ import { mswServer } from '@/test/msw-server';
 import { COMPLETE_CLASSIFICATION_PROJECTION } from '@/test/site-health-fixtures';
 import type { SiteHealthDashboard } from '@citeladder/contracts';
 import { queryKeys } from '@/lib/api/query-keys';
+import { refreshSiteHealthDashboard } from '@/lib/api/site-health-queries';
 import {
   CRAWL,
   PROJECT,
@@ -188,7 +189,7 @@ describe('SiteHealthScreen — loading failures', () => {
     expect(await screen.findByRole('button', { name: 'Recrawl' })).toBeVisible();
 
     available = false;
-    void queryClient.invalidateQueries({ queryKey: queryKeys.siteHealth.dashboard(PROJECT) });
+    void refreshSiteHealthDashboard(queryClient, PROJECT);
 
     expect(await screen.findByText('Dashboard refresh failed')).toBeVisible();
     expect(screen.getByRole('tablist', { name: 'Website analysis' })).toBeVisible();

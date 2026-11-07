@@ -250,13 +250,13 @@ export function CrawlLogCredential({
 export function CrawlLogSetupSubmit({
   model,
 }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
-  const { canManage, sources, mutation, issued } = model;
+  const { canManage, sources, mutation, issued, issueSource } = model;
   return (
     <Button
       variant="primary"
       disabled={!canManage || sources.data?.availability !== 'available' || issued !== null}
       pending={mutation.isPending}
-      onClick={() => mutation.mutate({ kind: 'create' })}
+      onClick={() => issueSource({ kind: 'create' })}
     >
       Create source
     </Button>

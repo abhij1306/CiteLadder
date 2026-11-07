@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -28,8 +28,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { projectQueries } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import type { BrandProfile, Project } from '@citeladder/contracts';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
@@ -92,9 +91,8 @@ function ContextWorkspace({
   workspaceId,
   project,
 }: Readonly<{ workspaceId: string; project: Project }>) {
-  const queryClient = useQueryClient();
   const [requestedTab, setTab] = useUrlState('tab', CONTEXT_TAB_CODEC);
-  const profile = useQuery(projectQueries.brandProfile(workspaceId, project.id));
+  const profile = useQuery(projectQueries.brandProfile({ workspaceId, projectId: project.id }));
   // The pilot gate is known before the tabs render, so its tab never appears
   // late. Outside the pilot there is no tab; an unreadable gate shows its error there.
   const facts = useBrandFacts(project.id, workspaceId);
@@ -102,10 +100,6 @@ function ContextWorkspace({
     projectId: project.id,
     workspaceId,
     profile: profile.data,
-    onSaved: () =>
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.projects.commandCenter(project.id),
-      }),
   });
   const instructions = useAgentInstructions(workspaceId, project.id);
   const offersBrandFacts = facts.isError || Boolean(facts.data?.enabled);
@@ -202,11 +196,9 @@ function ContextPanels({
   brandFacts: ReactNode;
   instructions: ReactNode;
 }>) {
-  const suggestions = useQuery({
-    queryKey: queryKeys.visibility.competitorSuggestions(project.id),
-    queryFn: ({ signal }) =>
-      visibilityApi.listCompetitorSuggestions(project.id, { signal, workspaceId }),
-  });
+  const suggestions = useQuery(
+    visibilityQueries.competitorSuggestions({ workspaceId, projectId: project.id }),
+  );
   return (
     <>
       <TabPanel value="facts">

@@ -7,9 +7,7 @@ import { AiReferralsContent } from '@/components/ai-traffic/referrals-content';
 import { FilterChoice, type FilterBarProps } from '@/components/ui/filter-bar';
 import { Spinner } from '@/components/ui/spinner';
 import { SegmentedControl, type TabRowProps } from '@/components/ui/tabs';
-import { aiTrafficApi } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
-import { retainPreviousDataForScope } from '@/lib/api/query-client';
+import { aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { GRANULARITY_OPTIONS } from '@/lib/format';
 import {
   RANGE_OPTIONS,
@@ -18,6 +16,7 @@ import {
   type AiReferralsRange,
 } from '@/lib/ai-traffic/options';
 import { useProjectContext } from '@/lib/project/project-context';
+import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 
 const rangeCodec = stringUrlCodec<AiReferralsRange>(
@@ -43,25 +42,10 @@ export function AiReferralsScreen({
   const [range, setRange] = useUrlState('range', rangeCodec);
   const [granularity, setGranularity] = useUrlState('granularity', granularityCodec);
   const rangeParams = useMemo(() => rangeToParams(range), [range]);
+  const requestScope = resolveActiveProjectRequestScope(activeProject);
   const dashboardQuery = useQuery({
-    queryKey: queryKeys.aiTraffic.dashboard(activeProject?.workspace_id ?? '', projectId ?? '', {
-      ...rangeParams,
-      granularity,
-    }),
-    queryFn: ({ signal }) =>
-      aiTrafficApi.getDashboard(
-        projectId!,
-        { ...rangeParams, granularity },
-        {
-          signal,
-          workspaceId: activeProject?.workspace_id,
-        },
-      ),
-    enabled: Boolean(projectId && activeProject?.workspace_id),
-    placeholderData: (previousData, previousQuery) =>
-      previousQuery?.queryKey[3] === activeProject?.workspace_id
-        ? retainPreviousDataForScope(projectId!, previousData, previousQuery)
-        : undefined,
+    ...aiTrafficQueries.dashboard(requestScope, { ...rangeParams, granularity }),
+    enabled: requestScope.enabled,
   });
 
   return (

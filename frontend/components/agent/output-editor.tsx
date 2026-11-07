@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import type { FormEvent } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,6 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { Textarea } from '@/components/ui/textarea';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { agentMutations, type AgentDocumentRef, type AgentRevision } from '@/lib/api/agent';
-import { queryKeys } from '@/lib/api/query-keys';
 
 /** An edit in progress, bound to the revision it started from. */
 export type OutputDraft = {
@@ -40,17 +39,7 @@ export function OutputEditor({
   onDone: () => void;
 }>) {
   const { title, body } = draft;
-  const queryClient = useQueryClient();
-  const save = useMutation({
-    ...agentMutations.editOutput(workspaceId),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(target.chatId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.revisions(target.chatId) }),
-      ]);
-      onDone();
-    },
-  });
+  const save = useMutation(agentMutations.editOutput(workspaceId));
   const unchanged = title === revision.title && body === revision.body;
   const blank = !title.trim() || !body.trim();
   const titleId = `agent-output-title-${target.outputId}`,
@@ -61,7 +50,11 @@ export function OutputEditor({
       gap="compact"
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
-        save.mutate({ ...target, baseRevisionId: draft.baseRevisionId, title, body });
+        // The descriptor refreshes the chat and its revisions before this closes the editor.
+        save.mutate(
+          { ...target, baseRevisionId: draft.baseRevisionId, title, body },
+          { onSuccess: onDone },
+        );
       }}
     >
       <label htmlFor={titleId} className="sr-only">

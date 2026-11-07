@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
 import {
-  integrationsApi,
+  integrationsMutations,
   type IntegrationConnection,
   type IntegrationProperty,
   type IntegrationProvider,
@@ -18,7 +18,7 @@ import {
 
 import { PROVIDER_META } from '@/components/settings/grant-model';
 
-import { ownPropertiesFirst, useRefreshImportedReads } from './data-sources';
+import { ownPropertiesFirst } from './data-sources';
 
 const onlyItem = <T,>(items: readonly T[]) => (items.length === 1 ? items[0] : undefined);
 
@@ -50,39 +50,34 @@ export function PropertyChoice({
   autoStart: boolean;
 }>) {
   const source = PROVIDER_META[provider];
-  const refresh = useRefreshImportedReads();
   const [showAll, setShowAll] = useState(false);
-  const discovery = useMutation({
-    mutationFn: () =>
-      integrationsApi.discoverProperties(connection.id, projectId, {
-        workspaceId: connection.workspace_id,
-      }),
-    retry: false,
-  });
-  const select = useMutation({
-    mutationFn: (propertyRef: string) =>
-      integrationsApi.createMapping(
-        connection.id,
-        { provider, property_ref: propertyRef, project_id: projectId },
-        { workspaceId: connection.workspace_id },
-      ),
-    onSuccess: () => refresh(),
-  });
+  const discovery = useMutation(
+    integrationsMutations.discoverProperties(connection.workspace_id, connection.id),
+  );
+  // Discovery names the project, so its own properties are marked.
+  const discover = () => discovery.mutate(projectId);
+  const select = useMutation(
+    integrationsMutations.createMapping(connection.workspace_id, connection.id),
+  );
+  const choose = (propertyRef: string) =>
+    select.mutate({ provider, property_ref: propertyRef, project_id: projectId });
+  const pendingRef = select.isPending ? (select.variables?.property_ref ?? null) : null;
   // Returning from consent, the list is what the user came back for.
   const started = useRef(false);
   useEffect(() => {
     if (!autoStart || started.current) return;
     started.current = true;
-    discovery.mutate();
-  }, [autoStart, discovery]);
+    discovery.mutate(projectId);
+  }, [autoStart, discovery, projectId]);
 
-  if (!discovery.isSuccess) return <DiscoveryStatus noun={source.noun} discovery={discovery} />;
+  if (!discovery.isSuccess)
+    return <DiscoveryStatus noun={source.noun} discovery={discovery} discover={discover} />;
   const properties = ownPropertiesFirst(discovery.data);
   if (properties.length === 0)
     return (
       <Callout tone="neutral">
         This account has no {source.noun}. Add and verify the site in {source.console}, then{' '}
-        <Button variant="ghost" onClick={() => discovery.mutate()}>
+        <Button variant="ghost" onClick={discover}>
           check again
         </Button>
       </Callout>
@@ -94,8 +89,8 @@ export function PropertyChoice({
         <Inline className="flex-wrap">
           <Button
             variant="primary"
-            onClick={() => select.mutate(suggested.property_ref)}
-            pending={select.isPending && select.variables === suggested.property_ref}
+            onClick={() => choose(suggested.property_ref)}
+            pending={pendingRef === suggested.property_ref}
             pendingLabel="Importing…"
             disabled={select.isPending}
             aria-label={`Use ${suggested.label} for ${source.label}`}
@@ -113,8 +108,8 @@ export function PropertyChoice({
         <PropertyList
           source={source}
           properties={properties}
-          pendingRef={select.isPending ? (select.variables ?? null) : null}
-          onSelect={(propertyRef) => select.mutate(propertyRef)}
+          pendingRef={pendingRef}
+          onSelect={choose}
         />
       )}
       {select.isError ? (
@@ -128,14 +123,16 @@ export function PropertyChoice({
 function DiscoveryStatus({
   noun,
   discovery,
+  discover,
 }: Readonly<{
   noun: string;
-  discovery: { isIdle: boolean; isPending: boolean; error: unknown; mutate: () => void };
+  discovery: { isIdle: boolean; isPending: boolean; error: unknown };
+  discover: () => void;
 }>) {
   if (discovery.isIdle)
     return (
       <div>
-        <Button variant="secondary" onClick={() => discovery.mutate()}>
+        <Button variant="secondary" onClick={discover}>
           Choose {noun}
         </Button>
       </div>
@@ -149,7 +146,7 @@ function DiscoveryStatus({
   return (
     <Callout tone="negative">
       Could not load your {noun}s. {humanizeApiError(discovery.error).message}{' '}
-      <Button variant="ghost" onClick={() => discovery.mutate()}>
+      <Button variant="ghost" onClick={discover}>
         Try again
       </Button>
     </Callout>

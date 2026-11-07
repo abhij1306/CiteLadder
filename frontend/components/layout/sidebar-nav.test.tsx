@@ -25,7 +25,10 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('@/lib/project/project-context', () => ({
   useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   useProjectContext: () => ({
-    activeProject: { id: '11111111-1111-4111-8111-111111111111' },
+    activeProject: {
+      id: '11111111-1111-4111-8111-111111111111',
+      workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    },
     activeProjectId: '11111111-1111-4111-8111-111111111111',
     activeWorkspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   }),
@@ -41,6 +44,10 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [searchParams, vi.fn()],
 }));
 
+import { performanceQueries } from '@/lib/api/performance';
+import { INITIAL_VISIBILITY_PARAMS } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
+import { INITIAL_DASHBOARD_PARAMS } from '@/lib/performance/performance';
 import { ModeSwitch } from './mode-switch';
 import { SidebarNav as Destinations } from './sidebar-nav';
 
@@ -54,14 +61,16 @@ function SidebarNav() {
   );
 }
 
+const SCOPE = {
+  workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  projectId: '11111111-1111-4111-8111-111111111111',
+};
 // The key the Performance screen's own landing selection reads, so a hover
 // warms exactly the entry the destination consumes.
-const PERFORMANCE_LANDING_KEY = [
-  'performance',
-  'dashboard',
-  '11111111-1111-4111-8111-111111111111',
-  { range: 'last_synced', granularity: 'day', compare: 'none' },
-];
+const PERFORMANCE_LANDING_KEY = performanceQueries.dashboard(
+  SCOPE,
+  INITIAL_DASHBOARD_PARAMS,
+).queryKey;
 
 describe('station navigation', () => {
   beforeEach(() => {
@@ -171,12 +180,8 @@ describe('station navigation', () => {
     fireEvent.mouseEnter(screen.getByRole('link', { name: 'AI Visibility' }));
     await waitFor(() => expect(mocks.prefetchQuery).toHaveBeenCalled());
     const keys = mocks.prefetchQuery.mock.calls.map((call) => call[0].queryKey);
-    expect(keys).toContainEqual([
-      'visibility',
-      'project',
-      '11111111-1111-4111-8111-111111111111',
-      'latest',
-      { cohort: 'core', selection_mode: 'latest' },
-    ]);
+    expect(keys).toContainEqual(
+      visibilityQueries.project(SCOPE, INITIAL_VISIBILITY_PARAMS).queryKey,
+    );
   });
 });

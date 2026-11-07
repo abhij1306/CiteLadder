@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AgentPanelProvider, useAgentPanelSeed } from '@/lib/agent/panel-context';
-import { queryKeys } from '@/lib/api/query-keys';
+import { refreshAgentChat } from '@/lib/api/agent';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import { expectThreadFollowsLatest } from '@/test/chat-follow';
@@ -217,7 +217,7 @@ describe('AgentPanel', () => {
             },
           ],
         };
-        await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(CHAT) }));
+        await act(() => refreshAgentChat(queryClient, CHAT));
         await within(panel).findByText('More detail.');
       },
     });

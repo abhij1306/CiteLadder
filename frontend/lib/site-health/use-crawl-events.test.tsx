@@ -72,7 +72,7 @@ describe('useCrawlEvents', () => {
     await waitFor(() =>
       expect(invalidateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          queryKey: queryKeys.siteHealth.dashboard(PROJECT),
+          queryKey: queryKeys.siteHealth.resource(PROJECT, 'dashboard'),
         }),
       ),
     );
@@ -112,7 +112,7 @@ describe('useCrawlEvents', () => {
     await waitFor(() =>
       expect(invalidateSpy).toHaveBeenCalledWith(
         expect.objectContaining({
-          queryKey: queryKeys.siteHealth.dashboard(PROJECT),
+          queryKey: queryKeys.siteHealth.resource(PROJECT, 'dashboard'),
         }),
       ),
     );
@@ -126,7 +126,7 @@ describe('useCrawlEvents', () => {
     const dashboardCalls = invalidateSpy.mock.calls.filter(
       ([arg]) =>
         JSON.stringify((arg as { queryKey: unknown }).queryKey) ===
-        JSON.stringify(queryKeys.siteHealth.dashboard(PROJECT)),
+        JSON.stringify(queryKeys.siteHealth.resource(PROJECT, 'dashboard')),
     );
     expect(dashboardCalls).toHaveLength(1);
   });

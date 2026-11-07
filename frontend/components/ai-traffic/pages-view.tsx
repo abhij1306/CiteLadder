@@ -39,7 +39,8 @@ export function TrafficPages({ workspaceId, projectId, filters }: TrafficTableSc
     workspaceId,
     scopeId: projectId,
     scope: filters,
-    query: (request) => aiTrafficQueries.pages(workspaceId, projectId, { ...filters, ...request }),
+    query: (request) =>
+      aiTrafficQueries.pages({ workspaceId, projectId }, { ...filters, ...request }),
     noun: 'paths',
     loading: 'Loading paths…',
     error: 'Could not read path-level AI Traffic',

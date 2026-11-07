@@ -4,8 +4,7 @@ import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-q
 import { useEffect } from 'react';
 
 import type { CommerceCatalog, CommerceProjection } from '@citeladder/contracts/commerce-suite';
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
+import { commerceQueries, refreshCatalog } from '@/lib/api/commerce';
 import { ACTIVE_RUN_POLL_MS } from '@/lib/config/operational';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -33,8 +32,7 @@ export function useCatalogProjection(
   const client = useQueryClient();
   const catalogInFlight = Boolean(catalog.data?.projection.in_flight);
   const poll = useQuery({
-    queryKey: [...queryKeys.commerce.catalogProjection(projectId), workspaceId],
-    queryFn: ({ signal }) => commerceApi.catalogProjection(projectId, { signal, workspaceId }),
+    ...commerceQueries.catalogProjection({ workspaceId, projectId }),
     enabled: Boolean(projectId) && catalogInFlight,
     refetchInterval: ACTIVE_RUN_POLL_MS,
   });
@@ -44,11 +42,7 @@ export function useCatalogProjection(
   const terminalized = catalogInFlight && newer && poll.data?.in_flight === 0;
   const pollReadAt = poll.dataUpdatedAt;
   useEffect(() => {
-    if (terminalized)
-      void client.invalidateQueries(
-        { queryKey: queryKeys.commerce.catalog(projectId) },
-        { cancelRefetch: false },
-      );
+    if (terminalized) void refreshCatalog(client, projectId, { joinInFlight: true });
   }, [terminalized, pollReadAt, client, projectId]);
   return newer ? poll.data : catalog.data?.projection;
 }

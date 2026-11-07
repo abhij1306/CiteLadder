@@ -2,8 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
+import { commerceQueries } from '@/lib/api/commerce';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import { useCatalogProjection } from './use-catalog-projection';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
@@ -20,29 +19,26 @@ import { useActiveWorkspaceId } from '@/lib/project/project-context';
 export function useCommerceQueries(projectId: string, target?: CommerceTarget) {
   const workspaceId = useActiveWorkspaceId();
   const hasProject = Boolean(projectId);
+  const scope = { workspaceId, projectId };
   const catalog = useQuery({
-    queryKey: queryKeys.commerce.catalog(projectId),
-    queryFn: ({ signal }) => commerceApi.catalog(projectId, { signal, workspaceId }),
+    ...commerceQueries.catalog(scope),
     // No interval: while projections run, only their state is polled.
     enabled: hasProject,
   });
   const projection = useCatalogProjection(projectId, catalog);
   const competitors = useQuery({
-    queryKey: queryKeys.commerce.competitors(projectId),
-    queryFn: ({ signal }) => commerceApi.competitors(projectId, { signal, workspaceId }),
+    ...commerceQueries.competitors(scope),
     // No interval: the discovery tracker owns the in-flight signal and
     // invalidates this list when the last tracked run terminalizes.
     enabled: hasProject,
   });
   const buyerPrompts = useQuery({
-    queryKey: queryKeys.commerce.buyerPrompts(projectId),
-    queryFn: ({ signal }) => commerceApi.buyerPrompts(projectId, { signal, workspaceId }),
+    ...commerceQueries.buyerPrompts(scope),
     enabled: hasProject,
   });
   const shelf = useQuery({
-    queryKey: queryKeys.commerce.shelf(projectId, target),
-    queryFn: ({ signal }) => commerceApi.shelf(projectId, target!, { signal, workspaceId }),
-    enabled: hasProject && Boolean(target),
+    ...commerceQueries.shelf(scope, target ?? null),
+    enabled: hasProject,
   });
   return { catalog, projection, competitors, buyerPrompts, shelf };
 }

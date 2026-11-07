@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -13,8 +13,7 @@ import { MutationNotice } from '@/components/ui/mutation-notice';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
+import { projectMutations } from '@/lib/api/projects';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 
 /**
@@ -27,32 +26,22 @@ export function ProjectMarkets({
   projectId,
   workspaceId,
 }: Readonly<{ projectId: string; workspaceId: string }>) {
-  const queryClient = useQueryClient();
-  const key = queryKeys.projects.markets(projectId);
+  const scope = { workspaceId, projectId };
   const markets = useProjectMarkets(projectId, workspaceId);
   const [country, setCountry] = useState('');
   const [language, setLanguage] = useState('');
-  const add = useMutation({
-    mutationFn: () =>
-      projectsApi.addMarket(
-        projectId,
-        { country_code: country, language_code: language },
-        { workspaceId },
-      ),
-    onSuccess: (list) => {
-      queryClient.setQueryData(key, list);
-      setCountry('');
-      setLanguage('');
-    },
-  });
-  const remove = useMutation({
-    mutationFn: (marketId: string) =>
-      projectsApi.deleteMarket(projectId, marketId, { workspaceId }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: key });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.runs.all });
-    },
-  });
+  const add = useMutation(projectMutations.addMarket(scope));
+  const remove = useMutation(projectMutations.removeMarket(scope));
+  const addMarket = () =>
+    add.mutate(
+      { country_code: country, language_code: language },
+      {
+        onSuccess: () => {
+          setCountry('');
+          setLanguage('');
+        },
+      },
+    );
   const extra = markets.filter((market) => !market.is_default);
   const failed = add.error ?? remove.error;
   return (
@@ -96,7 +85,7 @@ export function ProjectMarkets({
         <Button
           variant="secondary"
           disabled={!country || !language || add.isPending}
-          onClick={() => add.mutate()}
+          onClick={addMarket}
         >
           {add.isPending ? 'Adding…' : 'Add market'}
         </Button>

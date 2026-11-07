@@ -20,10 +20,17 @@ import { DemandEvidenceDrawer } from '@/components/demand/demand-evidence-drawer
 import { DemandLatentDemand } from '@/components/demand/demand-latent-demand';
 import { DemandDataCaveats, DemandSignalFilters } from '@/components/demand/demand-signal-filters';
 import { DemandSignalTable, SignalLegend } from '@/components/demand/demand-signal-table';
-import { demandApi, type DemandSignal, type DemandSnapshot } from '@/lib/api/demand';
+import {
+  demandMutations,
+  demandQueries,
+  refreshDemandSnapshot,
+  type demandApi,
+  type DemandSignal,
+  type DemandSnapshot,
+} from '@/lib/api/demand';
+import type { DemandRecomputeRequest } from '@citeladder/contracts/demand';
 import { isTransientMutationError, mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { queryKeys } from '@/lib/api/query-keys';
-import { latestDemandSnapshotQuery } from '@/lib/demand/latest-snapshot';
+import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
 import {
   countByTab,
   FILTER_TABS,
@@ -48,7 +55,7 @@ const DEMAND_TAB_CODEC = stringUrlCodec(
 type RecomputeMutation = UseMutationResult<
   Awaited<ReturnType<typeof demandApi.recompute>>,
   Error,
-  void
+  DemandRecomputeRequest
 >;
 
 /**
@@ -58,8 +65,9 @@ type RecomputeMutation = UseMutationResult<
  */
 function RecomputeAction({
   mutation,
+  onRecompute,
   onCheck,
-}: Readonly<{ mutation: RecomputeMutation; onCheck: () => void }>) {
+}: Readonly<{ mutation: RecomputeMutation; onRecompute: () => void; onCheck: () => void }>) {
   if (mutation.isSuccess)
     return (
       <Button variant="secondary" onClick={onCheck}>
@@ -71,7 +79,7 @@ function RecomputeAction({
   return (
     <Button
       variant="secondary"
-      onClick={() => mutation.mutate()}
+      onClick={onRecompute}
       pending={mutation.isPending}
       pendingLabel="Queueing…"
     >
@@ -126,24 +134,11 @@ function SearchDemandView({
   const [selectedSignalId, setSelectedSignalId] = useUrlState('signal', optionalStringUrlCodec);
   const selectedSignal = snapshot.signals.find((signal) => signal.id === selectedSignalId) ?? null;
 
-  /**
-   * Recompute is a QUEUED job, not a synchronous rebuild: the endpoint returns
-   * 202 with `status: queued` and a worker produces the new snapshot later.
-   * Refetching on success would therefore just re-read the current snapshot
-   * and look like a no-op, so we report that the work was queued and let the
-   * user refresh once it lands.
-   */
-  const recomputeMutation = useMutation({
-    mutationFn: () =>
-      demandApi.recompute(
-        activeProject!.id,
-        { window_start: snapshot.window_start, window_end: snapshot.window_end },
-        { workspaceId: activeProject!.workspace_id },
-      ),
-  });
-
-  const refreshSnapshot = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.demand.latest(activeProject?.id) });
+  // Recompute is queued: the screen reports that the work was queued and lets
+  // the reader check for the new snapshot once it lands.
+  const scope = resolveActiveProjectRequestScope(activeProject);
+  const recomputeMutation = useMutation(demandMutations.recompute(scope));
+  const refreshSnapshot = () => refreshDemandSnapshot(queryClient, scope.projectId);
 
   const handleInspect = (signal: DemandSignal) => {
     setSelectedSignalId(signal.id);
@@ -231,6 +226,12 @@ function SearchDemandView({
       actions={
         <RecomputeAction
           mutation={recomputeMutation}
+          onRecompute={() =>
+            recomputeMutation.mutate({
+              window_start: snapshot.window_start,
+              window_end: snapshot.window_end,
+            })
+          }
           onCheck={() => {
             recomputeMutation.reset();
             void refreshSnapshot();
@@ -300,7 +301,7 @@ function SearchDemandView({
 export function DemandProjection() {
   const { activeProject, isLoading: projectLoading } = useProjectContext();
   const latest = useQuery({
-    ...latestDemandSnapshotQuery(activeProject?.id ?? '', activeProject?.workspace_id ?? null),
+    ...demandQueries.latest(resolveActiveProjectRequestScope(activeProject)),
     enabled: Boolean(activeProject),
     // Deliberately NO `keepPreviousData`: the key's only variable is the
     // project, so keeping previous data would render the PREVIOUS project's

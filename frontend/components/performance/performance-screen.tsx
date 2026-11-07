@@ -28,9 +28,8 @@ import { readErrorProps } from '@/components/ui/read-error';
 import { StatusLine } from '@/components/ui/status-line';
 import { formatCount, formatWindowDate } from '@/lib/format';
 import { ChartNoAxesColumn } from 'lucide-react';
-import { integrationsApi } from '@/lib/api/integrations';
+import { integrationsQueries } from '@/lib/api/integrations';
 import { performanceQueries, type PerformanceDashboard } from '@/lib/api/performance';
-import { queryKeys } from '@/lib/api/query-keys';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
 import { useProjectContext } from '@/lib/project/project-context';
 import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
@@ -278,18 +277,13 @@ export function PerformanceScreen() {
   } = usePerformanceSelection();
 
   const dashboard = useQuery({
-    ...performanceQueries.dashboard(
-      workspaceId,
-      projectId,
-      dashboardParams(selection, granularity),
-    ),
+    ...performanceQueries.dashboard(scope, dashboardParams(selection, granularity)),
     enabled: scope.enabled,
     placeholderData: (previousData, previousQuery) =>
       retainPreviousDataForScope(projectId, previousData, previousQuery),
   });
   const connections = useQuery({
-    queryKey: queryKeys.integrations.connections(workspaceId),
-    queryFn: ({ signal }) => integrationsApi.list({ signal, workspaceId }),
+    ...integrationsQueries.connections(workspaceId),
     enabled: Boolean(workspaceId),
   });
   const sync = usePerformanceSync(projectId);

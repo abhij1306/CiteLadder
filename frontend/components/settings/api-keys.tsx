@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { KeyRound } from 'lucide-react';
 import { useState } from 'react';
 
@@ -21,9 +21,8 @@ import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableActionsCell, TableCell, TableRow } from '@/components/ui/table';
 import type { ApiKey, ApiKeyCreated, ApiKeyScope } from '@citeladder/contracts/api-keys';
-import { apiKeysApi } from '@/lib/api/api-keys';
+import { apiKeyMutations, apiKeyQueries } from '@/lib/api/api-keys';
 import { humanizeApiError } from '@/lib/api/errors';
-import { queryKeys } from '@/lib/api/query-keys';
 import { API_HOST_ORIGIN } from '@/lib/config/api-host';
 import { useProjectContext } from '@/lib/project/project-context';
 
@@ -117,7 +116,6 @@ function CreateKeyDialog({
   workspaceId,
   onClose,
 }: Readonly<{ open: boolean; workspaceId: string; onClose: () => void }>) {
-  const cache = useQueryClient();
   const { projects } = useProjectContext();
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<ReadonlySet<ApiKeyScope>>(new Set(['read']));
@@ -125,20 +123,18 @@ function CreateKeyDialog({
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   const [expiresOn, setExpiresOn] = useState('');
   const [created, setCreated] = useState<ApiKeyCreated | null>(null);
-  const create = useMutation({
-    mutationFn: () =>
-      apiKeysApi.create(workspaceId, {
+  const create = useMutation(apiKeyMutations.create(workspaceId));
+  const createKey = () =>
+    create.mutate(
+      {
         name,
         scopes: [...scopes],
         project_ids: projectMode === 'all' ? null : [...chosen],
         // The end of the chosen day where the person is, sent as an instant.
         expires_at: expiresOn ? new Date(`${expiresOn}T23:59:59`).toISOString() : null,
-      }),
-    onSuccess: (result) => {
-      setCreated(result);
-      return cache.invalidateQueries({ queryKey: queryKeys.apiKeys.all });
-    },
-  });
+      },
+      { onSuccess: setCreated },
+    );
   const toggle = <T,>(set: ReadonlySet<T>, value: T, on: boolean) => {
     const next = new Set(set);
     if (on) next.add(value);
@@ -174,7 +170,7 @@ function CreateKeyDialog({
             variant="primary"
             pending={create.isPending}
             disabled={!ready}
-            onClick={() => create.mutate()}
+            onClick={createKey}
           >
             Create key
           </Button>
@@ -273,23 +269,12 @@ function keysToolbar({ live, onCreate }: Readonly<{ live: number; onCreate: () =
 }
 
 export function ApiKeys() {
-  const cache = useQueryClient();
   const { activeWorkspaceId, projects } = useProjectContext();
   const workspaceId = activeWorkspaceId ?? '';
   const [creating, setCreating] = useState(false);
   const [pending, setPending] = useState<ApiKey | null>(null);
-  const query = useQuery({
-    queryKey: queryKeys.apiKeys.list(workspaceId),
-    queryFn: ({ signal }) => apiKeysApi.list(workspaceId, signal),
-    enabled: workspaceId !== '',
-  });
-  const revoke = useMutation({
-    mutationFn: (keyId: string) => apiKeysApi.revoke(workspaceId, keyId),
-    onSuccess: () => {
-      setPending(null);
-      return cache.invalidateQueries({ queryKey: queryKeys.apiKeys.all });
-    },
-  });
+  const query = useQuery({ ...apiKeyQueries.list(workspaceId), enabled: workspaceId !== '' });
+  const revoke = useMutation(apiKeyMutations.revoke(workspaceId));
   if (query.isPending) return <QueryState kind="loading" label="Loading API keys…" />;
   if (query.isError)
     return (
@@ -353,7 +338,7 @@ export function ApiKeys() {
             title: `Revoke ${pending.name}?`,
             confirmLabel: 'Revoke',
             destructive: true,
-            onConfirm: () => revoke.mutate(pending.id),
+            onConfirm: () => revoke.mutate(pending.id, { onSuccess: () => setPending(null) }),
             body: (
               <Stack gap="compact">
                 <p>Requests with this key are refused at once. This cannot be undone.</p>

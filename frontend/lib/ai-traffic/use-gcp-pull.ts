@@ -1,19 +1,10 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { aiTrafficApi } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
+import { useMutation } from '@tanstack/react-query';
+import { aiTrafficMutations } from '@/lib/api/ai-traffic';
 
 /** Commands on a Google Cloud pull source: check its subscription, confirm a filter update. */
 export function useGcpPullActions(projectId: string, workspaceId: string) {
-  const client = useQueryClient();
-  const options = { workspaceId };
-  const refresh = () => client.invalidateQueries({ queryKey: queryKeys.aiTraffic.all });
-  const verify = useMutation({
-    mutationFn: (sourceId: string) => aiTrafficApi.verifySource(projectId, sourceId, options),
-    onSuccess: refresh,
-  });
-  const confirmFilter = useMutation({
-    mutationFn: (sourceId: string) => aiTrafficApi.confirmSinkFilter(projectId, sourceId, options),
-    onSuccess: refresh,
-  });
+  const scope = { workspaceId, projectId };
+  const verify = useMutation(aiTrafficMutations.verifySource(scope));
+  const confirmFilter = useMutation(aiTrafficMutations.confirmSinkFilter(scope));
   return { verify, confirmFilter };
 }

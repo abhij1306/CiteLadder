@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import {
@@ -22,8 +22,7 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
+import { projectMutations } from '@/lib/api/projects';
 import { TOPIC_LABELS } from '@/lib/visibility/accuracy';
 
 const TOPIC_OPTIONS = factTopicSchema.options.map((topic) => ({
@@ -47,39 +46,26 @@ export function BrandFactsPanel({
   list,
   mayEdit,
 }: Readonly<{ workspaceId: string; projectId: string; list: BrandFactList; mayEdit: boolean }>) {
-  const queryClient = useQueryClient();
-  const refresh = () =>
-    void queryClient.invalidateQueries({ queryKey: queryKeys.projects.brandFacts(projectId) });
-  const create = useMutation({
-    mutationFn: (draft: Draft) =>
-      projectsApi.createBrandFact(
-        projectId,
-        {
-          topic: draft.topic,
-          statement: draft.statement.trim(),
-          source_url: draft.source_url.trim() || null,
-        },
-        { workspaceId },
-      ),
-    onSuccess: refresh,
-  });
-  const change = useMutation({
-    mutationFn: ({ fact, update }: Change) =>
-      projectsApi.updateBrandFact(
-        projectId,
-        fact.id,
-        { expected_revision: fact.revision, ...update },
-        { workspaceId },
-      ),
-    onSettled: refresh,
-  });
+  const scope = { workspaceId, projectId };
+  const create = useMutation(projectMutations.createBrandFact(scope));
+  const change = useMutation(projectMutations.updateBrandFact(scope));
+  const addFact = (draft: Draft) =>
+    create.mutate({
+      topic: draft.topic,
+      statement: draft.statement.trim(),
+      source_url: draft.source_url.trim() || null,
+    });
+  // Edits name the revision that was read; a stale one is refused.
+  const changeFact = ({ fact, update }: Change) =>
+    change.mutateAsync({
+      factId: fact.id,
+      input: { expected_revision: fact.revision, ...update },
+    });
   const active = list.facts.filter((fact) => fact.status !== 'retired');
   const retired = list.facts.filter((fact) => fact.status === 'retired');
   return (
     <Stack gap="workspace">
-      {mayEdit ? (
-        <AddFact pending={create.isPending} onAdd={(draft) => create.mutate(draft)} />
-      ) : null}
+      {mayEdit ? <AddFact pending={create.isPending} onAdd={addFact} /> : null}
       {create.isError ? (
         <MutationNotice notice={mutationNoticeForError(create.error, { action: 'add the fact' })} />
       ) : null}
@@ -102,7 +88,7 @@ export function BrandFactsPanel({
               fact={fact}
               mayEdit={mayEdit}
               pending={change.isPending}
-              onChange={(update) => change.mutateAsync({ fact, update })}
+              onChange={(update) => changeFact({ fact, update })}
             />
           ))}
         </Stack>

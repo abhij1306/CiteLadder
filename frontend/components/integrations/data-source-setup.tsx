@@ -1,5 +1,6 @@
 'use client';
 
+import { useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useLocation, useSearchParams } from 'react-router-dom';
@@ -22,18 +23,17 @@ import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { InlineFigure, textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { integrationsApi, type IntegrationProvider } from '@/lib/api/integrations';
+import {
+  integrationsApi,
+  refreshImportedReads,
+  type IntegrationProvider,
+} from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { projectDestination } from '@/lib/navigation/project-destination';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 
 import { PropertyChoice } from './property-choice';
-import {
-  oauthErrorMessage,
-  useDataSources,
-  useRefreshImportedReads,
-  type SourceStep,
-} from './data-sources';
+import { oauthErrorMessage, useDataSources, type SourceStep } from './data-sources';
 
 /**
  * The OAuth callback's result on this screen, read once and then removed from
@@ -45,10 +45,10 @@ function useOAuthReturn() {
     connected: params.get('connected'),
     error: params.get('error'),
   }));
-  const refresh = useRefreshImportedReads();
+  const client = useQueryClient();
   useEffect(() => {
     if (!result.connected && !result.error) return;
-    if (result.connected) void refresh();
+    if (result.connected) void refreshImportedReads(client);
     setParams(
       (current) => {
         const next = new URLSearchParams(current);
@@ -58,7 +58,7 @@ function useOAuthReturn() {
       },
       { replace: true },
     );
-  }, [refresh, result, setParams]);
+  }, [client, result, setParams]);
   const connected = isIntegrationProvider(result.connected) ? GRANT_FAMILY[result.connected] : null;
   return { connected, error: result.error };
 }

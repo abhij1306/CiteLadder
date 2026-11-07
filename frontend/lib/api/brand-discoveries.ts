@@ -1,6 +1,8 @@
+import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
+import { queryKeys } from './query-keys';
 import { ONBOARDING_RESEARCH_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 import type {
   BrandDiscoveryCompleteRequest,
@@ -75,4 +77,43 @@ export const brandDiscoveriesApi = {
     });
     return strictValidate(brandDiscoveryCompleteSchema, value, 'brandDiscovery.complete');
   },
+};
+
+export const brandDiscoveryQueries = {
+  /** Discovery limits (the competitor cap); they change only with a deployment. */
+  catalog: (workspaceId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.brandDiscovery.catalog(workspaceId),
+      queryFn: ({ signal }) => brandDiscoveriesApi.catalog({ signal, workspaceId }),
+      staleTime: Number.POSITIVE_INFINITY,
+    }),
+  detail: (workspaceId: string | null, discoveryId: string) =>
+    queryOptions({
+      queryKey: queryKeys.brandDiscovery.detail(workspaceId, discoveryId),
+      queryFn: ({ signal }) => brandDiscoveriesApi.get(discoveryId, { signal, workspaceId }),
+    }),
+};
+
+/**
+ * Re-read one discovery, after a run settles or a completion whose outcome is
+ * unknown: a request the browser abandoned may still have committed.
+ */
+export const refreshBrandDiscovery = (
+  client: QueryClient,
+  workspaceId: string | null,
+  discoveryId: string,
+) =>
+  client.invalidateQueries({
+    queryKey: queryKeys.brandDiscovery.detail(workspaceId, discoveryId),
+  });
+
+export const brandDiscoveryMutations = {
+  /** Execute a queued discovery; its progress is re-read however the request ends. */
+  run: () =>
+    mutationOptions({
+      mutationFn: ({ id, workspace }: { id: string; workspace: string | null }) =>
+        brandDiscoveriesApi.run(id, { workspaceId: workspace }),
+      onSettled: (_data, _error, { id, workspace }, _result, { client }) =>
+        refreshBrandDiscovery(client, workspace, id),
+    }),
 };

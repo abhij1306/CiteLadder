@@ -23,7 +23,7 @@ export function InsightStrip({
   range,
 }: Readonly<{ projectId: string; workspaceId: string; range: string }>) {
   const query = useQuery({
-    ...aiTrafficQueries.insights(workspaceId, projectId, range),
+    ...aiTrafficQueries.insights({ workspaceId, projectId }, range),
     enabled: !!projectId && !!workspaceId,
   });
   const data = query.isError ? undefined : query.data;

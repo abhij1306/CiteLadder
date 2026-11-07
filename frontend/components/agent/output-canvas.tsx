@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { Pencil, Sparkles } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 
@@ -16,7 +16,6 @@ import { treeBranchClasses } from '@/components/ui/workspace';
 import { agentWriteFailure } from '@/lib/agent/errors';
 import { replaceSection, splitSections, type OutputSection } from '@/lib/agent/sections';
 import { agentMutations, type AgentDocumentRef, type AgentRevision } from '@/lib/api/agent';
-import { queryKeys } from '@/lib/api/query-keys';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
 
 /** Outputs with at least this many titled sections get a contents list. */
@@ -226,17 +225,7 @@ function SectionEditor({
   onDone: () => void;
 }>) {
   const [text, setText] = useState(initial);
-  const queryClient = useQueryClient();
-  const save = useMutation({
-    ...agentMutations.editOutput(workspaceId),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(target.chatId) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.revisions(target.chatId) }),
-      ]);
-      onDone();
-    },
-  });
+  const save = useMutation(agentMutations.editOutput(workspaceId));
   const body = replaceSection(revision.body, index, text);
   const inputId = `section-editor-${revision.id}-${index}`;
   return (
@@ -245,12 +234,11 @@ function SectionEditor({
       gap="compact"
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
-        save.mutate({
-          ...target,
-          baseRevisionId: revision.id,
-          title: revision.title,
-          body,
-        });
+        // The descriptor refreshes the chat and its revisions before this closes the editor.
+        save.mutate(
+          { ...target, baseRevisionId: revision.id, title: revision.title, body },
+          { onSuccess: onDone },
+        );
       }}
     >
       <label htmlFor={inputId} className="sr-only">

@@ -6,9 +6,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import { httpErrorStatus } from '@/lib/api/client';
 import { setReportingWorkspace } from '@/lib/client-errors';
-import { projectQueries, projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
-import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
+import { projectQueries, retryProjectShell } from '@/lib/api/projects';
+import { workspaceQueries } from '@/lib/api/workspaces';
 import {
   readStoredActiveProjectId,
   readStoredActiveWorkspaceId,
@@ -75,15 +74,7 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
   // These are the loader's bootstrap reads; they carry its bounded timeout so
   // a stall reaches the gate's retry notice in seconds, on either creation
   // path (loader-seeded or provider-issued).
-  const workspacesQuery = useQuery({
-    queryKey: queryKeys.workspaces.list(),
-    queryFn: ({ signal }) =>
-      projectsApi.listWorkspaces({
-        signal,
-        workspaceId: null,
-        timeoutMs: getBootstrapReadTimeoutMs(),
-      }),
-  });
+  const workspacesQuery = useQuery(workspaceQueries.list());
 
   // The narrow resolution read for an explicit id. Authorized from the path,
   // so it answers before any workspace is known and its `workspace_id` is
@@ -184,10 +175,7 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
     [setSelectedProjectId, setSelectedWorkspaceId],
   );
 
-  const retry = useCallback(() => {
-    void queryClient.refetchQueries({ queryKey: queryKeys.workspaces.list() });
-    void queryClient.refetchQueries({ queryKey: queryKeys.projects.all });
-  }, [queryClient]);
+  const retry = useCallback(() => void retryProjectShell(queryClient), [queryClient]);
 
   useEffect(() => {
     writeStoredActiveWorkspaceId(activeWorkspaceId);

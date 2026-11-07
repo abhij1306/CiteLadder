@@ -29,13 +29,13 @@ export function DashboardScreen({
   const context = useProjectContext();
   const scope = resolveActiveProjectRequestScope(context.activeProject);
   const commandCenter = useQuery({
-    ...projectQueries.commandCenter(scope.workspaceId, scope.projectId),
+    ...projectQueries.commandCenter(scope),
     enabled: scope.enabled,
   });
   // The layout does not depend on the command center, so it is asked for
   // beside it rather than once the command center has rendered.
   const layout = useQuery({
-    ...projectQueries.overviewLayout(scope.workspaceId, scope.projectId),
+    ...projectQueries.overviewLayout(scope),
     enabled: scope.enabled,
   });
   useWarmWidgets(context.activeProject, layout.data?.widgets);

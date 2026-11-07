@@ -17,12 +17,11 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { TruncationNotice } from '@/components/visibility/evidence-states';
-import { queryKeys } from '@/lib/api/query-keys';
 import type {
   VisibilityEvidenceResponse,
   VisibilityExecutionEvidence,
 } from '@citeladder/contracts';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import { count, hostOf, sinceLabel } from '@/lib/visibility/sources';
@@ -70,12 +69,10 @@ export function SourcePrompts({
     url: url ?? undefined,
   };
   const query = useQuery({
-    queryKey: queryKeys.visibility.evidence(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getVisibilityEvidence(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
+    ...visibilityQueries.evidence(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId ?? '' },
+      params,
+    ),
     enabled: Boolean(queries.projectId && queries.activeRunId && (domain || url)),
   });
 

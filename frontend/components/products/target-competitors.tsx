@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { Users } from 'lucide-react';
 
 import { Callout } from '@/components/ui/callout';
@@ -10,10 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Inline, Stack } from '@/components/ui/layout';
-import { commerceApi } from '@/lib/api/commerce';
+import { commerceMutations } from '@/lib/api/commerce';
 import { humanizeApiError } from '@/lib/api/errors';
-import { queryKeys } from '@/lib/api/query-keys';
-import type { CompetitorDecisionRequest } from '@citeladder/contracts/commerce-requests';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import type { useCompetitorDiscovery } from '@/lib/products/competitor-discovery';
 
@@ -45,16 +43,8 @@ export function TargetCompetitors({
   query: CommerceQueries['competitors'];
   discovery: Discovery;
 }>) {
-  const client = useQueryClient();
   const workspaceId = useActiveWorkspaceId();
-  const decide = useMutation({
-    mutationFn: ({ id, decision }: { id: string } & CompetitorDecisionRequest) => {
-      if (!workspaceId) throw new Error('Workspace is not available.');
-      return commerceApi.decideCompetitor(projectId, id, { decision }, { workspaceId });
-    },
-    onSuccess: () =>
-      client.invalidateQueries({ queryKey: queryKeys.commerce.competitors(projectId) }),
-  });
+  const decide = useMutation(commerceMutations.decideCompetitor({ workspaceId, projectId }));
   // The tracker follows every run in the project, so a bulk discovery across
   // three categories otherwise showed all three banners on each one, and made
   // every target read as "Finding…" while any of them was running.

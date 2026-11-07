@@ -24,21 +24,25 @@ export const WIDGET_ROWS = 5;
 const COHORT = 'core';
 
 type WidgetProject = Pick<Project, 'id' | 'workspace_id'>;
+const widgetScope = (project: WidgetProject) => ({
+  workspaceId: project.workspace_id,
+  projectId: project.id,
+});
 type LatestVisibility = Visibility | null | undefined;
 
 const latestVisibilityQuery = (project: WidgetProject) =>
-  visibilityQueries.project(project.workspace_id, project.id, INITIAL_VISIBILITY_PARAMS);
+  visibilityQueries.project(widgetScope(project), INITIAL_VISIBILITY_PARAMS);
 
 const trendQuery = (project: WidgetProject) =>
-  visibilityQueries.trends(project.workspace_id, project.id, { cohort: COHORT });
+  visibilityQueries.trends(widgetScope(project), { cohort: COHORT });
 
 // The overview's own filters, as AI Traffic prefetches them: an unset filter is
 // absent from both the key and the request, so both read one cache entry.
 const trafficOverviewQuery = (project: WidgetProject) =>
-  aiTrafficQueries.overview(project.workspace_id, project.id, { range: TRAFFIC_RANGES[0].value });
+  aiTrafficQueries.overview(widgetScope(project), { range: TRAFFIC_RANGES[0].value });
 
 const searchPerformanceQuery = (project: WidgetProject) =>
-  performanceQueries.dashboard(project.workspace_id, project.id, INITIAL_DASHBOARD_PARAMS);
+  performanceQueries.dashboard(widgetScope(project), INITIAL_DASHBOARD_PARAMS);
 
 /** Domain movers against the latest run's comparable baseline; empty when it has none. */
 function moverParams(visibility: LatestVisibility) {
@@ -79,7 +83,7 @@ export function useLatestMovers(project: Project) {
   const visibility = useLatestVisibility(project);
   const params = moverParams(visibility.data);
   const movers = useQuery({
-    ...visibilityQueries.sourceMovers(project.workspace_id, project.id, params),
+    ...visibilityQueries.sourceMovers(widgetScope(project), params),
     enabled: moversReady(params),
   });
   // The projection's own comparison, so the widget can say WHY nothing moved
@@ -91,7 +95,7 @@ export function useLatestNearMisses(project: Project) {
   const visibility = useLatestVisibility(project);
   const params = nearMissParams(visibility.data);
   const misses = useQuery({
-    ...visibilityQueries.sourceNearMisses(project.workspace_id, project.id, params),
+    ...visibilityQueries.sourceNearMisses(widgetScope(project), params),
     enabled: Boolean(params.audit_id),
   });
   return { visibility, misses };
@@ -101,7 +105,7 @@ export function useLatestPerception(project: Project) {
   const visibility = useLatestVisibility(project);
   const params = perceptionParams(visibility.data);
   const perception = useQuery({
-    ...visibilityQueries.perception(project.workspace_id, project.id, params),
+    ...visibilityQueries.perception(widgetScope(project), params),
     enabled: Boolean(params.audit_id),
   });
   return { visibility, perception };
@@ -141,26 +145,23 @@ const WIDGET_WARMUPS: Readonly<Record<OverviewWidgetKey, WidgetWarmup | null>> =
   progress_proof: null,
   company_facts: null,
   missing_prompts: (client, project) =>
-    warmQuery(client, visibilityQueries.latestPrompts(project.workspace_id, project.id)),
+    warmQuery(client, visibilityQueries.prompts(widgetScope(project))),
   visibility_trend: (client, project) => warmQuery(client, trendQuery(project)),
   share_of_voice: (client, project) => warmQuery(client, latestVisibilityQuery(project)),
   top_movers: async (client, project) => {
     const params = moverParams(await warmedVisibility(client, project));
     if (moversReady(params))
-      warmQuery(client, visibilityQueries.sourceMovers(project.workspace_id, project.id, params));
+      warmQuery(client, visibilityQueries.sourceMovers(widgetScope(project), params));
   },
   retrieval: async (client, project) => {
     const params = nearMissParams(await warmedVisibility(client, project));
     if (params.audit_id)
-      warmQuery(
-        client,
-        visibilityQueries.sourceNearMisses(project.workspace_id, project.id, params),
-      );
+      warmQuery(client, visibilityQueries.sourceNearMisses(widgetScope(project), params));
   },
   perception: async (client, project) => {
     const params = perceptionParams(await warmedVisibility(client, project));
     if (params.audit_id)
-      warmQuery(client, visibilityQueries.perception(project.workspace_id, project.id, params));
+      warmQuery(client, visibilityQueries.perception(widgetScope(project), params));
   },
   ai_traffic: (client, project) => warmQuery(client, trafficOverviewQuery(project)),
   search_console: (client, project) => warmQuery(client, searchPerformanceQuery(project)),

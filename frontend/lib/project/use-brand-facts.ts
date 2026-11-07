@@ -11,7 +11,7 @@ import { projectQueries } from '@/lib/api/projects';
 export function useBrandFacts(projectId: string | null, workspaceId: string | null) {
   return useQuery({
     // Disabled until both are known, so the empty id never reaches the API.
-    ...projectQueries.brandFacts(workspaceId, projectId ?? ''),
+    ...projectQueries.brandFacts({ workspaceId, projectId: projectId ?? '' }),
     enabled: Boolean(projectId && workspaceId),
   });
 }

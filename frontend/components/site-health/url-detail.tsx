@@ -2,7 +2,7 @@
 
 import { useRef, useState, type MutableRefObject } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 
 import { Callout } from '@/components/ui/callout';
@@ -12,8 +12,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
-import { queryKeys } from '@/lib/api/query-keys';
-import { siteHealthMutations, siteHealthQueries } from '@/lib/api/site-health';
+import { siteHealthMutations, siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { PageDetail } from '@citeladder/contracts';
 import { ApiError } from '@/lib/api/errors';
 import { RERUN_MAX_PRE_ACTIVE_POLLS, RERUN_POLL_INTERVAL_MS } from '@/lib/config/site-health';
@@ -48,7 +47,6 @@ export function UrlDetail({
 }: Readonly<{ crawlId: string; siteUrlId: string }>) {
   const workspaceId = useActiveWorkspaceId();
   const router = useNavigate();
-  const queryClient = useQueryClient();
   const searchParams = useSearchParams()[0];
   // A rerun that minted a NEW crawl navigates here with `?rerun=1`; start
   // polling on mount so the fresh run's queued/running progress is observed
@@ -64,7 +62,7 @@ export function UrlDetail({
   const [rerunQueued, setRerunQueued] = useState(false);
   const [rerunError, setRerunError] = useState<string | null>(null);
   const detailQuery = useQuery({
-    ...siteHealthQueries.page(workspaceId ?? '', crawlId, siteUrlId),
+    ...siteHealthQueries.page(workspaceId, crawlId, siteUrlId),
     enabled: Boolean(workspaceId),
     refetchInterval: (query) =>
       rerunPollInterval(
@@ -74,33 +72,28 @@ export function UrlDetail({
         preActivePollCountRef,
       ),
   });
-  const rerun = useMutation({
-    ...siteHealthMutations.rerunPage(workspaceId ?? ''),
-    onSuccess: async (result) => {
-      if (result.crawl_id === crawlId && result.site_url_id === siteUrlId) {
-        // Invalidate before enabling polling: setting polling first can observe
-        // the stale terminal cache entry and stop before the invalidation fetch
-        // returns the newly enqueued pending/running snapshot.
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.siteHealth.page(crawlId, siteUrlId),
-        });
-        hasObservedActiveRerunRef.current = false;
-        preActivePollCountRef.current = 0;
-        setRerunQueued(true);
-        setRerunPolling(true);
-        return;
-      }
-      queryClient.setQueryData<PageDetail>(
-        queryKeys.siteHealth.page(result.crawl_id, result.site_url_id),
-        (previous) =>
-          previous
-            ? { ...previous, crawl_id: result.crawl_id, analysis_status: result.analysis_status }
-            : previous,
-      );
-      router(`/site/crawls/${result.crawl_id}/pages/${result.site_url_id}?${RERUN_SEARCH_PARAM}=1`);
-    },
-    onError: (error) => setRerunError(rerunErrorMessage(error)),
-  });
+  // The descriptor refreshes this URL's detail before these callbacks run, so
+  // polling starts only after the fresh pending snapshot has been asked for.
+  const rerun = useMutation(siteHealthMutations.rerunPage(workspaceId));
+  const startRerun = () =>
+    rerun.mutate(
+      { crawlId, siteUrlId },
+      {
+        onSuccess: (result) => {
+          if (result.crawl_id === crawlId && result.site_url_id === siteUrlId) {
+            hasObservedActiveRerunRef.current = false;
+            preActivePollCountRef.current = 0;
+            setRerunQueued(true);
+            setRerunPolling(true);
+            return;
+          }
+          router(
+            `/site/crawls/${result.crawl_id}/pages/${result.site_url_id}?${RERUN_SEARCH_PARAM}=1`,
+          );
+        },
+        onError: (error) => setRerunError(rerunErrorMessage(error)),
+      },
+    );
 
   if (detailQuery.isLoading)
     return (
@@ -129,7 +122,7 @@ export function UrlDetail({
       rerunQueued={rerunQueued}
       onRerun={() => {
         setRerunError(null);
-        rerun.mutate({ crawlId, siteUrlId });
+        startRerun();
       }}
       history={
         <IssueHistoryButton

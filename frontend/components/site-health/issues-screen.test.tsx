@@ -7,7 +7,7 @@ import { makeProject } from '@/test/fixtures/project';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
-import { queryKeys } from '@/lib/api/query-keys';
+import { refreshSiteHealthDashboard } from '@/lib/api/site-health-queries';
 
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
@@ -103,9 +103,7 @@ describe('IssuesScreen read recovery', () => {
     expect(await screen.findByTestId('issues-catalog')).toHaveTextContent(`${WORKSPACE}:${CRAWL}`);
 
     available = false;
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.siteHealth.dashboard(PROJECT),
-    });
+    void refreshSiteHealthDashboard(queryClient, PROJECT);
 
     expect(await screen.findByText('Refresh failed')).toBeVisible();
     expect(screen.getByTestId('issues-catalog')).toHaveTextContent(`${WORKSPACE}:${CRAWL}`);

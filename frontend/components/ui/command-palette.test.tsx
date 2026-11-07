@@ -111,7 +111,8 @@ describe('CommandPalette', () => {
     await waitFor(() =>
       expect(
         queryClient.getQueryData(
-          runsQueries.list('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'p1').queryKey,
+          runsQueries.list({ workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', projectId: 'p1' })
+            .queryKey,
         ),
       ).toEqual([]),
     );

@@ -157,13 +157,14 @@ vi.mock('@/lib/project/project-context', () => {
 vi.mock('@/lib/api/projects', () => ({
   projectsApi: { getCommandCenter: vi.fn(), downloadOverviewReport },
   projectQueries: {
-    commandCenter: (_workspaceId: string, projectId: string) => ({
+    commandCenter: ({ projectId }: { projectId: string }) => ({
       queryKey: ['projects', 'command-center', projectId],
     }),
-    overviewLayout: (_workspaceId: string, projectId: string) => ({
+    overviewLayout: ({ projectId }: { projectId: string }) => ({
       queryKey: ['projects', 'overview-layout', projectId],
     }),
   },
+  projectMutations: { reorderActions: () => ({}), saveOverviewLayout: () => ({}) },
 }));
 vi.mock('@/lib/api/opportunities', () => ({
   opportunitiesApi: { updateOrder: vi.fn() },

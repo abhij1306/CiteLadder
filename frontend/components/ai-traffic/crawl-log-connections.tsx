@@ -97,7 +97,7 @@ function Connections({
           canManage={canManage}
           onRotate={(id) => {
             setOpen(true);
-            mutation.mutate({ kind: 'rotate', id });
+            model.issueSource({ kind: 'rotate', id });
           }}
           onRevoke={setRevoking}
           onSetup={(id) => {
@@ -114,7 +114,12 @@ function Connections({
           canManage={canManage}
         />
       ) : null}
-      <RevokeSourceDialog source={revoking} mutation={mutation} onClose={() => setRevoking(null)} />
+      <RevokeSourceDialog
+        source={revoking}
+        mutation={mutation}
+        onRevoke={(id, onSettled) => model.issueSource({ kind: 'revoke', id }, onSettled)}
+        onClose={() => setRevoking(null)}
+      />
       {mutation.isError && !open ? (
         <Callout tone="negative">{mutation.error.message}</Callout>
       ) : null}
@@ -299,10 +304,12 @@ function SourceDiagnostics({
 function RevokeSourceDialog({
   source,
   mutation,
+  onRevoke,
   onClose,
 }: Readonly<{
   source: z.infer<typeof crawlSourceSchema> | null;
   mutation: ReturnType<typeof useCrawlConnections>['mutation'];
+  onRevoke: (id: string, onSettled: () => void) => void;
   onClose: () => void;
 }>) {
   return (
@@ -323,9 +330,7 @@ function RevokeSourceDialog({
             disabled={!source}
             pending={mutation.isPending}
             pendingLabel="Revoking…"
-            onClick={() =>
-              source && mutation.mutate({ kind: 'revoke', id: source.id }, { onSettled: onClose })
-            }
+            onClick={() => source && onRevoke(source.id, onClose)}
           >
             Revoke source
           </Button>

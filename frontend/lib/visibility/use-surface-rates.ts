@@ -3,8 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import type { ProjectRequestScope } from '@/lib/project/request-scope';
 
@@ -47,12 +46,7 @@ export function useSurfaceRates({
     cohort,
   };
   const surfaceRatesQuery = useQuery({
-    queryKey: queryKeys.visibility.surfaceRates(projectId ?? '', params),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      visibilityApi.getSurfaceRates(requestScope.projectId, params, {
-        signal,
-        workspaceId: requestScope.workspaceId,
-      }),
+    ...visibilityQueries.surfaceRates(requestScope, params),
     enabled:
       requestScope.enabled &&
       onTrendsTab &&

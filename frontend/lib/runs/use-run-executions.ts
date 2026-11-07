@@ -3,8 +3,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi } from '@/lib/api/runs';
+import { refreshAuditExecutions, runsQueries } from '@/lib/api/runs';
 import type { Audit } from '@citeladder/contracts';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -26,10 +25,9 @@ export function useRunExecutions(runId: string, audit: RunProgress | undefined) 
   const client = useQueryClient();
   const query = useQuery({
     // The workspace is part of the cache identity, so a switch never shows a
-    // list read under another workspace; invalidating the run's key prefix
+    // list read under another workspace; refreshing the run's executions
     // still reaches every workspace's copy.
-    queryKey: [...queryKeys.runs.executions(runId), workspaceId],
-    queryFn: ({ signal }) => runsApi.listExecutions(runId, { signal, workspaceId }),
+    ...runsQueries.executions(workspaceId, runId),
     enabled: workspaceId !== null,
   });
   const progress = audit
@@ -41,7 +39,7 @@ export function useRunExecutions(runId: string, audit: RunProgress | undefined) 
     const previous = seen.current;
     seen.current = { runId, progress };
     if (previous?.runId === runId && previous.progress !== progress)
-      void client.invalidateQueries({ queryKey: queryKeys.runs.executions(runId) });
+      void refreshAuditExecutions(client, runId);
   }, [client, progress, runId]);
   return query;
 }

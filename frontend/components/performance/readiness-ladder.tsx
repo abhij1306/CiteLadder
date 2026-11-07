@@ -10,12 +10,12 @@ import { panelClasses } from '@/components/ui/panel';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
 import {
-  performanceApi,
+  performanceQueries,
   type ProjectReadiness,
   type ProjectReadinessStage,
 } from '@/lib/api/performance';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { queryKeys } from '@/lib/api/query-keys';
+import { resolveProjectRequestScope } from '@/lib/project/request-scope';
 import { formatWindowDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -91,11 +91,10 @@ function StepMark({ state }: Readonly<{ state: 'done' | 'active' | 'pending' }>)
  * project is on.
  */
 export function useProjectReadiness(projectId: string | null) {
-  const workspaceId = useActiveWorkspaceId();
+  const scope = resolveProjectRequestScope(useActiveWorkspaceId(), projectId);
   return useQuery({
-    queryKey: queryKeys.performance.readiness(projectId ?? ''),
-    queryFn: ({ signal }) => performanceApi.getReadiness(projectId!, { signal, workspaceId }),
-    enabled: Boolean(projectId && workspaceId),
+    ...performanceQueries.readiness(scope),
+    enabled: scope.enabled,
     // While an import is in flight the answer changes on its own, so this
     // keeps asking rather than stranding the user on a stale stage.
     refetchInterval: (query) => {

@@ -15,7 +15,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { siteHealthQueries } from '@/lib/api/site-health';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { ReadinessCheck, ReadinessDimension } from '@citeladder/contracts';
 import { formatScore, PLACEHOLDER } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
@@ -95,7 +95,7 @@ export function AeoReadinessPanel({
   projectId: string;
   crawlId: string;
 }>) {
-  const readiness = useQuery(siteHealthQueries.aeoReadiness(workspaceId, projectId, crawlId));
+  const readiness = useQuery(siteHealthQueries.aeoReadiness({ workspaceId, projectId }, crawlId));
   const [detailKey, setDetailKey] = useState<string | null>(null);
 
   if (readiness.isLoading) {

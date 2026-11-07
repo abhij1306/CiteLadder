@@ -4,8 +4,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import type { VisibilityAdsResponse } from '@citeladder/contracts/visibility-ads';
 
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import {
   selectionEnabled,
@@ -38,15 +37,7 @@ export function useAds(filters: Pick<SourceFilters, 'engine' | 'cohort'>, querie
   const projectId = queries.projectId ?? '';
   const enabled = selectionEnabled(queries);
   const query = useInfiniteQuery({
-    queryKey: queryKeys.visibility.ads(projectId, params),
-    queryFn: ({ signal, pageParam }) =>
-      visibilityApi.getAds(
-        projectId,
-        { ...params, cursor: pageParam },
-        { signal, workspaceId: queries.workspaceId },
-      ),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => last.creatives.next_cursor ?? undefined,
+    ...visibilityQueries.ads({ workspaceId: queries.workspaceId, projectId }, params),
     enabled,
     placeholderData: enabled
       ? (data, previous) => retainPreviousDataForScope(projectId, data, previous)

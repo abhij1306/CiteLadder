@@ -15,10 +15,9 @@ import { useToast } from '@/components/ui/toast';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayTimestamp, pluralCount } from '@/lib/format';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi } from '@/lib/api/runs';
+import { runsQueries } from '@/lib/api/runs';
 import {
-  searchIntelligenceApi,
+  searchIntelligenceMutations,
   type SearchIntelligenceDataset,
 } from '@/lib/api/search-intelligence';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -32,7 +31,8 @@ export function SearchIntelligenceCitationMatcher({
   datasets: SearchIntelligenceDataset[];
   /** The website the Backlinks tab shows; its list is the one matched first. */
   targetOrigin?: string;
-  onDerived: () => Promise<unknown>;
+  /** The matches are saved and the readiness is refreshed. */
+  onDerived: () => void;
 }>) {
   const { activeProject } = useProjectContext();
   const timeZone = useDisplayTimeZone();
@@ -45,32 +45,30 @@ export function SearchIntelligenceCitationMatcher({
   const referring =
     lists.find((dataset) => dataset.id === listId) ??
     lists.find((dataset) => dataset.target_origin === targetOrigin);
+  const scope = {
+    workspaceId: activeProject?.workspace_id ?? null,
+    projectId: activeProject?.id ?? '',
+  };
   const audits = useQuery({
-    queryKey: queryKeys.runs.list({ project_id: activeProject?.id }),
-    queryFn: ({ signal }) =>
-      runsApi.listAudits(
-        { project_id: activeProject!.id },
-        { signal, workspaceId: activeProject!.workspace_id },
-      ),
+    ...runsQueries.list(scope),
     enabled: Boolean(activeProject && referring),
   });
-  const derive = useMutation({
-    mutationFn: () =>
-      searchIntelligenceApi.deriveCitationMatches(
-        activeProject!.id,
-        { backlink_dataset_id: referring!.id, audit_ids: selectedAudits },
-        { workspaceId: activeProject!.workspace_id },
-      ),
-    onSuccess: async (dataset) => {
-      setSelectedAudits([]);
-      notify(
-        'Citation matches saved',
-        `${pluralCount(dataset.unique_rows_saved, 'citation')} came from sites that link to you. Open Citation matches in Backlinks.`,
-        { tone: 'positive' },
-      );
-      await onDerived();
-    },
-  });
+  const derive = useMutation(searchIntelligenceMutations.deriveCitationMatches(scope));
+  const deriveMatches = () =>
+    derive.mutate(
+      { backlink_dataset_id: referring!.id, audit_ids: selectedAudits },
+      {
+        onSuccess: (dataset) => {
+          setSelectedAudits([]);
+          notify(
+            'Citation matches saved',
+            `${pluralCount(dataset.unique_rows_saved, 'citation')} came from sites that link to you. Open Citation matches in Backlinks.`,
+            { tone: 'positive' },
+          );
+          onDerived();
+        },
+      },
+    );
   if (!referring) return null;
   if (audits.isError)
     return (
@@ -129,7 +127,7 @@ export function SearchIntelligenceCitationMatcher({
         <Button
           variant="primary"
           disabled={!selectedAudits.length || derive.isPending}
-          onClick={() => derive.mutate()}
+          onClick={deriveMatches}
         >
           Match citations
         </Button>

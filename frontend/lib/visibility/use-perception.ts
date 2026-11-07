@@ -3,8 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { PERCEPTION_PENDING_POLL_MS } from '@/lib/config/operational';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import {
@@ -25,12 +24,10 @@ export function usePerception(
   const params = selectionParams(filters, queries);
   const enabled = selectionEnabled(queries);
   const query = useQuery({
-    queryKey: queryKeys.visibility.perception(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getPerception(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
+    ...visibilityQueries.perception(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId ?? '' },
+      params,
+    ),
     enabled,
     placeholderData: enabled
       ? (data, previous) => retainPreviousDataForScope(queries.projectId!, data, previous)

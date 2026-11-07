@@ -68,8 +68,7 @@ export function SearchIntelligenceDatasetView({
     scope: filters,
     query: (request) =>
       searchIntelligenceQueries.datasetRows(
-        activeProject?.workspace_id ?? '',
-        projectId ?? '',
+        { workspaceId: activeProject?.workspace_id ?? null, projectId: projectId ?? '' },
         dataset.id,
         { ...filters, ...request },
       ),

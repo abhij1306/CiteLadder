@@ -11,9 +11,8 @@ import { CsvImportTrigger } from '@/components/ui/csv-import';
 import { Stack } from '@/components/ui/layout';
 import { KpiRow, type StatSegment } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
-import { siteHealthApi, siteHealthQueries } from '@/lib/api/site-health';
+import { commerceMutations, followCatalogAnalysis } from '@/lib/api/commerce';
+import { siteHealthMutations, siteHealthQueries } from '@/lib/api/site-health-queries';
 import { pluralCount } from '@/lib/format';
 import { crawlPollInterval } from '@/lib/site-health/status';
 
@@ -38,9 +37,6 @@ function analyzedLabel(crawl: SiteHealthCrawl): string | null {
   const known = crawl.total_url_count ?? crawl.visible_url_count;
   return `${crawl.analyzed_count}/${Math.max(known, crawl.analyzed_count)}`;
 }
-
-/** When the cached catalog was read, and the crawl's analyzed count it was read beside. */
-type CatalogReadCount = { readAt: number; count: number };
 
 /**
  * Pages still being turned into catalog rows, then pages of the latest crawl
@@ -126,7 +122,7 @@ export function useCatalogHeader({
   const client = useQueryClient();
   const [result, setResult] = useState('');
   const dashboard = useQuery({
-    ...siteHealthQueries.dashboard(workspaceId, projectId),
+    ...siteHealthQueries.dashboard({ workspaceId, projectId }),
     // The workspace can still be resolving; this used to be gated by the
     // caller mounting the component at all, and the hook has to gate itself.
     enabled: Boolean(workspaceId && projectId),
@@ -137,46 +133,26 @@ export function useCatalogHeader({
   });
   // A running crawl enqueues projections as pages are analyzed; re-read the
   // catalog when that count has moved past the one its cached read was taken
-  // beside, so its own polling starts with the first task. The count is kept
-  // in the cache next to the catalog, so a remount over a fresh catalog still
-  // sees a count that moved meanwhile, and a catalog read just now is not read
-  // again for a count it already reflects.
+  // beside, so its own polling starts with the first task.
   const analyzed = dashboard.data?.crawl?.analyzed_count;
   const catalogReadAt = query.dataUpdatedAt;
   const hasCatalog = query.data !== undefined;
   useEffect(() => {
     if (analyzed === undefined || !hasCatalog) return;
-    const key = queryKeys.commerce.catalogReadCount(projectId);
-    const recorded = client.getQueryData<CatalogReadCount>(key);
-    if (!recorded || recorded.readAt !== catalogReadAt)
-      client.setQueryData<CatalogReadCount>(key, { readAt: catalogReadAt, count: analyzed });
-    else if (recorded.count !== analyzed)
-      void client.invalidateQueries({ queryKey: queryKeys.commerce.catalog(projectId) });
-  }, [analyzed, catalogReadAt, hasCatalog, client, projectId]);
-  const invalidateCatalog = () =>
-    client.invalidateQueries({
-      queryKey: queryKeys.commerce.catalog(projectId),
+    followCatalogAnalysis(client, { workspaceId, projectId }, { readAt: catalogReadAt, analyzed });
+  }, [analyzed, catalogReadAt, hasCatalog, client, workspaceId, projectId]);
+  const importCatalog = useMutation(commerceMutations.importCatalog({ workspaceId, projectId }));
+  const importFile = (file: File) =>
+    importCatalog.mutate(file, {
+      onSuccess: (data) =>
+        setResult(
+          `${data.created} created, ${data.updated} updated, ${data.unchanged} unchanged, ${data.rejected} rejected`,
+        ),
     });
-  const importCatalog = useMutation({
-    mutationFn: async (file: File) =>
-      commerceApi.importCatalog(
-        projectId,
-        { content: await file.text(), filename: file.name },
-        { workspaceId },
-      ),
-    onSuccess: async (data) => {
-      setResult(
-        `${data.created} created, ${data.updated} updated, ${data.unchanged} unchanged, ${data.rejected} rejected`,
-      );
-      await invalidateCatalog();
-    },
-  });
-  const discover = useMutation({
-    mutationFn: () => siteHealthApi.createCrawl({ project_id: projectId }, { workspaceId }),
-    onSuccess: async () => {
-      await Promise.all([dashboard.refetch(), query.refetch()]);
-    },
-  });
+  // The descriptor refreshes the Site Health dashboard; the catalog is this screen's own read.
+  const discover = useMutation(siteHealthMutations.createCrawl(workspaceId));
+  const startDiscovery = () =>
+    discover.mutate({ project_id: projectId }, { onSuccess: () => void query.refetch() });
   const crawl = dashboard.data?.crawl ?? null;
   const counts = query.data;
   return {
@@ -184,10 +160,10 @@ export function useCatalogHeader({
       <CatalogActions
         crawl={crawl}
         importing={importCatalog.isPending}
-        onImport={(file) => importCatalog.mutate(file)}
+        onImport={importFile}
         refreshing={discover.isPending || dashboard.isPending}
         onRefresh={() =>
-          crawl ? void Promise.all([dashboard.refetch(), query.refetch()]) : discover.mutate()
+          crawl ? void Promise.all([dashboard.refetch(), query.refetch()]) : startDiscovery()
         }
       />
     ),

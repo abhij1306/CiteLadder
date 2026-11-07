@@ -93,10 +93,9 @@ export function useOverviewWarmup(active: boolean) {
     if (!ready) return;
     // The overview's own filters: its folder and resource narrowing are unset,
     // and an unset filter is absent from both the key and the request.
-    void client.prefetchQuery(
-      aiTrafficQueries.overview(workspaceId, projectId, { range, verification }),
-    );
-    void client.prefetchQuery(aiTrafficQueries.insights(workspaceId, projectId, range));
+    const scope = { workspaceId, projectId };
+    void client.prefetchQuery(aiTrafficQueries.overview(scope, { range, verification }));
+    void client.prefetchQuery(aiTrafficQueries.insights(scope, range));
   }, [client, ready, workspaceId, projectId, range, verification]);
 }
 
@@ -109,13 +108,13 @@ export function useTrafficData(tab: TrafficDataTab) {
   const selection = useTrafficSelection(),
     filters = selectedFilters(tab, selection);
   const summary = useQuery({
-    ...aiTrafficQueries.overview(workspaceId, projectId, filters),
+    ...aiTrafficQueries.overview({ workspaceId, projectId }, filters),
     enabled: enabled && tab === 'overview',
   });
   // The table tabs read their own pages (`useCursorTableQuery`), so a page
   // turn keeps the rows and the pager on screen.
   const catalog = useQuery({
-    ...aiTrafficQueries.catalog(workspaceId, projectId),
+    ...aiTrafficQueries.catalog({ workspaceId, projectId }),
     enabled: enabled && tab !== 'overview',
   });
   const exporting = useMutation({

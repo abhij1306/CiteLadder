@@ -42,7 +42,7 @@ export function useComposerCommands({
     if (trigger === '@') setPoolWanted(true);
   }, []);
   const actions = useQuery({
-    ...actionsQueries.mentionPool(workspaceId, projectId),
+    ...actionsQueries.mentionPool({ workspaceId, projectId }),
     enabled: poolWanted && Boolean(workspaceId && projectId),
   });
 

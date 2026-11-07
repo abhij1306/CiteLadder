@@ -14,8 +14,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
+import { projectQueries } from '@/lib/api/projects';
 import type { BrandProfile } from '@citeladder/contracts';
 import {
   businessDraft,
@@ -92,10 +91,7 @@ function BusinessMapBody({
   workspaceId,
   profile,
 }: Readonly<{ projectId: string; workspaceId: string; profile: BrandProfile }>) {
-  const query = useQuery({
-    queryKey: queryKeys.projects.businessMap(projectId),
-    queryFn: ({ signal }) => projectsApi.getBusinessMap(projectId, { signal, workspaceId }),
-  });
+  const query = useQuery(projectQueries.businessMap({ workspaceId, projectId }));
   if (query.isPending) return <QueryState kind="loading" label="Loading the business map" />;
   if (query.isError)
     return (

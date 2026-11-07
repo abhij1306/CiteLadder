@@ -13,16 +13,22 @@ const getDashboard = vi.fn();
 vi.mock('@/lib/api/site-health', async () => {
   const actual =
     await vi.importActual<typeof import('@/lib/api/site-health')>('@/lib/api/site-health');
+  return { ...actual, siteHealthApi: { ...actual.siteHealthApi, createCrawl: vi.fn() } };
+});
+
+// The header reads the dashboard through the shared query factory, so the
+// factory is the seam — replacing `siteHealthApi` alone leaves the factory's
+// own captured reference in place.
+vi.mock('@/lib/api/site-health-queries', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api/site-health-queries')>(
+    '@/lib/api/site-health-queries',
+  );
   return {
     ...actual,
-    siteHealthApi: { ...actual.siteHealthApi, createCrawl: vi.fn() },
-    // The header reads the dashboard through the shared query factory, so the
-    // factory is the seam — replacing `siteHealthApi` alone leaves the
-    // factory's own captured reference in place.
     siteHealthQueries: {
       ...actual.siteHealthQueries,
-      dashboard: (_workspaceId: string, projectId: string) => ({
-        queryKey: ['site-health', 'dashboard', projectId],
+      dashboard: (scope: { workspaceId: string; projectId: string }) => ({
+        queryKey: actual.siteHealthQueries.dashboard(scope).queryKey,
         queryFn: () => getDashboard(),
       }),
     },
@@ -30,6 +36,10 @@ vi.mock('@/lib/api/site-health', async () => {
 });
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+const DASHBOARD_KEY = queryKeys.siteHealth.dashboard({
+  workspaceId: WORKSPACE_ID,
+  projectId: PROJECT_ID,
+});
 
 const crawl = (overrides: Record<string, unknown> = {}) => ({
   crawl: {
@@ -174,7 +184,7 @@ describe('CatalogHeader', () => {
     }));
     function LiveScreen() {
       const query = useQuery({
-        queryKey: queryKeys.commerce.catalog(PROJECT_ID),
+        queryKey: queryKeys.commerce.catalog({ workspaceId: WORKSPACE_ID, projectId: PROJECT_ID }),
         queryFn: readCatalog,
       });
       return (
@@ -193,9 +203,7 @@ describe('CatalogHeader', () => {
     expect(readCatalog).toHaveBeenCalledTimes(1);
 
     getDashboard.mockResolvedValue(crawl({ analyzed_count: 50 }));
-    await act(() =>
-      queryClient.invalidateQueries({ queryKey: ['site-health', 'dashboard', PROJECT_ID] }),
-    );
+    await act(() => queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY }));
     await waitFor(() => expect(screen.getByText('50/50')).toBeInTheDocument());
     await waitFor(() => expect(readCatalog).toHaveBeenCalledTimes(2));
 
@@ -203,10 +211,7 @@ describe('CatalogHeader', () => {
     // in the cache; coming back re-reads the catalog for the newer count.
     rerender(<LiveHost mounted={false} />);
     getDashboard.mockResolvedValue(crawl({ analyzed_count: 51 }));
-    queryClient.setQueryData(
-      ['site-health', 'dashboard', PROJECT_ID],
-      crawl({ analyzed_count: 51 }),
-    );
+    queryClient.setQueryData(DASHBOARD_KEY, crawl({ analyzed_count: 51 }));
     rerender(<LiveHost mounted />);
     expect(screen.getByText('51/51')).toBeInTheDocument();
     await waitFor(() => expect(readCatalog).toHaveBeenCalledTimes(3));

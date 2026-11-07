@@ -7,14 +7,28 @@ import { renderWithProviders } from '@/test/render';
 import { usePerformanceSync } from './use-performance-sync';
 
 const { syncNow, getSync } = vi.hoisted(() => ({ syncNow: vi.fn(), getSync: vi.fn() }));
-vi.mock('@/lib/api/performance', () => ({ performanceApi: { syncNow } }));
-vi.mock('@/lib/api/integrations', () => ({ integrationsApi: { getSync } }));
+// The enqueue and the run read stand in for the API; the cache keys and the
+// refresh of every imported read stay real.
+vi.mock('@/lib/api/performance', () => ({
+  performanceMutations: { syncNow: () => ({ mutationFn: () => syncNow() }) },
+}));
+vi.mock('@/lib/api/integrations', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/integrations')>();
+  return {
+    ...actual,
+    integrationsQueries: {
+      ...actual.integrationsQueries,
+      sync: (workspaceId: string | null, connectionId: string, syncId: string | null) => ({
+        ...actual.integrationsQueries.sync(workspaceId, connectionId, syncId),
+        queryFn: () => getSync(),
+      }),
+    },
+  };
+});
 
 function Sync({ projectId }: Readonly<{ projectId: string }>) {
   const sync = usePerformanceSync(projectId);
-  return (
-    <button onClick={() => sync.mutation.mutate()}>{sync.syncing ? 'Syncing' : 'Sync now'}</button>
-  );
+  return <button onClick={sync.start}>{sync.syncing ? 'Syncing' : 'Sync now'}</button>;
 }
 
 afterEach(() => {

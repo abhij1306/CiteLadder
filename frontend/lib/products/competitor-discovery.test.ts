@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import { ACTIVE_RUN_POLL_MS } from '@/lib/config/operational';
-import { discoveryFinished, discoveryPollInterval } from './competitor-discovery';
+import { discoveryFinished } from '@/lib/api/commerce';
+
+import { discoveryPollInterval } from './competitor-discovery';
 
 const task = (id: string, status: string, terminal: boolean) => ({
   id,

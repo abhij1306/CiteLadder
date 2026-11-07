@@ -1,13 +1,11 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { brandProfileDraftSchema } from '@citeladder/contracts';
 
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
-import { refreshSeedQueries } from '@/lib/api/topics';
+import { projectMutations } from '@/lib/api/projects';
 import type { BrandProfile, BrandProfileDraft } from '@citeladder/contracts';
 import { identityFacets, type IdentityFacets } from '@/lib/project/identity-facets';
 
@@ -82,15 +80,12 @@ export function useBrandProfileForm({
   projectId,
   workspaceId,
   profile,
-  onSaved,
 }: Readonly<{
   projectId: string;
   workspaceId: string;
   /** The persisted profile; none yet (or still loading) edits an empty draft. */
   profile: BrandProfile | null | undefined;
-  onSaved?: () => void;
 }>) {
-  const queryClient = useQueryClient();
   const [edits, setEdits] = useState<Edits>(NO_EDITS);
   const [notice, setNotice] = useState<string | null>(null);
   const savedDraft = profileDraft(profile);
@@ -98,32 +93,27 @@ export function useBrandProfileForm({
   const draft: BrandProfileDraft = { ...savedDraft, ...edits.draft };
   const identity: IdentityFacets = { ...savedIdentity, ...edits.identity };
 
-  const save = useMutation({
-    mutationFn: () =>
-      projectsApi.updateBrandProfile(
-        projectId,
-        {
-          ...changed(
-            DRAFT_FIELDS,
-            {
-              ...draft,
-              products_services: withPending(draft.products_services, edits.pendingOffering),
-            },
-            savedDraft,
-          ),
-          ...identityUpdate(identity, savedIdentity),
+  const save = useMutation(projectMutations.updateBrandProfile({ workspaceId, projectId }));
+  const submit = () =>
+    save.mutate(
+      {
+        ...changed(
+          DRAFT_FIELDS,
+          {
+            ...draft,
+            products_services: withPending(draft.products_services, edits.pendingOffering),
+          },
+          savedDraft,
+        ),
+        ...identityUpdate(identity, savedIdentity),
+      },
+      {
+        onSuccess: () => {
+          setEdits(NO_EDITS);
+          setNotice('Brand knowledge saved. These details now inform assisted features.');
         },
-        { workspaceId },
-      ),
-    onSuccess: (next) => {
-      queryClient.setQueryData(queryKeys.projects.brandProfile(projectId), next);
-      // Seed queries carry the category and offerings, so the builder rereads them.
-      void refreshSeedQueries(queryClient, projectId);
-      onSaved?.();
-      setEdits(NO_EDITS);
-      setNotice('Brand knowledge saved. These details now inform assisted features.');
-    },
-  });
+      },
+    );
 
   return {
     draft,
@@ -132,7 +122,7 @@ export function useBrandProfileForm({
     saving: save.isPending,
     error: save.error,
     notice,
-    save: () => save.mutate(),
+    save: submit,
     setDraft: (next: BrandProfileDraft) =>
       setEdits((current) => ({
         ...current,

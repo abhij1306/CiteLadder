@@ -19,9 +19,8 @@ import {
   TruncationNotice,
   type EvidenceTabProps,
 } from '@/components/visibility/evidence-states';
-import { queryKeys } from '@/lib/api/query-keys';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import {
@@ -387,9 +386,7 @@ function useFanoutSummary(
     [scope, needle],
   );
   const result = useQuery({
-    queryKey: queryKeys.visibility.fanout(projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getFanoutSummary(projectId ?? '', params, { signal, workspaceId }),
+    ...visibilityQueries.fanout({ workspaceId, projectId: projectId ?? '' }, params),
     enabled: Boolean(projectId && workspaceId) && scopeReady,
     // Totals for a selection do not change while the reader pages through it;
     // keeping the previous values avoids the headline flickering to blank.
@@ -413,12 +410,7 @@ function useFanoutSummary(
 function usePromptTopics(projectId: string | null, runId: string | null, enabled: boolean) {
   const workspaceId = useActiveWorkspaceId();
   const result = useQuery({
-    queryKey: [...queryKeys.visibility.prompts(projectId ?? '', runId ?? undefined), 'topics'],
-    queryFn: ({ signal }) =>
-      visibilityApi.getPromptMetrics(projectId ?? '', runId ?? undefined, {
-        signal,
-        workspaceId,
-      }),
+    ...visibilityQueries.prompts({ workspaceId, projectId: projectId ?? '' }, runId),
     enabled: enabled && Boolean(projectId && runId && workspaceId),
   });
   return useMemo(() => {

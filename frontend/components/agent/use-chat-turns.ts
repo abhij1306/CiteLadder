@@ -1,7 +1,7 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 
 import { useComposerCommands } from '@/components/agent/use-composer-commands';
 import { agentWriteFailure } from '@/lib/agent/errors';
@@ -15,7 +15,6 @@ import {
   type AgentMessage,
 } from '@/lib/api/agent';
 import type { AgentContextRefs } from '@citeladder/contracts/agent';
-import { queryKeys } from '@/lib/api/query-keys';
 
 /**
  * The persisted chat. Reads never run the agent. While a turn is active its
@@ -56,19 +55,10 @@ export function useCreateChat(
   projectId: string,
   onCreated: (chatId: string) => void,
 ) {
-  const queryClient = useQueryClient();
   const requestKey = useRequestKey();
-  const mutation = useMutation({
-    ...agentMutations.createChat(workspaceId),
-    onSuccess: async (accepted) => {
-      requestKey.accepted();
-      void queryClient.invalidateQueries({ queryKey: queryKeys.agent.chatLists(projectId) });
-      // Keep the current composer until the saved conversation is available.
-      // prefetchQuery contains read failures; an accepted send stays accepted.
-      await queryClient.prefetchQuery(agentQueries.chat(workspaceId, accepted.chat_id));
-      onCreated(accepted.chat_id);
-    },
-  });
+  // The descriptor reads the saved conversation before success resolves, so
+  // the current composer stays until the chat can render.
+  const mutation = useMutation(agentMutations.createChat(workspaceId));
   const start = ({
     message,
     skillId,
@@ -85,7 +75,15 @@ export function useCreateChat(
       context,
       ...(mentions.length > 0 ? { mentions } : {}),
     };
-    mutation.mutate({ projectId, idempotencyKey: requestKey.keyFor({ projectId, input }), input });
+    mutation.mutate(
+      { projectId, idempotencyKey: requestKey.keyFor({ projectId, input }), input },
+      {
+        onSuccess: (accepted) => {
+          requestKey.accepted();
+          onCreated(accepted.chat_id);
+        },
+      },
+    );
   };
   return {
     start,
@@ -101,34 +99,35 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
   const [skillId, setSkillId] = useState<string | null | undefined>(undefined);
   const [lastMessage, setLastMessage] = useState('');
   const requestKey = useRequestKey();
-  const queryClient = useQueryClient();
-  const commands = useComposerCommands({
-    workspaceId,
-    projectId: detail.chat.project_id,
+  const projectId = detail.chat.project_id;
+  const commands = useComposerCommands({ workspaceId, projectId });
+  const mutation = useMutation(agentMutations.sendMessage({ workspaceId, projectId }));
+  // The composer as it is when a send is accepted, not as it was when sent:
+  // typing during the round trip must survive the acceptance.
+  const composer = useRef({ draft, mentions: commands.mentions });
+  useEffect(() => {
+    composer.current = { draft, mentions: commands.mentions };
   });
-  const mutation = useMutation({
-    ...agentMutations.sendMessage(workspaceId),
-    onSuccess: (accepted, variables) => {
-      requestKey.accepted();
-      const submittedMentions = variables.mentions ?? [];
-      const unchangedMentions =
-        commands.mentions.length === submittedMentions.length &&
-        commands.mentions.every((mention, index) => mention.id === submittedMentions[index]);
-      if (draft.trim() === variables.message && unchangedMentions) {
-        setDraft('');
-        commands.clear();
-      }
-      queryClient.setQueryData<AgentChatDetail>(queryKeys.agent.chat(chatId), (current) =>
-        current ? { ...current, latest_run: accepted.run } : current,
-      );
-      void Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(chatId) }),
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agent.chatLists(detail.chat.project_id),
-        }),
-      ]);
-    },
-  });
+  type Turn = Parameters<typeof mutation.mutate>[0];
+  /**
+   * Every send goes through here: an accepted turn retires its request key,
+   * and clears the composer only if it still holds what was sent.
+   */
+  const submit = (turn: Turn) =>
+    mutation.mutate(turn, {
+      onSuccess: (_accepted, variables) => {
+        requestKey.accepted();
+        const { draft: current, mentions } = composer.current;
+        const submittedMentions = variables.mentions ?? [];
+        const unchangedMentions =
+          mentions.length === submittedMentions.length &&
+          mentions.every((mention, index) => mention.id === submittedMentions[index]);
+        if (current.trim() === variables.message && unchangedMentions) {
+          setDraft('');
+          commands.clear();
+        }
+      },
+    });
   /** The skill choice a recorded request was sent with, as the picker's tri-state. */
   const skillFor = (message: AgentMessage) => {
     if (message.skill_source === 'user') return message.skill_id;
@@ -149,7 +148,7 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
       skillId,
       commands.mentions.map((mention) => mention.id),
     );
-    mutation.mutate({ ...typed, idempotencyKey: requestKey.keyFor(typed) });
+    submit({ ...typed, idempotencyKey: requestKey.keyFor(typed) });
   };
   return {
     draft,
@@ -163,7 +162,7 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
     },
     /** Sends a recorded request again as a new turn, leaving the draft alone. */
     resend: (message: AgentMessage) =>
-      mutation.mutate({
+      submit({
         ...request(
           message.content,
           skillFor(message),
@@ -181,17 +180,13 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
     pending: mutation.isPending,
     failure: mutation.isError ? agentWriteFailure(mutation.error) : null,
     retrySubmission: () => {
-      if (mutation.variables) mutation.mutate(mutation.variables);
+      if (mutation.variables) submit(mutation.variables);
     },
   };
 }
 
 export type FollowUp = ReturnType<typeof useFollowUp>;
 
-export function useCancelRun(workspaceId: string, chatId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...agentMutations.cancelRun(workspaceId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(chatId) }),
-  });
+export function useCancelRun(workspaceId: string) {
+  return useMutation(agentMutations.cancelRun(workspaceId));
 }

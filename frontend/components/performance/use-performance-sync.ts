@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQueries } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 
-import { useRefreshImportedReads } from '@/components/integrations/data-sources';
 import { humanizeApiError } from '@/lib/api/errors';
-import { integrationsApi, type IntegrationSyncRun } from '@/lib/api/integrations';
-import { performanceApi, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
-import { queryKeys } from '@/lib/api/query-keys';
+import {
+  integrationsQueries,
+  refreshImportedReads,
+  type IntegrationSyncRun,
+} from '@/lib/api/integrations';
+import { performanceMutations, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
 import { isSucceededSyncRun, isSyncInFlight } from '@/lib/integrations/sync-runs';
@@ -44,19 +46,21 @@ export function usePerformanceSync(projectId: string | null) {
     currentBatch && !runs.length
       ? 'Nothing to sync yet. Connect a data source and choose its property above.'
       : null;
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!workspaceId || !projectId) throw new Error('Project is not available.');
-      const runs = await performanceApi.syncNow(projectId, { workspaceId });
-      return { scopeKey, runs, startedAt: new Date().toISOString() };
-    },
-    onSuccess: setBatch,
-  });
+  const mutation = useMutation(
+    performanceMutations.syncNow({ workspaceId, projectId: projectId ?? '' }),
+  );
+  // The batch belongs to the project it was started for: a late answer for a
+  // project the reader has since left is never polled here.
+  const start = () => {
+    const requested = scopeKey;
+    mutation.mutate(undefined, {
+      onSuccess: (enqueued) =>
+        setBatch({ scopeKey: requested, runs: enqueued, startedAt: new Date().toISOString() }),
+    });
+  };
   const runQueries = useQueries({
     queries: runs.map((run) => ({
-      queryKey: queryKeys.integrations.sync(run.connection_id, run.sync_run_id),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        integrationsApi.getSync(run.connection_id, run.sync_run_id, { signal, workspaceId }),
+      ...integrationsQueries.sync(workspaceId, run.connection_id, run.sync_run_id),
       refetchInterval: (query: { state: { data?: IntegrationSyncRun } }) => {
         const result = query.state.data;
         return !result || isSyncInFlight(result) ? SYNC_RUN_POLL_MS : false;
@@ -79,6 +83,7 @@ export function usePerformanceSync(projectId: string | null) {
   useRefreshWhenSettled(settled);
   return {
     mutation,
+    start,
     notice,
     outcome,
     startedAt,
@@ -89,8 +94,8 @@ export function usePerformanceSync(projectId: string | null) {
 
 /** Refetch every imported read once, when the batch's reports have been rebuilt. */
 function useRefreshWhenSettled(settled: boolean) {
-  const refresh = useRefreshImportedReads();
+  const client = useQueryClient();
   useEffect(() => {
-    if (settled) void refresh();
-  }, [settled, refresh]);
+    if (settled) void refreshImportedReads(client);
+  }, [settled, client]);
 }

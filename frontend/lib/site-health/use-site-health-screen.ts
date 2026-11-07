@@ -3,20 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { queryKeys } from '@/lib/api/query-keys';
 import { TABLE_DEFAULT_PAGE_SIZE } from '@/lib/config/tables';
+import { type StartCrawlInput } from '@/lib/api/site-health';
 import {
+  refreshCrawlViews,
+  refreshMonitoredUrls,
   siteHealthMutations,
   siteHealthQueries,
-  type StartCrawlInput,
-} from '@/lib/api/site-health';
+} from '@/lib/api/site-health-queries';
 import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import {
   downloadCrawlExport,
   type ExportFormat,
   type ExportView,
 } from '@/lib/site-health/download';
-import { invalidateCrawlViews, invalidateMonitoredProjection } from '@/lib/site-health/invalidate';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { resolveProjectRequestScope } from '@/lib/project/request-scope';
 import { useCrawlEvents } from '@/lib/site-health/use-crawl-events';
@@ -89,7 +89,7 @@ export function useSiteHealthScreen(projectId: string | null) {
   const [exporting, setExporting] = useState(false);
 
   const dashboardQuery = useQuery({
-    ...siteHealthQueries.dashboard(requestScope.workspaceId, requestScope.projectId),
+    ...siteHealthQueries.dashboard(requestScope),
     enabled: requestScope.enabled,
     // Backed off by crawl age, and stops entirely on a crawl that has gone
     // silent — an active-forever crawl must not pin the tab to a 4s poll of
@@ -125,15 +125,15 @@ export function useSiteHealthScreen(projectId: string | null) {
     const previous = lastSeenRef.current;
     lastSeenRef.current = { crawlId, version: crawlVersion };
     if (previous?.crawlId !== crawlId || previous.version === crawlVersion) return;
-    invalidateCrawlViews(queryClient, crawlId);
-    if (projectId) invalidateMonitoredProjection(queryClient, projectId);
+    void refreshCrawlViews(queryClient, crawlId);
+    if (projectId) void refreshMonitoredUrls(queryClient, projectId);
   }, [crawlId, crawlVersion, projectId, queryClient]);
 
   // Per-project monitored rows supply analysis progress totals. Automatic URL
   // admission owns membership; this query is display-only and cannot change
   // the crawl phase.
   const monitoredQuery = useQuery({
-    ...siteHealthQueries.monitored(requestScope.workspaceId, requestScope.projectId),
+    ...siteHealthQueries.monitored(requestScope),
     enabled: requestScope.enabled,
   });
   const projectSelectedTotal = useMemo(() => {
@@ -172,12 +172,11 @@ export function useSiteHealthScreen(projectId: string | null) {
   // projection refetch can neither extend the mutation lifecycle (and disable
   // the control indefinitely) nor report a failure for a crawl that already
   // exists. The `starting` state carries the button guard and strip notice
-  // through the refresh window; the refresh continuation below releases it.
-  // Each attempt carries a token, and every callback applies its state change
-  // only while its token is still the active one — a late callback from an
-  // earlier creation (e.g. the reader switched projects mid-POST) can refresh
-  // that project's projection but can neither overwrite nor clear a newer
-  // attempt's state.
+  // through the refresh window; the descriptor's refresh releases it when it
+  // lands. Each attempt carries a token, and every callback applies its state
+  // change only while its token is still the active one — a late callback
+  // from an earlier creation (e.g. the reader switched projects mid-POST) can
+  // neither overwrite nor clear a newer attempt's state.
   const [starting, setStarting] = useState<{
     projectId: string;
     crawlId: string | null;
@@ -185,63 +184,31 @@ export function useSiteHealthScreen(projectId: string | null) {
   } | null>(null);
   const createAttemptRef = useRef(0);
 
-  const createMutation = useMutation({
-    ...siteHealthMutations.createCrawl(requestScope.workspaceId),
-    onMutate: (variables) => {
-      createAttemptRef.current += 1;
-      const token = createAttemptRef.current;
-      setStarting({ projectId: variables.project_id, crawlId: null, token });
-      return { token };
-    },
-    onSuccess: (crawl, variables, context) => {
-      const token = context.token;
-      if (token === createAttemptRef.current) {
-        setStarting({ projectId: variables.project_id, crawlId: crawl.id, token });
-      }
-      // The create response is a crawl row, while this screen is driven by the
-      // backend's crawl + phase projection. Refresh the full projection in the
-      // background — the starting state releases when it lands, not when the
-      // POST resolves. Automatic admission also adds the root to the monitored
-      // set, so its project-scoped count must refresh in the same window.
-      void (async () => {
-        // Stop any in-flight dashboard fetch first, so a pre-create answer
-        // cannot commit after creation and read as the acknowledgement.
-        await queryClient.cancelQueries({
-          queryKey: queryKeys.siteHealth.dashboard(variables.project_id),
-        });
-        await Promise.all([
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.siteHealth.dashboard(variables.project_id),
-          }),
-          queryClient.invalidateQueries({
-            queryKey: queryKeys.siteHealth.monitored(variables.project_id),
-          }),
-        ]);
-        // The projection has now answered for the created crawl (a refetch
-        // failure also resolves here — bounded by the client's request
-        // timeout), so show the refreshed state instead of a permanent
-        // "Starting…" notice. A stale attempt never clears a newer one.
-        setStarting((current) => (current?.token === token ? null : current));
-      })();
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.token === createAttemptRef.current) setStarting(null);
-    },
-  });
-  const cancelMutation = useMutation({
-    ...siteHealthMutations.cancelCrawl(requestScope.workspaceId),
-    onSuccess: async () => {
-      if (!projectId) return;
-      // Cancellation also changes the server-owned phase. Refresh the whole
-      // projection atomically instead of pairing the terminal crawl row with
-      // an active phase in the client cache.
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.siteHealth.dashboard(projectId),
-      });
-    },
-  });
-  const startCrawl = (input?: StartCrawlInput) =>
-    requestScope.enabled && createMutation.mutate(input ?? { project_id: requestScope.projectId });
+  const createMutation = useMutation(siteHealthMutations.createCrawl(requestScope.workspaceId));
+  const cancelMutation = useMutation(siteHealthMutations.cancelCrawl(requestScope));
+  const startCrawl = (input?: StartCrawlInput) => {
+    if (!requestScope.enabled) return;
+    const variables = input ?? { project_id: requestScope.projectId };
+    createAttemptRef.current += 1;
+    const token = createAttemptRef.current;
+    setStarting({ projectId: variables.project_id, crawlId: null, token });
+    createMutation.mutate(variables, {
+      onSuccess: (created, _variables, start) => {
+        if (token === createAttemptRef.current)
+          setStarting({ projectId: variables.project_id, crawlId: created.id, token });
+        // The projection has answered for the created crawl once the refresh
+        // settles (a refetch failure also settles it — bounded by the client's
+        // request timeout), so show the refreshed state instead of a
+        // permanent "Starting…" notice. A stale attempt never clears a newer one.
+        void Promise.resolve(start?.refreshed).finally(() =>
+          setStarting((current) => (current?.token === token ? null : current)),
+        );
+      },
+      onError: () => {
+        if (token === createAttemptRef.current) setStarting(null);
+      },
+    });
+  };
   // Reruns the shown crawl's scope, so Changes always has a comparable baseline.
   const recrawl = () =>
     crawl && startCrawl({ project_id: requestScope.projectId, recrawl_of: crawl.id });

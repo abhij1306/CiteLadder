@@ -42,14 +42,18 @@ describe('CompetitorSuggestions', () => {
     const { queryClient } = renderWithProviders(
       <CompetitorSuggestions projectId={projectId} suggestionsQuery={suggestionsQuery} />,
     );
-    const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries');
+    const facts = queryKeys.projects.commandCenter({ workspaceId: null, projectId });
+    const suggestions = queryKeys.visibility.competitorSuggestions({
+      workspaceId: null,
+      projectId,
+    });
+    for (const key of [facts, suggestions]) queryClient.setQueryData(key, {});
+    const stale = (key: readonly unknown[]) => queryClient.getQueryState(key)?.isInvalidated;
 
     await user.click(screen.getByRole('button', { name: 'Add competitor' }));
 
-    await waitFor(() =>
-      expect(invalidateQueries).toHaveBeenCalledWith({
-        queryKey: queryKeys.projects.commandCenter(projectId),
-      }),
-    );
+    // The company facts and the suggestion list both re-read; the accepted
+    // competitor leaves the list.
+    await waitFor(() => expect([facts, suggestions].map(stale)).toEqual([true, true]));
   });
 });

@@ -5,8 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
+import { commerceQueries } from '@/lib/api/commerce';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import type { useCompetitorDiscovery } from '@/lib/products/competitor-discovery';
 
@@ -54,8 +53,7 @@ const staticDiscovery = {
  */
 function ShelfHarness({ target, label }: Readonly<{ target: CommerceTarget; label: string }>) {
   const shelf = useQuery({
-    queryKey: queryKeys.commerce.shelf(PROJECT_ID, target),
-    queryFn: ({ signal }) => commerceApi.shelf(PROJECT_ID, target, { signal }),
+    ...commerceQueries.shelf({ workspaceId: null, projectId: PROJECT_ID }, target),
   });
   const queries: CommerceQueries = {
     catalog: emptyRowsQuery,

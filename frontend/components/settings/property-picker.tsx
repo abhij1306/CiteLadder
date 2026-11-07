@@ -11,19 +11,15 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { OptionRow } from '@/components/ui/list-row';
 import { QueryState } from '@/components/ui/query-state';
 import {
-  integrationsApi,
+  integrationsMutations,
+  integrationsQueries,
   type IntegrationConnection,
   type IntegrationProperty,
 } from '@/lib/api/integrations';
 import { humanizeApiError } from '@/lib/api/errors';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import { InlineFigure } from '@/components/ui/typography';
-import {
-  activeMappingFor,
-  mappingsQuery,
-  ownPropertiesFirst,
-  useRefreshImportedReads,
-} from '@/components/integrations/data-sources';
+import { activeMappingFor, ownPropertiesFirst } from '@/components/integrations/data-sources';
 import { PROVIDER_META } from '@/components/settings/grant-model';
 
 /**
@@ -69,7 +65,7 @@ export function useActiveMapping(
   connectionId: string,
   projectId: string | null,
 ) {
-  const query = useQuery(mappingsQuery(connectionId, workspaceId));
+  const query = useQuery(integrationsQueries.mappings(workspaceId, connectionId));
   return activeMappingFor(query.data, projectId);
 }
 
@@ -166,7 +162,6 @@ export function PropertyPicker({
   connection,
   disabled = false,
 }: Readonly<{ connection: IntegrationConnection; disabled?: boolean }>) {
-  const refreshImportedReads = useRefreshImportedReads();
   const { activeProject } = useProjectContext();
   const mayDiscover = useWorkspaceCapability('manage_credentials');
   const activeMapping = useActiveMapping(
@@ -176,33 +171,22 @@ export function PropertyPicker({
   );
   const [open, setOpen] = useState(false);
 
-  const discovery = useMutation({
-    mutationFn: () =>
-      integrationsApi.discoverProperties(connection.id, activeProject?.id, {
-        workspaceId: connection.workspace_id,
-      }),
-    retry: false,
-  });
+  const discovery = useMutation(
+    integrationsMutations.discoverProperties(connection.workspace_id, connection.id),
+  );
 
-  const selectMutation = useMutation({
-    mutationFn: (propertyRef: string) => {
-      if (!activeProject) throw new Error('Select a project first.');
-      return integrationsApi.createMapping(
-        connection.id,
-        {
-          provider: connection.provider,
-          property_ref: propertyRef,
-          project_id: activeProject.id,
-        },
-        { workspaceId: connection.workspace_id },
-      );
-    },
-    onSuccess: async () => {
-      setOpen(false);
-      // account_ref moved with the mapping — refresh the connection list.
-      await refreshImportedReads();
-    },
-  });
+  // The descriptor refreshes the imported reads: account_ref moved with the mapping.
+  const selectMutation = useMutation(
+    integrationsMutations.createMapping(connection.workspace_id, connection.id),
+  );
+  // The options are blocked without a project, so a selection always names one.
+  const selectProperty = (propertyRef: string) => {
+    if (!activeProject) return;
+    selectMutation.mutate(
+      { provider: connection.provider, property_ref: propertyRef, project_id: activeProject.id },
+      { onSuccess: () => setOpen(false) },
+    );
+  };
 
   // The active mapping, never the connection's account_ref — see
   // `useActiveMapping`. A stale account_ref would show a property as chosen
@@ -222,7 +206,7 @@ export function PropertyPicker({
           if (discovery.isPending) return;
           discovery.reset();
           setOpen(true);
-          discovery.mutate();
+          discovery.mutate(activeProject?.id);
         }}
       />
 
@@ -270,8 +254,11 @@ export function PropertyPicker({
               properties={discovery.data ?? []}
               selected={selected}
               blocked={!activeProject || selectMutation.isPending}
-              selecting={selectMutation}
-              onSelect={(propertyRef) => selectMutation.mutate(propertyRef)}
+              selecting={{
+                isPending: selectMutation.isPending,
+                variables: selectMutation.variables?.property_ref,
+              }}
+              onSelect={selectProperty}
             />
           </Stack>
 

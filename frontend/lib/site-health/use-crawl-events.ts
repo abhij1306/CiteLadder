@@ -4,13 +4,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
 import { API_BASE_URL } from '@/lib/config/operational';
-import { queryKeys } from '@/lib/api/query-keys';
+import { refreshCrawlViews, refreshSiteHealthDashboard } from '@/lib/api/site-health-queries';
 import {
   SITE_HEALTH_STREAM_INVALIDATE_DEBOUNCE_MS,
   SITE_HEALTH_STREAM_RECONNECT_BASE_MS,
   SITE_HEALTH_STREAM_RECONNECT_MAX_MS,
 } from '@/lib/config/site-health';
-import { invalidateCrawlViews } from '@/lib/site-health/invalidate';
 import type { RawSseFrame } from '@/lib/sse/frames';
 import { useSseEventStream } from '@/lib/sse/use-event-stream';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
@@ -39,9 +38,8 @@ export function useCrawlEvents(
   const workspaceId = useActiveWorkspaceId();
   const onInvalidate = useCallback(() => {
     if (!crawlId) return;
-    if (projectId)
-      void queryClient.invalidateQueries({ queryKey: queryKeys.siteHealth.dashboard(projectId) });
-    else invalidateCrawlViews(queryClient, crawlId);
+    if (projectId) void refreshSiteHealthDashboard(queryClient, projectId);
+    else void refreshCrawlViews(queryClient, crawlId);
   }, [crawlId, projectId, queryClient]);
 
   useSseEventStream({

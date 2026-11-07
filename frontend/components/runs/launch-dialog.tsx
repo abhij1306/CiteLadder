@@ -1,12 +1,11 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { promptsQueries } from '@/lib/api/prompts';
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi, runsQueries } from '@/lib/api/runs';
+import { runsMutations, runsQueries } from '@/lib/api/runs';
 import type { Audit, LogicalEngine, PromptSet } from '@citeladder/contracts';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
@@ -76,7 +75,6 @@ export function LaunchDialog({
   promptSelectionLabel?: string;
   auditScope?: 'brand' | 'commerce';
 }>) {
-  const queryClient = useQueryClient();
   const workspaceId = useActiveWorkspaceId();
   const promptSetsQuery = useQuery({
     ...promptsQueries.sets({ workspaceId, projectId }),
@@ -172,19 +170,15 @@ export function LaunchDialog({
     setMarketIds([null]);
     setBatchIndex(null);
   };
-  const launchMutation = useMutation({
-    mutationFn: () => {
-      if (!workspaceId) throw new Error('Workspace is not available.');
-      return runsApi.launchAudit(buildLaunchPayload(selection), { workspaceId });
-    },
-    onSuccess: async (audits) => {
-      for (const audit of audits) queryClient.setQueryData(queryKeys.runs.detail(audit.id), audit);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.runs.all });
-      onOpenChange(false);
-      reset();
-      if (audits[0]) onLaunched?.(audits[0]);
-    },
-  });
+  const launchMutation = useMutation(runsMutations.launch(workspaceId));
+  const launch = () =>
+    launchMutation.mutate(buildLaunchPayload(selection), {
+      onSuccess: (audits) => {
+        onOpenChange(false);
+        reset();
+        if (audits[0]) onLaunched?.(audits[0]);
+      },
+    });
   const launchNotice = launchMutation.isError
     ? mutationNoticeForError(launchMutation.error, { action: 'launch the audit' })
     : null;
@@ -218,7 +212,7 @@ export function LaunchDialog({
       estimate={estimateQuery.data}
       launchPending={launchMutation.isPending}
       launchNotice={launchNotice}
-      onLaunch={() => launchMutation.mutate()}
+      onLaunch={launch}
       connecting={connecting}
       setConnecting={setConnecting}
       promptSetLocked={fixedSelection.locked}

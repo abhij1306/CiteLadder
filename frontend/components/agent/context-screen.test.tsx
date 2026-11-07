@@ -16,6 +16,11 @@ const project = makeProject();
 const instructionsEndpoint = `/api/v1/projects/${project.id}/agent/instructions`;
 const profileEndpoint = `/api/v1/projects/${project.id}/brand-profile`;
 const saved = (text: string) => ({ text, revision: 1, created_at: '2026-09-26T10:00:00Z' });
+/** The instructions read as the harness's active workspace caches it. */
+const instructionsKey = queryKeys.agent.instructions({
+  workspaceId: testProjectSelection().activeWorkspaceId,
+  projectId: project.id,
+});
 const none = {
   description: null,
   positioning: null,
@@ -503,14 +508,10 @@ describe('Agent instruction drafts', () => {
   it('follows refreshed instructions until edited, then preserves the local draft', async () => {
     const { queryClient } = renderContext({ tab: 'instructions' });
     const field = await screen.findByRole('textbox', { name: 'Agent instructions' });
-    act(() =>
-      queryClient.setQueryData(queryKeys.agent.instructions(project.id), saved('Refreshed')),
-    );
+    act(() => queryClient.setQueryData(instructionsKey, saved('Refreshed')));
     await waitFor(() => expect(field).toHaveValue('Refreshed'));
     fireEvent.change(field, { target: { value: 'Local draft' } });
-    act(() =>
-      queryClient.setQueryData(queryKeys.agent.instructions(project.id), saved('Remote edit')),
-    );
+    act(() => queryClient.setQueryData(instructionsKey, saved('Remote edit')));
     await waitFor(() => expect(field).toHaveValue('Local draft'));
     fireEvent.change(field, { target: { value: 'Original' } });
     expect(field).toHaveValue('Original');
@@ -553,9 +554,7 @@ describe('Agent instruction drafts', () => {
       fireEvent.change(field, { target: { value: later } });
       release();
       await waitFor(() =>
-        expect(queryClient.getQueryData(queryKeys.agent.instructions(project.id))).toEqual(
-          saved('Submitted'),
-        ),
+        expect(queryClient.getQueryData(instructionsKey)).toEqual(saved('Submitted')),
       );
       expect(field).toHaveValue(later);
       expect(screen.getByRole('button', { name: 'Save instructions' })).toBeEnabled();

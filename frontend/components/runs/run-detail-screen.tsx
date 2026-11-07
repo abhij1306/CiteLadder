@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 
@@ -9,8 +9,7 @@ import { RunActions, useRunExport } from '@/components/runs/progress-panel';
 import { RunDetailView } from '@/components/runs/run-detail-view';
 import { DetailScreen } from '@/components/layout/page-shell';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { AUDIT_RESULT_QUERY_ROOTS, queryKeys } from '@/lib/api/query-keys';
-import { runsApi } from '@/lib/api/runs';
+import { runsMutations, runsQueries } from '@/lib/api/runs';
 import { RUN_ACTIVE_POLL_MS } from '@/lib/config/runs';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
@@ -29,13 +28,11 @@ export function RunDetailScreen() {
   const searchParams = useSearchParams()[0];
   const runId = params.runId ?? '';
   const workspaceId = useActiveWorkspaceId();
-  const queryClient = useQueryClient();
   const executionParam = searchParams.get('execution');
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
 
   const auditQuery = useQuery({
-    queryKey: queryKeys.runs.detail(runId),
-    queryFn: ({ signal }) => runsApi.getAudit(runId, { signal, workspaceId }),
+    ...runsQueries.detail(workspaceId, runId),
     enabled: workspaceId !== null,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
@@ -51,26 +48,12 @@ export function RunDetailScreen() {
   // Stream is the accelerator; polling remains the reliable baseline.
   useRunEvents(runId, auditQuery.data?.project_id, active);
 
-  const cancelMutation = useMutation({
-    mutationFn: () => runsApi.cancelAudit(runId, { workspaceId }),
-    onSuccess: (audit) => {
-      queryClient.setQueryData(queryKeys.runs.detail(runId), audit);
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.runs.executions(runId),
-      });
-      queryClient.invalidateQueries({ queryKey: queryKeys.runs.all });
-      // A cancelled run finalizes what it measured: every audit-derived read refreshes.
-      for (const root of AUDIT_RESULT_QUERY_ROOTS)
-        void queryClient.invalidateQueries({ queryKey: root });
-    },
-  });
-  const rerunFailuresMutation = useMutation({
-    mutationFn: () => runsApi.rerunFailures(runId, {}, { workspaceId }),
-    onSuccess: (repairAudit) => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.runs.all });
-      router(projectHref(`/runs/${repairAudit.id}`));
-    },
-  });
+  const cancelMutation = useMutation(runsMutations.cancel(workspaceId, runId));
+  const rerunFailuresMutation = useMutation(runsMutations.rerunFailures(workspaceId, runId));
+  const rerunFailures = () =>
+    rerunFailuresMutation.mutate(undefined, {
+      onSuccess: (repairAudit) => router(projectHref(`/runs/${repairAudit.id}`)),
+    });
 
   const executions = executionsQuery.data ?? [];
   // A matching URL selection wins over a transient in-table selection; a stale
@@ -93,7 +76,7 @@ export function RunDetailScreen() {
             audit={audit}
             cancelPending={cancelMutation.isPending}
             onCancel={() => cancelMutation.mutate()}
-            onRerunFailures={() => rerunFailuresMutation.mutate()}
+            onRerunFailures={rerunFailures}
             rerunPending={rerunFailuresMutation.isPending}
             onExport={runExport.onExport}
             exporting={runExport.exporting}
@@ -124,7 +107,7 @@ export function RunDetailScreen() {
             : null
         }
         onCancel={() => cancelMutation.mutate()}
-        onRerunFailures={() => rerunFailuresMutation.mutate()}
+        onRerunFailures={rerunFailures}
         onSelectEvidence={(execution) => setSelectedExecutionId(execution.id)}
       />
       <ExecutionEvidenceDrawer

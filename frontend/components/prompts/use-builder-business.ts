@@ -1,11 +1,9 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
-import { refreshSeedQueries } from '@/lib/api/topics';
+import { projectMutations, projectQueries } from '@/lib/api/projects';
 import {
   businessDraft,
   mapChanges,
@@ -23,15 +21,9 @@ export function useBuilderBusiness({
   projectId,
   workspaceId,
 }: Readonly<{ projectId: string; workspaceId: string }>) {
-  const queryClient = useQueryClient();
-  const profileQuery = useQuery({
-    queryKey: queryKeys.projects.brandProfile(projectId),
-    queryFn: ({ signal }) => projectsApi.getBrandProfile(projectId, { signal, workspaceId }),
-  });
-  const mapQuery = useQuery({
-    queryKey: queryKeys.projects.businessMap(projectId),
-    queryFn: ({ signal }) => projectsApi.getBusinessMap(projectId, { signal, workspaceId }),
-  });
+  const scope = { workspaceId, projectId };
+  const profileQuery = useQuery(projectQueries.brandProfile(scope));
+  const mapQuery = useQuery(projectQueries.businessMap(scope));
   const saved = useMemo(
     () =>
       profileQuery.data && mapQuery.data ? businessDraft(profileQuery.data, mapQuery.data) : null,
@@ -43,25 +35,16 @@ export function useBuilderBusiness({
   const mapUpdate = edited && saved ? mapChanges(edited, saved) : null;
   const dirty = Object.keys(profileUpdate).length > 0 || mapUpdate !== null;
 
-  const save = useMutation({
-    mutationFn: async () => {
-      if (Object.keys(profileUpdate).length) {
-        const next = await projectsApi.updateBrandProfile(projectId, profileUpdate, {
-          workspaceId,
-        });
-        queryClient.setQueryData(queryKeys.projects.brandProfile(projectId), next);
-      }
-      if (mapUpdate) {
-        const next = await projectsApi.updateBusinessMap(projectId, mapUpdate, { workspaceId });
-        queryClient.setQueryData(queryKeys.projects.businessMap(projectId), next);
-      }
-    },
-    onSuccess: () => {
-      setEdited(null);
-      // Offerings and category terms decide which searches seed a run.
-      void refreshSeedQueries(queryClient, projectId);
-    },
-  });
+  const saveBusiness = useMutation(projectMutations.saveBusiness(scope));
+  const save = {
+    isPending: saveBusiness.isPending,
+    /** Write what changed; the draft becomes the saved state once both owners land. */
+    mutateAsync: () =>
+      saveBusiness.mutateAsync(
+        { profile: Object.keys(profileUpdate).length ? profileUpdate : null, map: mapUpdate },
+        { onSuccess: () => setEdited(null) },
+      ),
+  };
 
   const retry = () => {
     if (profileQuery.isError) void profileQuery.refetch();

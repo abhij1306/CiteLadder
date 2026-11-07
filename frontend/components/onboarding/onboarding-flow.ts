@@ -8,11 +8,12 @@ import { useForm } from 'react-hook-form';
 
 import {
   brandDiscoveriesApi,
+  brandDiscoveryQueries,
+  refreshBrandDiscovery,
   type BrandDiscovery,
   type DiscoveryProfile,
 } from '@/lib/api/brand-discoveries';
-import { queryKeys } from '@/lib/api/query-keys';
-import { brandDiscoveryKeys } from '@/lib/api/query-keys/brand-discovery';
+import { refreshAfterProjectCreated, refreshBrandLogos } from '@/lib/api/projects';
 import { projectDestination } from '@/lib/navigation/project-destination';
 import {
   brandStepSchema,
@@ -30,7 +31,6 @@ import {
 } from '@/lib/onboarding/timing';
 import { clearReviewDraft, readReviewDraft, saveReviewDraft } from '@/lib/onboarding/review-draft';
 import { useBrandDiscovery } from '@/lib/onboarding/use-brand-discovery';
-import { refreshBrandLogos } from '@/lib/project/brand-logos';
 import { useProjectContext } from '@/lib/project/project-context';
 
 import { hasConfirmedIcp } from './icp-confirmation';
@@ -126,10 +126,7 @@ export function useOnboardingFlow(transactionKey: string) {
     activeWorkspaceId,
   );
   const catalog = useQuery({
-    queryKey: brandDiscoveryKeys.catalog(activeWorkspaceId),
-    queryFn: ({ signal }) =>
-      brandDiscoveriesApi.catalog({ signal, workspaceId: activeWorkspaceId }),
-    staleTime: Number.POSITIVE_INFINITY,
+    ...brandDiscoveryQueries.catalog(activeWorkspaceId),
     enabled: activeWorkspaceId !== null,
   });
   const maximumCompetitors = catalog.data?.maximum_competitors;
@@ -224,10 +221,8 @@ export function useOnboardingFlow(transactionKey: string) {
       if (!mounted.current || openingProject.current === projectId) return;
       openingProject.current = projectId;
       if (activeWorkspaceId) {
-        const listKey = queryKeys.projects.list(activeWorkspaceId);
-        await queryClient.cancelQueries({ queryKey: listKey });
+        await refreshAfterProjectCreated(queryClient, activeWorkspaceId);
         if (!mounted.current) return;
-        void queryClient.invalidateQueries({ queryKey: listKey });
       }
       setActiveProjectId(projectId);
       startOnboardingNavigationHandoff(projectId);
@@ -275,10 +270,8 @@ export function useOnboardingFlow(transactionKey: string) {
     // draft: if it now names its project, the effect below opens it, instead
     // of leaving the reader on a review whose project already exists.
     onError: () => {
-      if (!discoveryState) return;
-      void queryClient.invalidateQueries({
-        queryKey: brandDiscoveryKeys.detail(activeWorkspaceId, discoveryState.id),
-      });
+      if (discoveryState)
+        void refreshBrandDiscovery(queryClient, activeWorkspaceId, discoveryState.id);
     },
   });
 

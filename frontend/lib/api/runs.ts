@@ -5,11 +5,12 @@
  * `strictValidate`.
  */
 import { z } from 'zod';
-import { queryOptions, skipToken } from '@tanstack/react-query';
+import { mutationOptions, queryOptions, skipToken, type QueryClient } from '@tanstack/react-query';
 
 import { API_BASE_URL } from '@/lib/config/operational';
 import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
+import type { ProjectScope } from './query-keys/scope';
 import {
   auditEstimateSchema,
   auditScheduleSchema,
@@ -119,7 +120,9 @@ export const runsApi = {
   eventsUrl: (auditId: string) => `${API_BASE_URL}/audits/${auditId}/events?stream=true`,
 };
 
-/** Shared list options keep navigation, the app provider, and run screens on one cache identity. */
+const scoped = (scope: ProjectScope) => ({ workspaceId: scope.workspaceId });
+
+/** Run reads: navigation intent, the app provider and run screens share these keys. */
 export const runsQueries = {
   /**
    * The estimate for a launch the dialog would send. Keyed by the
@@ -134,10 +137,102 @@ export const runsQueries = {
           ? ({ signal }) => runsApi.estimateAudit(input, { signal, workspaceId })
           : skipToken,
     }),
-  list: (workspaceId: string, projectId: string) =>
+  list: (scope: ProjectScope) =>
     queryOptions({
-      queryKey: queryKeys.runs.list({ project_id: projectId }),
+      queryKey: queryKeys.runs.list(scope),
       queryFn: ({ signal }) =>
-        runsApi.listAudits({ project_id: projectId }, { signal, workspaceId }),
+        runsApi.listAudits({ project_id: scope.projectId }, { signal, ...scoped(scope) }),
+    }),
+  schedules: (scope: ProjectScope) =>
+    queryOptions({
+      queryKey: queryKeys.runs.schedules(scope),
+      queryFn: ({ signal }) => runsApi.listSchedules(scope.projectId, { signal, ...scoped(scope) }),
+    }),
+  detail: (workspaceId: string | null, auditId: string) =>
+    queryOptions({
+      queryKey: queryKeys.runs.detail(workspaceId, auditId),
+      queryFn: ({ signal }) => runsApi.getAudit(auditId, { signal, workspaceId }),
+    }),
+  executions: (workspaceId: string | null, auditId: string) =>
+    queryOptions({
+      queryKey: queryKeys.runs.executions(workspaceId, auditId),
+      queryFn: ({ signal }) => runsApi.listExecutions(auditId, { signal, workspaceId }),
+    }),
+  /** One execution's persisted evidence; skips until an execution is chosen. */
+  execution: (workspaceId: string | null, executionId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.runs.execution(workspaceId, executionId ?? ''),
+      queryFn: executionId
+        ? ({ signal }) => runsApi.getExecution(executionId, { signal, workspaceId })
+        : skipToken,
+    }),
+};
+
+/**
+ * Reads derived from finished audits: Visibility, and Commerce's AI Shelf and
+ * target Actions. A completed or cancelled run refreshes each of them; this is
+ * the one place that says which.
+ */
+export function refreshAuditResults(client: QueryClient) {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.visibility.all }),
+    client.invalidateQueries({ queryKey: queryKeys.commerce.all }),
+  ]);
+}
+
+/** A run's own row and executions, after its stream or its progress moved. */
+export const refreshAuditDetail = (client: QueryClient, auditId: string) =>
+  client.invalidateQueries({ queryKey: queryKeys.runs.auditDetail(auditId) });
+export const refreshAuditExecutions = (client: QueryClient, auditId: string) =>
+  client.invalidateQueries({ queryKey: queryKeys.runs.auditExecutions(auditId) });
+
+/** Run writes; each success refreshes every read it changes. */
+export const runsMutations = {
+  /** One launch: a queued run per selected market, each written into the cache at once. */
+  launch: (workspaceId: string | null) =>
+    mutationOptions({
+      mutationFn: (input: AuditLaunchRequest) => {
+        if (!workspaceId) throw new Error('Workspace is not available.');
+        return runsApi.launchAudit(input, { workspaceId });
+      },
+      onSuccess: async (audits, _input, _result, { client }) => {
+        for (const audit of audits)
+          client.setQueryData(queryKeys.runs.detail(workspaceId, audit.id), audit);
+        await client.invalidateQueries({ queryKey: queryKeys.runs.all });
+      },
+    }),
+  /** A cancelled run finalizes what it measured: every audit-derived read refreshes. */
+  cancel: (workspaceId: string | null, auditId: string) =>
+    mutationOptions({
+      mutationFn: () => runsApi.cancelAudit(auditId, { workspaceId }),
+      onSuccess: (audit, _input, _result, { client }) => {
+        client.setQueryData(queryKeys.runs.detail(workspaceId, auditId), audit);
+        return Promise.all([
+          client.invalidateQueries({ queryKey: queryKeys.runs.all }),
+          refreshAuditResults(client),
+        ]);
+      },
+    }),
+  /** A repair run for the failed executions; the run list gains it. */
+  rerunFailures: (workspaceId: string | null, auditId: string) =>
+    mutationOptions({
+      mutationFn: () => runsApi.rerunFailures(auditId, {}, { workspaceId }),
+      onSuccess: (_audit, _input, _result, { client }) =>
+        client.invalidateQueries({ queryKey: queryKeys.runs.all }),
+    }),
+  createSchedule: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: (input: AuditScheduleCreateRequest) =>
+        runsApi.createSchedule(scope.projectId, input, scoped(scope)),
+      onSuccess: (_schedule, _input, _result, { client }) =>
+        client.invalidateQueries({ queryKey: queryKeys.runs.schedules(scope) }),
+    }),
+  /** Resume a paused schedule. */
+  resumeSchedule: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: (scheduleId: string) =>
+        runsApi.updateSchedule(scope.projectId, scheduleId, { enabled: true }, scoped(scope)),
+      onSuccess: (_schedule, _input, _result, { client }) =>
+        client.invalidateQueries({ queryKey: queryKeys.runs.schedules(scope) }),
     }),
 };

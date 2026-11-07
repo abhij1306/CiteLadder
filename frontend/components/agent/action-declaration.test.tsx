@@ -48,6 +48,7 @@ describe('Mark implemented', () => {
         revision={null}
         action={{
           id: ACTION,
+          project_id: PROJECT,
           members: [{ id: MEMBER, title: 'Missing structured data' } as never],
           member_measurement: { [MEMBER]: null },
           declarable_since: daysAgo(30).toISOString(),

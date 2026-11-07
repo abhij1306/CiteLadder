@@ -46,7 +46,9 @@ describe('OutputHistory', () => {
       ...items,
       revision('44444444-4444-4444-8444-444444444443', 3, 'user', 'Restored draft'),
     ];
-    await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.agent.revisions(CHAT) }));
+    await act(() =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.agent.chatRevisions(CHAT) }),
+    );
     expect(await screen.findByText('Revision 3')).toBeVisible();
   });
 });

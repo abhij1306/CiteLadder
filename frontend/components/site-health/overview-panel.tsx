@@ -8,7 +8,7 @@ import { OverviewMetricCards } from './overview-metrics';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { httpErrorStatus } from '@/lib/api/client';
-import { siteHealthQueries } from '@/lib/api/site-health';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import { shouldPollCrawl } from '@/lib/site-health/status';
 
@@ -31,7 +31,7 @@ export function OverviewPanel({
 }>) {
   const terminal = crawl ? !shouldPollCrawl(crawl) : false;
   const overview = useQuery({
-    ...siteHealthQueries.overview(workspaceId, projectId, crawlId),
+    ...siteHealthQueries.overview({ workspaceId, projectId }, crawlId),
     enabled: terminal,
   });
   const data = overview.data;

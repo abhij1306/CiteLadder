@@ -16,7 +16,7 @@ import { Pager } from '@/components/ui/pager';
 import { QueryState } from '@/components/ui/query-state';
 import { SearchField } from '@/components/ui/search-field';
 import { SegmentedControl } from '@/components/ui/tabs';
-import { siteHealthQueries } from '@/lib/api/site-health';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import { ICONS } from '@/lib/icons';
 import { ISSUE_OCCURRENCE_LIMIT } from '@/lib/config/site-health';
 import type { IssuesSummary, SiteIssue } from '@citeladder/contracts';

@@ -1,86 +1,113 @@
 /**
- * Site Health query-key namespace — isolated by project / crawl / filter so an
- * inventory query for one crawl (or one filter combination) never collides
- * with another.
+ * Site Health query-key namespace. Project reads sit on the shared scoped-key
+ * builder (`['site-health', projectId, resource, workspaceId, ...]`), so one
+ * project prefix refreshes every project read. A crawl's own reads are keyed
+ * by the crawl, because a crawl page knows only its id: `['site-health',
+ * 'crawl', crawlId, resource, workspaceId, ...]`, the workspace after the
+ * resource so a crawl's prefix reaches every workspace's copy.
  */
+import { scopedKeys, type ProjectScope } from './scope';
 import type { ListFilters } from './shared';
 
+const siteHealth = scopedKeys('site-health');
+
+/** One resource of one crawl, in every workspace. */
+const crawlResource = <const Resource extends string>(crawlId: string, resource: Resource) =>
+  ['site-health', 'crawl', crawlId, resource] as const;
+const crawlRead = <const Resource extends string, const Args extends readonly unknown[]>(
+  resource: Resource,
+  workspaceId: string | null,
+  crawlId: string,
+  ...args: Args
+) => [...crawlResource(crawlId, resource), workspaceId, ...args] as const;
+
 export const siteHealthKeys = {
-  /** The project at index 2, so a page turn keeps its rows only inside it. */
-  robotsHistory: (
-    workspaceId: string,
-    projectId: string,
-    page: Readonly<{ cursor?: string; limit?: number }>,
-  ) =>
-    [
-      'site-health',
-      'robots-history',
-      projectId,
-      workspaceId,
-      page.cursor ?? 'first',
-      page.limit ?? null,
-    ] as const,
-  internalLinks: (workspaceId: string, projectId: string, analysisId?: string) =>
-    ['site-health', 'internal-links', workspaceId, projectId, analysisId ?? 'latest'] as const,
-  all: ['site-health'] as const,
-  dashboard: (projectId: string, crawlId?: string) =>
-    ['site-health', 'dashboard', projectId, crawlId ?? 'latest'] as const,
-  overview: (projectId: string, crawlId?: string) =>
-    ['site-health', 'overview', projectId, crawlId ?? 'latest'] as const,
-  aeoReadiness: (projectId: string, crawlId?: string) =>
-    ['site-health', 'aeo-readiness', projectId, crawlId ?? 'latest'] as const,
-  architecture: (projectId: string, crawlId?: string) =>
-    ['site-health', 'architecture', projectId, crawlId ?? 'latest'] as const,
+  ...siteHealth,
+  // A crawl id or `latest`: the dashboard and its tabs read either the
+  // project's newest crawl or one the reader selected.
+  dashboard: (scope: ProjectScope, crawlId?: string) =>
+    siteHealth.read('dashboard', scope, crawlId ?? 'latest'),
+  overview: (scope: ProjectScope, crawlId?: string) =>
+    siteHealth.read('overview', scope, crawlId ?? 'latest'),
+  aeoReadiness: (scope: ProjectScope, crawlId?: string) =>
+    siteHealth.read('aeo-readiness', scope, crawlId ?? 'latest'),
+  architecture: (scope: ProjectScope, crawlId?: string) =>
+    siteHealth.read('architecture', scope, crawlId ?? 'latest'),
+  changesSummary: (scope: ProjectScope) => siteHealth.read('changes-summary', scope),
   changes: (
-    workspaceId: string,
-    projectId: string,
+    scope: ProjectScope,
     page: Readonly<{ crawlAId?: string; crawlBId?: string; cursor?: string; limit?: number }>,
   ) =>
-    [
-      'site-health',
+    siteHealth.read(
       'changes',
-      projectId,
-      workspaceId,
+      scope,
       page.crawlAId ?? 'unselected-a',
       page.crawlBId ?? 'unselected-b',
       page.cursor ?? 'first',
       page.limit ?? 'default',
-    ] as const,
-  changesSummary: (projectId: string) => ['site-health', 'changes-summary', projectId] as const,
-  crawls: (projectId: string, filters: ListFilters = {}) =>
-    ['site-health', 'crawls', projectId, filters] as const,
-  crawl: (crawlId: string) => ['site-health', 'crawl', crawlId] as const,
-  // A cursor table keeps its rows across a page turn only inside the
-  // workspace its key names, so these paged reads hold it before the filters
-  // (which stay last: a first page is found by their `cursor`).
-  inventory: (crawlId: string, workspaceId: string, filters: ListFilters = {}) =>
-    ['site-health', 'inventory', crawlId, workspaceId, filters] as const,
-  /** Every inventory page of one crawl, in any workspace and filter. */
-  crawlInventory: (crawlId: string) => ['site-health', 'inventory', crawlId] as const,
-  monitored: (projectId: string) => ['site-health', 'monitored', projectId] as const,
-  pages: (crawlId: string, workspaceId: string, filters: ListFilters = {}) =>
-    ['site-health', 'pages', crawlId, workspaceId, filters] as const,
-  /** Every page-browser page of one crawl, in any workspace and filter. */
-  crawlPages: (crawlId: string) => ['site-health', 'pages', crawlId] as const,
+    ),
+  robotsHistory: (scope: ProjectScope, page: Readonly<{ cursor?: string; limit?: number }>) =>
+    siteHealth.read('robots-history', scope, page.cursor ?? 'first', page.limit ?? null),
+  crawls: (scope: ProjectScope, filters: ListFilters = {}) =>
+    siteHealth.read('crawls', scope, filters),
+  monitored: (scope: ProjectScope) => siteHealth.read('monitored', scope),
+  internalLinks: (scope: ProjectScope, analysisId?: string) =>
+    siteHealth.read('internal-links', scope, analysisId ?? 'latest'),
   /**
    * The project-scoped read of the newest crawl's pages. Its answer names the
    * crawl, and the route prefetcher files it under that crawl's `pages` key.
    */
-  latestCrawlPages: (workspaceId: string, projectId: string, filters: ListFilters = {}) =>
-    ['site-health', 'latest-crawl-pages', projectId, workspaceId, filters] as const,
+  latestCrawlPages: (scope: ProjectScope, filters: ListFilters = {}) =>
+    siteHealth.read('latest-crawl-pages', scope, filters),
   /** The project-scoped read of the newest crawl's issues, as `latestCrawlPages`. */
-  latestCrawlIssues: (workspaceId: string, projectId: string, filters: ListFilters = {}) =>
-    ['site-health', 'latest-crawl-issues', projectId, workspaceId, filters] as const,
-  page: (crawlId: string, siteUrlId: string) =>
-    ['site-health', 'page', crawlId, siteUrlId] as const,
+  latestCrawlIssues: (scope: ProjectScope, filters: ListFilters = {}) =>
+    siteHealth.read('latest-crawl-issues', scope, filters),
+
+  /** The crawl row itself. */
+  crawl: (workspaceId: string | null, crawlId: string) =>
+    crawlRead('summary', workspaceId, crawlId),
+  /** The crawl row, in every workspace. */
+  crawlRow: (crawlId: string) => crawlResource(crawlId, 'summary'),
+  // The paged reads keep their filters last: a first page is found by their
+  // `cursor` (see `isFirstPage`).
+  inventory: (workspaceId: string | null, crawlId: string, filters: ListFilters = {}) =>
+    crawlRead('inventory', workspaceId, crawlId, filters),
+  /** Every inventory page of one crawl, in any workspace and filter. */
+  crawlInventory: (crawlId: string) => crawlResource(crawlId, 'inventory'),
+  pages: (workspaceId: string | null, crawlId: string, filters: ListFilters = {}) =>
+    crawlRead('pages', workspaceId, crawlId, filters),
+  /** Every page-browser page of one crawl, in any workspace and filter. */
+  crawlPages: (crawlId: string) => crawlResource(crawlId, 'pages'),
+  issues: (workspaceId: string | null, crawlId: string, filters: ListFilters = {}) =>
+    crawlRead('issues', workspaceId, crawlId, filters),
+  /** Every issues page of one crawl, in any workspace and filter. */
+  crawlIssues: (crawlId: string) => crawlResource(crawlId, 'issues'),
+  issue: (
+    workspaceId: string | null,
+    crawlId: string,
+    groupId: string,
+    filters: ListFilters = {},
+  ) => crawlRead('issue', workspaceId, crawlId, groupId, filters),
+  /** One URL's detail, in every workspace: what a rerun refreshes. */
+  crawlPage: (crawlId: string, siteUrlId: string) =>
+    [...crawlResource(crawlId, 'page'), siteUrlId] as const,
+  page: (workspaceId: string | null, crawlId: string, siteUrlId: string) =>
+    [...crawlResource(crawlId, 'page'), siteUrlId, workspaceId] as const,
   issueHistory: (
+    workspaceId: string | null,
     crawlId: string,
     siteUrlId: string,
-    workspaceId: string,
     filters: ListFilters = {},
-  ) => ['site-health', 'issue-history', crawlId, siteUrlId, workspaceId, filters] as const,
-  issues: (crawlId: string, filters: ListFilters = {}) =>
-    ['site-health', 'issues', crawlId, filters] as const,
-  issue: (crawlId: string, groupId: string, filters: ListFilters = {}) =>
-    ['site-health', 'issue', crawlId, groupId, filters] as const,
+  ) => crawlRead('issue-history', workspaceId, crawlId, siteUrlId, filters),
+  /**
+   * True for a paged crawl read sitting on its FIRST page. The filters are the
+   * last segment of every paged key above and carry an explicit `cursor: null`
+   * for a first page; this module builds those keys, so it is the one place
+   * that reads them.
+   */
+  isFirstPage: (queryKey: readonly unknown[]): boolean => {
+    const filters = queryKey.at(-1);
+    if (typeof filters !== 'object' || filters === null) return true;
+    return (filters as { cursor?: unknown }).cursor == null;
+  },
 };

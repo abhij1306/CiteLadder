@@ -32,10 +32,10 @@ vi.mock('@/lib/project/project-context', () => ({
   useActiveWorkspaceId: () => WORKSPACE,
   useProjectContext: () => ({ activeProject, isLoading: false }),
 }));
-vi.mock('@/lib/api/integrations', () => ({ integrationsApi: { list: vi.fn(async () => []) } }));
 vi.mock('./use-performance-sync', () => ({
   usePerformanceSync: () => ({
-    mutation: { mutate: vi.fn(), isPending: false },
+    mutation: { isPending: false },
+    start: vi.fn(),
     notice: null,
     outcome: null,
     startedAt: null,
@@ -122,6 +122,8 @@ const readiness = {
 beforeEach(() =>
   mswServer.use(
     http.get(`/api/v1/projects/${PROJECT}/readiness`, () => HttpResponse.json(readiness)),
+    // No data source is connected.
+    http.get('/api/v1/integrations', () => HttpResponse.json([])),
   ),
 );
 afterEach(() => {
