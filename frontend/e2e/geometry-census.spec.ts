@@ -11,7 +11,7 @@ import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/
  * that is 88px on one route and 152px on the next — and those are what made
  * the app look inconsistent (docs/design.md, Behaviour every surface keeps). So this
  * walks every product route at the owner's viewport (982×900, DPR 1) and at
- * 1280×900, in light and dark, measures every visible control, badge, tab,
+ * 1280×900 (light: dark rebinds only colours and shadows), measures every visible control, badge, tab,
  * band, box and query state, and asserts ONE value per role — the same
  * literals in every configuration. The expected values are literals on
  * purpose: deriving them from the tokens would let a token edit move the
@@ -506,18 +506,18 @@ const CONNECTIONS = [
   },
 ];
 
-// Both themes, each at both widths (WIDTHS): the same literals everywhere.
-for (const theme of ['light', 'dark'] as const) {
-  test.describe(`${theme} theme`, () => {
-    test.use({ deviceScaleFactor: 1, colorScheme: theme });
+// One theme, at both widths (WIDTHS). The dark theme rebinds colour and
+// shadow tokens only (globals.css), neither of which moves a box, so a
+// second pass in it measured the same geometry again.
+test.describe('light theme', () => {
+  test.use({ deviceScaleFactor: 1, colorScheme: 'light' });
 
-    test('every product route renders one value per geometric role', async ({ page }) => {
-      test.setTimeout(240_000);
-      // With no stored choice the theme follows the emulated device scheme.
-      await expectOneGeometry(page);
-    });
+  test('every product route renders one value per geometric role', async ({ page }) => {
+    test.setTimeout(240_000);
+    // With no stored choice the theme follows the emulated device scheme.
+    await expectOneGeometry(page);
   });
-}
+});
 
 async function expectOneGeometry(page: Page) {
   await stubAuthedShell(page);

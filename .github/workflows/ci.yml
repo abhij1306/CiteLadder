@@ -50,10 +50,15 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-frontend
-      # Not cached: most of this step is the --with-deps apt install, which a
-      # browser cache cannot skip.
+      # No `--with-deps`: on the ubuntu runner image it installed only nine
+      # font packages (CJK, Thai, Unifont, FreeFont, X fonts) that no page
+      # here renders, and that apt download from the Ubuntu mirror once took
+      # 9.5 of an 11-minute job. The image already has every library
+      # Chromium links; if one ever goes missing, Playwright names it at
+      # launch. `--only-shell`: the tests run headless, which uses only the
+      # headless shell, so the full Chrome build is not downloaded.
       - name: Install Playwright browser
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --only-shell chromium
       - name: Playwright
         run: pnpm test:e2e
       - uses: actions/upload-artifact@v7
