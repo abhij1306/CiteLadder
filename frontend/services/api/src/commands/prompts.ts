@@ -1,6 +1,8 @@
 /**
- * Prompt library commands: the one write path the browser and the public API
- * share. Each authorizes the actor, then calls the prompt owners.
+ * Prompt library commands: the one write path the browser, the public API and
+ * MCP share. Each authorizes the actor, then calls the prompt owners scoped to
+ * the caller's project (`RecordScope`): a set, prompt or topic outside it is a
+ * 404, so no caller checks project ownership itself.
  */
 import type { z } from 'zod';
 
@@ -8,65 +10,76 @@ import { enforceWorkspaceRequest } from '../abuse/usage.ts';
 import { requireCapability, type Actor } from '../auth/actor.ts';
 import { policy, resolveSettingSpec } from '../config.ts';
 import type { Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError } from '../errors.ts';
 import { isNonEmpty } from '../lists.ts';
 import * as candidates from '../prompts/candidates.ts';
 import type { GenerationInput } from '../prompts/generation-input.ts';
 import { generatePrompts } from '../prompts/generation.ts';
+import { scopedPromptSet } from '../prompts/prompt-sets.ts';
 import * as prompts from '../prompts/prompts.ts';
 import * as topicPreview from '../prompts/topic-preview.ts';
 import * as topics from '../prompts/topics.ts';
 
 const SCOPE = 'prompts:write';
 
-function authorize(actor: Actor): void {
+/** The actor's `write` grant, and the scope its records are found in. */
+function authorize(actor: Actor, projectId: string | null): RecordScope {
   requireCapability(actor, 'write', SCOPE);
+  return { workspaceId: actor.workspaceId, projectId };
 }
 
 export function createPrompts(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   promptSetId: string,
   inputs: z.infer<typeof prompts.promptInput>[],
 ) {
-  authorize(actor);
+  const scope = authorize(actor, projectId);
   if (!isNonEmpty(inputs)) throw new ApiError(422, 'At least one prompt is required');
-  return prompts.createPrompts(db, actor.workspaceId, promptSetId, inputs);
+  return prompts.createPrompts(db, scope, promptSetId, inputs);
 }
 
 export function createPrompt(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   promptSetId: string,
   input: z.infer<typeof prompts.promptInput>,
 ) {
-  authorize(actor);
-  return prompts.createPrompt(db, actor.workspaceId, promptSetId, input);
+  return prompts.createPrompt(db, authorize(actor, projectId), promptSetId, input);
 }
 
 export function updatePrompt(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   promptId: string,
   input: z.infer<typeof prompts.promptUpdate>,
 ) {
-  authorize(actor);
-  return prompts.updatePrompt(db, actor.workspaceId, promptId, input);
+  const scope = authorize(actor, projectId);
+  return prompts.updatePrompt(db, scope, promptId, input);
 }
 
-export function deletePrompt(db: Database, actor: Actor, promptId: string) {
-  authorize(actor);
-  return prompts.deletePrompt(db, actor.workspaceId, promptId);
+export function deletePrompt(
+  db: Database,
+  actor: Actor,
+  projectId: string | null,
+  promptId: string,
+) {
+  return prompts.deletePrompt(db, authorize(actor, projectId), promptId);
 }
 
 export function setPromptStatuses(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   promptSetId: string,
   input: z.infer<typeof prompts.promptBulkStatus>,
 ) {
-  authorize(actor);
-  return prompts.bulkSetStatus(db, actor.workspaceId, promptSetId, input);
+  const scope = authorize(actor, projectId);
+  return prompts.bulkSetStatus(db, scope, promptSetId, input);
 }
 
 /**
@@ -77,10 +90,11 @@ export function setPromptStatuses(
 export async function importPrompts(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   promptSetId: string,
   body: { bytes: number; read: () => Promise<z.infer<typeof prompts.promptImport>> },
 ) {
-  authorize(actor);
+  const scope = authorize(actor, projectId);
   await enforceWorkspaceRequest(db, actor.workspaceId, {
     operation: 'bulk_import',
     limit: resolveSettingSpec(policy.abuse.bulk_import_limit) as number,
@@ -88,7 +102,7 @@ export async function importPrompts(
   });
   if (body.bytes > policy.prompts.import_max_bytes)
     throw new ApiError(413, 'Import body too large');
-  return prompts.importPrompts(db, actor.workspaceId, promptSetId, await body.read());
+  return prompts.importPrompts(db, scope, promptSetId, await body.read());
 }
 
 export function createTopic(
@@ -97,23 +111,22 @@ export function createTopic(
   projectId: string,
   input: z.infer<typeof topics.topicCreate>,
 ) {
-  authorize(actor);
+  authorize(actor, projectId);
   return topics.createTopic(db, actor.workspaceId, projectId, input);
 }
 
 export function updateTopic(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   topicId: string,
   input: z.infer<typeof topics.topicUpdate>,
 ) {
-  authorize(actor);
-  return topics.updateTopic(db, actor.workspaceId, topicId, input);
+  return topics.updateTopic(db, authorize(actor, projectId), topicId, input);
 }
 
-export function deleteTopic(db: Database, actor: Actor, topicId: string) {
-  authorize(actor);
-  return topics.deleteTopic(db, actor.workspaceId, topicId);
+export function deleteTopic(db: Database, actor: Actor, projectId: string | null, topicId: string) {
+  return topics.deleteTopic(db, authorize(actor, projectId), topicId);
 }
 
 /** The Prompt Builder's reviewed topic plan: deletes, renames and creates at once. */
@@ -123,7 +136,7 @@ export function confirmTopics(
   projectId: string,
   input: z.infer<typeof topics.topicConfirm>,
 ) {
-  authorize(actor);
+  authorize(actor, projectId);
   return topics.confirmTopics(db, actor.workspaceId, projectId, input);
 }
 
@@ -133,10 +146,15 @@ export function previewTopics(db: Database, actor: Actor, projectId: string) {
   return topicPreview.previewTopics(db, actor.workspaceId, projectId);
 }
 
-/** A retried run with the same Idempotency-Key replays the staged run without provider I/O. */
-export function startGeneration(
+/**
+ * A retried run with the same Idempotency-Key replays the staged run without
+ * provider I/O. A set's project never changes, so the set is found in the
+ * caller's project before generation resolves it again under its locks.
+ */
+export async function startGeneration(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   promptSetId: string,
   input: GenerationInput,
   { idempotencyKey }: { idempotencyKey: string | null },
@@ -145,15 +163,16 @@ export function startGeneration(
   const key = idempotencyKey?.trim() ?? '';
   if (key.length > policy.prompts.generation.idempotency_key_max_chars)
     throw new ApiError(422, 'Idempotency-Key is too long', { code: 'generation_invalid' });
+  await scopedPromptSet(db, actor.workspaceId, promptSetId, projectId);
   return generatePrompts(db, actor.workspaceId, promptSetId, input, undefined, key || null);
 }
 
 export function reviewCandidates(
   db: Database,
   actor: Actor,
+  projectId: string | null,
   promptSetId: string,
   input: z.infer<typeof candidates.candidateReview>,
 ) {
-  authorize(actor);
-  return candidates.reviewCandidates(db, actor.workspaceId, promptSetId, input);
+  return candidates.reviewCandidates(db, authorize(actor, projectId), promptSetId, input);
 }

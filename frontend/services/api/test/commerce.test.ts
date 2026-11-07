@@ -644,7 +644,13 @@ describe('decisions and persisted reads', () => {
       .insertInto('commerce_shelf_snapshots')
       .values(snapshot(later, new Date('2026-10-02T00:00:00Z'), 0))
       .execute();
-    await updateActionStatus(db, t.workspaceId, action.id, 'dismissed', t.userId);
+    await updateActionStatus(
+      db,
+      { workspaceId: t.workspaceId, projectId: null },
+      action.id,
+      'dismissed',
+      t.userId,
+    );
     const failed = (await call<Shelf>(path)).body;
     expect(failed.snapshot).toMatchObject({
       product_visibility: null,

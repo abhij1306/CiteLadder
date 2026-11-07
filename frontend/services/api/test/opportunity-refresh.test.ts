@@ -445,7 +445,13 @@ describe('opportunity_refresh', () => {
     const s = await seed();
     await recomputeOpportunities(db, scope(s));
     const thin = byRule(await live(s), 'content_structure_incomplete');
-    await updateActionStatus(db, s.workspace_id, thin.action_id!, 'dismissed', s.user_id);
+    await updateActionStatus(
+      db,
+      { workspaceId: s.workspace_id, projectId: null },
+      thin.action_id!,
+      'dismissed',
+      s.user_id,
+    );
 
     await recomputeOpportunities(db, scope(s));
 
@@ -541,7 +547,13 @@ describe('Opportunity routes', () => {
       expect([query, (await read(query)).status]).toEqual([query, 422]);
 
     const thin = byRule(await live(s), 'content_structure_incomplete');
-    await updateActionStatus(db, s.workspace_id, thin.action_id!, 'dismissed', s.user_id);
+    await updateActionStatus(
+      db,
+      { workspaceId: s.workspace_id, projectId: null },
+      thin.action_id!,
+      'dismissed',
+      s.user_id,
+    );
     expect((await read('status=dismissed')).body.items.map((item) => item.rule_id)).toEqual([
       'content_structure_incomplete',
     ]);

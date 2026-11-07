@@ -22,6 +22,7 @@ import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
 import { isUniqueViolation } from '../db/errors.ts';
 import { record, strings } from '../db/json.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { requireProject } from '../projects/access.ts';
@@ -73,18 +74,16 @@ export const topicConfirm = topicConfirmRequestSchema.extend({
 });
 export type TopicConfirm = z.infer<typeof topicConfirm>;
 
-async function scopedTopic(
-  db: Kysely<DB>,
-  workspaceId: string,
-  topicId: string,
-): Promise<TopicRow> {
-  const topic = await db
+async function scopedTopic(db: Kysely<DB>, scope: RecordScope, topicId: string): Promise<TopicRow> {
+  const query = db
     .selectFrom('topics')
     .innerJoin('projects', 'projects.id', 'topics.project_id')
     .selectAll('topics')
     .where('topics.id', '=', topicId)
-    .where('projects.workspace_id', '=', workspaceId)
-    .executeTakeFirst();
+    .where('projects.workspace_id', '=', scope.workspaceId);
+  const topic = await (
+    scope.projectId === null ? query : query.where('projects.id', '=', scope.projectId)
+  ).executeTakeFirst();
   if (topic === undefined) throw notFound('Topic');
   return topic;
 }
@@ -196,13 +195,13 @@ export async function createTopic(
 
 export async function updateTopic(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   topicId: string,
   input: z.infer<typeof topicUpdate>,
 ): Promise<TopicView> {
   return writing(() =>
     inTransaction(db, async (trx) => {
-      const topic = await scopedTopic(trx, workspaceId, topicId);
+      const topic = await scopedTopic(trx, scope, topicId);
       // Every topic edit changes binding vocabulary or hierarchy: serialize it
       // with the prompt writers that read them.
       await acquireProjectLock(trx, topic.project_id);
@@ -229,11 +228,11 @@ export async function updateTopic(
 
 export async function deleteTopic(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   topicId: string,
 ): Promise<void> {
   await inTransaction(db, async (trx) => {
-    const topic = await scopedTopic(trx, workspaceId, topicId);
+    const topic = await scopedTopic(trx, scope, topicId);
     await acquireProjectLock(trx, topic.project_id);
     await trx.deleteFrom('topics').where('id', '=', topic.id).execute();
   });

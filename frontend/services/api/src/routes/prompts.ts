@@ -10,7 +10,7 @@ import {
 } from '@citeladder/contracts/project';
 import { z } from 'zod';
 
-import { actorOf } from '../auth/actor.ts';
+import { actorOf, requestProjectOf } from '../auth/actor.ts';
 import * as commands from '../commands/prompts.ts';
 import { generationInput } from '../prompts/generation-input.ts';
 import { policy } from '../config.ts';
@@ -69,6 +69,7 @@ export const promptRoutes = [
       return commands.startGeneration(
         db,
         actorOf(c),
+        requestProjectOf(c),
         path.prompt_set_id,
         await readBody(c, generationInput),
         { idempotencyKey: c.req.header('Idempotency-Key') ?? null },
@@ -144,7 +145,7 @@ export const promptRoutes = [
     response: promptSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, promptInput);
-      return commands.createPrompt(db, actorOf(c), path.prompt_set_id, input);
+      return commands.createPrompt(db, actorOf(c), requestProjectOf(c), path.prompt_set_id, input);
     },
   }),
   definePostRoute({
@@ -156,7 +157,13 @@ export const promptRoutes = [
     response: promptSetSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, promptBulkStatus);
-      return commands.setPromptStatuses(db, actorOf(c), path.prompt_set_id, input);
+      return commands.setPromptStatuses(
+        db,
+        actorOf(c),
+        requestProjectOf(c),
+        path.prompt_set_id,
+        input,
+      );
     },
   }),
   definePostRoute({
@@ -170,7 +177,7 @@ export const promptRoutes = [
     body: promptImport,
     response: promptSetSchema,
     async handle({ c, db }, { path }) {
-      return commands.importPrompts(db, actorOf(c), path.prompt_set_id, {
+      return commands.importPrompts(db, actorOf(c), requestProjectOf(c), path.prompt_set_id, {
         bytes: Buffer.byteLength(await c.req.text(), 'utf8'),
         read: () => readBody(c, promptImport),
       });
@@ -197,7 +204,13 @@ export const promptRoutes = [
     response: promptCandidateReviewResponseSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, candidateReview);
-      return commands.reviewCandidates(db, actorOf(c), path.prompt_set_id, input);
+      return commands.reviewCandidates(
+        db,
+        actorOf(c),
+        requestProjectOf(c),
+        path.prompt_set_id,
+        input,
+      );
     },
   }),
   definePatchRoute({
@@ -211,7 +224,7 @@ export const promptRoutes = [
     response: promptSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, promptUpdate);
-      return commands.updatePrompt(db, actorOf(c), path.prompt_id, input);
+      return commands.updatePrompt(db, actorOf(c), requestProjectOf(c), path.prompt_id, input);
     },
   }),
   defineDeleteRoute({
@@ -221,7 +234,8 @@ export const promptRoutes = [
     path: `${api}/prompts/{prompt_id}`,
     capability: 'write',
     params: { path: { prompt_id: uuid }, query: noQuery },
-    handle: ({ c, db }, { path }) => commands.deletePrompt(db, actorOf(c), path.prompt_id),
+    handle: ({ c, db }, { path }) =>
+      commands.deletePrompt(db, actorOf(c), requestProjectOf(c), path.prompt_id),
   }),
   defineGetRoute({
     family,
@@ -289,7 +303,7 @@ export const promptRoutes = [
     response: topicSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, topicUpdate);
-      return commands.updateTopic(db, actorOf(c), path.topic_id, input);
+      return commands.updateTopic(db, actorOf(c), requestProjectOf(c), path.topic_id, input);
     },
   }),
   defineDeleteRoute({
@@ -299,6 +313,7 @@ export const promptRoutes = [
     path: `${api}/topics/{topic_id}`,
     capability: 'write',
     params: { path: { topic_id: uuid }, query: noQuery },
-    handle: ({ c, db }, { path }) => commands.deleteTopic(db, actorOf(c), path.topic_id),
+    handle: ({ c, db }, { path }) =>
+      commands.deleteTopic(db, actorOf(c), requestProjectOf(c), path.topic_id),
   }),
 ];

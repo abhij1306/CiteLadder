@@ -91,8 +91,14 @@ export async function launchAudit(
   return readAudits(db, actor.workspaceId, ids);
 }
 
-export async function cancelAudit(db: Database, actor: Actor, auditId: string) {
+/** An audit outside the caller's project (when it named one) is a 404. */
+export async function cancelAudit(
+  db: Database,
+  actor: Actor,
+  projectId: string | null,
+  auditId: string,
+) {
   requireCapability(actor, 'write', SCOPE);
-  await cancelOwnedAudit(db, actor.workspaceId, auditId);
+  await cancelOwnedAudit(db, { workspaceId: actor.workspaceId, projectId }, auditId);
   return readAudit(db, actor.workspaceId, auditId);
 }

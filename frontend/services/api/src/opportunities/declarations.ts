@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { resolveOwnedPages } from '../demand/page-equivalence.ts';
 import { ApiError } from '../errors.ts';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
@@ -218,7 +219,7 @@ async function verifyExistingEvidence(
 
 export function declareAction(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   actionId: string,
   userId: string,
   key: string,
@@ -236,12 +237,13 @@ export function declareAction(
       ]),
     )
     .digest('hex');
+  const { workspaceId } = scope;
   return inTransaction(db, async (trx) => {
     // Refresh takes the project lock before updating Action rows. A declaration
     // needs the same order so members, snapshot and workflow form one revision.
-    const authorized = await requireAction(trx, workspaceId, actionId);
+    const authorized = await requireAction(trx, scope, actionId);
     await acquireProjectLock(trx, authorized.project_id);
-    const action = await requireAction(trx, workspaceId, actionId, true);
+    const action = await requireAction(trx, scope, actionId, true);
     const existing = await replay(trx, action, key, input, declaredAt);
     if (existing) return { row: existing, created: false };
     boundDeclaredAt(declaredAt, now);
@@ -266,10 +268,9 @@ export function declareAction(
       .where('workspace_id', '=', workspaceId)
       .where('id', '=', action.project_id)
       .executeTakeFirstOrThrow();
-    const scope = { workspaceId, projectId: action.project_id };
     const checks = await declarationChecks(
       trx,
-      scope,
+      { workspaceId, projectId: action.project_id },
       members,
       {
         auditId: snapshot.audit_id,

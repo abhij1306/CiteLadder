@@ -14,10 +14,12 @@ import type { Database } from '../db/database.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
 import { record, strings } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
-import { firstOf } from '../lists.ts';
+import { firstOf, isNonEmpty } from '../lists.ts';
 import { createModelGateway, type ModelGateway } from '../models/gateway.ts';
 import { ModelError } from '../models/http.ts';
 import { bindingTokens } from '../prompts/binding.ts';
+import { insertPrompts } from '../prompts/insert.ts';
+import { acquireProjectLock } from '../prompts/locks.ts';
 import { promptTextHash } from '../prompts/normalization.ts';
 import { buyerPrompts, commerceMissing, type CommerceScope } from './reads.ts';
 
@@ -206,68 +208,66 @@ async function commerceTopic(trx: Database, scope: CommerceScope, name: string, 
 
 type Batch = { target: Target; texts: string[]; evidence: Record<string, unknown> | null };
 
-/** One disabled prompt and its target binding; a normalized duplicate is a 409. */
-async function insertBuyerPrompt(
+/**
+ * One batch's disabled prompts and their target bindings; a normalized
+ * duplicate is a 409.
+ */
+async function insertBatch(
   trx: Database,
   scope: CommerceScope,
-  owner: { set: string; topic: string; name: string },
+  owner: {
+    set: { id: string; project_id: string; workspace_id: string };
+    topic: string;
+    name: string;
+  },
   batch: Batch,
-  text: string,
   now: Date,
 ) {
-  const id = randomUUID();
   const labels = batch.evidence
-    ? {
-        theme: owner.name,
-        buyer_stage: 'consideration',
-        prompt_intent: 'recommend',
-        origin: 'generated',
-      }
-    : { theme: 'Commerce', buyer_stage: '', prompt_intent: '', origin: 'manual' };
-  const inserted = await trx
-    .insertInto('prompts')
-    .values({
-      id,
-      workspace_id: scope.workspaceId,
-      prompt_set_id: owner.set,
-      topic_id: owner.topic,
+    ? { theme: owner.name, buyer_stage: 'consideration', prompt_intent: 'recommend' }
+    : { theme: 'Commerce', buyer_stage: '', prompt_intent: '' };
+  const prompts = await insertPrompts(
+    trx,
+    owner.set,
+    batch.texts.map((text) => ({
       text,
-      normalized_text_hash: promptTextHash(text),
+      topic_id: owner.topic,
       ...labels,
       intent: 'comparison',
+      persona: '',
       cohort: 'commerce',
-      branded: false,
       enabled: false,
-      status: 'active',
-      generation_evidence: batch.evidence ? JSON.stringify(batch.evidence) : null,
-      created_at: now,
-      updated_at: now,
-    })
-    .onConflict((conflict) => conflict.constraint('uq_prompt_set_normalized_text').doNothing())
-    .returning('id')
-    .executeTakeFirst();
-  if (!inserted) throw new ApiError(409, 'This buyer prompt is already tracked');
-  await trx
-    .insertInto('commerce_prompt_targets')
-    .values({
-      id: randomUUID(),
-      workspace_id: scope.workspaceId,
-      project_id: scope.projectId,
-      prompt_id: id,
-      target_kind: batch.target.kind,
-      target_id: batch.target.id,
-      template_version: P.version,
-      approved_at: null,
-      created_at: now,
-    })
-    .execute();
-  return id;
+      generation_evidence: batch.evidence,
+    })),
+    { origin: batch.evidence ? 'generated' : 'manual', onDuplicate: 'reject' },
+  );
+  const ids = prompts.flatMap((prompt) => (prompt === null ? [] : [prompt.id]));
+  if (isNonEmpty(ids))
+    await trx
+      .insertInto('commerce_prompt_targets')
+      .values(
+        ids.map((id) => ({
+          id: randomUUID(),
+          workspace_id: scope.workspaceId,
+          project_id: scope.projectId,
+          prompt_id: id,
+          target_kind: batch.target.kind,
+          target_id: batch.target.id,
+          template_version: P.version,
+          approved_at: null,
+          created_at: now,
+        })),
+      )
+      .execute();
+  return ids;
 }
 
 function persist(db: Database, scope: CommerceScope, batches: Batch[]) {
   return db.transaction().execute(async (trx) => {
     const contexts = [];
-    for (const batch of batches) contexts.push(await targetContext(trx, scope, batch.target));
+    for (const batch of batches) contexts.push(await targetContext(trx, scope, batch.target)); // NOSONAR -- One transaction: statements run in order.
+    // The project lock first, as every prompt writer: the set and topics below are created under it.
+    await acquireProjectLock(trx, scope.projectId);
     const now = new Date();
     const set = await commerceSet(trx, scope, now);
     const ids: string[] = [];
@@ -278,17 +278,15 @@ function persist(db: Database, scope: CommerceScope, batches: Batch[]) {
         .trim();
       if (!name) throw unavailable();
       const topic = await commerceTopic(trx, scope, name, now); // NOSONAR -- One transaction: statements run in order.
-      for (const text of batch.texts)
-        ids.push(
-          await insertBuyerPrompt(
-            trx,
-            scope,
-            { set: set.id, topic: topic.id, name },
-            batch,
-            text,
-            now,
-          ),
-        );
+      ids.push(
+        ...(await /* NOSONAR -- One transaction; ids keep generation order. */ insertBatch(
+          trx,
+          scope,
+          { set, topic: topic.id, name },
+          batch,
+          now,
+        )),
+      );
     }
     // Same-timestamp rows read back in random-id order; return generation order.
     const views = new Map((await buyerPrompts(trx, scope)).map((row) => [row.id, row]));

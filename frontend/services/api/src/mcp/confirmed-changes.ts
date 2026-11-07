@@ -44,7 +44,13 @@ type Run = (
 const runs: Record<ConfirmedKind, Run> = {
   add_prompts: async (trx, _config, actor, change) => {
     const payload = payloads.add_prompts.parse(change.payload);
-    const created = await createPrompts(trx, actor, payload.prompt_set_id, payload.prompts);
+    const created = await createPrompts(
+      trx,
+      actor,
+      change.projectId,
+      payload.prompt_set_id,
+      payload.prompts,
+    );
     return {
       summary: `Added ${created.length} active prompt(s).`,
       prompts: created.map((prompt) => ({ id: prompt.id, text: prompt.text })),
@@ -53,10 +59,16 @@ const runs: Record<ConfirmedKind, Run> = {
   archive_prompts: async (trx, _config, actor, change) => {
     const payload = payloads.archive_prompts.parse(change.payload);
     for (const group of payload.groups)
-      await setPromptStatuses(trx, actor, group.prompt_set_id, {
-        prompt_ids: group.prompt_ids,
-        status: 'archived',
-      });
+      await /* NOSONAR -- One transaction: groups apply in order. */ setPromptStatuses(
+        trx,
+        actor,
+        change.projectId,
+        group.prompt_set_id,
+        {
+          prompt_ids: group.prompt_ids,
+          status: 'archived',
+        },
+      );
     const count = payload.groups.reduce((total, group) => total + group.prompt_ids.length, 0);
     return { summary: `Archived ${count} prompt(s).` };
   },
@@ -82,6 +94,7 @@ const runs: Record<ConfirmedKind, Run> = {
     const { declaration } = await declareAction(
       trx,
       actor,
+      change.projectId,
       payload.action_id,
       payload.declaration,
       { idempotencyKey: declarationKey(change.id) },

@@ -109,6 +109,7 @@ export const publicApiRoutes: readonly ProductRoute[] = [
       prompts: await createPrompts(
         db,
         actorOf(c),
+        path.project_id,
         path.prompt_set_id,
         (await readBody(c, promptBatch)).prompts,
       ),

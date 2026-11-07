@@ -9,7 +9,7 @@ import {
 import { auditEventSchema } from '@citeladder/contracts/audit-events';
 import { configEnvironment, policy } from '../config.ts';
 import { readBody } from '../http/body.ts';
-import { actorOf } from '../auth/actor.ts';
+import { actorOf, requestProjectOf } from '../auth/actor.ts';
 import { cancelAudit, createQueuedAudit, runAudit } from '../commands/audits.ts';
 import { auditInput } from '../audits/inputs.ts';
 import { auditRuntime } from '../audits/config.ts';
@@ -138,7 +138,8 @@ export const auditRoutes = [
     params,
     capability: 'write',
     response: auditSchema,
-    handle: ({ c, db }, { path }) => cancelAudit(db, actorOf(c), path.audit_id),
+    handle: ({ c, db }, { path }) =>
+      cancelAudit(db, actorOf(c), requestProjectOf(c), path.audit_id),
   }),
   definePostRoute({
     family,

@@ -194,7 +194,8 @@ describe('keyword gaps become Actions', () => {
     await recomputeOpportunities(db, scopeOf(p));
     const [finding] = await gapFindings(p);
     const goLive = new Date(Date.now() - 5 * day);
-    const { row } = await declareAction(db, p.workspaceId, finding!.action_id!, p.userId, 'gap', {
+    const scope = { workspaceId: p.workspaceId, projectId: null };
+    const { row } = await declareAction(db, scope, finding!.action_id!, p.userId, 'gap', {
       output_revision_id: null,
       declared_implemented_at: goLive.toISOString(),
     });

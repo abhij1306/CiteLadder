@@ -306,7 +306,7 @@ it('runs a direct change at once and keeps named records inside the project', as
         name: 'Road running',
       }),
     ),
-  ).toBe('The topic was not found in this project');
+  ).toBe('Topic not found');
 });
 
 it('stops tracking a competitor and deletes a topic by name, keeping its prompts', async () => {

@@ -30,19 +30,22 @@ export const promptSetUpdate = promptSetUpdateRequestSchema.extend({
   description: z.string().max(1024).nullish(),
 });
 
-/** A set in the caller's workspace, or `Prompt set not found`. */
+/** A set in the caller's workspace (and named project), or `Prompt set not found`. */
 export async function scopedPromptSet(
   db: Kysely<DB>,
   workspaceId: string,
   promptSetId: string,
+  projectId: string | null = null,
 ): Promise<PromptSetRow> {
-  const row = await db
+  const query = db
     .selectFrom('prompt_sets')
     .innerJoin('projects', 'projects.id', 'prompt_sets.project_id')
     .selectAll('prompt_sets')
     .where('prompt_sets.id', '=', promptSetId)
-    .where('projects.workspace_id', '=', workspaceId)
-    .executeTakeFirst();
+    .where('projects.workspace_id', '=', workspaceId);
+  const row = await (
+    projectId === null ? query : query.where('projects.id', '=', projectId)
+  ).executeTakeFirst();
   if (row === undefined) throw notFound('Prompt set');
   return row;
 }

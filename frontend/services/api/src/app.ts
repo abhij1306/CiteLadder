@@ -21,8 +21,7 @@ import { conditionalReads } from './http/revalidate.ts';
 import { getLogger } from './logging.ts';
 import { requestId } from './request-id.ts';
 import { PRODUCT_ROUTES } from './routes/index.ts';
-import { registerMethodGuards } from './routes/define.ts';
-import { streamsOwnBody } from './routes/crawl-logs.ts';
+import { registerMethodGuards, selfBoundedBodies } from './routes/define.ts';
 import { registerMcpRoutes } from './mcp/server.ts';
 import { ROUTE_CONTRACTS } from './openapi/routes.ts';
 import { publicApiDocument } from './public-api/openapi.ts';
@@ -79,6 +78,7 @@ export function createApp(
       throw new ApiError(413, 'Request body too large');
     },
   });
+  const streamsOwnBody = selfBoundedBodies(PRODUCT_ROUTES);
   for (const prefix of ['/api/*', `${policy.api.machine_prefix}/*`])
     app.use(prefix, (c, next) =>
       streamsOwnBody(c.req.method, c.req.path) ? next() : ordinaryBodyLimit(c, next),

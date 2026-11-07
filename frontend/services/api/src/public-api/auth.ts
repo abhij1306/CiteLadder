@@ -74,7 +74,13 @@ export function apiKeyAuth(
       key.project_ids,
     );
     if (projectId !== null)
-      await requirePathOwnership(db, key.workspace_id, projectId, c.req.param());
+      await requirePathOwnership(
+        db,
+        key.workspace_id,
+        projectId,
+        c.req.param(),
+        operation.capability === 'read' ? 'read' : 'write',
+      );
     c.set('actor', actor);
     c.set('apiKey', { id: key.id, projectIds: key.project_ids });
     c.set('workspace', new WorkspaceContext(key.workspace_id, member.role, projectId));

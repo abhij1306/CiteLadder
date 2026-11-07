@@ -24,7 +24,13 @@ const confirmedKinds = z.enum([
   'declare_implemented',
 ]);
 export type ConfirmedKind = z.infer<typeof confirmedKinds>;
-export type Change = Readonly<{ id: string; kind: ConfirmedKind; payload: unknown }>;
+/** A stored change, run in the project its prepare call authorized. */
+export type Change = Readonly<{
+  id: string;
+  kind: ConfirmedKind;
+  projectId: string;
+  payload: unknown;
+}>;
 
 const tokenHmac = (config: ServiceConfig, token: string) =>
   tokenHash(config, `mcp-confirmation:${token}`);
@@ -99,7 +105,12 @@ export function confirmChange<T>(
       throw new Error('A stored MCP confirmation payload changed');
     const kind = confirmedKinds.parse(row.kind);
     const actor = await writeActor(trx, principal, row.project_id);
-    const result = await run(trx, actor, { id: row.id, kind, payload: row.payload });
+    const result = await run(trx, actor, {
+      id: row.id,
+      kind,
+      projectId: row.project_id,
+      payload: row.payload,
+    });
     await trx
       .updateTable('mcp_confirmations')
       .set({ consumed_at: new Date() })

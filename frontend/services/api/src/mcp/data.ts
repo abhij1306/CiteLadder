@@ -1,4 +1,5 @@
 /** Live authorization for persisted MCP evidence. */
+import type { RecordKindName } from '@citeladder/contracts/record-kinds';
 import { sql, type RawBuilder } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -161,7 +162,7 @@ export function decodeCursor(value: string, size: number): string[] {
   }
 }
 /** A record a later `fetch` can resolve; the Agent derives a turn's sources from these. */
-export const reference = (kind: string, id: string) => ({
+export const reference = (kind: RecordKindName, id: string) => ({
   kind,
   id,
   record_uri: `citeladder://${kind}/${id}`,
@@ -237,7 +238,13 @@ type SearchContext = {
   limit: number;
   results: Record<string, string>[];
   like: (column: string) => RawBuilder<boolean>;
-  append: (kind: string, id: string, project: string, title: string, text: string) => unknown;
+  append: (
+    kind: RecordKindName,
+    id: string,
+    project: string,
+    title: string,
+    text: string,
+  ) => unknown;
 };
 async function searchProjects({ db, workspaces, projectId, limit, like, append }: SearchContext) {
   let projects = db

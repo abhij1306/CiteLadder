@@ -38,7 +38,7 @@ import { operatorTransaction } from '../db/operator-transaction.ts';
 import { isNonEmpty } from '../lists.ts';
 import { competitorCreate } from '../projects/competitors.ts';
 import { generationInput } from '../prompts/generation-input.ts';
-import { promptInput, screenPrompts } from '../prompts/prompts.ts';
+import { promptInput, scopedPrompts, screenPrompts } from '../prompts/prompts.ts';
 import { listTopics, topicConfirm, topicCreate } from '../prompts/topics.ts';
 import { confirmChange, issueConfirmation } from './confirmations.ts';
 import { declarationKey, payloads, runConfirmed } from './confirmed-changes.ts';
@@ -143,27 +143,6 @@ async function requireNamed(
     .executeTakeFirst();
   if (!row) throw new McpInputError(`No ${kind} named "${name}" was found in this project`);
   return row;
-}
-
-type Owned = 'topic' | 'prompt' | 'action' | 'audit';
-const ownedTables = { topic: 'topics', action: 'actions', audit: 'audits' } as const;
-/** A record named by ID must belong to the project the call authorized. */
-async function requireInProject(db: Database, kind: Owned, id: string, projectId: string) {
-  const query =
-    kind === 'prompt'
-      ? db
-          .selectFrom('prompts')
-          .innerJoin('prompt_sets', 'prompt_sets.id', 'prompts.prompt_set_id')
-          .select('prompts.id')
-          .where('prompts.id', '=', id)
-          .where('prompt_sets.project_id', '=', projectId)
-      : db
-          .selectFrom(ownedTables[kind])
-          .select('id')
-          .where('id', '=', id)
-          .where('project_id', '=', projectId);
-  if (!(await query.executeTakeFirst()))
-    throw new McpInputError(`The ${kind} was not found in this project`);
 }
 
 /** The named prompt set, or the project's only one. */
@@ -274,8 +253,9 @@ const writeDefinitions = {
     }),
     annotations: hints(false, true),
     run: async (trx, actor, args) => {
-      await requireInProject(trx, 'topic', args.topic_id, args.project_id);
-      const topic = await updateTopic(trx, actor, args.topic_id, { name: args.name });
+      const topic = await updateTopic(trx, actor, args.project_id, args.topic_id, {
+        name: args.name,
+      });
       return { summary: `Renamed the topic to "${topic.name}".` };
     },
   }),
@@ -292,8 +272,9 @@ const writeDefinitions = {
     }),
     annotations: hints(false, true),
     run: async (trx, actor, args) => {
-      await requireInProject(trx, 'prompt', args.prompt_id, args.project_id);
-      const prompt = await updatePrompt(trx, actor, args.prompt_id, { text: args.text });
+      const prompt = await updatePrompt(trx, actor, args.project_id, args.prompt_id, {
+        text: args.text,
+      });
       return { summary: `The prompt now reads "${prompt.text}".` };
     },
   }),
@@ -345,8 +326,7 @@ const writeDefinitions = {
     }),
     annotations: hints(false, true),
     run: async (trx, actor, args) => {
-      await requireInProject(trx, 'action', args.action_id, args.project_id);
-      await setActionStatus(trx, actor, args.action_id, args.status);
+      await setActionStatus(trx, actor, args.project_id, args.action_id, args.status);
       return { summary: `The Action is now ${args.status}.` };
     },
   }),
@@ -362,8 +342,7 @@ const writeDefinitions = {
     }),
     annotations: hints(true, false),
     run: async (trx, actor, args) => {
-      await requireInProject(trx, 'audit', args.audit_id, args.project_id);
-      await cancelAudit(trx, actor, args.audit_id);
+      await cancelAudit(trx, actor, args.project_id, args.audit_id);
       return { summary: 'The audit was cancelled.' };
     },
   }),
@@ -378,7 +357,7 @@ const writeDefinitions = {
     annotations: hints(true, false),
     run: async (trx, actor, args) => {
       const topic = await requireNamed(trx, 'topic', args.name, args.project_id);
-      await deleteTopic(trx, actor, topic.id);
+      await deleteTopic(trx, actor, args.project_id, topic.id);
       return {
         summary: `Deleted the topic "${topic.name}"; its prompts are kept without a topic.`,
       };
@@ -470,6 +449,7 @@ const writeDefinitions = {
       const result = await startGeneration(
         context.db,
         actor,
+        projectId,
         set.id,
         generationInput.parse(request),
         { idempotencyKey: runKey },
@@ -532,7 +512,12 @@ const writeDefinitions = {
       );
       // Refuse a role that cannot add before showing what would be added.
       requireCapability(actor, 'write');
-      const screened = await screenPrompts(context.db, actor.workspaceId, set.id, inputs);
+      const screened = await screenPrompts(
+        context.db,
+        { workspaceId: actor.workspaceId, projectId: args.project_id },
+        set.id,
+        inputs,
+      );
       const dropped = screened.dropped.map(({ text, message }) => ({ text, reason: message }));
       const { admitted } = screened;
       if (!isNonEmpty(admitted))
@@ -541,7 +526,9 @@ const writeDefinitions = {
           preview: 'None of these prompts can be added.',
           dropped,
         };
-      await rehearse(context.db, (trx) => createPrompts(trx, actor, set.id, admitted));
+      await rehearse(context.db, (trx) =>
+        createPrompts(trx, actor, args.project_id, set.id, admitted),
+      );
       const droppedItems = dropped.map((item) => `"${item.text}" (${item.reason})`).join('; ');
       const lines = [
         `Add ${admitted.length} active prompt(s) to "${set.name}": ${quoted(admitted.map((item) => item.text))}.`,
@@ -571,18 +558,11 @@ const writeDefinitions = {
     annotations: hints(true, true),
     run: async (context, args) => {
       const actor = await writeActor(context.db, context.principal, args.project_id);
-      const ids = [...new Set(args.prompt_ids)];
-      const rows = await context.db
-        .selectFrom('prompts')
-        .innerJoin('prompt_sets', 'prompt_sets.id', 'prompts.prompt_set_id')
-        .select(['prompts.id', 'prompts.text', 'prompts.status', 'prompts.prompt_set_id'])
-        .where('prompts.id', 'in', ids)
-        .where('prompt_sets.project_id', '=', args.project_id)
-        .execute();
-      if (rows.length !== ids.length)
-        throw new McpInputError(
-          `${ids.length - rows.length} prompt(s) were not found in this project`,
-        );
+      const rows = await scopedPrompts(
+        context.db,
+        { workspaceId: actor.workspaceId, projectId: args.project_id },
+        args.prompt_ids,
+      );
       const active = rows.filter((row) => row.status !== 'archived');
       if (!active.length)
         return { state: 'nothing_to_change', preview: 'These prompts are already archived.' };
@@ -594,10 +574,16 @@ const writeDefinitions = {
       );
       await rehearse(context.db, async (trx) => {
         for (const group of groups)
-          await setPromptStatuses(trx, actor, group.prompt_set_id, {
-            ...group,
-            status: 'archived',
-          });
+          await /* NOSONAR -- One rehearsal transaction: groups apply in order. */ setPromptStatuses(
+            trx,
+            actor,
+            args.project_id,
+            group.prompt_set_id,
+            {
+              ...group,
+              status: 'archived',
+            },
+          );
       });
       const skipped = rows.length - active.length;
       const skippedNote = skipped ? ` ${skipped} already archived.` : '';
@@ -747,19 +733,21 @@ const writeDefinitions = {
     annotations: hints(false, false),
     run: async (context, args) => {
       const actor = await writeActor(context.db, context.principal, args.project_id);
-      await requireInProject(context.db, 'action', args.action_id, args.project_id);
       const declaration = payloads.declare_implemented.shape.declaration.parse({
         declared_implemented_at: args.declared_implemented_at ?? new Date().toISOString(),
       });
       const id = randomUUID();
+      // The dry run finds the Action only in this project.
       await rehearse(context.db, (trx) =>
-        declareAction(trx, actor, args.action_id, declaration, {
+        declareAction(trx, actor, args.project_id, args.action_id, declaration, {
           idempotencyKey: declarationKey(id),
         }),
       );
       const action = await context.db
         .selectFrom('actions')
         .select('target_label')
+        .where('workspace_id', '=', actor.workspaceId)
+        .where('project_id', '=', args.project_id)
         .where('id', '=', args.action_id)
         .executeTakeFirstOrThrow();
       return prepared(context, {

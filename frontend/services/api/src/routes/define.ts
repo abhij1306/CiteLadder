@@ -76,6 +76,12 @@ type RouteSpec<Path extends ParamSpecs, Query extends ParamSpecs, Response exten
   headers?: z.ZodObject;
   capability?: WorkspaceCapability;
   /**
+   * The handler authenticates and spends attempt quota, then reads its body
+   * through its own bound (compressed or not), so the app's ordinary body
+   * limit must not pre-read it.
+   */
+  streamsBody?: true;
+  /**
    * `project`: resolve the workspace from the path's `project_id` alone (links,
    * `<img>`). `active-project`: the active workspace, as a flat route resolves
    * it, must hold the path's `project_id`.
@@ -92,8 +98,9 @@ type RouteSpec<Path extends ParamSpecs, Query extends ParamSpecs, Response exten
   /**
    * The public path of a `both` route whose browser path is not below
    * `/api/v1/projects/{project_id}`: it nests the route under
-   * `/v1/projects/{project_id}`, and the key middleware proves each owned path
-   * ID belongs to that project (`public-api/ownership.ts`).
+   * `/v1/projects/{project_id}`: a write's command finds its record only in
+   * that project, and the key middleware proves a read's owned path IDs belong
+   * to it (`public-api/ownership.ts`).
    */
   publicPath?: string;
   /** The API key scope a public call needs; reads default to `read`. */
@@ -106,6 +113,8 @@ export type ProductRoute = {
   publicContract?: RouteContract;
   /** The declared parameters, as `validateParams` reads them. */
   params: { path: ParamSpecs; query: ParamSpecs };
+  /** The route bounds its own body (`streamsBody`). */
+  streamsBody: boolean;
   register: (app: Hono<AppEnv>, config: ServiceConfig, db: Database) => void;
 };
 
@@ -242,6 +251,7 @@ export function defineRoute<
     contract,
     ...(browser && publicSide ? { publicContract: publicSide.contract } : {}),
     params: route.params,
+    streamsBody: route.streamsBody === true,
     register,
   };
 }
@@ -395,6 +405,34 @@ export function defineDeleteRoute<const Path extends ParamSpecs, const Query ext
 }
 
 /** Register once before handlers: a path may support several methods. */
+/**
+ * Whether a request reaches a route that bounds its own body
+ * (`streamsBody`); the app skips its ordinary body limit for exactly these.
+ */
+export function selfBoundedBodies(
+  routes: readonly ProductRoute[],
+): (method: string, path: string) => boolean {
+  const templates = routes
+    .filter((route) => route.streamsBody)
+    .flatMap(({ contract, publicContract }) =>
+      (publicContract ? [contract, publicContract] : [contract]).map((served) => ({
+        method: served.method.toUpperCase(),
+        segments: served.path.split('/'),
+      })),
+    );
+  return (method, path) => {
+    const segments = path.split('/');
+    return templates.some(
+      (template) =>
+        template.method === method &&
+        template.segments.length === segments.length &&
+        template.segments.every((part, index) =>
+          part.startsWith('{') ? segments[index] !== '' : part === segments[index],
+        ),
+    );
+  };
+}
+
 export function registerMethodGuards(app: Hono<AppEnv>, routes: readonly ProductRoute[]): void {
   const methods = new Map<string, Set<string>>();
   const contracts = routes.flatMap(({ contract, publicContract }) =>

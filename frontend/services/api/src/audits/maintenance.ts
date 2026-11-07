@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
 import { inTransaction, type Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { policy } from '../config.ts';
 import { getLogger } from '../logging.ts';
@@ -76,16 +77,20 @@ export function repairOwnedCompletion(db: Database, claimed: AuditTask, owner: s
 /** Scope, cancellation, queue transitions and unused funding release commit together. */
 export async function cancelAudit(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   auditId: string,
   at = new Date(),
 ) {
+  const { workspaceId } = scope;
   return inTransaction(db, async (trx) => {
-    const audit = await trx
+    const query = trx
       .selectFrom('audits')
       .selectAll()
       .where('workspace_id', '=', workspaceId)
-      .where('id', '=', auditId)
+      .where('id', '=', auditId);
+    const audit = await (
+      scope.projectId === null ? query : query.where('project_id', '=', scope.projectId)
+    )
       .forUpdate()
       .executeTakeFirst();
     if (!audit) throw notFound('Audit');

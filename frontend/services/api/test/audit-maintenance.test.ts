@@ -176,7 +176,9 @@ describe('audit recovery against PostgreSQL', () => {
     const t = await seed(),
       foreign = await seed(),
       task = t.tasks[0]!;
-    await expect(cancelAudit(db, foreign.workspaceId, t.auditId)).rejects.toMatchObject({
+    await expect(
+      cancelAudit(db, { workspaceId: foreign.workspaceId, projectId: null }, t.auditId),
+    ).rejects.toMatchObject({
       status: 404,
     });
     await db
@@ -188,7 +190,7 @@ describe('audit recovery against PostgreSQL', () => {
       })
       .where('id', '=', task.id)
       .execute();
-    await cancelAudit(db, t.workspaceId, t.auditId);
+    await cancelAudit(db, { workspaceId: t.workspaceId, projectId: null }, t.auditId);
     expect(
       await persistExecutionSuccess(db, task, 'worker', answer(task), analyzeExecution),
     ).toBeNull();

@@ -1,6 +1,6 @@
 /** Workspace-authorized Action reads, workflow decisions and declarations. */
 import { z } from 'zod';
-import { actorOf } from '../auth/actor.ts';
+import { actorOf, requestProjectOf } from '../auth/actor.ts';
 import { declareAction, setActionStatus } from '../commands/actions.ts';
 import { policy } from '../config.ts';
 import { readBody } from '../http/body.ts';
@@ -70,7 +70,7 @@ export const actionRoutes = [
     response: actionItemSchema,
     async handle({ c, db }, { path }) {
       const body = await readBody(c, statusPatch);
-      return setActionStatus(db, actorOf(c), path.action_id, body.status);
+      return setActionStatus(db, actorOf(c), requestProjectOf(c), path.action_id, body.status);
     },
   }),
   definePostRoute({
@@ -96,6 +96,7 @@ export const actionRoutes = [
       const result = await declareAction(
         db,
         actorOf(c),
+        requestProjectOf(c),
         path.action_id,
         await readBody(c, actionDeclarationRequestSchema),
         { idempotencyKey: c.req.header('Idempotency-Key') ?? null },
