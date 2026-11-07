@@ -11,7 +11,7 @@ import { DetailScreen } from '@/components/layout/page-shell';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { runsMutations, runsQueries } from '@/lib/api/runs';
 import { useProjectHref } from '@/lib/navigation/project-destination';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useRunEvents } from '@/lib/runs/use-run-events';
 import { useRunExecutions } from '@/lib/runs/use-run-executions';
 import { AUDIT_STATES, pollAudits } from '@/lib/runs/status';
@@ -23,13 +23,12 @@ export function RunDetailScreen() {
   const projectHref = useProjectHref();
   const searchParams = useSearchParams()[0];
   const runId = params.runId ?? '';
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const executionParam = searchParams.get('execution');
   const [selectedExecutionId, setSelectedExecutionId] = useState<string | null>(null);
 
   const auditQuery = useQuery({
     ...runsQueries.detail(workspaceId, runId),
-    enabled: workspaceId !== null,
     // Polling remains the baseline; the run's event stream only accelerates it.
     refetchInterval: (query) => pollAudits(query.state.data?.status),
   });

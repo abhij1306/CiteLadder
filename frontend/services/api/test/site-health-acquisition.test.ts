@@ -256,7 +256,6 @@ describe('discover', () => {
       [url('/'), policy.site_health.crawl.analyze_priority_boost],
     ]);
     expect(await crawlRow(seed)).toMatchObject({ admitted_url_count: 3, discovered_url_count: 1 });
-    expect((await urlRow(seed, '/')).discovery_status).toBe('completed');
 
     // A selected child is handed its analysis by its own fetch; an unselected one is inventory only.
     const children = await tasks(seed, 'discover');
@@ -305,11 +304,6 @@ describe('discover', () => {
     ]);
     const counters = await crawlCounters(db, await crawlRow(seed));
     expect(counters).toMatchObject({ errors: 2, failure_breakdown: { http_4xx: 2 } });
-    // A final failure settles the URL's discovery as a fetch does, never leaving it running.
-    const statuses = await Promise.all(
-      ['/a', '/gone', '/seeded'].map(async (path) => (await urlRow(seed, path)).discovery_status),
-    );
-    expect(statuses).toEqual(['completed', 'failed', 'failed']);
   });
 
   it('records a seed an earlier crawl knew as this crawl’s sighting when it is discovered again', async () => {
@@ -333,7 +327,6 @@ describe('discover', () => {
         disposition_reason: 'http_404',
         disposition_version: 'fixture',
         item_kind: 'page',
-        discovery_status: 'failed',
         latest_source_kind: 'sitemap',
         latest_title: '',
         latest_content_type: '',
@@ -356,7 +349,6 @@ describe('discover', () => {
       source: after.latest_source_kind,
       first_seen: after.first_seen_crawl_id,
       last_seen: after.last_seen_crawl_id,
-      discovery: after.discovery_status,
     }).toEqual({
       id: before.id,
       depth: 1,
@@ -364,7 +356,6 @@ describe('discover', () => {
       source: 'link',
       first_seen: earlier,
       last_seen: seed.crawlId,
-      discovery: 'completed',
     });
     const observations = await db
       .selectFrom('site_url_observations')
@@ -374,20 +365,6 @@ describe('discover', () => {
     expect(observations).toEqual([
       { crawl_id: seed.crawlId, source_kind: 'link', status_code: 200 },
     ]);
-  });
-
-  it('settles a robots-excluded link failed rather than leaving it running', async () => {
-    const seed = await crawl();
-    const root = await queued(seed, 'discover');
-    const site = worker({
-      '/robots.txt': { body: 'User-agent: *\nDisallow: /private\n', contentType: 'text/plain' },
-      '/': { body: links('/private') },
-    });
-    await run(site, root);
-    expect((await urlRow(seed, '/private')).discovery_status).toBe('running');
-    const children = await tasks(seed, 'discover');
-    await run(site, children.find((row) => row.requested_url === url('/private'))!.id);
-    expect((await urlRow(seed, '/private')).discovery_status).toBe('failed');
   });
 
   it('keeps a document as inventory and excludes a canonical alias of an active page', async () => {

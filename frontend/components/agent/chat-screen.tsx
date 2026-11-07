@@ -19,13 +19,13 @@ import { ComposerDock } from '@/components/ui/chat-dock';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import type { AgentChatDetail } from '@/lib/api/agent';
-import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 /** One chat: a single thread with its documents inline and the composer pinned below. */
 export function ChatScreen() {
   const { chatId = '' } = useParams();
-  const { activeProjectId, activeWorkspaceId } = useProjectContext();
-  const workspaceId = activeWorkspaceId ?? '';
+  const { workspaceId, projectId } = useProjectScope();
   const query = useChatDetail(workspaceId, chatId);
 
   // A failed background refresh keeps the chat on screen; only a first load fails the page.
@@ -47,7 +47,7 @@ export function ChatScreen() {
         <QueryState kind="loading" />
       </ListScreen>
     );
-  if (query.data.chat.project_id !== activeProjectId)
+  if (query.data.chat.project_id !== projectId)
     return (
       <ListScreen>
         <Callout tone="negative">This chat belongs to another project.</Callout>

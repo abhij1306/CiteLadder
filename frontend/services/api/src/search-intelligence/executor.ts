@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { ProviderError } from '../providers/errors.ts';
 import { acquireCapacity, releaseCapacity, type CapacityRequest } from '../providers/capacity.ts';
@@ -10,7 +11,7 @@ import { connectionSecret } from '../providers/connection-secret.ts';
 import { resolveLive, sendLive, type LiveTarget } from './live.ts';
 import { si } from './requests.ts';
 
-type AcquisitionOptions = { send?: typeof fetch; env?: Record<string, string | undefined> };
+type AcquisitionOptions = { send?: typeof fetch; env?: SettingSource };
 type Dispatchable = Extract<PreparedResearch, { action: 'dispatch' | 'publish' }>;
 type StepContext = {
   state: AcquisitionState;
@@ -134,7 +135,9 @@ async function acquire(
   const plans = await state.start();
   if (!plans) return;
   const runtime = auditRuntime(options.env);
-  const encryptionKey = String(resolveSettingSpec(policy.settings.encryption_key, options.env));
+  const encryptionKey = String(
+    resolveSettingSpec(policy.settings.encryption_key, options.env ?? process.env),
+  );
   const step: StepContext = { state, task, context, encryptionKey, runtime, options };
   for (const [sequence, plan] of plans.entries()) {
     await context.checkCancelled('research plan');

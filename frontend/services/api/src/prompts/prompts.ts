@@ -304,9 +304,23 @@ export async function updatePrompt(
   }
 }
 
+/** The prompt row `FOR UPDATE`, read after its project lock; 404 once it is deleted. */
+async function lockedPrompt(db: Kysely<DB>, promptId: string): Promise<PromptRow> {
+  const prompt = await db
+    .selectFrom('prompts')
+    .selectAll()
+    .where('id', '=', promptId)
+    .forUpdate()
+    .executeTakeFirst();
+  if (prompt === undefined) throw notFound('Prompt');
+  return prompt;
+}
+
 /**
  * The edit, under the project lock that topic writers take, so the topic and
- * vocabulary it binds against cannot change before it commits.
+ * vocabulary it binds against cannot change before it commits. The prompt is
+ * re-read under that lock: a re-file or status change that committed while
+ * this edit waited decides what it must bind to.
  */
 async function applyPromptUpdate(
   db: Kysely<DB>,
@@ -314,18 +328,24 @@ async function applyPromptUpdate(
   promptId: string,
   input: z.infer<typeof promptUpdate>,
 ): Promise<PromptView> {
-  const prompt = await scopedPrompt(db, scope.workspaceId, promptId, scope.projectId);
-  await acquireProjectLock(db, prompt.project_id);
+  const { project_id: projectId } = await scopedPrompt(
+    db,
+    scope.workspaceId,
+    promptId,
+    scope.projectId,
+  );
+  await acquireProjectLock(db, projectId);
+  const prompt = await lockedPrompt(db, promptId);
   // An explicit null detaches the prompt; an absent key leaves its topic.
   const topicGiven = 'topic_id' in input;
   const topicId = topicGiven ? (input.topic_id ?? null) : prompt.topic_id;
-  if (topicGiven && topicId !== null) await topicText(db, prompt.project_id, topicId);
+  if (topicGiven && topicId !== null) await topicText(db, projectId, topicId);
   const activates = input.status === P.status_active && prompt.status !== P.status_active;
   // Re-filing an active prompt under another topic changes what it must bind to.
   const refiled =
     topicId !== prompt.topic_id && (input.status ?? prompt.status) === P.status_active;
   if (input.text != null || activates || refiled) {
-    await requireBinding(db, prompt.project_id, input.text ?? prompt.text, topicId);
+    await requireBinding(db, projectId, input.text ?? prompt.text, topicId);
   }
   const changes: Partial<PromptRow> = {
     ...(input.text == null

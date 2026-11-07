@@ -30,7 +30,7 @@ import {
   updatePrompt,
   updateTopic,
 } from '../commands/prompts.ts';
-import { configEnvironment, policy, type ServiceConfig } from '../config.ts';
+import { policy, type ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { plainJson } from '../db/json.ts';
 import { isNonEmpty } from '../lists.ts';
@@ -96,8 +96,8 @@ const engines = z
   .describe('The AI engines to ask; at least one.');
 const repetitions = z
   .int()
-  .min(policy.projects.min_repetitions)
-  .max(policy.projects.max_repetitions)
+  .min(policy.audits.min_repetitions)
+  .max(policy.audits.max_repetitions)
   .describe('How many times each prompt is asked per engine; omit for the project default.')
   .nullish();
 const markets = marketIdList
@@ -661,7 +661,7 @@ const writeDefinitions = {
         context.db,
         actor.workspaceId,
         { ...request, project_id: args.project_id },
-        auditRuntime(configEnvironment(context.config)),
+        auditRuntime(context.config.settings),
       );
       const ceiling = args.max_attempts ?? estimate.maximum_attempt_count;
       const change = newChange(args.project_id);

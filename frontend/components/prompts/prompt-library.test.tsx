@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 
 import { makeProject } from '@/test/fixtures/project';
-import { makePrompt, makeSet } from '@/test/fixtures/prompts';
+import { makePrompt, makeSet, makeSetList } from '@/test/fixtures/prompts';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 
@@ -47,7 +47,7 @@ function metric(visibilityRate: number) {
 /** The library's reads, with the latest run's figures answered by `figures`. */
 function libraryReads(figures: () => Promise<Response>) {
   mswServer.use(
-    http.get('/api/v1/prompt-sets', () => HttpResponse.json([set])),
+    http.get('/api/v1/prompt-sets', () => HttpResponse.json(makeSetList([set]))),
     http.get(`/api/v1/prompt-sets/${set.id}/candidates`, () => HttpResponse.json([])),
     http.get(`/api/v1/projects/${project.id}/topics`, () => HttpResponse.json([])),
     http.get(`/api/v1/projects/${project.id}/visibility/prompts`, figures),
@@ -151,7 +151,7 @@ describe('PromptLibrary topic filter', () => {
     const topicSet = makeSet([filed, unfiled]);
     const topicProject = makeProject({ prompt_sets: [topicSet] });
     mswServer.use(
-      http.get('/api/v1/prompt-sets', () => HttpResponse.json([topicSet])),
+      http.get('/api/v1/prompt-sets', () => HttpResponse.json(makeSetList([topicSet]))),
       http.get(`/api/v1/prompt-sets/${topicSet.id}/candidates`, () => HttpResponse.json([])),
       http.get(`/api/v1/projects/${topicProject.id}/topics`, () => HttpResponse.json([topic])),
       http.get(`/api/v1/projects/${topicProject.id}/visibility/prompts`, () =>

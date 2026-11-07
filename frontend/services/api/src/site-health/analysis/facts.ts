@@ -4,7 +4,8 @@
  * result is the bounded JSON persisted as `site_fetch_artifacts.normalized_facts`
  * and read by every Site Health analyzer. A malformed page yields partial facts.
  */
-import { policy, resolveSettingSpec } from '../../config.ts';
+import { policy } from '../../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../../config/settings.ts';
 import { compareText } from '../../text-order.ts';
 import { onlyOf } from '../../lists.ts';
 import {
@@ -72,7 +73,7 @@ export type Delivery = {
   decodedBytes?: number | null;
 };
 
-export function factSettings(env: Record<string, string | undefined> = process.env) {
+export function factSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (name: keyof typeof spec) => Number(resolveSettingSpec(spec[name], env));
   return {

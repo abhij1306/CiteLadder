@@ -7,13 +7,14 @@ import {
 } from '@citeladder/contracts/prompt-requests';
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { ApiError } from '../errors.ts';
 import { compareText } from '../text-order.ts';
 
 const G = policy.prompts.generation;
 export const generationSetting = (name: keyof typeof policy.prompts.generation_settings) =>
-  Number(resolveSettingSpec(policy.prompts.generation_settings[name]));
+  Number(resolveSettingSpec(policy.prompts.generation_settings[name], process.env));
 
 /** Personas become the run's audience facets, bounded by policy. */
 const generationDistribution = promptGenerationDistributionRequestSchema

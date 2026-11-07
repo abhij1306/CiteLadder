@@ -11,7 +11,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
 import { updateActionStatus, attachOrCreateAction } from '../src/opportunities/actions.ts';
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { record } from '../src/db/json.ts';
 import { recomputeOpportunities, refreshOpportunities } from '../src/opportunities/refresh.ts';
 import { enqueueOpportunityRefresh } from '../src/opportunities/enqueue.ts';

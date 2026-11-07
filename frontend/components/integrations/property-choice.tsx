@@ -5,10 +5,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import {
   integrationsMutations,
   type IntegrationConnection,
@@ -113,7 +114,9 @@ export function PropertyChoice({
         />
       )}
       {select.isError ? (
-        <Callout tone="negative">{humanizeApiError(select.error).message}</Callout>
+        <MutationNotice
+          notice={mutationNoticeForError(select.error, { action: 'save the property' })}
+        />
       ) : null}
     </Stack>
   );
@@ -144,12 +147,14 @@ function DiscoveryStatus({
       </Inline>
     );
   return (
-    <Callout tone="negative">
-      Could not load your {noun}s. {humanizeApiError(discovery.error).message}{' '}
-      <Button variant="ghost" onClick={discover}>
-        Try again
-      </Button>
-    </Callout>
+    <MutationNotice
+      notice={mutationNoticeForError(discovery.error, { action: `load your ${noun}s` })}
+      recovery={
+        <Button variant="secondary" onClick={discover}>
+          Try again
+        </Button>
+      }
+    />
   );
 }
 

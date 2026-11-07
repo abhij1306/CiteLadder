@@ -15,8 +15,7 @@ import {
   type AiReferralsGranularity,
   type AiReferralsRange,
 } from '@/lib/ai-traffic/options';
-import { useProjectContext } from '@/lib/project/project-context';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 
 const rangeCodec = stringUrlCodec<AiReferralsRange>(
@@ -36,24 +35,19 @@ export function AiReferralsScreen({
   /** Shown above the referrals, e.g. why crawl logs are unavailable. */
   notice?: React.ReactNode;
 }> = {}) {
-  const { activeProject, isLoading: isProjectLoading } = useProjectContext();
-  const projectId = activeProject?.id ?? null;
+  const { workspaceId, projectId } = useProjectScope();
   // The range is the screen's shared `range` parameter, so a preset follows the reader across tabs.
   const [range, setRange] = useUrlState('range', rangeCodec);
   const [granularity, setGranularity] = useUrlState('granularity', granularityCodec);
   const rangeParams = useMemo(() => rangeToParams(range), [range]);
-  const requestScope = resolveActiveProjectRequestScope(activeProject);
-  const dashboardQuery = useQuery({
-    ...aiTrafficQueries.dashboard(requestScope, { ...rangeParams, granularity }),
-    enabled: requestScope.enabled,
-  });
+  const dashboardQuery = useQuery(
+    aiTrafficQueries.dashboard({ workspaceId, projectId }, { ...rangeParams, granularity }),
+  );
 
   return (
     <AiReferralsContent
       tabs={tabs}
       notice={notice}
-      projectId={projectId}
-      projectLoading={isProjectLoading}
       range={range}
       query={dashboardQuery}
       controls={referralsControls({

@@ -5,7 +5,7 @@ import { OpportunitySourcePattern } from '@/components/opportunities/opportunity
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/typography';
 import type { OpportunityDetail } from '@citeladder/contracts';
-import { parseSourcePattern } from '@/lib/opportunities/source-pattern';
+import { observedSourcePattern } from '@/lib/opportunities/source-pattern';
 import { formatCount } from '@/lib/format';
 import { keywordGapEvidenceSchema } from '@citeladder/contracts';
 
@@ -63,7 +63,7 @@ export function OpportunityEvidenceSection({ detail }: Readonly<{ detail: Opport
   const url = asString(evidence.url) ?? detail.target_url;
   const theme = asString(evidence.prompt_theme) ?? detail.target_theme;
   const competitors = asStringList(evidence.competitor_names);
-  const sourcePattern = parseSourcePattern(evidence);
+  const sourcePattern = observedSourcePattern(evidence.source_pattern);
 
   return (
     <Stack as="section">

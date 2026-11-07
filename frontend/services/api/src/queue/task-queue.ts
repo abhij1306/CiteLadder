@@ -135,7 +135,8 @@ export const INTEGRATION_LANE = {
 /**
  * Audits charge the attempt when a paid result or failure settles, never on
  * claim; parks keep the budget, and recovery (`AuditMaintenance`, parent
- * first) charges unless the submission is uncertain or the audit ended.
+ * first) charges unless a paid submission exists (uncertain or polling) or
+ * the audit ended.
  */
 export const AUDIT_LANE = {
   table: 'audit_tasks',

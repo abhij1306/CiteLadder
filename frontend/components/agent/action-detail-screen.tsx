@@ -41,17 +41,18 @@ import { actionsMutations, actionsQueries, type ActionDetail } from '@/lib/api/a
 import { agentQueries } from '@/lib/api/agent';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { readableUrl } from '@/lib/format';
-import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 const BACK = { href: '/agent/actions', label: 'Back to Actions' } as const;
 
 /** One Action: diagnosis, member evidence, its declaration and linked chats. */
 export function ActionDetailScreen() {
   const { actionId = '' } = useParams();
-  const { activeProjectId, activeWorkspaceId } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const query = useQuery({
-    ...actionsQueries.detail(activeWorkspaceId ?? '', actionId),
-    enabled: Boolean(activeWorkspaceId && actionId),
+    ...actionsQueries.detail(workspaceId, actionId),
+    enabled: Boolean(actionId),
   });
 
   if (query.isError)
@@ -64,19 +65,13 @@ export function ActionDetailScreen() {
         />
       </DetailScreen>
     );
-  if (!activeWorkspaceId)
-    return (
-      <DetailScreen back={BACK}>
-        <Callout tone="info">Choose a workspace to open this Action.</Callout>
-      </DetailScreen>
-    );
   if (!query.data)
     return (
       <DetailScreen back={BACK}>
         <QueryState kind="loading" />
       </DetailScreen>
     );
-  if (query.data.project_id !== activeProjectId)
+  if (query.data.project_id !== projectId)
     return (
       <DetailScreen back={BACK}>
         <Callout tone="negative">
@@ -85,13 +80,7 @@ export function ActionDetailScreen() {
       </DetailScreen>
     );
   // Keyed so a mutation's state (and its Retry) never outlives its Action.
-  return (
-    <ActionDetailView
-      key={query.data.id}
-      action={query.data}
-      workspaceId={activeWorkspaceId ?? ''}
-    />
-  );
+  return <ActionDetailView key={query.data.id} action={query.data} workspaceId={workspaceId} />;
 }
 
 function ActionDetailView({

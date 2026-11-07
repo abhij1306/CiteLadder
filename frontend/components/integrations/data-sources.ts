@@ -101,6 +101,8 @@ const OAUTH_ERRORS: Record<string, string> = {
   oauth_state_invalid:
     'The connect link expired or was opened in a different browser. Start again from here.',
   oauth_not_configured: 'This connection is not available right now. Contact support.',
+  oauth_revocation_in_progress:
+    'The previous connection is still being disconnected. Wait a minute, then connect again.',
 };
 
 export function oauthErrorMessage(code: string): string {

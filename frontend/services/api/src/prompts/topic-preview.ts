@@ -8,7 +8,7 @@
 import type { topicPreviewResponseSchema } from '@citeladder/contracts/project';
 import type { z } from 'zod';
 
-import { agentCallLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -45,11 +45,9 @@ export async function previewTopics(
     throw generationInvalid('Add at least one offering before proposing topics');
   const meter = (dependencies.meter ?? meterFor)(db, workspaceId);
   const gateway = meter.gateway(dependencies.gateway(), 'prompt_generation');
-  await enforceWorkspaceRequest(
-    db,
-    workspaceId,
-    agentCallLimit(policy.prompts.generation.topic_calls),
-  );
+  await spendBudget(db, budget('agent_provider_call', process.env), workspaceId, {
+    amount: policy.prompts.generation.topic_calls,
+  });
   const deadline =
     dependencies.deadline?.() ??
     AbortSignal.timeout(generationSetting('generation_deadline_seconds') * 1000);

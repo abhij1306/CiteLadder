@@ -27,7 +27,7 @@ import { DisplayTime } from '@/components/ui/display-time';
 import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
@@ -46,8 +46,7 @@ export function AuditSchedules({
   projectId,
   promptSets,
 }: Readonly<{ projectId: string; promptSets: PromptSet[] }>) {
-  const workspaceId = useActiveWorkspaceId();
-  if (!workspaceId) return <Callout tone="info">Loading your workspace…</Callout>;
+  const { workspaceId } = useProjectScope();
   return (
     <WorkspaceSchedules
       key={`${workspaceId}:${projectId}`}

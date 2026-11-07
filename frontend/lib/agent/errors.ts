@@ -1,11 +1,14 @@
-import { ApiError, humanizeApiError } from '@/lib/api/errors';
+import { ApiError } from '@/lib/api/errors';
+import { mutationNoticeForError, type MutationNotice } from '@/lib/api/mutation-notice';
 
-/** What a refused Agent write means to the reader, and whether a new chat helps. */
-export type AgentWriteFailure = { message: string; startNewChat: boolean };
+/** A refused Agent write as the shared failure notice, and whether a new chat helps. */
+export type AgentWriteFailure = MutationNotice & { startNewChat: boolean };
+
+type AgentCopy = { message: string; startNewChat: boolean };
 
 const CODED: {
-  agent_funding_unavailable: AgentWriteFailure;
-  [code: string]: AgentWriteFailure;
+  agent_funding_unavailable: AgentCopy;
+  [code: string]: AgentCopy;
 } = {
   agent_funding_unavailable: {
     message:
@@ -30,15 +33,26 @@ const CODED: {
   },
 };
 
-export function agentWriteFailure(error: unknown): AgentWriteFailure {
-  if (error instanceof ApiError) {
-    const coded = error.code ? CODED[error.code] : undefined;
-    if (coded) return coded;
-    if (error.status === 429)
-      return {
-        message: 'The workspace has reached its agent usage limit. Try again later.',
-        startNewChat: false,
-      };
-  }
-  return { message: humanizeApiError(error).message, startNewChat: false };
+function agentCopy(error: unknown): AgentCopy | undefined {
+  if (!(error instanceof ApiError)) return undefined;
+  const coded = error.code ? CODED[error.code] : undefined;
+  if (coded) return coded;
+  if (error.status === 402) return CODED.agent_funding_unavailable;
+  if (error.status === 429)
+    return {
+      message: 'The workspace has reached its agent usage limit. Try again later.',
+      startNewChat: false,
+    };
+  return undefined;
+}
+
+/**
+ * The notice for a refused Agent write: the A4 notice for `action`, with the
+ * Agent's own copy for the refusals it knows.
+ */
+export function agentWriteFailure(error: unknown, action: string): AgentWriteFailure {
+  const notice = mutationNoticeForError(error, { action });
+  const copy = agentCopy(error);
+  if (!copy) return { ...notice, startNewChat: false };
+  return { ...notice, message: copy.message, startNewChat: copy.startNewChat };
 }

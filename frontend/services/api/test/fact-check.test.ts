@@ -11,7 +11,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { deriveExecution } from '../src/audits/derivation.ts';
 import { createApp } from '../src/app.ts';
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { admittedFactCheck, admittedPerceptionVersions } from '../src/perception/admission.ts';
 import { answerPerception } from '../src/perception/executor.ts';

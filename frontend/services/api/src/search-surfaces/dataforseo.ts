@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { surfaceSupports, type SearchSurface } from './locations.ts';
-import { policy, resolveSettingSpec, ConfigError } from '../config.ts';
+import { policy, ConfigError } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { surfaceKindOf, type ProviderSettings } from '../providers/config.ts';
 import {
   acceptedStatus,
@@ -46,7 +47,7 @@ export class SubmissionUncertain extends ProviderError {
     this.submission = submission;
   }
 }
-export function searchSettings(env: Record<string, string | undefined> = process.env) {
+export function searchSettings(env: SettingSource = process.env) {
   const timeoutSeconds = Number(
     resolveSettingSpec(searchPolicy.settings.request_timeout_seconds, env),
   );

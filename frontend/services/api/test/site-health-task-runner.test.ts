@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { afterAll, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
@@ -147,4 +148,60 @@ it('fences a task whose lease was reclaimed while it ran: the old owner settles 
     .set({ status: 'cancelled' })
     .where('id', '=', id)
     .execute();
+});
+
+/** Recovery reclaimed the lease (one attempt) and the same owner claimed the task again. */
+const reclaimedBySameOwner = () => ({
+  attempt_count: 1,
+  heartbeat_at: new Date('2026-01-01T00:00:00Z'),
+  lease_expires_at: new Date(Date.now() + 60_000),
+});
+const cancel = (...ids: string[]) =>
+  db.updateTable('site_crawl_tasks').set({ status: 'cancelled' }).where('id', 'in', ids).execute();
+
+it('stops renewing a lease the same owner re-claimed at the next attempt', async () => {
+  const seed = await runningCrawl();
+  const id = await fixtures.task(seed, 'link_metrics');
+  const reclaimed = reclaimedBySameOwner();
+  const worker = new SiteHealthWorker(db, {
+    owner: 'same-owner',
+    settings: { ...settings, heartbeat: 0.05 },
+    executors: {
+      link_metrics: async () => {
+        await db.updateTable('site_crawl_tasks').set(reclaimed).where('id', '=', id).execute();
+        await sleep(400);
+      },
+    },
+  });
+  await worker.execute(await lease(id, worker.owner, 0));
+
+  expect(await row(id)).toMatchObject({
+    status: 'running',
+    lease_owner: 'same-owner',
+    ...reclaimed,
+  });
+  await cancel(id);
+});
+
+it('leaves the live claim untouched when a stale claim of the same owner defers it', async () => {
+  const seed = await runningCrawl();
+  await db
+    .updateTable('site_crawls')
+    .set({ site_facts: null })
+    .where('id', '=', seed.crawlId)
+    .execute();
+  const root = await fixtures.analyzable(seed, '/');
+  const setup = await fixtures.task(seed, 'site_setup');
+  const worker = new SiteHealthWorker(db, { owner: 'same-owner', settings, fetcher });
+  const stale = await lease(root.taskId, worker.owner, 0);
+  const reclaimed = reclaimedBySameOwner();
+  await db.updateTable('site_crawl_tasks').set(reclaimed).where('id', '=', root.taskId).execute();
+  await worker.execute(stale);
+
+  expect(await row(root.taskId)).toMatchObject({
+    status: 'leased',
+    lease_owner: 'same-owner',
+    ...reclaimed,
+  });
+  await cancel(root.taskId, setup);
 });

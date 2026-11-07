@@ -276,11 +276,9 @@ function SiteLevelList({
             className={ledgerItemClasses('flex-wrap justify-between')}
           >
             <span className={textRole('itemTitle')}>{pageKindLabel(row.pageKind)}</span>
-            {row.pageCount === null ? null : (
-              <span className="type-caption tabular-nums">
-                {row.pageCount} {row.pageCount === 1 ? 'page' : 'pages'}
-              </span>
-            )}
+            <span className="type-caption tabular-nums">
+              {row.pageCount} {row.pageCount === 1 ? 'page' : 'pages'}
+            </span>
           </Inline>
         ))}
       </ul>

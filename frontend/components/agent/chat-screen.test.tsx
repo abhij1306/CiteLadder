@@ -14,6 +14,7 @@ import {
 } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { expectThreadFollowsLatest } from '@/test/chat-follow';
 
@@ -44,7 +45,7 @@ function renderChat() {
       initialEntries: [`/agent/chats/${CHAT}`],
       projectSelection: {
         activeProjectId: PROJECT,
-        activeProject: { id: PROJECT } as never,
+        activeProject: makeProject({ id: PROJECT }),
         status: 'ready',
       },
     },

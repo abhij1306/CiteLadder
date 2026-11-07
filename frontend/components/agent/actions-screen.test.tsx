@@ -5,6 +5,7 @@ import { Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
 import { ActionDetailScreen } from './action-detail-screen';
@@ -35,7 +36,7 @@ const action = {
 
 const selection = {
   activeProjectId: PROJECT,
-  activeProject: { id: PROJECT } as never,
+  activeProject: makeProject({ id: PROJECT }),
   status: 'ready' as const,
 };
 

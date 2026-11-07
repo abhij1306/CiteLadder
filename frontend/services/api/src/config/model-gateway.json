@@ -38,6 +38,12 @@
       "default": 630.0,
       "exclusive_minimum": 0
     },
+    "lease_seconds": {
+      "env": ["DEFAULT_AGENT_LEASE_SECONDS"],
+      "type": "float",
+      "default": 60.0,
+      "exclusive_minimum": 0
+    },
     "lease_margin_seconds": {
       "env": ["DEFAULT_AGENT_LEASE_MARGIN_SECONDS"],
       "type": "float",

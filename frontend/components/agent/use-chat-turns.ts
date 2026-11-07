@@ -88,7 +88,7 @@ export function useCreateChat(
   return {
     start,
     pending: mutation.isPending,
-    failure: mutation.isError ? agentWriteFailure(mutation.error) : null,
+    failure: mutation.isError ? agentWriteFailure(mutation.error, 'start the chat') : null,
   };
 }
 
@@ -178,7 +178,7 @@ export function useFollowUp(workspaceId: string, detail: AgentChatDetail) {
     send,
     commands,
     pending: mutation.isPending,
-    failure: mutation.isError ? agentWriteFailure(mutation.error) : null,
+    failure: mutation.isError ? agentWriteFailure(mutation.error, 'send the message') : null,
     retrySubmission: () => {
       if (mutation.variables) submit(mutation.variables);
     },

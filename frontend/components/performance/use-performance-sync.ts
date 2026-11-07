@@ -10,7 +10,7 @@ import {
   type IntegrationSyncRun,
 } from '@/lib/api/integrations';
 import { performanceMutations, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { isSyncInFlight, pollSyncRun } from '@/lib/integrations/status';
 
 /**
@@ -30,8 +30,8 @@ import { isSyncInFlight, pollSyncRun } from '@/lib/integrations/status';
  * batch stays in flight — Sync disabled, banner up — until the reports are
  * rebuilt, and the screen refetches once at that point.
  */
-export function usePerformanceSync(projectId: string | null) {
-  const workspaceId = useActiveWorkspaceId();
+export function usePerformanceSync() {
+  const { workspaceId, projectId } = useProjectScope();
   const scopeKey = `${workspaceId}:${projectId}`;
   const [batch, setBatch] = useState<{
     scopeKey: string;
@@ -45,9 +45,7 @@ export function usePerformanceSync(projectId: string | null) {
     currentBatch && !runs.length
       ? 'Nothing to sync yet. Connect a data source and choose its property above.'
       : null;
-  const mutation = useMutation(
-    performanceMutations.syncNow({ workspaceId, projectId: projectId ?? '' }),
-  );
+  const mutation = useMutation(performanceMutations.syncNow({ workspaceId, projectId }));
   // The batch belongs to the project it was started for: a late answer for a
   // project the reader has since left is never polled here.
   const start = () => {

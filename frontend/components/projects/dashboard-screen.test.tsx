@@ -170,11 +170,26 @@ vi.mock('@/lib/api/opportunities', () => ({
   opportunitiesApi: { updateOrder: vi.fn() },
 }));
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
 import { providerCatalogFixture } from '@/test/provider-catalog-fixture';
 import { DashboardScreen } from './dashboard-screen';
 
+// `/projects` is a project route: the gate hands the screen this project.
+const scopeProject = makeProject({
+  id: project.id,
+  workspace_id: project.workspace_id,
+  name: project.name,
+  brand_name: project.brand_name,
+  website_url: project.website_url,
+});
+
 function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {
-  return <MemoryRouter initialEntries={['/projects']}>{children}</MemoryRouter>;
+  return (
+    <MemoryRouter initialEntries={['/projects']}>
+      <ActiveProjectScopeProvider project={scopeProject}>{children}</ActiveProjectScopeProvider>
+    </MemoryRouter>
+  );
 }
 
 function renderDashboard(ui: ReactElement) {

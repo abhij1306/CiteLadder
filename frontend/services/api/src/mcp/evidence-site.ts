@@ -1,4 +1,5 @@
 /** Site Health reads over persisted snapshots, crawl pages, links and robots facts. */
+import type { McpSitePages, McpSiteSnapshot } from '@citeladder/contracts/mcp-app';
 import { robotsFactsSchema } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { z } from 'zod';
@@ -46,7 +47,7 @@ export async function siteSnapshot(
     state: 'available',
     snapshot_id: row.id,
     crawl_id: row.crawl_id,
-    observed_at: row.created_at,
+    observed_at: row.created_at.toISOString(),
     scores: {
       web_fundamentals: row.web_fundamentals_score,
       aeo_readiness: row.aeo_readiness_score,
@@ -71,7 +72,7 @@ export async function siteSnapshot(
     },
     link: appLink(origin, '/site', scope.projectId),
     artifact_refs: [reference('site_snapshot', row.id), reference('site_crawl', row.crawl_id)],
-  };
+  } satisfies McpSiteSnapshot & Evidence;
 }
 
 /** The selected crawl, or the latest; an explicit crawl from elsewhere is refused. */
@@ -391,7 +392,7 @@ export async function sitePages(
         row.analysis_id ? [reference('site_page', row.analysis_id)] : [],
       ),
     ],
-  };
+  } satisfies McpSitePages & Evidence;
 }
 
 /** The crawled pages of one crawl with their current analysis and fetched facts. */

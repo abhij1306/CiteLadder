@@ -1,6 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
 const discover = vi.fn();
@@ -50,7 +51,9 @@ import { CommerceWorkspace } from './commerce-workspace';
 
 describe('CommerceWorkspace stale bulk selection', () => {
   it('keeps stale checked keys clearable when no catalog target matches', () => {
-    renderWithProviders(<CommerceWorkspace projectId="11111111-1111-4111-8111-111111111111" />);
+    renderWithProviders(<CommerceWorkspace projectId="11111111-1111-4111-8111-111111111111" />, {
+      projectSelection: { activeProject: makeProject() },
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'Create stale selection' }));
 

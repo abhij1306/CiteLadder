@@ -1,22 +1,27 @@
 /** Descriptive citation taxonomy, never a causal claim or authority score.
  * Identity is resolved before third-party classification; unknown stays unknown.
- * Bump SOURCE_TAXONOMY_VERSION with classification changes.
+ * Bump SOURCE_TAXONOMY_VERSION with classification changes. The classes are
+ * the contract's `sourceClassSchema`, the vocabulary the evidence view reads.
  */
+import { sourceClassSchema, type SourceClass } from '@citeladder/contracts/opportunities';
+
+const sourceClass = sourceClassSchema.enum;
+
 export const sourcePatterns = {
   SOURCE_ORIGIN_EXTERNAL: 'external',
   SOURCE_TAXONOMY_VERSION: 'source-taxonomy-1',
   SOURCE_MIX_PROJECTION_VERSION: 'opportunity-source-mix-1',
   CONTENT_HANDOFF_TEMPLATE_VERSION: 'opportunity-content-handoff-1',
-  SOURCE_CLASS_BRAND_OWNED: 'brand_owned',
-  SOURCE_CLASS_COMPETITOR_OWNED: 'competitor_owned',
-  SOURCE_CLASS_COMMUNITY: 'community',
-  SOURCE_CLASS_VIDEO: 'video',
-  SOURCE_CLASS_SOCIAL: 'social',
-  SOURCE_CLASS_INSTITUTIONAL: 'institutional',
-  SOURCE_CLASS_REVIEW_MARKETPLACE: 'review_marketplace',
-  SOURCE_CLASS_EDITORIAL_THIRD_PARTY: 'editorial_third_party',
-  SOURCE_CLASS_OTHER_THIRD_PARTY: 'other_third_party',
-  SOURCE_CLASS_SEARCH_SURFACE: 'search_surface',
+  SOURCE_CLASS_BRAND_OWNED: sourceClass.brand_owned,
+  SOURCE_CLASS_COMPETITOR_OWNED: sourceClass.competitor_owned,
+  SOURCE_CLASS_COMMUNITY: sourceClass.community,
+  SOURCE_CLASS_VIDEO: sourceClass.video,
+  SOURCE_CLASS_SOCIAL: sourceClass.social,
+  SOURCE_CLASS_INSTITUTIONAL: sourceClass.institutional,
+  SOURCE_CLASS_REVIEW_MARKETPLACE: sourceClass.review_marketplace,
+  SOURCE_CLASS_EDITORIAL_THIRD_PARTY: sourceClass.editorial_third_party,
+  SOURCE_CLASS_OTHER_THIRD_PARTY: sourceClass.other_third_party,
+  SOURCE_CLASS_SEARCH_SURFACE: sourceClass.search_surface,
   SOURCE_ORIGIN_GOOGLE_OWNED: 'google_owned',
   GOOGLE_OWNED_PLATFORM_DOMAINS: [
     'blogger.com',
@@ -25,18 +30,7 @@ export const sourcePatterns = {
     'youtu.be',
     'youtube.com',
   ],
-  SOURCE_CLASS_ORDER: [
-    'brand_owned',
-    'competitor_owned',
-    'review_marketplace',
-    'editorial_third_party',
-    'community',
-    'social',
-    'institutional',
-    'video',
-    'search_surface',
-    'other_third_party',
-  ],
+  SOURCE_CLASS_ORDER: sourceClassSchema.options,
   COMMUNITY_DOMAINS: [
     'discourse.org',
     'news.ycombinator.com',
@@ -141,7 +135,7 @@ export const sourcePatterns = {
         'zdnet.com',
       ],
     ],
-  ],
+  ] satisfies [SourceClass, string[]][],
   PATTERN_COMPETITOR_OWNED_SOURCES: 'competitor_owned_sources_cited',
   PATTERN_INDEPENDENT_VALIDATION: 'independent_validation_present',
   PATTERN_COMMUNITY_EVIDENCE: 'community_evidence_present',

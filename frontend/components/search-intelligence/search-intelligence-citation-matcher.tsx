@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
@@ -20,7 +21,7 @@ import {
   searchIntelligenceMutations,
   type SearchIntelligenceDataset,
 } from '@/lib/api/search-intelligence';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { referringLists } from './search-intelligence-format';
 
 export function SearchIntelligenceCitationMatcher({
@@ -34,7 +35,8 @@ export function SearchIntelligenceCitationMatcher({
   /** The matches are saved and the readiness is refreshed. */
   onDerived: () => void;
 }>) {
-  const { activeProject } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
+  const scope = { workspaceId, projectId };
   const timeZone = useDisplayTimeZone();
   const { notify } = useToast();
   const [selectedAudits, setSelectedAudits] = useState<string[]>([]);
@@ -45,13 +47,9 @@ export function SearchIntelligenceCitationMatcher({
   const referring =
     lists.find((dataset) => dataset.id === listId) ??
     lists.find((dataset) => dataset.target_origin === targetOrigin);
-  const scope = {
-    workspaceId: activeProject?.workspace_id ?? null,
-    projectId: activeProject?.id ?? '',
-  };
   const audits = useQuery({
     ...runsQueries.list(scope),
-    enabled: Boolean(activeProject && referring),
+    enabled: Boolean(referring),
   });
   const derive = useMutation(searchIntelligenceMutations.deriveCitationMatches(scope));
   const deriveMatches = () =>
@@ -97,7 +95,11 @@ export function SearchIntelligenceCitationMatcher({
         Choose the Visibility audits whose cited sources to compare with the domains that link to
         you.
       </p>
-      {derive.isError ? <Callout tone="negative">{derive.error.message}</Callout> : null}
+      {derive.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(derive.error, { action: 'compare the cited sources' })}
+        />
+      ) : null}
       {lists.length > 1 ? (
         <Select
           ariaLabel="Website"

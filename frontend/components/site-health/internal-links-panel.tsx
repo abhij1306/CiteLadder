@@ -8,6 +8,7 @@ import type { InternalLink, InternalLinkAnalysis } from '@citeladder/contracts/s
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { DisplayTime } from '@/components/ui/display-time';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -19,7 +20,8 @@ import { Select } from '@/components/ui/select';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { ACTION_STATUS_LABEL } from '@/lib/agent/vocabulary';
 import type { ActionStatus } from '@/lib/api/actions';
-import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
+import { httpErrorStatus } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { internalLinksMutations, internalLinksQueries } from '@/lib/api/site-health-internal-links';
 import type { UrlHistory } from '@/lib/navigation/url-state';
 import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
@@ -201,8 +203,11 @@ function RunControls({ read, running }: Readonly<{ read: LinksRead; running: boo
 
 function Notices({ read }: Readonly<{ read: LinksRead }>) {
   const mutationError = read.analyze.error || read.cancel.error;
-  const failure =
-    mutationError && humanizeApiError(mutationError, 'Analysis could not be started.').message;
+  const failure = mutationError
+    ? mutationNoticeForError(mutationError, {
+        action: read.analyze.error ? 'start the analysis' : 'cancel the analysis',
+      })
+    : null;
   return (
     <>
       {read.query.isError ? (
@@ -213,7 +218,7 @@ function Notices({ read }: Readonly<{ read: LinksRead }>) {
           onRetry={() => void read.query.refetch()}
         />
       ) : null}
-      {failure ? <Callout tone="negative">{failure}</Callout> : null}
+      {failure ? <MutationNotice notice={failure} /> : null}
       {read.query.isPending ? <QueryState kind="loading" label="Loading internal links…" /> : null}
     </>
   );

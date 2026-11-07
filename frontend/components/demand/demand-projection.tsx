@@ -11,9 +11,9 @@ import {
 import { Calendar, RefreshCw, Search, Sparkles } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { ListScreen } from '@/components/layout/page-shell';
 import { QueryState } from '@/components/ui/query-state';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
 import { DemandEvidenceDrawer } from '@/components/demand/demand-evidence-drawer';
@@ -30,7 +30,6 @@ import {
 } from '@/lib/api/demand';
 import type { DemandRecomputeRequest } from '@citeladder/contracts/demand';
 import { isTransientMutationError, mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
 import {
   countByTab,
   FILTER_TABS,
@@ -41,7 +40,7 @@ import {
 } from '@/lib/demand/signals';
 import { formatCount, formatWindowDate } from '@/lib/format';
 import { InlineFigure } from '@/components/ui/typography';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { optionalStringUrlCodec, stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -99,18 +98,19 @@ function RecomputeStatus({ mutation }: Readonly<{ mutation: RecomputeMutation }>
           : 'Recompute queued. Signals refresh once the job finishes.'}
       </span>
     );
-  if (mutation.isError) {
-    const notice = mutationNoticeForError(mutation.error, {
-      action: 'queue the search demand recompute',
-    });
-    const support = [notice.code, notice.requestId].filter(Boolean).join(' · ');
-    return (
-      <span role="alert" className="type-caption text-negative" title={support || undefined}>
-        {notice.message}
-      </span>
-    );
-  }
   return null;
+}
+
+/** A failed recompute as the shared notice; the header button is its retry. */
+function RecomputeFailure({ mutation }: Readonly<{ mutation: RecomputeMutation }>) {
+  if (!mutation.isError) return null;
+  return (
+    <MutationNotice
+      notice={mutationNoticeForError(mutation.error, {
+        action: 'queue the search demand recompute',
+      })}
+    />
+  );
 }
 
 function SearchDemandView({
@@ -124,7 +124,7 @@ function SearchDemandView({
   onRetry?: () => void;
   retrying?: boolean;
 }>) {
-  const { activeProject } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useUrlState('view', DEMAND_TAB_CODEC, {
@@ -136,9 +136,8 @@ function SearchDemandView({
 
   // Recompute is queued: the screen reports that the work was queued and lets
   // the reader check for the new snapshot once it lands.
-  const scope = resolveActiveProjectRequestScope(activeProject);
-  const recomputeMutation = useMutation(demandMutations.recompute(scope));
-  const refreshSnapshot = () => refreshDemandSnapshot(queryClient, scope.projectId);
+  const recomputeMutation = useMutation(demandMutations.recompute({ workspaceId, projectId }));
+  const refreshSnapshot = () => refreshDemandSnapshot(queryClient, projectId);
 
   const handleInspect = (signal: DemandSignal) => {
     setSelectedSignalId(signal.id);
@@ -266,9 +265,9 @@ function SearchDemandView({
             pending={Boolean(retrying)}
           />
         ) : null}
+        <RecomputeFailure mutation={recomputeMutation} />
         {/* The summary line, then the table the top strip's filters narrow.
-            Recompute's outcome rides the summary line and the header button
-            rather than a banner above it, so the table never moves. */}
+            A queued recompute rides the summary line and the header button. */}
         <Stack>
           <Inline as="p" gap="meta">
             <span className="type-caption">
@@ -299,10 +298,9 @@ function SearchDemandView({
 }
 
 export function DemandProjection() {
-  const { activeProject, isLoading: projectLoading } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const latest = useQuery({
-    ...demandQueries.latest(resolveActiveProjectRequestScope(activeProject)),
-    enabled: Boolean(activeProject),
+    ...demandQueries.latest({ workspaceId, projectId }),
     // Deliberately NO `keepPreviousData`: the key's only variable is the
     // project, so keeping previous data would render the PREVIOUS project's
     // snapshot as a success (placeholder data is not `isLoading`) while
@@ -313,7 +311,7 @@ export function DemandProjection() {
   // with an empty content region, so it keeps its identity band rather than
   // losing the heading and the rule above the work.
   const snapshot = latest.data;
-  if (activeProject && snapshot?.coverage.search === 'observed') {
+  if (snapshot?.coverage.search === 'observed') {
     // The route already wraps this subtree in a TooltipProvider.
     //
     // A refresh that fails over evidence we already hold keeps the evidence and
@@ -328,30 +326,12 @@ export function DemandProjection() {
       />
     );
   }
-  return (
-    <ListScreen>
-      {demandFallback({
-        projectLoading,
-        hasProject: Boolean(activeProject),
-        latest,
-      })}
-    </ListScreen>
-  );
+  return <ListScreen>{demandFallback(latest)}</ListScreen>;
 }
 
 /** Every non-loaded state of `/demand`, in the order it is decided. */
-function demandFallback({
-  projectLoading,
-  hasProject,
-  latest,
-}: Readonly<{
-  projectLoading: boolean;
-  hasProject: boolean;
-  latest: UseQueryResult<DemandSnapshot | null, Error>;
-}>) {
-  if (projectLoading || latest.isLoading)
-    return <QueryState kind="loading" label="Loading search demand…" />;
-  if (!hasProject) return <ProjectRequiredState />;
+function demandFallback(latest: UseQueryResult<DemandSnapshot | null, Error>) {
+  if (latest.isLoading) return <QueryState kind="loading" label="Loading search demand…" />;
   if (latest.data === null) return <SearchConsoleSetup />;
   if (latest.isError)
     return (

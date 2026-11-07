@@ -18,6 +18,7 @@ import { WorkspaceScope } from '../../db/workspace-scope.ts';
 import { notFound } from '../../errors.ts';
 import { parseUuid } from '../../http/uuid.ts';
 import { firstOf } from '../../lists.ts';
+import { pageRerunSql } from '../page-rerun.ts';
 import type { Crawl } from '../site-task.ts';
 import { failedAs } from '../task-outcome.ts';
 
@@ -70,7 +71,8 @@ export async function dashboardCrawl(
 }
 
 /**
- * The named crawl (404 when foreign) or the project's newest usable one. A
+ * The named crawl (404 when foreign) or the project's newest usable site
+ * crawl; only a named crawl may be a page rerun. A
  * named crawl that has not reached a usable terminal state, or a project with
  * none, is `null`: the caller renders its own "nothing yet" state. The
  * caller's route has authorized the project.
@@ -90,8 +92,10 @@ export async function resolveUsableCrawl(
     if (crawl === undefined) throw notFound('Crawl');
     return isUsableCrawl(crawl.status) ? crawl : null;
   }
+  // A page rerun re-reads one page; it is never the site crawl a default read shows.
   const latest = await crawls
     .where('status', 'in', USABLE_CRAWL_STATUSES)
+    .where(sql<boolean>`not ${pageRerunSql}`)
     .orderBy('created_at', 'desc')
     .orderBy('id', 'desc')
     .executeTakeFirst();

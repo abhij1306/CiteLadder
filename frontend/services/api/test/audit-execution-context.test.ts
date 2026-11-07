@@ -14,7 +14,7 @@ import { probeConnection } from '../src/providers/probes.ts';
 import { record } from '../src/db/json.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
-import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 
 const db = testDatabase(),
   fixtures = new VisibilityFixtures(db),
@@ -64,7 +64,7 @@ async function seed(surface = false) {
     {},
     runtime,
   );
-  const [task] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId: id });
+  const [task] = await claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId: id });
   expect(task?.audit_id).toBe(id);
   return { ...t, connectionId, task: task! };
 }
@@ -84,7 +84,7 @@ describe('frozen audit execution identity', () => {
     const context = await loadExecutionContext(
       db,
       t.task,
-      'worker',
+      t.task.lease_owner,
       {
         ...runtime,
         audits: { ...runtime.audits, audit_timeout_seconds: 1, audit_max_output_tokens: 5 },
@@ -137,7 +137,7 @@ describe('frozen audit execution identity', () => {
       {},
       runtime,
     );
-    const [task] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId: id });
+    const [task] = await claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId: id });
     const context = await loadExecutionContext(
       db,
       task!,
@@ -180,7 +180,7 @@ describe('frozen audit execution identity', () => {
       new Date(),
     ))!;
     const intents = await Promise.all(
-      [1, 2].map(() => commitSubmissionIntent(db, context, 'worker')),
+      [1, 2].map(() => commitSubmissionIntent(db, context, t.task.lease_owner)),
     );
     expect(intents.map((intent) => intent?.fresh).sort()).toEqual([false, true]);
     const persisted = await db
@@ -264,7 +264,7 @@ describe('frozen audit execution identity', () => {
       auditTestKey,
       runtime.providers,
     );
-    await expect(commitSubmissionIntent(db, context, 'worker')).rejects.toMatchObject({
+    await expect(commitSubmissionIntent(db, context, t.task.lease_owner)).rejects.toMatchObject({
       code: 'connection_changed',
     });
     const task = await db

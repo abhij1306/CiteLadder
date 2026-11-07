@@ -16,6 +16,7 @@ import {
   emptySourceProjection,
 } from '../analysis/opportunities/source-mix.ts';
 import { policy } from '../config.ts';
+import { sourcePageVocabulary } from '../config/source-pages.ts';
 import type { Database } from '../db/database.ts';
 import { earnedPageHits } from './earned-page-hits.ts';
 import { internalLinkHits, internalLinkRunId } from './internal-link-hits.ts';
@@ -85,7 +86,7 @@ async function sourcePagesRevision(db: Database, scope: Scope) {
     select
       (select id from source_page_snapshots
         where workspace_id = ${scope.workspaceId} and project_id = ${scope.projectId}
-          and outcome = ${policy.opportunity.refresh.source_page_outcome_inspected}
+          and outcome = ${sourcePageVocabulary.INSPECTION_INSPECTED}
         order by fetched_at desc, id desc limit 1)::text as reading,
       (select max(updated_at) from source_pages
         where workspace_id = ${scope.workspaceId} and project_id = ${scope.projectId})::text as pages

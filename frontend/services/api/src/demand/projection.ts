@@ -1,4 +1,5 @@
 /** Pure demand decisions over recorded evidence. No model or provider calls. */
+import type { DemandDetectorState } from '@citeladder/contracts/demand';
 import { policy } from '../config.ts';
 import { canonicalHash } from '../canonical-json.ts';
 import { roundScaled } from '../numbers.ts';
@@ -52,13 +53,13 @@ export type Candidate = {
   priority_inputs: Record<string, number | string>;
 };
 export type Evaluation = {
-  state: string;
+  state: DemandDetectorState;
   candidates: Candidate[];
   counts_by_classification: Record<string, number>;
   limitations: string[];
 };
 /** Partial when any row abstained, else available only when rows were evaluated. */
-export function collectionState(abstained: number, rowCount: number) {
+export function collectionState(abstained: number, rowCount: number): DemandDetectorState {
   if (abstained) return 'partial';
   return rowCount ? 'available' : 'unavailable';
 }

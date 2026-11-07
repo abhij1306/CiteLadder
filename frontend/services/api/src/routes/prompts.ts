@@ -3,6 +3,7 @@ import {
   promptGenerateResponseSchema,
   promptCandidateSchema,
   promptSchema,
+  promptSetListSchema,
   promptSetSchema,
   seedQueriesResponseSchema,
   topicPreviewResponseSchema,
@@ -21,6 +22,7 @@ import {
   createPromptSet,
   deletePromptSet,
   listPromptSets,
+  promptFormLimits,
   promptSetCreate,
   promptSetUpdate,
   readPromptSet,
@@ -82,9 +84,15 @@ export const promptRoutes = [
     family,
     path: `${api}/prompt-sets`,
     params: { path: {}, query: { project_id: { scalar: { kind: 'uuid' } } } },
-    response: z.array(promptSetSchema),
-    handle: ({ c, db }, { query }) =>
-      listPromptSets(db, c.get('workspace').workspaceId, query.project_id ?? null),
+    response: promptSetListSchema,
+    handle: async ({ c, db }, { query }) => ({
+      prompt_sets: await listPromptSets(
+        db,
+        c.get('workspace').workspaceId,
+        query.project_id ?? null,
+      ),
+      limits: promptFormLimits(),
+    }),
   }),
   definePostRoute({
     family,

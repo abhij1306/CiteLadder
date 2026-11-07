@@ -151,6 +151,21 @@ export async function valueKindCoverage(db: Database, crawl: Crawl): Promise<Val
 export const expectedTaskFailure = failedAs('site_crawl_tasks', ['excluded', 'not_page', 'gone']);
 
 export async function crawlCoverage(db: Database, crawl: Crawl) {
+  return assessCoverage({
+    ...(await coverageSignals(db, crawl)),
+    valueKinds: await valueKindCoverage(db, crawl),
+  });
+}
+
+/**
+ * Whether the crawl inventoried the whole site: coverage `complete`, so no
+ * limit, pending frontier, sample or other bound cut discovery short.
+ */
+export async function inventoryComplete(db: Database, crawl: Crawl) {
+  return assessCoverage(await coverageSignals(db, crawl)).state === 'complete';
+}
+
+async function coverageSignals(db: Database, crawl: Crawl): Promise<CoverageSignals> {
   const discovery = await db
     .selectFrom('site_crawl_tasks')
     .select([
@@ -178,7 +193,7 @@ export async function crawlCoverage(db: Database, crawl: Crawl) {
     .where('crawl_id', '=', crawl.id)
     .executeTakeFirstOrThrow();
   const config = record(crawl.configuration);
-  return assessCoverage({
+  return {
     sampleMode: crawl.sample_mode,
     inputMode:
       typeof config.input_mode === 'string' && config.input_mode ? config.input_mode : 'auto',
@@ -194,6 +209,5 @@ export async function crawlCoverage(db: Database, crawl: Crawl) {
     analyzedUrlCount: crawl.analyzed_url_count,
     failedUrlCount: crawl.failed_url_count,
     automaticLimit: allowance(config[policy.site_health.crawl.automatic_monitor_limit_key]),
-    valueKinds: await valueKindCoverage(db, crawl),
-  });
+  };
 }

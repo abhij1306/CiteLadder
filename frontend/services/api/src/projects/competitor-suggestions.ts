@@ -21,11 +21,8 @@ import type { ProjectScope } from './brand-profile.ts';
 type Suggestion = z.input<typeof observedCompetitorSchema>;
 type Competitor = z.input<typeof competitorSchema>;
 
-const {
-  suggestion_pending: PENDING,
-  suggestion_accepted: ACCEPTED,
-  max_project_competitors: MAX_COMPETITORS,
-} = policy.brand_identity;
+const { status_pending: PENDING, status_accepted: ACCEPTED } = policy.audits.observed_competitors;
+const MAX_COMPETITORS = policy.brand_identity.max_project_competitors;
 const ids = z.array(z.string());
 const strings = z.array(z.string());
 

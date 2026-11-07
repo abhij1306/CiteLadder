@@ -60,7 +60,6 @@ async function siteUrl(owner: Tenant, url: string) {
       url_hash: hash(url),
       host: new URL(url).hostname,
       depth: 0,
-      discovery_status: 'discovered',
       corpus_disposition: 'analyze',
       disposition_reason: 'html_content',
       disposition_version: '1',

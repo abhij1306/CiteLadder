@@ -4,7 +4,13 @@ import type {
   PromptGenerateRequest,
   PromptImportRowRequest,
 } from '@citeladder/contracts/prompt-requests';
-import type { Prompt, PromptGenerateResponse, Topic } from '@citeladder/contracts';
+import type {
+  Prompt,
+  PromptFormLimits,
+  PromptGenerateResponse,
+  Topic,
+} from '@citeladder/contracts';
+import type { MutationNotice } from '@/lib/api/mutation-notice';
 import type { PromptFormValues } from '@/lib/prompts/forms';
 import type { usePromptCandidates } from '@/lib/prompts/use-prompt-candidates';
 
@@ -23,12 +29,12 @@ type PromptLibraryDialogsProps = {
   setEditing: Dispatch<SetStateAction<Prompt | undefined>>;
   submitForm: (values: PromptFormValues) => Promise<void>;
   isSaving: boolean;
-  formError?: string;
+  formError?: MutationNotice;
   importOpen: boolean;
   setImportOpen: Dispatch<SetStateAction<boolean>>;
   importPrompts: (rows: PromptImportRowRequest[]) => Promise<void>;
   isImporting: boolean;
-  importError?: string;
+  importError?: MutationNotice;
   builderOpen: boolean;
   setBuilderOpen: (open: boolean) => void;
   builderStep: BuilderStep;
@@ -45,6 +51,8 @@ type PromptLibraryDialogsProps = {
   pendingDelete: PendingDelete | null;
   setPendingDelete: (pending: PendingDelete | null) => void;
   confirmDelete: (pending: PendingDelete) => void;
+  /** The forms' server-enforced bounds; null until the prompt-set list loads. */
+  limits: PromptFormLimits | null;
 };
 
 export function PromptLibraryDialogs({
@@ -78,18 +86,25 @@ export function PromptLibraryDialogs({
   pendingDelete,
   setPendingDelete,
   confirmDelete,
+  limits,
 }: Readonly<PromptLibraryDialogsProps>) {
+  const deleteDialog = (
+    <ConfirmDeleteDialog
+      pending={pendingDelete}
+      onCancel={() => setPendingDelete(null)}
+      onConfirm={() => {
+        if (pendingDelete) confirmDelete(pendingDelete);
+        setPendingDelete(null);
+      }}
+    />
+  );
+  // The forms enforce the server's bounds, so they open once the list has listed them.
+  if (!limits) return deleteDialog;
   return (
     <>
-      <ConfirmDeleteDialog
-        pending={pendingDelete}
-        onCancel={() => setPendingDelete(null)}
-        onConfirm={() => {
-          if (pendingDelete) confirmDelete(pendingDelete);
-          setPendingDelete(null);
-        }}
-      />
+      {deleteDialog}
       <PromptFormDialog
+        limits={limits}
         open={formOpen}
         onOpenChange={(open) => {
           setFormOpen(open);
@@ -103,6 +118,7 @@ export function PromptLibraryDialogs({
         error={formError}
       />
       <CsvImportDialog
+        limits={limits}
         open={importOpen}
         onOpenChange={setImportOpen}
         onImport={importPrompts}
@@ -110,6 +126,7 @@ export function PromptLibraryDialogs({
         error={importError}
       />
       <PromptBuilder
+        limits={limits}
         open={builderOpen}
         onOpenChange={setBuilderOpen}
         initialStep={builderStep}

@@ -1,4 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import {
+  demandSnapshotSummarySchema,
+  type DemandDetector,
+  type DemandSnapshotSummary,
+} from '@citeladder/contracts/demand';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { policy } from '../config.ts';
@@ -12,7 +17,7 @@ import {
 } from '../queue/executor.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
-import { record, strings } from '../db/json.ts';
+import { strings } from '../db/json.ts';
 import { buildQueryEvidence } from './query-evidence.ts';
 import { classifyProjectQueries, normalizeQuery } from './classification.ts';
 import { queryDetectorInputs, sourceMaterial, trafficSource } from './source.ts';
@@ -24,7 +29,6 @@ import {
 } from './projection.ts';
 import { canonicalHash } from '../canonical-json.ts';
 import { detectCannibalization, detectCtrGap, detectTrends } from './detectors.ts';
-import { compareText } from '../text-order.ts';
 
 const p = policy.demand;
 async function downstream(db: Database, task: QueueTask, id: string, maxAttempts: number) {
@@ -59,8 +63,8 @@ export const recomputeDemand: Executor = async (task, { db, maxAttempts, checkCa
       traffic.inputs.filter((r) => r.target_kind === 'query').map((r) => r.target),
     );
     // Keyed by detector; the low-CTR detector reads the traffic snapshot.
-    const evaluations: Record<string, Evaluation> = {
-      [p.DEMAND_SIGNAL_HIGH_IMPRESSION_LOW_CTR]: detectSearchSignals(traffic.inputs, (query) =>
+    const evaluations: Record<DemandDetector, Evaluation> = {
+      high_impression_low_ctr: detectSearchSignals(traffic.inputs, (query) =>
         searchClasses.get(normalizeQuery(query)),
       ),
       striking_distance: detectStrikingDistance(inputs),
@@ -94,18 +98,11 @@ export const recomputeDemand: Executor = async (task, { db, maxAttempts, checkCa
       .executeTakeFirst();
     const counts: Record<string, number> = {};
     for (const c of candidates) counts[c.signal_type] = (counts[c.signal_type] ?? 0) + 1;
-    const detectorSummary = Object.fromEntries(
-      Object.entries(evaluations)
-        .sort(([a], [b]) => compareText(a, b))
-        .map(([name, e]) => [
-          name,
-          {
-            state: e.state,
-            counts_by_classification: e.counts_by_classification,
-            limitations: e.limitations,
-          },
-        ]),
-    );
+    const detector = ({ state, counts_by_classification, limitations }: Evaluation) => ({
+      state,
+      counts_by_classification,
+      limitations,
+    });
     const id = randomUUID();
     await trx
       .insertInto('demand_snapshots')
@@ -136,13 +133,19 @@ export const recomputeDemand: Executor = async (task, { db, maxAttempts, checkCa
         summary: JSON.stringify({
           signal_count: candidates.length,
           counts_by_type: counts,
-          detectors: detectorSummary,
-        }),
+          detectors: {
+            cannibalization: detector(evaluations.cannibalization),
+            high_impression_low_ctr: detector(evaluations.high_impression_low_ctr),
+            property_relative_ctr_gap: detector(evaluations.property_relative_ctr_gap),
+            query_trends: detector(evaluations.query_trends),
+            striking_distance: detector(evaluations.striking_distance),
+          },
+        } satisfies DemandSnapshotSummary),
         comparison: prior
           ? JSON.stringify({
               prior_snapshot_id: prior.id,
               signal_count_delta:
-                candidates.length - Number(record(prior.summary).signal_count ?? 0),
+                candidates.length - demandSnapshotSummarySchema.parse(prior.summary).signal_count,
               causality: 'not_asserted',
             })
           : null,

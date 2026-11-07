@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { auditScheduleUpdateRequestSchema } from '@citeladder/contracts/audit-requests';
 import { logicalEngineSchema } from '@citeladder/contracts/providers';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { marketIdList } from './inputs.ts';
 
 const timezones = new Map(
@@ -50,15 +51,15 @@ const fields = {
   market_ids: marketIdList,
   repetitions: z
     .int()
-    .min(policy.projects.min_repetitions)
-    .max(policy.projects.max_repetitions)
+    .min(policy.audits.min_repetitions)
+    .max(policy.audits.max_repetitions)
     .nullable(),
 };
 
 /** Validate after merging a patch with the locked current schedule. */
 export function scheduleIntervalIssue(
   input: { cadence: string; interval_minutes: number | null },
-  env: Record<string, string | undefined> = process.env,
+  env: SettingSource = process.env,
 ): string | null {
   if (input.cadence !== 'every_n_minutes')
     return input.interval_minutes === null

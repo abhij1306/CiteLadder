@@ -1,10 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { act, screen } from '@testing-library/react';
+import { useMemo } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import type { VisibilityEvidenceResponse } from '@citeladder/contracts';
 import { ApiError } from '@/lib/api/errors';
 import { visibilityApi } from '@/lib/api/visibility';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { FanoutEvidence } from './fanout-evidence';
 
@@ -48,17 +51,20 @@ function Panel({ projectId }: Readonly<{ projectId: string }>) {
     queryFn: async () => evidence,
     initialData: evidence,
   });
+  const project = useMemo(() => makeProject({ id: projectId }), [projectId]);
+  // The project route's gate hands the panel its project; a switch is a new one.
   return (
-    <FanoutEvidence
-      query={query}
-      projectId={projectId}
-      runId={null}
-      scope={{}}
-      scopeReady
-      scopeNarrowed={false}
-      isFiltered={false}
-      limit={100}
-    />
+    <ActiveProjectScopeProvider project={project}>
+      <FanoutEvidence
+        query={query}
+        runId={null}
+        scope={{}}
+        scopeReady
+        scopeNarrowed={false}
+        isFiltered={false}
+        limit={100}
+      />
+    </ActiveProjectScopeProvider>
   );
 }
 

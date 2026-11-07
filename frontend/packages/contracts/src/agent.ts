@@ -230,6 +230,8 @@ export const agentSkillCatalogSchema = responseObject({
   workflow_groups: z.array(responseObject({ id: z.string(), label: z.string() })).default([]),
   workflows: z.array(agentWorkflowSchema).default([]),
   output_kinds: z.array(agentOutputKindSchema).default([]),
+  /** Bounds the API enforces on a composed message, for the composer that reads this catalog. */
+  limits: responseObject({ mentions_max: z.number().int() }),
 });
 
 export const agentInstructionsSchema = responseObject({

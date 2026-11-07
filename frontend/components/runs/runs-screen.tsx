@@ -10,7 +10,6 @@ import { LaunchDialog } from '@/components/runs/launch-dialog';
 import { RunsTable } from '@/components/runs/runs-table';
 import { ListScreen } from '@/components/layout/page-shell';
 import { Button } from '@/components/ui/button';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { Dot } from '@/components/ui/icon';
 import { Inline } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -19,8 +18,7 @@ import { SegmentedControl } from '@/components/ui/tabs';
 import { runsQueries } from '@/lib/api/runs';
 import type { Audit } from '@citeladder/contracts';
 import { useProjectHref } from '@/lib/navigation/project-destination';
-import { useActiveProject } from '@/lib/project/project-context';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { AUDIT_STATES, pollAudits } from '@/lib/runs/status';
 
 type StatusFilter = 'all' | 'completed' | 'running' | 'failed';
@@ -50,17 +48,14 @@ const STATUS_FILTERS: {
 
 /** Active-project run list, status filtering, launch, and schedule management. */
 export function RunsScreen() {
-  const project = useActiveProject();
-  const scope = resolveActiveProjectRequestScope(project);
-  const projectId = scope.projectId;
+  const { workspaceId, projectId, project } = useProjectScope();
   const router = useNavigate();
   const projectHref = useProjectHref();
   const [launchOpen, setLaunchOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   const runsQuery = useQuery({
-    ...runsQueries.list({ workspaceId: scope.workspaceId, projectId }),
-    enabled: scope.enabled,
+    ...runsQueries.list({ workspaceId, projectId }),
     refetchInterval: (query) => pollAudits(query.state.data?.map((audit) => audit.status)),
   });
 
@@ -79,7 +74,7 @@ export function RunsScreen() {
   // so gating the whole screen on it would pin the page on a spinner forever.
   // The page keeps its action and status filters while the first load lands.
   const actions = (
-    <Button variant="primary" onClick={() => setLaunchOpen(true)} disabled={!projectId}>
+    <Button variant="primary" onClick={() => setLaunchOpen(true)}>
       Launch audit
     </Button>
   );
@@ -111,7 +106,6 @@ export function RunsScreen() {
   return (
     <ListScreen actions={actions} controls={controls}>
       <RunsContent
-        projectId={projectId}
         read={runsQuery}
         audits={audits}
         filteredAudits={filteredAudits}
@@ -120,24 +114,19 @@ export function RunsScreen() {
         onLaunch={() => setLaunchOpen(true)}
       />
 
-      {projectId && project ? (
-        <AuditSchedules projectId={projectId} promptSets={project.prompt_sets} />
-      ) : null}
+      <AuditSchedules projectId={projectId} promptSets={project.prompt_sets} />
 
-      {projectId ? (
-        <LaunchDialog
-          open={launchOpen}
-          onOpenChange={setLaunchOpen}
-          projectId={projectId}
-          onLaunched={(audit) => router(projectHref(`/runs/${audit.id}`))}
-        />
-      ) : null}
+      <LaunchDialog
+        open={launchOpen}
+        onOpenChange={setLaunchOpen}
+        projectId={projectId}
+        onLaunched={(audit) => router(projectHref(`/runs/${audit.id}`))}
+      />
     </ListScreen>
   );
 }
 
 function RunsContent({
-  projectId,
   read,
   audits,
   filteredAudits,
@@ -145,7 +134,6 @@ function RunsContent({
   anyActive,
   onLaunch,
 }: Readonly<{
-  projectId: string | null;
   /** The runs read: its failure, and the retry of exactly that read. */
   read: RetryableRead;
   audits: Audit[];
@@ -154,7 +142,6 @@ function RunsContent({
   anyActive: boolean;
   onLaunch: () => void;
 }>) {
-  if (!projectId) return <ProjectRequiredState />;
   if (read.error) {
     return (
       <QueryState

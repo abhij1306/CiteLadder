@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Users } from 'lucide-react';
 
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { QueryState } from '@/components/ui/query-state';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Inline, Stack } from '@/components/ui/layout';
 import { commerceMutations } from '@/lib/api/commerce';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import type { useCompetitorDiscovery } from '@/lib/products/competitor-discovery';
 
@@ -19,7 +20,7 @@ import type { CommerceQueries } from './commerce-queries';
 import { competitorHost, competitorState, discoveryMessage } from './commerce-format';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { sameTarget } from '@/lib/products/use-commerce-target';
 
 type Discovery = ReturnType<typeof useCompetitorDiscovery>;
@@ -43,7 +44,7 @@ export function TargetCompetitors({
   query: CommerceQueries['competitors'];
   discovery: Discovery;
 }>) {
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const decide = useMutation(commerceMutations.decideCompetitor({ workspaceId, projectId }));
   // The tracker follows every run in the project, so a bulk discovery across
   // three categories otherwise showed all three banners on each one, and made
@@ -57,7 +58,7 @@ export function TargetCompetitors({
         actions={
           <Button
             variant="secondary"
-            disabled={!workspaceId || discovery.discover.isPending || running}
+            disabled={discovery.discover.isPending || running}
             onClick={() => discovery.discover.mutate([target])}
           >
             {running ? 'Finding…' : 'Find competitors'}
@@ -69,29 +70,50 @@ export function TargetCompetitors({
       </CardHeader>
       <CardContent>
         <Stack>
-          {tasks.map((task) => (
-            <Callout key={task.id} tone={task.status === 'failed' ? 'negative' : 'info'}>
-              {discoveryMessage(task.status, task.target.kind, task.error_code)}
-            </Callout>
-          ))}
+          {tasks.map((task) =>
+            task.status === 'failed' ? (
+              <MutationNotice
+                key={task.id}
+                notice={{
+                  message: discoveryMessage(task.status, task.target.kind, task.error_code),
+                  retryable: false,
+                }}
+                recovery={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={discovery.discover.isPending || running}
+                    onClick={() => discovery.discover.mutate([target])}
+                  >
+                    Find again
+                  </Button>
+                }
+              />
+            ) : (
+              <Callout key={task.id} tone="info">
+                {discoveryMessage(task.status, task.target.kind, task.error_code)}
+              </Callout>
+            ),
+          )}
           {discovery.discover.isError ? (
-            <Callout tone="negative">
-              {
-                humanizeApiError(
-                  discovery.discover.error,
-                  'Competitor discovery could not start. Please try again.',
-                ).message
-              }
-            </Callout>
+            <MutationNotice
+              notice={mutationNoticeForError(discovery.discover.error, {
+                action: 'start competitor discovery',
+              })}
+            />
           ) : null}
           {decide.isError ? (
-            <Callout tone="negative">The competitor decision failed. Please try again.</Callout>
+            <MutationNotice
+              notice={mutationNoticeForError(decide.error, {
+                action: 'save the competitor decision',
+              })}
+            />
           ) : null}
           <CompetitorRows
             query={query}
             rows={rows}
             running={running}
-            pending={!workspaceId || decide.isPending}
+            pending={decide.isPending}
             onDecide={(id, decision) => decide.mutate({ id, decision })}
           />
         </Stack>

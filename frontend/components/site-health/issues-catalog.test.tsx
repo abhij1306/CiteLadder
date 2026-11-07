@@ -464,6 +464,7 @@ describe('IssuesCatalog', () => {
                     ),
                     deep('dddddddd-3333-4111-8111-111111111111', '/blogs/news/old', '', 5),
                   ],
+                  page_kind_counts: { article: 3 },
                   coverage_state: 'unknown',
                 },
               }),
@@ -511,6 +512,9 @@ describe('IssuesCatalog', () => {
                 rule_id: 'technical.sitewide_link_redirect',
                 evidence: {
                   count: 438,
+                  linking_page_kinds: ['article'],
+                  page_kind_counts: { article: 438 },
+                  resolution_source_ids: [],
                   targets: [
                     {
                       url: 'https://acme.com/collections/screens',
@@ -523,6 +527,7 @@ describe('IssuesCatalog', () => {
                           url: 'https://acme.com/blogs/news/winner',
                           title: 'Winner announced',
                           page_kind: 'article',
+                          artifact_id: 'eeeeeeee-2222-4111-8111-111111111111',
                         },
                       ],
                     },

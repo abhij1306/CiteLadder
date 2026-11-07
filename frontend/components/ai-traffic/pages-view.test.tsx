@@ -73,6 +73,7 @@ function pagerRange(text: string) {
 function renderPages() {
   return renderWithProviders(
     <TrafficPages workspaceId={WORKSPACE} projectId={PROJECT} filters={{ range: '30d' }} />,
+    { projectSelection: { activeProject: project } },
   );
 }
 
@@ -221,6 +222,7 @@ it('keeps the drawer’s crawler when a path is opened from it', async () => {
       projectId={PROJECT}
       filters={{ range: '30d', bot_id: 'openai_oai_searchbot' }}
     />,
+    { projectSelection: { activeProject: project } },
   );
   await user.click(
     await screen.findByRole('button', { name: 'View AI Traffic for https://example.test/guide' }),

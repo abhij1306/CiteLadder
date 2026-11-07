@@ -7,7 +7,8 @@ import type { MeterableShelfResolver } from '../commerce/shelf.ts';
 import type { ExecutionContext } from './execution-context.ts';
 import type { ExecutionResult } from './result-persistence.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { failureFacts, getLogger } from '../logging.ts';
 import { prepareSavedShelf } from '../commerce/shelf-recovery.ts';
 
@@ -15,7 +16,7 @@ import { prepareSavedShelf } from '../commerce/shelf-recovery.ts';
 export function auditProjections(
   db: Database,
   resolver?: MeterableShelfResolver | null,
-  env: Record<string, string | undefined> = process.env,
+  env: SettingSource = process.env,
 ) {
   return {
     execution: deriveExecution,
@@ -43,7 +44,7 @@ async function enqueueSourcePageInspection(
   db: Database,
   workspaceId: string,
   auditId: string,
-  env: Record<string, string | undefined>,
+  env: SettingSource,
 ) {
   const audit = await db
     .selectFrom('audits')

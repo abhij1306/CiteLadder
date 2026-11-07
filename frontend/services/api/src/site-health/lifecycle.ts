@@ -16,7 +16,7 @@ import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
 import { enqueueCrawlTasks } from './admission-writes.ts';
 import { reconcileDuplicateAliases } from './canonical-alias.ts';
-import { expectedTaskFailure } from './coverage.ts';
+import { expectedTaskFailure, inventoryComplete } from './coverage.ts';
 import { finalizeCrawlAnalyses } from './lifecycle-finalize.ts';
 import { rootFailure } from './reads/crawl.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
@@ -33,6 +33,18 @@ const TERMINAL_TASK = policy.task_queue.terminal;
 const LIFECYCLE_KINDS = ['discover', 'site_setup', 'analyze'];
 const EXCLUDED = failedAs('site_crawl_tasks', ['excluded']);
 const OVERDUE = policy.site_health.page_analysis.acquisition.error_codes.crawl_overdue;
+/**
+ * The row is its page's latest generation of its kind: a rerun's generation
+ * supersedes the earlier ones, so a page is counted once, by its newest
+ * outcome (the `ROW_TASK_ORDER` rule the crawl counters read).
+ */
+const LATEST_GENERATION = sql<boolean>`not exists (
+  select 1 from site_crawl_tasks newer
+  where newer.workspace_id = site_crawl_tasks.workspace_id
+    and newer.crawl_id = site_crawl_tasks.crawl_id
+    and newer.task_kind = site_crawl_tasks.task_kind
+    and newer.url_hash = site_crawl_tasks.url_hash
+    and newer.generation > site_crawl_tasks.generation)`;
 
 type Counts = {
   total: number;
@@ -83,6 +95,7 @@ async function taskSummary(db: Database, crawl: Crawl): Promise<Summary> {
     .where('workspace_id', '=', crawl.workspace_id)
     .where('crawl_id', '=', crawl.id)
     .where('task_kind', 'in', LIFECYCLE_KINDS)
+    .where(LATEST_GENERATION)
     .groupBy('task_kind')
     .execute();
   const kind = (name: string): Counts => rows.find((row) => row.task_kind === name) ?? NONE;
@@ -108,6 +121,7 @@ async function failedUrlCount(db: Database, crawl: Crawl) {
     .where('task_kind', 'in', ['discover', 'analyze'])
     .where('url_hash', '!=', '')
     .where(sql<boolean>`not ${EXCLUDED}`)
+    .where(LATEST_GENERATION)
     .executeTakeFirstOrThrow();
   return row.count;
 }
@@ -129,18 +143,38 @@ async function refreshCounters(db: Database, crawl: Crawl, summary: Summary) {
   crawl.admitted_url_count = Math.max(crawl.admitted_url_count, observed.count);
 }
 
-/** Progressive discovery state; returns whether the crawl failed outright and whether discovery fell short. */
+/**
+ * Progressive discovery state; returns whether the crawl failed outright and
+ * whether discovery fell short. A crawl fails outright when discovery found
+ * nothing and nothing was analyzed, or when it had pages to analyze and every
+ * one of them failed: a root that answered is no evidence about any page.
+ */
 function reconcileDiscovery(crawl: Crawl, summary: Summary) {
   const discoveryFailed = crawl.discovered_url_count === 0;
   // A recrawl that analyzed monitored pages after its root was blocked holds
   // useful partial evidence; it is not a failed crawl.
-  const fullyFailed = discoveryFailed && summary.analyzeSucceeded === 0;
-  if (!summary.discoverOpen) {
-    if (crawl.discovery_status === 'running')
-      crawl.discovery_status = discoveryFailed ? 'failed' : 'completed';
-    crawl.inventory_complete = !discoveryFailed;
-  }
+  const fullyFailed =
+    summary.analyzeSucceeded === 0 && (discoveryFailed || summary.analyzeApplicable > 0);
+  if (!summary.discoverOpen && crawl.discovery_status === 'running')
+    crawl.discovery_status = discoveryFailed ? 'failed' : 'completed';
   return { fullyFailed, discoveryPartial: summary.discoverFailed > 0 && !fullyFailed };
+}
+
+/**
+ * `inventory_complete` once discovery has drained: only an inventory no limit,
+ * pending frontier, sample or other bound cut short is the whole site. Its
+ * inputs settle with discovery, so it is decided when discovery settles and
+ * again when the crawl drains (a sample or rerun never runs discovery here).
+ */
+async function reconcileInventory(
+  db: Database,
+  crawl: Crawl,
+  summary: Summary,
+  discoveryWasRunning: boolean,
+) {
+  if (summary.discoverOpen) return;
+  if (!discoveryWasRunning && summary.analyzeOpen) return;
+  crawl.inventory_complete = crawl.discovered_url_count > 0 && (await inventoryComplete(db, crawl));
 }
 
 function analysisOutcome(summary: Summary, fullyFailed: boolean) {
@@ -256,7 +290,9 @@ async function reconcileLockedCrawl(db: Database, crawl: Crawl, options: Reconci
   if (!isActiveCrawl(crawl.status)) return;
   const summary = await taskSummary(db, crawl);
   await refreshCounters(db, crawl, summary);
+  const discoveryWasRunning = crawl.discovery_status === 'running';
   const { fullyFailed, discoveryPartial } = reconcileDiscovery(crawl, summary);
+  await reconcileInventory(db, crawl, summary, discoveryWasRunning);
   reconcileAnalysis(crawl, summary, fullyFailed);
   if (summary.discoverOpen || summary.analyzeOpen) {
     await saveState(db, crawl);

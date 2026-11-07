@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Selectable } from 'kysely';
+import type { SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import type { Audits } from '../generated/db-schema.ts';
 import { record, strings } from '../db/json.ts';
@@ -9,7 +10,7 @@ import type { DeriveExecution, ExecutionResult } from '../audits/result-persiste
 import { deriveExecution } from '../audits/derivation.ts';
 import { auditPolicy } from '../audits/config.ts';
 import { createModelGateway, gatewaySettings } from '../models/gateway.ts';
-import { agentCallLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
 import { lockCatalog } from './catalog-store.ts';
 import { ownedHosts } from './discovery-validation.ts';
@@ -36,7 +37,7 @@ export type MeterableShelfResolver = {
   resolve(spans: string[], meter: Meter): Promise<unknown>;
 };
 export function configuredShelfResolver(
-  env: Record<string, string | undefined> = process.env,
+  env: SettingSource = process.env,
   signal?: AbortSignal,
 ): MeterableShelfResolver | undefined {
   try {
@@ -74,7 +75,7 @@ function metered(
   return {
     model: resolver.model,
     resolve: async (spans) => {
-      await enforceWorkspaceRequest(db, workspaceId, agentCallLimit(1));
+      await spendBudget(db, budget('agent_provider_call', process.env), workspaceId);
       return resolver.resolve(spans, meterFor(db, workspaceId));
     },
   };

@@ -2,11 +2,12 @@ import { Badge } from '@/components/ui/badge';
 import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { Label, textRole } from '@/components/ui/typography';
+import type { SourcePattern } from '@citeladder/contracts';
 import {
+  classCountChips,
   recommendedActionLabel,
   sourceClassBadgeValue,
   sourceClassLabel,
-  type SourcePattern,
 } from '@/lib/opportunities/source-pattern';
 
 /**
@@ -19,23 +20,26 @@ import {
  * recommendation. Do not reword this toward "because" or "caused by".
  */
 export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: SourcePattern }>) {
-  const action = recommendedActionLabel(pattern.recommendedAction);
+  const action = recommendedActionLabel(pattern.recommended_action);
+  const classCounts = classCountChips(pattern);
+  const competitorSourceDomains = Object.entries(pattern.competitor_source_domains);
 
   return (
     <Stack as="section">
       <Inline gap="compact" className="items-baseline justify-between">
         <Label>Observed sources</Label>
         <span className="type-caption">
-          {pattern.distinctDomainCount} {pattern.distinctDomainCount === 1 ? 'domain' : 'domains'}
-          {pattern.independentDomainCount > 0
-            ? ` · ${pattern.independentDomainCount} independent`
+          {pattern.distinct_domain_count}{' '}
+          {pattern.distinct_domain_count === 1 ? 'domain' : 'domains'}
+          {pattern.independent_domain_count > 0
+            ? ` · ${pattern.independent_domain_count} independent`
             : null}
         </span>
       </Inline>
 
-      {pattern.classCounts.length > 0 ? (
+      {classCounts.length > 0 ? (
         <Inline className="flex-wrap">
-          {pattern.classCounts.map(({ sourceClass, count }) => (
+          {classCounts.map(({ sourceClass, count }) => (
             <Badge
               key={sourceClass}
               variant="classification"
@@ -47,10 +51,10 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
         </Inline>
       ) : null}
 
-      {pattern.competitorSourceDomains.length > 0 ? (
+      {competitorSourceDomains.length > 0 ? (
         <Stack gap="tight">
           <span className="type-caption">Sources matched to a tracked competitor</span>
-          {pattern.competitorSourceDomains.map(({ competitor, domains }) => (
+          {competitorSourceDomains.map(([competitor, domains]) => (
             <Inline key={competitor} gap="compact" className="items-start justify-between">
               <span className={textRole('body', 'shrink-0')}>{competitor}</span>
               <span className="type-caption text-right break-all tabular-nums">
@@ -61,9 +65,9 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
         </Stack>
       ) : null}
 
-      {pattern.topCitations.length > 0 ? (
+      {pattern.top_citations.length > 0 ? (
         <Stack as="ul" gap="tight">
-          {pattern.topCitations.map((citation) => (
+          {pattern.top_citations.map((citation) => (
             <Stack
               as="li"
               gap="tight"
@@ -77,9 +81,9 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
         </Stack>
       ) : null}
 
-      {pattern.topCitationsTruncated ? (
+      {pattern.top_citations_truncated ? (
         <p className="type-caption">
-          Showing the first {pattern.topCitations.length} of {pattern.distinctDomainCount} cited
+          Showing the first {pattern.top_citations.length} of {pattern.distinct_domain_count} cited
           domains. Every citation stays available in Visibility → Sources.
         </p>
       ) : null}

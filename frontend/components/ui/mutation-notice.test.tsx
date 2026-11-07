@@ -25,3 +25,23 @@ it('offers a retry for a transient failure', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
   expect(onRetry).toHaveBeenCalledOnce();
 });
+
+it('offers the owner recovery action in place of Try again when one is given', () => {
+  const { unmount } = renderWithProviders(
+    <MutationNotice
+      notice={{ message: 'Upload interrupted', retryable: true }}
+      onRetry={() => undefined}
+      recovery={<button type="button">Resume upload</button>}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'Resume upload' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  unmount();
+  renderWithProviders(
+    <MutationNotice
+      notice={{ message: 'Upload interrupted', retryable: true }}
+      onRetry={() => undefined}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+});

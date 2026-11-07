@@ -179,33 +179,6 @@ export function competingPages(signal: DemandSignal): CompetingPage[] {
   });
 }
 
-export type DetectorState = { state?: string; limitations?: string[] };
-
-/**
- * `summary.detectors` is `unknown` on the wire — read it defensively.
- *
- * Each entry is normalised so consumers can rely on the shape: `limitations`
- * is always an array of strings (callers `.join()` it), and a non-string
- * `state` is dropped so it falls through to the caller's default.
- */
-export function detectorStates(summary: Record<string, unknown>): Record<string, DetectorState> {
-  const detectors = summary.detectors;
-  if (!detectors || typeof detectors !== 'object' || Array.isArray(detectors)) return {};
-
-  const normalised: Record<string, DetectorState> = {};
-  for (const [key, value] of Object.entries(detectors as Record<string, unknown>)) {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-    const { state, limitations } = value as { state?: unknown; limitations?: unknown };
-    normalised[key] = {
-      state: typeof state === 'string' ? state : undefined,
-      limitations: Array.isArray(limitations)
-        ? limitations.filter((item): item is string => typeof item === 'string')
-        : [],
-    };
-  }
-  return normalised;
-}
-
 /**
  * Ask agent about one signal: its id travels as a typed reference the server
  * resolves, and its page (when it is a safe URL) as the chat's target.

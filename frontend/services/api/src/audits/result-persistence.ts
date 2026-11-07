@@ -200,8 +200,12 @@ type FailurePlan = {
   spendsAttempt: boolean;
   mayRetry: boolean;
   recordsAttempt: boolean;
-  /** A failed scraper exchange keeps its own immutable artifact with this outcome. */
-  artifactOutcome: string | null;
+  /**
+   * A failed surface exchange keeps its own immutable artifact with this outcome: always
+   * (scraper), or only once a paid submission reported its charge (AI Overview), so the
+   * paid request has a cost projection.
+   */
+  artifact: { outcome: string; when: 'always' | 'charged' } | null;
   evidence: ((db: Database, task: AuditTask) => Promise<void>) | null;
   context: ExecutionContext | undefined;
   at: Date;
@@ -212,7 +216,7 @@ function failureMetadata(
 ): Record<string, unknown> {
   return {
     ...record(providerMetadata),
-    ...(artifactOutcome ? { scraper_outcome: artifactOutcome, raw_response: {} } : {}),
+    ...(artifactOutcome ? { failure_outcome: artifactOutcome, raw_response: {} } : {}),
   };
 }
 async function markTaskFailed(db: Database, task: AuditTask, at: Date) {
@@ -246,14 +250,17 @@ export function persistAnswerFailure(
     spendsAttempt: options.called,
     mayRetry: options.called,
     recordsAttempt: options.called,
-    artifactOutcome: null,
+    artifact: null,
     evidence: null,
     context: options.context,
     at: options.at ?? new Date(),
   });
 }
 
-/** What an observed surface's failure keeps beside the task: a failure artifact or its own observation. */
+/**
+ * What an observed surface's failure keeps beside the task: a failure artifact, or its own
+ * observation (plus a failure artifact carrying the charge once a paid submission reported one).
+ */
 export type SurfaceFailureRecord =
   | { kind: 'failure_artifact'; outcome: string }
   | { kind: 'observation'; append: (db: Database, task: AuditTask) => Promise<void> };
@@ -280,7 +287,10 @@ export function persistSurfaceFailure(
     spendsAttempt: options.exchange === 'paid',
     mayRetry: false,
     recordsAttempt: options.exchange !== 'none',
-    artifactOutcome: evidence.kind === 'failure_artifact' ? evidence.outcome : null,
+    artifact:
+      evidence.kind === 'failure_artifact'
+        ? { outcome: evidence.outcome, when: 'always' }
+        : { outcome: error.code, when: 'charged' },
     evidence: evidence.kind === 'observation' ? evidence.append : null,
     context: options.context ?? undefined,
     at: options.at ?? new Date(),
@@ -308,7 +318,14 @@ function persistFailure(
   });
 }
 type Failure = { error: ProviderError; attempt: number; retry: boolean };
-/** Writes the failed attempt: optional scraper artifact, task row, attempt and cost projection. */
+/** The outcome a failure artifact records, or null when this failure writes none. */
+function artifactOutcome(plan: FailurePlan, current: AuditTask) {
+  if (!plan.artifact) return null;
+  if (plan.artifact.when === 'always') return plan.artifact.outcome;
+  const charged = record(current.provider_metadata).provider_submission_cost_microusd;
+  return typeof charged === 'number' ? plan.artifact.outcome : null;
+}
+/** Writes the failed attempt: optional failure artifact, task row, attempt and cost projection. */
 async function recordFailedAttempt(
   trx: Database,
   claimed: AuditTask,
@@ -317,8 +334,9 @@ async function recordFailedAttempt(
   plan: FailurePlan,
 ) {
   const at = plan.at;
-  const failureArtifactId = plan.artifactOutcome ? randomUUID() : null;
-  const metadata = failureMetadata(current.provider_metadata, plan.artifactOutcome);
+  const outcome = artifactOutcome(plan, current);
+  const failureArtifactId = outcome ? randomUUID() : null;
+  const metadata = failureMetadata(current.provider_metadata, outcome);
   if (failureArtifactId) await insertFailureArtifact(trx, claimed, failureArtifactId, metadata, at);
   const task = await trx
     .updateTable('audit_tasks')

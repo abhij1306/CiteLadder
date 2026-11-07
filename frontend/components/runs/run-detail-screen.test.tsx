@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-p
 
 import type { Audit } from '@citeladder/contracts';
 import { queryKeys } from '@/lib/api/query-keys';
+import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import { RunDetailScreen } from './run-detail-screen';
@@ -86,7 +87,12 @@ describe('RunDetailScreen', () => {
           }
         />
       </Routes>,
-      { initialEntries: [`/runs/${RUN}`] },
+      {
+        initialEntries: [`/runs/${RUN}`],
+        projectSelection: {
+          activeProject: makeProject({ id: '33333333-3333-4333-8333-333333333333' }),
+        },
+      },
     );
     await waitFor(() => expect(shelfFetches).toBe(1));
     await userEvent.click(await screen.findByRole('button', { name: 'Cancel run' }));

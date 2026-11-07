@@ -3,31 +3,32 @@
  *
  * Site-level findings are judged over the whole crawl and persisted ONCE,
  * against the homepage, with the pages (or page kinds, or link targets) they
- * found in the evidence. Shown as an occurrence they read as "the homepage is
- * buried too deeply"; the pages in the evidence are the affected pages. Pure.
+ * found in the evidence (`siteLevelFindingSchema`). Shown as an occurrence
+ * they read as "the homepage is buried too deeply"; the pages in the evidence
+ * are the affected pages. Pure.
  */
-import { originOf, records, sitePath, text, type Evidence } from './evidence-values';
+import {
+  siteLevelFinding,
+  siteLevelRuleSchema,
+  type SiteLevelFinding,
+  type SiteLevelRule,
+} from '@citeladder/contracts';
+import { originOf, sitePath } from './evidence-values';
 
-const PAGE_LIST_RULES = new Set([
+type PageListFinding = Extract<SiteLevelFinding, { evidence: { pages: unknown } }>;
+type LinkTargetFinding = Extract<SiteLevelFinding, { evidence: { targets: unknown } }>;
+type EvidenceTarget = LinkTargetFinding['evidence']['targets'][number];
+
+/** The rules whose evidence lists affected pages. */
+export const pageListRules: readonly SiteLevelRule[] = siteLevelRuleSchema.extract([
   'architecture.excessive_depth',
   'architecture.breadcrumb_hierarchy_conflict',
   'architecture.orphan_pages',
   'architecture.parentless_detail_pages',
   'architecture.unreachable_from_home',
-]);
-const PAGE_KIND_RULES = new Set([
-  'architecture.duplicate_metadata_in_page_kind',
-  'architecture.unhubbed_page_kind',
-]);
-const LINK_TARGET_RULES = new Set([
-  'technical.sitewide_broken_link',
-  'technical.sitewide_link_redirect',
-]);
-
-/** The rules whose evidence lists affected pages. */
-export const pageListRules: readonly string[] = [...PAGE_LIST_RULES];
-/** The rules whose evidence lists sitewide link targets and the pages carrying them. */
-export const linkTargetRules: readonly string[] = [...LINK_TARGET_RULES];
+]).options;
+/** Every rule whose finding is persisted once for the site. */
+export const siteLevelRules: readonly SiteLevelRule[] = siteLevelRuleSchema.options;
 
 type EvidencePage = Readonly<{
   siteUrlId: string;
@@ -43,7 +44,7 @@ type EvidenceSection = Readonly<{ pathPrefix: string; pageCount: number }>;
 
 /** Where a sitewide link goes wrong, spelled as the link's outcome. */
 type LinkOutcome =
-  | Readonly<{ kind: 'status'; statusCode: number }>
+  | Readonly<{ kind: 'status'; statusCode: number | null }>
   | Readonly<{ kind: 'redirect'; finalUrl: string; hops: number }>
   | Readonly<{ kind: 'loop' }>;
 
@@ -63,93 +64,89 @@ export type SiteLevelEvidence =
     }>
   | Readonly<{
       kind: 'page_kinds';
-      pageKinds: readonly Readonly<{ pageKind: string; pageCount: number | null }>[];
+      pageKinds: readonly Readonly<{ pageKind: string; pageCount: number }>[];
     }>
   | Readonly<{
       kind: 'link_targets';
-      /** Distinct pages carrying a failing link; `null` when the evidence did not record it. */
-      total: number | null;
+      /** Distinct pages carrying a failing link. */
+      total: number;
       targets: readonly LinkTarget[];
     }>;
 
-function pagesOf(value: unknown, depthIsTheFinding: boolean): EvidencePage[] {
-  return records(value).flatMap((page) => {
-    const siteUrlId = text(page.site_url_id);
-    const url = text(page.url);
-    if (!siteUrlId || !url) return [];
-    const depth = page.depth_from_home;
-    return [
-      {
-        siteUrlId,
-        url,
-        title: text(page.title) || null,
-        pageKind: text(page.page_kind) || null,
-        clicksFromHome: depthIsTheFinding && typeof depth === 'number' ? depth : null,
-      },
-    ];
-  });
+type SampledPage = Readonly<{
+  site_url_id: string;
+  url: string;
+  title: string;
+  page_kind: string;
+  depth_from_home?: number | null;
+}>;
+
+function evidencePage(page: SampledPage, depthIsTheFinding: boolean): EvidencePage {
+  return {
+    siteUrlId: page.site_url_id,
+    url: page.url,
+    title: page.title || null,
+    pageKind: page.page_kind || null,
+    clicksFromHome: depthIsTheFinding ? (page.depth_from_home ?? null) : null,
+  };
 }
 
-const evidencePages = (ruleId: string, evidence: Evidence) =>
-  pagesOf(evidence.pages, ruleId === 'architecture.excessive_depth');
-
-function evidenceSections(evidence: Evidence): EvidenceSection[] {
-  return records(evidence.sections).flatMap((row) => {
-    const pathPrefix = text(row.path_prefix);
-    const pageCount = row.page_count;
-    return pathPrefix && typeof pageCount === 'number' ? [{ pathPrefix, pageCount }] : [];
-  });
+function evidencePages(finding: PageListFinding): EvidencePage[] {
+  const depthIsTheFinding = finding.rule_id === 'architecture.excessive_depth';
+  return finding.evidence.pages.map((page) => evidencePage(page, depthIsTheFinding));
 }
 
-function linkOutcome(target: Evidence): LinkOutcome | null {
-  if (target.reason === 'redirect_limit') return { kind: 'loop' };
-  if (typeof target.status_code === 'number')
-    return { kind: 'status', statusCode: target.status_code };
-  const finalUrl = text(target.final_url);
-  if (!finalUrl) return null;
-  return { kind: 'redirect', finalUrl, hops: typeof target.hops === 'number' ? target.hops : 1 };
+function evidenceSections(finding: PageListFinding): EvidenceSection[] {
+  return finding.rule_id === 'architecture.unreachable_from_home'
+    ? finding.evidence.sections.map((row) => ({
+        pathPrefix: row.path_prefix,
+        pageCount: row.page_count,
+      }))
+    : [];
 }
 
-function linkTargets(evidence: Evidence): LinkTarget[] {
-  return records(evidence.targets).flatMap((target) => {
-    const url = text(target.url);
-    const outcome = linkOutcome(target);
-    if (!url || !outcome) return [];
-    const pages = pagesOf(target.pages, false);
-    const count = target.linking_page_count;
-    return [{ url, outcome, pageCount: typeof count === 'number' ? count : pages.length, pages }];
-  });
+function linkOutcome(target: EvidenceTarget): LinkOutcome {
+  if ('reason' in target) return { kind: 'loop' };
+  if ('status_code' in target) return { kind: 'status', statusCode: target.status_code };
+  return { kind: 'redirect', finalUrl: target.final_url, hops: target.hops };
+}
+
+function linkTargets(finding: LinkTargetFinding): LinkTarget[] {
+  return finding.evidence.targets.map((target) => ({
+    url: target.url,
+    outcome: linkOutcome(target),
+    pageCount: target.linking_page_count,
+    pages: target.pages.map((page) => evidencePage(page, false)),
+  }));
 }
 
 /** The pages, page kinds or link targets a site-level finding names; `null` for a per-page rule. */
-export function siteLevelEvidence(ruleId: string, evidence: Evidence): SiteLevelEvidence | null {
-  if (PAGE_LIST_RULES.has(ruleId)) {
-    const pages = evidencePages(ruleId, evidence);
-    const count = evidence.count;
-    return {
-      kind: 'pages',
-      total: typeof count === 'number' ? count : pages.length,
-      pages,
-      sections: evidenceSections(evidence),
-    };
+export function siteLevelEvidence(ruleId: string, evidence: unknown): SiteLevelEvidence | null {
+  const finding = siteLevelFinding(ruleId, evidence);
+  if (finding === null) return null;
+  switch (finding.rule_id) {
+    case 'architecture.duplicate_metadata_in_page_kind':
+    case 'architecture.unhubbed_page_kind': {
+      const duplicates = finding.rule_id === 'architecture.duplicate_metadata_in_page_kind';
+      return {
+        kind: 'page_kinds',
+        pageKinds: finding.evidence.page_kinds.map((row) => ({
+          pageKind: row.page_kind,
+          pageCount: duplicates ? row.duplicate_metadata_count : row.page_count,
+        })),
+      };
+    }
+    case 'technical.sitewide_broken_link':
+    case 'technical.sitewide_link_redirect':
+      return { kind: 'link_targets', total: finding.evidence.count, targets: linkTargets(finding) };
+    default:
+      return {
+        kind: 'pages',
+        total: finding.evidence.count,
+        pages: evidencePages(finding),
+        sections: evidenceSections(finding),
+      };
   }
-  if (PAGE_KIND_RULES.has(ruleId)) {
-    const pageKinds = records(evidence.page_kinds).flatMap((row) => {
-      const pageKind = text(row.page_kind);
-      const count =
-        ruleId === 'architecture.duplicate_metadata_in_page_kind'
-          ? row.duplicate_metadata_count
-          : row.page_count;
-      return pageKind ? [{ pageKind, pageCount: typeof count === 'number' ? count : null }] : [];
-    });
-    return { kind: 'page_kinds', pageKinds };
-  }
-  if (LINK_TARGET_RULES.has(ruleId)) {
-    const targets = linkTargets(evidence);
-    const count = evidence.count;
-    return { kind: 'link_targets', total: typeof count === 'number' ? count : null, targets };
-  }
-  return null;
 }
 
 /** A page count in words: `1 page`, `158 pages`. */
@@ -160,7 +157,7 @@ export const pageCountLabel = (count: number) =>
 export function linkOutcomeLabel(outcome: LinkOutcome, origin: string | null): string {
   switch (outcome.kind) {
     case 'status':
-      return String(outcome.statusCode);
+      return outcome.statusCode === null ? 'unreachable' : String(outcome.statusCode);
     case 'loop':
       return 'redirect loop';
     case 'redirect': {
@@ -175,31 +172,43 @@ export function linkOutcomeLabel(outcome: LinkOutcome, origin: string | null): s
 }
 
 /**
- * A page-list finding's facts: its sections when it groups pages by path
- * (`/blogs/testimonials (158 pages)`), otherwise each page's path, with its
- * depth where depth is the finding.
+ * A site-level finding's facts, one per thing it names:
+ *
+ * - a page list: its sections when it groups pages by path
+ *   (`/blogs/testimonials (158 pages)`), otherwise each page's path, with its
+ *   depth where depth is the finding;
+ * - page kinds: each affected kind;
+ * - sitewide links: each link, where it lands, and on how many pages.
+ *
+ * Empty for a per-page rule.
  */
-export function architecturePageFacts(ruleId: string) {
-  return (evidence: Evidence): string[] => {
-    const grouped = evidenceSections(evidence);
-    if (grouped.length > 0)
-      return grouped.map(
-        (section) => `${section.pathPrefix} (${pageCountLabel(section.pageCount)})`,
-      );
-    return evidencePages(ruleId, evidence).map((page) => {
-      const path = sitePath(page.url, null);
-      return page.clicksFromHome === null
-        ? path
-        : `${path} (${String(page.clicksFromHome)} clicks)`;
-    });
-  };
-}
-
-/** A sitewide link finding's facts: each link, where it lands, and on how many pages. */
-export function linkTargetFacts(evidence: Evidence): string[] {
-  return linkTargets(evidence).map((target) => {
-    const origin = originOf(target.url);
-    const landing = linkOutcomeLabel(target.outcome, origin);
-    return `${sitePath(target.url, origin)} → ${landing} (on ${pageCountLabel(target.pageCount)})`;
-  });
+export function siteLevelFacts(ruleId: string, evidence: unknown): string[] {
+  const listed = siteLevelEvidence(ruleId, evidence);
+  switch (listed?.kind) {
+    case undefined:
+      return [];
+    case 'page_kinds':
+      return listed.pageKinds.map((row) => row.pageKind);
+    case 'link_targets':
+      return listed.targets.map((target) => {
+        const origin = originOf(target.url);
+        const landing = linkOutcomeLabel(target.outcome, origin);
+        return `${sitePath(target.url, origin)} → ${landing} (on ${pageCountLabel(target.pageCount)})`;
+      });
+    case 'pages':
+      if (listed.sections.length > 0)
+        return listed.sections.map(
+          (section) => `${section.pathPrefix} (${pageCountLabel(section.pageCount)})`,
+        );
+      return listed.pages.map((page) => {
+        const path = sitePath(page.url, null);
+        return page.clicksFromHome === null
+          ? path
+          : `${path} (${String(page.clicksFromHome)} clicks)`;
+      });
+    default: {
+      const _exhaustive: never = listed;
+      return _exhaustive;
+    }
+  }
 }

@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { useMemo } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { queryKeys } from '@/lib/api/query-keys';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { usePerformanceSync } from './use-performance-sync';
 
@@ -26,8 +29,18 @@ vi.mock('@/lib/api/integrations', async (importOriginal) => {
   };
 });
 
+/** The sync control under the project route's gate, for the selected project. */
 function Sync({ projectId }: Readonly<{ projectId: string }>) {
-  const sync = usePerformanceSync(projectId);
+  const project = useMemo(() => makeProject({ id: projectId }), [projectId]);
+  return (
+    <ActiveProjectScopeProvider project={project}>
+      <SyncButton />
+    </ActiveProjectScopeProvider>
+  );
+}
+
+function SyncButton() {
+  const sync = usePerformanceSync();
   return <button onClick={sync.start}>{sync.syncing ? 'Syncing' : 'Sync now'}</button>;
 }
 

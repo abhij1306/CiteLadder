@@ -34,7 +34,7 @@ export function mergedAdPages(
  */
 export function useAds(filters: Pick<SourceFilters, 'engine' | 'cohort'>, queries: SourceQueries) {
   const params = selectionParams(filters, queries);
-  const projectId = queries.projectId ?? '';
+  const { projectId } = queries;
   const enabled = selectionEnabled(queries);
   const query = useInfiniteQuery({
     ...visibilityQueries.ads({ workspaceId: queries.workspaceId, projectId }, params),

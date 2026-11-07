@@ -201,6 +201,20 @@ export async function completeOAuth(
       .where('transport', '=', transport)
       .forUpdate()
       .executeTakeFirst();
+    // A claimed revocation is about to revoke the old tokens at the provider,
+    // which can end the whole grant; reconnecting over it would keep a grant
+    // that dies with them. Once revoked (or the claim lapses) a reconnect is fine.
+    if (
+      existing?.status === 'pending_revocation' &&
+      existing.refresh_claim_id !== null &&
+      existing.refresh_claim_expires_at !== null &&
+      existing.refresh_claim_expires_at.getTime() > Date.now()
+    )
+      throw new IntegrationError(
+        'oauth_revocation_in_progress',
+        'The previous connection is still being disconnected',
+        true,
+      );
     const grantId = existing?.id ?? randomUUID();
     const createdAt = existing?.created_at ?? new Date();
     const scopes = bundle.scopes;

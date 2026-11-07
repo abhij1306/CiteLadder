@@ -307,7 +307,7 @@ describe('frozen Commerce shelf projections', () => {
     );
     const queue = new AuditQueue(db, 120),
       [claim] = await queue.claim('shelf-worker', 1, { workspaceId: t.workspaceId, auditId });
-    const running = await queue.markRunning(claim!, 'shelf-worker');
+    const running = await queue.markRunning(claim!, claim!.lease_owner);
     const task = running!.task;
     tasks.push(task.id);
     await db
@@ -372,7 +372,7 @@ describe('frozen Commerce shelf projections', () => {
     await expect(
       prepareShelfExecution(db, { ...task, workspace_id: foreign.workspaceId }, result, null),
     ).rejects.toThrow();
-    const artifactId = await persistExecutionSuccess(db, task, 'shelf-worker', result, derive);
+    const artifactId = await persistExecutionSuccess(db, task, claim!.lease_owner, result, derive);
     await db.transaction().execute((trx) => derive(trx, task, running!.audit, artifactId!));
     const observations = await db
       .selectFrom('commerce_recommendation_observations')

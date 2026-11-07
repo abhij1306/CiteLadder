@@ -226,8 +226,8 @@ export function webSearchBlocks(blocks: readonly ConversationBlock[]) {
   return { calls, results };
 }
 
-/** A provider-hosted call in these blocks still waits for its result in the next call. */
-export function hasPendingServerTool(blocks: readonly ConversationBlock[]) {
+/** Whether `block` is a provider-hosted call with no result among `blocks`. */
+function pendingServerTool(blocks: readonly ConversationBlock[]) {
   const answered = new Set(
     blocks.flatMap((block) =>
       typeof block.tool_use_id === 'string' && block.type !== 'tool_result'
@@ -235,10 +235,24 @@ export function hasPendingServerTool(blocks: readonly ConversationBlock[]) {
         : [],
     ),
   );
-  return blocks.some(
-    (block) =>
-      block.type === 'server_tool_use' && typeof block.id === 'string' && !answered.has(block.id),
-  );
+  return (block: ConversationBlock) =>
+    block.type === 'server_tool_use' && typeof block.id === 'string' && !answered.has(block.id);
+}
+
+/** A provider-hosted call in these blocks still waits for its result in the next call. */
+export function hasPendingServerTool(blocks: readonly ConversationBlock[]) {
+  return blocks.some(pendingServerTool(blocks));
+}
+
+/**
+ * The blocks without provider-hosted calls that never got their result, for a
+ * response no later call continues. An empty result keeps a placeholder text,
+ * since an empty assistant message makes every later replay invalid.
+ */
+export function withoutPendingServerTools(blocks: readonly ConversationBlock[]) {
+  const pending = pendingServerTool(blocks);
+  const kept = blocks.filter((block) => !pending(block));
+  return kept.length ? kept : [{ type: 'text', text: '(no answer)' }];
 }
 
 const inputSchema = z.record(z.string(), z.json());

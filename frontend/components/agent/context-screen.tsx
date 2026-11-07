@@ -18,7 +18,6 @@ import {
   type BrandProfileForm,
 } from '@/components/knowledge-base/use-brand-profile-form';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { CompetitorSuggestions } from '@/components/visibility/prompt-insights';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +30,8 @@ import { projectQueries } from '@/lib/api/projects';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import type { BrandProfile, Project } from '@citeladder/contracts';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { useBrandFacts } from '@/lib/project/use-brand-facts';
 
 const CONTEXT_TABS = [
@@ -70,21 +70,9 @@ const TAB_SAVE: Readonly<Record<ContextTab, 'profile' | 'instructions' | null>> 
  * on a card; the identity band carries the active tab's save.
  */
 export function ContextScreen() {
-  const { activeProject, activeWorkspaceId } = useProjectContext();
-  if (!activeProject || !activeWorkspaceId)
-    return (
-      <ListScreen>
-        <ProjectRequiredState />
-      </ListScreen>
-    );
+  const { workspaceId, project } = useProjectScope();
   // Keyed by project so an unsaved draft never carries to another project.
-  return (
-    <ContextWorkspace
-      key={activeProject.id}
-      workspaceId={activeWorkspaceId}
-      project={activeProject}
-    />
-  );
+  return <ContextWorkspace key={project.id} workspaceId={workspaceId} project={project} />;
 }
 
 function ContextWorkspace({
@@ -95,7 +83,7 @@ function ContextWorkspace({
   const profile = useQuery(projectQueries.brandProfile({ workspaceId, projectId: project.id }));
   // The pilot gate is known before the tabs render, so its tab never appears
   // late. Outside the pilot there is no tab; an unreadable gate shows its error there.
-  const facts = useBrandFacts(project.id, workspaceId);
+  const facts = useBrandFacts();
   const form = useBrandProfileForm({
     projectId: project.id,
     workspaceId,

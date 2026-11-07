@@ -67,7 +67,7 @@ describe('AiReferralsScreen', () => {
         }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />);
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
 
     // GA4 is connected in place rather than through Settings.
     expect(
@@ -78,7 +78,7 @@ describe('AiReferralsScreen', () => {
 
   it('renders persisted referral measurement by source', async () => {
     mswServer.use(http.get(endpoint, () => HttpResponse.json(dashboard)));
-    renderWithProviders(<AiReferralsScreen />);
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
 
     expect(await screen.findByRole('heading', { name: 'AI-referred sessions' })).toBeVisible();
     expect(screen.getByRole('heading', { name: 'Share of GA4 sessions' })).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe('AiReferralsScreen', () => {
         }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />);
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
 
     await userEvent.setup().click(await screen.findByRole('tab', { name: 'Sources' }));
     expect(
@@ -132,7 +132,7 @@ describe('AiReferralsScreen', () => {
         }),
       ),
     );
-    renderWithProviders(<AiReferralsScreen />);
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
     await userEvent.setup().click(await screen.findByRole('tab', { name: 'Sources' }));
     expect(
       await screen.findByText(/classification is not complete for this window/i),
@@ -152,7 +152,7 @@ describe('AiReferralsScreen', () => {
       }),
     );
     const user = userEvent.setup();
-    renderWithProviders(<AiReferralsScreen />);
+    renderWithProviders(<AiReferralsScreen />, { projectSelection: { activeProject } });
 
     expect(await screen.findAllByText('3 days')).toHaveLength(2);
     const month = screen.getByRole('radio', { name: 'Month' });

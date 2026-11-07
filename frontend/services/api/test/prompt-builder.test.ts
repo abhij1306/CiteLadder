@@ -5,7 +5,7 @@ import type { topicPreviewResponseSchema, topicSchema } from '@citeladder/contra
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import type { z } from 'zod';
 
-import { agentCallLimit, enforceWorkspaceRequest } from '../src/abuse/usage.ts';
+import { budget, spendBudget } from '../src/abuse/usage.ts';
 import { createApp } from '../src/app.ts';
 import { previewTopics } from '../src/prompts/topic-preview.ts';
 import { recordingMeter } from './meter-fixtures.ts';
@@ -115,8 +115,8 @@ describe('topic preview', () => {
   });
 
   it('spends the provider-call window recovery uses before any model call', async () => {
-    const limit = agentCallLimit(1);
-    await enforceWorkspaceRequest(db, t.workspaceId, { ...limit, amount: limit.limit });
+    const calls = budget('agent_provider_call', {});
+    await spendBudget(db, calls, t.workspaceId, { amount: calls.limit });
     const deps = echoDependencies();
     await expect(previewTopics(db, t.workspaceId, t.projectId, deps)).rejects.toMatchObject({
       status: 429,

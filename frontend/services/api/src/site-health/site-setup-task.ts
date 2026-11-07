@@ -6,7 +6,8 @@
  * walk and its admission land in a second commit under the same lease. A
  * reclaimed task whose facts are published but still pending resumes at the walk.
  */
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { failureFacts, getLogger } from '../logging.ts';
@@ -33,7 +34,7 @@ import { canonicalIdentity } from './url-identity.ts';
 const crawlPolicy = policy.site_health.crawl;
 const logger = getLogger('site_health.setup');
 
-export function setupSettings(env: Record<string, string | undefined> = process.env) {
+export function setupSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (name: keyof typeof spec) => Number(resolveSettingSpec(spec[name], env));
   return {

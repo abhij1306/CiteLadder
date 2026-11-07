@@ -46,8 +46,7 @@ import {
 } from '../integrations/sync.ts';
 import { freshAccessToken } from '../integrations/tokens.ts';
 import { getLogger } from '../logging.ts';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { defineDeleteRoute, defineGetRoute, definePostRoute } from './define.ts';
 
 const family = 'integrations';
@@ -367,7 +366,7 @@ export const integrationRoutes = [
     params: { path: connectionPath, query: {} },
     body: discoveryRequest.nullable().optional(),
     response: integrationPropertyListSchema,
-    async handle({ c, db }, { path }) {
+    async handle({ c, db, config }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
       const body = await readOptionalBody(c, discoveryRequest);
       const row = await db
@@ -382,11 +381,8 @@ export const integrationRoutes = [
         .where('connection.workspace_id', '=', workspaceId)
         .executeTakeFirst();
       if (!row) throw notFound('Integration connection');
-      await enforceWorkspaceRequest(db, `${workspaceId}:${path.connection_id}`, {
-        operation: 'integrations.properties',
-        limit: resolveSettingSpec(policy.abuse.property_discovery_limit) as number,
-        windowSeconds: resolveSettingSpec(policy.abuse.property_discovery_window_seconds) as number,
-      });
+      // The connection was just proven to belong to this workspace.
+      await spendBudget(db, budget('integration_properties', config.settings), path.connection_id);
       // Resolve the project before provider I/O; an unknown project is a 404,
       // and any other failure keeps its own error.
       let sites: Set<string> | null = null;

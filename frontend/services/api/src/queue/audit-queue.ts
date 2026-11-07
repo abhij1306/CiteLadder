@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { AuditTasks } from '../generated/db-schema.ts';
@@ -7,7 +8,11 @@ import { auditEvent, transitionAudit } from '../audits/state.ts';
 import { AUDIT_LANE, TaskQueue, type ClaimFilter } from './task-queue.ts';
 
 export type AuditTask = Selectable<AuditTasks>;
+/** A row this claim leased: its `lease_owner` is the claim's own owner, for every later write. */
+export type ClaimedAuditTask = AuditTask & { lease_owner: string };
 const table = 'audit_tasks';
+/** `audit_tasks.lease_owner` is `varchar(64)`. */
+const LEASE_OWNER_MAX_LENGTH = 64;
 const { statuses } = policy.task_queue;
 
 export type AuditClaimScope = { workspaceId: string; auditId: string };
@@ -141,13 +146,26 @@ export class AuditQueue {
     this.now = now ?? (() => new Date());
     this.#tasks = new TaskQueue(db, AUDIT_LANE, { leaseTtlSeconds: leaseSeconds, now });
   }
-  /** The claim and fairness cursor commit before any provider dispatch. */
-  claim(
+  /**
+   * The claim and fairness cursor commit before any provider dispatch. Each
+   * claim leases its rows to `<owner>:<nonce>`: the lane charges no attempt
+   * at claim or uncertain reclaim, so only this per-claim owner tells a stale
+   * slot's lease from the same worker's re-claim of the task.
+   */
+  async claim(
     owner: string,
     limit = 1,
     scope?: AuditClaimScope | readonly AuditClaimScope[],
-  ): Promise<AuditTask[]> {
-    return this.#tasks.claim({ owner, limit, where: scope && auditScope(scope) });
+  ): Promise<ClaimedAuditTask[]> {
+    const leaseOwner = `${owner}:${randomBytes(4).toString('hex')}`;
+    if (leaseOwner.length > LEASE_OWNER_MAX_LENGTH)
+      throw new TypeError('Audit worker owner is too long');
+    const rows = await this.#tasks.claim({
+      owner: leaseOwner,
+      limit,
+      where: scope && auditScope(scope),
+    });
+    return rows.map((row) => ({ ...row, lease_owner: leaseOwner }));
   }
   /** Earliest claimable time or lease expiry, so an idle runner stays for a retry, provider poll or recovery due soon. */
   nextDue(): Promise<Date | null> {

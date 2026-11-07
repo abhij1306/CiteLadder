@@ -13,7 +13,7 @@ import { auditInput, auditLaunchInput } from '../audits/inputs.ts';
 import { executeInteractiveAudit } from '../audits/interactive.ts';
 import { cancelAudit as cancelOwnedAudit } from '../audits/maintenance.ts';
 import { readAudit, readAudits } from '../audits/reads.ts';
-import { configEnvironment, type ServiceConfig } from '../config.ts';
+import type { ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { interactiveSlots } from '../http/interactive-slots.ts';
@@ -36,7 +36,7 @@ export async function createQueuedAudit(
     actor.workspaceId,
     auditInput.parse(input),
     {},
-    auditRuntime(configEnvironment(config)),
+    auditRuntime(config.settings),
   );
   return readAudits(db, actor.workspaceId, ids);
 }
@@ -72,7 +72,7 @@ export async function launchAudit(
   input: z.output<typeof auditLaunchInput>,
 ) {
   const { max_attempts: ceiling, ...request } = input;
-  const runtime = auditRuntime(configEnvironment(config));
+  const runtime = auditRuntime(config.settings);
   const estimate = await estimateAudit(
     db,
     actor.workspaceId,

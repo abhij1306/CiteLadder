@@ -125,10 +125,7 @@ async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Prom
   return { ...success, discovery, facts };
 }
 
-/**
- * The fetched URL's latest state. Written after admission, whose upsert of
- * the root's own candidate would otherwise reset it to `running`.
- */
+/** The fetched URL's latest title and content type. */
 async function refreshFetchedUrl(
   trx: Database,
   crawl: Crawl,
@@ -142,7 +139,6 @@ async function refreshFetchedUrl(
       latest_title: discovery.title,
       latest_content_type: page.contentType.slice(0, 128),
       last_seen_crawl_id: crawl.id,
-      discovery_status: 'completed',
     })
     .where('workspace_id', '=', crawl.workspace_id)
     .where('project_id', '=', crawl.project_id)
@@ -236,20 +232,12 @@ async function insertObservation(
  * A URL whose fetch failed for good is still part of the crawl: observe it
  * with its status and the page that linked it, so it lists as an error with
  * its source. The root's failure is the crawl's own, and a URL the crawl's
- * policy excluded is not an error. Either way the URL's discovery is settled
- * `failed`, as a fetched URL's is settled `completed`.
+ * policy excluded is not an error.
  */
 async function observeFailure(trx: Database, crawl: Crawl, task: SiteTask, outcome: Outcome) {
   const root = canonicalIdentity(crawl.root_url).hash === task.url_hash;
   if (!root && taskOutcome(outcome) !== 'excluded')
     await observeFailedUrl(trx, crawl, task, outcome);
-  await trx
-    .updateTable('site_urls')
-    .set({ discovery_status: 'failed' })
-    .where('workspace_id', '=', crawl.workspace_id)
-    .where('project_id', '=', crawl.project_id)
-    .where('url_hash', '=', canonicalIdentity(task.requested_url).hash)
-    .execute();
 }
 async function observeFailedUrl(trx: Database, crawl: Crawl, task: SiteTask, outcome: Outcome) {
   const siteUrlId = await siteUrlFor(trx, crawl, task);

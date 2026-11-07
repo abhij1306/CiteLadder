@@ -408,9 +408,12 @@ async function settleThrown(ctx: SiteTaskContext, claimed: SiteTask, error: unkn
     });
   } catch (error_) {
     if (!isConflict(error_)) throw error_;
-    const task = (await loadScope(ctx.db, claimed))?.task;
-    if (task?.lease_owner === ctx.owner && task.conflict_count < ctx.settings.conflictMax)
-      await settleTask(ctx.db, ctx, task, { kind: 'conflict', errorDetail: detail, cause: error });
+    // The task row alone, through the lease fence: a re-claimed lease is never settled here.
+    await ctx.db.transaction().execute(async (trx) => {
+      const task = await ctx.queue.fence(trx, claimed, ctx.owner);
+      if (task && task.conflict_count < ctx.settings.conflictMax)
+        await settleTask(trx, ctx, task, { kind: 'conflict', errorDetail: detail, cause: error });
+    });
   }
 }
 
@@ -421,7 +424,9 @@ async function settleThrown(ctx: SiteTaskContext, claimed: SiteTask, error: unkn
  */
 export async function runSiteTask(runner: SiteTaskRunner, claimed: SiteTask, work: SiteTaskWork) {
   const heartbeat = maintainLease(
-    () => runner.queue.heartbeat(claimed.id, runner.owner, claimed.workspace_id),
+    // At the claimed attempt: recovery charges one, so a re-claim never renews this slot.
+    () =>
+      runner.queue.heartbeat(claimed.id, runner.owner, claimed.workspace_id, claimed.attempt_count),
     runner.settings.heartbeat * 1000,
     (error) => logger.exception('heartbeat failed', error, { task_id: claimed.id }),
   );

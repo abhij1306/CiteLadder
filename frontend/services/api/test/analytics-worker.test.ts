@@ -6,7 +6,8 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { setLogSink } from '../src/logging.ts';
 import { TaskQueue, type QueueTask } from '../src/queue/task-queue.ts';
 import { AnalyticsWorker, EXECUTORS, retryDelayMs } from '../src/workers/analytics-worker.ts';

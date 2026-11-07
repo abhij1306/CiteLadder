@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { verifyImplementationEvents } from '../src/opportunities/verification.ts';
 import { enqueueImplementationVerification } from '../src/opportunities/enqueue.ts';
 import { announceEvidence } from '../src/opportunities/evidence-announcement.ts';

@@ -610,6 +610,39 @@ describe('durable onboarding', () => {
     await worker.finish(task, task.lease_owner!, null, new FetchError('site_not_found'));
     expect((await discoveryRow(db, t.workspaceId, row.id)).status).toBe('queued');
   });
+  it('stops renewing a lease that recovery reclaimed and the same owner claimed again', async () => {
+    const t = await tenant();
+    const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
+    const reclaimed = {
+      attempt_count: 1,
+      heartbeat_at: new Date('2026-01-01T00:00:00Z'),
+      lease_expires_at: new Date(Date.now() + 60_000),
+    };
+    const network: WebsiteFetcher = async (url, options) => {
+      // The stalled slot's lease was reclaimed (one attempt) and re-claimed by the same owner.
+      await db
+        .updateTable('brand_discovery_tasks')
+        .set(reclaimed)
+        .where('discovery_id', '=', row.id)
+        .execute();
+      await sleep(400);
+      options.signal!.throwIfAborted();
+      return fetcher(url, options);
+    };
+    const worker = new DiscoveryWorker(db, {
+      fetcher: network,
+      gateway: null,
+      env: { BRAND_DISCOVERY_HEARTBEAT_INTERVAL_SECONDS: '0.05' },
+    });
+    await worker.runOnce('same-owner', { workspaceId: t.workspaceId, discoveryId: row.id });
+    expect(
+      await db
+        .selectFrom('brand_discovery_tasks')
+        .select(['status', 'lease_owner', 'attempt_count', 'heartbeat_at', 'lease_expires_at'])
+        .where('discovery_id', '=', row.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ status: 'running', lease_owner: 'same-owner', ...reclaimed });
+  });
   it('loses write permission when the lease expires while waiting for a discovery lock', async () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());

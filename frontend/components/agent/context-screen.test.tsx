@@ -8,6 +8,7 @@ import type { BrandProfile } from '@citeladder/contracts';
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders, testProjectSelection } from '@/test/render';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import { ProjectSelectionProvider } from '@/lib/project/project-scope';
 
 import { ContextScreen } from './context-screen';
@@ -59,7 +60,9 @@ function ContextScope({ activeProject }: { activeProject: ReturnType<typeof make
         status: 'ready',
       })}
     >
-      <ContextScreen />
+      <ActiveProjectScopeProvider project={activeProject}>
+        <ContextScreen />
+      </ActiveProjectScopeProvider>
     </ProjectSelectionProvider>
   );
 }
@@ -584,7 +587,9 @@ describe('Agent instruction drafts', () => {
           activeWorkspace: viewer,
         })}
       >
-        <ContextScreen />
+        <ActiveProjectScopeProvider project={project}>
+          <ContextScreen />
+        </ActiveProjectScopeProvider>
       </ProjectSelectionProvider>,
     );
     expect(await screen.findByRole('textbox', { name: 'Agent instructions' })).toHaveAttribute(

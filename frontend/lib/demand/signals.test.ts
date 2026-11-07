@@ -5,7 +5,6 @@ import { parseAgentHandoff } from '@/lib/agent/handoff';
 import {
   competingPages,
   demandSignalHandoffHref,
-  detectorStates,
   safePageUrl,
   signalPageLine,
   signalSubject,
@@ -73,28 +72,6 @@ describe('competingPages', () => {
   it('returns an empty list when evidence carries no pages array', () => {
     expect(competingPages(signal())).toEqual([]);
     expect(competingPages(signal({ evidence: { pages: 'nope' } }))).toEqual([]);
-  });
-});
-
-describe('detectorStates', () => {
-  it('normalises limitations to an array so callers can join it', () => {
-    const states = detectorStates({
-      detectors: {
-        striking_distance: { state: 'available', limitations: 'not an array' },
-        cannibalization: { state: 'partial', limitations: ['one', 2, 'three'] },
-        query_trends: { state: 42 },
-      },
-    });
-    expect(states.striking_distance?.limitations).toEqual([]);
-    expect(states.cannibalization?.limitations).toEqual(['one', 'three']);
-    // A non-string state is dropped so the caller's default applies.
-    expect(states.query_trends!.state).toBeUndefined();
-  });
-
-  it('ignores a summary whose detectors field is not an object map', () => {
-    expect(detectorStates({})).toEqual({});
-    expect(detectorStates({ detectors: ['a'] })).toEqual({});
-    expect(detectorStates({ detectors: 'available' })).toEqual({});
   });
 });
 

@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { strings } from '../db/json.ts';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { createAuditsInTransaction } from '../audits/creation.ts';
 import { marketIds } from '../projects/markets.ts';
 import { auditInput } from '../audits/inputs.ts';
@@ -12,7 +13,7 @@ import { getLogger } from '../logging.ts';
 import { ApiError } from '../errors.ts';
 import { claimDueSchedules } from '../queue/audit-queue.ts';
 
-export function schedulerSettings(env: Record<string, string | undefined> = process.env) {
+export function schedulerSettings(env: SettingSource = process.env) {
   return Object.fromEntries(
     Object.entries(policy.audit_schedules.settings).map(([name, spec]) => [
       name,
@@ -109,6 +110,24 @@ export class AuditScheduler {
       } catch (error) {
         await sql`rollback to savepoint schedule_planning`.execute(trx);
         await sql`release savepoint schedule_planning`.execute(trx);
+        if (error instanceof ApiError && error.isRetryable()) {
+          // A transient refusal (active-launch limit, daily task budget) is not the
+          // owner's to fix: try the same occurrence again without counting a failure.
+          // `next_run_at` stays the occurrence (it anchors the cadence); an ownerless
+          // lease until `Retry-After` keeps claims away until then.
+          await trx
+            .updateTable('audit_schedules')
+            .set({
+              lease_owner: null,
+              lease_expires_at: sql<Date>`clock_timestamp() + ${this.retrySeconds(error)} * interval '1 second'`,
+              updated_at: at,
+            })
+            .where('id', '=', schedule.id)
+            .where('workspace_id', '=', claim.workspaceId)
+            .execute();
+          logger.info('scheduled_audit_planning_deferred', { schedule_id: schedule.id });
+          return false;
+        }
         const failures = schedule.failure_count + 1;
         await trx
           .updateTable('audit_schedules')
@@ -128,6 +147,11 @@ export class AuditScheduler {
         return false;
       }
     });
+  }
+  /** How long a retryable refusal asks to wait: its `Retry-After`, else the failure delay. */
+  private retrySeconds(error: ApiError) {
+    const seconds = Number(error.headers?.['retry-after']);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : this.settings.failure_retry_seconds;
   }
   async runOnce(at = this.now(), canAdmit?: () => boolean) {
     if (canAdmit) return this.planUntilBudget(at, canAdmit);

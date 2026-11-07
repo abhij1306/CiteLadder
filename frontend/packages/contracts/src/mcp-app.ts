@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import { actionItemSchema } from './actions.ts';
+import {
+  visibilityExecutionEvidenceSchema,
+  visibilitySourcesSchema,
+} from './visibility-evidence.ts';
 
 export const analyticsSelectionSchema = z.strictObject({
   project_id: z.uuid().describe('A project id that list_projects returned.'),
@@ -78,3 +83,99 @@ export const analyticsResultSchema = z.object({
   links: z.object({ application: applicationUrl, onboarding: applicationUrl }),
 });
 export type AnalyticsResult = z.infer<typeof analyticsResultSchema>;
+
+// ---------------------------------------------------------------------------
+// The MCP read-tool results the App renders. Each lists the fields the App
+// reads; the tools return more, for the model.
+// ---------------------------------------------------------------------------
+
+const nextCursor = z.object({ next_cursor: z.string().nullable() });
+
+/** A read whose evidence does not exist yet: never zero. */
+export const mcpUnavailableSchema = z.object({
+  state: z.literal('unavailable'),
+  reason: z.string(),
+});
+
+/** `list_projects`. */
+export const mcpProjectsSchema = z.object({
+  projects: z.array(z.object({ id: z.uuid(), name: z.string(), workspace_name: z.string() })),
+  pagination: nextCursor,
+});
+
+/** `read_visibility_sources`, available. */
+export const mcpVisibilitySourcesSchema = z.object({
+  state: z.literal('available'),
+  items: z.array(
+    visibilitySourcesSchema.shape.items.element.pick({
+      key: true,
+      responses: true,
+      annotations: true,
+      citation_rate: true,
+      citation_share: true,
+    }),
+  ),
+  coverage: z.object({ responses: z.number(), prompts: z.number(), citations: z.number() }),
+  pagination: nextCursor,
+});
+export type McpVisibilitySources = z.input<typeof mcpVisibilitySourcesSchema>;
+
+/** One answer `read_visibility_results` lists, with the id `fetch` resolves. */
+const mcpVisibilityResultSchema = visibilityExecutionEvidenceSchema
+  .pick({ task_id: true, prompt_text: true, logical_engine: true, completed_at: true })
+  .extend({ record_uri: z.string() });
+export type McpVisibilityResult = z.infer<typeof mcpVisibilityResultSchema>;
+
+/** `read_visibility_results`, available. */
+export const mcpVisibilityResultsSchema = z.object({
+  state: z.literal('available'),
+  items: z.array(mcpVisibilityResultSchema),
+});
+export type McpVisibilityResults = z.input<typeof mcpVisibilityResultsSchema>;
+
+/** `fetch`: one record as document text. */
+export const mcpFetchedRecordSchema = z.object({ text: z.string() });
+
+/** `read_site_health`, available. */
+export const mcpSiteSnapshotSchema = z.object({
+  state: z.literal('available'),
+  snapshot_id: z.string(),
+  crawl_id: z.string(),
+  observed_at: z.string(),
+  scores: z.object({
+    web_fundamentals: z.number().nullable(),
+    aeo_readiness: z.number().nullable(),
+    aeo_measurement_coverage: z.number().nullable(),
+  }),
+  coverage: z.object({ selected_urls: z.number(), analyzed_urls: z.number() }),
+  measurement_states: z.record(z.string(), z.string()),
+  versions: z.record(z.string(), z.string().nullable()),
+});
+export type McpSiteSnapshot = z.input<typeof mcpSiteSnapshotSchema>;
+
+/** `read_site_pages`: the crawl's pages, one page of them. */
+export const mcpSitePagesSchema = z.object({
+  items: z.array(
+    z.object({ site_url_id: z.string(), url: z.string(), title: z.string().nullable() }),
+  ),
+});
+export type McpSitePages = z.input<typeof mcpSitePagesSchema>;
+export type McpSitePage = z.infer<typeof mcpSitePagesSchema>['items'][number];
+
+/** `read_actions` without an Action id. */
+export const mcpActionsSchema = z.discriminatedUnion('state', [
+  z.object({
+    state: z.literal('available'),
+    items: z.array(
+      actionItemSchema.pick({
+        id: true,
+        target_label: true,
+        target_url: true,
+        approach: true,
+        status: true,
+      }),
+    ),
+  }),
+  mcpUnavailableSchema,
+]);
+export type McpActions = z.infer<typeof mcpActionsSchema>;

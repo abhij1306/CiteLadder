@@ -1,7 +1,8 @@
 /** Optional search transports. Candidate pages are acquired by Site Health. */
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { discoverySettings } from '../projects/discovery-inputs.ts';
 import { createResearchClient, ResearchBudget } from '../projects/research-evidence.ts';
 import { boundedJson } from '../providers/response.ts';
@@ -44,7 +45,7 @@ function logSearchFailure(provider: string, error: unknown, startedAt: number) {
 }
 
 export function competitorSearch(
-  env: Record<string, string | undefined> = process.env,
+  env: SettingSource = process.env,
   transport: typeof fetch = fetch,
 ): CompetitorSearch {
   const setting = (name: keyof typeof p.settings) => resolveSettingSpec(p.settings[name], env);

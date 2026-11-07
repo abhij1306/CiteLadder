@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import type { SettingSource } from '../config/settings.ts';
 import {
   codes,
   endpoints,
@@ -110,10 +111,7 @@ export class IntegrationClient {
   readonly io;
   readonly #lastRequest = new Map<string, number>();
 
-  constructor(
-    env: Record<string, string | undefined> = process.env,
-    io: IntegrationIO = defaultIO,
-  ) {
+  constructor(env: SettingSource = process.env, io: IntegrationIO = defaultIO) {
     this.settings = integrationSettings(env);
     this.secrets = integrationSecrets(env);
     this.io = io;

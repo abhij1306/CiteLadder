@@ -3,6 +3,9 @@ import { act, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { LOADING_INDICATOR_DELAY_MS } from '@/lib/config/operational';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import type { Project } from '@citeladder/contracts';
+import { makeProject } from '@/test/fixtures/project';
 import type { FailureScope, SelectionStatus } from '@/lib/project/selection';
 
 const replace = vi.fn();
@@ -26,6 +29,7 @@ let contextValue: {
   activeWorkspaceId: string | null;
   activeWorkspace: { id: string; role: Role; capabilities: readonly string[] } | null;
   activeProjectId: string | null;
+  activeProject: Project | null;
   retry: () => void;
 };
 vi.mock('@/lib/project/project-context', () => ({
@@ -54,6 +58,8 @@ function setContext(
     activeWorkspaceId: WORKSPACE,
     activeWorkspace: { id: WORKSPACE, role, capabilities: CAPABILITIES[role] },
     activeProjectId: status === 'ready' ? PROJECT : null,
+    activeProject:
+      status === 'ready' ? makeProject({ id: PROJECT, workspace_id: WORKSPACE }) : null,
     retry: vi.fn(),
   };
 }
@@ -168,6 +174,21 @@ describe('OnboardingGate', () => {
 
     expect(replace).not.toHaveBeenCalled();
     expect(screen.getByText('That project is unavailable')).toBeInTheDocument();
+  });
+
+  it('hands a project route its resolved project scope', () => {
+    search = new URLSearchParams({ project: PROJECT });
+    function ScopedScreen() {
+      const { workspaceId, projectId } = useProjectScope();
+      return <p>{`${workspaceId}/${projectId}`}</p>;
+    }
+    render(
+      <OnboardingGate>
+        <ScopedScreen />
+      </OnboardingGate>,
+    );
+
+    expect(screen.getByText(`${WORKSPACE}/${PROJECT}`)).toBeInTheDocument();
   });
 
   it('keeps an empty workspace on its workspace-management routes', () => {

@@ -5,6 +5,7 @@ import { Route, Routes, useParams } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
 import { NewChatScreen } from './new-chat-screen';
@@ -30,7 +31,7 @@ function renderNewChat(search: string) {
       initialEntries: [`/agent${search}`],
       projectSelection: {
         activeProjectId: PROJECT,
-        activeProject: { id: PROJECT } as never,
+        activeProject: makeProject({ id: PROJECT }),
         status: 'ready',
       },
     },
@@ -109,6 +110,7 @@ const WORKFLOW_CATALOG = {
     },
   ],
   output_kinds: [],
+  limits: { mentions_max: 5 },
 };
 
 function baseHandlers(actions: ReturnType<typeof actionItem>[] = []) {
@@ -116,7 +118,9 @@ function baseHandlers(actions: ReturnType<typeof actionItem>[] = []) {
     http.get(`/api/v1/agent/chats/${CHAT}`, () =>
       HttpResponse.json({ ...detail(revision(REV1, 1, 'agent', '')), outputs: [] }),
     ),
-    http.get('/api/v1/agent/skills', () => HttpResponse.json({ skills: [GROWTH_SKILL] })),
+    http.get('/api/v1/agent/skills', () =>
+      HttpResponse.json({ skills: [GROWTH_SKILL], limits: { mentions_max: 5 } }),
+    ),
     http.get(`/api/v1/projects/${PROJECT}/actions`, () =>
       HttpResponse.json({ items: actions, next_cursor: null, status_counts: {} }),
     ),
@@ -165,7 +169,7 @@ describe('NewChatScreen', () => {
         initialEntries: ['/agent'],
         projectSelection: {
           activeProjectId: PROJECT,
-          activeProject: { id: PROJECT } as never,
+          activeProject: makeProject({ id: PROJECT }),
           status: 'ready',
         },
       },
@@ -327,6 +331,24 @@ describe('NewChatScreen', () => {
         mentions: [PRICING],
       },
     ]);
+  });
+
+  it('offers no further mention once the catalog-listed bound is reached', async () => {
+    captureChats([actionItem(PRICING, 'Pricing page'), actionItem(BLOG, 'Blog hub')]);
+    mswServer.use(
+      http.get('/api/v1/agent/skills', () =>
+        HttpResponse.json({ skills: [GROWTH_SKILL], limits: { mentions_max: 1 } }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderNewChat('');
+
+    const message = await screen.findByLabelText('Message the agent');
+    await user.type(message, '@pric');
+    await user.click(await screen.findByRole('option', { name: /Pricing page/ }));
+    await user.type(message, '@blo');
+    expect(message).toHaveValue('@Pricing page @blo');
+    expect(screen.queryByRole('option', { name: /Blog hub/ })).not.toBeInTheDocument();
   });
 
   it('loads the wider mention pool only once @ is typed', async () => {

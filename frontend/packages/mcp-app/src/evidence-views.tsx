@@ -1,5 +1,11 @@
 import { useState } from 'react';
 import { z } from 'zod';
+import {
+  mcpSiteSnapshotSchema,
+  mcpUnavailableSchema,
+  mcpVisibilitySourcesSchema,
+  type McpSitePage,
+} from '@citeladder/contracts/mcp-app';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Disclosure } from '@/components/ui/disclosure';
@@ -14,26 +20,12 @@ import {
 import { textRole } from '@/components/ui/typography';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import type { AppState, Controller } from './controller';
-import { moment, rate, text } from './format';
+import { moment, rate } from './format';
 
-const sourceSchema = z.object({
-  items: z.array(
-    z.object({
-      key: z.string(),
-      responses: z.number(),
-      annotations: z.number(),
-      citation_rate: z.number().nullable(),
-      citation_share: z.number().nullable(),
-    }),
-  ),
-  coverage: z.object({ responses: z.number(), prompts: z.number(), citations: z.number() }),
-  pagination: z.object({ next_cursor: z.string().nullable() }),
-});
 type Props = Readonly<{ state: AppState; controller: Controller }>;
 
 /** Visibility with nothing to show yet says why; neither reason is a failed read. */
-const notYetMeasured = z.object({
-  state: z.literal('unavailable'),
+const notYetMeasured = mcpUnavailableSchema.extend({
   reason: z.enum(['no_completed_run', 'metrics_pending']),
 });
 const notYetMeasuredText = {
@@ -50,7 +42,7 @@ export function notYetMeasuredMessage(evidence: unknown): string | null {
 
 export function SourcesView({ state, controller }: Props) {
   const selection = state.selection!;
-  const parsed = sourceSchema.safeParse(state.result?.evidence);
+  const parsed = mcpVisibilitySourcesSchema.safeParse(state.result?.evidence);
   if (!parsed.success) {
     const missing = notYetMeasuredMessage(state.result?.evidence);
     return (
@@ -133,58 +125,35 @@ export function SourcesView({ state, controller }: Props) {
       <p className={textRole('caption')}>
         Names in cited answers are co-occurrence, not proof of presence on the publisher page.
       </p>
-      {state.answers.map((answer, index) => (
-        <article key={text(answer.task_id, `answer-${index}`)} className="space-y-2">
-          <h3 className={textRole('itemTitle')}>
-            {typeof answer.prompt_text === 'string' ? answer.prompt_text : 'Answer evidence'}
-          </h3>
+      {state.answers.map((answer) => (
+        <article key={answer.task_id} className="space-y-2">
+          <h3 className={textRole('itemTitle')}>{answer.prompt_text}</h3>
           <p className={textRole('body')}>
-            {typeof answer.answer_text === 'string'
-              ? answer.answer_text
-              : 'Fetch the referenced answer for its retained text.'}
+            {answer.answer_text ?? 'Fetch the referenced answer for its retained text.'}
           </p>
           <p className={textRole('caption')}>
-            {text(answer.logical_engine, 'Engine unknown')} · {moment(answer.completed_at)}
+            {answer.logical_engine} · {moment(answer.completed_at)}
           </p>
-          {typeof answer.record_uri === 'string' && (
-            <Button
-              variant="ghost"
-              onClick={() => void controller.fetchAnswer(text(answer.record_uri))}
-            >
-              Read retained answer
-            </Button>
-          )}
+          <Button variant="ghost" onClick={() => void controller.fetchAnswer(answer.record_uri)}>
+            Read retained answer
+          </Button>
         </article>
       ))}
     </div>
   );
 }
 
-const siteSchema = z.object({
-  state: z.literal('available'),
-  snapshot_id: z.string(),
-  crawl_id: z.string(),
-  observed_at: z.string(),
-  scores: z.object({
-    web_fundamentals: z.number().nullable(),
-    aeo_readiness: z.number().nullable(),
-    aeo_measurement_coverage: z.number().nullable(),
-  }),
-  coverage: z.object({ selected_urls: z.number(), analyzed_urls: z.number() }),
-  measurement_states: z.record(z.string(), z.string()),
-  versions: z.record(z.string(), z.string().nullable()),
-});
 export function SiteHealthView({ state, controller }: Props) {
   const [findings, setFindings] = useState<Awaited<ReturnType<Controller['siteFindings']>>>(null);
   const [loadingFindings, setLoadingFindings] = useState(false);
   const [findingsError, setFindingsError] = useState(false);
   const [pagesError, setPagesError] = useState(false);
   const [loadingPages, setLoadingPages] = useState(false);
-  const [pages, setPages] = useState<Record<string, unknown>[]>([]);
-  const parsed = siteSchema.safeParse(state.result?.evidence);
+  const [pages, setPages] = useState<McpSitePage[]>([]);
+  const parsed = mcpSiteSnapshotSchema.safeParse(state.result?.evidence);
   if (!parsed.success) {
-    const missing = z
-      .object({ state: z.literal('unavailable'), reason: z.literal('no_site_snapshot') })
+    const missing = mcpUnavailableSchema
+      .extend({ reason: z.literal('no_site_snapshot') })
       .safeParse(state.result?.evidence);
     return (
       <p role={missing.success ? undefined : 'alert'} className={textRole('body')}>
@@ -250,7 +219,7 @@ export function SiteHealthView({ state, controller }: Props) {
           setPagesError(false);
           setLoadingPages(true);
           void controller
-            .sitePages()
+            .sitePages(site.crawl_id)
             .then(setPages)
             .catch(() => setPagesError(true))
             .finally(() => setLoadingPages(false));
@@ -278,21 +247,21 @@ export function SiteHealthView({ state, controller }: Props) {
       {findings?.state === 'available' && !findings.items.length && (
         <output className={textRole('body', 'block')}>No open Actions for this project.</output>
       )}
-      {(findings?.state === 'available' ? findings.items : []).map((action, index) => (
-        <article key={text(action.id, `action-${index}`)}>
-          <h3 className={textRole('itemTitle')}>{text(action.target_label, 'Action')}</h3>
-          {text(action.approach) && <p className={textRole('body')}>{text(action.approach)}</p>}
+      {(findings?.state === 'available' ? findings.items : []).map((action) => (
+        <article key={action.id}>
+          <h3 className={textRole('itemTitle')}>{action.target_label}</h3>
+          {action.approach && <p className={textRole('body')}>{action.approach}</p>}
           <p className={textRole('caption')}>
-            {text(action.status, 'Status unknown').replaceAll('_', ' ')}
-            {text(action.target_url) && ` · ${text(action.target_url)}`}
+            {action.status.replaceAll('_', ' ')}
+            {action.target_url && ` · ${action.target_url}`}
           </p>
         </article>
       ))}
-      {pages.map((page, index) => (
-        <article key={text(page.site_url_id, `page-${index}`)}>
-          <h3 className={textRole('itemTitle')}>{text(page.url, text(page.title, 'Page'))}</h3>
-          {text(page.title) && text(page.title) !== text(page.url) && (
-            <p className={textRole('caption')}>{text(page.title)}</p>
+      {pages.map((page) => (
+        <article key={page.site_url_id}>
+          <h3 className={textRole('itemTitle')}>{page.url}</h3>
+          {page.title && page.title !== page.url && (
+            <p className={textRole('caption')}>{page.title}</p>
           )}
         </article>
       ))}

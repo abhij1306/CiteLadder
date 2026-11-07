@@ -54,6 +54,7 @@ const API_ERROR_CODES = [
   'hard_excluded_query',
   'http_error',
   'idempotency_conflict',
+  'idempotency_outcome_unknown',
   'implementation_idempotency_conflict',
   'implementation_target_conflict',
   'internal_error',

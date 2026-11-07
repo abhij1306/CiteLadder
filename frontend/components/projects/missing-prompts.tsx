@@ -13,7 +13,6 @@ import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { missingPrompts, promptHistoryHref, type MissingPrompt } from '@/lib/prompts/history';
-import { resolveProjectRequestScope } from '@/lib/project/request-scope';
 import { useEngineCatalog } from '@/lib/providers/engines';
 
 import { useLatestPromptMetrics } from '@/components/prompts/use-latest-prompt-measurements';
@@ -30,7 +29,7 @@ export function MissingPrompts({
   projectId,
   workspaceId,
 }: Readonly<{ projectId: string; workspaceId: string }>) {
-  const query = useLatestPromptMetrics(resolveProjectRequestScope(workspaceId, projectId));
+  const query = useLatestPromptMetrics({ workspaceId, projectId });
   const rows = useMemo(() => missingPrompts(query.data ?? []), [query.data]);
   // No run yet has nothing to compare, so the section stays out of the way.
   if (query.isPending || query.data?.length === 0) return null;

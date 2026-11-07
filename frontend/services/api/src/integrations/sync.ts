@@ -5,7 +5,7 @@ import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { codes, integrationPolicy, integrationSettings } from './config.ts';
 import { policy } from '../config.ts';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { addDays } from '../calendar-days.ts';
 
@@ -168,11 +168,8 @@ async function admitOnDemandSync(
     .executeTakeFirstOrThrow();
   if (Number(count.count) >= settings.sync_on_demand_active_limit)
     throw new ApiError(429, 'Workspace sync capacity exceeded');
-  await enforceWorkspaceRequest(trx, workspaceId, {
-    operation: 'integrations.sync.on_demand',
-    limit: settings.sync_on_demand_request_limit,
-    windowSeconds: settings.sync_on_demand_request_window_seconds,
-  });
+  // The module resolves its integration settings from the process environment.
+  await spendBudget(trx, budget('integration_sync', process.env), workspaceId);
 }
 
 async function resolveSyncTarget(trx: Database, input: SyncInput) {

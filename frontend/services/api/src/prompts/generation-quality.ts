@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { record } from '../db/json.ts';
 import { getLogger } from '../logging.ts';
 import { ModelError, providerErrorCode } from '../models/http.ts';
@@ -17,7 +18,7 @@ import {
 
 const Q = policy.models.quality;
 const setting = (name: keyof typeof policy.models.jev) =>
-  resolveSettingSpec(policy.models.jev[name]);
+  resolveSettingSpec(policy.models.jev[name], process.env);
 export const probability = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1 ? value : null;
 const logger = getLogger('app.domain.prompts.quality_judge');

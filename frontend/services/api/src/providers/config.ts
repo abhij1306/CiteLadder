@@ -1,4 +1,5 @@
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 
 export { logicalEngines, surfaceKindOf } from '../config/providers.ts';
 
@@ -6,7 +7,7 @@ export const providerPolicy = policy.providers;
 export type Engine = keyof typeof providerPolicy.routes;
 export type ProviderTransport = 'openai' | 'google' | 'anthropic' | 'dataforseo';
 
-export function providerSettings(env: Record<string, string | undefined> = process.env) {
+export function providerSettings(env: SettingSource = process.env) {
   const spec = providerPolicy.settings;
   return {
     endpoints: {

@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Dialog } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -16,7 +17,7 @@ import {
   type IntegrationConnection,
   type IntegrationProperty,
 } from '@/lib/api/integrations';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import { InlineFigure } from '@/components/ui/typography';
 import { activeMappingFor, ownPropertiesFirst } from '@/components/integrations/data-sources';
@@ -236,10 +237,11 @@ export function PropertyPicker({
           {discovery.isPending ? <QueryState kind="loading" label={`Loading ${noun}s…`} /> : null}
 
           {discovery.isError ? (
-            <Callout tone="negative">
-              Could not load your properties from the provider.{' '}
-              {humanizeApiError(discovery.error).message}
-            </Callout>
+            <MutationNotice
+              notice={mutationNoticeForError(discovery.error, {
+                action: 'load your properties from the provider',
+              })}
+            />
           ) : null}
 
           {discovery.data?.length === 0 ? (
@@ -263,7 +265,9 @@ export function PropertyPicker({
           </Stack>
 
           {selectMutation.isError ? (
-            <Callout tone="negative">{humanizeApiError(selectMutation.error).message}</Callout>
+            <MutationNotice
+              notice={mutationNoticeForError(selectMutation.error, { action: 'save the property' })}
+            />
           ) : null}
         </Stack>
       </Dialog>

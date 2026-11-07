@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Inline, Stack } from '@/components/ui/layout';
 import { LineDiff } from '@/components/ui/line-diff';
@@ -57,7 +57,7 @@ export function OutputHistory({
   return (
     <Stack gap="compact">
       {restore.isError ? (
-        <Callout tone="negative">{agentWriteFailure(restore.error).message}</Callout>
+        <MutationNotice notice={agentWriteFailure(restore.error, 'restore the revision')} />
       ) : null}
       <ol aria-label="Revisions" className={ledgerClasses()}>
         {revisions.map((revision) => (

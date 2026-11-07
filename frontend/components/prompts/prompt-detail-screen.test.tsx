@@ -4,6 +4,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
 import { testQueryClient } from '@/test/render';
 import type { PromptHistory } from '@citeladder/contracts';
 
@@ -135,9 +137,14 @@ function renderScreen(path = `/prompts/${PROMPT}`) {
     <MemoryRouter initialEntries={[path]}>
       <QueryClientProvider client={testQueryClient()}>
         <TooltipProvider>
-          <Routes>
-            <Route path="/prompts/:promptId" element={<PromptDetailScreen />} />
-          </Routes>
+          {/* A project route: the gate hands the screen its project. */}
+          <ActiveProjectScopeProvider
+            project={makeProject({ id: PROJECT, workspace_id: WORKSPACE })}
+          >
+            <Routes>
+              <Route path="/prompts/:promptId" element={<PromptDetailScreen />} />
+            </Routes>
+          </ActiveProjectScopeProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </MemoryRouter>,

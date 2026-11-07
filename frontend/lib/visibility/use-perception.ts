@@ -25,12 +25,12 @@ export function usePerception(
   const enabled = selectionEnabled(queries);
   const query = useQuery({
     ...visibilityQueries.perception(
-      { workspaceId: queries.workspaceId, projectId: queries.projectId ?? '' },
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
       params,
     ),
     enabled,
     placeholderData: enabled
-      ? (data, previous) => retainPreviousDataForScope(queries.projectId!, data, previous)
+      ? (data, previous) => retainPreviousDataForScope(queries.projectId, data, previous)
       : undefined,
     refetchInterval: (current) =>
       current.state.data?.state === 'pending' ? PERCEPTION_PENDING_POLL_MS : false,

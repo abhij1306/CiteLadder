@@ -18,6 +18,7 @@ import { navigationMode } from '@/lib/navigation/app-routes';
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { DockedThread } from '@/components/ui/chat-dock';
 import { Drawer } from '@/components/ui/drawer';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -159,7 +160,7 @@ function PanelStart({
         </p>
       </Stack>
       {access.canSend ? null : <Callout tone="info">{access.message}</Callout>}
-      {create.failure ? <Callout tone="negative">{create.failure.message}</Callout> : null}
+      {create.failure ? <MutationNotice notice={create.failure} /> : null}
     </DockedThread>
   );
 }

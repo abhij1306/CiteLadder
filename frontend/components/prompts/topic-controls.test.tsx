@@ -154,7 +154,7 @@ describe('AddTopicDialog', () => {
         onCreate={async () => {
           if (fail) throw new Error('rejected');
         }}
-        error="Topic name already exists"
+        error={{ message: 'Topic name already exists', retryable: false }}
       />,
     );
     expect(screen.getByText('Topic name already exists')).toBeVisible();

@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
-import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { createAudits } from '../src/audits/creation.ts';
@@ -69,7 +69,7 @@ async function seed() {
     {},
     runtime,
   );
-  const [task] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId });
+  const [task] = await claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId });
   await queue.markRunning(task!, 'worker');
   tasks.push(task!.id);
   const context = await loadExecutionContext(

@@ -8,7 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { deriveExecution } from '../src/audits/derivation.ts';
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { answerPerception } from '../src/perception/executor.ts';
 import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';

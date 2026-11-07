@@ -5,10 +5,11 @@ import {
 import { brandDiscoverySchema } from '@citeladder/contracts/visibility';
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { categoryInput, competitorInput, marketInput } from './inputs.ts';
 
-export function discoverySettings(env: Record<string, string | undefined> = process.env) {
+export function discoverySettings(env: SettingSource = process.env) {
   const spec = policy.discovery.settings;
   const setting = (name: keyof typeof spec) => resolveSettingSpec(spec[name], env);
   return Object.fromEntries(

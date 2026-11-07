@@ -1,4 +1,4 @@
-import { loadWorkerSettings } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import type { Database } from '../src/db/database.ts';
 import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
 

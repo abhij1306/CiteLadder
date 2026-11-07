@@ -1,5 +1,6 @@
 import { sql } from 'kysely';
-import { activeJobRetrySeconds, policy } from '../config.ts';
+import { activeJobRetrySeconds } from '../abuse/usage.ts';
+import { policy } from '../config.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';

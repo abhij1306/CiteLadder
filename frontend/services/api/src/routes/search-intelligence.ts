@@ -16,7 +16,8 @@ import { z } from 'zod';
 
 import type { AppEnv } from '../context.ts';
 import { readBody } from '../http/body.ts';
-import { configEnvironment, policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { ApiError } from '../errors.ts';
 import { createReview } from '../search-intelligence/reviews.ts';
 import { deriveCitationMatches } from '../search-intelligence/citations.ts';
@@ -73,7 +74,7 @@ export const searchIntelligenceRoutes = [
         c.get('user').id,
         key,
         await readBody(c, reviewBody),
-        String(resolveSettingSpec(policy.settings.encryption_key, configEnvironment(config))),
+        String(resolveSettingSpec(policy.settings.encryption_key, config.settings)),
       );
     },
   }),

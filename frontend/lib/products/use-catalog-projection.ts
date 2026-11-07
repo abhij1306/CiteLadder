@@ -33,7 +33,7 @@ export function useCatalogProjection(
   const catalogInFlight = Boolean(catalog.data?.projection.in_flight);
   const poll = useQuery({
     ...commerceQueries.catalogProjection({ workspaceId, projectId }),
-    enabled: Boolean(projectId) && catalogInFlight,
+    enabled: catalogInFlight,
     refetchInterval: ACTIVE_RUN_POLL_MS,
   });
   // A poll only runs once the catalog is cached, so one landing in the same

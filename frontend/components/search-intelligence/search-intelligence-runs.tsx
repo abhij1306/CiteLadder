@@ -5,6 +5,7 @@ import { DisplayTime } from '@/components/ui/display-time';
 import { Drawer } from '@/components/ui/drawer';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
@@ -40,10 +41,13 @@ const STOP_REASONS: Readonly<Record<string, string>> = {
 export function RunNotice({
   run,
   onCancel,
+  onReview,
   cancelling,
 }: Readonly<{
   run: SearchIntelligenceRun | null;
   onCancel: (runId: string) => void;
+  /** Opens the analysis review: the recovery for a stopped run. */
+  onReview: () => void;
   cancelling: boolean;
 }>) {
   if (!run) return null;
@@ -66,20 +70,23 @@ export function RunNotice({
       </Inline>
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
+  const reason =
+    STOP_REASONS[run.error_code] ||
+    run.error_detail ||
+    `${run.completed_calls} of ${run.planned_calls} requests completed.`;
+  // A stopped analysis is recovered by reviewing and running it again.
   return (
-    <output className={panelClasses({ tone: 'none' }, 'type-body bg-warning-soft block')}>
-      <Stack gap="tight">
-        <p className={textRole('itemTitle')}>
-          Analysis {SEARCH_RUN_STATES[run.status].label.toLowerCase()}
-        </p>
-        <p className="text-ink-muted">
-          {STOP_REASONS[run.error_code] ||
-            run.error_detail ||
-            `${run.completed_calls} of ${run.planned_calls} requests completed.`}{' '}
-          Saved results remain available below.
-        </p>
-      </Stack>
-    </output>
+    <MutationNotice
+      notice={{
+        message: `Analysis ${SEARCH_RUN_STATES[run.status].label.toLowerCase()}. ${reason} Saved results remain available below.`,
+        retryable: false,
+      }}
+      recovery={
+        <Button type="button" variant="secondary" onClick={onReview}>
+          Review again
+        </Button>
+      }
+    />
   );
 }
 

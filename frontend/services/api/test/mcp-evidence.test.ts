@@ -270,7 +270,10 @@ it('pages prompts stably while context includes only active prompts and foreign 
   const at = (offset: number) => new Date(Date.UTC(2026, 0, 1) + offset);
   const first = await prompt(db, set, 'Acme first', { createdAt: at(0), topicId: nets });
   const second = await prompt(db, set, 'Acme second', { createdAt: at(1) });
-  const retired = await prompt(db, set, 'Acme retired', { status: 'retired', createdAt: at(2) });
+  const archived = await prompt(db, set, 'Acme archived', {
+    status: 'archived',
+    createdAt: at(2),
+  });
   // Accepted from a grounded candidate: the portfolio says so without the query identity.
   await db
     .updateTable('prompts')
@@ -308,8 +311,8 @@ it('pages prompts stably while context includes only active prompts and foreign 
     second,
   ]);
   expect(
-    record(await fetchRecord(db, principal, `citeladder://prompt/${retired}`, origin)),
-  ).toMatchObject({ status: 'retired' });
+    record(await fetchRecord(db, principal, `citeladder://prompt/${archived}`, origin)),
+  ).toMatchObject({ status: 'archived' });
   const foreign = await fixtures.tenant();
   const secret = await prompt(db, await promptSet(db, foreign.projectId), 'Acme private');
   await expect(fetchRecord(db, principal, `citeladder://prompt/${secret}`, origin)).rejects.toThrow(
@@ -486,7 +489,7 @@ it('exposes published dataset aggregates without treating them as backlink edges
       base_url: '',
       credential_revision: randomUUID(),
       active: true,
-      last_test_status: policy.search_intelligence.connection_test_ok,
+      last_test_status: policy.providers.test_status_ok,
       created_at: new Date(),
       updated_at: new Date(),
     })
@@ -504,7 +507,7 @@ it('exposes published dataset aggregates without treating them as backlink edges
       estimated_credits: null,
       charged_credits: null,
       platform_call_id: null,
-      status: 'completed',
+      status: 'succeeded',
       action: 'analysis',
       idempotency_key: runId,
       frozen_scope: '{}',

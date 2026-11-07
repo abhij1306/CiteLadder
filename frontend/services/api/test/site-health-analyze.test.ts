@@ -220,10 +220,7 @@ describe('analyze acquisition', () => {
       .selectAll()
       .where('id', '=', page.siteUrlId)
       .executeTakeFirstOrThrow();
-    expect(url).toMatchObject({
-      latest_title: 'Rich page about widgets',
-      discovery_status: 'completed',
-    });
+    expect(url).toMatchObject({ latest_title: 'Rich page about widgets' });
   });
 
   it('reuses the discover artifact without refetching, and a rerun supersedes the current analysis', async () => {

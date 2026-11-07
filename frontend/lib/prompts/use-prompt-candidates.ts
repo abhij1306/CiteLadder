@@ -44,7 +44,7 @@ export function usePromptCandidates({
   const [notice, setNotice] = useState<string | null>(null);
   const query = useQuery({
     ...promptsQueries.candidates(scope, promptSetId),
-    enabled: Boolean(promptSetId && workspaceId),
+    enabled: Boolean(promptSetId),
   });
   const candidates: PromptCandidate[] = query.data ?? [];
 

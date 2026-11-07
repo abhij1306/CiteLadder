@@ -9,7 +9,7 @@ import { IslandUnavailable, LazyIsland } from '@/components/ui/lazy-island';
 import { Stack } from '@/components/ui/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { runsQueries } from '@/lib/api/runs';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * The evidence card and the markdown renderer behind it are fetched when a
@@ -61,10 +61,10 @@ export function ExecutionEvidenceDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }>) {
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const evidenceQuery = useQuery({
     ...runsQueries.execution(workspaceId, execution?.id ?? null),
-    enabled: open && execution !== null && workspaceId !== null,
+    enabled: open && execution !== null,
   });
   // Start the card's download beside the evidence read rather than after it.
   useEffect(() => {

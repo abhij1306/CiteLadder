@@ -719,6 +719,88 @@ describe('crawl lifecycle', () => {
     });
   });
 
+  it('fails a page rerun or a site crawl whose every analysis failed', async () => {
+    const failAnalysis = async (seed: SiteSeed, path: string) => {
+      const page = await fixtures.analyzable(seed, path);
+      await db
+        .updateTable('site_crawl_tasks')
+        .set({ status: 'failed', error_code: 'task_failed' })
+        .where('id', '=', page.taskId)
+        .execute();
+    };
+    const rerun = await running({
+      configuration: JSON.stringify({ page_rerun: true }),
+      discovery_status: 'completed',
+      discovered_url_count: 1,
+    });
+    await failAnalysis(rerun, '/rerun');
+    const site = await running();
+    const root = await fixtures.task(site, 'discover');
+    await db
+      .updateTable('site_crawl_tasks')
+      .set({ status: 'succeeded' })
+      .where('id', '=', root)
+      .execute();
+    await failAnalysis(site, '/a');
+    await failAnalysis(site, '/b');
+    await reconcileCrawl(db, rerun.workspaceId, rerun.crawlId);
+    await reconcileCrawl(db, site.workspaceId, site.crawlId);
+    for (const seed of [rerun, site]) {
+      expect(await crawlRow(seed.crawlId)).toMatchObject({
+        status: 'failed',
+        analysis_status: 'failed',
+        analyzed_url_count: 0,
+      });
+      expect(await events(seed.crawlId, 'crawl.failed')).toHaveLength(1);
+      expect(await tasksOf(seed.crawlId, 'change_intel')).toHaveLength(0);
+    }
+  });
+
+  it('counts a rerun page once, by its latest generation', async () => {
+    const seed = await running();
+    const page = await monitoredPage(seed, '/');
+    const earlier = await fixtures.task(seed, 'analyze');
+    const latest = await db
+      .updateTable('site_crawl_tasks')
+      .set({ generation: 1 })
+      .where('id', '=', page.taskId)
+      .returning(['url_hash', 'site_url_id'])
+      .executeTakeFirstOrThrow();
+    await db
+      .updateTable('site_crawl_tasks')
+      .set({ ...latest, status: 'failed', error_code: 'task_failed' })
+      .where('id', '=', earlier)
+      .execute();
+    await reconcileCrawl(db, seed.workspaceId, seed.crawlId);
+    expect(await crawlRow(seed.crawlId)).toMatchObject({
+      status: 'completed',
+      analysis_status: 'completed',
+      partial_reason: '',
+      analyzed_url_count: 1,
+      failed_url_count: 0,
+    });
+  });
+
+  it('marks the inventory complete only when no page limit cut discovery short', async () => {
+    const discovered = async (changes: Partial<Insertable<SiteCrawls>>) => {
+      const seed = await running({ discovery_status: 'running', ...changes });
+      const root = await fixtures.task(seed, 'discover');
+      await db
+        .updateTable('site_crawl_tasks')
+        .set({ status: 'succeeded' })
+        .where('id', '=', root)
+        .execute();
+      await fixtures.page(seed, '/', {}, { observed: true });
+      await reconcileCrawl(db, seed.workspaceId, seed.crawlId);
+      return crawlRow(seed.crawlId);
+    };
+    expect(await discovered({})).toMatchObject({ status: 'completed', inventory_complete: true });
+    expect(await discovered({ discovery_requested_count: 1 })).toMatchObject({
+      status: 'completed',
+      inventory_complete: false,
+    });
+  });
+
   it('hands analytics the crawl identity when no page was analyzed', async () => {
     const seed = await running({ analysis_status: 'pending' });
     await reconcileCrawl(db, seed.workspaceId, seed.crawlId);

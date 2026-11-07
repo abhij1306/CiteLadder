@@ -13,21 +13,23 @@ import type {
   PromptCreateRequest,
   PromptUpdateRequest,
 } from '@citeladder/contracts/prompt-requests';
-import { PERSONA_MAX_CHARS } from '@/lib/config/prompts';
 import { buyerStageSchema, promptIntentSchema } from '@citeladder/contracts/project';
-import type { BuyerStage, Prompt, PromptIntent } from '@citeladder/contracts';
+import type { BuyerStage, Prompt, PromptFormLimits, PromptIntent } from '@citeladder/contracts';
 
-export const promptFormSchema = z.object({
-  text: z.string().trim().min(1, 'Prompt text is required.'),
-  /** A topic id of the project, or '' for no topic. */
-  topicId: z.string(),
-  intent: promptIntentSchema,
-  buyerStage: buyerStageSchema,
-  /** The buyer the prompt is asked as; '' for none. */
-  persona: z.string().trim().max(PERSONA_MAX_CHARS, 'Persona is too long.'),
-});
+/** The form's schema under the persona bound the API enforces (from the prompt-set list). */
+export function promptFormSchema(limits: Pick<PromptFormLimits, 'persona_max_chars'>) {
+  return z.object({
+    text: z.string().trim().min(1, 'Prompt text is required.'),
+    /** A topic id of the project, or '' for no topic. */
+    topicId: z.string(),
+    intent: promptIntentSchema,
+    buyerStage: buyerStageSchema,
+    /** The buyer the prompt is asked as; '' for none. */
+    persona: z.string().trim().max(limits.persona_max_chars, 'Persona is too long.'),
+  });
+}
 
-export type PromptFormValues = z.infer<typeof promptFormSchema>;
+export type PromptFormValues = z.infer<ReturnType<typeof promptFormSchema>>;
 
 /** Ordered intent options for the filter menu; '' renders as "Unspecified". */
 export const intentValues: PromptIntent[] = promptIntentSchema.options;

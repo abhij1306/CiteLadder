@@ -70,10 +70,10 @@ export function SourcePrompts({
   };
   const query = useQuery({
     ...visibilityQueries.evidence(
-      { workspaceId: queries.workspaceId, projectId: queries.projectId ?? '' },
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
       params,
     ),
-    enabled: Boolean(queries.projectId && queries.activeRunId && (domain || url)),
+    enabled: Boolean(queries.activeRunId && (domain || url)),
   });
 
   // The answer opens over this screen rather than routing to the run that

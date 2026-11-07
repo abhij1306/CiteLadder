@@ -8,7 +8,8 @@ import {
   siteCrawlCreateRequestSchema,
   urlPreviewRequestSchema,
 } from '@citeladder/contracts/site-health-requests';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { Database } from '../db/database.ts';
 import type { Selectable } from 'kysely';

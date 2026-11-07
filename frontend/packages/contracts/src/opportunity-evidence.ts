@@ -4,7 +4,7 @@
  * rule family; `opportunityEvidenceSchemas` names the schema of every rule.
  */
 import { z } from 'zod';
-import { keywordGapEvidenceSchema } from './opportunities.ts';
+import { keywordGapEvidenceSchema, sourcePatternSchema } from './opportunities.ts';
 import { internalLinkSchema } from './site-health/internal-links.ts';
 
 const json = z.record(z.string(), z.unknown());
@@ -21,7 +21,7 @@ const promptGapEvidenceSchema = z.object({
   observed_engines: z.array(z.string()),
   brand_mentioned: z.boolean(),
   owned_citation_count: z.number(),
-  source_pattern: json,
+  source_pattern: sourcePatternSchema,
   competitor_names: z.array(z.string()).optional(),
   engines: z.array(z.string()).optional(),
   owned_domains: z.array(z.string()).optional(),

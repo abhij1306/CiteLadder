@@ -9,6 +9,7 @@ import { useCancelRun, useFollowUp, type FollowUp } from '@/components/agent/use
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { latestOutput } from '@/lib/agent/documents';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { isRunActive } from '@/lib/agent/run-state';
@@ -120,24 +121,26 @@ function FollowUpFailure({
 }: Readonly<{ turn: FollowUp; actionId: string | null; canSend: boolean }>) {
   if (!turn.failure) return null;
   return (
-    <Callout tone="negative">
-      {turn.failure.message}{' '}
-      {turn.failure.startNewChat ? (
-        <ProjectLink
-          href={agentHandoffHref({ actionId, prompt: turn.lastMessage })}
-          className="underline"
-        >
-          Start a new chat
-        </ProjectLink>
-      ) : (
-        <Button
-          variant="secondary"
-          onClick={turn.retrySubmission}
-          disabled={turn.pending || !canSend}
-        >
-          Retry send
-        </Button>
-      )}
-    </Callout>
+    <MutationNotice
+      notice={turn.failure}
+      recovery={
+        turn.failure.startNewChat ? (
+          <ProjectLink
+            href={agentHandoffHref({ actionId, prompt: turn.lastMessage })}
+            className="underline"
+          >
+            Start a new chat
+          </ProjectLink>
+        ) : (
+          <Button
+            variant="secondary"
+            onClick={turn.retrySubmission}
+            disabled={turn.pending || !canSend}
+          >
+            Retry send
+          </Button>
+        )
+      }
+    />
   );
 }

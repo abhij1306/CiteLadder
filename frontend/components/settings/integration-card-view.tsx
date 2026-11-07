@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { ConnectionRow } from '@/components/settings/integration-connection-row';
 import { Dialog } from '@/components/ui/dialog';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import {
   FAMILY_META,
   isGrantGone,
@@ -14,6 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import {
   Card,
   CardContent,
@@ -199,7 +200,11 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
             one property, use Remove on its row instead.
           </p>
           {disconnect.isError ? (
-            <Callout tone="negative">{humanizeApiError(disconnect.error).message}</Callout>
+            <MutationNotice
+              notice={mutationNoticeForError(disconnect.error, {
+                action: 'disconnect the integration',
+              })}
+            />
           ) : null}
         </Stack>
       </Dialog>

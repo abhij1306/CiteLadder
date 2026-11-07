@@ -13,7 +13,8 @@
 import { randomBytes } from 'node:crypto';
 
 import { ConfigError } from '../config/config-error.ts';
-import { policy, type WorkerSettings } from '../config.ts';
+import { policy } from '../config.ts';
+import type { WorkerSettings } from '../config/analytics.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
 import { recoverAnalyticsLeases } from '../queue/analytics-recovery.ts';

@@ -41,6 +41,34 @@ export async function terminalize(
     .execute();
 }
 
+/**
+ * Ends a turn no live request runs as interrupted, with its reply: its model
+ * calls settle in the caller's transaction, which holds
+ * the run's row lock.
+ */
+export async function endInterrupted(
+  db: Database,
+  run: Run,
+  settleFailed: (db: Database, run: Run) => Promise<void>,
+) {
+  // Settlement and terminal writes share one ordered transaction.
+  await settleFailed(db, run);
+  await db
+    .updateTable('agent_runs')
+    .set({
+      status: statuses.failed,
+      error_code: 'interrupted',
+      updated_at: sql<Date>`clock_timestamp()`,
+      lease_owner: null,
+      lease_expires_at: null,
+      completed_at: sql<Date>`clock_timestamp()`,
+    })
+    .where('id', '=', run.id)
+    .where('workspace_id', '=', run.workspace_id)
+    .execute();
+  await appendRecoveryReply(db, run, 'interrupted');
+}
+
 /** Workspace sets come from the process owner, with bounded lease recovery. */
 export class AgentQueue {
   readonly db: Database;
@@ -122,24 +150,8 @@ export class AgentQueue {
         .forUpdate()
         .skipLocked()
         .execute();
-      for (const run of rows) {
-        // Ledger settlement and terminal writes share one ordered transaction.
-        await reconcile(trx, run); // NOSONAR
-        await trx // NOSONAR
-          .updateTable('agent_runs')
-          .set({
-            status: statuses.failed,
-            error_code: 'interrupted',
-            updated_at: sql<Date>`clock_timestamp()`,
-            lease_owner: null,
-            lease_expires_at: null,
-            completed_at: sql<Date>`clock_timestamp()`,
-          })
-          .where('id', '=', run.id)
-          .where('workspace_id', '=', run.workspace_id)
-          .execute();
-        await appendRecoveryReply(trx, run, 'interrupted'); // NOSONAR
-      }
+      // One transaction connection: the runs end in order.
+      for (const run of rows) await endInterrupted(trx, run, reconcile); // NOSONAR
       return rows.length;
     });
   }

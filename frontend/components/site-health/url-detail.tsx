@@ -28,7 +28,7 @@ import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 
 import { UrlDetailView } from './url-detail-view';
 import { ListScreen } from '@/components/layout/page-shell';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 const HISTORY_LIMIT = 25;
 const RERUN_SEARCH_PARAM = 'rerun';
@@ -45,7 +45,7 @@ export function UrlDetail({
   crawlId,
   siteUrlId,
 }: Readonly<{ crawlId: string; siteUrlId: string }>) {
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const router = useNavigate();
   const searchParams = useSearchParams()[0];
   // A rerun that minted a NEW crawl navigates here with `?rerun=1`; start
@@ -63,7 +63,6 @@ export function UrlDetail({
   const [rerunError, setRerunError] = useState<string | null>(null);
   const detailQuery = useQuery({
     ...siteHealthQueries.page(workspaceId, crawlId, siteUrlId),
-    enabled: Boolean(workspaceId),
     refetchInterval: (query) =>
       rerunPollInterval(
         rerunPolling,
@@ -128,7 +127,7 @@ export function UrlDetail({
         <IssueHistoryButton
           // A finished re-audit changes what is resolved: start the history over.
           key={`history:${crawlId}:${siteUrlId}:${detailQuery.data.last_audited ?? ''}`}
-          workspaceId={workspaceId!}
+          workspaceId={workspaceId}
           crawlId={crawlId}
           siteUrlId={siteUrlId}
         />

@@ -14,13 +14,13 @@ import { useCreateChat } from '@/components/agent/use-chat-turns';
 import { useComposerCommands } from '@/components/agent/use-composer-commands';
 import { WorkflowGallery, WorkflowStart } from '@/components/agent/workflow-gallery';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { Disclosure } from '@/components/ui/disclosure';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { cardClasses } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { TextLink } from '@/components/ui/text-link';
@@ -39,7 +39,7 @@ import type { AgentWorkflow } from '@/lib/api/agent';
 import { AGENT_TOP_ACTIONS } from '@/lib/config/agent';
 import { readableUrl } from '@/lib/format';
 import { useProjectHref } from '@/lib/navigation/project-destination';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * New chat: ask a question, start a defined workflow, or pick up an Action.
@@ -47,20 +47,16 @@ import { useProjectContext } from '@/lib/project/project-context';
  * shown as removable context before the first message is sent.
  */
 export function NewChatScreen() {
-  const { activeProjectId, activeWorkspaceId } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const [searchParams] = useSearchParams();
   const handoffKey = searchParams.toString();
-  return activeProjectId && activeWorkspaceId ? (
+  return (
     <NewChat
-      key={`${activeProjectId}:${handoffKey}`}
-      workspaceId={activeWorkspaceId}
-      projectId={activeProjectId}
+      key={`${projectId}:${handoffKey}`}
+      workspaceId={workspaceId}
+      projectId={projectId}
       searchParams={searchParams}
     />
-  ) : (
-    <ListScreen>
-      <ProjectRequiredState />
-    </ListScreen>
   );
 }
 
@@ -121,7 +117,7 @@ function NewChat({
           <AttachedAction workspaceId={workspaceId} actionId={handoff.actionId} />
         ) : null}
         {access.canSend ? null : <Callout tone="info">{access.message}</Callout>}
-        {failure ? <Callout tone="negative">{failure.message}</Callout> : null}
+        {failure ? <MutationNotice notice={failure} /> : null}
         <Composer
           id="new-chat-message"
           label="Message the agent"

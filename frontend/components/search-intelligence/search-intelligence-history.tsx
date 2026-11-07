@@ -11,8 +11,7 @@ import {
   searchIntelligenceQueries,
   type SearchIntelligenceDataset,
 } from '@/lib/api/search-intelligence';
-import { useProjectContext } from '@/lib/project/project-context';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /** One month of saved history; a null value is an unobserved month and draws as a gap. */
 type HistoryRow = {
@@ -25,12 +24,10 @@ type HistoryRow = {
 export function SearchIntelligenceHistory({
   dataset,
 }: Readonly<{ dataset: SearchIntelligenceDataset }>) {
-  const { activeProject } = useProjectContext();
-  const scope = resolveActiveProjectRequestScope(activeProject);
-  const query = useQuery({
-    ...searchIntelligenceQueries.datasetHistory(scope, dataset.id),
-    enabled: scope.enabled,
-  });
+  const { workspaceId, projectId } = useProjectScope();
+  const query = useQuery(
+    searchIntelligenceQueries.datasetHistory({ workspaceId, projectId }, dataset.id),
+  );
   if (query.isError)
     return <ReadError {...readErrorProps(query)} fallback="Saved history could not be loaded." />;
   if (query.isPending) return <Skeleton variant="chart" />;

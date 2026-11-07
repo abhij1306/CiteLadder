@@ -132,7 +132,7 @@ describe('audit admission freeze', () => {
       entities: { target: { mode: 'context_required' } },
     });
   });
-  it('rejects foreign, disabled and unreviewed explicit selections as a whole', async () => {
+  it('rejects foreign and archived explicit selections as a whole', async () => {
     const t = await seed();
     const foreign = await seed();
     const prepare = (ids: string[]) =>
@@ -148,7 +148,7 @@ describe('audit admission freeze', () => {
     await expect(prepare([t.promptId, foreign.promptId])).rejects.toMatchObject({ status: 400 });
     await db
       .updateTable('prompts')
-      .set({ status: 'proposed' })
+      .set({ status: 'archived' })
       .where('id', '=', t.promptId)
       .execute();
     await expect(prepare([t.promptId])).rejects.toMatchObject({ status: 400 });

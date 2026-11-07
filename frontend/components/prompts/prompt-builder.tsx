@@ -14,7 +14,12 @@ import { readErrorProps } from '@/components/ui/read-error';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
 import { topicsQueries } from '@/lib/api/topics';
-import type { PromptGenerateResponse, SeedQueries, Topic } from '@citeladder/contracts';
+import type {
+  PromptFormLimits,
+  PromptGenerateResponse,
+  SeedQueries,
+  Topic,
+} from '@citeladder/contracts';
 import { personaChoices } from '@/lib/prompts/builder-business';
 import { defaultRunSettings, runRequest, type RunSettings } from '@/lib/prompts/builder-run';
 
@@ -50,6 +55,8 @@ type PromptBuilderProps = {
   generateError?: unknown;
   /** The pending-candidate review list. */
   review: ReactNode;
+  /** The request bounds the API enforces, from the prompt-set list. */
+  limits: PromptFormLimits;
 };
 
 /** What this open of the builder generated: its request and every run it made. */
@@ -74,7 +81,8 @@ export function PromptBuilder(props: Readonly<PromptBuilderProps>) {
 }
 
 function BuilderSheet(props: Readonly<PromptBuilderProps>) {
-  const { projectId, workspaceId, topics, hasCompetitors, isGenerating, generateError } = props;
+  const { projectId, workspaceId, topics, hasCompetitors, isGenerating, generateError, limits } =
+    props;
   const scope = { workspaceId, projectId };
   const [step, setStep] = useState<BuilderStep>(props.initialStep);
   const business = useBuilderBusiness({ projectId, workspaceId });
@@ -87,6 +95,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
     seeds: seedsQuery.data ?? null,
     hasCompetitors,
     personaChoices: personas,
+    limits,
   });
   const [run, setRun] = useState<Session | null>(null);
 
@@ -147,6 +156,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
             business={business}
             runContext={settings.runContext}
             onRunContextChange={(runContext) => setEdited({ ...settings, runContext })}
+            limits={limits}
           />
         </TabPanel>
         <TabPanel value="topics">
@@ -156,6 +166,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
           <BuilderDistributionStep
             settings={settings}
             onChange={setEdited}
+            limits={limits}
             hasCompetitors={hasCompetitors}
             personaChoices={personas}
             seeds={{ data: seedsQuery.data, status: <SeedsReadState read={seedsQuery} /> }}

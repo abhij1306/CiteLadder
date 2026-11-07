@@ -4,6 +4,7 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DateField } from '@/components/ui/date-field';
@@ -22,7 +23,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableActionsCell, TableCell, TableRow } from '@/components/ui/table';
 import type { ApiKey, ApiKeyCreated, ApiKeyScope } from '@citeladder/contracts/api-keys';
 import { apiKeyMutations, apiKeyQueries } from '@/lib/api/api-keys';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { API_HOST_ORIGIN } from '@/lib/config/api-host';
 import { useProjectContext } from '@/lib/project/project-context';
 
@@ -248,7 +249,9 @@ function CreateKeyDialog({
             )}
           </Field>
           {create.isError ? (
-            <Callout tone="negative">{humanizeApiError(create.error).message}</Callout>
+            <MutationNotice
+              notice={mutationNoticeForError(create.error, { action: 'create the API key' })}
+            />
           ) : null}
         </Stack>
       )}
@@ -343,7 +346,9 @@ export function ApiKeys() {
               <Stack gap="compact">
                 <p>Requests with this key are refused at once. This cannot be undone.</p>
                 {revoke.isError ? (
-                  <Callout tone="negative">{humanizeApiError(revoke.error).message}</Callout>
+                  <MutationNotice
+                    notice={mutationNoticeForError(revoke.error, { action: 'revoke the API key' })}
+                  />
                 ) : null}
               </Stack>
             ),

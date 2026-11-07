@@ -8,6 +8,8 @@ import { verificationFailureLabel } from '@/lib/ai-traffic/vocabulary';
 import { GCP_PULL_SETUP } from '@/lib/config/crawl-logs';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { CopyButton } from '@/components/ui/copy-button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -130,7 +132,12 @@ export function GcpSourceSetup({
           {verificationFailureLabel(outcome.failure ?? 'unavailable')}
         </Callout>
       ) : null}
-      {verify.isError ? <Callout tone="negative">{verify.error.message}</Callout> : null}
+      {verify.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(verify.error, { action: 'verify the subscription' })}
+          onRetry={() => verify.mutate(source.id)}
+        />
+      ) : null}
     </Stack>
   );
 }
@@ -190,7 +197,12 @@ function SinkFilterUpdate({
         </Button>
       ) : null}
       {confirmFilter.isError ? (
-        <Callout tone="negative">{confirmFilter.error.message}</Callout>
+        <MutationNotice
+          notice={mutationNoticeForError(confirmFilter.error, {
+            action: 'confirm the sink filter',
+          })}
+          onRetry={() => confirmFilter.mutate(source.id)}
+        />
       ) : null}
     </Stack>
   );

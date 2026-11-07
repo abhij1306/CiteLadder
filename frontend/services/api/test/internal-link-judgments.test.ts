@@ -11,11 +11,14 @@ import {
 import { compensateTerminalTasks } from '../src/workers/terminal-compensation.ts';
 import { ModelError } from '../src/models/http.ts';
 import { enqueueTask } from '../src/queue/enqueue.ts';
+import { admitLinkRun, linkRun } from '../src/site-health/internal-link-runs.ts';
 import { seedProject } from './referral-fixtures.ts';
+import { SiteFixtures } from './site-health-fixtures.ts';
 import { Fixtures, testDatabase } from './support.ts';
 
 const db = testDatabase();
 const fixtures = new Fixtures(db);
+const siteFixtures = new SiteFixtures(db);
 let actor: string;
 let workspace: string;
 let project: string;
@@ -74,6 +77,7 @@ beforeAll(async () => {
     .execute();
 });
 afterAll(async () => {
+  await siteFixtures.cleanup();
   await fixtures.cleanup();
   await db.destroy();
 });
@@ -291,6 +295,49 @@ describe('internal link judgment execution', () => {
     await compensateTerminalTasks(db);
     expect(await payload()).toMatchObject({ terminal_compensation_failures: limit });
     expect((await payload()).terminal_compensated_at).toEqual(expect.any(String));
+  });
+
+  it('ends a run whose publication failed terminally, so a new run is admitted', async () => {
+    const seed = await siteFixtures.crawl();
+    const scope = { workspaceId: seed.workspaceId, projectId: seed.projectId };
+    const runId = randomUUID();
+    await db
+      .insertInto('site_internal_link_runs')
+      .values({
+        id: runId,
+        workspace_id: seed.workspaceId,
+        project_id: seed.projectId,
+        crawl_id: seed.crawlId,
+        actor_id: seed.userId,
+        idempotency_key: runId,
+        state: 'running',
+        policy_version: 1,
+        created_at: new Date(),
+        manifest: JSON.stringify({ candidates: [], page_count: 2, omitted_pages: 0 }),
+      })
+      .execute();
+    const taskId = await enqueueTask(db, {
+      ...scope,
+      kind: 'internal_link_publish',
+      payload: { run_id: runId },
+      keyParts: [runId, 'publish'],
+      maxAttempts: 1,
+    });
+    await db
+      .updateTable('analytics_tasks')
+      .set({ status: 'failed', error_code: 'task_failed', completed_at: new Date() })
+      .where('id', '=', taskId!)
+      .execute();
+    const admit = () =>
+      admitLinkRun(db, scope, seed.userId, {
+        crawl_id: seed.crawlId,
+        idempotency_key: randomUUID(),
+      });
+    await expect(admit()).rejects.toThrow('An internal link analysis is already running');
+    await compensateTerminalTasks(db, { workspaceId: seed.workspaceId, taskIds: [taskId!] });
+    expect((await linkRun(db, scope, runId)).analysis?.state).toBe('failed');
+    // Admission now passes the live-run check and stops only at the crawl's own evidence.
+    await expect(admit()).rejects.toThrow('The crawl captured too few pages to link');
   });
 
   it('terminal recovery settles unfinished pairs idempotently after lease sweep', async () => {

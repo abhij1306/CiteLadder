@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { inTransaction, type Database } from '../db/database.ts';
-import { subjectXactLock } from '../db/advisory-lock.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { scraperConfiguration, searchPolicy } from '../search-surfaces/dataforseo.ts';
 import { surfaceKindOf, type Engine } from '../providers/config.ts';
 import { auditSlots, prepareAudit } from './freeze.ts';
-import { reserveAuditCapacity, type FrozenAudit } from './admission.ts';
+import { lockAuditEnqueue, reserveAuditCapacity, type FrozenAudit } from './admission.ts';
 import { auditEvent, transitionAudit } from './state.ts';
 import { auditPolicy, auditRuntime, type AuditRuntime } from './config.ts';
 import { auditInput, type AuditInput } from './inputs.ts';
@@ -70,7 +69,7 @@ async function createMarketAudit(
   at: Date,
 ) {
   const trigger = (launch.trigger ?? 'manual').trim().toLowerCase();
-  await subjectXactLock(trx, `audit-enqueue:${workspaceId}`);
+  await lockAuditEnqueue(trx, workspaceId);
   if (launch.scheduleId) {
     if (!launch.scheduledFor || trigger !== 'scheduled')
       throw new ApiError(400, 'Scheduled launch requires its occurrence');

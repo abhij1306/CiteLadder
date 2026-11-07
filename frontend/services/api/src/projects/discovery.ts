@@ -7,8 +7,10 @@ import {
 import type { Selectable } from 'kysely';
 import { z } from 'zod';
 
-import { dailyWorkspaceLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { activeJobRetrySeconds, policy, resolveSettingSpec } from '../config.ts';
+import { activeJobRetrySeconds, budget, spendBudget } from '../abuse/usage.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
+import promptLibrary from '../config/prompt-library.json' with { type: 'json' };
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
@@ -92,16 +94,12 @@ async function admitDiscovery(trx: Database, workspaceId: string) {
     .executeTakeFirstOrThrow();
   if (
     Number(active.count) >=
-    Number(resolveSettingSpec(policy.abuse.active_brand_discoveries_per_workspace))
+    Number(resolveSettingSpec(policy.abuse.active_brand_discoveries_per_workspace, process.env))
   )
     throw new ApiError(429, 'Workspace active brand discovery limit exceeded', {
       headers: { 'retry-after': String(activeJobRetrySeconds()) },
     });
-  await enforceWorkspaceRequest(
-    trx,
-    workspaceId,
-    dailyWorkspaceLimit('brand_discovery.create', 'brand_discoveries_per_workspace_daily'),
-  );
+  await spendBudget(trx, budget('brand_discovery', process.env), workspaceId);
 }
 export function createDiscovery(
   db: Database,
@@ -390,7 +388,7 @@ export async function completeDiscovery(
         id: randomUUID(),
         workspace_id: workspaceId,
         project_id: projectId,
-        name: policy.projects.prompt_set_name,
+        name: promptLibrary.prompt_set_name,
         description: '',
         created_at: now,
         updated_at: now,

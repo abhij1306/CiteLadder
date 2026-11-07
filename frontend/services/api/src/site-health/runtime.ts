@@ -1,6 +1,7 @@
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 
-export function siteWorkerSettings(env: Record<string, string | undefined> = process.env) {
+export function siteWorkerSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (name: keyof typeof spec) => Number(resolveSettingSpec(spec[name], env));
   const lease = number('lease_ttl_seconds');
@@ -49,7 +50,7 @@ export function siteWorkerSettings(env: Record<string, string | undefined> = pro
 export type SiteWorkerSettings = ReturnType<typeof siteWorkerSettings>;
 
 /** What the read API needs: export and event-stream bounds, and the advanced-controls flag. */
-export function siteReadSettings(env: Record<string, string | undefined> = process.env) {
+export function siteReadSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const value = (name: keyof typeof spec) => resolveSettingSpec(spec[name], env);
   return {

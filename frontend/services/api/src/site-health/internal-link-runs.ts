@@ -6,17 +6,21 @@ import {
   type InternalLinkAnalysis,
 } from '@citeladder/contracts/site-health';
 
-import { dailyWorkspaceLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
+import { getLogger } from '../logging.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
+import { payloadString } from '../queue/executor.ts';
+import type { QueueTask } from '../queue/task-queue.ts';
 import { linkCandidates, linkRequests } from './internal-link-candidates.ts';
 import { loadLinkPages, type LinkScope } from './internal-link-pages.ts';
 
 const { succeeded, failed, cancelled } = policy.task_queue.statuses;
 const terminalTaskStatuses = [succeeded, failed, cancelled];
+const logger = getLogger('app.site_health.internal_links');
 
 export function latestLinkCrawl(db: Database, scope: LinkScope) {
   return db
@@ -100,7 +104,8 @@ export async function linkRun(db: Database, scope: LinkScope, id?: string) {
   );
   analysis.stale = crawl?.id !== row.crawl_id;
   await attachActions(db, scope, analysis);
-  if (row.state === 'cancelled') analysis.state = 'cancelled';
+  // A stop or a failed publication ends the run over whatever result it last published.
+  if (row.state === 'cancelled' || row.state === 'failed') analysis.state = row.state;
   return { ...read, analysis };
 }
 
@@ -151,11 +156,7 @@ export async function admitLinkRun(
       .executeTakeFirst();
     if (settling) throw new ApiError(409, 'The previous internal link analysis is still stopping');
     // Each run can make many platform-paid judge calls; replays above spend nothing.
-    await enforceWorkspaceRequest(
-      trx,
-      scope.workspaceId,
-      dailyWorkspaceLimit('internal_links.analysis', 'internal_link_analyses_per_workspace_daily'),
-    );
+    await spendBudget(trx, budget('internal_link_analysis', process.env), scope.workspaceId);
     const crawl = await trx
       .selectFrom('site_crawls')
       .select('id')
@@ -201,6 +202,31 @@ export async function admitLinkRun(
     return runId;
   });
   return linkRun(db, scope, id);
+}
+
+/**
+ * Compensates a terminally failed `internal_link_publish`: its run ends
+ * `failed`, so the project's slot frees for a new analysis instead of reading
+ * live until someone cancels it. The task row keeps the error code.
+ */
+export async function failLinkRun(db: Database, task: QueueTask) {
+  const runId = payloadString(task, 'run_id');
+  if (!runId || !task.project_id) return;
+  const ended = await db
+    .updateTable('site_internal_link_runs')
+    .set({ state: 'failed' })
+    .where('id', '=', runId)
+    .where('workspace_id', '=', task.workspace_id)
+    .where('project_id', '=', task.project_id)
+    .where('state', 'in', ['queued', 'running'])
+    .returning('id')
+    .execute();
+  if (ended.length)
+    logger.warning('internal_link_run_failed', {
+      run_id: runId,
+      task_id: task.id,
+      error_code: task.error_code,
+    });
 }
 
 export async function cancelLinkRun(db: Database, scope: LinkScope, id: string) {

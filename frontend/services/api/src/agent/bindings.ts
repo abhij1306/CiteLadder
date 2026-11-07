@@ -1,3 +1,4 @@
+import type { SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { gatewaySettings } from '../models/gateway.ts';
 import { agentSettings } from './config.ts';
@@ -13,7 +14,7 @@ import { AgentRuntime } from './runtime.ts';
 import { readAgentContext } from './context-adapter.ts';
 import { attachAgentTarget } from './target-adapter.ts';
 
-export async function createAgentBindings(db: Database, env = process.env) {
+export async function createAgentBindings(db: Database, env: SettingSource = process.env) {
   const settings = agentSettings(env),
     platform = gatewaySettings(env);
   const catalog = await loadSkillCatalog(settings.skillsDirectory),
@@ -25,6 +26,7 @@ export async function createAgentBindings(db: Database, env = process.env) {
     context: readAgentContext,
     admission: agentAdmission(settings, platform),
     timeoutSeconds: settings.executionTimeoutSeconds,
+    settleFailed: (trx, run) => models.settleFailed(trx, run),
   });
   const runtime = new AgentRuntime(db, {
     catalog,
@@ -40,7 +42,7 @@ export async function createAgentBindings(db: Database, env = process.env) {
     models,
     settings,
     outputs: new AgentOutputs(db),
-    queue: new AgentQueue(db, settings.executionTimeoutSeconds + settings.leaseMarginSeconds),
+    queue: new AgentQueue(db, settings.leaseSeconds),
   };
 }
 const bindings = new WeakMap<Database, ReturnType<typeof createAgentBindings>>();

@@ -5,7 +5,7 @@ import { Pencil, Sparkles } from 'lucide-react';
 import { useState, type FormEvent, type ReactNode } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -251,7 +251,7 @@ function SectionEditor({
         onChange={(event) => setText(event.target.value)}
       />
       {save.isError ? (
-        <Callout tone="negative">{agentWriteFailure(save.error).message}</Callout>
+        <MutationNotice notice={agentWriteFailure(save.error, 'save the section')} />
       ) : null}
       <Inline className="justify-end">
         <Button type="button" variant="ghost" onClick={onDone} disabled={save.isPending}>

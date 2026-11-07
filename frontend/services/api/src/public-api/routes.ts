@@ -27,7 +27,7 @@ import {
 } from '../commands/competitors.ts';
 import { routeActor } from '../commands/permission.ts';
 import { createPrompts, PROMPTS_WRITE } from '../commands/prompts.ts';
-import { configEnvironment, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';
 import { competitorCreate, competitorUpdate, listCompetitors } from '../projects/competitors.ts';
@@ -228,7 +228,7 @@ export const publicApiRoutes: readonly ProductRoute[] = [
         db,
         c.get('workspace').workspaceId,
         { ...(await readBody(c, projectEstimate)), project_id: path.project_id },
-        auditRuntime(configEnvironment(config)),
+        auditRuntime(config.settings),
       ),
   }),
   definePostRoute({

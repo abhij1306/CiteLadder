@@ -5,13 +5,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
 import { CsvImportTrigger } from '@/components/ui/csv-import';
 import { Stack } from '@/components/ui/layout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { KpiRow, type StatSegment } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
 import { commerceMutations, followCatalogAnalysis } from '@/lib/api/commerce';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { siteHealthMutations, siteHealthQueries } from '@/lib/api/site-health-queries';
 import { pluralCount } from '@/lib/format';
 import { crawlPollInterval } from '@/lib/site-health/status';
@@ -123,9 +124,6 @@ export function useCatalogHeader({
   const [result, setResult] = useState('');
   const dashboard = useQuery({
     ...siteHealthQueries.dashboard({ workspaceId, projectId }),
-    // The workspace can still be resolving; this used to be gated by the
-    // caller mounting the component at all, and the hook has to gate itself.
-    enabled: Boolean(workspaceId && projectId),
     refetchInterval: (state) => {
       const crawl = state.state.data?.crawl;
       return crawl ? crawlPollInterval(crawl) : false;
@@ -155,6 +153,8 @@ export function useCatalogHeader({
     discover.mutate({ project_id: projectId }, { onSuccess: () => void query.refetch() });
   const crawl = dashboard.data?.crawl ?? null;
   const counts = query.data;
+  const refresh = () =>
+    crawl ? void Promise.all([dashboard.refetch(), query.refetch()]) : startDiscovery();
   return {
     actions: (
       <CatalogActions
@@ -162,17 +162,16 @@ export function useCatalogHeader({
         importing={importCatalog.isPending}
         onImport={importFile}
         refreshing={discover.isPending || dashboard.isPending}
-        onRefresh={() =>
-          crawl ? void Promise.all([dashboard.refetch(), query.refetch()]) : startDiscovery()
-        }
+        onRefresh={refresh}
       />
     ),
     stats: <CatalogStats counts={counts} projection={projection} crawl={crawl} />,
     notices: (
       <CatalogNotices
         result={result}
-        importFailed={importCatalog.isError}
-        refreshFailed={discover.isError || dashboard.isError}
+        importError={importCatalog.error}
+        refreshError={discover.error ?? dashboard.error}
+        onRefresh={refresh}
       />
     ),
   };
@@ -209,16 +208,36 @@ function CatalogActions({
 /** Whatever the last catalog-wide action has to report, above the counts. */
 function CatalogNotices({
   result,
-  importFailed,
-  refreshFailed,
-}: Readonly<{ result: string; importFailed: boolean; refreshFailed: boolean }>) {
-  if (!result && !importFailed && !refreshFailed) return null;
+  importError,
+  refreshError,
+  onRefresh,
+}: Readonly<{
+  result: string;
+  importError: unknown;
+  refreshError: unknown;
+  /** Re-runs the refresh, the recovery for a failed one. */
+  onRefresh: () => void;
+}>) {
+  if (!result && !importError && !refreshError) return null;
   return (
     <Stack>
       {result ? <p className={textRole('body')}>{result}</p> : null}
-      {importFailed ? <Callout tone="negative">The catalog import failed.</Callout> : null}
-      {refreshFailed ? (
-        <Callout tone="negative">Site Health progress could not be refreshed.</Callout>
+      {importError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(importError, { action: 'import the catalog' })}
+        />
+      ) : null}
+      {refreshError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(refreshError, {
+            action: 'refresh Site Health progress',
+          })}
+          recovery={
+            <Button type="button" variant="secondary" onClick={onRefresh}>
+              Refresh again
+            </Button>
+          }
+        />
       ) : null}
     </Stack>
   );

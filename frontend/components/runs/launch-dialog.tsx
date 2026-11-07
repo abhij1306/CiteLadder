@@ -7,7 +7,7 @@ import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { promptsQueries } from '@/lib/api/prompts';
 import { runsMutations, runsQueries } from '@/lib/api/runs';
 import type { Audit, LogicalEngine, PromptSet } from '@citeladder/contracts';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import {
   auditablePrompts,
@@ -75,10 +75,10 @@ export function LaunchDialog({
   promptSelectionLabel?: string;
   auditScope?: 'brand' | 'commerce';
 }>) {
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const promptSetsQuery = useQuery({
     ...promptsQueries.sets({ workspaceId, projectId }),
-    enabled: open && workspaceId !== null,
+    enabled: open,
   });
   const { configuredEngines, unverifiedEngines, enginesReady, catalog } = useConfiguredEngines(
     open,
@@ -127,7 +127,7 @@ export function LaunchDialog({
   const promptSelection = useMemo(
     () =>
       batchSelection(
-        promptSetsQuery.data,
+        promptSetsQuery.data?.prompt_sets,
         promptSetId,
         fixedPromptSetId,
         fixedPromptIds,
@@ -158,9 +158,14 @@ export function LaunchDialog({
     repetitions,
     auditScope,
   };
-  const ready = workspaceId !== null && canLaunch(selection);
+  // The accepted repetition range arrives with the prompt-set list; no payload is built before it.
+  const limits = promptSetsQuery.data?.limits ?? null;
+  const ready = limits !== null && canLaunch(selection);
   const estimateQuery = useQuery({
-    ...runsQueries.estimate(workspaceId, ready ? buildLaunchPayload(selection) : null),
+    ...runsQueries.estimate(
+      workspaceId,
+      ready && limits ? buildLaunchPayload(selection, limits) : null,
+    ),
     enabled: open,
   });
   const reset = () => {
@@ -171,14 +176,16 @@ export function LaunchDialog({
     setBatchIndex(null);
   };
   const launchMutation = useMutation(runsMutations.launch(workspaceId));
-  const launch = () =>
-    launchMutation.mutate(buildLaunchPayload(selection), {
+  const launch = () => {
+    if (!limits) return;
+    launchMutation.mutate(buildLaunchPayload(selection, limits), {
       onSuccess: (audits) => {
         onOpenChange(false);
         reset();
         if (audits[0]) onLaunched?.(audits[0]);
       },
     });
+  };
   const launchNotice = launchMutation.isError
     ? mutationNoticeForError(launchMutation.error, { action: 'launch the audit' })
     : null;
@@ -187,7 +194,8 @@ export function LaunchDialog({
     <LaunchDialogView
       open={open}
       onOpenChange={onOpenChange}
-      promptSets={promptSetsQuery.data ?? []}
+      promptSets={promptSetsQuery.data?.prompt_sets ?? []}
+      repetitionLimits={limits}
       promptSetsLoading={promptSetsQuery.isLoading}
       configuredEngines={configuredEngines}
       unverifiedEngines={unverifiedEngines}

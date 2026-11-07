@@ -1,6 +1,11 @@
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { policy } from '../src/config.ts';
 import { IntegrationClient } from '../src/integrations/client.ts';
+import {
+  claimRevocation,
+  disconnectConnection,
+  markGrantRevoked,
+} from '../src/integrations/grants.ts';
 import { completeOAuth, startOAuth, stateReturnPath } from '../src/integrations/oauth.ts';
 import { seedProject } from './referral-fixtures.ts';
 import { Fixtures, testDatabase } from './support.ts';
@@ -32,6 +37,30 @@ function configureOAuth() {
   );
   vi.stubGlobal('fetch', fetch);
   return fetch;
+}
+
+/** A workspace whose owner completed Google consent once, with a consent to repeat. */
+async function connectedGsc() {
+  configureOAuth();
+  const userId = await fixtures.user();
+  const workspaceId = await fixtures.ownedWorkspace(userId);
+  const consent = async () => {
+    const start = await startOAuth(db, { userId, workspaceId, provider: 'gsc' });
+    await completeOAuth(db, {
+      provider: 'gsc',
+      code: 'recorded-code',
+      nonce: start.nonce,
+      state: new URL(start.url).searchParams.get('state')!,
+    });
+  };
+  await consent();
+  const gsc = await db
+    .selectFrom('integration_connections')
+    .select(['id', 'grant_id'])
+    .where('workspace_id', '=', workspaceId)
+    .where('provider', '=', 'gsc')
+    .executeTakeFirstOrThrow();
+  return { workspaceId, consent, gsc };
 }
 
 describe('integration OAuth state and persistence', () => {
@@ -212,27 +241,39 @@ describe('integration OAuth state and persistence', () => {
     expect(await stateReturnPath('forged.state.value')).toBeNull();
   });
 
-  it('queues a catch-up sync for mapped properties when a grant is reconnected', async () => {
-    configureOAuth();
-    const userId = await fixtures.user();
-    const workspaceId = await fixtures.ownedWorkspace(userId);
-    const projectId = await seedProject(db, workspaceId);
-    const consent = async () => {
-      const start = await startOAuth(db, { userId, workspaceId, provider: 'gsc' });
-      await completeOAuth(db, {
-        provider: 'gsc',
-        code: 'recorded-code',
-        nonce: start.nonce,
-        state: new URL(start.url).searchParams.get('state')!,
-      });
-    };
+  it('refuses a reconnect while a revocation is claimed and keeps only new tokens after it', async () => {
+    const { workspaceId, consent, gsc } = await connectedGsc();
+    await disconnectConnection(db, { workspaceId, connectionId: gsc.id });
+    const claim = { workspaceId, grantId: gsc.grant_id, claimId: crypto.randomUUID() };
+    const claimed = await claimRevocation(db, claim);
+    // The provider returns no refresh token on a repeat consent.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ access_token: 'second-access', expires_in: 3600 })),
+    );
+    await expect(consent()).rejects.toMatchObject({ code: 'oauth_revocation_in_progress' });
+    const grant = () =>
+      db
+        .selectFrom('integration_oauth_grants')
+        .selectAll()
+        .where('id', '=', gsc.grant_id)
+        .executeTakeFirstOrThrow();
+    expect((await grant()).status).toBe('pending_revocation');
+
+    await markGrantRevoked(db, { ...claim, tokenRevision: claimed!.token_revision });
     await consent();
-    const gsc = await db
-      .selectFrom('integration_connections')
-      .select(['id', 'grant_id'])
-      .where('workspace_id', '=', workspaceId)
-      .where('provider', '=', 'gsc')
-      .executeTakeFirstOrThrow();
+    const reconnected = await grant();
+    const cipher = new IntegrationClient({}).secrets.cipher;
+    expect({
+      status: reconnected.status,
+      access: cipher.decrypt(reconnected.access_token_encrypted),
+      refresh: reconnected.refresh_token_encrypted,
+    }).toEqual({ status: 'connected', access: 'second-access', refresh: '' });
+  });
+
+  it('queues a catch-up sync for mapped properties when a grant is reconnected', async () => {
+    const { workspaceId, consent, gsc } = await connectedGsc();
+    const projectId = await seedProject(db, workspaceId);
     await db
       .insertInto('integration_property_mappings')
       .values({

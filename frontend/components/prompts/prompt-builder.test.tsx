@@ -10,6 +10,7 @@ import type {
   SeedQueries,
   Topic,
 } from '@citeladder/contracts';
+import { makeFormLimits } from '@/test/fixtures/prompts';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 
@@ -124,6 +125,7 @@ function renderBuilder(
       generate={generate}
       isGenerating={false}
       review={<p>Review list</p>}
+      limits={makeFormLimits()}
     />,
   );
   return { generate };

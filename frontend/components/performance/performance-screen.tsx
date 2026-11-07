@@ -22,7 +22,6 @@ import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
 import { Stack } from '@/components/ui/layout';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type { ChartTone } from '@/components/ui/chart';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { StatusLine } from '@/components/ui/status-line';
@@ -31,8 +30,7 @@ import { ChartNoAxesColumn } from 'lucide-react';
 import { integrationsQueries } from '@/lib/api/integrations';
 import { performanceQueries, type PerformanceDashboard } from '@/lib/api/performance';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { useProjectContext } from '@/lib/project/project-context';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import {
   COMPARE_OPTIONS,
   METRIC_CARDS,
@@ -259,9 +257,8 @@ function granularityAction(
 }
 
 export function PerformanceScreen() {
-  const { activeProject, isLoading } = useProjectContext();
-  const scope = resolveActiveProjectRequestScope(activeProject);
-  const { projectId, workspaceId } = scope;
+  const { projectId, workspaceId } = useProjectScope();
+  const scope = { workspaceId, projectId };
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTab, setDialogTab] = useState<'filter' | 'compare'>('filter');
   const {
@@ -278,31 +275,17 @@ export function PerformanceScreen() {
 
   const dashboard = useQuery({
     ...performanceQueries.dashboard(scope, dashboardParams(selection, granularity)),
-    enabled: scope.enabled,
     placeholderData: (previousData, previousQuery) =>
       retainPreviousDataForScope(projectId, previousData, previousQuery),
   });
-  const connections = useQuery({
-    ...integrationsQueries.connections(workspaceId),
-    enabled: Boolean(workspaceId),
-  });
-  const sync = usePerformanceSync(projectId);
-  const readiness = useProjectReadiness(projectId);
+  const connections = useQuery(integrationsQueries.connections(workspaceId));
+  const sync = usePerformanceSync();
+  const readiness = useProjectReadiness();
   const projection = useRangeProjection(scope, dashboard.data);
 
-  // No project yet is either "still resolving which one" or "there is none";
-  // only the second is something to tell the reader about.
   // Every state keeps its identity band: a page that loses its heading and its
   // rule while loading is a different-looking page, and the work below it moves
   // when the real one arrives.
-  if (!projectId)
-    return isLoading ? (
-      <PerformanceLoading />
-    ) : (
-      <ListScreen>
-        <ProjectRequiredState />
-      </ListScreen>
-    );
   if (dashboard.isError)
     return (
       <ListScreen>
@@ -376,7 +359,12 @@ export function PerformanceScreen() {
           title="Connect Search Console"
           description="Performance reads this project's own search data. Connect Google and use the property for this site; Analytics and Bing are optional."
         />
-        {readiness.isError ? null : <ReadinessLadder data={readiness.data} />}
+        {readiness.isError ? null : (
+          <ReadinessLadder
+            data={readiness.data}
+            sync={sync.syncing || sync.mutation.isPending ? undefined : sync.start}
+          />
+        )}
 
         <StatusLine
           testId="performance-status"

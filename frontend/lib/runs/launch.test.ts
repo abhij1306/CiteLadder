@@ -5,11 +5,9 @@ import { makePrompt, makeSet } from '@/test/fixtures/prompts';
 import {
   auditablePrompts,
   batchLabel,
-  buildLaunchPayload,
+  buildLaunchPayload as buildWithLimits,
   canLaunch,
   clampRepetitions,
-  MAX_REPETITIONS,
-  MIN_REPETITIONS,
   promptBatches,
   PROMPT_BATCH_SIZE,
   toggleEngine,
@@ -19,6 +17,9 @@ import {
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const SET_ID = '22222222-2222-4222-8222-222222222222';
+/** The repetition range the prompt-set list carries, as the dialog passes it. */
+const LIMITS = { audit_repetitions_min: 1, audit_repetitions_max: 10 };
+const buildLaunchPayload = (launch: LaunchSelection) => buildWithLimits(launch, LIMITS);
 
 function selection(overrides: Partial<LaunchSelection> = {}): LaunchSelection {
   return {
@@ -32,13 +33,14 @@ function selection(overrides: Partial<LaunchSelection> = {}): LaunchSelection {
 
 describe('clampRepetitions', () => {
   it('defaults a first run to one repetition', () => {
-    expect(clampRepetitions(Number.NaN)).toBe(1);
+    expect(clampRepetitions(Number.NaN, LIMITS)).toBe(1);
   });
 
-  it('clamps below/above the accepted range', () => {
-    expect(clampRepetitions(0)).toBe(MIN_REPETITIONS);
-    expect(clampRepetitions(99)).toBe(MAX_REPETITIONS);
-    expect(clampRepetitions(4)).toBe(4);
+  it('clamps below/above the range the server listed', () => {
+    const limits = { audit_repetitions_min: 2, audit_repetitions_max: 6 };
+    expect(clampRepetitions(0, limits)).toBe(2);
+    expect(clampRepetitions(99, limits)).toBe(6);
+    expect(clampRepetitions(4, limits)).toBe(4);
   });
 });
 
@@ -87,7 +89,7 @@ describe('buildLaunchPayload', () => {
   });
 
   it('clamps the repetition count into range', () => {
-    expect(buildLaunchPayload(selection({ repetitions: 42 })).repetitions).toBe(MAX_REPETITIONS);
+    expect(buildLaunchPayload(selection({ repetitions: 42 })).repetitions).toBe(10);
   });
 
   it('launches an explicitly approved prompt selection without a prompt set', () => {

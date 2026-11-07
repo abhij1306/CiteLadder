@@ -15,11 +15,15 @@ import {
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
+import type { PromptFormLimits } from '@citeladder/contracts/project';
+
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { promptSetView, type PromptSetRow, type PromptSetView } from './views.ts';
+import { generationSetting } from './generation-input.ts';
 
 export const promptSetCreate = promptSetCreateRequestSchema.extend({
   name: z.string().max(255).default(''),
@@ -93,6 +97,25 @@ export async function listPromptSets(
     .orderBy('prompt_sets.id')
     .execute();
   return views(db, sets);
+}
+
+/**
+ * The bounds the request schemas enforce on the forms a prompt-set list opens,
+ * read from the same policy values so the browser never restates them.
+ */
+export function promptFormLimits(): PromptFormLimits {
+  const generation = policy.prompts.generation;
+  return {
+    generation_count_max: generationSetting('max_count'),
+    import_rows_max: policy.prompts.import_max_rows,
+    persona_max_chars: policy.prompts.persona_max_chars,
+    run_context_max_chars: generation.run_context_max_chars,
+    distribution_personas_max: generation.distribution_personas_max,
+    seed_query_ids_max: generation.seed_query_ids_max,
+    context_list_max_entries: policy.brand_identity.context_list_max_entries,
+    audit_repetitions_min: policy.audits.min_repetitions,
+    audit_repetitions_max: policy.audits.max_repetitions,
+  };
 }
 
 export async function createPromptSet(

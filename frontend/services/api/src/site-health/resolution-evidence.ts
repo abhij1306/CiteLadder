@@ -1,4 +1,8 @@
 /** Exact attempt and artifact provenance for terminal URL resolution checks. */
+import type {
+  SitewideLinkEvidence,
+  SitewideTargetOutcome,
+} from '@citeladder/contracts/site-health';
 import type { Database } from '../db/database.ts';
 import { policy } from '../config.ts';
 import type { Crawl } from './site-task.ts';
@@ -241,7 +245,7 @@ export function resolutionSet(
 }
 
 /** Where a redirecting URL ended up, for evidence a reader can act on. */
-const redirectTarget = (url: string, resolution: Resolution) =>
+const redirectTarget = (url: string, resolution: Resolution): SitewideTargetOutcome =>
   resolution.errorCode === REDIRECT_LIMIT
     ? { url, reason: 'redirect_limit' }
     : { url, final_url: resolution.finalUrl, hops: resolution.hops };
@@ -339,7 +343,7 @@ function sitewideFinding(
   { failing, unchecked }: { failing: readonly string[]; unchecked: readonly string[] },
   linkers: ReadonlyMap<string, readonly LinkingPage[]>,
   resolutions: Map<string, Resolution>,
-  outcome: (url: string, resolution: Resolution) => Record<string, unknown>,
+  outcome: (url: string, resolution: Resolution) => SitewideTargetOutcome,
 ) {
   // Like a page's link checks, an unfetched or rate-limited target cannot pass.
   if (!failing.length && unchecked.length)
@@ -378,7 +382,7 @@ function sitewideFinding(
     resolution_source_ids: [...new Set(failing.flatMap((url) => sourceIds(resolutions.get(url)!)))]
       .toSorted(compareText)
       .slice(0, limit),
-  });
+  } satisfies SitewideLinkEvidence);
 }
 
 /**

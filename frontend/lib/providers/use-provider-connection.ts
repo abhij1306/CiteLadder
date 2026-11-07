@@ -17,8 +17,8 @@ import {
 /** Result of an inline "Test connection" run. */
 export type ConnectionTestState = { status: 'ok' | 'failed'; message: string } | null;
 
-/** Shared human-readable mutation error. */
-export function errorMessage(error: unknown): string {
+/** A failed save or probe as the test result's line. */
+function errorMessage(error: unknown): string {
   return humanizeApiError(error).message;
 }
 

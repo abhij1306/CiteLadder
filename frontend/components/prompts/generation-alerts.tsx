@@ -1,5 +1,7 @@
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import type { PromptGenerateResponse } from '@citeladder/contracts';
 import { admissionDropSummary } from '@/lib/prompts/admission';
 
@@ -49,8 +51,8 @@ export function GenerateResultAlert({ result }: Readonly<{ result: PromptGenerat
 /** A failed model action (generation or a topic proposal), in customer terms. */
 export function GenerateErrorAlert({
   error,
-  fallback = 'Generation failed. Please try again.',
-}: Readonly<{ error: unknown; fallback?: string }>) {
+  action = 'generate prompts',
+}: Readonly<{ error: unknown; /** Completes "Could not ___". */ action?: string }>) {
   const status = httpErrorStatus(error);
   if (status === 429) {
     const retryAfter = humanizeApiError(error).retryAfterSeconds;
@@ -74,9 +76,5 @@ export function GenerateErrorAlert({
         The AI provider call failed or returned unusable output. Try again in a moment.
       </Callout>
     );
-  return (
-    <Callout tone="negative">
-      {error instanceof Error && error.message ? error.message : fallback}
-    </Callout>
-  );
+  return <MutationNotice notice={mutationNoticeForError(error, { action })} />;
 }

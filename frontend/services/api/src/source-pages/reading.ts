@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
+import { sourcePageVocabulary } from '../config/source-pages.ts';
 import { compareIdentityText } from '../analysis/comparison.ts';
 import { storedEntityMatching } from '../analysis/entity-matching.ts';
 import type { Database } from '../db/database.ts';
@@ -90,7 +91,7 @@ export async function latestReadings(db: Database, scope: Scope, pageIds: string
     where workspace_id = ${scope.workspaceId}
       and project_id = ${scope.projectId}
       and source_page_id in (${sql.join(pageIds)})
-      and outcome = ${policy.opportunity.refresh.source_page_outcome_inspected}
+      and outcome = ${sourcePageVocabulary.INSPECTION_INSPECTED}
     order by source_page_id asc, fetched_at desc, id desc
   `.execute(db);
   for (const row of rows.rows) latest.set(row.source_page_id, row);

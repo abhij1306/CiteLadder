@@ -2,7 +2,8 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import robotsModule from 'robots-parser';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { FetchError, fetchWebsite, type FetchOptions, type WebsiteFetcher } from '../safe-fetch.ts';
 import { failureFacts, getLogger } from '../logging.ts';
@@ -20,7 +21,7 @@ const robotsParser = robotsModule as unknown as (
   _rules: Record<string, unknown>;
 };
 
-export function acquisitionSettings(env: Record<string, string | undefined> = process.env) {
+export function acquisitionSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (key: keyof typeof spec) => Number(resolveSettingSpec(spec[key], env));
   return {

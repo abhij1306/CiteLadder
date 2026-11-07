@@ -20,7 +20,7 @@ const s = policy.opportunity.source_pages;
 const classes = policy.opportunity.source_patterns;
 // Pages that belong to the business or a competitor can never list the business.
 const OWN_PAGE_CLASSES = policy.opportunity.earned_actions.EARNED_EXCLUDED_SOURCE_CLASSES;
-const INSPECTED = policy.opportunity.refresh.source_page_outcome_inspected;
+const INSPECTED = s.INSPECTION_INSPECTED;
 
 /**
  * One page's standing. A page that belongs to the business or to a

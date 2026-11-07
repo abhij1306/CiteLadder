@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { ConfigError, policy, resolveSettingSpec } from '../config.ts';
+import { ConfigError, policy, resolveSettingSpec, type SettingSource } from '../config.ts';
 import { createSecretCipher } from './fernet.ts';
 
 export const integrationPolicy = policy.integrations;
@@ -9,7 +9,7 @@ export type IntegrationProvider = 'gsc' | 'ga4' | 'bing';
 export type IntegrationTransport = 'google_oauth' | 'microsoft_oauth';
 export type Dataset = (typeof integrationPolicy.datasets)[keyof typeof integrationPolicy.datasets];
 
-export function integrationSettings(env: Record<string, string | undefined> = process.env) {
+export function integrationSettings(env: SettingSource = process.env) {
   const specs = integrationPolicy.settings;
   const settings = Object.fromEntries(
     Object.entries(specs).map(([name, spec]) => [name, resolveSettingSpec(spec, env) as number]),
@@ -31,7 +31,7 @@ export function integrationSettings(env: Record<string, string | undefined> = pr
   return settings;
 }
 
-export function integrationSecrets(env: Record<string, string | undefined> = process.env) {
+export function integrationSecrets(env: SettingSource = process.env) {
   const value = (name: keyof typeof policy.settings) =>
     resolveSettingSpec(policy.settings[name], env) as string;
   return {

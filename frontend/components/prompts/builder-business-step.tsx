@@ -8,7 +8,7 @@ import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { textRole } from '@/components/ui/typography';
-import { PROMPT_BUILDER } from '@/lib/config/prompts';
+import type { PromptFormLimits } from '@citeladder/contracts';
 import {
   showsServiceAreas,
   withOfferings,
@@ -19,7 +19,11 @@ import { BUSINESS_MODEL_CHOICES } from '@/lib/project/identity-facets';
 
 import type { BuilderBusiness } from './use-builder-business';
 
-const LIST_MAX = PROMPT_BUILDER.contextListMax;
+/** The bounds the API enforces on this step's saves and the run note, from the prompt-set list. */
+export type BusinessStepLimits = Pick<
+  PromptFormLimits,
+  'context_list_max_entries' | 'run_context_max_chars'
+>;
 const chips = (values: readonly string[]): ChipItem[] => values.map((value) => ({ value }));
 const values = (items: readonly ChipItem[]) => items.map((item) => item.value);
 const entryChips = (entries: readonly MapEntryDraft[]): ChipItem[] =>
@@ -34,10 +38,12 @@ const entries = (items: readonly ChipItem[]): MapEntryDraft[] =>
 function OfferingFacts({
   map,
   disabled,
+  listMax,
   onChange,
 }: Readonly<{
   map: BusinessDraft['maps'][number];
   disabled: boolean;
+  listMax: number;
   onChange: (map: BusinessDraft['maps'][number]) => void;
 }>) {
   return (
@@ -49,7 +55,7 @@ function OfferingFacts({
         onChange={(items) => onChange({ ...map, audiences: entries(items) })}
         placeholder="e.g. beginner golfers"
         disabled={disabled}
-        max={LIST_MAX}
+        max={listMax}
       />
       <ChipInput
         label="Situations and constraints"
@@ -57,7 +63,7 @@ function OfferingFacts({
         onChange={(items) => onChange({ ...map, situations: entries(items) })}
         placeholder="e.g. small back garden"
         disabled={disabled}
-        max={LIST_MAX}
+        max={listMax}
       />
       <ChipInput
         label="Attributes"
@@ -65,7 +71,7 @@ function OfferingFacts({
         onChange={(items) => onChange({ ...map, attributes: entries(items) })}
         placeholder="e.g. self-standing frame"
         disabled={disabled}
-        max={LIST_MAX}
+        max={listMax}
       />
     </Stack>
   );
@@ -80,11 +86,14 @@ export function BuilderBusinessStep({
   business,
   runContext,
   onRunContextChange,
+  limits,
 }: Readonly<{
   business: BuilderBusiness;
   runContext: string;
   onRunContextChange: (value: string) => void;
+  limits: BusinessStepLimits;
 }>) {
+  const listMax = limits.context_list_max_entries;
   const { draft, profile, map } = business;
   if (business.loading) return <QueryState kind="loading" label="Loading your business details" />;
   if (business.loadError || !draft || !profile || !map)
@@ -116,13 +125,14 @@ export function BuilderBusinessStep({
         onChange={(items) => set({ buyerRoles: values(items) })}
         placeholder="e.g. club coach"
         disabled={disabled}
-        max={LIST_MAX}
+        max={listMax}
       />
       {draft.maps.map((offering, index) => (
         <OfferingFacts
           key={offering.offering}
           map={offering}
           disabled={disabled}
+          listMax={listMax}
           onChange={(next) =>
             set({ maps: draft.maps.map((item, i) => (i === index ? next : item)) })
           }
@@ -136,7 +146,7 @@ export function BuilderBusinessStep({
           onChange={(items) => set({ serviceAreas: values(items) })}
           placeholder="e.g. Leeds"
           disabled={disabled}
-          max={LIST_MAX}
+          max={listMax}
         />
       ) : null}
       <ChipInput
@@ -146,7 +156,7 @@ export function BuilderBusinessStep({
         onChange={(items) => set({ categoryTerms: values(items) })}
         placeholder="e.g. golf net"
         disabled={disabled}
-        max={LIST_MAX}
+        max={listMax}
       />
       <ChipInput
         label="Jobs to be done"
@@ -155,7 +165,7 @@ export function BuilderBusinessStep({
         onChange={(items) => set({ jobs: values(items) })}
         placeholder="e.g. practise driving at home"
         disabled={disabled}
-        max={LIST_MAX}
+        max={listMax}
       />
       <Field label="Business model">
         {(field) => (
@@ -178,7 +188,7 @@ export function BuilderBusinessStep({
           <Input
             {...field}
             value={runContext}
-            maxLength={PROMPT_BUILDER.runContextMaxChars}
+            maxLength={limits.run_context_max_chars}
             placeholder="e.g. focus on winter practice"
             onChange={(event) => onRunContextChange(event.target.value)}
           />

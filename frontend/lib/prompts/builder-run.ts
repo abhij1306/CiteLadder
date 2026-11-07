@@ -4,8 +4,11 @@
  * against what was asked for, with the request for "Generate more".
  */
 import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
-import type { PromptCandidate, SeedQueries, Topic } from '@citeladder/contracts';
-import { MAX_GENERATION_COUNT, PROMPT_BUILDER } from '@/lib/config/prompts';
+import type { PromptCandidate, PromptFormLimits, SeedQueries, Topic } from '@citeladder/contracts';
+import { PROMPT_BUILDER } from '@/lib/config/prompts';
+
+/** The run bounds the API enforces, from the prompt-set list. */
+export type RunLimits = Pick<PromptFormLimits, 'generation_count_max' | 'seed_query_ids_max'>;
 
 export type SeedChoice = SeedQueries['sources'][number]['source'] | 'none';
 type IntentKey = keyof typeof PROMPT_BUILDER.defaultIntentMix;
@@ -67,6 +70,7 @@ type Built = { ok: true; request: PromptGenerateRequest } | { ok: false; problem
 function seedFields(
   settings: RunSettings,
   seeds: SeedQueries,
+  seedQueryIdsMax: number,
 ): Pick<PromptGenerateRequest, 'seed_source' | 'seed_query_ids'> | string {
   const source = seedSourceOf(settings, seeds);
   if (source === 'none') return { seed_source: 'none' };
@@ -74,8 +78,8 @@ function seedFields(
   const ticked = listed.filter((query) => !settings.unticked.has(query.id)).map((q) => q.id);
   if (listed.length && !ticked.length) return { seed_source: 'none' };
   if (ticked.length === listed.length) return { seed_source: source };
-  if (ticked.length > PROMPT_BUILDER.seedQueryIdsMax)
-    return `Tick at most ${PROMPT_BUILDER.seedQueryIdsMax} search queries, or keep them all.`;
+  if (ticked.length > seedQueryIdsMax)
+    return `Tick at most ${seedQueryIdsMax} search queries, or keep them all.`;
   return { seed_source: source, seed_query_ids: ticked };
 }
 
@@ -83,6 +87,7 @@ function seedFields(
  * The generate request for every topic, or why the settings cannot make one.
  * `seeds` is null until the seed-query read has loaded, so a pending or failed
  * read never passes for "no search data". Only personas still offered count.
+ * `limits` are the server's run bounds, so no request it would refuse is built.
  */
 export function runRequest(
   settings: RunSettings,
@@ -90,11 +95,12 @@ export function runRequest(
     seeds: SeedQueries | null;
     hasCompetitors: boolean;
     personaChoices: readonly string[];
+    limits: RunLimits;
   },
 ): Built {
-  const count = whole(settings.count, 1, MAX_GENERATION_COUNT);
-  if (count === null)
-    return { ok: false, problem: `Choose between 1 and ${MAX_GENERATION_COUNT} prompts.` };
+  const countMax = context.limits.generation_count_max;
+  const count = whole(settings.count, 1, countMax);
+  if (count === null) return { ok: false, problem: `Choose between 1 and ${countMax} prompts.` };
   const branded = whole(settings.brandedPercent, 0, 100);
   const comparison = context.hasCompetitors ? whole(settings.comparisonPercent, 0, 100) : 0;
   if (branded === null || comparison === null)
@@ -109,7 +115,7 @@ export function runRequest(
     return { ok: false, problem: 'Give at least one intent a weight.' };
   if (!context.seeds)
     return { ok: false, problem: 'Your search data has to load before a run can start.' };
-  const seeds = seedFields(settings, context.seeds);
+  const seeds = seedFields(settings, context.seeds, context.limits.seed_query_ids_max);
   if (typeof seeds === 'string') return { ok: false, problem: seeds };
   const note = settings.runContext.trim();
   return {

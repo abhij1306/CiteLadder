@@ -212,7 +212,6 @@ async function refreshUrlState(
       ...(title ? { latest_title: title.slice(0, 1024) } : {}),
       latest_content_type: contentType.slice(0, 128),
       last_seen_crawl_id: crawl.id,
-      discovery_status: 'completed',
     })
     .where('id', '=', siteUrlId)
     .where('workspace_id', '=', crawl.workspace_id)

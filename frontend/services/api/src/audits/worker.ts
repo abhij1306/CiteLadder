@@ -1,7 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
-import { AuditQueue, ownedAuditTask, parkAuditTask, type AuditTask } from '../queue/audit-queue.ts';
+import {
+  AuditQueue,
+  ownedAuditTask,
+  parkAuditTask,
+  type AuditTask,
+  type ClaimedAuditTask,
+} from '../queue/audit-queue.ts';
 import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
 import { logLaneFailure } from '../queue/lane-log.ts';
 import { AUDIT_LANE } from '../queue/task-queue.ts';
@@ -36,7 +42,8 @@ export class AuditWorker {
   readonly #runtime: AuditRuntime;
   readonly #key: string;
   readonly #projections: ProjectionOwners;
-  readonly #deps: PhaseDeps;
+  /** Each claim adds its own lease owner (`#execute`). */
+  readonly #deps: Omit<PhaseDeps, 'owner'>;
   readonly #taskScope: { workspaceId: string; auditId: string } | undefined;
   readonly #now: () => Date;
   constructor(
@@ -63,7 +70,6 @@ export class AuditWorker {
     // Revocation still lands within the TTL; the per-task ownership lock is never cached.
     this.#deps = {
       db,
-      owner: this.owner,
       runtime,
       now: this.#now,
       send: options.send ?? globalThis.fetch,
@@ -101,7 +107,7 @@ export class AuditWorker {
     let claimed = 0;
     let queued = true;
     const refill = async () => {
-      let tasks: AuditTask[];
+      let tasks: ClaimedAuditTask[];
       try {
         tasks = await this.#queue.claim(this.owner, limit - inFlight.size, this.#taskScope);
       } catch (error) {
@@ -129,10 +135,13 @@ export class AuditWorker {
     if (failures.length) throw failures[0];
     return claimed;
   }
-  async #execute(claimed: AuditTask, signal?: AbortSignal) {
+  async #execute(lease: ClaimedAuditTask, signal?: AbortSignal) {
     const startedAt = performance.now();
+    // Every write under this claim is fenced by the claim's own lease owner.
+    const deps: PhaseDeps = { ...this.#deps, owner: lease.lease_owner };
+    let claimed: AuditTask = lease;
     const heartbeat = maintainLease(
-      () => this.#queue.heartbeat(claimed, this.owner),
+      () => this.#queue.heartbeat(claimed, deps.owner),
       Math.max(1, this.#runtime.audits.heartbeat_interval_seconds) * 1000,
       () => logger.info('audit_heartbeat_failed', { task_id: claimed.id }),
     );
@@ -141,23 +150,31 @@ export class AuditWorker {
     let context: ExecutionContext | null = null;
     const dispatch: DispatchState = { started: false };
     try {
-      if (await repairOwnedCompletion(this.#db, claimed, this.owner, this.#now())) return;
+      if (await repairOwnedCompletion(this.#db, claimed, deps.owner, this.#now())) return;
       // Start the parent now; publish task running only after acquiring provider capacity.
-      const running = await this.#queue.markRunning(claimed, this.owner, false);
+      const running = await this.#queue.markRunning(claimed, deps.owner, false);
       if (!running) return;
       claimed = running.task;
-      if ((await this.#checkDeadline(adapter, claimed)).expired) return;
-      context = await this.#loadContext(adapter, claimed);
+      if ((await this.#checkDeadline(deps, adapter, claimed)).expired) return;
+      context = await this.#loadContext(deps, adapter, claimed);
       if (!context) return;
-      const { expired, recovery } = await this.#checkDeadline(adapter, claimed, context);
+      const { expired, recovery } = await this.#checkDeadline(deps, adapter, claimed, context);
       if (expired) return;
       const capacity = adapter.capacity(claimed, context);
       const decision = await acquireCapacity(this.#db, capacity, this.#runtime, this.#now());
       if (!decision.acquired) {
-        await this.#parkCapacity(claimed, decision, recovery);
+        await this.#parkCapacity(deps.owner, claimed, decision, recovery);
         return;
       }
-      await this.#dispatchLeased(adapter, claimed, context, capacity, dispatch, dispatchSignal);
+      await this.#dispatchLeased(
+        deps,
+        adapter,
+        claimed,
+        context,
+        capacity,
+        dispatch,
+        dispatchSignal,
+      );
     } catch (error) {
       // The surface adapter decides retry or failure; the log records where it broke.
       logLaneFailure(AUDIT_LANE.table, claimed, {
@@ -166,7 +183,7 @@ export class AuditWorker {
         error,
         facts: { engine: claimed.logical_engine },
       });
-      await adapter.fail(this.#deps, claimed, context, {
+      await adapter.fail(deps, claimed, context, {
         kind: 'internal',
         error,
         dispatched: dispatch.started,
@@ -178,6 +195,7 @@ export class AuditWorker {
   }
   /** The leased dispatch: ownership is rechecked right before any network boundary. */
   async #dispatchLeased(
+    deps: PhaseDeps,
     adapter: SurfaceAdapter,
     claimed: AuditTask,
     context: ExecutionContext,
@@ -189,10 +207,10 @@ export class AuditWorker {
       // Recheck ownership after acquiring capacity, immediately before any network boundary.
       const live = await this.#db
         .transaction()
-        .execute((trx) => ownedAuditTask(trx, claimed, this.owner));
+        .execute((trx) => ownedAuditTask(trx, claimed, deps.owner));
       if (!live || signal.aborted) return;
-      if (!(await this.#queue.markRunning(claimed, this.owner))) return;
-      await adapter.dispatch(this.#deps, context, dispatch, signal);
+      if (!(await this.#queue.markRunning(claimed, deps.owner))) return;
+      await adapter.dispatch(deps, context, dispatch, signal);
     } catch (error) {
       if (error instanceof ProviderError) dispatch.rateError = error;
       throw error;
@@ -209,12 +227,12 @@ export class AuditWorker {
       );
     }
   }
-  async #loadContext(adapter: SurfaceAdapter, claimed: AuditTask) {
+  async #loadContext(deps: PhaseDeps, adapter: SurfaceAdapter, claimed: AuditTask) {
     try {
       return await loadExecutionContext(
         this.#db,
         claimed,
-        this.owner,
+        deps.owner,
         this.#runtime,
         this.#key,
         this.#now(),
@@ -224,18 +242,23 @@ export class AuditWorker {
         error instanceof ProviderError
           ? error
           : new ProviderError(auditPolicy.constants.error_no_connection);
-      await adapter.fail(this.#deps, claimed, null, {
+      await adapter.fail(deps, claimed, null, {
         kind: 'context_unavailable',
         error: safe,
       });
       return null;
     }
   }
-  async #checkDeadline(adapter: SurfaceAdapter, claimed: AuditTask, context?: ExecutionContext) {
+  async #checkDeadline(
+    deps: PhaseDeps,
+    adapter: SurfaceAdapter,
+    claimed: AuditTask,
+    context?: ExecutionContext,
+  ) {
     const task = context?.task ?? claimed;
     const recovery = adapter.recoveryDeadline(task);
     if (recovery && this.#now() >= recovery) {
-      await adapter.fail(this.#deps, claimed, context ?? null, {
+      await adapter.fail(deps, claimed, context ?? null, {
         kind: 'recovery_deadline',
       });
       return { expired: true, recovery };
@@ -249,12 +272,13 @@ export class AuditWorker {
       startedAt &&
       this.#now().getTime() - startedAt.getTime() >= context.maxRunSeconds * 1000;
     if (!runExpired) return { expired: false, recovery };
-    await adapter.fail(this.#deps, claimed, context ?? null, {
+    await adapter.fail(deps, claimed, context ?? null, {
       kind: 'run_deadline',
     });
     return { expired: true, recovery };
   }
   #parkCapacity(
+    owner: string,
     task: AuditTask,
     decision: Extract<CapacityDecision, { acquired: false }>,
     deadline: Date | null,
@@ -262,7 +286,7 @@ export class AuditWorker {
     const at = this.#now(),
       available = deadline && decision.availableAt > deadline ? deadline : decision.availableAt;
     return this.#db.transaction().execute(async (trx) => {
-      const locked = await ownedAuditTask(trx, task, this.owner);
+      const locked = await ownedAuditTask(trx, task, owner);
       if (!locked) return;
       await parkAuditTask(trx, locked.task, 'capacity_wait', available, at);
       await auditEvent(

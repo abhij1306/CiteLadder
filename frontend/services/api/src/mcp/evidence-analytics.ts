@@ -1,5 +1,9 @@
 /** Visibility reads compose the canonical visibility owners; they own no metrics. */
-import type { AnalyticsSelection } from '@citeladder/contracts/mcp-app';
+import type {
+  AnalyticsSelection,
+  McpVisibilityResults,
+  McpVisibilitySources,
+} from '@citeladder/contracts/mcp-app';
 import { visibilitySchema } from '@citeladder/contracts/visibility';
 import { visibilityTrendListSchema } from '@citeladder/contracts/visibility-trends';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
@@ -292,7 +296,7 @@ export async function visibilityResults(
     items,
     pagination: pagination(items, page.next_cursor ?? null, page.total ?? 0),
     artifact_refs: items.map((item) => reference('visibility_result', item.task_id)),
-  };
+  } satisfies McpVisibilityResults & Evidence;
 }
 
 export async function visibilitySources(
@@ -333,7 +337,7 @@ export async function visibilitySources(
     pagination: pagination(page.items, page.next_cursor, page.total),
     as_of: page.as_of,
     artifact_refs: [reference('audit', auditId)],
-  };
+  } satisfies McpVisibilitySources & Evidence;
 }
 
 export async function sourceUrl(

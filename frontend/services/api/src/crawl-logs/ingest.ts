@@ -9,7 +9,7 @@ import { ApiError, notFound } from '../errors.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { crawlers } from '../config/crawlers.ts';
 import { strings } from '../db/json.ts';
-import { enforceSubjectRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { prepareBatch } from './prepare.ts';
 import { lockCrawlState, enqueueRollup, reportingDay, type CrawlScope } from './state.ts';
 import { requireCrawlLogs } from './sources.ts';
@@ -85,17 +85,7 @@ export async function batchQuota(
   const stored = key ? await storedReceipt(db, source, key) : undefined;
   if (stored) return stored;
   await receivedBytesCeiling(db, source, now);
-  await enforceSubjectRequest(
-    db,
-    'crawl_source',
-    source.id,
-    {
-      operation: 'crawl_logs.batch',
-      limit: crawlLogs.batches_per_source_per_hour,
-      windowSeconds: 3600,
-    },
-    now,
-  );
+  await spendBudget(db, budget('crawl_log_batches'), source.id, { at: now });
 }
 /**
  * Refuse a project whose receipts already hold `received_bytes_per_project_per_day`
@@ -395,18 +385,10 @@ async function insertRequests(
     }
     counts.lines_duplicate = admitted.length - counts.lines_matched;
     if (counts.lines_matched)
-      await enforceSubjectRequest(
-        trx,
-        'crawl_project',
-        scope.projectId,
-        {
-          operation: 'crawl_logs.accepted_lines',
-          limit: crawlLogs.accepted_lines_per_project_per_day,
-          windowSeconds: 86400,
-          amount: counts.lines_matched,
-        },
-        now,
-      );
+      await spendBudget(trx, budget('crawl_log_lines'), scope.projectId, {
+        amount: counts.lines_matched,
+        at: now,
+      });
   }
 }
 function decodeBatch(

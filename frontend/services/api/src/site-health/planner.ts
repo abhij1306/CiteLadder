@@ -218,7 +218,7 @@ function insertCrawl(
       status: 'queued',
       analysis_status: 'pending',
       discovery_status: input.rerun ? 'completed' : 'running',
-      inventory_complete: input.rerun,
+      inventory_complete: false,
       discovery_requested_count: input.rerun ? 0 : Number(input.configuration.requested_page_limit),
       analysis_requested_count: 0,
       discovered_url_count: input.rerun ? 1 : 0,

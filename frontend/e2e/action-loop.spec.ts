@@ -62,10 +62,7 @@ function detail() {
   return {
     ...row,
     remediation: 'Prepare a transparent expert-contribution brief.',
-    evidence: {
-      audit_id: SNAPSHOT,
-      source_pattern: { source_class: 'editorial' },
-    },
+    evidence: { audit_id: SNAPSHOT },
     source_analysis_ids: [SNAPSHOT],
     source_issue_ids: [],
     source_metric_ids: [SNAPSHOT],
@@ -185,7 +182,9 @@ test('declaring an Action implemented shows comparable verification', async ({ p
   await page.route(`**/api/v1/projects/${PROJECT}/logos/refresh`, (route) =>
     route.fulfill({ json: {} }),
   );
-  await page.route('**/api/v1/agent/skills', (route) => route.fulfill({ json: { skills: [] } }));
+  await page.route('**/api/v1/agent/skills', (route) =>
+    route.fulfill({ json: { skills: [], limits: { mentions_max: 5 } } }),
+  );
   await page.route(`**/api/v1/projects/${PROJECT}/actions*`, (route) =>
     route.fulfill({ json: { items: [action], next_cursor: null, status_counts: { open: 1 } } }),
   );
@@ -241,7 +240,9 @@ test('Action filters restore through URL history and reload', async ({ page }) =
   await page.route(`**/api/v1/projects/${PROJECT}/agent/chats?*`, (route) =>
     route.fulfill({ json: { items: [], next_cursor: null } }),
   );
-  await page.route('**/api/v1/agent/skills', (route) => route.fulfill({ json: { skills: [] } }));
+  await page.route('**/api/v1/agent/skills', (route) =>
+    route.fulfill({ json: { skills: [], limits: { mentions_max: 5 } } }),
+  );
 
   await page.goto(`/agent/actions?project=${PROJECT}&status=dismissed`);
   await expect(page.getByText('No Actions match these filters')).toBeVisible();

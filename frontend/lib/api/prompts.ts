@@ -18,6 +18,7 @@ import {
   promptCandidateSchema,
   promptGenerateResponseSchema,
   promptSchema,
+  promptSetListSchema,
   promptSetSchema,
 } from '@citeladder/contracts/project';
 import type {
@@ -36,14 +37,15 @@ import type {
   PromptCandidateReviewResponse,
   PromptGenerateResponse,
   PromptSet,
+  PromptSetList,
 } from '@citeladder/contracts';
 
-const promptSetListSchema = z.array(promptSetSchema);
 const promptCandidateListSchema = z.array(promptCandidateSchema);
 
 export const promptsApi = {
+  /** The project's sets and the server-enforced bounds of the forms they open. */
   listPromptSets: async (projectId: string, options?: ApiRequestOptions) => {
-    const res = await apiClient.get<PromptSet[]>(
+    const res = await apiClient.get<PromptSetList>(
       `/prompt-sets?project_id=${encodeURIComponent(projectId)}`,
       options,
     );
@@ -212,15 +214,16 @@ export const promptsMutations = {
           ...promptsQueries.sets(scope),
           staleTime: 0,
         });
-        if (available[0]) return available[0];
+        const [first] = available.prompt_sets;
+        if (first) return first;
         return promptsApi.createPromptSet(
           { project_id: scope.projectId, name: 'Default prompt set' },
           scoped(scope),
         );
       },
       onSuccess: async (created, _vars, _result, { client }) => {
-        client.setQueryData<PromptSet[]>(queryKeys.prompts.sets(scope), (prev) =>
-          prev?.length ? prev : [created],
+        client.setQueryData<PromptSetList>(queryKeys.prompts.sets(scope), (prev) =>
+          prev && !prev.prompt_sets.length ? { ...prev, prompt_sets: [created] } : prev,
         );
         await client.invalidateQueries({ queryKey: queryKeys.prompts.project(scope.projectId) });
       },

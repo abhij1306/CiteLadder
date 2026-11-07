@@ -8,7 +8,8 @@ import {
 import { sql } from 'kysely';
 import { z } from 'zod';
 
-import { configEnvironment, loadWorkerSettings, policy } from '../config.ts';
+import { policy } from '../config.ts';
+import { loadWorkerSettings } from '../config/analytics.ts';
 import { AnalyticsWorker } from '../workers/analytics-worker.ts';
 import { projectPerformanceRange } from '../traffic/snapshot.ts';
 import { ApiError, notFound } from '../errors.ts';
@@ -64,7 +65,7 @@ export const performanceRoutes = [
           .where('id', '=', path.task_id)
           .executeTakeFirst();
       if (!(await read())) throw notFound('Performance range task');
-      const worker = new AnalyticsWorker(db, loadWorkerSettings(configEnvironment(config)), {
+      const worker = new AnalyticsWorker(db, loadWorkerSettings(config.settings), {
         taskScope: { workspaceId: workspace.workspaceId, taskIds: [path.task_id] },
         executors: { performance_range_projection: projectPerformanceRange },
       });

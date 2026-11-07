@@ -6,13 +6,19 @@
  */
 import { domainToASCII } from 'node:url';
 
-import { policy } from './config.ts';
 import { crawlLogs } from './config/crawl-logs.ts';
 import { crawlers } from './config/crawlers.ts';
+import { siteHealth } from './config/site-health.ts';
 import { compareIdentityText } from './analysis/comparison.ts';
 import { hash } from './crypto-text.ts';
 import { normalizeQuery } from './traffic/normalization.ts';
 import { stripTrailing } from './text-order.ts';
+
+/** Tracking and session parameters Site Health ignores never split a page identity. */
+const IGNORED_QUERY_KEYS: ReadonlySet<string> = new Set([
+  ...siteHealth.tracking_params,
+  ...siteHealth.ignored_query_keys,
+]);
 
 /** Canonical page identity, without fetching or performing URL admission. */
 export function canonicalPage(input: string, origin?: string | null): string | null {
@@ -23,7 +29,7 @@ export function canonicalPage(input: string, origin?: string | null): string | n
       value = new URL(value, `${stripTrailing(origin, '/')}/`).href;
     const parsed = new URL(value);
     const scheme = parsed.protocol.slice(0, -1);
-    if (!policy.traffic.url_schemes.includes(scheme) || parsed.username || parsed.password)
+    if (!siteHealth.web_fetch.schemes.includes(scheme) || parsed.username || parsed.password)
       return null;
     // Site Health still stores the compared url_hash. Retain its raw path
     // (including dot segments) and Unicode-folded hostname in this identity only.
@@ -36,7 +42,7 @@ export function canonicalPage(input: string, origin?: string | null): string | n
     if (!host) return null;
     const defaultPort = scheme === 'https' ? 443 : 80;
     const port = parsed.port ? Number(parsed.port) : defaultPort;
-    if (!policy.traffic.url_ports.includes(port)) return null;
+    if (!siteHealth.web_fetch.ports.includes(port)) return null;
     const path = (rawPath || '/').replace(/%([0-9a-f]{2})/giu, (_match, hex: string) => {
       const char = String.fromCodePoint(Number.parseInt(hex, 16));
       return /[a-z0-9\-._~]/iu.test(char) ? char : `%${hex.toUpperCase()}`;
@@ -47,7 +53,7 @@ export function canonicalPage(input: string, origin?: string | null): string | n
       )
       .join('');
     const pairs = [...parsed.searchParams].filter(
-      ([key]) => !policy.traffic.ignored_query_keys.includes(key.toLowerCase()),
+      ([key]) => !IGNORED_QUERY_KEYS.has(key.toLowerCase()),
     );
     pairs.sort(([ak, av], [bk, bv]) => compareIdentityText(ak, bk) || compareIdentityText(av, bv));
     const quote = (s: string) =>

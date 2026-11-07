@@ -1,7 +1,17 @@
 /** Service policy and validated environment overrides. */
 import { ConfigError } from './config/config-error.ts';
-import { executionSettings } from './config/execution.ts';
+import { executionSettings, executionSpecs } from './config/execution.ts';
+import { loadWorkerSettings } from './config/analytics.ts';
+import {
+  Settings,
+  resolveSettingSpec,
+  resolveSpec,
+  type Env,
+  type SettingSource,
+  type SettingSpec,
+} from './config/settings.ts';
 export { ConfigError } from './config/config-error.ts';
+export { resolveSettingSpec, type SettingSource } from './config/settings.ts';
 import { brandEvidence } from './config/brand-evidence.ts';
 import { abuse } from './config/abuse.ts';
 import { errors } from './config/errors.ts';
@@ -45,17 +55,6 @@ import { promptGeneration } from './config/prompt-generation.ts';
 import { brandLogos } from './config/brand-logos.ts';
 import { internalLinks } from './config/internal-links.ts';
 import { perception } from './config/perception.ts';
-
-type SettingSpec = {
-  env: string[];
-  type: string;
-  default: unknown;
-  values?: unknown[];
-  minimum?: number;
-  exclusive_minimum?: number;
-  maximum?: number;
-  exclusive_maximum?: number;
-};
 
 export const policy = {
   development_env_names: api.development_env_names,
@@ -167,85 +166,46 @@ export const policy = {
   perception,
 };
 
-const TRUE_VALUES = new Set(['1', 'on', 't', 'true', 'y', 'yes']);
-const FALSE_VALUES = new Set(['0', 'off', 'f', 'false', 'n', 'no']);
+/** The host and port the service listens on. */
+const listenSpecs = {
+  host: { env: ['HOST'], type: 'str', default: '' },
+  port: { env: ['PORT'], type: 'str', default: '' },
+} satisfies Record<string, SettingSpec>;
 
-function envValue(spec: SettingSpec, env: Record<string, string | undefined>): string | undefined {
-  // Environment aliases are case-insensitive.
-  const byLowerName = new Map(
-    Object.entries(env).map(([name, value]) => [name.toLowerCase(), value]),
+function isSettingSpec(value: object): value is SettingSpec {
+  return (
+    'env' in value &&
+    Array.isArray(value.env) &&
+    'type' in value &&
+    typeof value.type === 'string' &&
+    'default' in value
   );
-  for (const name of spec.env) {
-    const value = byLowerName.get(name.toLowerCase());
-    if (value !== undefined) return value;
-  }
-  return undefined;
 }
 
-function checkBounds(name: string, value: number, spec: SettingSpec): number {
-  if (spec.exclusive_minimum !== undefined && value <= spec.exclusive_minimum) {
-    throw new ConfigError(`${name} must be > ${spec.exclusive_minimum}`);
-  }
-  if (spec.minimum !== undefined && value < spec.minimum) {
-    throw new ConfigError(`${name} must be >= ${spec.minimum}`);
-  }
-  if (spec.maximum !== undefined && value > spec.maximum) {
-    throw new ConfigError(`${name} must be <= ${spec.maximum}`);
-  }
-  if (spec.exclusive_maximum !== undefined && value >= spec.exclusive_maximum) {
-    throw new ConfigError(`${name} must be < ${spec.exclusive_maximum}`);
-  }
-  return value;
+/** Every setting the policy declares, with the key it is declared under. */
+function settingCatalog(): [string, SettingSpec][] {
+  const catalog: [string, SettingSpec][] = [];
+  const seen = new Set<object>();
+  const visit = (name: string, value: unknown) => {
+    if (value === null || typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (isSettingSpec(value)) catalog.push([name, value]);
+    else if (!Array.isArray(value) && !(value instanceof Set) && !(value instanceof Map))
+      for (const [key, child] of Object.entries(value)) visit(key, child);
+  };
+  visit('policy', { policy, executionSpecs, listenSpecs });
+  return catalog;
 }
+const catalog = settingCatalog();
 
-function parseInteger(name: string, raw: string, spec: SettingSpec): number {
-  if (!/^[+-]?\d+$/u.test(raw.trim())) throw new ConfigError(`${name} must be an integer`);
-  return checkBounds(name, Number(raw.trim()), spec);
-}
-
-function parseFloatSetting(name: string, raw: string, spec: SettingSpec): number {
-  const value = Number(raw.trim());
-  if (!raw.trim() || !Number.isFinite(value)) throw new ConfigError(`${name} must be a number`);
-  return checkBounds(name, value, spec);
-}
-
-function parseBoolean(name: string, raw: string): boolean {
-  const normalized = raw.trim().toLowerCase();
-  if (TRUE_VALUES.has(normalized)) return true;
-  if (FALSE_VALUES.has(normalized)) return false;
-  throw new ConfigError(`${name} must be a boolean`);
-}
-
-function parseSetting(name: string, spec: SettingSpec, raw: string): unknown {
-  switch (spec.type) {
-    case 'int':
-      return parseInteger(name, raw, spec);
-    case 'float':
-      return parseFloatSetting(name, raw, spec);
-    case 'bool':
-      return parseBoolean(name, raw);
-    case 'literal':
-      if (!spec.values?.includes(raw)) {
-        throw new ConfigError(`${name} must be one of ${spec.values?.join(', ')}`);
-      }
-      return raw;
-    default:
-      return raw;
-  }
-}
-
-function resolveSpec(
-  name: string,
-  spec: SettingSpec,
-  env: Record<string, string | undefined>,
-): unknown {
-  const raw = envValue(spec, env);
-  return raw === undefined ? spec.default : parseSetting(name, spec, raw);
+/** Resolve and validate every catalogued setting once from `env`. */
+function resolveSettings(env: Env): Settings {
+  return new Settings(catalog, env);
 }
 
 /** Pool, timeout and TLS settings shared by the service and terminal operators. */
-export function databaseSettings(env: Record<string, string | undefined>) {
-  const setting = (name: keyof typeof policy.settings) => resolveSetting(name, env);
+export function databaseSettings(source: SettingSource) {
+  const setting = (name: keyof typeof policy.settings) => resolveSetting(name, source);
   return {
     poolSize: setting('db_pool_size') as number,
     maxOverflow: setting('db_max_overflow') as number,
@@ -260,11 +220,13 @@ export function databaseSettings(env: Record<string, string | undefined>) {
   };
 }
 
-function resolveSetting(name: string, env: Record<string, string | undefined>): unknown {
-  return resolveSpec(name, policy.settings[name as keyof typeof policy.settings], env);
+function resolveSetting(name: keyof typeof policy.settings, source: SettingSource): unknown {
+  return resolveSpec(name, policy.settings[name], source);
 }
 
 export type ServiceConfig = {
+  /** Every catalogued setting, resolved and validated once at startup. */
+  settings: Settings;
   execution: ReturnType<typeof executionSettings>;
   appName: string;
   appEnv: string;
@@ -358,11 +320,11 @@ export function secretIsWeak(value: string): boolean {
  * Outside development the application secrets must be strong and independent.
  * A self-hosted install has no sign-in, so these are its only secrets.
  */
-function productionSecretProblems(env: Record<string, string | undefined>): string[] {
+function productionSecretProblems(source: SettingSource): string[] {
   const secrets = {
-    ENCRYPTION_KEY: String(resolveSetting('encryption_key', env)),
-    REFERRAL_HASH_SALT: String(resolveSetting('referral_hash_salt', env)),
-    API_KEY_PEPPER: String(resolveSetting('api_key_pepper', env)),
+    ENCRYPTION_KEY: String(resolveSetting('encryption_key', source)),
+    REFERRAL_HASH_SALT: String(resolveSetting('referral_hash_salt', source)),
+    API_KEY_PEPPER: String(resolveSetting('api_key_pepper', source)),
   };
   const values = Object.values(secrets);
   const issues = Object.entries(secrets)
@@ -371,7 +333,7 @@ function productionSecretProblems(env: Record<string, string | undefined>): stri
   if (new Set(values).size !== values.length)
     issues.push('application secrets must be independent');
   // MCP is optional, but once enabled its token grants read and write access.
-  const mcpToken = String(resolveSettingSpec(mcp.settings.token, env));
+  const mcpToken = String(resolveSettingSpec(mcp.settings.token, source));
   if (mcpToken && secretIsWeak(mcpToken))
     issues.push(
       `MCP_TOKEN does not meet the production strength policy (at least ${policy.secret_policy.min_bytes} bytes of random characters, e.g. \`openssl rand -hex 32\`)`,
@@ -379,49 +341,40 @@ function productionSecretProblems(env: Record<string, string | undefined>): stri
   return issues;
 }
 
-export function assertDeployable(
-  config: ServiceConfig,
-  env: Record<string, string | undefined>,
-  force = false,
-): void {
+export function assertDeployable(config: ServiceConfig, force = false): void {
   if (isDevelopmentEnv(config.appEnv) && !force) return;
-  const issues = productionSecretProblems(env);
+  const issues = productionSecretProblems(config.settings);
   if (issues.length) throw new ConfigError(issues.join('; '));
 }
 
 // Auxiliary owners resolve the same startup input. Keep it out of loggable
 // configuration objects because an environment can contain unrelated secrets.
-const environments = new WeakMap<ServiceConfig, Record<string, string | undefined>>();
-export function configEnvironment(config: ServiceConfig): Record<string, string | undefined> {
-  return environments.get(config) ?? {};
-}
-
-/** Resolve the service configuration from `env` (defaults to `process.env`). */
-export function loadConfig(env: Record<string, string | undefined> = process.env): ServiceConfig {
-  validateSiteHealthSettings(
+/**
+ * Resolve the service configuration from `env` (defaults to `process.env`):
+ * every catalogued setting is resolved and validated here, once, and owners
+ * read `config.settings` instead of the environment.
+ */
+export function loadConfig(env: Env = process.env): ServiceConfig {
+  const settings = resolveSettings(env);
+  const values = <K extends string>(specs: Record<K, SettingSpec>) =>
     Object.fromEntries(
-      Object.entries(siteHealth.settings).map(([name, spec]) => [
-        name,
-        resolveSettingSpec(spec, env),
-      ]),
-    ),
-  );
-  validateJevSettings(
-    Object.fromEntries(
-      Object.entries(jev).map(([name, spec]) => [name, resolveSettingSpec(spec, env)]),
-    ) as Record<keyof typeof jev, unknown>,
-  );
-  const setting = (name: keyof typeof policy.settings) => resolveSetting(name, env);
+      Object.entries<SettingSpec>(specs).map(([name, spec]) => [name, settings.of(spec)]),
+    ) as Record<K, unknown>;
+  validateSiteHealthSettings(values(siteHealth.settings));
+  validateJevSettings(values(jev));
+  loadWorkerSettings(settings);
+  const setting = (name: keyof typeof policy.settings) => resolveSetting(name, settings);
   const config: ServiceConfig = {
-    execution: executionSettings(env),
+    settings,
+    execution: executionSettings(settings),
     appName: setting('app_name') as string,
     appEnv: setting('app_env') as string,
     // Loopback by default: there is no login, so binding every interface is an
     // explicit choice (the Docker image sets HOST=0.0.0.0 behind a loopback port).
-    host: env.HOST?.trim() || '127.0.0.1',
-    port: parsePort(env.PORT),
+    host: String(settings.of(listenSpecs.host)).trim() || '127.0.0.1',
+    port: parsePort(String(settings.of(listenSpecs.port))),
     databaseUrl: setting('database_url') as string,
-    database: databaseSettings(env),
+    database: databaseSettings(settings),
     requestIdHeader: setting('request_id_header') as string,
     auth: {
       frontendUrl: setting('frontend_url') as string,
@@ -432,71 +385,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
         ...String(setting('allowed_hosts')).split(','),
       ]),
       apiKeyPepper: setting('api_key_pepper') as string,
-      limits: Object.fromEntries(
-        Object.entries(policy.abuse).map(([name, spec]) => [name, resolveSettingSpec(spec, env)]),
-      ) as ServiceConfig['auth']['limits'],
+      limits: values(policy.abuse) as ServiceConfig['auth']['limits'],
     },
     readinessTimeoutMs: policy.api.readiness_timeout_seconds * 1000,
   };
-  assertDeployable(config, env);
-  environments.set(config, { ...env });
+  assertDeployable(config);
   return config;
-}
-
-export type WorkerSettings = {
-  leaseReclaimBatchSize: number;
-  drainBudgetSeconds: number;
-  leaseTtlSeconds: number;
-  heartbeatIntervalSeconds: number;
-  taskMaxAttempts: number;
-  pollIntervalSeconds: number;
-  /** The first retry's base wait; each later attempt doubles it up to `retryMaxDelaySeconds`. */
-  retryDelaySeconds: number;
-  retryMaxDelaySeconds: number;
-};
-
-/** Resolve one policy setting with its environment override. */
-export function resolveSettingSpec(
-  spec: SettingSpec,
-  env: Record<string, string | undefined> = process.env,
-): unknown {
-  return resolveSpec(spec.env[0] ?? 'setting', spec, env);
-}
-
-export function activeJobRetrySeconds(
-  env: Record<string, string | undefined> = process.env,
-): number {
-  return resolveSpec(
-    'active_job_retry_after_seconds',
-    policy.abuse.active_job_retry_after_seconds,
-    env,
-  ) as number;
-}
-
-/** The analytics worker knobs (`ANALYTICS_*`), refusing a heartbeat slower than the lease. */
-export function loadWorkerSettings(
-  env: Record<string, string | undefined> = process.env,
-): WorkerSettings {
-  const specs = policy.analytics.worker_settings;
-  const setting = (name: keyof typeof specs) => resolveSpec(name, specs[name], env) as number;
-  const settings: WorkerSettings = {
-    leaseReclaimBatchSize: setting('lease_reclaim_batch_size'),
-    drainBudgetSeconds: setting('drain_budget_seconds'),
-    leaseTtlSeconds: setting('lease_ttl_seconds'),
-    heartbeatIntervalSeconds: setting('heartbeat_interval_seconds'),
-    taskMaxAttempts: setting('task_max_attempts'),
-    pollIntervalSeconds: setting('poll_interval_seconds'),
-    retryDelaySeconds: setting('retry_delay_seconds'),
-    retryMaxDelaySeconds: setting('retry_max_delay_seconds'),
-  };
-  // A heartbeat slower than the lease guarantees expiry during healthy work;
-  // the analytics worker checks the per-kind leases its registry declares.
-  if (settings.heartbeatIntervalSeconds >= settings.leaseTtlSeconds) {
-    throw new ConfigError('heartbeat_interval_seconds must be shorter than every lease TTL');
-  }
-  // A cap below the base would cut every backoff short of the configured first wait.
-  if (settings.retryMaxDelaySeconds < settings.retryDelaySeconds) {
-    throw new ConfigError('retry_max_delay_seconds must not be below retry_delay_seconds');
-  }
-  return settings;
 }

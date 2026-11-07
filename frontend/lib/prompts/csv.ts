@@ -16,8 +16,10 @@
  */
 import type { PromptImportRowRequest } from '@citeladder/contracts/prompt-requests';
 import { buyerStageSchema, promptIntentSchema } from '@citeladder/contracts/project';
-import type { BuyerStage, PromptIntent } from '@citeladder/contracts';
-import { PERSONA_MAX_CHARS, PROMPT_IMPORT_MAX_ROWS } from '@/lib/config/prompts';
+import type { BuyerStage, PromptFormLimits, PromptIntent } from '@citeladder/contracts';
+
+/** The import bounds the API enforces, from the prompt-set list. */
+export type PromptCsvLimits = Pick<PromptFormLimits, 'import_rows_max' | 'persona_max_chars'>;
 
 /** The import's column contract, in the order the sample file uses. */
 export const PROMPT_CSV_COLUMNS = ['topic', 'prompt'] as const;
@@ -200,7 +202,12 @@ const HEADERLESS_COLUMNS: ColumnMap = {
   enabled: -1,
 };
 
-function parseRow(cells: string[], map: ColumnMap, line: number): ParsedPromptRow {
+function parseRow(
+  cells: string[],
+  map: ColumnMap,
+  line: number,
+  personaMaxChars: number,
+): ParsedPromptRow {
   const cell = (col: number) => (col >= 0 ? cells[col] : undefined);
   const text = (cell(map.text) ?? '').trim();
   const topic = (cell(map.topic) ?? '').trim();
@@ -221,7 +228,7 @@ function parseRow(cells: string[], map: ColumnMap, line: number): ParsedPromptRo
       intent: normalizeIntent(cell(map.intent)),
       buyer_stage: normalizeStage(cell(map.stage)),
       persona: codePoints((cell(map.persona) ?? '').trim())
-        .slice(0, PERSONA_MAX_CHARS)
+        .slice(0, personaMaxChars)
         .join(''),
       // No cohort column leaves filing to the backend, which files a prompt
       // naming the brand as branded.
@@ -235,8 +242,10 @@ function parseRow(cells: string[], map: ColumnMap, line: number): ParsedPromptRo
 /**
  * Parse CSV text into previewable prompt rows. With a header row, columns are
  * matched by name (any order); without one, the first column is the prompt.
+ * `limits` are the API's import bounds, so the preview never reads as ready
+ * for an upload the server would reject.
  */
-export function parsePromptCsv(raw: string): ParsedCsv {
+export function parsePromptCsv(raw: string, limits: PromptCsvLimits): ParsedCsv {
   const matrix = tokenizeCsv(raw);
   const [firstRow] = matrix;
   if (!firstRow) {
@@ -247,15 +256,15 @@ export function parsePromptCsv(raw: string): ParsedCsv {
   const hasHeader = columns !== null;
   const dataRows = hasHeader ? matrix.slice(1) : matrix;
   const rows = dataRows.map((cells, index) =>
-    parseRow(cells, columns ?? HEADERLESS_COLUMNS, index + 1),
+    parseRow(cells, columns ?? HEADERLESS_COLUMNS, index + 1, limits.persona_max_chars),
   );
 
   const errors: string[] = [];
   if (rows.length === 0) errors.push('No data rows were found.');
   // The API rejects an oversized upload whole; say so before the preview reads as ready.
-  if (rows.length > PROMPT_IMPORT_MAX_ROWS)
+  if (rows.length > limits.import_rows_max)
     errors.push(
-      `The file has ${rows.length} rows; import up to ${PROMPT_IMPORT_MAX_ROWS} at a time by splitting it.`,
+      `The file has ${rows.length} rows; import up to ${limits.import_rows_max} at a time by splitting it.`,
     );
 
   return { rows, hasHeader, errors };

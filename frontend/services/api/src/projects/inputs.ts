@@ -42,8 +42,8 @@ const scalars = {
   ),
   default_repetitions: z
     .int()
-    .min(cfg.min_repetitions)
-    .max(cfg.max_repetitions)
+    .min(policy.audits.min_repetitions)
+    .max(policy.audits.max_repetitions)
     .default(cfg.default_repetitions),
 };
 const collections = {

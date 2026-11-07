@@ -238,6 +238,8 @@ export const agentRoutes = [
             prompt: step.prompt,
           })),
         })),
+        // The same bound the turn request schemas enforce.
+        limits: { mentions_max: agentPolicy.mentions_max },
       };
     },
   }),

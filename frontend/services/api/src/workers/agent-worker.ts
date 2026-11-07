@@ -61,19 +61,31 @@ export class AgentWorker {
     return rows.map((row) => row.workspace_id);
   }
   /**
-   * When the earliest unclaimed turn passes its grace and this lane can end it,
-   * so the chat is not blocked until the next tick. A streaming turn's lease is
-   * live for its whole request, so it does not keep the runner alive.
+   * When this lane can next end a turn, so the chat is not blocked until the
+   * next tick: the earlier of the earliest unclaimed turn passing its grace and
+   * the earliest held turn's lease expiry. A live turn's heartbeat keeps moving
+   * its expiry, so only a turn whose process stopped ever comes due.
    */
   async nextDue(): Promise<Date | null> {
     const row = await this.db
       .selectFrom('agent_runs')
-      .select((eb) => eb.fn.min('available_at').as('due'))
-      .where('status', 'in', policy.task_queue.claimable)
+      .select((eb) => [
+        eb.fn
+          .min('available_at')
+          .filterWhere('status', 'in', policy.task_queue.claimable)
+          .as('unclaimed'),
+        eb.fn.min('lease_expires_at').filterWhere('status', 'in', leasedStatuses).as('expires'),
+      ])
+      .where('status', 'in', [...policy.task_queue.claimable, ...leasedStatuses])
       .$if(this.workspaceId !== undefined, (q) => q.where('workspace_id', '=', this.workspaceId!))
       .executeTakeFirst();
-    if (!row?.due) return null;
-    return new Date(new Date(row.due).getTime() + policy.agent.unclaimed_grace_seconds * 1000);
+    const due = [
+      row?.unclaimed
+        ? new Date(row.unclaimed).getTime() + policy.agent.unclaimed_grace_seconds * 1000
+        : null,
+      row?.expires ? new Date(row.expires).getTime() : null,
+    ].filter((time) => time !== null);
+    return due.length ? new Date(Math.min(...due)) : null;
   }
   /**
    * Turns execute only inside the browser's request; this lane never runs one.

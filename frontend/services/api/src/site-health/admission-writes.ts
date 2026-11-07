@@ -8,7 +8,8 @@
 import { randomUUID } from 'node:crypto';
 import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import type { Candidate } from './frontier.ts';
 import type { Crawl } from './site-task.ts';
@@ -103,7 +104,6 @@ export async function upsertSiteUrls(trx: Database, crawl: Crawl, items: Candida
         disposition_reason: item.dispositionReason,
         disposition_version: policy.site_health.crawl.disposition_version,
         item_kind: item.itemKind,
-        discovery_status: 'running',
         latest_source_kind: item.sourceKind,
         latest_title: '',
         latest_content_type: '',
@@ -124,7 +124,6 @@ export async function upsertSiteUrls(trx: Database, crawl: Crawl, items: Candida
           disposition_reason: eb.ref('excluded.disposition_reason'),
           disposition_version: eb.ref('excluded.disposition_version'),
           item_kind: eb.ref('excluded.item_kind'),
-          discovery_status: eb.ref('excluded.discovery_status'),
           latest_source_kind: eb.ref('excluded.latest_source_kind'),
           last_seen_crawl_id: eb.ref('excluded.last_seen_crawl_id'),
           last_seen_at: eb.ref('excluded.last_seen_at'),

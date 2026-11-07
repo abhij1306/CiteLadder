@@ -160,6 +160,7 @@ export class AgentFixtures extends VisibilityFixtures {
           requested_model: 'test-model',
         } satisfies FundingIdentity),
       context: () => Promise.resolve(emptyPackage),
+      settleFailed: (trx, run) => new ModelCalls(this.agentDb, zeroFunding).settleFailed(trx, run),
       ...overrides,
     });
   }

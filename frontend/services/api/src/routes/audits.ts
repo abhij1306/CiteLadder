@@ -7,7 +7,7 @@ import {
   executionSchema,
 } from '@citeladder/contracts/audits';
 import { auditEventSchema } from '@citeladder/contracts/audit-events';
-import { configEnvironment, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import { readBody } from '../http/body.ts';
 import { requestProjectOf } from '../auth/actor.ts';
 import {
@@ -93,7 +93,7 @@ export const auditRoutes = [
         db,
         c.get('workspace').workspaceId,
         await readBody(c, estimateInput),
-        auditRuntime(configEnvironment(config)),
+        auditRuntime(config.settings),
       );
     },
   }),
@@ -158,13 +158,14 @@ export const auditRoutes = [
     body: repairInput,
     response: auditSchema,
     raw: true,
-    async handle({ c, db }, { path }) {
+    async handle({ c, db, config }, { path }) {
       const workspace = c.get('workspace').workspaceId,
         result = await createRepairAudit(
           db,
           workspace,
           path.audit_id,
           await readBody(c, repairInput),
+          auditRuntime(config.settings),
         );
       return c.json(await readAudit(db, workspace, result.auditId), result.created ? 201 : 200);
     },
@@ -198,7 +199,7 @@ export const auditRoutes = [
     raw: true,
     async handle({ c, db, config }, { path, query }) {
       const workspace = c.get('workspace').workspaceId,
-        runtime = auditRuntime(configEnvironment(config));
+        runtime = auditRuntime(config.settings);
       const after = resumeCursor(c.req.header('last-event-id'));
       const events = await auditEvents(
         db,

@@ -7,7 +7,7 @@ import {
 import { sql } from 'kysely';
 import { z } from 'zod';
 
-import { agentCallLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { policy } from '../config.ts';
 import { commerceBuyerPromptSystem } from '../config/commerce.ts';
 import type { Database } from '../db/database.ts';
@@ -338,7 +338,9 @@ export async function generateBuyerPrompts(
   // unique normalized hash still guards writes that race this read.
   const tracked = await trackedHashes(db, scope);
   const gateway = meter.gateway(createGateway(gatewayFactory), 'commerce_buyer_prompts');
-  await enforceWorkspaceRequest(db, scope.workspaceId, agentCallLimit(input.targets.length));
+  await spendBudget(db, budget('agent_provider_call', process.env), scope.workspaceId, {
+    amount: input.targets.length,
+  });
   // Each target keeps what it admitted, so one weak batch or a later model
   // failure does not discard the prompts already paid for. Only a request that
   // admitted nothing at all is unavailable.

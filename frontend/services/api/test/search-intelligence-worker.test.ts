@@ -7,7 +7,7 @@ import { confirmRun } from '../src/search-intelligence/runs.ts';
 import { reviewBody } from '../src/routes/search-intelligence-contracts.ts';
 import { createSecretCipher } from '../src/integrations/fernet.ts';
 import { WorkspaceScope } from '../src/db/workspace-scope.ts';
-import { loadWorkerSettings } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { testDatabase } from './support.ts';
 import { workspaceTaskIds } from './analytics-drain.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';

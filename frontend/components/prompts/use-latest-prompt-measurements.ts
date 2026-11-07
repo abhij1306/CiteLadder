@@ -2,19 +2,18 @@ import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { visibilityQueries } from '@/lib/api/visibility-queries';
-import type { ProjectRequestScope } from '@/lib/project/request-scope';
+import type { ActiveProjectScope } from '@/lib/project/active-project-scope';
 
 import type { PromptMeasurement } from './prompt-table';
+
+type PromptScope = Pick<ActiveProjectScope, 'workspaceId' | 'projectId'>;
 
 /**
  * The latest default-market run's prompt rows: one query shared by the prompt
  * table and Overview, so both read the same cache entry the same way.
  */
-export function useLatestPromptMetrics(scope: ProjectRequestScope) {
-  return useQuery({
-    ...visibilityQueries.prompts(scope),
-    enabled: scope.enabled,
-  });
+export function useLatestPromptMetrics(scope: PromptScope) {
+  return useQuery(visibilityQueries.prompts(scope));
 }
 
 /**
@@ -29,7 +28,7 @@ export function useLatestPromptMetrics(scope: ProjectRequestScope) {
  * measured columns and then squeezing four in beside rows already on screen.
  */
 export function useLatestPromptMeasurements(
-  scope: ProjectRequestScope,
+  scope: PromptScope,
 ): ReadonlyMap<string, PromptMeasurement> | undefined {
   const result = useLatestPromptMetrics(scope);
   return useMemo(() => {

@@ -2,7 +2,6 @@ import type { UseQueryResult } from '@tanstack/react-query';
 
 import { AiReferralsEmptyState } from '@/components/ai-traffic/empty-state';
 import { Callout } from '@/components/ui/callout';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -16,32 +15,21 @@ import { ListScreen } from '@/components/layout/page-shell';
 import { TabPanel, type TabRowProps } from '@/components/ui/tabs';
 
 export function AiReferralsContent({
-  projectId,
-  projectLoading,
   range,
   query,
   controls,
   tabs,
   notice,
 }: Readonly<{
-  projectId: string | null;
-  projectLoading: boolean;
   range: AiReferralsRange;
   query: UseQueryResult<AiReferrals, Error>;
   controls: FilterBarProps;
   tabs?: TabRowProps;
   notice?: React.ReactNode;
 }>) {
-  // The control band stays drawn while the project resolves. Hiding it left the
+  // The control band stays drawn while the data loads. Hiding it left the
   // work jumping a row's height the moment data arrived.
-  const data = (
-    <AiReferralsDataRegion
-      projectId={projectId}
-      projectLoading={projectLoading}
-      range={range}
-      query={query}
-    />
-  );
+  const data = <AiReferralsDataRegion range={range} query={query} />;
   const region = notice ? (
     <Stack gap="section">
       {notice}
@@ -58,14 +46,10 @@ export function AiReferralsContent({
 }
 
 function AiReferralsDataRegion({
-  projectId,
-  projectLoading,
   range,
   query,
-}: Omit<React.ComponentProps<typeof AiReferralsContent>, 'controls' | 'notice'>) {
-  if (projectLoading || (Boolean(projectId) && query.isLoading))
-    return <QueryState kind="loading" label="Loading AI referrals…" />;
-  if (!projectId) return <ProjectRequiredState />;
+}: Omit<React.ComponentProps<typeof AiReferralsContent>, 'controls' | 'notice' | 'tabs'>) {
+  if (query.isLoading) return <QueryState kind="loading" label="Loading AI referrals…" />;
   if (query.isError) {
     return (
       <QueryState

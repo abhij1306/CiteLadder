@@ -10,7 +10,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import type { WorkspaceSiteHealthRuntime } from '../generated/db-schema.ts';
@@ -34,7 +35,7 @@ import {
 const crawlPolicy = policy.site_health.crawl;
 type Runtime = Selectable<WorkspaceSiteHealthRuntime>;
 
-function frontierSettings(env: Record<string, string | undefined> = process.env) {
+function frontierSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (name: keyof typeof spec) => Number(resolveSettingSpec(spec[name], env));
   return {

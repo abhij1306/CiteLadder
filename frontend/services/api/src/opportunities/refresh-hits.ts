@@ -4,6 +4,7 @@
  * catalog/shelf gaps.
  */
 import { policy } from '../config.ts';
+import { siteHealth } from '../config/site-health.ts';
 import { rules } from '../analysis/opportunities/detectors.ts';
 import type { DetectorHit } from '../analysis/opportunities/evidence.ts';
 import { targetKey, type TargetRef } from '../analysis/opportunities/targets.ts';
@@ -14,15 +15,15 @@ import type { DemandSource, Scope } from './sources.ts';
 import { compareText } from '../text-order.ts';
 
 const o = policy.opportunity.opportunities;
-const r = policy.opportunity.refresh;
+const r = siteHealth.change_intel;
 type Json = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
 // Change Intelligence
 // ---------------------------------------------------------------------------
 const RULE_BY_CLASS: Readonly<Record<string, string>> = {
-  [r.change_class_regression]: 'site_change_potential_regression',
-  [r.change_class_critical]: 'site_change_critical_regression',
+  [r.class_regression]: 'site_change_potential_regression',
+  [r.class_critical]: 'site_change_critical_regression',
 };
 
 /** The rule an unexpected change promotes to, or null when it promotes nothing. */
@@ -34,7 +35,7 @@ export function changeRule(row: {
   if (Object.hasOwn(RULE_BY_CLASS, row.change_class)) return RULE_BY_CLASS[row.change_class]!;
   const after = row.after;
   if (
-    row.field !== r.content_change_field ||
+    row.field !== r.change_field ||
     after === null ||
     typeof after !== 'object' ||
     Array.isArray(after)
@@ -74,8 +75,8 @@ export async function changeHits(
     .select(['id', 'crawl_a_id', 'crawl_b_id', 'complete_pair', 'coverage'])
     .where('project_id', '=', crawl.project_id)
     .where('crawl_b_id', '=', crawl.id)
-    .where('state', '=', r.change_state_available)
-    .where('analyzer_version', '=', r.change_analyzer_version)
+    .where('state', '=', r.state_available)
+    .where('analyzer_version', '=', r.analyzer_version)
     .where('page_analyzer_version', '=', crawl.analyzer_version)
     .where('extractor_version', '=', crawl.extractor_version)
     .orderBy('created_at', 'desc')
@@ -92,13 +93,13 @@ export async function changeHits(
     .where((eb) =>
       eb.or([
         eb('change_class', 'in', Object.keys(RULE_BY_CLASS)),
-        eb('field', '=', r.content_change_field),
+        eb('field', '=', r.change_field),
       ]),
     )
     .orderBy('normalized_url')
     .orderBy('field')
     .orderBy('id')
-    .limit(r.change_max_observations)
+    .limit(r.max_observations)
     .execute();
   return rows.flatMap((row) => changeHit(snapshot, row) ?? []);
 }

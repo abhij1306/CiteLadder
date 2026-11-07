@@ -152,7 +152,7 @@ describe('persisted audit reads and immutable repair', () => {
       .execute();
     const request = repairInput.parse({ task_ids: [t.tasks[0]!.id] });
     await expect(
-      createRepairAudit(db, foreign.workspaceId, t.auditId, request),
+      createRepairAudit(db, foreign.workspaceId, t.auditId, request, runtime),
     ).rejects.toMatchObject({ status: 404 });
     await expect(
       createRepairAudit(
@@ -160,11 +160,12 @@ describe('persisted audit reads and immutable repair', () => {
         t.workspaceId,
         t.auditId,
         repairInput.parse({ task_ids: [foreign.tasks[0]!.id] }),
+        runtime,
       ),
     ).rejects.toMatchObject({ status: 409 });
     const repaired = await Promise.all([
-      createRepairAudit(db, t.workspaceId, t.auditId, request),
-      createRepairAudit(db, t.workspaceId, t.auditId, request),
+      createRepairAudit(db, t.workspaceId, t.auditId, request, runtime),
+      createRepairAudit(db, t.workspaceId, t.auditId, request, runtime),
     ]);
     expect(new Set(repaired.map((result) => result.auditId)).size).toBe(1);
     expect(repaired.filter((result) => result.created)).toHaveLength(1);
@@ -188,12 +189,12 @@ describe('persisted audit reads and immutable repair', () => {
       provider_task_id: '',
       result_artifact_id: null,
     });
-    const defaultRepair = await createRepairAudit(
-      db,
-      t.workspaceId,
-      t.auditId,
-      repairInput.parse({}),
-    );
-    expect((await readAudit(db, t.workspaceId, defaultRepair.auditId)).requested_count).toBe(3);
+    // The default selection (every failed task) overlaps the live child's task.
+    await expect(
+      createRepairAudit(db, t.workspaceId, t.auditId, repairInput.parse({}), runtime),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'A running repair already covers a selected task',
+    });
   });
 });

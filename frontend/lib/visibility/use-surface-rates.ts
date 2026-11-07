@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { useEngineCatalog } from '@/lib/providers/engines';
-import type { ProjectRequestScope } from '@/lib/project/request-scope';
+import type { ActiveProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * The observed-surface rates, scoped to the same resolved run selection the
@@ -22,15 +22,13 @@ import type { ProjectRequestScope } from '@/lib/project/request-scope';
  */
 export function useSurfaceRates({
   requestScope,
-  projectId,
   engine,
   cohort,
   onTrendsTab,
   activeRunId,
   selectedRunIds,
 }: {
-  requestScope: ProjectRequestScope;
-  projectId: string | null;
+  requestScope: Pick<ActiveProjectScope, 'workspaceId' | 'projectId'>;
   engine: string | undefined;
   cohort: string;
   onTrendsTab: boolean;
@@ -48,12 +46,9 @@ export function useSurfaceRates({
   const surfaceRatesQuery = useQuery({
     ...visibilityQueries.surfaceRates(requestScope, params),
     enabled:
-      requestScope.enabled &&
-      onTrendsTab &&
-      surfaceEngine !== null &&
-      Boolean(activeRunId) &&
-      selectedRunIds?.length !== 0,
-    placeholderData: (data, query) => retainPreviousDataForScope(projectId!, data, query),
+      onTrendsTab && surfaceEngine !== null && Boolean(activeRunId) && selectedRunIds?.length !== 0,
+    placeholderData: (data, query) =>
+      retainPreviousDataForScope(requestScope.projectId, data, query),
   });
   return { surfaceEngine, surfaceRatesQuery };
 }

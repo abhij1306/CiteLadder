@@ -9,7 +9,8 @@
 import { randomUUID } from 'node:crypto';
 import { sql, type Transaction } from 'kysely';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { inTransaction, type Database } from '../db/database.ts';
 import { subjectXactLock } from '../db/advisory-lock.ts';
@@ -30,7 +31,10 @@ type Enqueue = {
 
 /** The analytics task attempt budget successors inherit unless their kind sets its own. */
 function defaultTaskMaxAttempts(): number {
-  return resolveSettingSpec(policy.analytics.worker_settings.task_max_attempts) as number;
+  return resolveSettingSpec(
+    policy.analytics.worker_settings.task_max_attempts,
+    process.env,
+  ) as number;
 }
 
 /** The deterministic `analytics:<kind>:<identity parts>` idempotency key. */

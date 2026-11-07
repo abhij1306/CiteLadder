@@ -235,7 +235,8 @@ describe('PropertyPicker', () => {
     await ue.click(screen.getByRole('button', { name: 'Select Search Console property' }));
 
     // A broken upstream must never read as "you own no properties".
-    expect(await screen.findByText(/Could not load your properties/)).toBeInTheDocument();
+    expect(await screen.findByText('grant rejected')).toBeInTheDocument();
+    expect(screen.getByText('Support: code grant_auth_failed · ref test')).toBeInTheDocument();
     expect(screen.queryByText(/has no Search Console property available/)).toBeNull();
   });
 

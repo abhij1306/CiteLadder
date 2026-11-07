@@ -11,7 +11,7 @@
 import { apiKeyScopeSchema, type ApiKeyScope } from '@citeladder/contracts/api-keys';
 import type { MiddlewareHandler } from 'hono';
 
-import { enforceSubjectRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { resolveCaller, touchApiKey } from '../api-keys/keys.ts';
 import { requireCapability, type Actor } from '../auth/actor.ts';
 import {
@@ -20,19 +20,12 @@ import {
   WorkspaceContext,
   type WorkspaceCapability,
 } from '../auth/workspace.ts';
-import { policy, type ServiceConfig } from '../config.ts';
+import type { ServiceConfig } from '../config.ts';
 import type { AppEnv } from '../context.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { requireProject } from '../projects/access.ts';
 import { requirePathOwnership } from './ownership.ts';
-
-const P = policy.public_api;
-
-function limit(subject: keyof typeof P.rate_limits) {
-  const { operation, limit: allowed, window_seconds: windowSeconds } = P.rate_limits[subject];
-  return { operation, limit: allowed, windowSeconds };
-}
 
 export function apiKeyAuth(
   db: Database,
@@ -41,8 +34,8 @@ export function apiKeyAuth(
 ): MiddlewareHandler<AppEnv> {
   return async (c, next) => {
     const key = await resolveCaller(db, config.auth.apiKeyPepper, c.req.header('authorization'));
-    await enforceSubjectRequest(db, 'api_key', key.id, limit('api_key'));
-    await enforceSubjectRequest(db, 'workspace', key.workspace_id, limit('workspace'));
+    await spendBudget(db, budget('public_api_key'), key.id);
+    await spendBudget(db, budget('public_api_workspace'), key.workspace_id);
     const member = await findWorkspaceMember(db, key.created_by_user_id, key.workspace_id);
     // A key acts as its creator, so it stops when that user is deactivated.
     const creator = await db

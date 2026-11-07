@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
-import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { auditRuntime } from '../src/audits/config.ts';
@@ -43,7 +43,7 @@ async function seed() {
     {},
     runtime,
   );
-  const [claimed] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId });
+  const [claimed] = await claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId });
   const running = await queue.markRunning(claimed!, 'worker');
   const context = await loadExecutionContext(
     db,

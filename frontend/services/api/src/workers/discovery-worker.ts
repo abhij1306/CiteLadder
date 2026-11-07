@@ -98,7 +98,8 @@ export class DiscoveryWorker {
     const task = await this.claim(owner, target);
     if (!task) return false;
     const heartbeat = maintainLease(
-      () => this.queue.heartbeat(task.id, owner, task.workspace_id),
+      // At the claimed attempt: recovery charges one, so a re-claim never renews this slot.
+      () => this.queue.heartbeat(task.id, owner, task.workspace_id, task.attempt_count),
       this.settings.heartbeat_interval_seconds * 1000,
       (error) => logger.exception('discovery_heartbeat_failed', error, { task_id: task.id }),
     );

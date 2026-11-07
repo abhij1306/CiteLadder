@@ -26,7 +26,12 @@ const seeds: SeedQueries = {
     },
   ],
 };
-const context = { seeds, hasCompetitors: false, personaChoices: ['Parent', 'Club coach'] };
+const context = {
+  seeds,
+  hasCompetitors: false,
+  personaChoices: ['Parent', 'Club coach'],
+  limits: { generation_count_max: 50, seed_query_ids_max: 200 },
+};
 
 const topic = (id: string, name: string): Topic => ({
   id,
@@ -107,6 +112,17 @@ describe('runRequest', () => {
         context,
       ),
     ).toEqual({ ok: false, problem: 'Give at least one intent a weight.' });
+  });
+
+  it('holds the count and ticked searches to the bounds the server listed', () => {
+    const limits = { generation_count_max: 12, seed_query_ids_max: 0 };
+    expect(runRequest({ ...defaultRunSettings(), count: '13' }, { ...context, limits })).toEqual({
+      ok: false,
+      problem: 'Choose between 1 and 12 prompts.',
+    });
+    expect(
+      runRequest({ ...defaultRunSettings(), unticked: new Set([Q2]) }, { ...context, limits }),
+    ).toEqual({ ok: false, problem: 'Tick at most 0 search queries, or keep them all.' });
   });
 
   it('plans no competitor share without a tracked competitor', () => {

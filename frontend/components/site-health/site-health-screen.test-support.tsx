@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
 import { makeProject } from '@/test/fixtures/project';
-import { renderWithProviders } from '@/test/render';
+import { renderWithProviders, ResolvedProjectRoute } from '@/test/render';
 import {
   COMPLETE_CLASSIFICATION_PROJECTION,
   EMPTY_WEB_FUNDAMENTALS,
@@ -188,7 +188,9 @@ function mockRoutes(
 function renderScreen() {
   return renderWithProviders(
     <ProjectProvider>
-      <SiteHealthScreen />
+      <ResolvedProjectRoute>
+        <SiteHealthScreen />
+      </ResolvedProjectRoute>
     </ProjectProvider>,
   );
 }

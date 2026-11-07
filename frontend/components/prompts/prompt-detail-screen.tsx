@@ -5,7 +5,6 @@ import { useParams } from 'react-router-dom';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { DetailScreen } from '@/components/layout/page-shell';
-import { Callout } from '@/components/ui/callout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
@@ -21,7 +20,7 @@ import { formatWholePercent } from '@/lib/visibility/dashboard';
 import type { PromptHistory } from '@citeladder/contracts';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import {
   implementationEvents,
@@ -36,15 +35,14 @@ const BACK = { href: '/prompts', label: 'Back to Prompts' } as const;
 /** /prompts/:promptId — one prompt's measurements over time, in one market. */
 export function PromptDetailScreen() {
   const { promptId = '' } = useParams();
-  const { activeProjectId, activeWorkspaceId } = useProjectContext();
-  const projectId = activeProjectId ?? '';
+  const { workspaceId, projectId } = useProjectScope();
   const [market, setMarket] = useUrlState('market', optionalStringUrlCodec);
-  const markets = useProjectMarkets(projectId, activeWorkspaceId);
+  const markets = useProjectMarkets(projectId, workspaceId);
   const query = useQuery({
-    ...visibilityQueries.promptHistory({ workspaceId: activeWorkspaceId, projectId }, promptId, {
+    ...visibilityQueries.promptHistory({ workspaceId, projectId }, promptId, {
       market: market ?? undefined,
     }),
-    enabled: Boolean(projectId && activeWorkspaceId && promptId),
+    enabled: Boolean(promptId),
   });
 
   if (query.isError)
@@ -55,12 +53,6 @@ export function PromptDetailScreen() {
           {...readErrorProps(query)}
           fallback="This prompt could not be loaded."
         />
-      </DetailScreen>
-    );
-  if (!activeWorkspaceId)
-    return (
-      <DetailScreen back={BACK}>
-        <Callout tone="info">Choose a workspace to open this prompt.</Callout>
       </DetailScreen>
     );
   if (!query.data)

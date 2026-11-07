@@ -8,6 +8,7 @@ import {
   type DataforseoClient,
 } from '../providers/dataforseo.ts';
 import { policy } from '../config.ts';
+import type { SettingSource } from '../config/settings.ts';
 import { si } from './requests.ts';
 import { canonicalJson } from '../canonical-json.ts';
 import { record } from '../db/json.ts';
@@ -32,10 +33,7 @@ type LiveOptions = {
 export type LiveTarget = { endpoint: string; credential: { secret: string; baseUrl: string } };
 
 /** Every local check a call needs, before its dispatch commits: nothing here is sent. */
-export function resolveLive(
-  input: LiveInput,
-  env?: Record<string, string | undefined>,
-): LiveTarget {
+export function resolveLive(input: LiveInput, env?: SettingSource): LiveTarget {
   if (
     ![...Object.values(si.endpoints), ...Object.values(si.broad_endpoints)].includes(input.endpoint)
   )
@@ -62,7 +60,7 @@ function liveClient(
 export async function sendLive(
   target: LiveTarget,
   payload: Record<string, unknown>,
-  options: LiveOptions & { env?: Record<string, string | undefined> } = {},
+  options: LiveOptions & { env?: SettingSource } = {},
 ): Promise<ResearchResponse> {
   const { env, ...transport } = options;
   const client = liveClient(target.credential, providerSettings(env), transport);

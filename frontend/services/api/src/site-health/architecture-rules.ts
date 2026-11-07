@@ -1,8 +1,14 @@
+import type { PageKindEvidence, PageListEvidence } from '@citeladder/contracts/site-health';
 import { policy } from '../config.ts';
 import { compareText } from '../text-order.ts';
 import type { ArchitecturePage, buildArchitecture } from './architecture-model.ts';
 
 const p = policy.site_health.architecture;
+
+/** The bounded sample a finding names: its pages or its page kinds. */
+type Sample = Pick<PageListEvidence, 'pages'> | Pick<PageKindEvidence, 'page_kinds'>;
+const pageSample = (pages: PageListEvidence['pages']) => ({ pages });
+const kindSample = (page_kinds: PageKindEvidence['page_kinds']) => ({ page_kinds });
 
 /**
  * The affected pages of each page kind, over every row rather than the bounded
@@ -21,7 +27,7 @@ function pageKindCounts<Row extends { page_kind: string }>(
 function evaluation<Row extends { page_kind: string }>(
   id: string,
   rows: Row[],
-  key: string,
+  sample: (rows: Row[]) => Sample,
   coverage: string,
   requiresComplete = false,
   pagesOf?: (row: Row) => number,
@@ -37,12 +43,12 @@ function evaluation<Row extends { page_kind: string }>(
     reason: unavailable ? 'coverage_not_complete' : '',
     evidence: unavailable
       ? { reason: 'coverage_not_complete', coverage_state: coverage }
-      : {
+      : ({
           count: rows.length,
-          [key]: rows.slice(0, p.max_evidence_items),
+          ...sample(rows.slice(0, p.max_evidence_items)),
           page_kind_counts: pageKindCounts(rows, pagesOf),
           coverage_state: coverage,
-        },
+        } satisfies PageListEvidence | PageKindEvidence),
   };
 }
 /** The first two path segments: `/blogs/testimonials/a-review` is `/blogs/testimonials`. */
@@ -92,7 +98,7 @@ function unreachableFromHome(
   const result = evaluation(
     'architecture.unreachable_from_home',
     unreachable,
-    'pages',
+    pageSample,
     coverage,
     true,
   );
@@ -122,7 +128,7 @@ export function architectureRules(
       pages.filter(
         (page) => page.depth_from_home !== null && page.depth_from_home >= p.excessive_depth_min,
       ),
-      'pages',
+      pageSample,
       coverage,
       // Depth is shortest path over the observed graph: a link the crawl did
       // not see can only make a page shallower, so it needs complete coverage.
@@ -136,7 +142,7 @@ export function architectureRules(
           page.explicit_parent_site_url_id &&
           page.breadcrumb_parent_site_url_id !== page.explicit_parent_site_url_id,
       ),
-      'pages',
+      pageSample,
       coverage,
     ),
     evaluation(
@@ -146,7 +152,7 @@ export function architectureRules(
           kind.page_count >= p.duplicate_metadata_min_urls &&
           kind.duplicate_metadata_count / kind.page_count >= p.duplicate_metadata_rate,
       ),
-      'page_kinds',
+      kindSample,
       coverage,
       false,
       // The finding is the duplicated pages, as its group counts them.
@@ -157,7 +163,7 @@ export function architectureRules(
       pages.filter(
         (page) => page.page_kind !== 'homepage' && byId.get(page.site_url_id)!.inbound === 0,
       ),
-      'pages',
+      pageSample,
       coverage,
       true,
     ),
@@ -167,7 +173,7 @@ export function architectureRules(
       pages.filter(
         (page) => p.detail_page_kinds.includes(page.page_kind) && page.parent_site_url_id === null,
       ),
-      'pages',
+      pageSample,
       coverage,
       true,
     ),
@@ -180,7 +186,7 @@ export function architectureRules(
             (id) => p.detail_page_kinds.includes(byId.get(id)!.kind) && parents.get(id) === null,
           ),
       ),
-      'page_kinds',
+      kindSample,
       coverage,
       true,
       (kind) => kind.page_count,

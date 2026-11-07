@@ -326,6 +326,30 @@ export const promptSetSchema = responseObject({
   updated_at: z.string(),
 });
 
+/**
+ * Request bounds the API enforces on the forms the prompt-set list opens: the
+ * prompt form and CSV import, the Prompt Builder (its business-context lists
+ * included) and the audit launch. The browser reads them here instead of
+ * restating policy values.
+ */
+export const promptFormLimitsSchema = responseObject({
+  generation_count_max: z.number().int(),
+  import_rows_max: z.number().int(),
+  persona_max_chars: z.number().int(),
+  run_context_max_chars: z.number().int(),
+  distribution_personas_max: z.number().int(),
+  seed_query_ids_max: z.number().int(),
+  context_list_max_entries: z.number().int(),
+  audit_repetitions_min: z.number().int(),
+  audit_repetitions_max: z.number().int(),
+});
+
+/** The browser's prompt-set list: a project's sets and the bounds of the forms they open. */
+export const promptSetListSchema = responseObject({
+  prompt_sets: z.array(promptSetSchema),
+  limits: promptFormLimitsSchema,
+});
+
 export const benchmarkModeSchema = z.enum([
   'consumer_like',
   'controlled_localized',
@@ -365,6 +389,8 @@ export type BuyerStage = z.infer<typeof buyerStageSchema>;
 export type Prompt = z.infer<typeof promptSchema>;
 export type PromptStatus = z.infer<typeof promptStatusSchema>;
 export type PromptSet = z.infer<typeof promptSetSchema>;
+export type PromptFormLimits = z.infer<typeof promptFormLimitsSchema>;
+export type PromptSetList = z.infer<typeof promptSetListSchema>;
 export type Topic = z.infer<typeof topicSchema>;
 export type TopicPreview = z.infer<typeof topicPreviewResponseSchema>;
 export type SeedQueries = z.infer<typeof seedQueriesResponseSchema>;

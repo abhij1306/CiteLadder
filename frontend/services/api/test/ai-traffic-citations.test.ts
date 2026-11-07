@@ -20,7 +20,7 @@ import { persistExecutionSuccess, type ExecutionResult } from '../src/audits/res
 import { aiTrafficOverview } from '../src/ai-traffic/overview.ts';
 import { AuditQueue } from '../src/queue/audit-queue.ts';
 import { persistSourceAggregates } from '../src/visibility/source-aggregates.ts';
-import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
@@ -103,7 +103,7 @@ async function finalizedRun(t: AuditTenant, urls: string[]) {
     {},
     runtime,
   );
-  const claim = () => queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId });
+  const claim = () => claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId });
   for (let claimed = await claim(); claimed[0]; claimed = await claim()) {
     const running = await queue.markRunning(claimed[0], 'worker');
     const context = await loadExecutionContext(

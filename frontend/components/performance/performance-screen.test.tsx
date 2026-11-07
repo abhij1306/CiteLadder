@@ -17,7 +17,6 @@ import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import type { PerformanceDashboard } from '@/lib/api/performance';
 import { useRangeProjection } from './use-range-projection';
-import type { ProjectRequestScope } from '@/lib/project/request-scope';
 
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
@@ -45,6 +44,11 @@ vi.mock('./use-performance-sync', () => ({
 }));
 
 import { PerformanceScreen } from './performance-screen';
+
+/** `/performance` under the gate, which hands the screen the active project. */
+function renderPerformance() {
+  return renderWithProviders(<PerformanceScreen />, { projectSelection: { activeProject } });
+}
 
 const emptyTotals: PerformanceDashboard['selected']['totals'] = {
   clicks: null,
@@ -165,7 +169,13 @@ describe('PerformanceScreen evidence states', () => {
           });
         }),
       );
-      function Harness({ scope, from }: { scope: ProjectRequestScope; from: string }) {
+      function Harness({
+        scope,
+        from,
+      }: {
+        scope: Parameters<typeof useRangeProjection>[0];
+        from: string;
+      }) {
         const data = dashboard({
           selected: { ...measuredWindow(emptyTotals), snapshot_id: null, window_start: from },
         }) as PerformanceDashboard;
@@ -173,17 +183,11 @@ describe('PerformanceScreen evidence states', () => {
         return <output>{projecting ? 'Projecting' : 'Idle'}</output>;
       }
       const { rerender, queryClient } = renderWithProviders(
-        <Harness
-          scope={{ workspaceId: WORKSPACE, projectId: PROJECT, enabled: true }}
-          from="2026-08-01"
-        />,
+        <Harness scope={{ workspaceId: WORKSPACE, projectId: PROJECT }} from="2026-08-01" />,
       );
       await waitFor(() => expect(enqueued).toBe(1));
       rerender(
-        <Harness
-          scope={{ workspaceId: WORKSPACE, projectId: nextProject, enabled: true }}
-          from="2026-08-02"
-        />,
+        <Harness scope={{ workspaceId: WORKSPACE, projectId: nextProject }} from="2026-08-02" />,
       );
       await waitFor(() => expect(polled).toContain(latestTask));
       release();
@@ -211,7 +215,7 @@ describe('PerformanceScreen evidence states', () => {
         return HttpResponse.json(readiness);
       }),
     );
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
     await waitFor(() => expect(dashboardRead && readinessRead).toBe(true));
     // The `status` announcement is held back until the spinner becomes visible.
     expect(await screen.findByRole('status', { name: 'Loading performance…' })).toBeInTheDocument();
@@ -235,7 +239,7 @@ describe('PerformanceScreen evidence states', () => {
         return HttpResponse.json({ ...readiness, stage: 'importing' });
       }),
     );
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
 
     // The dashboard alone controls first paint: the advisory readiness ladder
     // must not hold the whole surface on the slowest of two independent reads.
@@ -272,7 +276,7 @@ describe('PerformanceScreen evidence states', () => {
       ),
     );
 
-    const { unmount } = renderWithProviders(<PerformanceScreen />);
+    const { unmount } = renderPerformance();
     expect(await screen.findByTestId('performance-status')).toHaveTextContent(
       'Imported history Aug 1, 2026 – Aug 28, 2026 · 28 days',
     );
@@ -280,7 +284,7 @@ describe('PerformanceScreen evidence states', () => {
     unmount();
 
     flagged = true;
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
     expect(await screen.findByTestId('performance-status')).toHaveTextContent(
       'Some imported days are missing or flagged, or come from an earlier complete import. Days without a usable import show no value, not zero.',
     );
@@ -297,7 +301,7 @@ describe('PerformanceScreen evidence states', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
 
     expect(await screen.findByText('No search performance evidence yet')).toBeVisible();
     expect(screen.queryByTestId('metric-card-strip')).not.toBeInTheDocument();
@@ -326,7 +330,7 @@ describe('PerformanceScreen evidence states', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
 
     expect(await screen.findByTestId('metric-card-strip')).toBeVisible();
     await waitFor(() => expect(tableSnapshot).toBe(SNAPSHOT));
@@ -348,7 +352,7 @@ describe('PerformanceScreen evidence states', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
     expect(await screen.findByTestId('ga4-summary')).toBeVisible();
     expect(screen.queryByTestId('metric-card-strip')).not.toBeInTheDocument();
     expect(tableDimensions).toEqual([]);
@@ -373,7 +377,7 @@ describe('PerformanceScreen evidence states', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
 
     expect(await screen.findByRole('tablist', { name: 'Performance breakdowns' })).toBeVisible();
     await waitFor(() => expect(tableDimensions).toContain('query'));
@@ -396,7 +400,7 @@ describe('PerformanceScreen evidence states', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
 
     expect(await screen.findByTestId('bing-panel')).toBeVisible();
     await waitFor(() => expect(tableDimensions).toContain('bing_query'));
@@ -408,7 +412,7 @@ describe('PerformanceScreen evidence states', () => {
       http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(dashboard())),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
 
     expect(await screen.findByText('No search performance evidence yet')).toBeVisible();
     expect(screen.queryByTestId('bing-panel')).not.toBeInTheDocument();
@@ -459,7 +463,7 @@ describe('PerformanceScreen evidence states', () => {
       ),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
 
     expect(await screen.findByTestId('metric-card-strip')).toBeVisible();
     expect(enqueueCount).toBe(1);
@@ -518,7 +522,7 @@ describe('PerformanceScreen table interactions', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
     const table = await screen.findByRole('table', { name: 'Top queries' });
     expect(await within(table).findByText('query 1')).toBeVisible();
 
@@ -564,7 +568,7 @@ describe('PerformanceScreen table interactions', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
     const table = await screen.findByRole('table', { name: 'Top queries' });
     expect(await within(table).findByText('query 1')).toBeVisible();
     await user.click(within(table).getByRole('button', { name: 'impressions' }));
@@ -603,7 +607,7 @@ describe('PerformanceScreen table interactions', () => {
       }),
     );
 
-    renderWithProviders(<PerformanceScreen />);
+    renderPerformance();
     expect(await screen.findByText('query 1')).toBeVisible();
 
     await user.click(screen.getByRole('tab', { name: 'Pages' }));

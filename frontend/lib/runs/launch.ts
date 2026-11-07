@@ -7,10 +7,16 @@
  * independent of the dialog component.
  */
 import type { AuditLaunchRequest } from '@citeladder/contracts/audit-requests';
-import type { LogicalEngine, Prompt, PromptSet } from '@citeladder/contracts';
-import { DEFAULT_REPETITIONS, MAX_REPETITIONS, MIN_REPETITIONS } from '@/lib/config/operational';
+import type { LogicalEngine, Prompt, PromptFormLimits, PromptSet } from '@citeladder/contracts';
+import { DEFAULT_REPETITIONS } from '@/lib/config/operational';
 
-export { DEFAULT_REPETITIONS, MAX_REPETITIONS, MIN_REPETITIONS } from '@/lib/config/operational';
+export { DEFAULT_REPETITIONS } from '@/lib/config/operational';
+
+/** The repetition range the API accepts, from the prompt-set list's limits. */
+export type RepetitionLimits = Pick<
+  PromptFormLimits,
+  'audit_repetitions_min' | 'audit_repetitions_max'
+>;
 
 /** The dialog's local, still-being-edited selection. */
 export type LaunchSelection = {
@@ -68,9 +74,12 @@ export function batchLabel(index: number, batch: Prompt[], size = PROMPT_BATCH_S
 }
 
 /** Clamp a repetition count into the backend-accepted range. */
-export function clampRepetitions(value: number): number {
+export function clampRepetitions(value: number, limits: RepetitionLimits): number {
   if (!Number.isFinite(value)) return DEFAULT_REPETITIONS;
-  return Math.min(MAX_REPETITIONS, Math.max(MIN_REPETITIONS, Math.round(value)));
+  return Math.min(
+    limits.audit_repetitions_max,
+    Math.max(limits.audit_repetitions_min, Math.round(value)),
+  );
 }
 
 /**
@@ -90,7 +99,10 @@ export function canLaunch(selection: LaunchSelection): boolean {
  * Build the `POST /audits` payload from a launchable selection. Throws if the
  * selection is not launchable — callers gate on `canLaunch` first.
  */
-export function buildLaunchPayload(selection: LaunchSelection): AuditLaunchRequest {
+export function buildLaunchPayload(
+  selection: LaunchSelection,
+  limits: RepetitionLimits,
+): AuditLaunchRequest {
   if (!canLaunch(selection)) {
     throw new Error('Cannot build a launch payload from an incomplete selection.');
   }
@@ -101,7 +113,7 @@ export function buildLaunchPayload(selection: LaunchSelection): AuditLaunchReque
       : { prompt_set_id: selection.promptSetId! }),
     engines: [...selection.engines],
     ...(selection.marketIds ? { market_ids: [...selection.marketIds] } : {}),
-    repetitions: clampRepetitions(selection.repetitions),
+    repetitions: clampRepetitions(selection.repetitions, limits),
     audit_scope: selection.auditScope ?? 'brand',
   };
 }

@@ -16,10 +16,9 @@ import { useEngineCatalog } from '@/lib/providers/engines';
 import {
   batchLabel,
   clampRepetitions,
-  MAX_REPETITIONS,
-  MIN_REPETITIONS,
   toggleEngine,
   toggleMarket,
+  type RepetitionLimits,
 } from '@/lib/runs/launch';
 import { textRole } from '@/components/ui/typography';
 import { panelClasses } from '@/components/ui/panel';
@@ -221,6 +220,7 @@ export function LaunchDialogView({
   setEngines,
   repetitions,
   setRepetitions,
+  repetitionLimits,
   markets,
   marketIds,
   setMarketIds,
@@ -249,6 +249,8 @@ export function LaunchDialogView({
   setEngines: React.Dispatch<React.SetStateAction<LogicalEngine[]>>;
   repetitions: number;
   setRepetitions: React.Dispatch<React.SetStateAction<number>>;
+  /** The range the API accepts, from the prompt-set list; null until it loads. */
+  repetitionLimits: RepetitionLimits | null;
   markets: readonly ProjectMarket[];
   marketIds: (string | null)[];
   setMarketIds: React.Dispatch<React.SetStateAction<(string | null)[]>>;
@@ -348,17 +350,24 @@ export function LaunchDialogView({
         <MarketsField markets={markets} marketIds={marketIds} setMarketIds={setMarketIds} />
         <Field
           label="Repetitions"
-          hint={`How many times to run each prompt per engine (${MIN_REPETITIONS}–${MAX_REPETITIONS}).`}
+          hint={
+            repetitionLimits
+              ? `How many times to run each prompt per engine (${repetitionLimits.audit_repetitions_min}–${repetitionLimits.audit_repetitions_max}).`
+              : 'How many times to run each prompt per engine.'
+          }
         >
           {(props) => (
             <Input
               {...props}
               type="number"
-              min={MIN_REPETITIONS}
-              max={MAX_REPETITIONS}
+              min={repetitionLimits?.audit_repetitions_min}
+              max={repetitionLimits?.audit_repetitions_max}
               value={repetitions}
               onChange={(event) => setRepetitions(Number(event.target.value))}
-              onBlur={() => setRepetitions((current) => clampRepetitions(current))}
+              onBlur={() => {
+                if (repetitionLimits)
+                  setRepetitions((current) => clampRepetitions(current, repetitionLimits));
+              }}
             />
           )}
         </Field>

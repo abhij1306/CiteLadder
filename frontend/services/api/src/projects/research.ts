@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { policy } from '../config.ts';
 import { createModelGateway, gatewaySettings, type ModelGateway } from '../models/gateway.ts';
 import { competitorSuggestionPrompt } from '../config/discovery.ts';
+import type { SettingSource } from '../config/settings.ts';
 import { getLogger } from '../logging.ts';
 import { defaultTransport, ModelError } from '../models/http.ts';
 import { ApiError } from '../errors.ts';
@@ -130,7 +131,7 @@ export type ResearchDependencies = {
   fetcher?: WebsiteFetcher;
   transport?: ResearchTransport;
   gateway?: ModelGateway | null;
-  env?: Record<string, string | undefined>;
+  env?: SettingSource;
   onCompetitors?: () => Promise<void>;
   checkCancelled?: () => void;
   signal?: AbortSignal;

@@ -42,10 +42,10 @@ export function useSourceMovers(
   };
   return useQuery({
     ...visibilityQueries.sourceMovers(
-      { workspaceId: queries.workspaceId, projectId: queries.projectId ?? '' },
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
       params,
     ),
-    enabled: enabled && Boolean(queries.projectId && queries.activeRunId && baseline?.length),
+    enabled: enabled && Boolean(queries.activeRunId && baseline?.length),
   });
 }
 

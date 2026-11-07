@@ -9,7 +9,8 @@ import type { crawlSourceSchema } from '@citeladder/contracts/ai-traffic';
 import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
@@ -121,7 +122,9 @@ function Connections({
         onClose={() => setRevoking(null)}
       />
       {mutation.isError && !open ? (
-        <Callout tone="negative">{mutation.error.message}</Callout>
+        <MutationNotice
+          notice={mutationNoticeForError(mutation.error, { action: 'update the crawl-log source' })}
+        />
       ) : null}
       <Dialog
         open={open}
@@ -182,7 +185,11 @@ function SetupAvailability({ model }: Readonly<{ model: ReturnType<typeof useCra
   if (sources.data.availability === 'available') return <CrawlLogSetup model={model} />;
   return (
     <>
-      {mutation.isError ? <Callout tone="negative">{mutation.error.message}</Callout> : null}
+      {mutation.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(mutation.error, { action: 'update the crawl-log source' })}
+        />
+      ) : null}
       <CrawlLogAvailabilityNotice availability={sources.data.availability} />
     </>
   );

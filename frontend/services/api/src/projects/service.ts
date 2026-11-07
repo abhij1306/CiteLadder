@@ -442,8 +442,8 @@ export async function deleteProject(db: Database, scope: ProjectScope) {
 }
 
 /**
- * The deletion itself, for a caller holding the project lock and its authority
- * that has checked no metered work still holds reserved units.
+ * The deletion itself, for a caller holding the project lock and its
+ * authority.
  */
 export async function removeProject(trx: Database, scope: ProjectScope) {
   await trx

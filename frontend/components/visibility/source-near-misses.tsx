@@ -26,10 +26,10 @@ export function useSourceNearMisses(
   input: { enabled: boolean; limit: number },
 ) {
   const params = { ...selectionParams(filters, queries), limit: input.limit };
-  const enabled = input.enabled && Boolean(queries.projectId && queries.activeRunId);
+  const enabled = input.enabled && Boolean(queries.activeRunId);
   return useQuery({
     ...visibilityQueries.sourceNearMisses(
-      { workspaceId: queries.workspaceId, projectId: queries.projectId ?? '' },
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
       params,
     ),
     enabled,
@@ -37,7 +37,7 @@ export function useSourceNearMisses(
     // so the table never drops to a loading state; a selection with no run
     // has nothing to keep.
     placeholderData: enabled
-      ? (data, previous) => retainPreviousDataForScope(queries.projectId!, data, previous)
+      ? (data, previous) => retainPreviousDataForScope(queries.projectId, data, previous)
       : undefined,
   });
 }

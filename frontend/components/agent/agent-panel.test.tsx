@@ -9,6 +9,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { AgentPanelProvider, useAgentPanelSeed } from '@/lib/agent/panel-context';
 import { refreshAgentChat } from '@/lib/api/agent';
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { expectThreadFollowsLatest } from '@/test/chat-follow';
 
@@ -108,7 +109,7 @@ function renderShell(path: string) {
       initialEntries: [path],
       projectSelection: {
         activeProjectId: PROJECT,
-        activeProject: { id: PROJECT } as never,
+        activeProject: makeProject({ id: PROJECT }),
         status: 'ready',
       },
     },
@@ -126,11 +127,13 @@ beforeEach(() =>
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
+const EMPTY_CATALOG = { skills: [], limits: { mentions_max: 5 } };
+
 describe('AgentPanel', () => {
   it('starts a chat from the screen context and continues it in the Agent workspace', async () => {
     const bodies: unknown[] = [];
     mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json({ skills: [] })),
+      http.get('/api/v1/agent/skills', () => HttpResponse.json(EMPTY_CATALOG)),
       http.post(`/api/v1/projects/${PROJECT}/agent/chats`, async ({ request }) => {
         bodies.push(await request.json());
         return HttpResponse.json({ chat_id: CHAT, run: RUN }, { status: 202 });
@@ -164,7 +167,7 @@ describe('AgentPanel', () => {
   });
 
   it('keeps an unsent draft when the screen context changes while open', async () => {
-    mswServer.use(http.get('/api/v1/agent/skills', () => HttpResponse.json({ skills: [] })));
+    mswServer.use(http.get('/api/v1/agent/skills', () => HttpResponse.json(EMPTY_CATALOG)));
     const user = userEvent.setup();
     renderShell('/site');
 
@@ -189,7 +192,7 @@ describe('AgentPanel', () => {
   it('follows the drawer thread in its own region until the reader scrolls up', async () => {
     let current = DETAIL;
     mswServer.use(
-      http.get('/api/v1/agent/skills', () => HttpResponse.json({ skills: [] })),
+      http.get('/api/v1/agent/skills', () => HttpResponse.json(EMPTY_CATALOG)),
       http.post(`/api/v1/projects/${PROJECT}/agent/chats`, () =>
         HttpResponse.json({ chat_id: CHAT, run: RUN }, { status: 202 }),
       ),

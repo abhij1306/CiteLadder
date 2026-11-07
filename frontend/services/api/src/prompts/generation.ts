@@ -4,8 +4,9 @@ import { promptGenerateResponseSchema } from '@citeladder/contracts/project';
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
-import { agentCallLimit, dailyWorkspaceLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
@@ -431,39 +432,29 @@ export async function generatePrompts(
             gateway: gatewayFor,
             deadline,
             reserve: () =>
-              enforceWorkspaceRequest(
-                db,
-                workspaceId,
-                agentCallLimit(policy.prompts.generation.topic_calls),
-              ),
+              spendBudget(db, budget('agent_provider_call', process.env), workspaceId, {
+                amount: policy.prompts.generation.topic_calls,
+              }),
           },
         );
     const context = await generationContext(db, workspaceId, setId, input);
     if (cohortShares(input).comparison > 0 && !context.context.competitors.length)
       throw generationInvalid('Add a competitor before generating comparison prompts');
     const gateway = gatewayFor();
-    await enforceWorkspaceRequest(
-      db,
-      workspaceId,
-      agentCallLimit(draftCallLimit(input) + policy.prompts.generation.map_calls),
-    );
+    await spendBudget(db, budget('agent_provider_call', process.env), workspaceId, {
+      amount: draftCallLimit(input) + policy.prompts.generation.map_calls,
+    });
     const output = await generateDrafts(context, input, gateway, deadline);
     const judge = dependencies.judge();
     // Judge calls are platform-paid, so each generation spends its bounded
     // call count before judging.
     if (judge && output.drafts.length)
-      await enforceWorkspaceRequest(
-        db,
-        workspaceId,
-        dailyWorkspaceLimit(
-          'prompt_generation.judge',
-          'prompt_judge_calls_per_workspace_daily',
-          Math.min(
-            output.drafts.length,
-            Number(resolveSettingSpec(policy.models.jev.max_calls_per_generation)),
-          ),
+      await spendBudget(db, budget('prompt_judge_calls', process.env), workspaceId, {
+        amount: Math.min(
+          output.drafts.length,
+          Number(resolveSettingSpec(policy.models.jev.max_calls_per_generation, process.env)),
         ),
-      );
+      });
     const gate = await judgeDrafts(
       context,
       output.drafts,

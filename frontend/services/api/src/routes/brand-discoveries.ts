@@ -6,7 +6,6 @@ import {
 
 import { readBody } from '../http/body.ts';
 import { randomUUID } from 'node:crypto';
-import { configEnvironment } from '../config.ts';
 import { DiscoveryWorker } from '../workers/discovery-worker.ts';
 import { ApiError } from '../errors.ts';
 import {
@@ -79,7 +78,7 @@ export const brandDiscoveryRoutes = [
     async handle({ c, db, config }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
       await discoveryRow(db, workspaceId, path.discovery_id);
-      const worker = new DiscoveryWorker(db, { env: configEnvironment(config) });
+      const worker = new DiscoveryWorker(db, { env: config.settings });
       await worker.runOnce(
         `interactive-discovery:${randomUUID()}`,
         { workspaceId, discoveryId: path.discovery_id },

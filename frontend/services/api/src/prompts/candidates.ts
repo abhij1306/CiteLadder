@@ -14,7 +14,8 @@ import { promptCandidateReviewRequestSchema } from '@citeladder/contracts/prompt
 import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import type { RecordScope } from '../db/workspace-scope.ts';
 import { jsonObject, record } from '../db/json.ts';
@@ -43,7 +44,7 @@ function plannedPersona(refs: unknown[]): string {
   return typeof audience === 'string' ? audience.trim().slice(0, P.persona_max_chars) : '';
 }
 const setting = (name: keyof typeof P.generation_settings) =>
-  resolveSettingSpec(P.generation_settings[name]) as number;
+  resolveSettingSpec(P.generation_settings[name], process.env) as number;
 
 export const candidateReview = promptCandidateReviewRequestSchema;
 

@@ -32,6 +32,7 @@ import {
   finalFailure,
   httpError,
   loadScope,
+  lockSiteTask,
   markRunning,
   owned,
   recordCrawlEvent,
@@ -340,11 +341,16 @@ async function prepare(
     waited < ctx.settings.dependencyMaxWait
   ) {
     // Waiting costs no attempt; past the bound this analyze acquires the page itself.
-    await settleTask(ctx.db, ctx, task, {
-      kind: 'deferred',
-      delaySeconds: dependencyDelay(ctx.settings, waited),
+    const deferred = await ctx.db.transaction().execute(async (trx) => {
+      const held = await lockSiteTask(trx, ctx, claimed);
+      if (!held) return false;
+      await settleTask(trx, ctx, held.task, {
+        kind: 'deferred',
+        delaySeconds: dependencyDelay(ctx.settings, waited),
+      });
+      return true;
     });
-    return 'deferred';
+    return deferred ? 'deferred' : null;
   }
   if (!(await markRunning(ctx, task))) return null;
   if (!artifact) return acquire(ctx, task);

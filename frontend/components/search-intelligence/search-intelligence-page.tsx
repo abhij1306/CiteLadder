@@ -30,8 +30,7 @@ import type { SearchReviewAction } from '@citeladder/contracts/search-intelligen
 import { searchMarketLabel } from '@/lib/config/search-intelligence';
 import { pollSearchRun } from '@/lib/search-intelligence/status';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { useProjectContext } from '@/lib/project/project-context';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 const PROVIDER_SETTINGS = '/settings?tab=providers';
 const TABS = [
@@ -87,7 +86,7 @@ function selectDatasets(
 }
 
 export function SearchIntelligencePage() {
-  const { activeProject } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const [tab, setTab] = useUrlState('tab', TAB_CODEC);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
@@ -97,15 +96,14 @@ export function SearchIntelligencePage() {
   const [market, setMarket] = useState('');
   const [scope, setScope] = useState('');
   const [action, setAction] = useState<SearchReviewAction>('analysis');
-  const requestScope = resolveActiveProjectRequestScope(activeProject);
+  const requestScope = { workspaceId, projectId };
   const readiness = useQuery({
     ...searchIntelligenceQueries.readiness(requestScope),
-    enabled: requestScope.enabled,
     refetchInterval: (query) => pollSearchRun(query.state.data?.latest_run?.status),
   });
   const runsQuery = useQuery({
     ...searchIntelligenceQueries.runs(requestScope),
-    enabled: requestScope.enabled && costOpen,
+    enabled: costOpen,
   });
   const cancelMutation = useMutation(searchIntelligenceMutations.cancel(requestScope));
   const reviewMutation = useMutation(searchIntelligenceMutations.review(requestScope));
@@ -219,6 +217,7 @@ export function SearchIntelligencePage() {
           <RunNotice
             run={data.latest_run}
             onCancel={(runId) => cancelMutation.mutate(runId)}
+            onReview={() => openReview('analysis')}
             cancelling={cancelMutation.isPending}
           />
           <TabPanel value="overview" className="min-w-0">
@@ -277,7 +276,7 @@ export function SearchIntelligencePage() {
             onRetry={() => void runsQuery.refetch()}
           />
           <SearchIntelligenceReviewDrawer
-            key={`${activeProject?.workspace_id}:${activeProject?.id}:${action}:${drawerOpen}`}
+            key={`${workspaceId}:${projectId}:${action}:${drawerOpen}`}
             open={drawerOpen}
             action={action}
             readiness={data}

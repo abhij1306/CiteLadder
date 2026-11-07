@@ -243,11 +243,57 @@ export const opportunityOrderUpdateRequestSchema = z.strictObject({
 });
 export type OpportunityOrderUpdateRequest = z.input<typeof opportunityOrderUpdateRequestSchema>;
 
+/**
+ * The citation taxonomy: what kind of publisher a cited domain is. Descriptive,
+ * never a causal claim or authority score; the order is the display order.
+ */
+export const sourceClassSchema = z.enum([
+  'brand_owned',
+  'competitor_owned',
+  'review_marketplace',
+  'editorial_third_party',
+  'community',
+  'social',
+  'institutional',
+  'video',
+  'search_surface',
+  'other_third_party',
+]);
+export type SourceClass = z.infer<typeof sourceClassSchema>;
+
+/**
+ * The sources a prompt gap's answers cited, classified: written into the
+ * evidence of every prompt-gap Opportunity, read by its evidence view.
+ * `distinct_domain_count` 0 means nothing was cited, not a measured zero.
+ */
+export const sourcePatternSchema = z.object({
+  taxonomy_version: z.string(),
+  distinct_domain_count: z.number().int(),
+  independent_domain_count: z.number().int(),
+  class_counts: z.partialRecord(sourceClassSchema, z.number().int()),
+  observed_patterns: z.array(z.string()),
+  competitor_source_domains: z.record(z.string(), z.array(z.string())),
+  top_citations: z.array(
+    z.object({
+      domain: z.string(),
+      url: z.string(),
+      title: z.string(),
+      source_class: sourceClassSchema,
+      matched_competitor: z.string().nullable(),
+    }),
+  ),
+  top_citations_truncated: z.boolean(),
+  recommended_action: z.string(),
+});
+export type SourcePattern = z.infer<typeof sourcePatternSchema>;
+
 // Full evidence bundle + provenance for one opportunity. Superseded rows stay
 // readable.
 export const opportunityDetailSchema = opportunitySchema.extend({
   remediation: z.string(),
-  evidence: z.record(z.string(), z.unknown()),
+  // The rule's evidence (`opportunityEvidenceSchemas`); the blocks the evidence
+  // view reads are typed, the rest pass through for the Agent and exports.
+  evidence: z.looseObject({ source_pattern: sourcePatternSchema.optional() }),
   source_analysis_ids: z.array(z.string()),
   source_issue_ids: z.array(z.string()),
   source_metric_ids: z.array(z.string()),

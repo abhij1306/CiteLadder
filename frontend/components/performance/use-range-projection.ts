@@ -10,7 +10,7 @@ import {
   type PerformanceDashboard,
 } from '@/lib/api/performance';
 import { pollRangeTask, RANGE_TASK_STATES } from '@/lib/performance/status';
-import type { ProjectRequestScope } from '@/lib/project/request-scope';
+import type { ActiveProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * Materialize any window the dashboard reported as unprojected.
@@ -21,7 +21,7 @@ import type { ProjectRequestScope } from '@/lib/project/request-scope';
  * a second viewer joins the same work rather than duplicating it.
  */
 export function useRangeProjection(
-  scope: ProjectRequestScope,
+  scope: Pick<ActiveProjectScope, 'workspaceId' | 'projectId'>,
   data: PerformanceDashboard | undefined,
 ) {
   const { workspaceId, projectId } = scope;
@@ -43,7 +43,7 @@ export function useRangeProjection(
 
   const missing = missingWindow(data);
   useEffect(() => {
-    if (!scope.enabled || !missing) return;
+    if (!missing) return;
     const requested = scopeKey;
     mutation.mutate(missing, {
       // Two enqueues can be in flight when the selection moves while the first
@@ -62,11 +62,10 @@ export function useRangeProjection(
     // `missing` is a stable string pair derived from the response; re-running
     // on the mutation object itself would loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope.enabled, workspaceId, projectId, missing?.from, missing?.to]);
+  }, [workspaceId, projectId, missing?.from, missing?.to]);
 
   const task = useQuery({
     ...performanceQueries.rangeTask(scope, pending),
-    enabled: scope.enabled,
     refetchInterval: (query) => pollRangeTask(query.state.data?.status),
   });
 

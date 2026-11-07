@@ -5,6 +5,8 @@ import { useId, useState } from 'react';
 
 import { Button, IconButton } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { FilterTrigger } from '@/components/ui/filter-bar';
@@ -113,7 +115,7 @@ export function AddTopicDialog({
   /** Rejects when the create fails; the error is then shown from `error`. */
   onCreate: (name: string, parentId: string | null) => Promise<void>;
   isCreating?: boolean;
-  error?: string | null;
+  error?: MutationNoticeData | null;
 }>) {
   const formId = useId();
   const [name, setName] = useState('');
@@ -163,7 +165,7 @@ export function AddTopicDialog({
           void submit();
         }}
       >
-        {error ? <Callout tone="negative">{error}</Callout> : null}
+        {error ? <MutationNotice notice={error} /> : null}
         <Field label="Topic name" required>
           {(props) => (
             <Input
@@ -276,10 +278,9 @@ export function ManageTopicsDialog({
   onDelete: (topic: Topic) => void;
   onAdd: () => void;
   loadError?: boolean;
-  actionError?: string | null;
+  actionError?: MutationNoticeData | null;
 }>) {
   const ordered = orderTopicsForRail(topics);
-  const error = loadError ? TOPICS_LOAD_ERROR : actionError;
   return (
     <Dialog
       open={open}
@@ -295,7 +296,8 @@ export function ManageTopicsDialog({
         </>
       }
     >
-      {error ? <Callout tone="negative">{error}</Callout> : null}
+      {loadError ? <Callout tone="negative">{TOPICS_LOAD_ERROR}</Callout> : null}
+      {!loadError && actionError ? <MutationNotice notice={actionError} /> : null}
       {ordered.length ? (
         <TreeList label="Topics">
           {ordered.map(({ topic, nested, label }) => (

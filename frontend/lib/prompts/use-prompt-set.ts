@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 
 import { promptsMutations, promptsQueries } from '@/lib/api/prompts';
 import type { PromptSet } from '@citeladder/contracts';
-import { useActiveProject, useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * Resolve the active project's prompt set.
@@ -17,36 +17,29 @@ import { useActiveProject, useActiveWorkspaceId } from '@/lib/project/project-co
  * is the source of truth once loaded so a freshly-created set is picked up.
  */
 export function usePromptSet() {
-  const project = useActiveProject();
-  const workspaceId = useActiveWorkspaceId();
-  const projectId = project?.id ?? null;
-  // Disabled until a project is active, so the empty id never reaches the API.
-  const scope = { workspaceId, projectId: projectId ?? '' };
-  const available = Boolean(projectId && workspaceId);
+  const { workspaceId, projectId, project } = useProjectScope();
+  const scope = { workspaceId, projectId };
 
-  const listQuery = useQuery({
-    ...promptsQueries.sets(scope),
-    enabled: available,
-    // Seed from the embedded prompt sets so the table can render immediately.
-    initialData: project?.prompt_sets?.length ? project.prompt_sets : undefined,
-  });
-
-  const sets = listQuery.data ?? [];
+  const listQuery = useQuery(promptsQueries.sets(scope));
+  // The embedded prompt sets render the table until the list (and its form bounds) loads.
+  const embedded = project.prompt_sets;
+  const sets = listQuery.data?.prompt_sets ?? embedded;
   const promptSet: PromptSet | null = sets[0] ?? null;
 
   const createMutation = useMutation(promptsMutations.ensureSet(scope));
 
   const ensurePromptSet = useCallback((): Promise<PromptSet> => {
     if (promptSet) return Promise.resolve(promptSet);
-    if (!available) return Promise.reject(new Error('Project is not available.'));
     return createMutation.mutateAsync();
-  }, [promptSet, available, createMutation]);
+  }, [promptSet, createMutation]);
 
   return {
     projectId,
     promptSet,
     prompts: promptSet?.prompts ?? [],
-    isLoading: Boolean(projectId) && listQuery.isLoading,
+    /** Server-enforced bounds of the prompt forms; null until the list loads. */
+    limits: listQuery.data?.limits ?? null,
+    isLoading: listQuery.isLoading && !embedded.length,
     /** The list read's failure; null unless it failed. */
     error: listQuery.error,
     retry: () => void listQuery.refetch(),

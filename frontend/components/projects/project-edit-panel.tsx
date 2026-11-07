@@ -4,7 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { QueryState } from '@/components/ui/query-state';
 import { Button, IconButton } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
@@ -18,7 +18,7 @@ import { textRole } from '@/components/ui/typography';
 import { projectMutations } from '@/lib/api/projects';
 import { brandDiscoveryQueries } from '@/lib/api/brand-discoveries';
 import type { Project } from '@citeladder/contracts';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 
 import { MentionRuleFields, mentionRuleDraft, type MentionRuleDraft } from './mention-rule-fields';
@@ -184,7 +184,9 @@ export function ProjectEditPanel({
     >
       <Stack gap="workspace">
         {save.isError ? (
-          <Callout tone="negative">{humanizeApiError(save.error).message}</Callout>
+          <MutationNotice
+            notice={mutationNoticeForError(save.error, { action: 'save the project' })}
+          />
         ) : null}
 
         <Stack gap="workspace">
