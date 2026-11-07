@@ -497,7 +497,7 @@ describe('Agent runtime on PostgreSQL', () => {
       {
         error: false,
         content:
-          'Document 1: staged as a new document; it is saved with your reply. Now reply briefly; do not repeat the document.',
+          'Document 1: staged as a new document; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.',
       },
       {
         error: true,

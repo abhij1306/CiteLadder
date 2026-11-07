@@ -210,6 +210,11 @@ function normalized(
 const needsExtraction = (rule: Rule) =>
   rule.applicability_key.includes('html') || rule.applicability_key.includes('content');
 
+// The server-rendered content check is what detects a script-only shell, so that unreadable page
+// fails it instead of leaving it unknown. Other unavailable extractions stay unknown.
+const judgesShell = (rule: Rule, reason: string) =>
+  rule.rule_id === 'aeo.server_rendered_content' && reason === 'client_rendering_required';
+
 function runCheck(
   rule: Rule,
   facts: Facts,
@@ -276,8 +281,9 @@ function evaluateRule(rule: Rule, facts: Facts): RuleEvaluation {
   }
   const extraction = record(facts.extraction);
   const state = text(extraction.state);
-  if (state && state !== 'available' && needsExtraction(rule)) {
-    const reason = text(extraction.reason) || 'extraction_unavailable';
+  const unread = text(extraction.reason);
+  if (state && state !== 'available' && needsExtraction(rule) && !judgesShell(rule, unread)) {
+    const reason = unread || 'extraction_unavailable';
     return {
       ...base,
       ...membership(rule.rule_id),

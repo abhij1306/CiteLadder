@@ -35,6 +35,37 @@ const fixtureFacts = (name: string, url: string) =>
   extractPageFacts(fixture(name), { finalUrl: url, contentType: 'text/html' });
 
 describe('page checklist', () => {
+  it('fails a script-only shell on server-rendered content and leaves its other checks unknown', () => {
+    const bootstrap = `(()=>{${'window.__app=window.__app||{};'.repeat(30)}})();`;
+    const shell = (body: string) =>
+      analyzePage(
+        facts(
+          `<!doctype html><html><head><title>Store™</title></head><body>
+          <script>${bootstrap}</script><app-root></app-root>
+          <noscript><div>Please enable JavaScript to continue using this application.</div></noscript>
+          ${body}<script src="main.js" type="module"></script></body></html>`,
+          'https://example.test/services/returns',
+        ),
+        context,
+      );
+    const page = shell('');
+    const rows = byRule(page.evaluations);
+    const rendered = rows.get('aeo.server_rendered_content')!;
+    expect([rendered.outcome, rendered.evidence.word_count]).toEqual(['missing', 0]);
+    expect(createsIssue(rendered)).toBe(true);
+    const description = rows.get('technical.meta_description_present')!;
+    expect([description.outcome, description.reason_code]).toEqual([
+      'unknown',
+      'client_rendering_required',
+    ]);
+    // Before this rule could fail, a shell's determinate checks all passed and it scored 100.
+    expect(page.scores.aeo_readiness_score).toBeLessThan(100);
+
+    const copy = Array.from({ length: 40 }, (_, i) => `returns detail ${i}`).join(' ');
+    const readable = byRule(shell(`<main><h1>Returns</h1><p>${copy}</p></main>`).evaluations);
+    expect(readable.get('aeo.server_rendered_content')?.outcome).toBe('satisfied');
+  });
+
   it('keeps blog archives separate from authored articles and product categories', () => {
     const cards = Array.from(
       { length: 9 },
