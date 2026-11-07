@@ -51,6 +51,12 @@ export const analytics = {
 };
 export const referrals = {
   ...referralRuntime,
+  // Referral evidence is kept exactly as long as Performance can read it, so an
+  // in-window AI session is never re-counted as not AI after a sweep (OD7).
+  retention_days: Math.max(
+    trafficRuntime.TRAFFIC_MAX_WINDOW_DAYS,
+    trafficRuntime.PERFORMANCE_CUSTOM_RANGE_MAX_DAYS,
+  ),
   dimension_key_separator: integrations.dimension_separator,
   dimension_arity: Object.fromEntries(
     Object.values(referralRuntime.datasets).map((id) => [id, dimensionArity[id]]),

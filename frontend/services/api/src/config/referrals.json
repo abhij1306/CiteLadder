@@ -176,7 +176,6 @@
   ],
   "url_param_allowlist": ["ref"],
   "url_param_allowlist_prefixes": ["utm_"],
-  "retention_days": 90,
   "datasets": {
     "referrer_daily": "ga4_referrer_daily",
     "source_medium_daily": "ga4_source_medium_daily"
