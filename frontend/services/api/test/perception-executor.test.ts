@@ -27,6 +27,8 @@ const configuration = {
     extractor_version: 'perception-extract-test',
     template_version: 'perception-template-test',
     metrics_version: 'perception-metrics-test',
+    // The fake gateway's model.
+    model: 'test',
   },
 };
 const ANSWER = '😀 Acme is the best value pick. Rival support is slow.';
@@ -253,6 +255,22 @@ describe('perception executor', () => {
       (await perceptions(tenant.workspaceId)).map((row) => [row.outcome, row.outcome_reason]),
     ).toEqual([['unavailable', 'model_not_configured']]);
     expect((await queued(tenant.workspaceId)).map((row) => row.status)).toEqual(['succeeded']);
+  });
+
+  it('never classifies an audit with a model other than the one it froze', async () => {
+    const auditId = await fixtures.audit(tenant, {
+      configuration: {
+        ...configuration,
+        perception: { ...configuration.perception, model: 'frozen-model' },
+      },
+    });
+    await analysed(tenant, auditId, ANSWER);
+    const gateway = fakeGateway([goodOutput]);
+    await drain(tenant, gateway.factory);
+    expect(
+      (await perceptions(tenant.workspaceId)).map((row) => [row.outcome, row.outcome_reason]),
+    ).toEqual([['unavailable', 'model_changed']]);
+    expect(gateway.fetch).not.toHaveBeenCalled();
   });
 
   it('ends over the per-audit cap as platform_cap without failing the task or the audit', async () => {

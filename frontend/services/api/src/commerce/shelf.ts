@@ -87,7 +87,7 @@ type ShelfContext = {
   audit: Selectable<Audits>;
   target: { target_kind: string; target_id: string };
   catalog: FrozenShelfTarget;
-  versions: { parser: string; matcher: string };
+  versions: { parser: string; matcher: string; resolver: string };
   owned: string[];
   locale: string;
 };
@@ -156,18 +156,25 @@ async function observedCandidate(
   });
   return url ? findOrCreateCandidate(db, ctx, resolved, span.text, url) : null;
 }
-function observationClassification(matched: ShelfMatch, candidate: { id: string } | null) {
+/**
+ * An AI-observed candidate is classified by its review state when the answer
+ * is recorded: approved holds a slot like a frozen competitor, pending is its
+ * own class outside the share, and rejected is excluded from the shelf.
+ */
+function observationClassification(matched: ShelfMatch, candidate: { state: string } | null) {
   if (matched.product) return 'owned';
   if (matched.competitor) return 'approved_competitor';
-  return candidate ? 'ai_observed_competitor' : 'unresolved';
+  if (!candidate) return 'unresolved';
+  if (candidate.state === 'approved') return 'approved_competitor';
+  return candidate.state === 'rejected' ? 'rejected_competitor' : 'ai_observed_competitor';
 }
 async function recordObservation(
   db: Database,
   { task, audit, target, versions, locale }: ShelfContext,
-  { span, resolved, model }: PreparedItem,
+  { span, resolved, model, outcome }: PreparedItem,
   evidence: {
     matched: ShelfMatch;
-    candidate: { id: string; product_name: string; brand_name: string } | null;
+    candidate: { id: string; product_name: string; brand_name: string; state: string } | null;
     artifactId: string;
     answerText: string;
     citations: { id: string; url: string }[];
@@ -217,6 +224,9 @@ async function recordObservation(
       merchant_url: merchant.url,
       merchant_domain: merchant.domain,
       model_version: model,
+      resolver_outcome: outcome,
+      // The resolver's prompt template, recorded whenever its model was called.
+      resolver_template_version: model ? versions.resolver : null,
       match_confidence: matched.confidence,
       rank: span.rank,
       order_observable: span.orderObservable,
@@ -294,6 +304,10 @@ export async function prepareShelfExecution(
       typeof frozen.matcher_version === 'string'
         ? frozen.matcher_version
         : auditPolicy.commerce_versions.matcher_version,
+    resolver:
+      typeof frozen.resolver_template_version === 'string'
+        ? frozen.resolver_template_version
+        : auditPolicy.commerce_versions.resolver_template_version,
   };
   const locale = [config.language_code, config.country_code]
     .filter((value) => typeof value === 'string' && value)

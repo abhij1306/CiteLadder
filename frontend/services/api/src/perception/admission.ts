@@ -28,6 +28,9 @@ const versionsSchema = z.object({
   extractor_version: z.string().min(1),
   template_version: z.string().min(1),
   metrics_version: z.string().min(1),
+  // The gateway model at admission (empty when none was configured): the audit
+  // is classified by this model or not at all, so its results never mix models.
+  model: z.string(),
 });
 export type PerceptionVersions = z.infer<typeof versionsSchema>;
 
@@ -58,19 +61,21 @@ export function checkedTopics(factCheck: FrozenFactCheck): ReadonlySet<FactTopic
   );
 }
 
-/** What a new audit freezes: the versions in force now, for a brand audit only. */
-export function admittedPerceptionVersions(
-  auditScope: string,
-  factCheck: FrozenFactCheck | null = null,
-): PerceptionVersions | null {
-  if (auditScope !== policy.visibility.brand_audit_scope) return null;
+/** What a new audit freezes: the versions and gateway model in force now, for a brand audit only. */
+export function admittedPerceptionVersions(input: {
+  auditScope: string;
+  factCheck: FrozenFactCheck | null;
+  model: string;
+}): PerceptionVersions | null {
+  if (input.auditScope !== policy.visibility.brand_audit_scope) return null;
   const { extractor_version, template_version, metrics_version } = policy.perception;
   return {
     extractor_version,
-    template_version: factCheck
-      ? `${template_version}+${factCheck.claims_version}`
+    template_version: input.factCheck
+      ? `${template_version}+${input.factCheck.claims_version}`
       : template_version,
     metrics_version,
+    model: input.model,
   };
 }
 

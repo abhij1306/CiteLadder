@@ -169,7 +169,8 @@ export const actions = {
     site_health: 'next_crawl',
     link_graph: 'next_crawl',
     site_changes: 'next_crawl',
-    commerce: 'next_visibility_run',
+    // No check is frozen for a Commerce Action, so nothing promises a reading.
+    commerce: null,
   },
   CHECK_KIND_MEASUREMENT_LEG: {
     site_rule: 'next_crawl',

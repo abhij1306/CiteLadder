@@ -19,9 +19,11 @@ import { drainWorkspace } from './analytics-drain.ts';
 import { seedOpportunityScenario, type OpportunitySeed } from './opportunity-fixtures.ts';
 import { sourcePage } from './action-support.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
+import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
 const config = testConfig();
 const db = testDatabase(config);
+const visibility = new VisibilityFixtures(db);
 const app = createApp(config, db);
 const o = policy.opportunity.opportunities;
 const URL_B = 'https://acme.test/b';
@@ -108,6 +110,7 @@ afterAll(async () => {
     await db.deleteFrom('workspaces').where('id', '=', s.workspace_id).execute();
     await db.deleteFrom('users').where('id', '=', s.user_id).execute();
   }
+  await visibility.cleanup();
   await db.destroy();
 });
 
@@ -224,6 +227,79 @@ describe('opportunity_refresh', () => {
       .execute();
     await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
     expect(await snapshotCount(s)).toBe(before + 1);
+  });
+
+  /** A completed Commerce run whose one product was never named. */
+  async function unseenProductRun(tenant: Tenant, completedAt: Date) {
+    const auditId = await visibility.audit(tenant, { scope: 'commerce', completedAt });
+    const productId = randomUUID();
+    await db
+      .insertInto('commerce_shelf_snapshots')
+      .values({
+        id: randomUUID(),
+        workspace_id: tenant.workspaceId,
+        project_id: tenant.projectId,
+        audit_id: auditId,
+        target_kind: 'product',
+        target_id: productId,
+        product_visibility: 0,
+        share_of_shelf: null,
+        average_shelf_position: null,
+        first_position_win_rate: null,
+        successful_execution_count: 2,
+        recognized_slot_count: 0,
+        ranked_execution_count: 0,
+        formula_version: 'commerce-shelf-formulas-1',
+        source_observation_ids: '[]',
+        context_snapshot: '{}',
+        created_at: new Date(),
+      })
+      .execute();
+    return productId;
+  }
+
+  it('keeps brand and Commerce Actions when a Commerce run follows the brand run', async () => {
+    const s = await seed();
+    const tenant = { userId: s.user_id, workspaceId: s.workspace_id, projectId: s.project_id };
+    // Completed after the seed's brand run, so it is the project's newest run of any scope.
+    const productId = await unseenProductRun(tenant, new Date(Date.now() + 60_000));
+    await recomputeOpportunities(db, scope(s));
+    const rows = await live(s);
+    const rules = rows.map((row) => [row.rule_id, row.target_key]).toSorted();
+    expect(rules).toEqual([
+      ['brand_absent_high_value_prompt', `prompt:${s.prompt0_id}`],
+      ['content_structure_incomplete', expect.any(String)],
+      ['missing_structured_data', expect.any(String)],
+      ['owned_page_not_cited', expect.any(String)],
+      ['product_not_mentioned', `product:${productId}`],
+    ]);
+    const snapshot = await db
+      .selectFrom('opportunity_snapshots')
+      .select('audit_id')
+      .where('workspace_id', '=', s.workspace_id)
+      .orderBy('created_at', 'desc')
+      .executeTakeFirstOrThrow();
+    // The brand evidence still comes from the brand run.
+    expect(snapshot.audit_id).toBe(s.audit_id);
+  });
+
+  it('refreshes a project whose only source is Commerce when a newer Commerce run lands', async () => {
+    const tenant = await visibility.tenant();
+    const scoped = { workspaceId: tenant.workspaceId, projectId: tenant.projectId };
+    await unseenProductRun(tenant, new Date(Date.now() - 60_000));
+    await recomputeOpportunities(db, scoped);
+    const second = await unseenProductRun(tenant, new Date());
+    await recomputeOpportunities(db, scoped);
+
+    const rows = await db
+      .selectFrom('opportunities')
+      .select(['rule_id', 'target_key'])
+      .where('workspace_id', '=', tenant.workspaceId)
+      .where('superseded_at', 'is', null)
+      .execute();
+    expect(rows.map((row) => [row.rule_id, row.target_key])).toEqual([
+      ['product_not_mentioned', `product:${second}`],
+    ]);
   });
 
   it('lets exactly one of two concurrent workers claim a queued refresh', async () => {

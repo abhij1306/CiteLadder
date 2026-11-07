@@ -249,15 +249,52 @@ export function promptMetrics(rows: AggregateExecution[], config: ScoringConfig)
     })
     .sort((a, b) => b.composite_score - a.composite_score || a.prompt_index - b.prompt_index);
 }
+export type AnswerCounts = { answers: number; mentioned: number; cited: number };
+
+/** How many answers there are, and how many mentioned the brand or cited an owned domain. */
+export function answerCounts(
+  answers: readonly { brand_mentioned?: unknown; owned_domain_cited?: unknown }[],
+): AnswerCounts {
+  return {
+    answers: answers.length,
+    mentioned: answers.filter((answer) => Boolean(answer.brand_mentioned)).length,
+    cited: answers.filter((answer) => Boolean(answer.owned_domain_cited)).length,
+  };
+}
+
+/**
+ * Brand-mention and owned-citation rates: the one definition the run
+ * aggregate and every per-prompt, per-engine or pooled read share. No answer
+ * is no rate (null), never zero.
+ */
+export function answerRates({
+  answers,
+  mentioned,
+  cited,
+}: {
+  answers: number;
+  /** Null when the count was never recorded: its rate is unknown too. */
+  mentioned: number | null;
+  cited: number | null;
+}) {
+  return {
+    brand_mention_rate: mentioned === null ? null : rate(mentioned, answers),
+    owned_citation_rate: cited === null ? null : rate(cited, answers),
+  };
+}
+
 export function aggregateRun(rows: AggregateExecution[], config: ScoringConfig) {
   const scores = rows.map((row) => row.score),
     total = rows.length;
-  const mention = count(scores, 'brand_mentioned'),
-    owned = count(scores, 'owned_domain_cited');
+  const counted = answerCounts(scores);
+  const rates = answerRates(counted);
+  const mention = counted.mentioned,
+    owned = counted.cited;
   const queryScores = scores.filter(
     (s) => s.prompt_class === 'non_branded' && s.search_query_text_available === true,
   );
-  const queryCoverage = scores.filter((s) => s.search_query_text_available === true).length;
+  const queried = scores.filter((s) => s.search_query_text_available === true);
+  const queryCoverage = queried.length;
   const citations = sum(scores.map((s) => Number(s.citation_count) || 0)),
     ownedCitations = sum(scores.map((s) => Number(s.owned_citation_count) || 0));
   const classes: Record<string, number> = {};
@@ -270,8 +307,8 @@ export function aggregateRun(rows: AggregateExecution[], config: ScoringConfig) 
     brand_mention_count: mention,
     owned_citation_response_count: owned,
     observation_state: total ? 'measured' : 'no_observations',
-    brand_mention_rate: rate(mention, total),
-    owned_citation_rate: rate(owned, total),
+    brand_mention_rate: rates.brand_mention_rate,
+    owned_citation_rate: rates.owned_citation_rate,
     mention_to_owned_citation_conversion: rate(
       scores.filter((s) => s.brand_mentioned && s.owned_domain_cited).length,
       mention,
@@ -286,9 +323,11 @@ export function aggregateRun(rows: AggregateExecution[], config: ScoringConfig) 
       queryScores.length,
     ),
     search_use_rate: rate(count(scores, 'search_used'), total),
-    avg_queries_per_execution: total
-      ? round(sum(scores.map((s) => Number(s.search_query_count) || 0)) / total, 2)
-      : 0,
+    // Over the answers that exposed their search queries: an answer that hid
+    // them is unknown, not zero queries. Null when none exposed any.
+    avg_queries_per_execution: queryCoverage
+      ? round(sum(queried.map((s) => Number(s.search_query_count) || 0)) / queryCoverage, 2)
+      : null,
     unintended_domain_citation_rate: rate(count(scores, 'unintended_domain_cited'), total),
     ...citationAggregates(rows),
     competitor_mention_rate: Object.fromEntries(

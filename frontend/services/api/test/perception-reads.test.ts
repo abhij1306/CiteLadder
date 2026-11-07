@@ -18,6 +18,7 @@ const VERSIONS = {
   extractor_version: 'perception-extract-test',
   template_version: 'perception-template-test',
   metrics_version: 'perception-metrics-test',
+  model: 'test',
 };
 const CONFIGURATION = {
   brand_name: 'Acme',

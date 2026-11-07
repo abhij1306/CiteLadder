@@ -236,12 +236,14 @@ describe('verdict validation', () => {
         row.verdict,
         row.factRevisionIds,
         row.lowConfidence,
+        row.modelOmitted,
       ]),
     ).toEqual([
-      ['claim-a', 'contradicted', ['rev-price'], false],
-      ['claim-b', 'inconclusive', [], false],
-      ['claim-c', 'inconclusive', ['rev-price'], true],
-      ['claim-d', 'not_covered', [], false],
+      ['claim-a', 'contradicted', ['rev-price'], false, false],
+      ['claim-b', 'inconclusive', [], false, false],
+      ['claim-c', 'inconclusive', ['rev-price'], true, false],
+      // The model left claim-d out: flagged, so it never reads as "no fact covers it".
+      ['claim-d', 'not_covered', [], false, true],
     ]);
     expect(result.drops).toEqual({
       unknown_fact: 2,
@@ -366,7 +368,13 @@ describe('accuracy metrics', () => {
 
   it('derives a claim status from its own confidence, the frozen topics and the verification', () => {
     const verified = { outcome: 'verified', outcome_reason: null };
-    const supported = { verdict: 'supported' as const, low_confidence: false };
+    const supported = {
+      verdict: 'supported' as const,
+      low_confidence: false,
+      model_omitted: false,
+    };
+    // The placeholder verdict an omitted claim is stored with.
+    const omitted = { verdict: 'not_covered' as const, low_confidence: false, model_omitted: true };
     expect([
       claimStatus({
         lowConfidenceClaim: true,
@@ -398,12 +406,19 @@ describe('accuracy metrics', () => {
         verification: verified,
         verdict: supported,
       }),
+      claimStatus({
+        lowConfidenceClaim: false,
+        topicHasFact: true,
+        verification: verified,
+        verdict: omitted,
+      }),
     ]).toEqual([
       { kind: 'low_confidence' },
       { kind: 'verdict', verdict: 'not_covered' },
       { kind: 'pending' },
       { kind: 'unavailable', reason: 'model_not_configured' },
       { kind: 'verdict', verdict: 'supported' },
+      { kind: 'unavailable', reason: 'model_omitted' },
     ]);
   });
 });

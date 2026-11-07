@@ -655,7 +655,12 @@ it('serves answer perception with the same numbers as the Perception read, and i
   const auditId = await fixtures.audit(tenant, {
     configuration: {
       brand_name: 'Acme',
-      perception: { extractor_version: 'mcp-test', template_version: 't', metrics_version: 'm' },
+      perception: {
+        extractor_version: 'mcp-test',
+        template_version: 't',
+        metrics_version: 'm',
+        model: 'test',
+      },
     },
   });
   const { taskId, analysisId } = await fixtures.execution(tenant, { auditId, analysis: {} });

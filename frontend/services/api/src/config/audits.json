@@ -314,6 +314,7 @@
     "template_version": "commerce-buyer-prompts-1",
     "parser_version": "commerce-recommendation-parser-1",
     "matcher_version": "commerce-recommendation-matcher-1",
-    "formula_version": "commerce-shelf-formulas-1"
+    "formula_version": "commerce-shelf-formulas-1",
+    "resolver_template_version": "commerce-shelf-resolver-1"
   }
 }

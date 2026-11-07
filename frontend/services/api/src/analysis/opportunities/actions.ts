@@ -89,10 +89,12 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
       compareText(a.opportunity_id, b.opportunity_id),
   );
   const familyMap: Record<string, string> = p.RULE_EVIDENCE_FAMILY;
-  const legMap: Record<string, string> = p.FAMILY_MEASUREMENT_LEG;
+  // A family with no frozen check (null) promises no reading.
+  const legMap: Record<string, string | null> = p.FAMILY_MEASUREMENT_LEG;
   const families = p.EVIDENCE_FAMILIES.filter((f) =>
     ordered.some((m) => familyMap[m.rule_id] === f),
   );
+  const legs = families.flatMap((f) => legMap[f] ?? []);
   const branch = selectApproach(
     ordered.map((m) => m.rule_id),
     t.kind,
@@ -120,7 +122,7 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
       approach: branch.approach,
       skill_id: branch.skill_id,
       donts: [...branch.donts],
-      measure_with: [...new Set(families.map((f) => legMap[f]))],
+      measure_with: [...new Set(legs)],
       versions: {
         grouping: p.ACTION_GROUPING_VERSION,
         diagnosis: p.ACTION_DIAGNOSIS_VERSION,

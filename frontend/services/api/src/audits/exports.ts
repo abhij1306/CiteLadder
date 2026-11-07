@@ -196,7 +196,7 @@ async function markdownExport(db: Database, tasks: ExportTask[], audit: ExportAu
   ])
     lines.push(`| ${label} | ${pct(summary[key!])} |`);
   lines.push(
-    `| Avg. search queries / answer | ${scalarText(summary.avg_queries_per_execution ?? 0)} |`,
+    `| Avg. search queries / answer | ${typeof summary.avg_queries_per_execution === 'number' ? scalarText(summary.avg_queries_per_execution) : '—'} |`,
     `| Paid-list token cost estimate | ${usd(cost.paid_list_token_estimate_usd)} |`,
     `| Grounding cost if outside free allowance | ${usd(cost.grounding_cost_if_billable_usd)} |`,
   );

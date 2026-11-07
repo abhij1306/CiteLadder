@@ -58,7 +58,7 @@ type Outcome =
   | { outcome: 'no_mentions' }
   | {
       outcome: 'unavailable';
-      reason: 'platform_cap' | 'model_not_configured' | 'task_failed';
+      reason: 'platform_cap' | 'model_not_configured' | 'task_failed' | 'model_changed';
     }
   | { outcome: 'invalid_output' }
   | { outcome: 'model_error'; reason: string };
@@ -149,6 +149,7 @@ function persist(
             label: entity.label,
             confidence: entity.confidence,
             low_confidence: entity.low_confidence,
+            model_omitted: entity.model_omitted,
             passage_spans: JSON.stringify(entity.passage_spans),
             aspects: JSON.stringify(entity.aspects),
           })),
@@ -242,6 +243,9 @@ export function answerPerception(
     if (capped) return settle({ outcome: 'unavailable', reason: 'platform_cap' });
     const raw = gatewayFactory();
     if (!raw) return settle({ outcome: 'unavailable', reason: 'model_not_configured' });
+    // The audit froze its model: another one never classifies its answers.
+    if (raw.model !== versions.model)
+      return settle({ outcome: 'unavailable', reason: 'model_changed' });
     // Included in the prompt run: recorded with its tokens, not charged.
     const gateway = meterFor(db, task.workspace_id).gateway(raw, 'answer_perception');
     const config = scoringConfig(subject.configuration);

@@ -27,12 +27,14 @@ import {
   sharesCellContext,
   type ComparisonCell,
 } from './comparison.ts';
-import { ratio, round2 } from './metrics.ts';
+import { answerCounts, answerRates } from '../analysis/aggregate.ts';
+import { round2 } from './metrics.ts';
 import { runSetComparisonStatus } from './run-sets.ts';
 import { marketOf, type RunScope } from './runs.ts';
 import {
   AnalysisNotFoundError,
   authorizeRunSet,
+  latestBrandRunId,
   selectedCohorts,
   validateCohort,
   validateEngineAndRange,
@@ -96,20 +98,8 @@ async function attachActions(
     item.action_id = (item.prompt_id && byPrompt.get(item.prompt_id)) || null;
 }
 
-async function latestRunId(db: Database, scope: RunScope): Promise<string | null> {
-  const latest = await db
-    .selectFrom('audits')
-    .select('id')
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('market_id', 'is not distinct from', marketOf(scope))
-    .where('audit_scope', '=', visibility.brand_audit_scope)
-    .where('status', 'in', visibility.dashboard_audit_statuses)
-    .orderBy(sql`completed_at desc nulls last`)
-    .orderBy('created_at', 'desc')
-    .limit(1)
-    .executeTakeFirst();
-  return latest?.id ?? null;
+function latestRunId(db: Database, scope: RunScope): Promise<string | null> {
+  return latestBrandRunId(db, { ...scope, marketId: marketOf(scope) });
 }
 
 /** One run's prompts, strongest first; no run yet is an empty list. */
@@ -266,10 +256,26 @@ function poolStates(parts: readonly (AnswerStates | null | undefined)[]): Answer
   };
 }
 
+/** A row's rates from its counts, through the one rate owner (`answerRates`). */
+function countRates(
+  counts: Pick<Counts, 'responses' | 'brand_responses' | 'owned_citation_responses'>,
+) {
+  const rates = answerRates({
+    answers: counts.responses,
+    mentioned: counts.brand_responses,
+    cited: counts.owned_citation_responses,
+  });
+  return {
+    visibility_rate: rates.brand_mention_rate,
+    owned_citation_rate: rates.owned_citation_rate,
+  };
+}
+
 export function outcomeCounts(
   responses: readonly Pick<Response, 'brand_mentioned' | 'owned_domain_cited'>[],
   tasks: readonly Pick<Task, 'status'>[],
 ): Counts {
+  const answered = answerCounts(responses);
   return {
     state: responses.length ? 'measured' : 'no_observations',
     responses: responses.length,
@@ -277,8 +283,8 @@ export function outcomeCounts(
     failed: tasks.filter((task) => task.status === FAILED).length,
     // Anything that neither succeeded nor failed has not run.
     not_run: tasks.filter((task) => task.status !== SUCCEEDED && task.status !== FAILED).length,
-    brand_responses: responses.filter((row) => row.brand_mentioned).length,
-    owned_citation_responses: responses.filter((row) => row.owned_domain_cited).length,
+    brand_responses: answered.mentioned,
+    owned_citation_responses: answered.cited,
     entity_presences: null,
   };
 }
@@ -296,8 +302,7 @@ function outcome(engine: string, model: string, responses: Response[], tasks: Ta
     logical_engine: engine,
     transport_model: model,
     counts,
-    visibility_rate: ratio(counts.brand_responses, counts.responses),
-    owned_citation_rate: ratio(counts.owned_citation_responses, counts.responses),
+    ...countRates(counts),
     answer_states: answerStates(responses),
     gap_counts: gaps,
   };
@@ -435,8 +440,7 @@ async function enrichOutcomes(
     const answered = responses.get(item.prompt_index) ?? [];
     const promptTasks = tasks.get(item.prompt_index) ?? [];
     item.counts = outcomeCounts(answered, promptTasks);
-    item.visibility_rate = ratio(item.counts.brand_responses, item.counts.responses);
-    item.owned_citation_rate = ratio(item.counts.owned_citation_responses, item.counts.responses);
+    Object.assign(item, countRates(item.counts));
     item.answer_states = answerStates(answered);
     // Over the answers that named the brand: an unnamed answer has no rank.
     const ranked = answered.flatMap((row) => (row.avg_position === null ? [] : [row.avg_position]));
@@ -540,8 +544,7 @@ function poolPrompt(rows: readonly PromptRow[]): PromptRow {
       ...structuredClone(latest.item),
       source_audit_ids: [...new Set(rows.map((row) => row.item.audit_id))].sort(compareText),
       counts,
-      visibility_rate: ratio(counts.brand_responses, counts.responses),
-      owned_citation_rate: ratio(counts.owned_citation_responses, counts.responses),
+      ...countRates(counts),
       answer_states: poolStates(rows.map((row) => row.item.answer_states)),
       // A single run's score and movement mean nothing across a pool.
       composite_score: null,
@@ -566,8 +569,7 @@ function poolPrompt(rows: readonly PromptRow[]): PromptRow {
           logical_engine: entries[0].logical_engine,
           transport_model: entries[0].transport_model,
           counts: pooled,
-          visibility_rate: ratio(pooled.brand_responses, pooled.responses),
-          owned_citation_rate: ratio(pooled.owned_citation_responses, pooled.responses),
+          ...countRates(pooled),
           answer_states: poolStates(entries.map((entry) => entry.answer_states)),
           gap_counts: gaps,
         };

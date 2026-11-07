@@ -44,6 +44,9 @@ const REASON_COPY: Record<NonNullable<PerceptionResponse['reason']>, string> = {
   model_error: 'The classifier could not be reached for these answers.',
   task_failed: 'Classification stopped before it finished for these answers.',
   not_assessable: 'The answers did not say enough about you to judge their tone.',
+  model_omitted: 'The classifier left these businesses out of its answer.',
+  model_changed:
+    'The classifier model changed after these runs started, so they were not classified.',
 };
 
 /** The heading and sentence for a read that has no value to show. */
@@ -82,6 +85,8 @@ const UNAVAILABLE_SHORT: Record<NonNullable<PerceptionResponse['reason']>, strin
   model_error: 'classifier unreachable',
   task_failed: 'classification stopped',
   not_assessable: 'not assessable',
+  model_omitted: 'left out by the classifier',
+  model_changed: 'classifier model changed',
 };
 
 /** "N of M mentions classified", then every other bucket that is non-empty. */

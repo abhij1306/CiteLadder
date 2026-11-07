@@ -9,6 +9,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { utcText, utcTextOf } from '../db/timestamps.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
+import { latestBrandRunId } from '../visibility/selection.ts';
 
 export type Scope = { workspaceId: string; projectId: string };
 
@@ -47,15 +48,34 @@ function crawls(db: Database, scope: Scope) {
 export type AuditSource = NonNullable<Awaited<ReturnType<typeof resolveAudit>>>;
 export type CrawlSource = NonNullable<Awaited<ReturnType<typeof resolveCrawl>>>;
 
-/** The latest dashboard-ready audit, or null. */
+/**
+ * The latest dashboard-ready brand run of the project's default market, the
+ * one Visibility and Overview call "latest" (`latestBrandRunId`), or null.
+ */
 export async function resolveAudit(db: Database, scope: Scope) {
-  const latest = await audits(db, scope)
+  const id = await latestBrandRunId(db, { ...scope, marketId: null });
+  if (id === null) return null;
+  return (await audits(db, scope).where('id', '=', id).executeTakeFirst()) ?? null;
+}
+
+/**
+ * The latest dashboard-ready Commerce run of the project's default market, or
+ * null: Commerce hits read it explicitly, so a later brand run never hides them.
+ */
+export async function resolveCommerceAuditId(db: Database, scope: Scope): Promise<string | null> {
+  const latest = await new WorkspaceScope(scope.workspaceId)
+    .selectFrom(db, 'audits')
+    .select('id')
+    .where('project_id', '=', scope.projectId)
+    .where('audit_scope', '=', policy.audits.constants.audit_scope_commerce)
+    .where('market_id', 'is', null)
     .where('status', 'in', DASHBOARD_AUDIT_STATUSES)
     .orderBy(sql`completed_at desc nulls last`)
     .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
     .limit(1)
     .executeTakeFirst();
-  return latest ?? null;
+  return latest?.id ?? null;
 }
 
 /** The latest terminal crawl with usable evidence, or null. */

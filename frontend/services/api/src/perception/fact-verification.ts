@@ -23,7 +23,13 @@ import type { ModelGateway } from '../models/gateway.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { scalarText } from '../text-order.ts';
 import { payloadString, taskProject, type Executor } from '../workers/executor.ts';
-import { checkedTopics, factScope, frozenFactCheck, type FrozenFactCheck } from './admission.ts';
+import {
+  checkedTopics,
+  factScope,
+  frozenFactCheck,
+  frozenPerceptionVersions,
+  type FrozenFactCheck,
+} from './admission.ts';
 import {
   callStructured,
   configuredGateway,
@@ -46,7 +52,10 @@ const CALLED = ['verified', 'invalid_output', 'model_error'];
 
 type Outcome =
   | { outcome: 'verified'; verdicts: VerifiedVerdict[]; drops: Record<string, number> }
-  | { outcome: 'unavailable'; reason: 'platform_cap' | 'model_not_configured' | 'task_failed' }
+  | {
+      outcome: 'unavailable';
+      reason: 'platform_cap' | 'model_not_configured' | 'task_failed' | 'model_changed';
+    }
   | { outcome: 'invalid_output' }
   | { outcome: 'model_error'; reason: string };
 
@@ -162,6 +171,7 @@ function persist(
           fact_revision_ids: JSON.stringify(verdict.factRevisionIds),
           confidence: verdict.confidence,
           low_confidence: verdict.lowConfidence,
+          model_omitted: verdict.modelOmitted,
         })),
       )
       .execute();
@@ -221,6 +231,9 @@ export function factVerification(
     if (capped) return settle({ outcome: 'unavailable', reason: 'platform_cap' });
     const raw = gatewayFactory();
     if (!raw) return settle({ outcome: 'unavailable', reason: 'model_not_configured' });
+    // Verdicts compare under the audit's frozen model, so another one never checks its claims.
+    if (raw.model !== frozenPerceptionVersions(subject.configuration)?.model)
+      return settle({ outcome: 'unavailable', reason: 'model_changed' });
     // Included in the prompt run: recorded with its tokens, not charged.
     const gateway = meterFor(db, task.workspace_id).gateway(raw, 'fact_verification');
     const configuration = record(subject.configuration);

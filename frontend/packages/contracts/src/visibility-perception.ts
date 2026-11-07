@@ -20,7 +20,9 @@ const perceptionPolaritySchema = z.enum(['positive', 'negative']);
 
 // Why a mention has no usable label. `platform_cap` and `model_not_configured`
 // are bounded platform outcomes; `task_failed` is a worker that gave up;
-// `entity_limit` is a business beyond the per-answer classification cap.
+// `entity_limit` is a business beyond the per-answer classification cap;
+// `model_omitted` a business the classifier was sent but left out of its
+// answer; `model_changed` a deployment model other than the one the audit froze.
 const perceptionUnavailableReasonSchema = z.enum([
   'model_not_configured',
   'platform_cap',
@@ -29,6 +31,8 @@ const perceptionUnavailableReasonSchema = z.enum([
   'model_error',
   'task_failed',
   'not_assessable',
+  'model_omitted',
+  'model_changed',
 ]);
 
 // `value`: at least one confident label. `pending`: mentions are waiting for

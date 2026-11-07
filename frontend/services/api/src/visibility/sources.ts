@@ -68,15 +68,12 @@ export type SourceQuery = {
 type RowFilters = Pick<SourceQuery, 'domain' | 'sourceClass' | 'standing'>;
 const UNFILTERED: RowFilters = { domain: null, sourceClass: null, standing: null };
 
-/** The selected runs, each with when it was observed. */
 /**
- * The selected brand runs, each with when it was observed. A commerce run
- * measures something else, so even when named it contributes no sources.
+ * The selected brand runs (`selectedRuns`), each with when it was observed. A
+ * commerce run measures something else, so even when named it contributes no sources.
  */
 const runsOf = (db: Database, selection: RunSelection) =>
-  selectedRuns(db, selection)
-    .where('audit.audit_scope', '=', policy.visibility.brand_audit_scope)
-    .select(['audit.id', observedAt.as('observed_at')]);
+  selectedRuns(db, selection).select(['audit.id', observedAt.as('observed_at')]);
 type Runs = ReturnType<typeof runsOf>;
 
 function sourcePosition(query: SourceQuery, filters: Record<string, unknown>) {

@@ -76,6 +76,7 @@ function frozenOf(configuration: unknown): Frozen | null {
 function identityOf({ versions, factCheck }: Frozen) {
   return JSON.stringify([
     versions.template_version,
+    versions.model,
     factCheck.verify_template_version,
     factCheck.metrics_version,
     factCheck.fact_set_hash,
@@ -134,7 +135,7 @@ async function claimsOf(
     (ids) =>
       db
         .selectFrom('claim_verdicts')
-        .select(['claim_id', 'verdict', 'low_confidence', 'fact_revision_ids'])
+        .select(['claim_id', 'verdict', 'low_confidence', 'model_omitted', 'fact_revision_ids'])
         .where('workspace_id', '=', workspaceId)
         .where('verification_id', 'in', ids)
         .execute(),
@@ -145,6 +146,7 @@ async function claimsOf(
       {
         verdict: claimVerdictSchema.parse(row.verdict),
         low_confidence: row.low_confidence,
+        model_omitted: row.model_omitted,
         revisionIds: revisionIdsSchema.parse(row.fact_revision_ids),
       },
     ]),
@@ -221,7 +223,6 @@ async function selectionAnswers(
   const scoped = await scopedSelection(db, selection);
   const rows = (
     await evidenceScope(db, scoped)
-      .where('audit.audit_scope', '=', policy.visibility.brand_audit_scope)
       .select([
         'ra.id',
         'ra.audit_id',

@@ -36,12 +36,13 @@ type Scope = Readonly<{ projectId: string; workspaceId: string }>;
 type ParamChange = (key: string, value: string, history?: UrlHistory) => void;
 const isRunning = (state: string | undefined) => state === 'queued' || state === 'running';
 
+// Each state reads as itself: waiting is not running, and unavailable is not a failure.
 const STATE_LABELS: Record<InternalLinkAnalysis['state'], string> = {
-  queued: 'Running',
+  queued: 'Queued',
   running: 'Running',
   completed: 'Complete',
   partial: 'Partial',
-  unavailable: 'Failed',
+  unavailable: 'Unavailable',
   cancelled: 'Cancelled',
   failed: 'Failed',
 };

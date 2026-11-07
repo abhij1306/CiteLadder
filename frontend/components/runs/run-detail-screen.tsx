@@ -9,7 +9,7 @@ import { RunActions, useRunExport } from '@/components/runs/progress-panel';
 import { RunDetailView } from '@/components/runs/run-detail-view';
 import { DetailScreen } from '@/components/layout/page-shell';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { queryKeys } from '@/lib/api/query-keys';
+import { AUDIT_RESULT_QUERY_ROOTS, queryKeys } from '@/lib/api/query-keys';
 import { runsApi } from '@/lib/api/runs';
 import { RUN_ACTIVE_POLL_MS } from '@/lib/config/runs';
 import { useProjectHref } from '@/lib/navigation/project-destination';
@@ -59,7 +59,9 @@ export function RunDetailScreen() {
         queryKey: queryKeys.runs.executions(runId),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.runs.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.visibility.all });
+      // A cancelled run finalizes what it measured: every audit-derived read refreshes.
+      for (const root of AUDIT_RESULT_QUERY_ROOTS)
+        void queryClient.invalidateQueries({ queryKey: root });
     },
   });
   const rerunFailuresMutation = useMutation({

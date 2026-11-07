@@ -44,8 +44,7 @@ function observation<Row extends { ownership: string }>(row: Row) {
 
 async function selectionAnswers(db: Database, selection: RunSelection) {
   const scoped = await scopedSelection(db, selection);
-  const scope = () =>
-    evidenceScope(db, scoped).where('audit.audit_scope', '=', policy.visibility.brand_audit_scope);
+  const scope = () => evidenceScope(db, scoped);
   // Each answer's ads at its own parser version, joined in SQL.
   const [rows, ads] = await Promise.all([
     scope()

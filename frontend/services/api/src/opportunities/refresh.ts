@@ -60,6 +60,7 @@ import {
   currentDemandSnapshot,
   latestSnapshot,
   resolveAudit,
+  resolveCommerceAuditId,
   resolveCrawl,
   type AuditSource,
   type CrawlSource,
@@ -119,10 +120,7 @@ async function auditHits(
   // Page-keyed, over the FULL eligible answer set rather than the gap prompts.
   hits.push(...(await earnedPageHits(db, scope, audit, visibility)));
   hits = hits.map((hit) => ({ ...hit, source_metric_ids: [metricId] }));
-  hits.push(
-    ...(await commerceHits(db, scope, audit.id)),
-    ...(await confirmedDeclineHits(db, scope.workspaceId, audit.id)),
-  );
+  hits.push(...(await confirmedDeclineHits(db, scope.workspaceId, audit.id)));
   return { audit, hits, sourceMix, limitations };
 }
 
@@ -151,6 +149,7 @@ async function sourcePagesRevision(db: Database, scope: Scope) {
  */
 async function resolveSources(db: Database, scope: Scope, at: Date): Promise<Sources> {
   const audit = await resolveAudit(db, scope);
+  const commerceAuditId = await resolveCommerceAuditId(db, scope);
   const crawl = await resolveCrawl(db, scope);
   const demand = await currentDemandSnapshot(db, scope);
   const gaps = await searchGapSource(db, scope, at);
@@ -161,6 +160,7 @@ async function resolveSources(db: Database, scope: Scope, at: Date): Promise<Sou
     gaps,
     identity: {
       audit_id: audit?.id ?? null,
+      commerce_audit_id: commerceAuditId,
       site_crawl_id: crawl?.id ?? null,
       demand_snapshot_id: demand?.id ?? null,
       demand_source_revision: demand?.source_hash ?? null,
@@ -186,6 +186,9 @@ async function collectHits(db: Database, scope: Scope, sources: Sources): Promis
     collected.sourceMix = found.sourceMix;
     collected.limitations.push(...found.limitations);
   }
+  // Commerce reads its own latest run, so brand and Commerce Actions never replace each other.
+  if (sources.identity.commerce_audit_id !== null)
+    collected.hits.push(...(await commerceHits(db, scope, sources.identity.commerce_audit_id)));
   if (sources.crawl !== null) {
     const site = await loadSiteEvidence(db, scope.workspaceId, sources.crawl);
     collected.hits.push(...detectSiteIssueOpportunities(site));
@@ -356,6 +359,7 @@ export async function recomputeOpportunities(
     const readGaps = Boolean(record(record(current?.coverage).source_identity).search_gap_revision);
     const empty =
       collected.audit === null &&
+      sources.identity.commerce_audit_id === null &&
       sources.crawl === null &&
       sources.demand === null &&
       sources.gaps === null &&

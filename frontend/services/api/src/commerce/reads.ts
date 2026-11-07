@@ -305,6 +305,8 @@ export async function shelf(
   >();
   let unresolved = 0;
   for (const row of observations) {
+    // A rejected candidate is excluded from the shelf, not an unresolved recommendation.
+    if (row.classification === 'rejected_competitor') continue;
     const identity = holderIdentity(row);
     const kind = shelfHolderSchema.shape.kind.safeParse(row.classification);
     if (identity === null || !kind.success) {

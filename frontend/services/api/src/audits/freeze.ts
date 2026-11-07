@@ -11,6 +11,7 @@ import { freezeCommerceContext } from '../commerce/audit-context.ts';
 import { frozenEntityMatching, projectEntityMatching } from '../analysis/entity-matching.ts';
 import { strings } from '../db/json.ts';
 import { admittedFactCheck, admittedPerceptionVersions } from '../perception/admission.ts';
+import { gatewaySettings } from '../models/gateway.ts';
 import { marketLabel } from '@citeladder/contracts/markets';
 import type { Market } from '../projects/markets.ts';
 import {
@@ -444,8 +445,12 @@ export async function prepareAudit(
     anthropic_max_uses: providerSettings.anthropicMaxUses,
     openai_max_tool_calls: providerSettings.openaiMaxToolCalls,
     slot_order_version: 'mt19937-v1',
-    // Perception results carry the versions in force at admission (brand audits only).
-    perception: admittedPerceptionVersions(input.audit_scope, factCheck),
+    // Perception results carry the versions and model in force at admission (brand audits only).
+    perception: admittedPerceptionVersions({
+      auditScope: input.audit_scope,
+      factCheck,
+      model: gatewaySettings().model,
+    }),
     // Fact-checking pilot: the confirmed fact revisions this audit checks against.
     fact_check: factCheck,
     panel_id: panelHash.slice(0, 16),
