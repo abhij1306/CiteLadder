@@ -19,7 +19,12 @@ import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { SiteCrawl } from '@citeladder/contracts';
 import { Tabs } from '@/components/ui/tabs';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
-import { DEFAULT_PAGES_SORT, statusLabel, type InventoryMode } from '@/lib/site-health/status';
+import {
+  CRAWL_STATES,
+  DEFAULT_PAGES_SORT,
+  statusLabel,
+  type InventoryMode,
+} from '@/lib/site-health/status';
 
 /**
  * Always-mounted inventory section of the canonical Site Health screen.
@@ -104,9 +109,7 @@ function DiscoveringInventory({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
       columns={DISCOVERED_COLUMNS}
       {...table}
       footer={
-        crawl.status === 'running' || crawl.status === 'queued'
-          ? 'More URLs appear as discovery continues.'
-          : undefined
+        CRAWL_STATES[crawl.status].active ? 'More URLs appear as discovery continues.' : undefined
       }
     >
       {page?.items.map((row) => (

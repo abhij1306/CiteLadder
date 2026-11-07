@@ -20,8 +20,7 @@ import {
 import { humanizeApiError } from '@/lib/api/errors';
 import { formatCount, formatShortDate } from '@/lib/format';
 import { DisplayTime } from '@/components/ui/display-time';
-import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
-import { isActiveSyncRun, isSyncInFlight, SYNC_RUN_BADGE } from '@/lib/integrations/sync-runs';
+import { isSyncInFlight, pollSyncRun, SYNC_RUN_STATES } from '@/lib/integrations/status';
 import { ControlRow } from '@/components/ui/control-row';
 import { FactList } from '@/components/ui/facts';
 import { IconTile } from '@/components/ui/icon';
@@ -47,16 +46,6 @@ const connectionAction = (
   error: mutation.error,
   mutate: run,
 });
-
-const SYNC_RUN_LABEL: Record<SyncRun['status'], string> = {
-  queued: 'Queued',
-  leased: 'Starting',
-  running: 'Running',
-  retry_wait: 'Retrying',
-  succeeded: 'Succeeded',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-};
 
 function waitingLabel(status: SyncRun['status']): string {
   if (status === 'leased') return 'assigned to a worker';
@@ -157,8 +146,8 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
   if (runActive)
     return (
       <>
-        <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
-          {SYNC_RUN_LABEL[run.status]}
+        <Badge variant="run-status" value={SYNC_RUN_STATES[run.status].badge}>
+          {SYNC_RUN_STATES[run.status].label}
         </Badge>
         <span className="truncate">
           {run.status === 'running' ? (
@@ -184,8 +173,8 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
     run.status === 'succeeded' ? `${rows} imported · ${window}` : run.error_detail || window;
   return (
     <>
-      <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
-        {SYNC_RUN_LABEL[run.status]}
+      <Badge variant="run-status" value={SYNC_RUN_STATES[run.status].badge}>
+        {SYNC_RUN_STATES[run.status].label}
       </Badge>
       <span className="truncate" title={result}>
         {result}
@@ -383,13 +372,10 @@ export function ConnectionRow({
     });
   const syncRunQuery = useQuery({
     ...integrationsQueries.sync(connection.workspace_id, connection.id, activeSyncId),
-    refetchInterval: (query) => {
-      const run = query.state.data;
-      return !run || isSyncInFlight(run) ? SYNC_RUN_POLL_MS : false;
-    },
+    refetchInterval: (query) => pollSyncRun(query.state.data),
   });
   const activeRun = syncRunQuery.data ?? null;
-  const runActive = activeRun !== null && isActiveSyncRun(activeRun.status);
+  const runActive = activeRun !== null && SYNC_RUN_STATES[activeRun.status].active;
   const runInFlight = activeRun !== null && isSyncInFlight(activeRun);
   // Pages read the projections, so they refresh once the reports are rebuilt.
   const runTerminal = activeRun !== null && !runInFlight;

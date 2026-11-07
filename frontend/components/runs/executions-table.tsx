@@ -16,11 +16,7 @@ import { formatCount } from '@/lib/format';
 import { productTransportLabel } from '@/lib/providers/catalog';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import type { Execution } from '@citeladder/contracts';
-import {
-  executionBadgeValue,
-  executionFailureReason,
-  executionStatusLabel,
-} from '@/lib/runs/status';
+import { EXECUTION_STATES, executionFailureReason, executionStatusLabel } from '@/lib/runs/status';
 
 const COLUMNS: readonly DataTableColumn[] = [
   { key: 'prompt', label: 'Prompt' },
@@ -108,7 +104,7 @@ function StatusBadge({ execution }: Readonly<{ execution: Execution }>) {
   return (
     <Badge
       variant="status"
-      value={executionBadgeValue(execution.status)}
+      value={EXECUTION_STATES[execution.status].badge}
       className="max-w-full"
       title={label}
     >

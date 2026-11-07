@@ -11,8 +11,7 @@ import {
 } from '@/lib/api/integrations';
 import { performanceMutations, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
-import { isSucceededSyncRun, isSyncInFlight } from '@/lib/integrations/sync-runs';
+import { isSyncInFlight, pollSyncRun } from '@/lib/integrations/status';
 
 /**
  * "Sync now" for the Performance surface: enqueue one integrations run per
@@ -61,10 +60,8 @@ export function usePerformanceSync(projectId: string | null) {
   const runQueries = useQueries({
     queries: runs.map((run) => ({
       ...integrationsQueries.sync(workspaceId, run.connection_id, run.sync_run_id),
-      refetchInterval: (query: { state: { data?: IntegrationSyncRun } }) => {
-        const result = query.state.data;
-        return !result || isSyncInFlight(result) ? SYNC_RUN_POLL_MS : false;
-      },
+      refetchInterval: (query: { state: { data?: IntegrationSyncRun } }) =>
+        pollSyncRun(query.state.data),
     })),
   });
   const enqueued = runs.length > 0;
@@ -75,9 +72,7 @@ export function usePerformanceSync(projectId: string | null) {
   // in it did — one failure is a failed batch.
   let outcome: 'succeeded' | 'failed' | null = null;
   if (settled) {
-    const allSucceeded = runQueries.every(
-      (query) => query.data && isSucceededSyncRun(query.data.status),
-    );
+    const allSucceeded = runQueries.every((query) => query.data?.status === 'succeeded');
     outcome = allSucceeded ? 'succeeded' : 'failed';
   }
   useRefreshWhenSettled(settled);

@@ -22,8 +22,8 @@ import {
   toRunOptions,
   type VisibilityTab,
 } from '@/lib/visibility/dashboard';
-import { shouldPollAudit } from '@/lib/runs/status';
-import { ACTIVE_RUN_POLL_MS, EVIDENCE_LIMIT } from '@/lib/config/operational';
+import { pollAudits } from '@/lib/runs/status';
+import { EVIDENCE_LIMIT } from '@/lib/config/operational';
 import {
   optionalStringUrlCodec,
   setUrlParams,
@@ -347,8 +347,7 @@ function useVisibilityRuns(requestScope: ProjectRequestScope, market: string | n
   const auditsQuery = useQuery({
     ...runsQueries.list({ workspaceId, projectId }),
     enabled: requestScope.enabled,
-    refetchInterval: (query) =>
-      query.state.data?.some((audit) => shouldPollAudit(audit.status)) ? ACTIVE_RUN_POLL_MS : false,
+    refetchInterval: (query) => pollAudits(query.state.data?.map((audit) => audit.status)),
   });
   // The run picker offers the selected market's runs only; markets never pool.
   const runOptions = useMemo(

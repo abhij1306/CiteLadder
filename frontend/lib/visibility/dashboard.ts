@@ -10,7 +10,7 @@
  * control is offered.
  */
 import { availabilityLabel, formatDisplayTimestamp } from '@/lib/format';
-import { shouldPollAudit } from '@/lib/runs/status';
+import { AUDIT_STATES } from '@/lib/runs/status';
 import type {
   AuditStatus,
   LogicalEngine,
@@ -135,7 +135,7 @@ export function findActiveRun(
   audits: ReadonlyArray<{ id: string; status: AuditStatus; created_at: string }>,
 ): ActiveRun | null {
   const active = audits
-    .filter((audit) => shouldPollAudit(audit.status))
+    .filter((audit) => AUDIT_STATES[audit.status].active)
     .slice()
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const newest = active[0];

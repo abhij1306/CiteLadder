@@ -1,3 +1,4 @@
+import { scoreBand, type ScoreBand } from '@/lib/score-band';
 import { cn } from '@/lib/utils';
 
 /**
@@ -9,10 +10,14 @@ export type ScoreTone = 'ink' | 'auto';
 
 type ScoreFill = 'ink' | 'positive' | 'warning' | 'negative';
 
+const BAND_FILL = {
+  high: 'positive',
+  mid: 'warning',
+  low: 'negative',
+} as const satisfies Record<ScoreBand, ScoreFill>;
+
 function scoreFill(tone: ScoreTone, value: number): ScoreFill {
-  if (tone === 'ink') return 'ink';
-  if (value >= 80) return 'positive';
-  return value >= 50 ? 'warning' : 'negative';
+  return tone === 'ink' ? 'ink' : BAND_FILL[scoreBand(value)];
 }
 
 export const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));

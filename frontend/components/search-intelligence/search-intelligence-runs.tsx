@@ -14,17 +14,8 @@ import { textRole } from '@/components/ui/typography';
 import type { SearchIntelligenceRun } from '@/lib/api/search-intelligence';
 import { formatCount } from '@/lib/format';
 import { words } from '@/lib/ai-traffic/vocabulary';
+import { SEARCH_RUN_STATES } from '@/lib/search-intelligence/status';
 import { reportedCost, runEstimate } from './search-intelligence-format';
-
-const RUN_STATUS_LABELS: Readonly<Record<string, string>> = {
-  succeeded: 'Complete',
-  partial: 'Stopped early',
-  failed: 'Failed',
-  uncertain: 'Outcome unknown',
-  cancelled: 'Cancelled',
-  queued: 'Queued',
-  running: 'Running',
-};
 
 /** Why an acquisition stopped, in the reader's terms. */
 const STOP_REASONS: Readonly<Record<string, string>> = {
@@ -56,7 +47,7 @@ export function RunNotice({
   cancelling: boolean;
 }>) {
   if (!run) return null;
-  if (run.status === 'queued' || run.status === 'running')
+  if (SEARCH_RUN_STATES[run.status].active)
     return (
       <Inline
         gap="compact"
@@ -79,7 +70,7 @@ export function RunNotice({
     <output className={panelClasses({ tone: 'none' }, 'type-body bg-warning-soft block')}>
       <Stack gap="tight">
         <p className={textRole('itemTitle')}>
-          Analysis {RUN_STATUS_LABELS[run.status]?.toLowerCase()}
+          Analysis {SEARCH_RUN_STATES[run.status].label.toLowerCase()}
         </p>
         <p className="text-ink-muted">
           {STOP_REASONS[run.error_code] ||
@@ -116,7 +107,7 @@ export function CostDetails({
           <Stack as="li" gap="compact" key={run.id} className={panelClasses({ tone: 'well' })}>
             <Stack gap="tight">
               <p className={textRole('itemTitle')}>
-                {words(run.action)} · {RUN_STATUS_LABELS[run.status] ?? run.status}
+                {words(run.action)} · {SEARCH_RUN_STATES[run.status].label}
               </p>
               <p className={textRole('caption')}>
                 <DisplayTime value={run.created_at} />

@@ -1,21 +1,24 @@
 import { describe, expect, it } from 'vite-plus/test';
 
+import { ACTIVE_RUN_POLL_MS } from '@/lib/config/operational';
+
 import {
-  auditBadgeValue,
+  AUDIT_STATES,
+  EXECUTION_STATES,
   classificationBadgeValue,
-  executionBadgeValue,
   executionFailureReason,
   executionStatusLabel,
   formatDateTime,
   isAuditCancelable,
+  pollAudits,
   schedulePauseReason,
-  shouldPollAudit,
 } from './status';
 
 describe('audit lifecycle decisions', () => {
-  it('keeps polling through reporting and stops at a terminal status', () => {
-    expect(shouldPollAudit('reporting')).toBe(true);
-    expect(shouldPollAudit('partially_completed')).toBe(false);
+  it('keeps polling while any run is reporting and stops once all are terminal', () => {
+    expect(pollAudits(['completed', 'reporting'])).toBe(ACTIVE_RUN_POLL_MS);
+    expect(pollAudits(['completed', 'partially_completed'])).toBe(false);
+    expect(pollAudits(undefined)).toBe(false);
   });
 
   it('cannot cancel a run that is already reporting', () => {
@@ -26,12 +29,12 @@ describe('audit lifecycle decisions', () => {
 
 describe('badge folding', () => {
   it('folds the extra audit statuses onto the badge space', () => {
-    expect(auditBadgeValue('partially_completed')).toBe('partial');
+    expect(AUDIT_STATES.partially_completed.badge).toBe('partial');
   });
 
   it('shows a failed execution as a danger and a waiting one as a warning', () => {
-    expect(executionBadgeValue('failed')).toBe('danger');
-    expect(executionBadgeValue('retry_wait')).toBe('warning');
+    expect(EXECUTION_STATES.failed.badge).toBe('danger');
+    expect(EXECUTION_STATES.retry_wait.badge).toBe('warning');
   });
 
   it('folds unintended owned citations onto the owned visual', () => {
@@ -44,7 +47,7 @@ describe('executionStatusLabel', () => {
     expect(executionStatusLabel('awaiting_provider_result', 'ChatGPT search')).toContain(
       'ChatGPT search',
     );
-    expect(executionStatusLabel('awaiting_provider_result')).not.toMatch(/undefined/);
+    expect(executionStatusLabel('awaiting_provider_result')).toBe('Waiting for the provider');
   });
 });
 

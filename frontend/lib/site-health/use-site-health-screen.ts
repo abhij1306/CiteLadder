@@ -26,7 +26,7 @@ import {
   DEFAULT_PAGES_SORT,
   inventoryModeForPhase,
   isCrawlStalled,
-  shouldPollCrawl,
+  CRAWL_STATES,
   type InventoryMode,
   type SiteHealthPhase,
 } from '@/lib/site-health/status';
@@ -61,7 +61,7 @@ export function pagePreviewQuery(workspaceId: string, dashboard: SiteHealthDashb
   return siteHealthQueries.pages(
     workspaceId,
     crawl.id,
-    monitoredPagePreviewParams(shouldPollCrawl(crawl)),
+    monitoredPagePreviewParams(CRAWL_STATES[crawl.status].active),
   );
 }
 
@@ -101,7 +101,7 @@ export function useSiteHealthScreen(projectId: string | null) {
   });
 
   const crawl: SiteCrawl | null = dashboardQuery.data?.crawl ?? null;
-  const active = crawl ? shouldPollCrawl(crawl) : false;
+  const active = crawl ? CRAWL_STATES[crawl.status].active : false;
   // Evidence-derived backend activity state; never inferred from client time.
   const stalled = isCrawlStalled(crawl);
   // THE phase, resolved server-side from the crawl and the project's monitored

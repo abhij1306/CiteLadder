@@ -21,10 +21,7 @@ import type { Audit } from '@citeladder/contracts';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useActiveProject } from '@/lib/project/project-context';
 import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
-import { shouldPollAudit } from '@/lib/runs/status';
-
-/** Poll interval (ms) for the runs list while any run is active. */
-const POLL_INTERVAL_MS = 3_000;
+import { AUDIT_STATES, pollAudits } from '@/lib/runs/status';
 
 type StatusFilter = 'all' | 'completed' | 'running' | 'failed';
 
@@ -42,7 +39,7 @@ const STATUS_FILTERS: {
   {
     id: 'running',
     label: 'Running',
-    match: (audit) => shouldPollAudit(audit.status),
+    match: (audit) => AUDIT_STATES[audit.status].active,
   },
   {
     id: 'failed',
@@ -64,10 +61,7 @@ export function RunsScreen() {
   const runsQuery = useQuery({
     ...runsQueries.list({ workspaceId: scope.workspaceId, projectId }),
     enabled: scope.enabled,
-    refetchInterval: (query) => {
-      const audits = query.state.data;
-      return audits?.some((audit) => shouldPollAudit(audit.status)) ? POLL_INTERVAL_MS : false;
-    },
+    refetchInterval: (query) => pollAudits(query.state.data?.map((audit) => audit.status)),
   });
 
   const audits = useMemo(() => runsQuery.data ?? [], [runsQuery.data]);
@@ -78,7 +72,7 @@ export function RunsScreen() {
       ),
     [audits, statusFilter],
   );
-  const anyActive = audits.some((audit) => shouldPollAudit(audit.status));
+  const anyActive = audits.some((audit) => AUDIT_STATES[audit.status].active);
 
   // Gate only on the runs list: the schedules query errors independently
   // (and refetches whenever its card remounts onto the errored cache entry),

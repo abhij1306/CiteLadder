@@ -20,12 +20,7 @@ import type { Audit } from '@citeladder/contracts';
 import { saveBlob } from '@/lib/download';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate, formatDisplayTime } from '@/lib/format';
-import {
-  auditBadgeValue,
-  auditStatusLabel,
-  isAuditCancelable,
-  shouldPollAudit,
-} from '@/lib/runs/status';
+import { AUDIT_STATES, isAuditCancelable } from '@/lib/runs/status';
 
 type ExportFormat = 'csv' | 'md';
 
@@ -116,8 +111,8 @@ function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: bo
   const engines = useEngineCatalog();
   return (
     <Inline className="flex-wrap">
-      <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
-        {auditStatusLabel(audit.status)}
+      <Badge variant="run-status" value={AUDIT_STATES[audit.status].badge}>
+        {AUDIT_STATES[audit.status].label}
       </Badge>
       <Badge>{marketLabel(audit.market)}</Badge>
       <MeasurementContext provenance={audit.model_provenance} />
@@ -219,7 +214,7 @@ export function ProgressPanel({
   rerunNotice?: MutationNoticeData | null;
   onRerunRetry?: () => void;
 }>) {
-  const polling = shouldPollAudit(audit.status);
+  const polling = AUDIT_STATES[audit.status].active;
 
   return (
     <Card>

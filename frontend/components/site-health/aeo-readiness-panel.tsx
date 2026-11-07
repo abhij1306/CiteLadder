@@ -17,6 +17,7 @@ import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { ReadinessCheck, ReadinessDimension } from '@citeladder/contracts';
+import { scoreBand } from '@/lib/score-band';
 import { formatScore, PLACEHOLDER } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import {
@@ -62,9 +63,9 @@ function dimensionState(dimension: ReadinessDimension): DimensionState {
   if (dimension.score === null) return 'Not measured';
   // Round prioritization bands for display. Passing below still requires an
   // actual perfect score over a complete measurement.
-  const score = Math.round(dimension.score);
-  if (score < 50) return 'Critical';
-  if (score < 80) return 'Needs work';
+  const band = scoreBand(Math.round(dimension.score));
+  if (band === 'low') return 'Critical';
+  if (band === 'mid') return 'Needs work';
   // A perfect score over an INCOMPLETE set is not a pass. Unresolved checks
   // cap the badge one band below, so "Passing" only ever means every
   // applicable check resolved and every one of them passed.

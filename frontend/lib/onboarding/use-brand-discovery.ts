@@ -11,6 +11,7 @@ import {
   brandDiscoveryQueries,
   type BrandDiscovery,
 } from '@/lib/api/brand-discoveries';
+import { isDiscoveryActive, pollDiscovery } from '@/lib/onboarding/discovery-activity';
 
 let fallbackOperationSequence = 0;
 
@@ -122,13 +123,10 @@ export function useBrandDiscovery(
     ...brandDiscoveryQueries.detail(workspaceId, String(discoveryId)),
     enabled: Boolean(discoveryId),
     initialData: started,
-    refetchInterval: (result) =>
-      result.state.data?.status === 'queued' || result.state.data?.status === 'running'
-        ? 1000
-        : false,
+    refetchInterval: (result) => pollDiscovery(result.state.data?.status),
   });
   const discovery = query.data ?? started;
-  const active = discovery?.status === 'queued' || discovery?.status === 'running';
+  const active = isDiscoveryActive(discovery?.status);
   const execution = useDiscoveryExecution(discoveryId, active, workspaceId);
   /** A new discovery from this one's input; a finished task is never reset. */
   const rerun = (onStarted?: () => void) => {

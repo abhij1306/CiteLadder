@@ -10,7 +10,7 @@ import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import type { Audit } from '@citeladder/contracts';
 import { marketLabel } from '@citeladder/contracts/markets';
-import { auditBadgeValue, auditStatusLabel, formatDateTime } from '@/lib/runs/status';
+import { AUDIT_STATES, formatDateTime } from '@/lib/runs/status';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 
 /** A launch's per-market runs arrive together; later rows point back to the first. */
@@ -82,8 +82,8 @@ export function RunsTable({
       {pagedAudits.map((audit, index) => (
         <TableRow key={audit.id}>
           <TableCell>
-            <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
-              {auditStatusLabel(audit.status)}
+            <Badge variant="run-status" value={AUDIT_STATES[audit.status].badge}>
+              {AUDIT_STATES[audit.status].label}
             </Badge>
           </TableCell>
           <TableCell>

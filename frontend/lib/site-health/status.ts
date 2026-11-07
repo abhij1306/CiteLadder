@@ -22,11 +22,10 @@ import type {
 } from '@citeladder/contracts';
 import type { PagesSort } from '@/lib/api/site-health';
 import type { RunStatusValue, StatusValue } from '@/components/ui/badge';
-import {
-  isActiveCrawl,
-  isTerminalCrawl,
-  type InternalLinkAnalysis,
-} from '@citeladder/contracts/site-health';
+import type { InternalLinkAnalysis } from '@citeladder/contracts/site-health';
+import { CRAWL_POLL_MS } from '@/lib/config/operational';
+import { RERUN_POLL_INTERVAL_MS } from '@/lib/config/site-health';
+import { pollWhileActive, type JobStates } from '@/lib/jobs/poll';
 import { availabilityLabel, formatCount, formatDisplayTimestamp } from '@/lib/format';
 import { titleCaseStatus } from '@/lib/utils';
 
@@ -37,6 +36,25 @@ const INTERNAL_LINK_REASON_LABELS: Record<string, string> = {
   interrupted_dispatch: 'interrupted requests',
   invalid_placement: 'missing or invalid placement answer',
 };
+
+/**
+ * Every internal-link analysis state. Each reads as itself: waiting is not
+ * running, and unavailable is not a failure. Only a queued or running
+ * analysis changes on its own, so only those poll.
+ */
+export const INTERNAL_LINK_STATES = {
+  queued: { label: 'Queued', badge: 'queued', active: true },
+  running: { label: 'Running', badge: 'running', active: true },
+  completed: { label: 'Complete', badge: 'completed', active: false },
+  partial: { label: 'Partial', badge: 'partial', active: false },
+  unavailable: { label: 'Unavailable', badge: 'draft', active: false },
+  cancelled: { label: 'Cancelled', badge: 'cancelled', active: false },
+  failed: { label: 'Failed', badge: 'failed', active: false },
+} as const satisfies JobStates<InternalLinkAnalysis['state'], RunStatusValue>;
+
+/** The analysis poll cadence: while the open analysis is still checking page pairs. */
+export const pollInternalLinks = (state: InternalLinkAnalysis['state'] | undefined) =>
+  pollWhileActive(INTERNAL_LINK_STATES, RERUN_POLL_INTERVAL_MS, state);
 
 export function internalLinkStateNotice(analysis: InternalLinkAnalysis) {
   const reasons = Object.entries(analysis.diagnostics?.reasons ?? {})
@@ -66,8 +84,19 @@ export const PLACEHOLDER = availabilityLabel('not_measured');
  */
 export const DEFAULT_PAGES_SORT: PagesSort = 'status';
 
-/** Poll cadence for the Site Health screen's active-crawl queries. */
-export const POLL_INTERVAL_MS = 4_000;
+/**
+ * Every overall crawl status: its label, its run-status badge, and whether the
+ * crawl still runs (so the screen keeps polling and the crawl can still be
+ * cancelled). Mirrors the contract's `ACTIVE_CRAWL_STATUSES`.
+ */
+export const CRAWL_STATES = {
+  queued: { label: 'Queued', badge: 'queued', active: true },
+  running: { label: 'Running', badge: 'running', active: true },
+  completed: { label: 'Completed', badge: 'completed', active: false },
+  partially_completed: { label: 'Partially Completed', badge: 'partial', active: false },
+  failed: { label: 'Failed', badge: 'failed', active: false },
+  cancelled: { label: 'Cancelled', badge: 'cancelled', active: false },
+} as const satisfies JobStates<CrawlOverallStatus, RunStatusValue>;
 
 /** Discovery sub-states that are terminal. */
 const TERMINAL_DISCOVERY: ReadonlySet<CrawlDiscoveryStatus> = new Set<CrawlDiscoveryStatus>([
@@ -85,11 +114,6 @@ const TERMINAL_ANALYSIS: ReadonlySet<CrawlAnalysisStatus> = new Set<CrawlAnalysi
   'cancelled',
 ]);
 
-/** True while the crawl page should keep polling `GET /site-crawls/{id}`. */
-export function shouldPollCrawl(crawl: Pick<SiteCrawl, 'status'>): boolean {
-  return !isTerminalCrawl(crawl.status);
-}
-
 /**
  * Poll cadence for an active crawl, backed off by how long it has been running.
  *
@@ -105,15 +129,16 @@ export function crawlPollInterval(
   crawl: Pick<SiteCrawl, 'status' | 'started_at' | 'created_at' | 'updated_at'>,
   now: number = Date.now(),
 ): number | false {
-  if (!shouldPollCrawl(crawl)) return false;
+  const base = pollWhileActive(CRAWL_STATES, CRAWL_POLL_MS, crawl.status);
+  if (base === false) return false;
   // Back off on how long the crawl has run. The backend activity projection
   // owns waiting/stalled semantics from leases and durable queue evidence.
   const startedAt = crawl.started_at ?? crawl.created_at;
   const running = _sinceMs(startedAt, now);
-  if (running === null) return POLL_INTERVAL_MS;
+  if (running === null) return base;
   if (running >= 5 * 60_000) return 30_000;
   if (running >= 60_000) return 10_000;
-  return POLL_INTERVAL_MS;
+  return base;
 }
 
 /** Elapsed ms since an ISO timestamp; null when unusable (skew, unparseable). */
@@ -131,13 +156,8 @@ export function isCrawlStalled(
   crawl: Pick<SiteCrawl, 'status' | 'counters'> | null,
   _now: number = Date.now(),
 ): boolean {
-  if (!crawl || !shouldPollCrawl(crawl)) return false;
+  if (!crawl || !CRAWL_STATES[crawl.status].active) return false;
   return crawl.counters.activity.state === 'stalled';
-}
-
-/** True when the crawl can still be cancelled cooperatively. */
-export function isCrawlCancelable(status: CrawlOverallStatus): boolean {
-  return isActiveCrawl(status);
 }
 
 export function isDiscoveryTerminal(status: CrawlDiscoveryStatus): boolean {
@@ -305,11 +325,6 @@ export function crawlDisplayStatus(
   return crawl.status === 'partially_completed' && crawl.partial_reason === 'discovery_incomplete'
     ? 'completed'
     : crawl.status;
-}
-
-/** Map an overall crawl status onto a run-status badge value. */
-export function crawlBadgeValue(status: CrawlOverallStatus): RunStatusValue {
-  return status === 'partially_completed' ? 'partial' : status;
 }
 
 /** Map a per-page analysis status onto a status-badge value. */

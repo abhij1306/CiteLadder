@@ -28,6 +28,7 @@ import {
 } from '@/lib/api/search-intelligence';
 import type { SearchReviewAction } from '@citeladder/contracts/search-intelligence-requests';
 import { searchMarketLabel } from '@/lib/config/search-intelligence';
+import { pollSearchRun } from '@/lib/search-intelligence/status';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
 import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
@@ -100,8 +101,7 @@ export function SearchIntelligencePage() {
   const readiness = useQuery({
     ...searchIntelligenceQueries.readiness(requestScope),
     enabled: requestScope.enabled,
-    refetchInterval: (query) =>
-      ['queued', 'running'].includes(query.state.data?.latest_run?.status ?? '') ? 5000 : false,
+    refetchInterval: (query) => pollSearchRun(query.state.data?.latest_run?.status),
   });
   const runsQuery = useQuery({
     ...searchIntelligenceQueries.runs(requestScope),

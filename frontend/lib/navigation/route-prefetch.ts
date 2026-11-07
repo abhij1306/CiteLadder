@@ -158,7 +158,7 @@ async function prefetchOverview(client: QueryClient, scope: ProjectScope) {
  */
 async function prefetchSiteHealth(client: QueryClient, scope: ProjectScope) {
   const { workspaceId } = scope;
-  const [{ siteHealthQueries }, { latestCrawlQueries }, screen, { shouldPollCrawl }] =
+  const [{ siteHealthQueries }, { latestCrawlQueries }, screen, { CRAWL_STATES }] =
     await Promise.all([
       import('@/lib/api/site-health-queries'),
       import('@/lib/api/site-health-latest-crawl'),
@@ -180,7 +180,7 @@ async function prefetchSiteHealth(client: QueryClient, scope: ProjectScope) {
   if (!latest) return;
   const { crawl_id: crawlId, crawl_status: status, ...page } = latest;
   const key = siteHealthQueries.pages(workspaceId, crawlId, params).queryKey;
-  if (!shouldPollCrawl({ status }) && client.getQueryData(key) === undefined)
+  if (!CRAWL_STATES[status].active && client.getQueryData(key) === undefined)
     client.setQueryData(key, page);
 }
 

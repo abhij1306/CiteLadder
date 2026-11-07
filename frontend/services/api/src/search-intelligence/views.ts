@@ -3,6 +3,7 @@ import {
   searchDatasetSchema,
   type searchRowSchema,
   type searchRunSchema,
+  searchRunStatusSchema,
 } from '@citeladder/contracts/search-intelligence';
 import type { Selectable } from 'kysely';
 import type { z } from 'zod';
@@ -27,7 +28,8 @@ const iso = (value: Date | null): string | null => value?.toISOString() ?? null;
 export function runView(run: Run): z.input<typeof searchRunSchema> {
   return {
     id: run.id,
-    status: run.status,
+    // The column is plain text; a value outside the published lifecycle is a defect, not a status.
+    status: searchRunStatusSchema.parse(run.status),
     action: run.action,
     pricing_version: run.pricing_version,
     estimated_cost_usd: run.estimated_cost_usd,

@@ -10,15 +10,11 @@ import { RunDetailView } from '@/components/runs/run-detail-view';
 import { DetailScreen } from '@/components/layout/page-shell';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { runsMutations, runsQueries } from '@/lib/api/runs';
-import { RUN_ACTIVE_POLL_MS } from '@/lib/config/runs';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useRunEvents } from '@/lib/runs/use-run-events';
 import { useRunExecutions } from '@/lib/runs/use-run-executions';
-import { shouldPollAudit } from '@/lib/runs/status';
-
-/** Poll interval (ms) while a run is active. Polling remains the baseline. */
-const POLL_INTERVAL_MS = RUN_ACTIVE_POLL_MS;
+import { AUDIT_STATES, pollAudits } from '@/lib/runs/status';
 
 /** Active-run progress, cancellation, failed-execution reruns, and evidence selection. */
 export function RunDetailScreen() {
@@ -34,13 +30,11 @@ export function RunDetailScreen() {
   const auditQuery = useQuery({
     ...runsQueries.detail(workspaceId, runId),
     enabled: workspaceId !== null,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status && shouldPollAudit(status) ? POLL_INTERVAL_MS : false;
-    },
+    // Polling remains the baseline; the run's event stream only accelerates it.
+    refetchInterval: (query) => pollAudits(query.state.data?.status),
   });
 
-  const active = auditQuery.data ? shouldPollAudit(auditQuery.data.status) : false;
+  const active = auditQuery.data ? AUDIT_STATES[auditQuery.data.status].active : false;
 
   // Only the audit row polls; the executions list follows its progress.
   const executionsQuery = useRunExecutions(runId, auditQuery.data);

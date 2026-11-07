@@ -9,6 +9,7 @@ import {
   refreshPerformance,
   type PerformanceDashboard,
 } from '@/lib/api/performance';
+import { pollRangeTask, RANGE_TASK_STATES } from '@/lib/performance/status';
 import type { ProjectRequestScope } from '@/lib/project/request-scope';
 
 /**
@@ -66,19 +67,14 @@ export function useRangeProjection(
   const task = useQuery({
     ...performanceQueries.rangeTask(scope, pending),
     enabled: scope.enabled,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status === 'succeeded' || status === 'failed' || status === 'cancelled' ? false : 1500;
-    },
+    refetchInterval: (query) => pollRangeTask(query.state.data?.status),
   });
 
   const status = task.data?.status;
-  const terminal = status === 'succeeded' || status === 'failed' || status === 'cancelled';
+  const terminal = status !== undefined && !RANGE_TASK_STATES[status].active;
   useEffect(() => {
-    // EVERY terminal status releases the poll — a failed or cancelled task
-    // that stayed pending would leave the surface reporting work that has
-    // already stopped. Only a success changed a projection, so only a
-    // success invalidates.
+    // EVERY terminal status releases the pending task, not only a success.
+    // Only a success changed a projection, so only a success invalidates.
     if (!terminal) return;
     setQueued(null);
     if (status === 'succeeded') void refreshPerformance(queryClient, projectId);

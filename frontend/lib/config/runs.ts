@@ -6,9 +6,6 @@
  * UI notices a change — never whether it eventually does.
  */
 
-/** Poll cadence while a run is active. Unchanged from the pre-stream default. */
-export const RUN_ACTIVE_POLL_MS = 3_000;
-
 /**
  * Events arrive in bursts (one per task). Coalesce them into a single
  * invalidation so a 60-task run does not trigger 60 refetches.

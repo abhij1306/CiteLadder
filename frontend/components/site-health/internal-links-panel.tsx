@@ -22,38 +22,29 @@ import type { ActionStatus } from '@/lib/api/actions';
 import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
 import { internalLinksMutations, internalLinksQueries } from '@/lib/api/site-health-internal-links';
 import type { UrlHistory } from '@/lib/navigation/url-state';
-import { RERUN_POLL_INTERVAL_MS } from '@/lib/config/site-health';
 import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
 import { downloadInternalLinksCsv } from '@/lib/site-health/internal-link-csv';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatCount, formatDisplayTimestamp, readableUrl } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
-import { internalLinkStateNotice } from '@/lib/site-health/status';
+import {
+  INTERNAL_LINK_STATES,
+  internalLinkStateNotice,
+  pollInternalLinks,
+} from '@/lib/site-health/status';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { InternalLinkReview } from './internal-link-review';
 
 type Scope = Readonly<{ projectId: string; workspaceId: string }>;
 type ParamChange = (key: string, value: string, history?: UrlHistory) => void;
-const isRunning = (state: string | undefined) => state === 'queued' || state === 'running';
-
-// Each state reads as itself: waiting is not running, and unavailable is not a failure.
-const STATE_LABELS: Record<InternalLinkAnalysis['state'], string> = {
-  queued: 'Queued',
-  running: 'Running',
-  completed: 'Complete',
-  partial: 'Partial',
-  unavailable: 'Unavailable',
-  cancelled: 'Cancelled',
-  failed: 'Failed',
-};
+const isRunning = (state: InternalLinkAnalysis['state']) => INTERNAL_LINK_STATES[state].active;
 
 function useInternalLinks(scope: Scope, update: ParamChange) {
   const [params] = useSearchParams();
   const analysisId = params.get('analysis') || undefined;
   const query = useQuery({
     ...internalLinksQueries.analysis(scope, analysisId),
-    refetchInterval: (current) =>
-      isRunning(current.state.data?.analysis?.state) ? RERUN_POLL_INTERVAL_MS : false,
+    refetchInterval: (current) => pollInternalLinks(current.state.data?.analysis?.state),
   });
   const denied = [401, 403, 404].includes(httpErrorStatus(query.error) ?? 0);
   const data = denied ? undefined : query.data;
@@ -173,7 +164,7 @@ function LinksHeader({
           onValueChange={(value) => update('analysis', value)}
           options={data.history.map((run) => ({
             value: run.id,
-            label: `${formatDisplayTimestamp(run.created_at, timeZone)} · ${STATE_LABELS[run.state]}`,
+            label: `${formatDisplayTimestamp(run.created_at, timeZone)} · ${INTERNAL_LINK_STATES[run.state].label}`,
           }))}
         />
       ) : null}
