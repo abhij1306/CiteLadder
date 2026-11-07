@@ -1,5 +1,6 @@
 import { createHmac, hkdfSync } from 'node:crypto';
 import { z } from 'zod';
+import { casefold } from '../casefold.ts';
 import { policy } from '../config.ts';
 import { createSecretCipher } from '../integrations/fernet.ts';
 
@@ -22,16 +23,12 @@ export function dataforseoSecretIdentity(packed: string, encryptionKey: string) 
   }
   const result = credential.safeParse(payload);
   if (!result.success) throw new Error('Stored DataForSEO credential is unreadable');
-  const overrides: Record<string, string> = policy.dataforseo.casefold_overrides;
   const characters = Array.from(result.data.login);
   let start = 0,
     end = characters.length;
   while (start < end && stripCharacters.has(characters[start]!)) start += 1;
   while (end > start && stripCharacters.has(characters[end - 1]!)) end -= 1;
-  const login = characters
-    .slice(start, end)
-    .map((char) => overrides[char] ?? char.toLowerCase())
-    .join('');
+  const login = casefold(characters.slice(start, end).join(''));
   const key = hkdfSync(
     'sha256',
     Buffer.from(encryptionKey, 'utf8'),

@@ -7,7 +7,7 @@ import { loadWorkerSettings, policy, resolveSettingSpec } from '../src/config.ts
 import { integrationSettings } from '../src/integrations/config.ts';
 import { validateReferralRules } from '../src/config/referral-rules.ts';
 import { generationSystemPrompt } from '../src/config/prompt-generation.ts';
-import { publicUrl } from '../src/projects/safe-fetch.ts';
+import { publicUrl } from '../src/safe-fetch.ts';
 
 it.each(['https://example..com/', 'https://.example.com/'])(
   'rejects malformed DNS labels before acquisition: %s',

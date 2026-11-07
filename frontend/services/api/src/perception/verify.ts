@@ -12,7 +12,7 @@ import { claimVerdictSchema } from '@citeladder/contracts/fact-checking';
 import { z } from 'zod';
 
 import type { FactCheckPolicy } from '../config/perception.ts';
-import { canonicalJson } from '../search-intelligence/requests.ts';
+import { canonicalJson } from '../canonical-json.ts';
 
 export type VerifyFact = { revisionId: string; topic: FactTopic; statement: string };
 export type VerifyClaim = { claimId: string; topic: FactTopic; claim: string; quote: string };

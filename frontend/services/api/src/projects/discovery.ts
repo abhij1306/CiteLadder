@@ -21,7 +21,7 @@ import {
   type DiscoveryCompletion,
   type DiscoveryInput,
 } from './discovery-inputs.ts';
-import { websiteIdentity } from './safe-fetch.ts';
+import { websiteIdentity } from '../safe-fetch.ts';
 import { insertProject } from './service.ts';
 
 export type DiscoveryRow = Selectable<BrandDiscoveries>;

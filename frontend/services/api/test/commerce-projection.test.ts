@@ -10,6 +10,7 @@ import {
   productCategories,
   productFacts,
   readFacts,
+  shelfLinks,
 } from '../src/commerce/projection-facts.ts';
 import { catalog } from '../src/commerce/reads.ts';
 import { record } from '../src/db/json.ts';
@@ -372,6 +373,23 @@ describe('projection decisions over stored facts', () => {
         'https://shop.example.com/products/old',
       ),
     ).toBe('https://shop.example.com/products/widget');
+  });
+  it("links shelves and products in Site Health's URL identity across escapes and repeated keys", () => {
+    const base = 'https://shop.example.com/collections/tools';
+    const facts = readFacts({
+      commerce: {
+        product_cards: [
+          { url: '/products/%7ewidget?b=2&a=1&a=0' },
+          { url: 'https://shop.example.com/products/~widget?a=0&b=2&a=1&utm_source=x' },
+        ],
+      },
+    });
+    expect(shelfLinks(facts, base)).toEqual([
+      'https://shop.example.com/products/~widget?a=0&a=1&b=2',
+    ]);
+    expect(pageIdentity(readFacts({ canonical_url: '/products/%7Ewidget?a=1&a=0' }), base)).toBe(
+      'https://shop.example.com/products/~widget?a=0&a=1',
+    );
   });
   it.each(['from $29.99', 'up to $40', '$40 $20', 'Save 20%', '$1,23,4'])(
     'does not invent product identity from an ambiguous price: %s',

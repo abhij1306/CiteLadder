@@ -1,7 +1,5 @@
 import type { Database } from '../db/database.ts';
 import { normalizeDomain } from '../analysis/domains.ts';
-import { canonicalPage } from '../traffic/normalization.ts';
-import { pathIdentity } from '../crawl-logs/identity.ts';
 
 /**
  * The registrable site of a URL, property or bare host: lower-cased, with
@@ -56,13 +54,4 @@ export async function projectHosts(db: Database, workspaceId: string, projectId:
   // Callers hold a run or task for this project; its loss fails that work.
   if (!sites) throw new Error('The project no longer exists in this workspace');
   return new Set([...sites].flatMap((site) => [site, `www.${site}`]));
-}
-export function landingPage(path: string, host: string, hosts: ReadonlySet<string>) {
-  const normalizedHost = host.toLowerCase();
-  if (!hosts.has(normalizedHost) || path === '(not set)') return null;
-  const origin = `https://${normalizedHost}`;
-  const page = canonicalPage(path.split(/[?#]/u)[0]!, origin);
-  return page && new URL(page).origin === origin && pathIdentity(page, origin)?.identity === 'exact'
-    ? page
-    : null;
 }

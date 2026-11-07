@@ -18,7 +18,7 @@ import {
   type ResearchTransport,
 } from './research-evidence.ts';
 import type { ResolvedSite } from './site-resolution.ts';
-import { fetchWebsite, websiteIdentity, type WebsiteFetcher } from './safe-fetch.ts';
+import { fetchWebsite, websiteIdentity, type WebsiteFetcher } from '../safe-fetch.ts';
 import type { Meter } from '../models/metering.ts';
 
 const cfg = policy.discovery.constants;

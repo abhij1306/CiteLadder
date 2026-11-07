@@ -1,5 +1,5 @@
 import { policy } from '../../config.ts';
-import { round } from '../../demand/projection.ts';
+import { roundScaled } from '../../numbers.ts';
 import { normalizedUrlForCompare } from '../url-compare.ts';
 import { rules } from './detectors.ts';
 import { compareText } from '../../text-order.ts';
@@ -105,7 +105,7 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
     families,
     // The strongest finding ranks the Action. Agreement is not rewarded: most
     // findings on a page come from the one crawl, so a count would double it.
-    priority_score: round(ordered[0].priority_score, p.ACTION_PRIORITY_ROUNDING_DECIMALS),
+    priority_score: roundScaled(ordered[0].priority_score, p.ACTION_PRIORITY_ROUNDING_DECIMALS),
     approach: branch.approach,
     skill_id: branch.skill_id,
     diagnosis: {

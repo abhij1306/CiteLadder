@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { Database } from '../db/database.ts';
-import { hash } from '../traffic/normalization.ts';
+import { hash } from '../crypto-text.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { recordSecurityEvent } from '../auth/security-events.ts';

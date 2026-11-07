@@ -1,5 +1,5 @@
 import { afterAll, expect, it, vi } from 'vitest';
-import * as safeFetch from '../src/projects/safe-fetch.ts';
+import * as safeFetch from '../src/safe-fetch.ts';
 import { policy } from '../src/config.ts';
 import { exclusiveDrain } from '../src/workers/runner.ts';
 import { createApp } from '../src/app.ts';

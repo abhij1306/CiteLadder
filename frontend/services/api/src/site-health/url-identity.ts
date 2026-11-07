@@ -3,7 +3,7 @@ import { getDomain } from 'tldts';
 
 import { policy } from '../config.ts';
 import { compareIdentityText } from '../analysis/comparison.ts';
-import { publicUrl } from '../projects/safe-fetch.ts';
+import { publicUrl } from '../safe-fetch.ts';
 
 // Canonical serialization defines the stored `url_hash` keyspace: unreserved
 // escapes decode, other escapes uppercase, the path re-quotes with its safe
@@ -40,7 +40,6 @@ export function canonicalIdentity(value: string, base?: string) {
     domain: getDomain(url.hostname) ?? url.hostname,
   };
 }
-/** The canonical URL, or null when the value is not a public URL. */
 /**
  * The identity hash of the same URL on the www/apex twin host, or null. Many
  * sites answer on both without redirecting; admission keeps one of the pair.
@@ -55,25 +54,11 @@ export function hostTwinHash(value: string): string | null {
   }
 }
 
+/** The canonical URL, or null when the value is not a public URL. */
 export function canonicalUrl(value: unknown, base?: string): string | null {
   if (typeof value !== 'string' || !value) return null;
   try {
     return canonicalIdentity(value, base).url;
-  } catch {
-    return null;
-  }
-}
-export function citationIdentity(value: string) {
-  try {
-    const identity = canonicalIdentity(value);
-    const host = new URL(identity.url).hostname;
-    if (
-      policy.source_pages.redirect_hosts.some(
-        (redirect) => host === redirect || host.endsWith(`.${redirect}`),
-      )
-    )
-      return null;
-    return identity;
   } catch {
     return null;
   }

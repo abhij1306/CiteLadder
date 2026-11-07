@@ -12,7 +12,7 @@ import {
   type FetchCall,
   type FetchedPage,
   type WebsiteFetcher,
-} from '../projects/safe-fetch.ts';
+} from '../safe-fetch.ts';
 import {
   acquisitionSettings,
   authorizeAcquisition,

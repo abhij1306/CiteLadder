@@ -1,5 +1,6 @@
 /** Descriptive comparisons over versioned, persisted page evidence. */
 import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import { getDomain } from 'tldts';
 
 import { policy } from '../config.ts';
@@ -321,16 +322,21 @@ export function refreshDifferentiation(
         report: JSON.stringify(report),
         created_at: new Date(),
       };
-      await trx
+      // Derived results are insert-only: a refresh appends a report only when it
+      // differs from the task's newest one at this formula version.
+      const latest = await trx // NOSONAR -- One transaction: reports insert in order.
+        .selectFrom('content_differentiation_reports')
+        .select(['owned_site_url_id', sql<boolean>`report = ${values.report}::jsonb`.as('same')])
+        .where('workspace_id', '=', scope.workspaceId)
+        .where('audit_task_id', '=', taskId)
+        .where('formula_version', '=', values.formula_version)
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+        .executeTakeFirst();
+      if (latest?.same && latest.owned_site_url_id === values.owned_site_url_id) continue;
+      await trx // NOSONAR -- One transaction: reports insert in order.
         .insertInto('content_differentiation_reports')
         .values(values)
-        .onConflict((oc) =>
-          oc.column('audit_task_id').doUpdateSet({
-            report: values.report,
-            owned_site_url_id: values.owned_site_url_id,
-            formula_version: values.formula_version,
-          }),
-        )
         .execute();
     }
   });

@@ -23,7 +23,7 @@ import { latestQuerySnapshot } from '../demand/query-evidence.ts';
 import { preferencesBody } from '../routes/search-intelligence-contracts.ts';
 import { competitorTarget, ownedTargets, searchMarket } from '../search-intelligence/targets.ts';
 import { normalizeQuery as trafficQueryKey } from '../traffic/normalization.ts';
-import { canonicalJson } from '../search-intelligence/requests.ts';
+import { canonicalJson } from '../canonical-json.ts';
 import { compareText } from '../text-order.ts';
 import { OWNED_RANK, searchTerms } from './keyword-verification.ts';
 import type { CrawlSource, DemandSource, Scope } from './sources.ts';

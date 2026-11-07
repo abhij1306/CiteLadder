@@ -9,14 +9,14 @@ import {
   partitionQuality,
   type PartitionScope,
 } from '../integrations/partitions.ts';
-import { projectHosts, landingPage } from '../integrations/host-scope.ts';
-import { classifyReferralSignals } from './classification.ts';
-import { hash } from '../traffic/normalization.ts';
+import { projectHosts } from '../integrations/host-scope.ts';
+import { landingPage, pathIdentity } from '../page-identity.ts';
+import { dimensionParts, readReferralClassifications } from './persisted.ts';
+import { hash } from '../crypto-text.ts';
 import { aiTraffic } from '../config/ai-traffic.ts';
-import { pathIdentity } from '../crawl-logs/identity.ts';
 import { policy } from '../config.ts';
 import { compareText } from '../text-order.ts';
-import { isNonEmpty, lastOf, type NonEmpty } from '../lists.ts';
+import { isNonEmpty, lastOf } from '../lists.ts';
 
 const datasets = [
   'ga4_landing_daily',
@@ -24,12 +24,6 @@ const datasets = [
   'ga4_channel_daily',
   'ga4_ecommerce_source_medium_daily',
 ];
-const arities = Object.fromEntries(
-  Object.entries(policy.integrations.datasets).map(([name, dataset]) => [
-    name,
-    dataset.dimensions.length,
-  ]),
-);
 export async function referralEvidence(db: Database, scope: PartitionScope) {
   const query = () =>
     db
@@ -59,27 +53,22 @@ export async function referralEvidence(db: Database, scope: PartitionScope) {
     rows,
     quality: Object.fromEntries(qualities),
     hosts: await projectHosts(db, scope.workspaceId, scope.projectId),
+    classifications: await readReferralClassifications(db, scope),
   };
 }
 type Evidence = Awaited<ReturnType<typeof referralEvidence>>;
+type EvidenceRow = Evidence['rows'][number];
 const count = (m: Record<string, unknown>, key: string) =>
   typeof m[key] === 'number' && Number.isFinite(m[key]) ? (m[key] as number) : 0;
-const signals = (parts: readonly string[]) =>
-  classifyReferralSignals({ utm_source: parts[0], utm_medium: parts[1] });
+/** The row's persisted AI source for its session source and medium, or null. */
+const aiSource = (evidence: Evidence, row: EvidenceRow, source = '', medium = '') =>
+  evidence.classifications.aiSource(row.property_ref, row.day, source, medium);
 type Counts = { sessions: number; engaged_sessions: number; key_events: number };
 const empty = (): Counts => ({ sessions: 0, engaged_sessions: 0, key_events: 0 });
 function add(target: Counts, m: Record<string, unknown>) {
   target.sessions += count(m, 'sessions');
   target.engaged_sessions += count(m, 'engagedSessions');
   target.key_events += count(m, 'keyEvents');
-}
-function dimensionParts(row: Evidence['rows'][number]): NonEmpty<string> {
-  const split = row.dimension_key.split(policy.integrations.dimension_separator);
-  const arity = arities[row.dataset]!;
-  return [
-    split.slice(0, split.length - arity + 1).join(policy.integrations.dimension_separator),
-    ...split.slice(split.length - arity + 1),
-  ];
 }
 function landingExtras(rows: Evidence['rows'], evidence: Evidence) {
   let unattributed = 0;
@@ -100,10 +89,10 @@ function landingExtras(rows: Evidence['rows'], evidence: Evidence) {
   >();
   for (const row of rows) {
     if (row.dataset !== 'ga4_landing_daily') continue;
-    const parts = dimensionParts(row),
+    const parts = dimensionParts(row.dataset, row.dimension_key),
       m = record(row.metrics);
-    const match = signals(parts.slice(1, 3));
-    if (!match) continue;
+    const source = aiSource(evidence, row, parts[1], parts[2]);
+    if (source === null) continue;
     const quality = evidence.quality[row.dataset]!.find((q) => q.day === row.day)!;
     const host = parts.at(-2);
     if (host === undefined) throw new Error('Expected a host dimension on a landing row');
@@ -114,7 +103,7 @@ function landingExtras(rows: Evidence['rows'], evidence: Evidence) {
     }
     const tz = quality.reporting_timezone ?? 'unknown',
       urlHash = hash(page),
-      key = [row.day, tz, urlHash, match.ai_source].join(':');
+      key = [row.day, tz, urlHash, source].join(':');
     const identity = pathIdentity(page, new URL(page).origin)!;
     const item = landing.get(key) ?? {
       ...empty(),
@@ -123,7 +112,7 @@ function landingExtras(rows: Evidence['rows'], evidence: Evidence) {
       display_path: identity.display_path,
       folder: identity.folder,
       resource_class: identity.resource_class,
-      ai_source: match.ai_source,
+      ai_source: source,
       reporting_date: row.day,
       reporting_timezone: tz,
       analytics_quality: quality.flags,
@@ -135,21 +124,21 @@ function landingExtras(rows: Evidence['rows'], evidence: Evidence) {
   }
   return { landing: [...landing.values()], unattributed };
 }
-function sourceExtras(rows: Evidence['rows']) {
+function sourceExtras(rows: Evidence['rows'], evidence: Evidence) {
   const sources = new Map<string, Counts & { transactions: number; purchase_revenue: number }>();
   const channels = { ai: empty(), organic: empty(), total: empty() };
   for (const row of rows) {
     if (row.dataset === 'ga4_landing_daily') continue;
-    const parts = dimensionParts(row),
+    const parts = dimensionParts(row.dataset, row.dimension_key),
       m = record(row.metrics);
     if (row.dataset === 'ga4_channel_daily') {
       add(channels.total, m);
       if (parts[0] === 'Organic Search') add(channels.organic, m);
       continue;
     }
-    const match = signals(parts);
-    if (!match) continue;
-    const source = sources.get(match.ai_source) ?? {
+    const aiName = aiSource(evidence, row, parts[0], parts[1]);
+    if (aiName === null) continue;
+    const source = sources.get(aiName) ?? {
       ...empty(),
       transactions: 0,
       purchase_revenue: 0,
@@ -161,14 +150,14 @@ function sourceExtras(rows: Evidence['rows']) {
       source.transactions += count(m, 'transactions');
       source.purchase_revenue += count(m, 'purchaseRevenue');
     }
-    sources.set(match.ai_source, source);
+    sources.set(aiName, source);
   }
   return { sources, channels };
 }
 export function referralExtras(evidence: Evidence, start: string, end: string) {
   const rows = evidence.rows.filter((r) => r.day >= start && r.day <= end);
   const { landing, unattributed } = landingExtras(rows, evidence);
-  const { sources, channels } = sourceExtras(rows);
+  const { sources, channels } = sourceExtras(rows, evidence);
   const quality = Object.fromEntries(
     Object.entries(evidence.quality).map(([dataset, q]) => [
       dataset,

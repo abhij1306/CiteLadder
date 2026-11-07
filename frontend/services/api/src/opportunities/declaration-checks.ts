@@ -1,6 +1,6 @@
 /** Freeze server-owned expectations from the live findings and their snapshot. */
 import { sql } from 'kysely';
-import { round } from '../demand/projection.ts';
+import { roundScaled } from '../numbers.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { policy } from '../config.ts';
@@ -106,7 +106,7 @@ async function trafficCheck(
     key,
     metric: o.TRAFFIC_METRIC_CLICKS,
   });
-  if (rate !== null) check.baseline_value = round(rate, 4);
+  if (rate !== null) check.baseline_value = roundScaled(rate, 4);
   return check;
 }
 

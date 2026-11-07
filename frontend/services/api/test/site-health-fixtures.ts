@@ -8,7 +8,7 @@ import {
   type FetchedPage,
   type FetchOptions,
   type WebsiteFetcher,
-} from '../src/projects/safe-fetch.ts';
+} from '../src/safe-fetch.ts';
 import { canonicalIdentity } from '../src/site-health/url-identity.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';

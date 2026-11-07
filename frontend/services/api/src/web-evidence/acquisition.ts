@@ -4,12 +4,7 @@ import robotsModule from 'robots-parser';
 
 import { policy, resolveSettingSpec } from '../config.ts';
 import type { Database } from '../db/database.ts';
-import {
-  FetchError,
-  fetchWebsite,
-  type FetchOptions,
-  type WebsiteFetcher,
-} from '../projects/safe-fetch.ts';
+import { FetchError, fetchWebsite, type FetchOptions, type WebsiteFetcher } from '../safe-fetch.ts';
 
 // The package is CommonJS; its declaration describes the exported function as ESM.
 const robotsParser = robotsModule as unknown as (

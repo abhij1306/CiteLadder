@@ -13,7 +13,7 @@ import {
   persistExecutionFailure,
   type ExecutionResult,
 } from '../src/audits/result-persistence.ts';
-import { ProviderError } from '../src/answer-engines/contracts.ts';
+import { ProviderError } from '../src/providers/errors.ts';
 import { record } from '../src/db/json.ts';
 import { analyzeExecution } from '../src/analysis/execution.ts';
 import { finalizeAudit } from '../src/analysis/finalization.ts';

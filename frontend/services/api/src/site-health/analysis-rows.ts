@@ -10,7 +10,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
-import type { FetchCall, FetchedPage } from '../projects/safe-fetch.ts';
+import type { FetchCall, FetchedPage } from '../safe-fetch.ts';
 import type { SiteTask } from '../queue/task-queue.ts';
 import type { analyzePage } from './analysis/analyze-page.ts';
 import { createsIssue, type RuleEvaluation } from './analysis/rules.ts';

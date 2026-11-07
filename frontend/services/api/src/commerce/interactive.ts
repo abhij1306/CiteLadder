@@ -1,7 +1,7 @@
 import { configEnvironment, loadWorkerSettings, type ServiceConfig } from '../config.ts';
 import { interactiveExecution } from '../config/execution.ts';
 import type { Database } from '../db/database.ts';
-import { fetchWebsite } from '../projects/safe-fetch.ts';
+import { fetchWebsite } from '../safe-fetch.ts';
 import { leaseSignal } from '../queue/heartbeat.ts';
 import { AnalyticsWorker } from '../workers/analytics-worker.ts';
 import { exclusiveDrain } from '../workers/runner.ts';

@@ -2,17 +2,14 @@ import { getDomain } from 'tldts';
 import { z } from 'zod';
 import { record } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
-import {
-  ProviderError,
-  type Citation,
-  type RetrievedSource,
-  type SearchEvent,
-} from '../answer-engines/contracts.ts';
+import type { Citation, RetrievedSource, SearchEvent } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import type { ExecutionResult } from '../audits/result-persistence.ts';
 import { providerPolicy } from '../providers/config.ts';
 import { classifySourceOrigin } from '../analysis/opportunities/source-patterns.ts';
 import { citationIdentity } from '../source-pages/identity.ts';
 import { providerCharge, searchPolicy, type SearchEngine } from './dataforseo.ts';
+import { casefold } from '../casefold.ts';
 import { onlyOf } from '../lists.ts';
 
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -159,16 +156,7 @@ function overviewContent(walked: [number, Record<string, unknown>][]) {
   for (const [index, element] of walked) {
     for (const fragment of fragments(element)) {
       // Casefold and whitespace only; punctuation distinguishes visible fragments.
-      const key = fragment
-        .split(/\s+/u)
-        .filter(Boolean)
-        .join(' ')
-        .replaceAll(
-          /./gsu,
-          (char) =>
-            searchPolicy.casefold_overrides[char as keyof typeof searchPolicy.casefold_overrides] ??
-            char.toLowerCase(),
-        );
+      const key = casefold(fragment.split(/\s+/u).filter(Boolean).join(' '));
       if (!key || seenText.has(key)) continue;
       seenText.add(key);
       parts.push(fragment.trim());

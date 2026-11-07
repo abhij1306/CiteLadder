@@ -6,7 +6,7 @@ import { competitorSearch, type CompetitorSearch } from '../src/commerce/discove
 import { discoveryQuery } from '../src/commerce/discovery-validation.ts';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { importCatalog } from '../src/commerce/import.ts';
-import type { WebsiteFetcher } from '../src/projects/safe-fetch.ts';
+import type { WebsiteFetcher } from '../src/safe-fetch.ts';
 import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
 import { ANALYTICS_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { recoverAnalyticsLeases } from '../src/queue/analytics-recovery.ts';

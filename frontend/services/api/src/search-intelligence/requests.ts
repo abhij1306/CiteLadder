@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { policy } from '../config.ts';
-import { compareText } from '../text-order.ts';
+import { canonicalJson } from '../canonical-json.ts';
 import type { CanonicalTarget } from './targets.ts';
 
 export const si = policy.search_intelligence;
@@ -208,20 +208,6 @@ export function buildRequest(o: RequestOptions) {
   const endpoint = applyResearchScope(o, payload);
   applyKeywordOrder(o, payload);
   return { endpoint, payload };
-}
-/** Compact, key-sorted JSON (ASCII-escaped by default) keeps stored scope identities stable. */
-export function canonicalJson(value: unknown, ascii = true): string {
-  if (Array.isArray(value)) return `[${value.map((item) => canonicalJson(item, ascii)).join(',')}]`;
-  if (value !== null && typeof value === 'object')
-    return `{${Object.entries(value)
-      .sort(([a], [b]) => compareText(a, b))
-      .map(([k, v]) => `${canonicalJson(k, ascii)}:${canonicalJson(v, ascii)}`)
-      .join(',')}}`;
-  if (!ascii) return JSON.stringify(value);
-  return JSON.stringify(value).replace(
-    /[\u0080-\uffff]/g,
-    (char) => String.raw`\u${char.codePointAt(0)!.toString(16).padStart(4, '0')}`,
-  );
 }
 export function scopeHash(o: RequestOptions, payload: Record<string, unknown>) {
   const backlink = includes(si.backlink_kinds, o.kind);

@@ -17,12 +17,8 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { payloadWindow, requireProject, type Executor } from '../queue/executor.ts';
-import {
-  addDays,
-  bucketStart,
-  buildAiReferralsProjection,
-  type ReferralFact,
-} from './projection.ts';
+import { addDays } from '../calendar-days.ts';
+import { bucketStart, buildAiReferralsProjection, type ReferralFact } from './projection.ts';
 import { compareText, textSpan } from '../text-order.ts';
 import { isNonEmpty } from '../lists.ts';
 import { selectedPartition, partitionAnchor, partitionEpoch } from '../integrations/partitions.ts';

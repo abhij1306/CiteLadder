@@ -7,6 +7,7 @@ import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
 import type { CommerceProducts } from '../generated/db-schema.ts';
+import { canonicalUrl } from '../site-health/url-identity.ts';
 import { TerminalExecutorError, type Executor } from '../queue/executor.ts';
 import {
   addMembership,
@@ -17,7 +18,6 @@ import {
 } from './catalog-store.ts';
 import type { CommerceScope } from './reads.ts';
 import {
-  catalogUrl,
   categoryKey,
   categoryTitle,
   pageIdentity,
@@ -295,7 +295,7 @@ async function linkShelves(db: Database, scope: CommerceScope, crawlId: string, 
     .where('project_id', '=', scope.projectId);
   if ('productId' in from) productQuery = productQuery.where('id', '=', from.productId);
   const productsByUrl = new Map(
-    (await productQuery.execute()).map((row) => [catalogUrl(row.canonical_url), row.id]),
+    (await productQuery.execute()).map((row) => [canonicalUrl(row.canonical_url) ?? '', row.id]),
   );
   for (const shelf of shelves)
     for (const productId of listedProducts(shelf.links, identities, productsByUrl))

@@ -3,9 +3,9 @@ import {
   buildRequest,
   quoteDataset,
   scopeHash,
-  canonicalJson,
   type RequestOptions,
 } from '../src/search-intelligence/requests.ts';
+import { canonicalJson } from '../src/canonical-json.ts';
 import { reviewBody } from '../src/routes/search-intelligence-contracts.ts';
 import { policy } from '../src/config.ts';
 

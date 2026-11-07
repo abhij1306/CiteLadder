@@ -6,7 +6,7 @@ import { policy } from '../src/config.ts';
 import { projectCreate } from '../src/projects/inputs.ts';
 import { refreshLogos } from '../src/projects/logo-refresh.ts';
 import { createProject, updateProject } from '../src/projects/service.ts';
-import type { WebsiteFetcher } from '../src/projects/safe-fetch.ts';
+import type { WebsiteFetcher } from '../src/safe-fetch.ts';
 import { Fixtures, testDatabase } from './support.ts';
 
 const db = testDatabase();

@@ -4,8 +4,8 @@ import { policy, resolveSettingSpec, ConfigError } from '../config.ts';
 import { providerErrorCode } from '../models/http.ts';
 import { approvedEndpoint, basicAuthorization } from '../providers/connections.ts';
 import { type ProviderSettings } from '../providers/config.ts';
-import { ProviderError } from '../answer-engines/contracts.ts';
-import { round } from '../analysis/round.ts';
+import { ProviderError } from '../providers/errors.ts';
+import { round } from '../numbers.ts';
 import { boundedJson } from '../providers/response.ts';
 
 export const searchPolicy = policy.dataforseo;

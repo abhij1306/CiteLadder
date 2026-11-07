@@ -2,7 +2,7 @@
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { policy } from '../config.ts';
-import { canonicalPage } from '../traffic/normalization.ts';
+import { canonicalPage } from '../page-identity.ts';
 import { record } from '../db/json.ts';
 import { compareText, scalarText, stripTrailing } from '../text-order.ts';
 import { onlyOf } from '../lists.ts';

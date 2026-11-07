@@ -7,7 +7,7 @@
 import { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import type { OverviewWidgetKey } from '@citeladder/contracts/overview';
 
-import { PdfReport, type Stat, type Tag } from './pdf.ts';
+import { PdfReport, type Stat, type Tag } from '../documents/pdf.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { getRunVisibility } from '../visibility/dashboard.ts';

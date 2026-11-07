@@ -10,7 +10,7 @@ import { sourceMixSchema as sourceMix } from '@citeladder/contracts/opportunitie
 import { randomUUID } from 'node:crypto';
 
 import { policy } from '../config.ts';
-import { round } from '../demand/projection.ts';
+import { roundScaled } from '../numbers.ts';
 import { rules } from '../analysis/opportunities/detectors.ts';
 import type { DetectorHit } from '../analysis/opportunities/evidence.ts';
 import { priorityScore } from '../analysis/opportunities/scoring.ts';
@@ -48,7 +48,7 @@ export function siteCoverage(crawl: CoverageCrawl | null): [Json, string[]] {
     selected_url_count: selected,
     analyzed_url_count: analyzed,
     failed_url_count: integer(crawl.failed_url_count),
-    analysis_ratio: selected ? round(analyzed / selected, 4) : null,
+    analysis_ratio: selected ? roundScaled(analyzed / selected, 4) : null,
   };
   const limitations: string[] = [];
   if (crawl.status !== r.crawl_status_completed) {
@@ -173,7 +173,7 @@ export function buildSnapshot(
     counts_by_type: countsByType,
     counts_by_severity: countsBySeverity,
     total_count: rows.length,
-    median_priority: scores.length ? round(median(scores), 1) : null,
+    median_priority: scores.length ? roundScaled(median(scores), 1) : null,
     analyzer_version: o.ANALYZER_VERSION,
     rule_version: o.RULE_VERSION,
     formula_version: o.FORMULA_VERSION,

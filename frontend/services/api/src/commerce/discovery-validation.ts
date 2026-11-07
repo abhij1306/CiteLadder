@@ -3,7 +3,7 @@ import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
-import type { FetchedPage } from '../projects/safe-fetch.ts';
+import type { FetchedPage } from '../safe-fetch.ts';
 import { canonicalUrl } from '../site-health/url-identity.ts';
 import { extractPageFacts } from '../site-health/analysis/facts.ts';
 import { classify } from '../site-health/analysis/page-kinds.ts';

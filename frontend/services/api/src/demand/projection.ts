@@ -1,26 +1,12 @@
 /** Pure demand decisions over recorded evidence. No model or provider calls. */
 import { policy } from '../config.ts';
-import { hash } from '../traffic/normalization.ts';
+import { canonicalHash } from '../canonical-json.ts';
+import { roundScaled } from '../numbers.ts';
 import { compareText } from '../text-order.ts';
 import { groupBy } from '../lists.ts';
 import type { Classification } from './classification.ts';
 
 const p = policy.demand;
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  if (value && typeof value === 'object')
-    return `{${Object.entries(value)
-      .sort(([a], [b]) => compareText(a, b))
-      .map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`)
-      .join(',')}}`;
-  return JSON.stringify(value);
-}
-export const stableHash = (value: unknown) => hash(stableJson(value));
-/** Round a derived metric to its published decimal precision. */
-export function round(value: number, digits: number): number {
-  const scale = 10 ** digits;
-  return Math.round(value * scale) / scale;
-}
 export type SearchInput = {
   source_metric_row_ids: string[];
   source_artifact_ids: string[];
@@ -81,10 +67,10 @@ function priority(impressions: number, ctr: number | null, gap: number) {
   const demand = Math.min(1, Math.log1p(Math.max(impressions, 0)) / Math.log1p(10000));
   const weakness = ctr === null ? 1 : Math.max(0, 1 - ctr);
   return {
-    priority_score: round(100 * demand * weakness * gap, 2),
+    priority_score: roundScaled(100 * demand * weakness * gap, 2),
     priority_inputs: {
-      demand: round(demand, 6),
-      weakness: round(weakness, 6),
+      demand: roundScaled(demand, 6),
+      weakness: roundScaled(weakness, 6),
       gap,
       formula_version: p.DEMAND_FORMULA_VERSION,
     },
@@ -147,12 +133,15 @@ function lowCtrCandidates(
     )
     .slice(0, p.DEMAND_LOW_CTR_MAX_SIGNALS)
     .map(({ row, ctr, classified }) => ({
-      identity_hash: stableHash({
-        type: p.DEMAND_SIGNAL_HIGH_IMPRESSION_LOW_CTR,
-        target_kind: row.target_kind,
-        target: row.target,
-        rule_version: p.DEMAND_RULE_VERSION,
-      }),
+      identity_hash: canonicalHash(
+        {
+          type: p.DEMAND_SIGNAL_HIGH_IMPRESSION_LOW_CTR,
+          target_kind: row.target_kind,
+          target: row.target,
+          rule_version: p.DEMAND_RULE_VERSION,
+        },
+        false,
+      ),
       signal_type: p.DEMAND_SIGNAL_HIGH_IMPRESSION_LOW_CTR,
       state: p.DEMAND_SIGNAL_STATE_ACTIVE,
       topic_cluster: row.target_kind === 'query' ? row.target : '',
@@ -224,7 +213,10 @@ export function queryCandidate(
   gap: number,
 ): Candidate {
   return {
-    identity_hash: stableHash({ type, query, page_url: page, rule_version: p.DEMAND_RULE_VERSION }),
+    identity_hash: canonicalHash(
+      { type, query, page_url: page, rule_version: p.DEMAND_RULE_VERSION },
+      false,
+    ),
     signal_type: type,
     state: p.DEMAND_SIGNAL_STATE_ACTIVE,
     topic_cluster: query,

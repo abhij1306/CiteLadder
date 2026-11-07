@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { policy } from '../config.ts';
 import { extractPage, offeringLinks, type PageEvidence } from './html-evidence.ts';
-import { publicUrl, type WebsiteFetcher } from './safe-fetch.ts';
+import { publicUrl, type WebsiteFetcher } from '../safe-fetch.ts';
 import { discoverySettings } from './discovery-inputs.ts';
 import type { ResolvedSite } from './site-resolution.ts';
 import type { Meter } from '../models/metering.ts';

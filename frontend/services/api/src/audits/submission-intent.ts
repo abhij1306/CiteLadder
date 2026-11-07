@@ -1,5 +1,5 @@
 import type { Database } from '../db/database.ts';
-import { ProviderError } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { ownedAuditTask, type AuditTask } from '../queue/audit-queue.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';
 import type { ExecutionContext } from './execution-context.ts';

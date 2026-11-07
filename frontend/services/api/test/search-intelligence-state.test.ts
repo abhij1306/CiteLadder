@@ -9,7 +9,7 @@ import { confirmRun } from '../src/search-intelligence/runs.ts';
 import { reviewBody } from '../src/routes/search-intelligence-contracts.ts';
 import { createSecretCipher } from '../src/integrations/fernet.ts';
 import { WorkspaceScope } from '../src/db/workspace-scope.ts';
-import { ProviderError } from '../src/answer-engines/contracts.ts';
+import { ProviderError } from '../src/providers/errors.ts';
 import { reconcileResearch } from '../src/search-intelligence/maintenance.ts';
 import { pageEstimateMicrousd } from '../src/search-intelligence/requests.ts';
 import { policy } from '../src/config.ts';

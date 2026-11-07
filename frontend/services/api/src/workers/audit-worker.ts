@@ -5,7 +5,7 @@ import { record } from '../db/json.ts';
 import { getLogger } from '../logging.ts';
 import { AuditQueue, ownedAuditTask, parkAuditTask, type AuditTask } from '../queue/audit-queue.ts';
 import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
-import { ProviderError } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { executeAnswer } from '../answer-engines/execute.ts';
 import { acquireCapacity, releaseCapacity, type CapacityDecision } from '../providers/capacity.ts';
 import { providerPolicy } from '../providers/config.ts';

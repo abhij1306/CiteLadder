@@ -1,48 +1,10 @@
 import ipaddr from 'ipaddr.js';
 import { crawlLogs } from '../config/crawl-logs.ts';
-import { crawlers, type CrawlerBot } from '../config/crawlers.ts';
-import { canonicalPage, hash } from '../traffic/normalization.ts';
+import type { CrawlerBot } from '../config/crawlers.ts';
 import type { Selectable } from 'kysely';
 import type { BotIpRangeSnapshots } from '../generated/db-schema.ts';
 import { strings } from '../db/json.ts';
 
-export function pathIdentity(path: string, origin: string) {
-  const withoutQuery = path.split(/[?#]/u)[0]!;
-  const canonical = canonicalPage(withoutQuery, origin);
-  if (!canonical) return null;
-  // Inspect decoded segments to catch encoded secrets without changing exact identity.
-  let display = new URL(canonical).pathname;
-  try {
-    display = decodeURIComponent(display);
-  } catch {
-    return null;
-  }
-  let redacted = false;
-  for (const pattern of crawlLogs.secret_path_patterns) {
-    display = display.replace(new RegExp(pattern, 'giu'), () => {
-      redacted = true;
-      return '[redacted]';
-    });
-  }
-  if (display.length > 2048) return null;
-  const folder =
-    '/' + display.split('/').filter(Boolean).slice(0, crawlLogs.folder_depth).join('/');
-  const lower = display.toLowerCase();
-  const resource = crawlers.resource_rules.find(
-    (rule) =>
-      rule.paths.some((value) => lower === value.toLowerCase()) ||
-      rule.extensions.some((value) => lower.endsWith(value.toLowerCase())),
-  );
-  return {
-    display_path: display,
-    canonical_url: redacted ? null : canonical,
-    identity: redacted ? 'non_joinable' : 'exact',
-    identity_reason: redacted ? 'redacted_secret' : null,
-    url_hash: redacted ? null : hash(canonical),
-    folder,
-    resource_class: resource?.resource_class ?? 'page',
-  };
-}
 export function verifyBot(
   bot: CrawlerBot,
   ip: string | null,

@@ -1,8 +1,6 @@
 /** Domain identities and grounding redirects in recorded citation evidence. */
+import { policy } from '../config.ts';
 import { stripTrailing } from '../text-order.ts';
-
-const GOOGLE_REDIRECT_HOST = 'vertexaisearch.cloud.google.com';
-const GROUNDING_REDIRECT_MARKER = 'grounding-api-redirect';
 
 /** Lowercase host without www., accepting a bare domain or an absolute URL. */
 export function normalizeDomain(value: unknown): string {
@@ -32,10 +30,8 @@ export function isGroundingRedirect(value: unknown): boolean {
   try {
     const url = new URL(raw.includes('://') ? raw : `https://${raw}`);
     const host = stripTrailing(url.hostname, '.');
-    return (
-      host === GOOGLE_REDIRECT_HOST ||
-      host.endsWith(`.${GOOGLE_REDIRECT_HOST}`) ||
-      host === GROUNDING_REDIRECT_MARKER
+    return policy.source_pages.redirect_hosts.some(
+      (redirect) => host === redirect || host.endsWith(`.${redirect}`),
     );
   } catch {
     return false;

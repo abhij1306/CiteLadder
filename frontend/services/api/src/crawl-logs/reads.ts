@@ -21,7 +21,7 @@ import { isoDateText, utcTextOf, wireUtc } from '../db/timestamps.ts';
 import { boundedExport } from '../http/table-export.ts';
 import { sourceList } from './source-reads.ts';
 import { reportingDay, type CrawlScope } from './state.ts';
-import { addDays } from '../referrals/projection.ts';
+import { addDays, inclusiveDays } from '../calendar-days.ts';
 
 export type CrawlReadOptions = {
   range?: string | null;
@@ -91,8 +91,7 @@ export function crawlWindow(options: CrawlReadOptions, now = new Date()) {
       !z.iso.date().safeParse(options.start_date).success ||
       !z.iso.date().safeParse(options.end_date).success ||
       options.start_date > options.end_date ||
-      (Date.parse(options.end_date) - Date.parse(options.start_date)) / 86400000 + 1 >
-        policy.analytics.max_window_days
+      inclusiveDays(options.start_date, options.end_date) > policy.analytics.max_window_days
     )
       throw new ApiError(422, 'Invalid crawl window');
     return { start: options.start_date, end: options.end_date };
@@ -502,7 +501,7 @@ function coverageQuality(
 ) {
   const end = w.end < today ? w.end : addDays(today, -1);
   const rows = all.filter((row) => row.day <= end);
-  const expected = (Date.parse(end) - Date.parse(w.start)) / 86400000 + 1;
+  const expected = inclusiveDays(w.start, end);
   const hosts = new Set(all.map((row) => row.host));
   // A window of only the day in progress has no closed day to be complete.
   const judged = expected >= 1 && hosts.size > 0;

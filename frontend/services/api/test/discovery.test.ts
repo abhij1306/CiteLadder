@@ -6,7 +6,7 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.ts';
 import { completeDiscovery, createDiscovery, discoveryRow } from '../src/projects/discovery.ts';
 import { discoveryComplete, discoveryCreate } from '../src/projects/discovery-inputs.ts';
-import { FetchError, type WebsiteFetcher } from '../src/projects/safe-fetch.ts';
+import { FetchError, type WebsiteFetcher } from '../src/safe-fetch.ts';
 import { DiscoveryQueue } from '../src/queue/discovery-queue.ts';
 import { recoverDiscoveryLeases } from '../src/queue/recovery.ts';
 import { DiscoveryWorker } from '../src/workers/discovery-worker.ts';

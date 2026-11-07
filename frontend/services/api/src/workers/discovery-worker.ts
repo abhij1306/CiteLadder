@@ -18,7 +18,7 @@ import {
   type ResearchDependencies,
 } from '../projects/research.ts';
 import { resolveSite } from '../projects/site-resolution.ts';
-import { FetchError, fetchWebsite } from '../projects/safe-fetch.ts';
+import { FetchError, fetchWebsite } from '../safe-fetch.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
 import {
   DiscoveryQueue,

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ProviderError } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { providerCharge, searchPolicy, type Envelope, type SearchEngine } from './dataforseo.ts';
 
 export type ReconciliationState = {

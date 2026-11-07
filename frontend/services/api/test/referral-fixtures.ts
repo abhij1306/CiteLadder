@@ -6,6 +6,8 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Database } from '../src/db/database.ts';
+import { classifyReferrals } from '../src/referrals/classify.ts';
+import { ingestReferrals } from '../src/referrals/ingest.ts';
 
 export const REFERRER_DAILY = 'ga4_referrer_daily';
 export const SOURCE_MEDIUM_DAILY = 'ga4_source_medium_daily';
@@ -146,16 +148,28 @@ export async function seedImport(
       updated_at: now,
     })
     .execute();
+  const run = { ...options, connectionId, mappingId, syncRunId };
+  return { ...run, artifactId: await seedArtifact(db, run, options.dataset, options.provider) };
+}
+
+/** Another artifact on `seed`'s sync run, as one run imports several datasets. */
+async function seedArtifact(
+  db: Database,
+  seed: Pick<ImportSeed, 'workspaceId' | 'syncRunId' | 'connectionId'>,
+  dataset: string,
+  provider = 'ga4',
+): Promise<string> {
+  const now = new Date();
   const artifactId = randomUUID();
   await db
     .insertInto('integration_import_artifacts')
     .values({
       id: artifactId,
-      workspace_id: options.workspaceId,
-      sync_run_id: syncRunId,
-      connection_id: connectionId,
-      provider: options.provider ?? 'ga4',
-      dataset: options.dataset,
+      workspace_id: seed.workspaceId,
+      sync_run_id: seed.syncRunId,
+      connection_id: seed.connectionId,
+      provider,
+      dataset,
       query_snapshot: JSON.stringify({}),
       payload_hash: randomUUID().replaceAll('-', '').repeat(2),
       row_count: 0,
@@ -164,7 +178,7 @@ export async function seedImport(
       created_at: now,
     })
     .execute();
-  return { ...options, connectionId, mappingId, syncRunId, artifactId };
+  return artifactId;
 }
 
 /** One derived row; `values` are the dimension values in template order, date last. */
@@ -193,6 +207,47 @@ export async function seedMetricRow(
     })
     .execute();
   return id;
+}
+
+/**
+ * Persisted AI referral classifications for GA4 (source, medium) pairs on
+ * `date`: a source/medium artifact on `run`'s sync run whose rows go through
+ * the real ingest and classify executors, as a sync's referral chain does.
+ */
+export async function seedClassifiedPairs(
+  db: Database,
+  run: ImportSeed,
+  options: { date: string; pairs: [source: string, medium: string][] },
+): Promise<ImportSeed> {
+  const seed = {
+    ...run,
+    dataset: SOURCE_MEDIUM_DAILY,
+    artifactId: await seedArtifact(db, run, SOURCE_MEDIUM_DAILY),
+  };
+  await Promise.all(
+    options.pairs.map(([source, medium]) =>
+      seedMetricRow(db, seed, {
+        date: options.date,
+        values: [source, medium, options.date],
+        sessions: 1,
+      }),
+    ),
+  );
+  const context = { db, maxAttempts: 3, checkCancelled: async () => {} };
+  const taskId = await enqueue(db, {
+    workspaceId: run.workspaceId,
+    projectId: run.projectId,
+    kind: 'ingest_referrals',
+    payload: { import_artifact_id: seed.artifactId },
+  });
+  const queued = await db
+    .selectFrom('analytics_tasks')
+    .selectAll()
+    .where('id', '=', taskId)
+    .executeTakeFirstOrThrow();
+  await ingestReferrals(queued, context);
+  await classifyReferrals({ ...queued, task_kind: 'classify_referrals' }, context);
+  return seed;
 }
 
 /** A queued analytics task, as the post-sync projection enqueues one. */

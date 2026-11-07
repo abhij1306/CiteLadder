@@ -11,7 +11,7 @@ import { enqueueTask } from '../queue/enqueue.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { taskProject, TerminalExecutorError, type Executor } from '../queue/executor.ts';
 import { PageAcquirer, authorizeAcquisition } from '../web-evidence/acquisition.ts';
-import { fetchWebsite, type WebsiteFetcher } from '../projects/safe-fetch.ts';
+import { fetchWebsite, type WebsiteFetcher } from '../safe-fetch.ts';
 import { commerceMissing, type CommerceScope } from './reads.ts';
 import { lockCatalog } from './catalog-store.ts';
 import {

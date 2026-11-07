@@ -6,7 +6,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
-import { citationIdentity } from '../site-health/url-identity.ts';
+import { pageIdentity } from './identity.ts';
 import { urlFormat } from './assessment.ts';
 import type { SourceScope } from './admission.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
@@ -20,7 +20,7 @@ function organicRow(raw: unknown, fallbackRank: number): OrganicResult | null {
   if (item.type !== 'organic' || typeof item.url !== 'string') return null;
   const rank = item.rank_absolute ?? item.rank_group ?? fallbackRank;
   if (typeof rank !== 'number' || !Number.isSafeInteger(rank) || rank < 1) return null;
-  if (!citationIdentity(item.url)) return null;
+  if (!pageIdentity(item.url)) return null;
   const title = typeof item.title === 'string' ? item.title.slice(0, 1000) : '';
   return { url: item.url, title, rank };
 }
@@ -269,7 +269,7 @@ async function syncOrganicPages(db: Database, scope: SourceScope, auditId: strin
     const identities = [];
     for (const result of organicResults(row.provider_metadata)) {
       if (ranks.size >= policy.content_differentiation.result_limit) break;
-      const identity = citationIdentity(result.url)!;
+      const identity = pageIdentity(result.url)!;
       if (ranks.has(identity.hash)) continue;
       ranks.set(identity.hash, result);
       identities.push(identity);
@@ -323,7 +323,7 @@ export async function resolveCitation(
   finalUrl: string,
   task?: QueueTask,
 ) {
-  const identity = citationIdentity(finalUrl);
+  const identity = pageIdentity(finalUrl);
   if (!identity) return null;
   // The audit was checked when this run synced its pages; the update is
   // scoped to it, so only the fence and the lock are needed here.

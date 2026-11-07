@@ -1,5 +1,5 @@
 import { policy } from '../../config.ts';
-import { round } from '../../demand/projection.ts';
+import { roundScaled } from '../../numbers.ts';
 import type { AnalysisEvidence } from './evidence.ts';
 import { byDomain } from './source-patterns.ts';
 import { compareText } from '../../text-order.ts';
@@ -34,11 +34,13 @@ function mix(counts: Map<string, number>, eligible: number, answers: number) {
     projection_version: s.SOURCE_MIX_PROJECTION_VERSION,
     taxonomy_version: s.SOURCE_TAXONOMY_VERSION,
     counts: Object.fromEntries(keys.map((k) => [k, counts.get(k)])),
-    percentages: Object.fromEntries(keys.map((k) => [k, round((counts.get(k)! * 100) / total, 1)])),
+    percentages: Object.fromEntries(
+      keys.map((k) => [k, roundScaled((counts.get(k)! * 100) / total, 1)]),
+    ),
     observation_count: total,
     answers_with_sources: answers,
     eligible_analyzed_answers: eligible,
-    coverage_rate: eligible ? round(answers / eligible, 4) : null,
+    coverage_rate: eligible ? roundScaled(answers / eligible, 4) : null,
     limitations: [],
   };
 }

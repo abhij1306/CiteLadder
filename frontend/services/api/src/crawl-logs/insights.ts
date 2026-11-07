@@ -11,7 +11,7 @@ import {
   type CrawlReadOptions,
 } from './reads.ts';
 import { partitionAnchor } from '../integrations/partitions.ts';
-import { addDays } from '../referrals/projection.ts';
+import { addDays } from '../calendar-days.ts';
 import { pageDataset, type JoinedPage } from './pages-data.ts';
 import { ga4Mapped, insightSnapshot, pageContext, pageComparable } from './pages.ts';
 import { aiTraffic } from '../config/ai-traffic.ts';

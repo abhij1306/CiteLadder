@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
-import { ProviderError } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { analyzeExecution } from '../analysis/execution.ts';
 import { type OverviewResult, overviewAnswer } from '../search-surfaces/parsing.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';

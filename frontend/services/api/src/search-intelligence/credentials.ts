@@ -5,7 +5,7 @@
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import type { Selectable } from 'kysely';
 
-import { ProviderError } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import type { Database } from '../db/database.ts';
 import type { WorkspaceScope } from '../db/workspace-scope.ts';
 import { ApiError } from '../errors.ts';

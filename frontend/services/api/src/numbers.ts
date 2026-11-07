@@ -1,3 +1,14 @@
+/** Rounding for derived metrics. Two rules exist because persisted scores use each. */
+
+/**
+ * Round the scaled value to the nearest integer (`Math.round`), the precision
+ * demand and opportunity scores are stored with.
+ */
+export function roundScaled(value: number, digits: number): number {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+}
+
 /** Round the represented binary value to `digits` decimals, with ties to even. */
 export function round(value: number, digits: number) {
   if (!Number.isFinite(value) || !Number.isInteger(digits) || digits < 0 || digits > 15)

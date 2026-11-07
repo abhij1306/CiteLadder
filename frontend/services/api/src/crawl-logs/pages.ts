@@ -1,4 +1,5 @@
 import { sql } from 'kysely';
+import { inclusiveDays } from '../calendar-days.ts';
 import {
   aiTrafficPagesSchema,
   aiTrafficUrlSchema,
@@ -300,7 +301,7 @@ function cursorPosition(position: string[], options: CrawlReadOptions) {
   const matches =
     options.start_date && options.end_date
       ? w.start === options.start_date && w.end === options.end_date
-      : (Date.parse(w.end) - Date.parse(w.start)) / 86400000 + 1 === presetDays(options);
+      : inclusiveDays(w.start, w.end) === presetDays(options);
   if (!matches) throw new InvalidCursorError('invalid Pages cursor');
   return { w, after };
 }

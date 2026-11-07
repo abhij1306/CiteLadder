@@ -10,7 +10,7 @@
  * window, and an occurrence inside an exclusion phrase never counts.
  */
 import { policy } from '../config.ts';
-import { searchPolicy } from '../search-surfaces/dataforseo.ts';
+import { casefold } from '../casefold.ts';
 import type { EntityPolicy } from './entity-matching.ts';
 
 export type { EntityPolicy };
@@ -22,15 +22,7 @@ const WORDS = new Intl.Segmenter(undefined, { granularity: 'word' });
 
 export function normalizeAlias(value: string): string {
   return (
-    value
-      .normalize('NFKC')
-      .replaceAll(
-        /./gsu,
-        (character) =>
-          searchPolicy.casefold_overrides[
-            character as keyof typeof searchPolicy.casefold_overrides
-          ] ?? character.toLowerCase(),
-      )
+    casefold(value.normalize('NFKC'))
       .replaceAll('&', ' and ')
       // Combining marks are part of a word (Thai and Devanagari vowel signs).
       .replaceAll(/[^\p{L}\p{M}\p{N}_ ]/gu, ' ')

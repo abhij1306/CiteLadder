@@ -6,7 +6,7 @@ import { competitorPosition } from './position.ts';
 import { citationDomain, type ScoringConfig } from './scoring.ts';
 import { costStatus, rateCard } from '../audits/costs.ts';
 import { usageCount } from '../answer-engines/parse.ts';
-import { round } from './round.ts';
+import { round } from '../numbers.ts';
 
 export type AggregateExecution = {
   prompt_index: number;

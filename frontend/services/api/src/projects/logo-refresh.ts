@@ -7,7 +7,7 @@ import type { Database } from '../db/database.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import type { ProjectScope } from './brand-profile.ts';
 import { extractPage } from './html-evidence.ts';
-import { fetchWebsite, websiteIdentity, type WebsiteFetcher } from './safe-fetch.ts';
+import { fetchWebsite, websiteIdentity, type WebsiteFetcher } from '../safe-fetch.ts';
 import { readProject } from './service.ts';
 
 const cfg = policy.brand_logos;

@@ -12,7 +12,7 @@ import { isActiveCrawl } from '@citeladder/contracts/site-health';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
-import type { FetchedPage } from '../projects/safe-fetch.ts';
+import type { FetchedPage } from '../safe-fetch.ts';
 import type { SiteTask } from '../queue/task-queue.ts';
 import { factSettings, type PageFacts } from './analysis/facts.ts';
 import { discoverAsync } from './analysis/off-thread.ts';

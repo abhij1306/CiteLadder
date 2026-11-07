@@ -25,7 +25,7 @@ import {
   type Referrer,
 } from './page-rows.ts';
 import { issueOccurrence, ruleTitle, severityOrder, type IssueRow } from './rules.ts';
-import { hash } from '../../traffic/normalization.ts';
+import { hash } from '../../crypto-text.ts';
 
 type Paging = { limit: number; cursor: string | null };
 // A pathological artifact never balloons a detail response.

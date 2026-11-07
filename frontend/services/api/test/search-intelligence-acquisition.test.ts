@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProviderError } from '../src/answer-engines/contracts.ts';
+import { ProviderError } from '../src/providers/errors.ts';
 import { resolveLive, sendLive } from '../src/search-intelligence/live.ts';
 import { INT4_MAX, normalizeResponse } from '../src/search-intelligence/normalization.ts';
 

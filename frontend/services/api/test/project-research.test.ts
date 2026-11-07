@@ -14,7 +14,7 @@ import {
   pinnedRequest,
   validateAddress,
   websiteIdentity,
-} from '../src/projects/safe-fetch.ts';
+} from '../src/safe-fetch.ts';
 import { resolveSite } from '../src/projects/site-resolution.ts';
 import {
   identityEnvelope,

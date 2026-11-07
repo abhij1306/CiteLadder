@@ -2,12 +2,8 @@ import { z } from 'zod';
 import { providerErrorCode, transientStatus } from '../models/http.ts';
 import { approvedEndpoint } from '../providers/connections.ts';
 import { openaiReasoning, providerPolicy, type ProviderSettings } from '../providers/config.ts';
-import {
-  answerRequestSchema,
-  ProviderError,
-  type Answer,
-  type AnswerRequest,
-} from './contracts.ts';
+import { answerRequestSchema, type Answer, type AnswerRequest } from './contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { parseAnswer } from './parse.ts';
 import { boundedJson } from '../providers/response.ts';
 

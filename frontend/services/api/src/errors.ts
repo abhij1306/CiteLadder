@@ -92,6 +92,11 @@ export function notFound(resource: string): ApiError {
   return new ApiError(404, `${resource} not found`);
 }
 
+/** A 409 carrying its reason as both message and detail. */
+export function conflict(reason: string): never {
+  throw new ApiError(409, reason, { details: { reason } });
+}
+
 function requestIdOf(c: Context): string {
   return (c.get('requestId') as string | undefined) ?? '';
 }

@@ -1,11 +1,12 @@
 /** Incremental traffic fold. Ordered input buffers just one revision identity. */
 import { policy } from '../config.ts';
-import { classifyReferralSignals } from '../referrals/classification.ts';
-import { addDays } from '../referrals/projection.ts';
+import type { ReferralClassifications } from '../referrals/persisted.ts';
+import { addDays } from '../calendar-days.ts';
 import { Ga4Accum, GscAccum, provenance, sourceFields, type MetricRow } from './accumulators.ts';
-import { canonicalPage, hash, normalizeQuery } from './normalization.ts';
+import { hash } from '../crypto-text.ts';
+import { canonicalPage, landingPage } from '../page-identity.ts';
+import { normalizeQuery } from './normalization.ts';
 import { compareText } from '../text-order.ts';
-import { landingPage } from '../integrations/host-scope.ts';
 import { observesZero, type DayQuality } from '../integrations/partitions.ts';
 import type { NonEmpty } from '../lists.ts';
 
@@ -35,6 +36,8 @@ export type ProjectionWindow = {
   granularity: string;
   projectOrigin?: string | null;
   allowedHosts?: ReadonlySet<string>;
+  /** Persisted AI referral classifications; GA4 rows are never classified live (OD3). */
+  referrals: ReferralClassifications;
 };
 
 function bucketStart(day: string, grain: string): string {
@@ -192,7 +195,8 @@ export class TrafficProjectionBuilder {
 
   private foldGa4(row: MetricRow, values: NonEmpty<string>, bucket: Ga4Accum) {
     const ai = (source: string | undefined, medium: string | undefined) =>
-      classifyReferralSignals({ utm_source: source, utm_medium: medium }) !== null;
+      this.window.referrals.aiSource(row.property_ref, row.date, source ?? '', medium ?? '') !==
+      null;
     if (row.dataset === p.DATASET_GA4_LANDING_DAILY) {
       const hosts =
         this.window.allowedHosts ??

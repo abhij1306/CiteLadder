@@ -7,6 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { TERMINAL_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
+import { canonicalHash } from '../canonical-json.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
@@ -42,26 +43,15 @@ const SCOPE_KEYS = [
 const RULE_FIELDS = new Map(Object.entries(p.field_rules).map(([field, rule]) => [rule, field]));
 
 const sha256 = (text: string) => createHash('sha256').update(text).digest('hex');
-/** Compact JSON with recursively sorted keys. */
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (value !== null && typeof value === 'object')
-    return `{${Object.keys(value)
-      .sort(compareText)
-      .map(
-        (key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`,
-      )
-      .join(',')}}`;
-  return JSON.stringify(value ?? null);
-}
 function rootOrigin(crawl: Pick<Crawl, 'root_url'>) {
   const [, scheme = '', authority = ''] = /^([^:/?#]+):\/\/([^/?#]*)/.exec(crawl.root_url) ?? [];
   return `${scheme.toLowerCase()}://${authority.toLowerCase()}`;
 }
 function crawlScopeHash(crawl: Pick<Crawl, 'configuration'>) {
   const configuration = record(crawl.configuration);
-  return sha256(
-    canonicalJson(Object.fromEntries(SCOPE_KEYS.map((key) => [key, configuration[key]]))),
+  return canonicalHash(
+    Object.fromEntries(SCOPE_KEYS.map((key) => [key, configuration[key] ?? null])),
+    false,
   );
 }
 const sameScope = (a: Crawl, b: Crawl) =>

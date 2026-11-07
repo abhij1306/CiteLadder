@@ -13,7 +13,7 @@ import { SiteHealthWorker } from '../workers/site-health-worker.ts';
 import { exclusiveDrain } from '../workers/runner.ts';
 import { siteWorkerSettings } from '../site-health/runtime.ts';
 import { SitePageFetcher, siteFetchSettings } from '../site-health/page-fetch.ts';
-import { fetchWebsite } from '../projects/safe-fetch.ts';
+import { fetchWebsite } from '../safe-fetch.ts';
 import { leaseSignal } from '../queue/heartbeat.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';

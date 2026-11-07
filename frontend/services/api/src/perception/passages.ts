@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { countedMatches, trackedEntities } from '../analysis/entity-assessment.ts';
 import type { ScoringConfig } from '../analysis/scoring.ts';
 import type { PerceptionPolicy } from '../config/perception.ts';
-import { canonicalJson } from '../search-intelligence/requests.ts';
+import { canonicalJson } from '../canonical-json.ts';
 
 /** A code-point span of the answer and its exact text. */
 export type Span = { start: number; end: number; text: string };

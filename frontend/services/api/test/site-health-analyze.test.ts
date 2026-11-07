@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
-import type { FetchedPage } from '../src/projects/safe-fetch.ts';
+import type { FetchedPage } from '../src/safe-fetch.ts';
 import { isBotBlock, SitePageFetcher, siteFetchSettings } from '../src/site-health/page-fetch.ts';
 import { siteTaskSettings } from '../src/site-health/site-task.ts';
 import { crawlCounters } from '../src/site-health/reads/crawl.ts';

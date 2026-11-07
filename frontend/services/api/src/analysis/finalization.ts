@@ -11,7 +11,7 @@ import { analyzeExecution } from './execution.ts';
 import { aggregateRun, promptTrend, type Aggregate, type AggregateExecution } from './aggregate.ts';
 import { frozenComparisonKey } from './comparison.ts';
 import { persistObservedCompetitors } from './observed-competitors.ts';
-import { round } from './round.ts';
+import { round } from '../numbers.ts';
 import { getLogger } from '../logging.ts';
 import { compareText } from '../text-order.ts';
 import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';

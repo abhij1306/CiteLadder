@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { policy, resolveSettingSpec } from '../config.ts';
 import { auditRuntime } from '../audits/config.ts';
-import { ProviderError } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { acquireCapacity, releaseCapacity, type CapacityRequest } from '../providers/capacity.ts';
 import type { Executor } from '../queue/executor.ts';
 import { record } from '../db/json.ts';

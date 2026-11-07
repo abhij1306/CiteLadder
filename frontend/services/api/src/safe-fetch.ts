@@ -8,8 +8,8 @@ import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib';
 import ipaddr from 'ipaddr.js';
 import { getDomain } from 'tldts';
 
-import { policy } from '../config.ts';
-import { isNonEmpty } from '../lists.ts';
+import { policy } from './config.ts';
+import { isNonEmpty } from './lists.ts';
 
 export class FetchError extends Error {
   readonly code: string;

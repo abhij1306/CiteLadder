@@ -1,11 +1,11 @@
 import { policy } from '../config.ts';
-import { addDays } from '../referrals/projection.ts';
+import { addDays } from '../calendar-days.ts';
+import { roundScaled } from '../numbers.ts';
 import {
   aggregate,
   classificationCounts,
   collectionState,
   queryCandidate,
-  round,
   unique,
   type Candidate,
   type Evaluation,
@@ -124,9 +124,9 @@ function relevance(query: string, a: ReturnType<typeof aggregate>, property: str
     signal_type: p.DEMAND_SIGNAL_QUERY_PAGE_RELEVANCE,
     state: 'measured',
     signal_active: active,
-    title_coverage: round(tc, 6),
-    h1_coverage: round(hc, 6),
-    primary_content_coverage: round(pc, 6),
+    title_coverage: roundScaled(tc, 6),
+    h1_coverage: roundScaled(hc, 6),
+    primary_content_coverage: roundScaled(pc, 6),
     absent_from_title: [...terms].filter((t) => !title.has(t)).sort(compareText),
     absent_from_h1: [...terms].filter((t) => !h1.has(t)).sort(compareText),
     page_analysis_id: a.page_analysis_id,

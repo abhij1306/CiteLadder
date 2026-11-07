@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { auditPolicy } from '../audits/config.ts';
-import { searchPolicy } from '../search-surfaces/dataforseo.ts';
-import { canonicalPage } from '../traffic/normalization.ts';
+import { casefold } from '../casefold.ts';
+import { canonicalPage } from '../page-identity.ts';
 import { localizedPrice } from './projection-facts.ts';
 import { onlyOf } from '../lists.ts';
 import { domainMatches } from '../analysis/domains.ts';
@@ -46,14 +46,7 @@ function recommendationSpans(answer: string): RecommendationSpan[] {
 
 /** Shelf matching applies its own casefold and punctuation rules, independently of brand aliases. */
 function normalize(value: string) {
-  return value
-    .replaceAll(
-      /./gsu,
-      (character) =>
-        searchPolicy.casefold_overrides[
-          character as keyof typeof searchPolicy.casefold_overrides
-        ] ?? character.toLowerCase(),
-    )
+  return casefold(value)
     .replaceAll(/[^\p{L}\p{N}_]+/gu, ' ')
     .trim()
     .replaceAll(/\s+/gu, ' ');

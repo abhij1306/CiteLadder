@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { ProviderError } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { providerSettings } from '../providers/config.ts';
 import { approvedEndpoint, basicAuthorization } from '../providers/connections.ts';
 import { boundedJson } from '../providers/response.ts';
 import { providerErrorCode } from '../models/http.ts';
-import { canonicalJson, si } from './requests.ts';
+import { si } from './requests.ts';
+import { canonicalJson } from '../canonical-json.ts';
 import { record } from '../db/json.ts';
 
 export type ResearchResponse = {

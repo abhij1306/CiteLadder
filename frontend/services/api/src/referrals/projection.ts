@@ -16,6 +16,7 @@
  *
  * Dates are ISO `YYYY-MM-DD` strings, which also order correctly as text.
  */
+import { addDays, dayStart, utcDay } from '../calendar-days.ts';
 import { policy } from '../config.ts';
 import { compareText } from '../text-order.ts';
 
@@ -42,27 +43,19 @@ export type AiReferralsProjection = {
 
 class ProjectionError extends Error {}
 
-const DAY_MS = 86_400_000;
-const toDate = (day: string) => new Date(`${day}T00:00:00Z`);
-const toDay = (date: Date) => date.toISOString().slice(0, 10);
-
-export function addDays(day: string, days: number): string {
-  return toDay(new Date(toDate(day).getTime() + days * DAY_MS));
-}
-
 /** The calendar bucket holding `day`: itself, its ISO Monday, or the 1st. */
 export function bucketStart(day: string, granularity: string): string {
   if (granularity === 'day') return day;
-  if (granularity === 'week') return addDays(day, -((toDate(day).getUTCDay() + 6) % 7));
+  if (granularity === 'week') return addDays(day, -((dayStart(day).getUTCDay() + 6) % 7));
   if (granularity === 'month') return `${day.slice(0, 7)}-01`;
   throw new ProjectionError(`unknown granularity: ${granularity}`);
 }
 
 function nextBucket(start: string, granularity: string): string {
   if (granularity !== 'month') return addDays(start, granularity === 'day' ? 1 : 7);
-  const date = toDate(start);
+  const date = dayStart(start);
   date.setUTCMonth(date.getUTCMonth() + 1);
-  return toDay(date);
+  return utcDay(date);
 }
 
 /** Series labels: every bucket start in the window, the first clamped to it. */

@@ -68,6 +68,9 @@ it('joins mixed-case owned hosts and bounds deduplicated snapshot provenance wit
     ['/guide?token=removed', 'chatgpt.com', 'referral', 'ExAmPlE.TeSt', day],
     { sessions: 4, keyEvents: 1 },
   );
+  const sourceMedium = await imported('ga4_source_medium_daily');
+  await row(sourceMedium, ['chatgpt.com', 'referral', day], { sessions: 4 });
+  await classify(sourceMedium);
   const evidence = await referralEvidence(db, {
     workspaceId: t.workspaceId,
     projectId: t.projectId,
@@ -80,7 +83,7 @@ it('joins mixed-case owned hosts and bounds deduplicated snapshot provenance wit
     sessions: 4,
     source_metric_row_ids: [metricId],
   });
-  const metric = evidence.rows[0]!;
+  const metric = evidence.rows.find((r) => r.id === metricId)!;
   const rows = Array.from({ length: policy.traffic.TRAFFIC_PROVENANCE_ID_LIMIT + 1 }, () => ({
     ...metric,
     id: randomUUID(),
@@ -296,6 +299,47 @@ describe('A3 integration partition replacement', () => {
       { channel: 'All other sessions', sessions: 6, key_events: 4, engagement_rate: 5 / 6 },
     ]);
   });
+  it('counts the persisted classification in the headline, landing pages and Performance until reclassification', async () => {
+    const source = await imported('ga4_source_medium_daily');
+    await row(source, ['ordinary.example', 'referral', day], {
+      sessions: 7,
+      engagedSessions: 3,
+      keyEvents: 1,
+    });
+    await classify(source);
+    // A classification written under earlier rules: today's rules would not call this source AI.
+    await db
+      .updateTable('referral_classifications')
+      .set({ is_ai_referral: true, ai_source: 'chatgpt' })
+      .where('project_id', '=', t.projectId)
+      .execute();
+    const landing = await imported('ga4_landing_daily');
+    await row(landing, ['/guide', 'ordinary.example', 'referral', 'example.test', day], {
+      sessions: 7,
+      engagedSessions: 3,
+      keyEvents: 1,
+    });
+    await refreshAiReferralsSnapshot(
+      await task(db, t, 'ai_referrals_snapshot_refresh', window),
+      context,
+    );
+    const referrals = await getAiReferrals(db, {
+      workspaceId: t.workspaceId,
+      projectId: t.projectId,
+      fromDate: day,
+      toDate: day,
+      rangeToken: null,
+      granularity: 'day',
+    });
+    expect(referrals.referral_volume).toEqual([{ date: day, value: 7 }]);
+    expect(referrals.landing_pages[0]).toMatchObject({
+      canonical_url: 'https://example.test/guide',
+      sessions: 7,
+    });
+    await refreshTrafficSnapshot(await task(db, t, 'traffic_snapshot_refresh', window), context);
+    const performance = await requests(db, t)(`performance?range=custom&from=${day}&to=${day}`);
+    expect(performance.body.selected.totals.sessions).toBe(7);
+  });
   it('carries flagged GA4 zeros as unavailable into landing, channel and Performance projections', async () => {
     const landing = await imported('ga4_landing_daily'),
       source = await imported('ga4_source_medium_daily'),
@@ -387,13 +431,6 @@ describe('A3 integration partition replacement', () => {
       keyEvents: 2,
     });
     await classify(first);
-    const newer = await imported('ga4_source_medium_daily', first, 1);
-    await row(newer, ['ordinary.example', 'referral', day], {
-      sessions: 10,
-      engagedSessions: 5,
-      keyEvents: 1,
-    });
-    await classify(newer);
     const landing = await imported('ga4_landing_daily');
     await row(landing, ['/gone', 'chatgpt.com', 'referral', 'example.test', day], {
       sessions: 9,
@@ -404,6 +441,13 @@ describe('A3 integration partition replacement', () => {
       await task(db, t, 'ai_referrals_snapshot_refresh', window),
       context,
     );
+    const newer = await imported('ga4_source_medium_daily', first, 1);
+    await row(newer, ['ordinary.example', 'referral', day], {
+      sessions: 10,
+      engagedSessions: 5,
+      keyEvents: 1,
+    });
+    await classify(newer);
     await imported('ga4_landing_daily', landing, 1);
     expect(
       (
@@ -503,6 +547,10 @@ describe('A3 integration partition replacement', () => {
     await row(landing, ['/guide', 'chatgpt.com', 'referral', 'foreign.test', day], base);
     await row(landing, ['(not set)', 'claude.ai', 'referral', 'example.test', day], base);
     await row(landing, ['/ordinary', 'not-ai', 'referral', 'example.test', day], base);
+    const source = await imported('ga4_source_medium_daily');
+    for (const referrer of ['chatgpt.com', 'claude.ai', 'not-ai'])
+      await row(source, [referrer, 'referral', day], base);
+    await classify(source);
     await refreshAiReferralsSnapshot(
       await task(db, t, 'ai_referrals_snapshot_refresh', window),
       context,

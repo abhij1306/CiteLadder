@@ -17,11 +17,14 @@ import {
   newProduct,
 } from './catalog-store.ts';
 import type { CommerceScope } from './reads.ts';
-import { catalogUrl, categoryKey, isCategoryName } from './projection-facts.ts';
+import { categoryKey, isCategoryName } from './projection-facts.ts';
+import { canonicalUrl } from '../site-health/url-identity.ts';
 
 const productInput = z
   .object({
-    canonical_url: z.url().refine((value) => catalogUrl(value) !== '', 'Unsupported catalog URL'),
+    canonical_url: z
+      .url()
+      .refine((value) => canonicalUrl(value) !== null, 'Unsupported catalog URL'),
     name: z.string().max(512),
     description: z.string(),
     brand: z.string().max(255),
@@ -91,7 +94,7 @@ function productValues(row: Record<string, string>) {
       parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
     );
   if (parsed.data.canonical_url) {
-    parsed.data.canonical_url = catalogUrl(parsed.data.canonical_url);
+    parsed.data.canonical_url = canonicalUrl(parsed.data.canonical_url) ?? '';
   }
   return { values: parsed.data, categories };
 }

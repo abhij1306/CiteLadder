@@ -4,15 +4,15 @@ import { afterAll, expect, it, vi } from 'vitest';
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
 import { enqueueTask } from '../src/queue/enqueue.ts';
-import { createWebsiteFetcher } from '../src/projects/safe-fetch.ts';
+import { createWebsiteFetcher } from '../src/safe-fetch.ts';
 import { authorizeAcquisition } from '../src/web-evidence/acquisition.ts';
-import { canonicalIdentity } from '../src/site-health/url-identity.ts';
+import { pageIdentity } from '../src/source-pages/identity.ts';
 import { claimPages, spendRedirect } from '../src/source-pages/admission.ts';
 import { assessPage } from '../src/source-pages/assessment.ts';
 import { extractSourcePage } from '../src/source-pages/extract.ts';
 import { recordInspection } from '../src/source-pages/persistence.ts';
 import { projectRoster } from '../src/source-pages/reading.ts';
-import { syncPages } from '../src/source-pages/sync.ts';
+import { resolveCitation, syncCitedPages, syncPages } from '../src/source-pages/sync.ts';
 import { sourcePageInspector, compensateInspection } from '../src/source-pages/inspector.ts';
 import { refreshDifferentiation } from '../src/source-pages/differentiation.ts';
 import { testDatabase } from './support.ts';
@@ -34,13 +34,13 @@ async function seed(urls = ['https://publisher.test/review']) {
   const audit = await fixtures.audit(tenant, { configuration });
   await fixtures.execution(tenant, {
     auditId: audit,
-    analysis: { citations: urls.map((url) => ({ url, urlHash: canonicalIdentity(url).hash })) },
+    analysis: { citations: urls.map((url) => ({ url, urlHash: pageIdentity(url)?.hash ?? null })) },
   });
   for (const url of urls)
     await db
       .updateTable('citations')
       .set({
-        canonical_url: canonicalIdentity(url).url,
+        canonical_url: pageIdentity(url)?.url ?? null,
         url_identity_method: 'verbatim',
         url_identity_version: policy.source_pages.identity_version,
       })
@@ -369,6 +369,41 @@ it('fails closed before DNS or transport when the policy store cannot answer', a
   ).rejects.toMatchObject({ code: 'acquisition_unavailable' });
   expect(dns).not.toHaveBeenCalled();
   expect(send).not.toHaveBeenCalled();
+});
+
+it('gives a page cited directly and through a followed redirect one source page', async () => {
+  const direct = 'https://bücher.example/guides/./best?size=8';
+  const token = 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc';
+  const own = await seed([direct, token]);
+  await db
+    .updateTable('citations')
+    .set({ url_hash: null, canonical_url: null, url_identity_method: 'unresolved' })
+    .where('audit_id', '=', own.audit)
+    .where('url', '=', token)
+    .execute();
+  const roster = projectRoster(own.configuration);
+  expect(await syncPages(db, own.scope, own.audit, roster)).toEqual([token]);
+  const reached = 'https://BÜCHER.example./guides/./best?utm_source=engine&size=8';
+  const identity = await resolveCitation(db, own.scope, own.audit, token, reached);
+  await syncCitedPages(db, own.scope, own.audit, [identity!.hash]);
+  const pages = await db
+    .selectFrom('source_pages')
+    .select(['canonical_url', 'registrable_domain'])
+    .where('project_id', '=', own.projectId)
+    .execute();
+  expect(pages).toEqual([
+    {
+      canonical_url: 'https://xn--bcher-kva.example/guides/./best?size=8',
+      registrable_domain: 'xn--bcher-kva.example',
+    },
+  ]);
+  const hashes = await db
+    .selectFrom('citations')
+    .select('url_hash')
+    .distinct()
+    .where('audit_id', '=', own.audit)
+    .execute();
+  expect(hashes).toEqual([{ url_hash: identity!.hash }]);
 });
 
 it('recovers an expired page lease, ignores old spend and retries a redirect in a later window', async () => {
