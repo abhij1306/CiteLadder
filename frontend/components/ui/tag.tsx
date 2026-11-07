@@ -54,20 +54,6 @@ export function Tag({
   );
 }
 
-/**
- * InlineTag — a tag set inside a line of caption text (a table row's topic
- * before its classification): the caption face in `ink-secondary` with a
- * 1px `line-strong` inset ring, `radius-xs`, 4px across. The ring is drawn
- * inside the box without a border, so the tag adds no height to its line.
- */
-export function InlineTag({ children }: Readonly<{ children: string }>) {
-  return (
-    <span className="text-ink-secondary ring-line-strong me-1 rounded-xs px-1 font-medium ring-1 ring-inset">
-      {children}
-    </span>
-  );
-}
-
 /** Two tags and a "+n" control that expands the rest in place, for touch and keyboard. */
 export function TagGroup({ labels }: Readonly<{ labels: readonly string[] }>) {
   const [expanded, setExpanded] = useState(false);

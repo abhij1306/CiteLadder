@@ -15,7 +15,7 @@ export const MENU_PANEL =
   'menu-panel bg-surface text-ink shadow-pop z-modal focus-ring overflow-hidden rounded-lg border border-transparent p-1';
 
 /**
- * One 32px row: `radius-sm`, 8px padding, 14/20 `ink`, a 16px lead column for
+ * One 32px row, which never shrinks when a long menu scrolls: `radius-sm`, 8px padding, 14/20 `ink`, a 16px lead column for
  * an icon or a check so labels align. Hover and keyboard highlight take
  * `surface-sunken`; keyboard focus adds the shared 2px ring, which the
  * panel's 4px inset holds. `danger` is `negative` text with a `negative-soft`
@@ -26,7 +26,7 @@ export function menuItemClasses({
   className,
 }: Readonly<{ danger?: boolean; className?: string }> = {}) {
   return cn(
-    'focus-ring relative flex h-8 w-full cursor-pointer items-center gap-2 rounded-sm px-2 text-left text-body-sm transition-colors select-none',
+    'focus-ring relative flex h-8 w-full shrink-0 cursor-pointer items-center gap-2 rounded-sm px-2 text-left text-body-sm transition-colors select-none',
     'data-[highlighted]:bg-surface-sunken hover:bg-surface-sunken',
     'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-45 data-[disabled]:hover:bg-transparent',
     danger

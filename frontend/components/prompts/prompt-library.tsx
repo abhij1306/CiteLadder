@@ -329,7 +329,6 @@ export function PromptLibrary({
       }}
       busyId={busyId}
       measurements={measurements}
-      topics={topics}
     />
   );
   // A failed read with nothing to show takes the empty state's slot; a failed

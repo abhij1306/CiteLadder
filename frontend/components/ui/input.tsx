@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils';
 
 /**
  * The field box every text control shares (Input, SearchField, Select's
- * trigger, ChipInput): `surface` with a soft 1px `line` edge and the faint
- * `shadow-edge` smudge under it, never a dark hairline (decision D5),
- * `radius-md`, `control-md` tall. Hover steps the edge to `line-strong`;
- * focus turns it `focus` with a 3px `line` halo, and an invalid field turns
- * it `negative` (globals.css `.focus-input`/`.focus-frame`, which win over hover).
+ * trigger, ChipInput, Textarea, the composer): `surface` with the soft 1px
+ * `line` edge and the faint `shadow-edge` smudge under it (decision D5;
+ * owner, 6 November 2026: no dark edge), `radius-md`, `control-md` tall.
+ * Hover steps the edge to `line-strong`; focus
+ * thickens it to a 2px `focus` line inside a 3px `line` halo, and an invalid
+ * field turns it `negative` (globals.css `.focus-input`/`.focus-frame`, which
+ * win over hover).
  */
 export const FIELD_EDGE = 'bg-surface shadow-edge border border-line hover:border-line-strong';
 

@@ -81,7 +81,8 @@
 
   /* Type. Each role owns size, leading, weight and tracking; on the website
      and docs the display roles (display-*, title, title-sm, stat) pair with
-     `font-display`. In the app only the page title is Cal Sans (D7): its other
+     `font-display`. In the app only the page title and the auth card titles
+     are Cal Sans (D7, D37): its other
      titles and figures set these sizes in Geist 500. The mono roles (eyebrow,
      data, code) pair with `font-mono`, the rest are Geist, never above 500. */
   --text-*: initial;
@@ -490,8 +491,9 @@ body {
     letter-spacing: var(--text-display-sm--letter-spacing);
     color: var(--color-ink);
   }
-  /* In the app Cal Sans is the page title's alone (decision D7): every other
-     title and number is Geist, never above 500 (D6). */
+  /* In the app Cal Sans is the page title's and the auth card title's alone
+     (decisions D7, D37): every other title and number is Geist, never above
+     500 (D6). */
   .type-section-title {
     font-family: var(--font-sans);
     font-size: var(--text-heading-lg);
@@ -804,7 +806,9 @@ a.focus-ring:active .type-caption {
 }
 
 /* Keyboard focus is a solid 2px `focus` ring (ink) with a 2px offset. A field
-   instead turns its border `focus` and adds a 3px `line` halo. */
+   instead thickens its edge to a 2px `focus` line (its border plus a 1px
+   ring, `negative` when invalid) inside a 3px `line` halo, so focus reads
+   apart from the 1px `line` rest and the `line-strong` hover. */
 :focus-visible,
 .focus-ring:focus-visible {
   outline: 2px solid var(--color-focus);
@@ -820,9 +824,11 @@ a.focus-ring:active .type-caption {
 
 .focus-input:focus-visible,
 .focus-frame:has(:where(input:focus-visible, textarea:focus-visible, select:focus-visible)) {
-  border-color: var(--color-focus);
+  border-color: var(--field-focus-edge, var(--color-focus));
   outline: none;
-  box-shadow: 0 0 0 3px var(--color-line);
+  box-shadow:
+    0 0 0 1px var(--field-focus-edge, var(--color-focus)),
+    0 0 0 4px var(--color-line);
 }
 
 /* A bare table's boundary: the `line` ring. A table inside a card or dialog
@@ -917,6 +923,7 @@ input:-webkit-autofill:focus {
 .focus-input[aria-invalid='true'],
 .focus-ring[aria-invalid='true'],
 .focus-frame:has([aria-invalid='true']) {
+  --field-focus-edge: var(--color-negative);
   border: 1px solid var(--color-negative);
   outline-color: var(--color-negative);
 }
