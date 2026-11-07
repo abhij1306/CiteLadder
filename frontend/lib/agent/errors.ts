@@ -7,16 +7,16 @@ export type AgentWriteFailure = MutationNotice & { startNewChat: boolean };
 type AgentCopy = { message: string; startNewChat: boolean };
 
 const CODED: {
-  agent_funding_unavailable: AgentCopy;
+  agent_model_unavailable: AgentCopy;
   [code: string]: AgentCopy;
 } = {
-  agent_funding_unavailable: {
+  agent_model_unavailable: {
     message:
       "No Agent model is configured. Set DEFAULT_AGENT_API_KEY, DEFAULT_AGENT_BASE_URL and DEFAULT_AGENT_MODEL in the server's .env, then restart.",
     startNewChat: false,
   },
-  agent_model_unavailable: {
-    message: 'The connected AI model is unavailable. Check Providers in Settings, then try again.',
+  model_changed: {
+    message: 'The Agent model changed on the server. Send your message again.',
     startNewChat: false,
   },
   agent_run_active: {
@@ -37,7 +37,6 @@ function agentCopy(error: unknown): AgentCopy | undefined {
   if (!(error instanceof ApiError)) return undefined;
   const coded = error.code ? CODED[error.code] : undefined;
   if (coded) return coded;
-  if (error.status === 402) return CODED.agent_funding_unavailable;
   if (error.status === 429)
     return {
       message: 'The workspace has reached its agent usage limit. Try again later.',

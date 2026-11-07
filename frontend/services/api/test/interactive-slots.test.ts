@@ -9,7 +9,7 @@ import { auditRuntime } from '../src/audits/config.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { interactiveSlots, type InteractiveSlot } from '../src/http/interactive-slots.ts';
-import { AgentFixtures, reply, scripted, zeroFunding } from './agent-support.ts';
+import { AgentFixtures, reply, scripted, modelAvailable } from './agent-support.ts';
 import { auditTenant } from './audit-fixtures.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { agentTurnAcceptedSchema } from '@citeladder/contracts/agent';
@@ -29,7 +29,7 @@ describe('in-request work slots on one API instance', () => {
     const scope = await fixtures.scope(),
       bindings = await createAgentBindings(db, {});
     bindings.store.dependencies.admission = fixtures.store().dependencies.admission;
-    bindings.runtime.deps.models = new ModelCalls(db, zeroFunding);
+    bindings.runtime.deps.models = new ModelCalls(db, modelAvailable);
     bindings.runtime.deps.modelFor = () => model;
     bindings.models = bindings.runtime.deps.models;
     vi.spyOn(bindingsOwner, 'agentBindings').mockResolvedValue(bindings);

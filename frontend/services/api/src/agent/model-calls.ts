@@ -10,7 +10,7 @@ import {
 import { ModelError } from '../models/http.ts';
 import { authorize } from './access.ts';
 import { abortable } from './async.ts';
-import { AgentError, budgetSchema, type Lease, type ModelAttempt, type Run } from './contracts.ts';
+import { AgentError, budgetSchema, type Lease, type Run } from './contracts.ts';
 import { lockRun } from './queue.ts';
 
 export type ModelResult = ConversationResult;
@@ -27,52 +27,28 @@ export type AgentModel = {
     listener?: ConversationListener,
   ) => Promise<ModelResult>;
 };
-type Hold = {
-  reservationId: string | null;
-  credits: number;
-  pricingRevision: string;
-  /** The output cap the call is sent with. Omitted: the route's cap. */
-  outputTokens?: number;
-};
 /**
- * The dispatch seam: `reserve` rechecks the frozen model and configuration
- * before a call, `settle` records its receipt. Self-hosted calls hold and
- * charge nothing; both run on the caller's transaction.
+ * The dispatch recheck, inside the dispatch transaction: throws when the
+ * run's frozen model is no longer the configured one (`model_changed`) or no
+ * model is configured (`model_unavailable`).
  */
-export type Funding = {
-  reserve: (
-    db: Database,
-    run: Run,
-    dispatchId: string,
-    model: AgentModel,
-    request: ModelRequest,
-  ) => Promise<Hold>;
-  settle: (
-    db: Database,
-    attempt: ModelAttempt,
-    /** The provider's reported usage, a failed call's included; null when it reported none. */
-    usage: Usage | null,
-  ) => Promise<{ credits: number; status: string }>;
-  /** Refunds every credit the run's settled calls debited; idempotent. */
-  refund: (db: Database, run: Run) => Promise<void>;
-};
+export type ModelAvailability = (run: Run) => void;
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 /**
- * A dispatch refused for funding before anything was reserved, recorded or
- * sent: the turn may still end with work it already staged. A funding
- * failure later in a call (at settlement) is a plain `funding_unavailable`.
+ * A dispatch refused because no model is available, before anything was
+ * recorded or sent: the turn may still end with work it already staged.
  */
 export class RefusedDispatch extends AgentError {
   constructor() {
-    super('funding_unavailable');
+    super('model_unavailable');
   }
 }
 export class ModelCalls {
   readonly db: Database;
-  readonly funding: Funding;
-  constructor(db: Database, funding: Funding) {
+  readonly available: ModelAvailability;
+  constructor(db: Database, available: ModelAvailability) {
     this.db = db;
-    this.funding = funding;
+    this.available = available;
   }
   dispatch(lease: Lease, ordinal: number, model: AgentModel, request: ModelRequest) {
     return this.db.transaction().execute(async (trx) => {
@@ -96,12 +72,7 @@ export class ModelCalls {
         .where('ordinal', '=', ordinal)
         .executeTakeFirst();
       if (existing) throw new AgentError('lease');
-      const dispatchId = randomUUID();
-      const hold = await this.funding.reserve(trx, run, dispatchId, model, request);
-      // Self-hosted calls reserve nothing and keep the route's output cap; a
-      // hold is only the dispatch recheck.
-      if (hold.reservationId !== null || hold.credits !== 0 || hold.outputTokens !== undefined)
-        throw new AgentError('funding_unavailable');
+      this.available(run);
       const now = new Date();
       const attempt = await trx
         .insertInto('agent_model_attempts')
@@ -110,21 +81,16 @@ export class ModelCalls {
           workspace_id: run.workspace_id,
           project_id: run.project_id,
           run_id: run.id,
-          dispatch_id: dispatchId,
+          dispatch_id: randomUUID(),
           run_attempt: run.attempt_count,
           ordinal,
-          funding_source: run.funding_source,
           provider_adapter: model.adapter,
           endpoint_host: model.endpointHost,
           requested_model: run.requested_model,
           returned_model: '',
-          pricing_revision: hold.pricingRevision,
-          reservation_id: hold.reservationId,
-          reserved_credits: hold.credits,
           // The size of what the provider read, and the output cap sent (null: the route's).
           input_bytes: conversationInputBytes(request),
-          max_output_tokens: hold.outputTokens ?? null,
-          debited_credits: 0,
+          max_output_tokens: request.maxOutputTokens ?? null,
           input_tokens: null,
           cached_input_tokens: null,
           cache_write_input_tokens: null,
@@ -132,7 +98,6 @@ export class ModelCalls {
           reasoning_tokens: null,
           total_tokens: null,
           usage_complete: false,
-          settlement_status: 'not_applicable',
           request_hash: hash(JSON.stringify(request)),
           output_hash: '',
           dispatched_at: now,
@@ -156,12 +121,12 @@ export class ModelCalls {
       return attempt;
     });
   }
-  /** Receipt settlement outlives cancellation/lease loss; first settlement wins. */
+  /** Recording a receipt outlives cancellation/lease loss; the first receipt wins. */
   receipt(
     workspaceId: string,
     attemptId: string,
     result: ModelResult | null,
-    /** Tokens a failed call still reported, charged as platform metering charges them. */
+    /** Tokens a failed call still reported, recorded with its receipt. */
     failedUsage: Usage | null = null,
   ) {
     const outcome = result ? 'completed' : 'failed';
@@ -182,43 +147,16 @@ export class ModelCalls {
           : null;
       };
       const now = new Date();
-      const updated = {
-        ...attempt,
-        input_tokens: usage('input_tokens'),
-        output_tokens: usage('output_tokens'),
-        cached_input_tokens: usage('cached_input_tokens'),
-        cache_write_input_tokens: usage('cache_write_input_tokens'),
-        reasoning_tokens: usage('reasoning_tokens'),
-        total_tokens: usage('total_tokens'),
-        usage_complete: usage('input_tokens') !== null && usage('output_tokens') !== null,
-        outcome,
-        settled_at: now,
-      };
-      const stored = (value: number | null) => (value === null ? null : String(value));
-      const settled = await this.funding.settle(
-        trx,
-        {
-          ...updated,
-          input_tokens: stored(updated.input_tokens),
-          output_tokens: stored(updated.output_tokens),
-          cached_input_tokens: stored(updated.cached_input_tokens),
-          cache_write_input_tokens: stored(updated.cache_write_input_tokens),
-          reasoning_tokens: stored(updated.reasoning_tokens),
-          total_tokens: stored(updated.total_tokens),
-        },
-        reported,
-      );
-      if (settled.credits !== 0) throw new AgentError('funding_unavailable');
       await trx
         .updateTable('agent_model_attempts')
         .set({
-          input_tokens: updated.input_tokens,
-          output_tokens: updated.output_tokens,
-          cached_input_tokens: updated.cached_input_tokens,
-          cache_write_input_tokens: updated.cache_write_input_tokens,
-          reasoning_tokens: updated.reasoning_tokens,
-          total_tokens: updated.total_tokens,
-          usage_complete: updated.usage_complete,
+          input_tokens: usage('input_tokens'),
+          output_tokens: usage('output_tokens'),
+          cached_input_tokens: usage('cached_input_tokens'),
+          cache_write_input_tokens: usage('cache_write_input_tokens'),
+          reasoning_tokens: usage('reasoning_tokens'),
+          total_tokens: usage('total_tokens'),
+          usage_complete: usage('input_tokens') !== null && usage('output_tokens') !== null,
           outcome,
           settled_at: now,
           late_receipt: now > attempt.deadline_at,
@@ -237,8 +175,6 @@ export class ModelCalls {
               ? result.cache.missed_input_tokens
               : null,
           usage_iterations: JSON.stringify(result?.iterations ?? []),
-          settlement_status: settled.status,
-          debited_credits: settled.credits,
         })
         .where('id', '=', attempt.id)
         .where('workspace_id', '=', workspaceId)
@@ -255,23 +191,18 @@ export class ModelCalls {
   ) {
     executionSignal?.throwIfAborted();
     const attempt = await this.dispatch(lease, ordinal, model, request).catch((error: unknown) => {
-      // The dispatch transaction rolled back: no hold, attempt or request exists.
-      if (error instanceof AgentError && error.code === 'funding_unavailable')
+      // The dispatch transaction rolled back: no attempt or request exists.
+      if (error instanceof AgentError && error.code === 'model_unavailable')
         throw new RefusedDispatch();
       throw error;
     });
-    // A call the balance covers only in part is sent with the output cap it was held for.
-    const sent =
-      attempt.max_output_tokens === null
-        ? request
-        : { ...request, maxOutputTokens: attempt.max_output_tokens };
     let result: ModelResult;
     try {
       const remaining = attempt.deadline_at.getTime() - Date.now();
       if (remaining <= 0) throw new AgentError('provider_error');
       const deadline = AbortSignal.timeout(remaining);
       const signal = executionSignal ? AbortSignal.any([deadline, executionSignal]) : deadline;
-      result = await abortable(() => model.converse(sent, signal, listener), signal);
+      result = await abortable(() => model.converse(request, signal, listener), signal);
     } catch (error) {
       await this.receipt(
         lease.workspaceId,
@@ -286,44 +217,23 @@ export class ModelCalls {
     await this.db.transaction().execute((trx) => lockRun(trx, lease));
     return result;
   }
+  /**
+   * Closes the run's calls still awaiting a receipt as `recovered_unknown`, on
+   * the caller's transaction. A failed or interrupted turn runs this before it ends.
+   */
   async reconcile(db: Database, run: Run) {
-    const attempts = await db
-      .selectFrom('agent_model_attempts')
-      .selectAll()
+    await db
+      .updateTable('agent_model_attempts')
+      .set({
+        outcome: 'recovered_unknown',
+        settled_at: new Date(),
+        error_code: 'worker_lost_after_dispatch',
+        usage_complete: false,
+      })
       .where('workspace_id', '=', run.workspace_id)
       .where('run_id', '=', run.id)
       .where('outcome', '=', 'dispatched')
-      .forUpdate()
       .execute();
-    for (const attempt of attempts) {
-      const updated = {
-        ...attempt,
-        outcome: 'recovered_unknown',
-        usage_complete: false,
-        settled_at: new Date(),
-      };
-      // Settlement and its attempt write share one ordered transaction.
-      const settled = await this.funding.settle(db, updated, null); // NOSONAR
-      if (settled.credits !== 0) throw new AgentError('funding_unavailable');
-      await db // NOSONAR
-        .updateTable('agent_model_attempts')
-        .set({
-          outcome: updated.outcome,
-          settled_at: updated.settled_at,
-          error_code: 'worker_lost_after_dispatch',
-          settlement_status: settled.status,
-          debited_credits: settled.credits,
-          usage_complete: false,
-        })
-        .where('workspace_id', '=', run.workspace_id)
-        .where('id', '=', attempt.id)
-        .execute();
-    }
-  }
-  /** A failed turn saves nothing: its calls settle as recorded, then their credits are refunded. */
-  async settleFailed(db: Database, run: Run) {
-    await this.reconcile(db, run);
-    await this.funding.refund(db, run);
   }
   recoverCancelled(workspaceIds: readonly string[], limit: number, graceSeconds: number) {
     if (!workspaceIds.length) return Promise.resolve(0);
@@ -348,7 +258,7 @@ export class ModelCalls {
         .forUpdate()
         .skipLocked()
         .execute();
-      // One transaction connection: settlements run in order.
+      // One transaction connection: runs are reconciled in order.
       for (const run of runs) await this.reconcile(trx, run); // NOSONAR
       return runs.length;
     });

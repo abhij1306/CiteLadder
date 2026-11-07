@@ -90,7 +90,7 @@ const RECOVERY: Record<string, string> = {
     'This request and its selected evidence are too large for one turn. Remove some references or ask about one part at a time.',
   skills_changed:
     'CiteLadder was updated while this request was waiting. Nothing was saved; send it again.',
-  funding_unavailable:
+  model_unavailable:
     'The Agent model is not configured. Set DEFAULT_AGENT_API_KEY, DEFAULT_AGENT_BASE_URL and DEFAULT_AGENT_MODEL, then restart. Nothing was saved.',
   model_changed:
     'The AI model changed while this request was waiting. Nothing was saved; send it again.',

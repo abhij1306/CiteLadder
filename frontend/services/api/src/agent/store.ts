@@ -6,7 +6,6 @@ import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import { jsonObject } from '../db/json.ts';
 import { authorize } from './access.ts';
-import { SELF_HOSTED } from './funding.ts';
 import {
   agentPolicy,
   AgentError,
@@ -21,10 +20,10 @@ import { buildManifest, type ContextReader } from './context.ts';
 import { active, endInterrupted, terminal } from './queue.ts';
 import { appendMessage, appendRecoveryReply, getChat } from './messages.ts';
 
-export type FundingIdentity = Pick<Run, 'funding_source' | 'requested_model'>;
+export type AdmittedModel = Pick<Run, 'requested_model'>;
 /** Admission owns the model configuration check and abuse capacity, in this transaction.
  * It is injected deliberately, with no default. */
-export type Admission = (db: Database, scope: Scope) => Promise<FundingIdentity>;
+export type Admission = (db: Database, scope: Scope) => Promise<AdmittedModel>;
 const messageSchema = z.string().trim().min(1).max(agentPolicy.message_max_chars);
 export type TurnInput = {
   chatId?: string;
@@ -106,8 +105,8 @@ export class AgentStore {
     catalog: SkillCatalog;
     registryVersion: string;
     timeoutSeconds: number;
-    /** A failed turn's settlement, for a Stop on a turn whose lease lapsed. */
-    settleFailed: (db: Database, run: Run) => Promise<void>;
+    /** Closes a failed turn's unanswered model calls, for a Stop on a turn whose lease lapsed. */
+    reconcile: (db: Database, run: Run) => Promise<void>;
   };
   constructor(db: Database, dependencies: AgentStore['dependencies']) {
     this.db = db;
@@ -141,8 +140,7 @@ export class AgentStore {
       if (chat.archived_at) throw notFound('Chat');
       await requireIdle(trx, chat);
       if (chat.turn_count >= agentPolicy.chat_turn_limit) throw new AgentError('agent_turn_limit');
-      const funding = await this.dependencies.admission(trx, scope);
-      z.literal(SELF_HOSTED).parse(funding.funding_source);
+      const admitted = await this.dependencies.admission(trx, scope);
       const refs = z
         .record(z.string(), z.json())
         .parse(jsonObject(chat.context_refs, 'agent_chats.context_refs'));
@@ -202,7 +200,7 @@ export class AgentStore {
           protocol_version: agentPolicy.protocol_version,
           registry_version: this.dependencies.registryVersion,
           skill_catalog_version: this.dependencies.catalog.version,
-          ...funding,
+          ...admitted,
           max_attempts: agentPolicy.run_max_attempts,
           status: 'queued',
           priority: 0,
@@ -321,7 +319,7 @@ export class AgentStore {
       if (terminal.includes(run.status)) return;
       // A turn whose instance died ends as recovery would end it.
       if (run.lapsed) {
-        await endInterrupted(trx, run, this.dependencies.settleFailed);
+        await endInterrupted(trx, run, this.dependencies.reconcile);
         return;
       }
       await trx

@@ -16,7 +16,7 @@ import {
   save,
   scripted,
   toolUse,
-  zeroFunding,
+  modelAvailable,
 } from './agent-support.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import {
@@ -41,7 +41,7 @@ describe('served Agent cutover on PostgreSQL', () => {
     const scope = await fixtures.scope(),
       bindings = await createAgentBindings(db, {});
     bindings.store.dependencies.admission = fixtures.store().dependencies.admission;
-    bindings.runtime.deps.models = new ModelCalls(db, zeroFunding);
+    bindings.runtime.deps.models = new ModelCalls(db, modelAvailable);
     bindings.runtime.deps.modelFor = () =>
       scripted([save('Requested document', { format_id: 'content_page' })]);
     bindings.models = bindings.runtime.deps.models;
@@ -311,10 +311,10 @@ describe('served Agent cutover on PostgreSQL', () => {
     expect(
       await db
         .selectFrom('agent_model_attempts')
-        .select(['outcome', 'settlement_status'])
+        .select(['outcome', 'error_code'])
         .where('id', '=', attempt.id)
         .executeTakeFirst(),
-    ).toMatchObject({ outcome: 'recovered_unknown', settlement_status: 'zero_debit' });
+    ).toMatchObject({ outcome: 'recovered_unknown', error_code: 'worker_lost_after_dispatch' });
     const other = await fixtures.scope();
     const foreignHeaders = {
       ...headers,

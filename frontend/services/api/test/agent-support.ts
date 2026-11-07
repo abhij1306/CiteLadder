@@ -3,13 +3,12 @@ import { z } from 'zod';
 import type { Database } from '../src/db/database.ts';
 import type { Json, Scope, SkillCatalog } from '../src/agent/contracts.ts';
 import { blockText, blockToolCalls, type ConversationBlock } from '../src/models/conversation.ts';
-import { AgentStore, type FundingIdentity } from '../src/agent/store.ts';
-import { SELF_HOSTED } from '../src/agent/funding.ts';
+import { AgentStore, type AdmittedModel } from '../src/agent/store.ts';
 import { AgentQueue } from '../src/agent/queue.ts';
 import {
   ModelCalls,
   type AgentModel,
-  type Funding,
+  type ModelAvailability,
   type ModelResult,
   type ModelRequest,
 } from '../src/agent/model-calls.ts';
@@ -132,11 +131,8 @@ export function scripted(
     },
   };
 }
-export const zeroFunding: Funding = {
-  reserve: () => Promise.resolve({ reservationId: null, credits: 0, pricingRevision: '' }),
-  settle: () => Promise.resolve({ credits: 0, status: 'zero_debit' }),
-  refund: () => Promise.resolve(),
-};
+/** The dispatch recheck with the model always available. */
+export const modelAvailable: ModelAvailability = () => {};
 export class AgentFixtures extends VisibilityFixtures {
   readonly agentDb: Database;
   readonly scopes: Scope[] = [];
@@ -154,13 +150,9 @@ export class AgentFixtures extends VisibilityFixtures {
       catalog,
       registryVersion: 'test-tools-1',
       timeoutSeconds: 10,
-      admission: () =>
-        Promise.resolve({
-          funding_source: SELF_HOSTED,
-          requested_model: 'test-model',
-        } satisfies FundingIdentity),
+      admission: () => Promise.resolve({ requested_model: 'test-model' } satisfies AdmittedModel),
       context: () => Promise.resolve(emptyPackage),
-      settleFailed: (trx, run) => new ModelCalls(this.agentDb, zeroFunding).settleFailed(trx, run),
+      reconcile: (trx, run) => new ModelCalls(this.agentDb, modelAvailable).reconcile(trx, run),
       ...overrides,
     });
   }
@@ -189,7 +181,7 @@ export class AgentFixtures extends VisibilityFixtures {
     return new AgentRuntime(this.agentDb, {
       catalog,
       tools: this.tools(scope),
-      models: new ModelCalls(this.agentDb, zeroFunding),
+      models: new ModelCalls(this.agentDb, modelAvailable),
       modelFor: () => model,
       attachTarget: (_db, _chat, _output, payload) =>
         payload.target

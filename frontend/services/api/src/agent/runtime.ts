@@ -181,9 +181,9 @@ function noReply(reads: number) {
     ? `I completed ${read} but reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request to one page, prompt or date range and ask again.`
     : 'I reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request and ask again.';
 }
-const UNFUNDED_REPLY = 'The Agent model connection changed before I could write a summary.';
+const UNAVAILABLE_REPLY = 'The Agent model connection changed before I could write a summary.';
 const CLOSED_REPLY = 'The chat was closed before I wrote a summary.';
-const unfunded = (error: unknown) => error instanceof RefusedDispatch;
+const unavailable = (error: unknown) => error instanceof RefusedDispatch;
 /**
  * Whether the turn can end on the documents it staged: there is one, and the
  * transcript ends on a user message with no search waiting, so a closing reply
@@ -228,12 +228,12 @@ function nextSearches(model: AgentModel, budget: Budget, state: TurnState, ordin
   return searchAllowance(budget, state.searches, state.waiting, ordinal === budget.max_model_calls);
 }
 /**
- * A call refused for funding after the turn staged a document answers null,
+ * A call refused for an unavailable model after the turn staged a document answers null,
  * so the turn saves that document with a fixed reply (B60); anything else throws.
  */
 function unlessClosable(state: TurnState) {
   return (error: unknown) => {
-    if (unfunded(error) && closable(state)) return null;
+    if (unavailable(error) && closable(state)) return null;
     throw error;
   };
 }
@@ -427,9 +427,9 @@ export class AgentRuntime {
       );
       // Finished work is kept: a document already staged commits with a fixed reply (B60).
       if (!response)
-        return this.finish(lease, turn, model, state, UNFUNDED_REPLY, latest.summary, true);
+        return this.finish(lease, turn, model, state, UNAVAILABLE_REPLY, latest.summary, true);
       previousResponseId = response.response_id || previousResponseId;
-      // A discarded response's searches were still run and billed.
+      // A discarded response's searches were still run, so they count against the turn's budget.
       state.searches += reportedSearches(response);
       if (response.stop === 'max_tokens') {
         effort = retryEffort(effort, ordinal, budget);
@@ -800,14 +800,14 @@ export class AgentRuntime {
   }
   /**
    * Ends the turn with its code-specific reply. A failed turn saves nothing,
-   * so its model calls are settled through the funding seam. A member who lost
-   * access gets no summary or reply, but the turn still settles and ends.
+   * so its unanswered model calls are closed first. A member who lost
+   * access gets no summary or reply, but the turn still ends.
    */
   async fail(lease: Lease, code: string, summary?: PromptSummary) {
     try {
       await this.db.transaction().execute(async (trx) => {
         const run = await lockRun(trx, lease);
-        await this.deps.models.settleFailed(trx, run);
+        await this.deps.models.reconcile(trx, run);
         if (
           run.user_id &&
           code !== 'access_revoked' &&

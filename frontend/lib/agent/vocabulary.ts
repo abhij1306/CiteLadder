@@ -200,7 +200,7 @@ const RUN_ERROR_COPY: Record<string, string> = {
   skills_changed: 'The agent was updated after this request was queued. Send it again.',
   output_conflict:
     'The output changed while the agent was working, so its revision was not saved. Ask again to revise the latest version.',
-  funding_unavailable:
+  model_unavailable:
     "No Agent model is configured. Set DEFAULT_AGENT_* in the server's .env and restart, then send it again.",
   provider_error: 'The model provider returned an error. Try again.',
   interrupted: 'The page closed before the agent finished. Nothing was saved; send it again.',
@@ -210,9 +210,9 @@ const RUN_ERROR_COPY: Record<string, string> = {
   model_refused:
     'The model declined to answer this request. Nothing was saved; rephrase it or ask about one part at a time.',
   output_too_long:
-    'The model ran out of room to finish, even after a shorter second attempt. Nothing was saved or charged; ask for one part at a time.',
+    'The model ran out of room to finish, even after a shorter second attempt. Nothing was saved; ask for one part at a time.',
   context_too_long:
-    'This chat is longer than the model can read at once. Nothing was saved or charged; start a new chat to continue.',
+    'This chat is longer than the model can read at once. Nothing was saved; start a new chat to continue.',
   incompatible_budget:
     'The agent policy changed incompatibly after admission. Send this request again.',
   context_size_limit:

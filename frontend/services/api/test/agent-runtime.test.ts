@@ -17,14 +17,14 @@ import {
   scripted,
   text,
   toolUse,
-  zeroFunding,
+  modelAvailable,
   agentPolicy,
   type Response,
 } from './agent-support.ts';
 import { AgentError } from '../src/agent/contracts.ts';
 import { AgentQueue, lockRun } from '../src/agent/queue.ts';
 import { AgentOutputs } from '../src/agent/outputs.ts';
-import { ModelCalls, type Funding, type ModelRequest } from '../src/agent/model-calls.ts';
+import { ModelCalls, type ModelRequest } from '../src/agent/model-calls.ts';
 import { readChat, listChats, listRevisions, progress } from '../src/agent/reads.ts';
 import { appendMessage, getChat, recoveryReply } from '../src/agent/messages.ts';
 import { ToolRegistry } from '../src/agent/tools.ts';
@@ -111,18 +111,18 @@ describe('Agent runtime on PostgreSQL', () => {
     ).rejects.toMatchObject({ code: 'agent_run_active' });
     expect(fingerprint({ b: 2, a: { z: 1, y: 2 } })).toBe(fingerprint({ a: { y: 2, z: 1 }, b: 2 }));
   });
-  it('rolls back chat and message when funding/context admission refuses; authorizes every Action', async () => {
+  it('rolls back chat and message when model/context admission refuses; authorizes every Action', async () => {
     const scope = await fixtures.scope();
     const other = await fixtures.scope();
     await expect(
       fixtures
         .store({
           admission: async () => {
-            throw new AgentError('funding_unavailable');
+            throw new AgentError('model_unavailable');
           },
         })
         .enqueue(scope, { key: randomUUID(), message: 'Request' }),
-    ).rejects.toMatchObject({ code: 'funding_unavailable' });
+    ).rejects.toMatchObject({ code: 'model_unavailable' });
     await expect(
       fixtures
         .store()
@@ -696,7 +696,7 @@ describe('Agent runtime on PostgreSQL', () => {
     await expect(db.transaction().execute((trx) => lockRun(trx, lease))).rejects.toMatchObject({
       code: 'lease',
     });
-    const calls = new ModelCalls(db, zeroFunding);
+    const calls = new ModelCalls(db, modelAvailable);
     expect(
       await queue.recover([scope.workspaceId], 1, agentPolicy.unclaimed_grace_seconds, (trx, run) =>
         calls.reconcile(trx, run),
@@ -718,7 +718,7 @@ describe('Agent runtime on PostgreSQL', () => {
       .store()
       .enqueue(scope, { key: randomUUID(), message: 'Question' });
     const queue = new AgentQueue(db, 30);
-    const calls = new ModelCalls(db, zeroFunding);
+    const calls = new ModelCalls(db, modelAvailable);
     const recover = () =>
       queue.recover([scope.workspaceId], 1, agentPolicy.unclaimed_grace_seconds, (trx, run) =>
         calls.reconcile(trx, run),
@@ -738,19 +738,14 @@ describe('Agent runtime on PostgreSQL', () => {
       error_code: 'interrupted',
     });
   });
-  it('ends a turn whose heartbeat gives up as interrupted at once, refunding its calls', async () => {
+  it('ends a turn whose heartbeat gives up as interrupted at once, closing its calls', async () => {
     const scope = await fixtures.scope();
     const queued = await fixtures
       .store()
       .enqueue(scope, { key: randomUUID(), message: 'Question' });
     const queue = new AgentQueue(db, 60);
-    const refunded: string[] = [];
-    const models = new ModelCalls(db, {
-      ...zeroFunding,
-      refund: async (_trx, run) => {
-        refunded.push(run.id);
-      },
-    });
+    const models = new ModelCalls(db, modelAvailable);
+    const reconcile = vi.spyOn(models, 'reconcile');
     let calling!: () => void;
     const called = new Promise<void>((resolve) => {
       calling = resolve;
@@ -782,7 +777,14 @@ describe('Agent runtime on PostgreSQL', () => {
       error_code: 'interrupted',
       lease_owner: null,
     });
-    expect(refunded).toEqual([queued.id]);
+    expect(reconcile.mock.calls.map(([, run]) => run.id)).toEqual([queued.id]);
+    expect(
+      await db
+        .selectFrom('agent_model_attempts')
+        .select('outcome')
+        .where('run_id', '=', queued.id)
+        .execute(),
+    ).toEqual([{ outcome: 'failed' }]);
     expect((await readChat(db, scope, queued.chat_id)).messages.at(-1)?.content).toBe(
       recoveryReply('interrupted'),
     );
@@ -790,13 +792,8 @@ describe('Agent runtime on PostgreSQL', () => {
   it('lets the lane end a turn whose process died once its minute-long lease lapses', async () => {
     const scope = await fixtures.scope();
     const bindings = await createAgentBindings(db, {});
-    const refunded: string[] = [];
-    bindings.models = new ModelCalls(db, {
-      ...zeroFunding,
-      refund: async (_trx, run) => {
-        refunded.push(run.id);
-      },
-    });
+    bindings.models = new ModelCalls(db, modelAvailable);
+    const reconcile = vi.spyOn(bindings.models, 'reconcile');
     const worker = new AgentWorker(db, bindings, scope.workspaceId);
     const queued = await fixtures
       .store()
@@ -820,7 +817,7 @@ describe('Agent runtime on PostgreSQL', () => {
       status: 'failed',
       error_code: 'interrupted',
     });
-    expect(refunded).toEqual([queued.id]);
+    expect(reconcile.mock.calls.map(([, run]) => run.id)).toEqual([queued.id]);
     expect(await worker.nextDue()).toBeNull();
   });
   it('contains start failure without dispatching the runtime', async () => {
@@ -902,10 +899,10 @@ describe('Agent runtime on PostgreSQL', () => {
       .selectAll()
       .where('run_id', '=', run.id)
       .execute();
-    expect(attempts.map((attempt) => attempt.settlement_status)).toEqual([
-      'zero_debit',
-      'zero_debit',
-      'zero_debit',
+    expect(attempts.map(({ outcome, late_receipt }) => [outcome, late_receipt])).toEqual([
+      ['completed', false],
+      ['completed', false],
+      ['completed', false],
     ]);
     expect(
       attempts.every(
@@ -913,11 +910,10 @@ describe('Agent runtime on PostgreSQL', () => {
       ),
     ).toBe(true);
   });
-  it('settles a model cancelled in flight exactly once and answers with the stop, not a late reply', async () => {
+  it('records a model cancelled in flight exactly once and answers with the stop, not a late reply', async () => {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope);
-    const settle = vi.fn(zeroFunding.settle);
-    const models = new ModelCalls(db, { ...zeroFunding, settle });
+    const models = new ModelCalls(db, modelAvailable);
     const fake = scripted([reply()], async () => {
       await fixtures.store().cancel(scope, run.chat_id, run.id);
     });
@@ -927,8 +923,16 @@ describe('Agent runtime on PostgreSQL', () => {
       .selectAll()
       .where('run_id', '=', run.id)
       .executeTakeFirstOrThrow();
+    expect(attempt.outcome).toBe('completed');
     await models.receipt(scope.workspaceId, attempt.id, result(reply('Duplicate receipt')));
-    expect(settle).toHaveBeenCalledTimes(1);
+    // The first receipt wins: a duplicate rewrites nothing.
+    expect(
+      await db
+        .selectFrom('agent_model_attempts')
+        .selectAll()
+        .where('id', '=', attempt.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual(attempt);
     expect(
       (await readChat(db, scope, run.chat_id)).messages.map(({ role, content }) => [role, content]),
     ).toEqual([
@@ -940,20 +944,22 @@ describe('Agent runtime on PostgreSQL', () => {
   it('reconciles a lost dispatch as unknown when recovery ends an expired turn', async () => {
     const scope = await fixtures.scope();
     const { run, lease, queue } = await fixtures.claimed(scope);
-    const settle = vi.fn(async () => ({ credits: 0, status: 'zero_debit' }));
-    const models = new ModelCalls(db, { ...zeroFunding, settle });
+    const models = new ModelCalls(db, modelAvailable);
     const attempt = await models.dispatch(lease, 1, scripted([]), request);
     await expireAndRecover(queue, scope.workspaceId, run.id, models);
-    // A late answer after recovery settles nothing twice.
+    // A late answer after recovery records nothing over the recovered attempt.
     await models.receipt(scope.workspaceId, attempt.id, result(reply()));
-    expect(settle).toHaveBeenCalledTimes(1);
     expect(
       await db
         .selectFrom('agent_model_attempts')
-        .select('outcome')
+        .select(['outcome', 'error_code', 'output_hash'])
         .where('id', '=', attempt.id)
         .executeTakeFirst(),
-    ).toMatchObject({ outcome: 'recovered_unknown' });
+    ).toEqual({
+      outcome: 'recovered_unknown',
+      error_code: 'worker_lost_after_dispatch',
+      output_hash: '',
+    });
     expect(await fixtures.run(run.id)).toMatchObject({
       status: 'failed',
       error_code: 'interrupted',
@@ -1009,15 +1015,10 @@ describe('Agent runtime on PostgreSQL', () => {
     expect((await fixtures.run(second.run.id)).error_code).toBe('access_revoked');
     expect(calls).toBe(0);
   });
-  it('settles, refunds and ends an interrupted turn whose member was removed, with no reply', async () => {
+  it('closes the calls of an interrupted turn whose member was removed and ends it with no reply', async () => {
     const scope = await fixtures.scope();
-    const refunded: string[] = [];
-    const models = new ModelCalls(db, {
-      ...zeroFunding,
-      refund: async (_trx, run) => {
-        refunded.push(run.id);
-      },
-    });
+    const models = new ModelCalls(db, modelAvailable);
+    const reconcile = vi.spyOn(models, 'reconcile');
     const { run, lease } = await fixtures.claimed(scope);
     await db
       .deleteFrom('workspace_members')
@@ -1030,7 +1031,7 @@ describe('Agent runtime on PostgreSQL', () => {
       error_code: 'interrupted',
       lease_owner: null,
     });
-    expect(refunded).toEqual([run.id]);
+    expect(reconcile.mock.calls.map(([, row]) => row.id)).toEqual([run.id]);
     const messages = await db
       .selectFrom('agent_messages')
       .select('role')
@@ -1454,39 +1455,63 @@ describe('Agent runtime on PostgreSQL', () => {
     expect(sent).toEqual([2, 1, 0]);
     expect((await fixtures.run(run.id)).status).toBe('succeeded');
   });
-  it('fails a turn whose funding breaks after a call was sent, even with a staged document', async () => {
+  it('ends on its staged document when the model becomes unavailable before a later call', async () => {
     const scope = await fixtures.scope();
     const { run, lease } = await fixtures.claimed(scope, { skillId: 'plan' });
-    let receipts = 0;
-    const funding: Funding = {
-      ...zeroFunding,
-      // The second call's receipt cannot settle; recovery then settles it as unknown.
-      settle: async (_db, _attempt, received) => {
-        if (received && ++receipts === 2) throw new AgentError('funding_unavailable');
-        return { credits: 0, status: 'zero_debit' };
-      },
+    let checks = 0;
+    // The gateway's configuration is removed between the first and second call.
+    const available = () => {
+      if (++checks === 2) throw new AgentError('model_unavailable');
     };
-    await fixtures
-      .runtime(scope, scripted([save('Staged plan.'), reply('Done.')]), {
-        models: new ModelCalls(db, funding),
-      })
-      .execute(lease);
-    expect(await fixtures.run(run.id)).toMatchObject({
-      status: 'failed',
-      error_code: 'funding_unavailable',
+    const converse = vi.fn();
+    const model = scripted([save('Staged plan.'), reply('Done.')], async () => {
+      converse();
     });
-    expect((await readChat(db, scope, run.chat_id)).outputs).toEqual([]);
+    await fixtures.runtime(scope, model, { models: new ModelCalls(db, available) }).execute(lease);
+    expect(converse).toHaveBeenCalledTimes(1);
+    const detail = await readChat(db, scope, run.chat_id);
+    expect(detail.latest_run?.status).toBe('succeeded');
+    expect(detail.outputs).toHaveLength(1);
+    expect(detail.messages.at(-1)?.content).toContain(
+      'The Agent model connection changed before I could write a summary.',
+    );
+    // The refused call was never recorded or sent.
     expect(
       await db
         .selectFrom('agent_model_attempts')
         .select(['ordinal', 'outcome'])
         .where('run_id', '=', run.id)
-        .orderBy('ordinal')
         .execute(),
-    ).toEqual([
-      { ordinal: 1, outcome: 'completed' },
-      { ordinal: 2, outcome: 'recovered_unknown' },
-    ]);
+    ).toEqual([{ ordinal: 1, outcome: 'completed' }]);
+  });
+  it('fails a turn whose model changed before a call, recording and sending nothing', async () => {
+    const scope = await fixtures.scope();
+    const { run, lease } = await fixtures.claimed(scope);
+    const converse = vi.fn();
+    const changed = () => {
+      throw new AgentError('model_changed');
+    };
+    await fixtures
+      .runtime(
+        scope,
+        scripted([reply()], async () => {
+          converse();
+        }),
+        { models: new ModelCalls(db, changed) },
+      )
+      .execute(lease);
+    expect(converse).not.toHaveBeenCalled();
+    expect(await fixtures.run(run.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'model_changed',
+    });
+    expect(
+      await db
+        .selectFrom('agent_model_attempts')
+        .select('id')
+        .where('run_id', '=', run.id)
+        .execute(),
+    ).toEqual([]);
   });
   it('appends user edits and restores per document while refusing stale bases and other chats', async () => {
     const scope = await fixtures.scope();
@@ -1833,7 +1858,7 @@ describe('Agent runtime on PostgreSQL', () => {
   it('recovers an abandoned cancellation’s dispatch exactly once', async () => {
     const scope = await fixtures.scope();
     const turn = await fixtures.claimed(scope);
-    const calls = new ModelCalls(db, zeroFunding);
+    const calls = new ModelCalls(db, modelAvailable);
     const attempt = await calls.dispatch(turn.lease, 1, scripted([]), request);
     await fixtures.store().cancel(scope, turn.run.chat_id, turn.run.id);
     await db
@@ -1902,18 +1927,15 @@ describe('Agent runtime on PostgreSQL', () => {
     ]);
     expect(detail.outputs.map((output) => output.latest_revision.id)).toEqual([changedId]);
   });
-  it('leaves unsettled dispatches recoverable when accounting is temporarily unavailable', async () => {
+  it('leaves a dispatch recoverable when its receipt and closing cannot be written', async () => {
     const scope = await fixtures.scope();
     const { run, lease, queue } = await fixtures.claimed(scope);
-    const models = new ModelCalls(db, {
-      ...zeroFunding,
-      settle: async () => {
-        throw new Error('Accounting unavailable');
-      },
-    });
+    const models = new ModelCalls(db, modelAvailable);
+    vi.spyOn(models, 'receipt').mockRejectedValue(new Error('Receipt write failed'));
+    vi.spyOn(models, 'reconcile').mockRejectedValue(new Error('Receipt write failed'));
     await expect(
       fixtures.runtime(scope, scripted([reply()]), { models }).execute(lease),
-    ).rejects.toThrow('Accounting unavailable');
+    ).rejects.toThrow('Receipt write failed');
     expect((await fixtures.run(run.id)).status).toBe('running');
     expect(
       await db
@@ -1922,7 +1944,7 @@ describe('Agent runtime on PostgreSQL', () => {
         .where('run_id', '=', run.id)
         .executeTakeFirst(),
     ).toMatchObject({ outcome: 'dispatched' });
-    const restored = new ModelCalls(db, zeroFunding);
+    const restored = new ModelCalls(db, modelAvailable);
     await expireAndRecover(queue, scope.workspaceId, run.id, restored);
     expect((await fixtures.run(run.id)).status).toBe('failed');
     expect(

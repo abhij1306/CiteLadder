@@ -1,5 +1,5 @@
 /**
- * Live events of a turn in progress. Display only: the settlement transaction
+ * Live events of a turn in progress. Display only: the turn's final transaction
  * saves the validated message and revision, and nothing here is persisted.
  */
 import type { z } from 'zod';
