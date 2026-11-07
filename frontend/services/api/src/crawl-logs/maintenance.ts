@@ -13,6 +13,9 @@ import { enqueueRollup, lockCrawlState, type CrawlScope } from './state.ts';
 import { insightsRefresh } from '../config/ai-traffic.ts';
 import { stallQuietSources } from './stall.ts';
 import { enqueueDuePulls } from './pull.ts';
+import { failureFacts, getLogger } from '../logging.ts';
+
+const logger = getLogger('crawl_logs.maintenance');
 
 export function botIpRangeRefresh(fetcher: WebsiteFetcher = fetchWebsite): Executor {
   return async (task, { checkCancelled }) => {
@@ -48,8 +51,14 @@ export function botIpRangeRefresh(fetcher: WebsiteFetcher = fetchWebsite): Execu
       if (!cidrs.length) throw new Error('Empty IP range response');
       cidrs.forEach((c) => ipaddr.parseCIDR(c));
       status = 'succeeded';
-    } catch {
+    } catch (error) {
+      // A failed refresh persists a `failed` snapshot with no ranges.
       cidrs = [];
+      logger.warning('bot_ip_range_refresh_failed', {
+        bot_id: bot.bot_id,
+        ...failureFacts(error),
+        elapsed_ms: Date.now() - fetchedAt.getTime(),
+      });
     }
     return {
       error: null,

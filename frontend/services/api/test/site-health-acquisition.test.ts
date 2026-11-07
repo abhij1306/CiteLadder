@@ -3,6 +3,8 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
+import { setLogSink } from '../src/logging.ts';
+import { FetchError } from '../src/safe-fetch.ts';
 import {
   admitCandidates,
   candidate,
@@ -735,6 +737,38 @@ describe('site setup', () => {
       urls: [],
       lastmod: {},
     });
+  });
+
+  it('records an unreachable llms.txt as not fetched and logs why it failed', async () => {
+    const seed = await crawl();
+    const setup = await queued(seed, 'site_setup');
+    const records: Record<string, unknown>[] = [];
+    const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+    try {
+      await run(
+        worker({
+          '/robots.txt': robots,
+          '/llms.txt': {
+            onFetch: async () => {
+              throw new FetchError('connect_timeout');
+            },
+          },
+        }),
+        setup,
+      );
+    } finally {
+      setLogSink(restore);
+    }
+    const facts = record((await crawlRow(seed)).site_facts);
+    expect(facts.llms_txt).toMatchObject({ fetched: false, present: false, status_code: null });
+    expect(records.filter((entry) => entry.event === 'site_health_document_fetch_failed')).toEqual([
+      expect.objectContaining({
+        phase: 'llms_txt',
+        error_class: 'FetchError',
+        error_code: 'connect_timeout',
+        elapsed_ms: expect.any(Number),
+      }),
+    ]);
   });
 
   it('preserves an overlong sitemap declaration without fetching a truncated URL', async () => {

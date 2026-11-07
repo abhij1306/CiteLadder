@@ -16,8 +16,8 @@ import {
   windowBounds,
   withReportingTimezone,
   type CrawlReadOptions,
-} from './reads.ts';
-import type { CrawlScope } from './state.ts';
+} from '../crawl-logs/reads.ts';
+import type { CrawlScope } from '../crawl-logs/state.ts';
 import { citationCoverage, citationRuns, type CitationCoverage } from './citation-runs.ts';
 import { pageDataset, pageSorts, aiBots, type JoinedPage, type PageOptions } from './pages-data.ts';
 import { partitionQuality } from '../integrations/partitions.ts';

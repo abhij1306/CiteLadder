@@ -58,6 +58,29 @@ export async function lockCrawlState(db: Database, scope: CrawlScope) {
     .forUpdate()
     .executeTakeFirstOrThrow();
 }
+/**
+ * Adopt the reporting timezone a GA4 property reports in. A change re-rolls
+ * every retained day in the new timezone; the same timezone is a no-op.
+ */
+export async function adoptReportingTimezone(
+  db: Database,
+  scope: CrawlScope,
+  timeZone: string,
+): Promise<void> {
+  const state = await lockCrawlState(db, scope);
+  if (state.reporting_timezone === timeZone) return;
+  await db
+    .updateTable('crawl_log_states')
+    .set({ reporting_timezone: timeZone })
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
+    .execute();
+  const now = new Date();
+  await enqueueRollup(db, scope, now, {
+    first: new Date(now.getTime() - (crawlLogs.retention_days - 1) * 86400000),
+    last: now,
+  });
+}
 /** Rollups coalesce: queued work merges the affected reporting days; leased work gets a successor. */
 export async function enqueueRollup(
   db: Database,

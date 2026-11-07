@@ -6,6 +6,7 @@ import { policy } from '../config.ts';
 import { queueRecovery } from '../config/queue-recovery.ts';
 import { recoverDiscoveryLeases } from '../queue/recovery.ts';
 import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { getLogger } from '../logging.ts';
@@ -150,21 +151,15 @@ export class DiscoveryWorker {
       checkCancelled();
       await this.finish(task, owner, result, null);
     } catch (error) {
-      const fields = {
-        task_id: task.id,
-        workspace_id: task.workspace_id,
-        attempt: task.attempt_count + 1,
+      // The queue owner logged the lost lease; recovery settles the task.
+      if (heartbeat.signal.aborted) return true;
+      logLaneFailure(DISCOVERY_LANE.table, task, {
         phase,
-        elapsed_ms: Math.round(performance.now() - started),
-      };
-      if (heartbeat.signal.aborted) {
-        logger.warning('brand_discovery.lease_lost', fields);
-        return true;
-      }
-      logger.warning('brand_discovery.task_failed', {
-        ...fields,
-        ...failureFields(error),
-        error_code: error instanceof FetchError ? error.code : failureCode(error),
+        startedAt: started,
+        attempt: task.attempt_count + 1,
+        error,
+        code: error instanceof FetchError ? error.code : failureCode(error),
+        facts: failureFields(error),
       });
       await this.finish(task, owner, null, error);
     } finally {

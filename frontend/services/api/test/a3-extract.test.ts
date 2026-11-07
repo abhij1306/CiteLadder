@@ -10,7 +10,7 @@ import { classifyReferrals } from '../src/referrals/classify.ts';
 import { refreshAiReferralsSnapshot } from '../src/referrals/snapshot.ts';
 import { partitionQuality, selectedPartition } from '../src/integrations/partitions.ts';
 import { getAiReferrals } from '../src/analytics/ai-referrals.ts';
-import { pagesRead } from '../src/crawl-logs/pages.ts';
+import { pagesRead } from '../src/ai-traffic/pages.ts';
 import { referralEvidence, referralExtras } from '../src/referrals/landing.ts';
 import { policy } from '../src/config.ts';
 

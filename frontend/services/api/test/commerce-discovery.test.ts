@@ -6,6 +6,7 @@ import { competitorSearch, type CompetitorSearch } from '../src/commerce/discove
 import { discoveryQuery } from '../src/commerce/discovery-validation.ts';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { importCatalog } from '../src/commerce/import.ts';
+import { setLogSink } from '../src/logging.ts';
 import type { WebsiteFetcher } from '../src/safe-fetch.ts';
 import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
 import { ANALYTICS_LANE, TaskQueue } from '../src/queue/task-queue.ts';
@@ -472,7 +473,22 @@ it('falls back from failed Tavily to the existing Keenable transport and refuses
           });
     },
   );
-  expect(await search('buy tool online store', 'en-US', meter)).toMatchObject({
+  const records: Record<string, unknown>[] = [];
+  const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+  let outcome;
+  try {
+    outcome = await search('buy tool online store', 'en-US', meter);
+  } finally {
+    setLogSink(restore);
+  }
+  expect(records.filter((entry) => entry.event === 'commerce_competitor_search_failed')).toEqual([
+    expect.objectContaining({
+      provider: 'tavily',
+      error_class: 'Error',
+      elapsed_ms: expect.any(Number),
+    }),
+  ]);
+  expect(outcome).toMatchObject({
     status: 'succeeded',
     providerVersion: policy.discovery.constants.keenable_research_version,
     results: [

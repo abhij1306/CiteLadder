@@ -58,6 +58,8 @@ import {
   systemPrefix,
 } from './transcript.ts';
 import { leaseSignal } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
+import { AGENT_LANE } from '../queue/task-queue.ts';
 import { refused, ToolRegistry, type ToolOutcome } from './tools.ts';
 
 function failureCode(error: unknown) {
@@ -237,6 +239,7 @@ export class AgentRuntime {
   /** `events` listens to this execution only; persisted state never depends on it. */
   async execute(lease: Lease, signal?: AbortSignal, events?: TurnEvents) {
     const latest: { summary?: PromptSummary } = {};
+    const startedAt = performance.now();
     try {
       await this.turn(lease, latest, signal, events);
     } catch (error) {
@@ -244,7 +247,13 @@ export class AgentRuntime {
       if (signal?.aborted) return;
       if (error instanceof AgentError && error.code === 'lease') return;
       // Provider failures were already retried within the call; the turn ends with its reply.
-      await this.fail(lease, failureCode(error), latest.summary);
+      const code = failureCode(error);
+      logLaneFailure(
+        AGENT_LANE.table,
+        { id: lease.runId, workspace_id: lease.workspaceId, attempt_count: lease.attempt },
+        { phase: 'turn', startedAt, outcome: 'failed', error, code },
+      );
+      await this.fail(lease, code, latest.summary);
     }
   }
   private async turn(

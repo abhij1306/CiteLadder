@@ -278,6 +278,40 @@ describe('integration worker paging and resume', () => {
     }
   });
 
+  it('a refused sync keeps a grant that a disconnect already set to pending revocation', async () => {
+    const run = await seedRun();
+    try {
+      await db
+        .updateTable('integration_oauth_grants')
+        .set({ status: 'pending_revocation' })
+        .where('id', '=', run.grantId)
+        .execute();
+      const refused: Pick<IntegrationClient, 'page'> = {
+        async page() {
+          throw new IntegrationError('grant_auth_failed', 'HTTP 401', false, null, 401);
+        },
+      };
+      await new IntegrationWorker(db, refused, settings, async () => 'token', {
+        workspaceId: run.workspaceId,
+        runId: run.runId,
+      }).runOnce();
+      const grant = await db
+        .selectFrom('integration_oauth_grants')
+        .select('status')
+        .where('id', '=', run.grantId)
+        .executeTakeFirstOrThrow();
+      expect(grant.status).toBe('pending_revocation');
+      const events = await db
+        .selectFrom('integration_events')
+        .select('event_type')
+        .where('workspace_id', '=', run.workspaceId)
+        .execute();
+      expect(events.map((event) => event.event_type)).not.toContain('integration.reauth_required');
+    } finally {
+      await db.deleteFrom('workspaces').where('id', '=', run.workspaceId).execute();
+    }
+  });
+
   it('recovers only the selected seed run, leaving sibling and foreign leases untouched', async () => {
     const selected = await seedRun();
     const foreign = await seedRun();

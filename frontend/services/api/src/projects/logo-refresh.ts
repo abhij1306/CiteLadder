@@ -9,8 +9,10 @@ import type { ProjectScope } from './brand-profile.ts';
 import { extractPage } from './html-evidence.ts';
 import { fetchWebsite, websiteIdentity, type WebsiteFetcher } from '../safe-fetch.ts';
 import { readProject } from './service.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 
 const cfg = policy.brand_logos;
+const logger = getLogger('projects.logos');
 export function rasterType(body: Buffer): string | null {
   if (body.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
     return 'image/png';
@@ -21,9 +23,19 @@ export function rasterType(body: Buffer): string | null {
     return 'image/webp';
   return null;
 }
+/** A logo source that could not be read; the next candidate may still succeed. */
+function logLogoFetchFailure(phase: 'homepage' | 'icon', error: unknown, startedAt: number) {
+  logger.info('brand_logo_fetch_failed', {
+    phase,
+    ...failureFacts(error),
+    elapsed_ms: Math.round(performance.now() - startedAt),
+  });
+}
+
 async function fetchLogo(url: string, fetcher: WebsiteFetcher, signal: AbortSignal) {
   let base = url;
   let icons: string[] = [];
+  const homepageAt = performance.now();
   try {
     const page = await fetcher(url, {
       maxBytes: cfg.max_html_bytes,
@@ -37,13 +49,15 @@ async function fetchLogo(url: string, fetcher: WebsiteFetcher, signal: AbortSign
       base = page.url;
       icons = extractPage(page.body, base).icons;
     }
-  } catch {
-    /* The well-known fallback can still work when the homepage cannot. */
+  } catch (error) {
+    // The well-known fallback can still work when the homepage cannot.
+    logLogoFetchFailure('homepage', error, homepageAt);
   }
   const candidates = [
     ...new Set([...icons.slice(0, cfg.max_candidates - 1), new URL(cfg.fallback_path, base).href]),
   ];
   for (const candidate of candidates) {
+    const candidateAt = performance.now();
     try {
       const result = await fetcher(candidate, {
         maxBytes: cfg.max_image_bytes,
@@ -55,8 +69,9 @@ async function fetchLogo(url: string, fetcher: WebsiteFetcher, signal: AbortSign
       const type = rasterType(result.body);
       if (result.status >= 200 && result.status < 300 && type)
         return { ...result, contentType: type };
-    } catch {
-      /* Only validated raster bytes become a ready cache asset. */
+    } catch (error) {
+      // Only validated raster bytes become a ready cache asset.
+      logLogoFetchFailure('icon', error, candidateAt);
     }
   }
   return null;

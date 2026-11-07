@@ -15,6 +15,7 @@ import { meterFor, type Meter } from '../models/metering.ts';
 import { record, strings } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
 import { firstOf, isNonEmpty } from '../lists.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { createModelGateway, type ModelGateway } from '../models/gateway.ts';
 import { ModelError } from '../models/http.ts';
 import { bindingTokens } from '../prompts/binding.ts';
@@ -344,6 +345,7 @@ export async function generateBuyerPrompts(
   const batches = [];
   for (const [index, context] of contexts.entries()) {
     let response;
+    const startedAt = performance.now();
     try {
       response = await gateway.structured(
         commerceBuyerPromptSystem(context.business_model),
@@ -352,8 +354,15 @@ export async function generateBuyerPrompts(
         z.object({ prompts: z.array(z.object({ text: z.string() })) }),
       );
     } catch (error) {
-      if (error instanceof ModelError) break;
-      throw error;
+      if (!(error instanceof ModelError)) throw error;
+      getLogger('commerce.buyer_prompts').warning('commerce_buyer_prompts_model_failed', {
+        target_index: index,
+        admitted_batches: batches.length,
+        ...failureFacts(error),
+        status: error.status,
+        elapsed_ms: Math.round(performance.now() - startedAt),
+      });
+      break;
     }
     const texts = admittedTexts(
       response.value.prompts.map((row) => row.text),

@@ -7,6 +7,7 @@ import { policy } from '../config.ts';
 import { memberCan } from '../auth/workspace.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { createJevClient, type JevClient } from '../models/jev.ts';
 import { meterFor } from '../models/metering.ts';
 import { ModelError, providerErrorCode } from '../models/http.ts';
@@ -14,6 +15,7 @@ import { enqueueTask } from '../queue/enqueue.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { payloadString, taskProject, type Executor } from '../queue/executor.ts';
 
+const logger = getLogger('site_health.internal_links');
 const requestSchema = z.object({
   id: z.uuid(),
   candidates: z.array(z.object({ id: z.uuid(), key: z.string() })),
@@ -188,6 +190,12 @@ async function judge(
       if (!(error instanceof ModelError)) throw error;
       reason = error.status ? providerErrorCode(error.status) : error.code;
     }
+    logger.warning('internal_link_judgment_uncertain', {
+      request_id: request.id,
+      reason,
+      ...failureFacts(error),
+      elapsed_ms: Math.round(performance.now() - started),
+    });
     return request.candidates.map(({ id }) => ({ id, evidence: { state: 'uncertain', reason } }));
   }
 }

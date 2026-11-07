@@ -7,8 +7,8 @@
  * which is not zero.
  */
 import type { Database } from '../db/database.ts';
-import type { windowBounds } from './reads.ts';
-import type { CrawlScope } from './state.ts';
+import type { windowBounds } from '../crawl-logs/reads.ts';
+import type { CrawlScope } from '../crawl-logs/state.ts';
 
 export function citationRuns(
   db: Database,

@@ -3,6 +3,7 @@
  * analytics worker claims, recovers and compensates. Each feature exports its
  * own kinds; a kind exists only here, never as a separate catalog entry.
  */
+import { aiTrafficKinds } from '../ai-traffic/analytics-kinds.ts';
 import { commerceKinds } from '../commerce/analytics-kinds.ts';
 import { crawlLogKinds } from '../crawl-logs/analytics-kinds.ts';
 import { demandKinds } from '../demand/analytics-kinds.ts';
@@ -18,6 +19,7 @@ import { trafficKinds } from '../traffic/analytics-kinds.ts';
 
 export const ANALYTICS_KINDS: AnalyticsKinds = Object.freeze({
   ...crawlLogKinds,
+  ...aiTrafficKinds,
   ...commerceKinds,
   ...searchIntelligenceKinds,
   ...sourcePageKinds,

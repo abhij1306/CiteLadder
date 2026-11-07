@@ -27,9 +27,11 @@ import { ingest } from './ingest.ts';
 import { crawlLogAvailability, findLivePullSource } from './sources.ts';
 import { CHECK_HELD_STALLS } from './stall.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 
 type Source = Selectable<CrawlLogSources>;
 const settings = crawlLogs.gcp_pull;
+const logger = getLogger('crawl_logs.pull');
 
 async function touch(db: Database, source: Source, column: 'last_pull_at' | 'last_drained_at') {
   await db
@@ -81,8 +83,15 @@ async function admitBatch(
       messages.map((m) => m.ackId),
     );
   } catch (error) {
-    if (error instanceof GcpError) return false;
-    throw error;
+    if (!(error instanceof GcpError)) throw error;
+    // The batch is admitted under its idempotency key; Pub/Sub redelivers it to a later pull.
+    logger.warning('crawl_log_pull_ack_failed', {
+      source_id: source.id,
+      phase: 'acknowledge',
+      ...failureFacts(error),
+      failure: error.failure,
+    });
+    return false;
   }
   return true;
 }

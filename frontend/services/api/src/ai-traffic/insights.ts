@@ -3,13 +3,13 @@ import { randomUUID } from 'node:crypto';
 import { aiTrafficInsightsSchema } from '@citeladder/contracts/ai-traffic';
 import type { z } from 'zod';
 import type { Database } from '../db/database.ts';
-import type { CrawlScope } from './state.ts';
+import type { CrawlScope } from '../crawl-logs/state.ts';
 import {
   crawlWindow,
   currentReportingDay,
   withReportingTimezone,
   type CrawlReadOptions,
-} from './reads.ts';
+} from '../crawl-logs/reads.ts';
 import { partitionAnchor } from '../integrations/partitions.ts';
 import { addDays } from '../calendar-days.ts';
 import { pageDataset, type JoinedPage } from './pages-data.ts';

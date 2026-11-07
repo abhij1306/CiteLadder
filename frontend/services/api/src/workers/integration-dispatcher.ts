@@ -4,6 +4,12 @@ import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { IntegrationClient } from '../integrations/client.ts';
 import { endpoints, integrationSettings } from '../integrations/config.ts';
+import {
+  claimRevocation,
+  markGrantRevoked,
+  pendingRevocations,
+  releaseRevocationClaim,
+} from '../integrations/grants.ts';
 import { enqueueSyncRun } from '../integrations/sync.ts';
 import { getLogger } from '../logging.ts';
 
@@ -90,18 +96,7 @@ export class IntegrationDispatcher {
   }
 
   async #revoke(canAdmit: () => boolean): Promise<void> {
-    const grants = await this.#db
-      .selectFrom('integration_oauth_grants')
-      .select(['id', 'workspace_id'])
-      .where('status', '=', 'pending_revocation')
-      .where((eb) =>
-        eb.or([
-          eb('refresh_claim_id', 'is', null),
-          eb('refresh_claim_expires_at', '<=', new Date()),
-        ]),
-      )
-      .limit(20)
-      .execute();
+    const grants = await pendingRevocations(this.#db, 20);
     for (const candidate of grants) {
       if (!canAdmit()) break;
       await this.#revokeGrant(candidate.id, candidate.workspace_id); // NOSONAR -- Revocations finish sequentially before the next admission check.
@@ -110,34 +105,8 @@ export class IntegrationDispatcher {
 
   async #revokeGrant(grantId: string, workspaceId: string): Promise<void> {
     const client = this.#client;
-    const claimId = randomUUID();
-    const grant = await this.#db.transaction().execute(async (trx) => {
-      const row = await trx
-        .selectFrom('integration_oauth_grants')
-        .selectAll()
-        .where('id', '=', grantId)
-        .where('workspace_id', '=', workspaceId)
-        .forUpdate()
-        .executeTakeFirst();
-      if (
-        row?.status !== 'pending_revocation' ||
-        (row.refresh_claim_expires_at &&
-          new Date(row.refresh_claim_expires_at).getTime() > Date.now())
-      )
-        return null;
-      await trx
-        .updateTable('integration_oauth_grants')
-        .set({
-          refresh_claim_id: claimId,
-          refresh_claim_expires_at: new Date(
-            Date.now() + settings.token_refresh_claim_seconds * 1000,
-          ),
-        })
-        .where('id', '=', grantId)
-        .where('workspace_id', '=', workspaceId)
-        .execute();
-      return row;
-    });
+    const claim = { workspaceId, grantId, claimId: randomUUID() };
+    const grant = await claimRevocation(this.#db, claim);
     if (!grant) return;
     try {
       let token: string | null;
@@ -156,65 +125,11 @@ export class IntegrationDispatcher {
           token,
         );
       }
-      await this.#db.transaction().execute(async (trx) => {
-        const updated = await trx
-          .updateTable('integration_oauth_grants')
-          .set({
-            status: 'revoked',
-            access_token_encrypted: '',
-            refresh_token_encrypted: '',
-            token_expires_at: null,
-            refresh_claim_id: null,
-            refresh_claim_expires_at: null,
-            token_revision: grant.token_revision + 1,
-            updated_at: new Date(),
-          })
-          .where('id', '=', grantId)
-          .where('workspace_id', '=', workspaceId)
-          .where('refresh_claim_id', '=', claimId)
-          .where('token_revision', '=', grant.token_revision)
-          .where('status', '=', 'pending_revocation')
-          .returning('id')
-          .executeTakeFirst();
-        if (updated)
-          await trx
-            .insertInto('integration_events')
-            .values({
-              id: randomUUID(),
-              workspace_id: workspaceId,
-              connection_id: null,
-              grant_id: grantId,
-              event_type: 'integration.revoked',
-              message: 'Integration grant revoked',
-              payload: null,
-              created_at: new Date(),
-            })
-            .execute();
-      });
+      await markGrantRevoked(this.#db, { ...claim, tokenRevision: grant.token_revision });
     } catch (error) {
-      await this.#db.transaction().execute(async (trx) => {
-        await trx
-          .updateTable('integration_oauth_grants')
-          .set({ refresh_claim_id: null, refresh_claim_expires_at: null, updated_at: new Date() })
-          .where('id', '=', grantId)
-          .where('workspace_id', '=', workspaceId)
-          .where('refresh_claim_id', '=', claimId)
-          .execute();
-        await trx
-          .insertInto('integration_events')
-          .values({
-            id: randomUUID(),
-            workspace_id: workspaceId,
-            connection_id: null,
-            grant_id: grantId,
-            event_type: 'integration.revoke_failed',
-            message: 'Integration grant revocation failed',
-            payload: JSON.stringify({
-              error_code: error instanceof Error ? error.name : 'provider_api_error',
-            }),
-            created_at: new Date(),
-          })
-          .execute();
+      await releaseRevocationClaim(this.#db, {
+        ...claim,
+        errorCode: error instanceof Error ? error.name : 'provider_api_error',
       });
       logger.warning('integration_revoke_failed', { grant_id: grantId });
     }

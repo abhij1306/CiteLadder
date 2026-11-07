@@ -17,7 +17,7 @@ import { createAudits } from '../src/audits/creation.ts';
 import { loadExecutionContext } from '../src/audits/execution-context.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { persistExecutionSuccess, type ExecutionResult } from '../src/audits/result-persistence.ts';
-import { aiTrafficOverview } from '../src/crawl-logs/overview.ts';
+import { aiTrafficOverview } from '../src/ai-traffic/overview.ts';
 import { AuditQueue } from '../src/queue/audit-queue.ts';
 import { persistSourceAggregates } from '../src/visibility/source-aggregates.ts';
 import { auditTenant, auditTestKey } from './audit-fixtures.ts';

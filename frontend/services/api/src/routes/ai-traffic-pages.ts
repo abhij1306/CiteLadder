@@ -5,8 +5,8 @@ import {
   aiTrafficInsightsSchema,
 } from '@citeladder/contracts/ai-traffic';
 import { defineGetRoute } from './define.ts';
-import { pagesExport, pagesRead, urlRead } from '../crawl-logs/pages.ts';
-import { insightsRead } from '../crawl-logs/insights.ts';
+import { pagesExport, pagesRead, urlRead } from '../ai-traffic/pages.ts';
+import { insightsRead } from '../ai-traffic/insights.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { tableCsv } from '../http/table-export.ts';
 

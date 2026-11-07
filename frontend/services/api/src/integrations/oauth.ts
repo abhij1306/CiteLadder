@@ -8,6 +8,7 @@ import { resolveWorkspaceMember } from '../auth/workspace.ts';
 import { lockAuthorizedWorkspace } from '../workspaces/service.ts';
 import { ApiError } from '../errors.ts';
 import { enqueueSyncRun } from './sync.ts';
+import { recordIntegrationEvents } from './events.ts';
 import { getLogger } from '../logging.ts';
 import {
   endpoints,
@@ -267,19 +268,15 @@ export async function completeOAuth(
         .onConflict((conflict) => conflict.columns(['grant_id', 'provider']).doNothing())
         .execute();
     }
-    await trx
-      .insertInto('integration_events')
-      .values({
-        id: randomUUID(),
-        workspace_id: workspaceId,
-        connection_id: null,
-        grant_id: grantId,
-        event_type: 'integration.connected',
+    await recordIntegrationEvents(trx, [
+      {
+        workspaceId,
+        grantId,
+        type: 'integration.connected',
         message: `Integration connected via ${transport}`,
-        payload: JSON.stringify({ provider: input.provider, transport, providers }),
-        created_at: new Date(),
-      })
-      .execute();
+        payload: { provider: input.provider, transport, providers },
+      },
+    ]);
     return grantId;
   });
   await queueCatchUp(db, workspaceId, connectedGrant);

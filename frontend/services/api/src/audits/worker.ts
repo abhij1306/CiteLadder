@@ -3,6 +3,8 @@ import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
 import { AuditQueue, ownedAuditTask, parkAuditTask, type AuditTask } from '../queue/audit-queue.ts';
 import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
+import { AUDIT_LANE } from '../queue/task-queue.ts';
 import { ProviderError } from '../providers/errors.ts';
 import { executeAnswer } from '../answer-engines/execute.ts';
 import { acquireCapacity, releaseCapacity, type CapacityDecision } from '../providers/capacity.ts';
@@ -128,6 +130,7 @@ export class AuditWorker {
     return claimed;
   }
   async #execute(claimed: AuditTask, signal?: AbortSignal) {
+    const startedAt = performance.now();
     const heartbeat = maintainLease(
       () => this.#queue.heartbeat(claimed, this.owner),
       Math.max(1, this.#runtime.audits.heartbeat_interval_seconds) * 1000,
@@ -156,9 +159,12 @@ export class AuditWorker {
       }
       await this.#dispatchLeased(adapter, claimed, context, capacity, dispatch, dispatchSignal);
     } catch (error) {
-      logger.info('audit_task_internal_failure', {
-        task_id: claimed.id,
-        error_code: error instanceof ProviderError ? error.code : 'unknown',
+      // The surface adapter decides retry or failure; the log records where it broke.
+      logLaneFailure(AUDIT_LANE.table, claimed, {
+        phase: dispatch.started ? 'dispatch' : 'prepare',
+        startedAt,
+        error,
+        facts: { engine: claimed.logical_engine },
       });
       await adapter.fail(this.#deps, claimed, context, {
         kind: 'internal',

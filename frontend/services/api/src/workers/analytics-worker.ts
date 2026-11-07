@@ -24,6 +24,7 @@ import {
   type TaskSettlement,
 } from '../queue/executor.ts';
 import { maintainLease } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
 import { ANALYTICS_LANE, TaskQueue, type ClaimScope, type QueueTask } from '../queue/task-queue.ts';
 import {
   ANALYTICS_KIND_NAMES,
@@ -175,6 +176,7 @@ export class AnalyticsWorker {
   }
 
   async #execute(claimed: QueueTask): Promise<void> {
+    const startedAt = performance.now();
     let started = false;
     try {
       // Cooperative cancel at the boundary: a row that turned terminal between
@@ -182,12 +184,15 @@ export class AnalyticsWorker {
       if (await this.#queue.isTerminal(claimed.id, claimed.workspace_id)) return;
       if (!(await this.#queue.markRunning(claimed.id, this.owner, claimed.attempt_count))) return;
       started = true;
-      await this.#finalize(claimed, await this.#run(claimed));
+      await this.#finalize(claimed, await this.#run(claimed), startedAt);
     } catch (error) {
       logger.exception('analytics_task_crashed', error, { task_id: claimed.id });
       // A failed transition leaves a leased claim for recovery; no executor
       // attempt or partial publication occurred.
-      if (started) await this.#finalize(claimed, error as Error).catch(() => undefined);
+      if (started)
+        await this.#finalize(claimed, error as Error, startedAt).catch((settleError: unknown) =>
+          logger.exception('analytics_task_settle_failed', settleError, { task_id: claimed.id }),
+        );
     }
   }
 
@@ -233,11 +238,15 @@ export class AnalyticsWorker {
   }
 
   /** The one locked terminal write per dispatch. */
-  #finalize(claimed: QueueTask, result: Error | TaskSettlement | null): Promise<boolean> {
+  async #finalize(
+    claimed: QueueTask,
+    result: Error | TaskSettlement | null,
+    startedAt: number,
+  ): Promise<boolean> {
     const taskId = claimed.id;
-    return this.#db.transaction().execute(async (trx) => {
+    const settled = await this.#db.transaction().execute(async (trx) => {
       const row = await this.#queue.fence(trx, claimed, this.owner);
-      if (row === undefined) return false;
+      if (row === undefined) return null;
       const now = new Date();
       const error = result === null || result instanceof Error ? result : result.error;
       if (result !== null && !(result instanceof Error)) await result.persist(trx);
@@ -254,7 +263,18 @@ export class AnalyticsWorker {
         })
         .where('id', '=', taskId)
         .execute();
-      return true;
+      return { error, attempt, outcome };
     });
+    if (settled === null) return false;
+    if (settled.error !== null)
+      logLaneFailure(ANALYTICS_LANE.table, claimed, {
+        phase: claimed.task_kind,
+        startedAt,
+        attempt: settled.attempt,
+        outcome: settled.outcome.status === statuses.failed ? 'failed' : 'retry',
+        error: settled.error,
+        code: settled.outcome.error_code,
+      });
+    return true;
   }
 }

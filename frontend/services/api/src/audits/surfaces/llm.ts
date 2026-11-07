@@ -1,5 +1,6 @@
 /** The `llm` surface: one direct answer-engine call per lease, retried within the task's budget. */
 import { record } from '../../db/json.ts';
+import { failureFacts, getLogger } from '../../logging.ts';
 import { answerRequestSchema } from '../../answer-engines/contracts.ts';
 import { ProviderError } from '../../providers/errors.ts';
 import { auditPolicy } from '../config.ts';
@@ -73,6 +74,13 @@ export const llmSurface: SurfaceAdapter = {
       );
     } catch (error) {
       const safe = error instanceof ProviderError ? error : new ProviderError('unknown');
+      // The persisted code is `unknown` for a non-provider failure; the log keeps its class.
+      getLogger('workers.audit').warning('audit_answer_failed', {
+        task_id: claimed.id,
+        engine: claimed.logical_engine,
+        ...failureFacts(error),
+        persisted_code: safe.code,
+      });
       state.rateError = safe;
       await persistAnswerFailure(deps.db, claimed, deps.owner, safe, deps.runtime, {
         called: true,

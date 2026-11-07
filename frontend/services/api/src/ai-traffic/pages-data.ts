@@ -1,14 +1,14 @@
 /** Each population reaches one row per path hash before the cross-signal join. */
 import { sql, type RawBuilder } from 'kysely';
 import type { Database } from '../db/database.ts';
-import type { CrawlScope } from './state.ts';
+import type { CrawlScope } from '../crawl-logs/state.ts';
 import {
   crawlWindow,
   verificationFilter,
   windowBounds,
   withReportingTimezone,
   type CrawlReadOptions,
-} from './reads.ts';
+} from '../crawl-logs/reads.ts';
 import { citationRuns } from './citation-runs.ts';
 import { crawlers } from '../config/crawlers.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';

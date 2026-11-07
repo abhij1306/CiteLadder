@@ -8,8 +8,8 @@ import {
   crawlSummary,
   type CrawlReadOptions,
 } from '../crawl-logs/reads.ts';
-import { insightsRead } from '../crawl-logs/insights.ts';
-import { pagesRead, urlRead } from '../crawl-logs/pages.ts';
+import { insightsRead } from '../ai-traffic/insights.ts';
+import { pagesRead, urlRead } from '../ai-traffic/pages.ts';
 import { readAiReferrals } from '../analytics/ai-referrals.ts';
 import { queryEvidencePage } from '../demand/reads.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';

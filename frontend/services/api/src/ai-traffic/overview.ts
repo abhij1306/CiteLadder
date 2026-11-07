@@ -20,8 +20,8 @@ import {
   windowBounds,
   withReportingTimezone,
   type CrawlReadOptions,
-} from './reads.ts';
-import type { CrawlScope } from './state.ts';
+} from '../crawl-logs/reads.ts';
+import type { CrawlScope } from '../crawl-logs/state.ts';
 import { citationCoverage, citationRuns } from './citation-runs.ts';
 
 const TRACKED_CITATIONS_LABEL = "Observed in CiteLadder's tracked answers";

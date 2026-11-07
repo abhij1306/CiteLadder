@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
+import { setLogSink } from '../src/logging.ts';
 import {
   internalLinkJudge,
   compensateInternalLinks,
@@ -202,12 +203,26 @@ describe('internal link judgment execution', () => {
     const unavailable = vi.fn(async () => {
       throw new ModelError('connection');
     });
-    await internalLinkJudge(() => ({ model: 'fixture', decide: unavailable }))(
-      provider.task,
-      context,
-    );
+    const records: Record<string, unknown>[] = [];
+    const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+    try {
+      await internalLinkJudge(() => ({ model: 'fixture', decide: unavailable }))(
+        provider.task,
+        context,
+      );
+    } finally {
+      setLogSink(restore);
+    }
     expect((await events(provider.id, 'outcome')).map((e) => e.evidence)).toEqual([
       { state: 'uncertain', reason: 'connection' },
+    ]);
+    expect(records.filter((entry) => entry.event === 'internal_link_judgment_uncertain')).toEqual([
+      expect.objectContaining({
+        reason: 'connection',
+        error_class: 'ModelError',
+        error_code: 'connection',
+        elapsed_ms: expect.any(Number),
+      }),
     ]);
     const broken = await seed(1);
     const defect = vi.fn(async () => {

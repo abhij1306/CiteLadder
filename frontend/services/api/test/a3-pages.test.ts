@@ -12,14 +12,14 @@ import { aiTraffic, insightsRefresh } from '../src/config/ai-traffic.ts';
 import { ingest } from '../src/crawl-logs/ingest.ts';
 import { refreshCrawlLogs } from '../src/crawl-logs/rollup.ts';
 import { refreshAiReferralsSnapshot } from '../src/referrals/snapshot.ts';
-import { pagesRead, urlRead, pageContext } from '../src/crawl-logs/pages.ts';
-import { pageDataset, type JoinedPage } from '../src/crawl-logs/pages-data.ts';
+import { pagesRead, urlRead, pageContext } from '../src/ai-traffic/pages.ts';
+import { pageDataset, type JoinedPage } from '../src/ai-traffic/pages-data.ts';
 import {
   insightPatterns,
   refreshTrafficInsights,
   refreshInsightWindow,
   insightsRead,
-} from '../src/crawl-logs/insights.ts';
+} from '../src/ai-traffic/insights.ts';
 import { enqueueCoalesced } from '../src/queue/enqueue.ts';
 import { hash } from '../src/crypto-text.ts';
 import { canonicalPage } from '../src/page-identity.ts';

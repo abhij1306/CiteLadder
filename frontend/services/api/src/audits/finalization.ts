@@ -2,7 +2,7 @@ import { sql, type Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { Audits } from '../generated/db-schema.ts';
 import { policy } from '../config.ts';
-import { getLogger } from '../logging.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { insightsRefresh } from '../config/ai-traffic.ts';
 import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { persistComparisonBaselines } from '../visibility/baselines.ts';
@@ -107,9 +107,12 @@ export function finalizeAudit(
     await sql`savepoint commerce_shelf_finalization`.execute(trx);
     try {
       await commerce(trx, audit);
-    } catch {
+    } catch (error) {
       await sql`rollback to savepoint commerce_shelf_finalization`.execute(trx);
-      getLogger('workers.audit').info('commerce_shelf_finalization_failed', { audit_id: audit.id });
+      getLogger('workers.audit').warning('commerce_shelf_finalization_failed', {
+        audit_id: audit.id,
+        ...failureFacts(error),
+      });
     }
     await sql`release savepoint commerce_shelf_finalization`.execute(trx);
     await trx

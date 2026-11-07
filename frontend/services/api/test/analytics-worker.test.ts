@@ -7,6 +7,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadWorkerSettings, policy } from '../src/config.ts';
+import { setLogSink } from '../src/logging.ts';
 import { TaskQueue, type QueueTask } from '../src/queue/task-queue.ts';
 import { AnalyticsWorker, EXECUTORS, retryDelayMs } from '../src/workers/analytics-worker.ts';
 import { enqueueTask } from '../src/queue/enqueue.ts';
@@ -555,13 +556,60 @@ describe('finalize', () => {
         .where('id', '=', task.id)
         .execute();
     };
-    expect(await runOne({ ingest_referrals: stolen })).toMatchObject({
+    const { records, result } = await capturingLogs(() => runOne({ ingest_referrals: stolen }));
+    expect(result).toMatchObject({
       status: 'running',
       lease_owner: 'sweeper-reclaimed',
       attempt_count: 0,
     });
+    expect(records.filter((record) => record.task_id === result.id)).toEqual([
+      expect.objectContaining({
+        event: 'lane_lease_lost',
+        lane: 'analytics_tasks',
+        workspace_id: workspaceId,
+        attempt: 0,
+        phase: 'fence',
+      }),
+    ]);
+  });
+
+  it('logs a failed attempt by class, code, phase, attempt and elapsed time, never its message', async () => {
+    class ProviderTimeout extends Error {
+      readonly code = 'provider_timeout';
+    }
+    const timingOut: Executor = async () => {
+      throw new ProviderTimeout('upstream said: secret-body');
+    };
+    const { records, result } = await capturingLogs(() => runOne({ ingest_referrals: timingOut }));
+    expect(result).toMatchObject({ status: 'retry_wait', attempt_count: 1 });
+    const logged = records.filter((record) => record.task_id === result.id);
+    expect(logged).toEqual([
+      expect.objectContaining({
+        event: 'lane_task_failed',
+        level: 'warning',
+        lane: 'analytics_tasks',
+        workspace_id: workspaceId,
+        attempt: 1,
+        phase: 'ingest_referrals',
+        outcome: 'retry',
+        error_class: 'ProviderTimeout',
+        error_code: 'provider_timeout',
+        elapsed_ms: expect.any(Number),
+      }),
+    ]);
+    expect(JSON.stringify(logged)).not.toContain('secret-body');
   });
 });
+
+async function capturingLogs<T>(run: () => Promise<T>) {
+  const records: Record<string, unknown>[] = [];
+  const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+  try {
+    return { records, result: await run() };
+  } finally {
+    setLogSink(restore);
+  }
+}
 
 describe('retry backoff', () => {
   const backoff = { retryDelaySeconds: 30, retryMaxDelaySeconds: 900 };

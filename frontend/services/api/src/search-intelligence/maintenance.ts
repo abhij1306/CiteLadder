@@ -2,7 +2,7 @@ import type { Database } from '../db/database.ts';
 import { jsonObjects } from '../db/json.ts';
 import { AcquisitionState } from './acquisition-state.ts';
 import { si } from './requests.ts';
-import { getLogger } from '../logging.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 
 /** The queue sweeper may exhaust a dead analytics worker; recover saved receipts with no HTTP. */
 export async function reconcileResearch(db: Database, at = new Date(), canAdmit = () => true) {
@@ -99,9 +99,11 @@ export async function reconcileResearch(db: Database, at = new Date(), canAdmit 
           .where('status', '=', 'collecting')
           .execute();
       });
-    } catch {
-      getLogger('workers.research').info('research_maintenance_failed', {
+    } catch (error) {
+      // One run's repair never blocks the others; the next sweep retries it.
+      getLogger('workers.research').warning('research_maintenance_failed', {
         run_id: candidate.run_id,
+        ...failureFacts(error),
       });
     }
   }

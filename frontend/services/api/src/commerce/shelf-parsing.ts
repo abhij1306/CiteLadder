@@ -6,6 +6,7 @@ import { localizedPrice } from './projection-facts.ts';
 import { onlyOf } from '../lists.ts';
 import { domainMatches } from '../analysis/domains.ts';
 import { stripTrailing } from '../text-order.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 
 export const shelfPolicy = auditPolicy.commerce_shelf;
 export const boundedText = (text: string, limit: number) => [...text].slice(0, limit).join('');
@@ -208,6 +209,7 @@ export async function prepareRecommendations(
   const resolved = new Map<RecommendationSpan, ResolvedRecommendation[]>();
   let failed = false;
   if (resolver && pending.length) {
+    const startedAt = performance.now();
     try {
       const batch = resolvedBatchSchema.parse(
         await resolver.resolve(
@@ -218,8 +220,14 @@ export async function prepareRecommendations(
         const span = pending[item.span];
         if (span) resolved.set(span, [...(resolved.get(span) ?? []), item]);
       }
-    } catch {
+    } catch (error) {
       // Optional classification cannot erase unresolved evidence; the failure is recorded.
+      getLogger('commerce.shelf').warning('commerce_shelf_resolution_failed', {
+        model: resolver.model,
+        spans: pending.length,
+        ...failureFacts(error),
+        elapsed_ms: Math.round(performance.now() - startedAt),
+      });
       failed = true;
     }
   }

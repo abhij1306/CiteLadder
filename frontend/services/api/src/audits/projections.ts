@@ -8,7 +8,7 @@ import type { ExecutionContext } from './execution-context.ts';
 import type { ExecutionResult } from './result-persistence.ts';
 import { enqueueTask } from '../queue/enqueue.ts';
 import { policy, resolveSettingSpec } from '../config.ts';
-import { getLogger } from '../logging.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { prepareSavedShelf } from '../commerce/shelf-recovery.ts';
 
 /** Compose existing deterministic analysis, bounded shelf preparation and persisted downstream work. */
@@ -63,9 +63,10 @@ async function enqueueSourcePageInspection(
         resolveSettingSpec(policy.analytics.worker_settings.task_max_attempts, env),
       ),
     });
-  } catch {
-    getLogger('workers.audit').info('source_page_inspection_enqueue_failed', {
+  } catch (error) {
+    getLogger('workers.audit').warning('source_page_inspection_enqueue_failed', {
       audit_id: auditId,
+      ...failureFacts(error),
     });
   }
 }

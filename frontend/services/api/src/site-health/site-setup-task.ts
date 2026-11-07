@@ -9,6 +9,7 @@
 import { policy, resolveSettingSpec } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import type { SiteTask } from '../queue/task-queue.ts';
 import { SitemapCollector, SitemapParseError, sitemapRef } from '../web-evidence/sitemaps.ts';
 import { robotsPolicy } from '../web-evidence/acquisition.ts';
@@ -30,6 +31,7 @@ import { classifyUrlAdmission } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
 const crawlPolicy = policy.site_health.crawl;
+const logger = getLogger('site_health.setup');
 
 export function setupSettings(env: Record<string, string | undefined> = process.env) {
   const spec = policy.site_health.settings;
@@ -61,8 +63,22 @@ function robotsStatus(robots: Robots | null) {
   return crawlPolicy.robots_statuses.not_found;
 }
 
+/**
+ * A best-effort site document could not be fetched. A stop of the lease or
+ * the drain is not a fetch failure: the task's commit re-checks it.
+ */
+function logFetchFailure(ctx: SiteTaskContext, phase: string, error: unknown, startedAt: number) {
+  if (ctx.signal.aborted) return;
+  logger.warning('site_health_document_fetch_failed', {
+    phase,
+    ...failureFacts(error),
+    elapsed_ms: Math.round(performance.now() - startedAt),
+  });
+}
+
 async function wellKnown(ctx: SiteTaskContext, url: string, settings: Settings) {
   const fetch = ctx.fetcher.settings.acquisition;
+  const startedAt = performance.now();
   try {
     return await ctx.fetcher.acquirer.fetch(url, {
       signal: ctx.signal,
@@ -72,7 +88,9 @@ async function wellKnown(ctx: SiteTaskContext, url: string, settings: Settings) 
       redirects: fetch.redirects,
       contentTypes: ['*'],
     });
-  } catch {
+  } catch (error) {
+    // Unfetched stays distinct from absent: the llms.txt fact records `fetched: false`.
+    logFetchFailure(ctx, 'llms_txt', error, startedAt);
     return null;
   }
 }
@@ -121,6 +139,7 @@ type SiteFacts = Record<string, unknown>;
 
 async function sitemapDocument(ctx: SiteTaskContext, url: string, settings: Settings) {
   const fetch = ctx.fetcher.settings.acquisition;
+  const startedAt = performance.now();
   try {
     const page = await ctx.fetcher.acquirer.fetch(url, {
       signal: ctx.signal,
@@ -136,7 +155,9 @@ async function sitemapDocument(ctx: SiteTaskContext, url: string, settings: Sett
       },
     });
     return page.status >= 200 && page.status < 300 ? page : null;
-  } catch {
+  } catch (error) {
+    // The walk counts the attempt against its budget and moves on to the next document.
+    logFetchFailure(ctx, 'sitemap', error, startedAt);
     return null;
   }
 }

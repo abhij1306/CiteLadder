@@ -3,7 +3,7 @@ import { inTransaction, type Database } from '../db/database.ts';
 import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { policy } from '../config.ts';
-import { getLogger } from '../logging.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';
 import { surfaceKindOf } from '../providers/config.ts';
 import { ownedAuditTask, type AuditTask } from '../queue/audit-queue.ts';
@@ -319,9 +319,11 @@ export class AuditMaintenance {
       if (!canAdmit()) break;
       try {
         await this.finalize(parent.workspaceId, parent.auditId); // NOSONAR -- Settle each parent before admitting the next within budget.
-      } catch {
-        getLogger('workers.audit').info('audit_maintenance_finalize_failed', {
+      } catch (error) {
+        // One parent's finalize never blocks the others; the next sweep retries it.
+        getLogger('workers.audit').warning('audit_maintenance_finalize_failed', {
           audit_id: parent.auditId,
+          ...failureFacts(error),
         });
       }
     }

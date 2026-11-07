@@ -17,7 +17,8 @@ import type { SiteCrawls } from '../generated/db-schema.ts';
 import { getLogger } from '../logging.ts';
 import { TaskCancelledError } from '../queue/executor.ts';
 import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
-import type { SiteTask, TaskQueue } from '../queue/task-queue.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
+import { SITE_HEALTH_LANE, type SiteTask, type TaskQueue } from '../queue/task-queue.ts';
 import type { SitePageFetcher } from './page-fetch.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 
@@ -41,7 +42,8 @@ export type SiteTaskRunner = {
   settings: SiteWorkerSettings;
   signal?: AbortSignal;
 };
-export type SiteTaskContext = SiteTaskRunner & { signal: AbortSignal };
+/** The runner adds the lease signal and when the attempt began (`performance.now()`). */
+export type SiteTaskContext = SiteTaskRunner & { signal: AbortSignal; startedAt: number };
 
 /** How a kind runs: it acquires and commits itself, or it runs inside the runner's transaction. */
 export type SiteTaskWork =
@@ -57,9 +59,11 @@ export type SiteTaskOutcome =
       errorCode: string;
       errorDetail: string;
       retryAfterSeconds?: number;
+      /** The thrown failure, when there was one; logged by class and code only. */
+      cause?: unknown;
     }
   /** Lock contention: retried on the conflict budget without spending an attempt. */
-  | { kind: 'conflict'; errorDetail: string }
+  | { kind: 'conflict'; errorDetail: string; cause?: unknown }
   /** Waiting on a prerequisite: requeued without spending an attempt. */
   | { kind: 'deferred'; delaySeconds: number };
 
@@ -236,10 +240,19 @@ export async function commitTask(
 /** Settle a task this worker holds: success, a retry (backed off or on the conflict budget), a deferral, or a terminal failure. */
 export async function settleTask(
   db: Database,
-  ctx: Pick<SiteTaskRunner, 'owner' | 'settings'>,
+  ctx: Pick<SiteTaskContext, 'owner' | 'settings' | 'startedAt'>,
   task: SiteTask,
   outcome: SiteTaskOutcome,
 ) {
+  const logFailure = (attempt: number, retry: boolean, code: string, cause: unknown) =>
+    logLaneFailure(SITE_HEALTH_LANE.table, task, {
+      phase: task.task_kind,
+      startedAt: ctx.startedAt,
+      attempt,
+      outcome: retry ? 'retry' : 'failed',
+      error: cause,
+      code,
+    });
   const now = new Date();
   const at = (seconds: number) => new Date(now.getTime() + seconds * 1000);
   const released = {
@@ -288,6 +301,7 @@ export async function settleTask(
           error_detail: outcome.errorDetail.slice(0, 2000),
         })
         .execute();
+      logFailure(task.attempt_count, retry, 'db_conflict', outcome.cause);
       return;
     }
     case 'failed': {
@@ -308,6 +322,7 @@ export async function settleTask(
           error_detail: outcome.errorDetail.slice(0, 2000),
         })
         .execute();
+      logFailure(attempt, retry, outcome.errorCode, outcome.cause);
       return;
     }
     default: {
@@ -378,8 +393,14 @@ async function runInTransaction(
 async function settleThrown(ctx: SiteTaskContext, claimed: SiteTask, error: unknown) {
   const detail = failureDetail(error);
   const outcome: SiteTaskOutcome = isConflict(error)
-    ? { kind: 'conflict', errorDetail: detail }
-    : { kind: 'failed', retryable: true, errorCode: 'task_failed', errorDetail: detail };
+    ? { kind: 'conflict', errorDetail: detail, cause: error }
+    : {
+        kind: 'failed',
+        retryable: true,
+        errorCode: 'task_failed',
+        errorDetail: detail,
+        cause: error,
+      };
   try {
     await ctx.db.transaction().execute(async (trx) => {
       const held = await lockSiteTask(trx, ctx, claimed);
@@ -389,7 +410,7 @@ async function settleThrown(ctx: SiteTaskContext, claimed: SiteTask, error: unkn
     if (!isConflict(error_)) throw error_;
     const task = (await loadScope(ctx.db, claimed))?.task;
     if (task?.lease_owner === ctx.owner && task.conflict_count < ctx.settings.conflictMax)
-      await settleTask(ctx.db, ctx, task, { kind: 'conflict', errorDetail: detail });
+      await settleTask(ctx.db, ctx, task, { kind: 'conflict', errorDetail: detail, cause: error });
   }
 }
 
@@ -404,13 +425,16 @@ export async function runSiteTask(runner: SiteTaskRunner, claimed: SiteTask, wor
     runner.settings.heartbeat * 1000,
     (error) => logger.exception('heartbeat failed', error, { task_id: claimed.id }),
   );
-  const ctx: SiteTaskContext = { ...runner, signal: leaseSignal(heartbeat.signal, runner.signal) };
+  const ctx: SiteTaskContext = {
+    ...runner,
+    signal: leaseSignal(heartbeat.signal, runner.signal),
+    startedAt: performance.now(),
+  };
   try {
     if (work.kind === 'acquire') await work.run(ctx, claimed);
     else await runInTransaction(ctx, claimed, work.run);
   } catch (error) {
     if (heartbeat.signal.aborted || error instanceof TaskCancelledError) return;
-    logger.exception('site health task failed', error, { task_id: claimed.id });
     await settleThrown(ctx, claimed, error);
   } finally {
     await heartbeat.stop();

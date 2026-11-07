@@ -26,6 +26,7 @@ import type {
   QueueWorkspaceTurns,
 } from '../generated/db-schema.ts';
 import { compareText } from '../text-order.ts';
+import { logLeaseLost } from './lane-log.ts';
 import { nextDueAt } from './next-due.ts';
 
 export type QueueTask = Selectable<AnalyticsTasks>;
@@ -273,6 +274,30 @@ async function advanceTurns(
     .execute();
 }
 
+/**
+ * Log a lost lease unless the row reached a terminal status or is gone: a
+ * cancel or the lane's own settle ends the lease too, and is not a loss.
+ */
+async function reportLeaseLoss(
+  db: Database,
+  table: LaneTable,
+  claimed: { id: string; workspace_id: string },
+  phase: 'heartbeat' | 'fence',
+): Promise<void> {
+  // The lease is already gone; a failed status read must not turn that answer
+  // into an error, so the loss is logged with its attempt unknown.
+  const row = await queueDatabase(db)
+    .selectFrom(table)
+    .select(['status', 'attempt_count'])
+    .where('id', '=', claimed.id)
+    .where('workspace_id', '=', claimed.workspace_id)
+    .executeTakeFirst()
+    .catch(() => null);
+  if (row === null) logLeaseLost(table, { ...claimed, attempt_count: null }, phase);
+  else if (row !== undefined && !terminal.includes(row.status))
+    logLeaseLost(table, { ...claimed, attempt_count: row.attempt_count }, phase);
+}
+
 /** FOR UPDATE to settle; FOR KEY SHARE to hold a row the heartbeat still extends. */
 export type FenceStrength = 'update' | 'keyShare';
 type FencedClaim = { id: string; workspace_id: string; attempt_count: number };
@@ -304,6 +329,7 @@ export async function fenceLease<T extends LaneTable>(
     .$if(inStatus !== undefined, (query) => query.where('status', 'in', inStatus!))
     .$call((query) => (strength === 'keyShare' ? query.forKeyShare() : query.forUpdate()))
     .executeTakeFirst();
+  if (row === undefined) await reportLeaseLoss(trx, table, claimed, 'fence');
   return row === undefined || terminal.includes(row.status)
     ? undefined
     : (row as unknown as TaskFor<T>);
@@ -448,7 +474,15 @@ export class TaskQueue<T extends LaneTable = 'analytics_tasks'> {
       .where('lease_expires_at', '>', sql<Date>`clock_timestamp()`)
       .$if(attemptCount !== undefined, (query) => query.where('attempt_count', '=', attemptCount!))
       .executeTakeFirst();
-    return updated.numUpdatedRows > 0n;
+    const live = updated.numUpdatedRows > 0n;
+    if (!live)
+      await reportLeaseLoss(
+        this.#db,
+        this.#table,
+        { id: taskId, workspace_id: workspaceId },
+        'heartbeat',
+      );
+    return live;
   }
 
   /** The fenced lock a terminal write takes inside its transaction (`fenceLease`). */

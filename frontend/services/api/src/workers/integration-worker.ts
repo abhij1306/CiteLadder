@@ -2,10 +2,10 @@ import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
-import { crawlLogs } from '../config/crawl-logs.ts';
 import { queueRecovery } from '../config/queue-recovery.ts';
 import { recoverIntegrationLeases } from '../queue/recovery.ts';
 import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
 import type { ImportPage } from '../integrations/client.ts';
@@ -16,7 +16,9 @@ import { freshAccessToken } from '../integrations/tokens.ts';
 import { normalizedRows } from '../integrations/normalize.ts';
 import { extractMetadata } from '../integrations/partitions.ts';
 import { projectHosts } from '../integrations/host-scope.ts';
-import { lockCrawlState, enqueueRollup } from '../crawl-logs/state.ts';
+import { adoptReportingTimezone } from '../crawl-logs/state.ts';
+import { recordIntegrationEvents } from '../integrations/events.ts';
+import { markGrantNeedsReauth } from '../integrations/grants.ts';
 import {
   activeSyncTarget,
   artifactOffset,
@@ -63,22 +65,16 @@ function failureDetail(failure: unknown): string {
 }
 
 function startedEvents(trx: Database, runs: readonly TaskFor<'integration_sync_runs'>[]) {
-  return trx
-    .insertInto('integration_events')
-    .values(
-      runs.map((run) => ({
-        id: randomUUID(),
-        workspace_id: run.workspace_id,
-        connection_id: run.connection_id,
-        grant_id: null,
-        event_type: 'integration.sync_started',
-        message: 'Integration sync started',
-        payload: JSON.stringify({ sync_run_id: run.id }),
-        created_at: new Date(),
-      })),
-    )
-    .execute()
-    .then(() => undefined);
+  return recordIntegrationEvents(
+    trx,
+    runs.map((run) => ({
+      workspaceId: run.workspace_id,
+      connectionId: run.connection_id,
+      type: 'integration.sync_started',
+      message: 'Integration sync started',
+      payload: { sync_run_id: run.id },
+    })),
+  );
 }
 
 export class IntegrationWorker {
@@ -93,6 +89,8 @@ export class IntegrationWorker {
   #committedPages = 0;
   /** When this claim's first provider request started; null until one has. */
   #firstRequestAt: number | null = null;
+  /** When this claim's attempt began. */
+  #startedAt = 0;
 
   constructor(
     db: Database,
@@ -124,6 +122,7 @@ export class IntegrationWorker {
     );
     this.#committedPages = 0;
     this.#firstRequestAt = null;
+    this.#startedAt = performance.now();
     try {
       await this.#execute(run, leaseSignal(heartbeat.signal, signal));
       if (!heartbeat.signal.aborted) await this.#finish(run, null);
@@ -498,20 +497,11 @@ export class IntegrationWorker {
           .returning('id')
           .executeTakeFirst();
         if (updated && metadata.timeZone) {
-          const scope = { workspaceId: run.workspace_id, projectId: run.project_id };
-          const state = await lockCrawlState(trx, scope);
-          if (state.reporting_timezone !== metadata.timeZone) {
-            await trx
-              .updateTable('crawl_log_states')
-              .set({ reporting_timezone: metadata.timeZone })
-              .where('workspace_id', '=', run.workspace_id)
-              .where('project_id', '=', run.project_id)
-              .execute();
-            await enqueueRollup(trx, scope, new Date(), {
-              first: new Date(Date.now() - (crawlLogs.retention_days - 1) * 86400000),
-              last: new Date(),
-            });
-          }
+          await adoptReportingTimezone(
+            trx,
+            { workspaceId: run.workspace_id, projectId: run.project_id },
+            metadata.timeZone,
+          );
         }
       }
     });
@@ -628,19 +618,16 @@ export class IntegrationWorker {
       .where('id', '=', run.connection_id)
       .where('workspace_id', '=', run.workspace_id)
       .execute();
-    await trx
-      .insertInto('integration_events')
-      .values({
-        id: randomUUID(),
-        workspace_id: run.workspace_id,
-        connection_id: run.connection_id,
-        grant_id: null,
-        event_type: 'integration.sync_finished',
+    await recordIntegrationEvents(trx, [
+      {
+        workspaceId: run.workspace_id,
+        connectionId: run.connection_id,
+        type: 'integration.sync_finished',
         message: 'Integration sync completed',
-        payload: JSON.stringify({ sync_run_id: run.id }),
-        created_at: now,
-      })
-      .execute();
+        payload: { sync_run_id: run.id },
+        at: now,
+      },
+    ]);
     await enqueuePostSyncProjections(trx, run);
   }
 
@@ -663,49 +650,34 @@ export class IntegrationWorker {
       })
       .where('id', '=', run.id)
       .execute();
-    if (failure instanceof IntegrationError && failure.code === 'grant_auth_failed') {
-      await trx
-        .updateTable('integration_oauth_grants')
-        .set({ status: 'needs_reauth', updated_at: now })
-        .where(
-          'id',
-          '=',
-          (
-            await trx
-              .selectFrom('integration_connections')
-              .select('grant_id')
-              .where('id', '=', run.connection_id)
-              .where('workspace_id', '=', run.workspace_id)
-              .executeTakeFirstOrThrow()
-          ).grant_id,
-        )
-        .where('workspace_id', '=', run.workspace_id)
-        .execute();
-    }
-    await trx
-      .insertInto('integration_events')
-      .values({
-        id: randomUUID(),
-        workspace_id: run.workspace_id,
-        connection_id: run.connection_id,
-        grant_id: null,
-        event_type:
-          failure instanceof IntegrationError && failure.code === 'grant_auth_failed'
-            ? 'integration.reauth_required'
-            : 'integration.sync_finished',
+    const reauth =
+      failure instanceof IntegrationError &&
+      failure.code === 'grant_auth_failed' &&
+      (await markGrantNeedsReauth(trx, {
+        workspaceId: run.workspace_id,
+        connectionId: run.connection_id,
+        at: now,
+      }));
+    await recordIntegrationEvents(trx, [
+      {
+        workspaceId: run.workspace_id,
+        connectionId: run.connection_id,
+        type: reauth ? 'integration.reauth_required' : 'integration.sync_finished',
         message: retry ? 'Integration sync will retry' : 'Integration sync failed',
-        payload: JSON.stringify({
+        payload: {
           sync_run_id: run.id,
           error_code: failure instanceof IntegrationError ? failure.code : 'provider_api_error',
           retry,
-        }),
-        created_at: now,
-      })
-      .execute();
-    logger.warning('integration_sync_failed', {
-      sync_run_id: run.id,
-      error_code: failure instanceof IntegrationError ? failure.code : 'provider_api_error',
-      retry,
+        },
+        at: now,
+      },
+    ]);
+    logLaneFailure(INTEGRATION_LANE.table, run, {
+      phase: run.sync_kind,
+      startedAt: this.#startedAt,
+      outcome: retry ? 'retry' : 'failed',
+      error: failure,
+      code: 'provider_api_error',
     });
     if (!retry) await enqueuePostSyncProjections(trx, run, true);
   }

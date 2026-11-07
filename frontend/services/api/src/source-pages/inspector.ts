@@ -11,7 +11,7 @@ import {
   payloadString,
   type Executor,
 } from '../queue/executor.ts';
-import { getLogger } from '../logging.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { FetchError, type FetchedPage, type WebsiteFetcher } from '../safe-fetch.ts';
 import { PageAcquirer, authorizeAcquisition } from '../web-evidence/acquisition.ts';
 import { pageIdentity } from './identity.ts';
@@ -117,9 +117,16 @@ export function sourcePageInspector(fetcher?: WebsiteFetcher): Executor {
       if (spent === 'exhausted') break;
       if (spent === 'duplicate') continue;
       let result: FetchedPage;
+      const startedAt = performance.now();
       try {
-        result = await acquirer.fetch(token, options);
-      } catch {
+        result = await acquirer.fetch(token, options); // NOSONAR -- Each redirect fetch spends budget first and stops when it is exhausted.
+      } catch (error) {
+        // The citation stays unresolved; its spent redirect budget is kept.
+        logger.info('source_page_redirect_fetch_failed', {
+          task_id: task.id,
+          ...failureFacts(error),
+          elapsed_ms: Math.round(performance.now() - startedAt),
+        });
         continue;
       }
       const identity = pageIdentity(result.url);
