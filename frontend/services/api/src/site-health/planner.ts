@@ -41,9 +41,8 @@ export async function admissionRuntime(db: Database, workspaceId: string) {
       id: randomUUID(),
       workspace_id: workspaceId,
       ...projection,
-      // Legacy NOT NULL provenance columns; a self-hosted runtime has one fixed source.
+      // Legacy NOT NULL provenance column; a self-hosted runtime has one fixed source.
       resolved_registry_revision: 'self-hosted',
-      resolved_entitlement_lifecycle_version: 0,
       created_at: now,
       updated_at: now,
     })

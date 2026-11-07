@@ -526,7 +526,6 @@ export interface Audits {
   created_at: Timestamp;
   error_message: string;
   failed_count: number;
-  funded_budget_period_start: Timestamp | null;
   id: string;
   launch_id: string | null;
   market_id: string | null;
@@ -1906,7 +1905,6 @@ export interface ProviderConnections {
   pause_reason: Generated<string>;
   pause_until: Timestamp | null;
   paused_at: Timestamp | null;
-  platform_credential_ref: Generated<string>;
   transport_provider: string;
   updated_at: Timestamp;
   workspace_id: string;
@@ -2949,7 +2947,6 @@ export interface WorkspaceMembers {
 export interface Workspaces {
   created_at: Timestamp;
   id: string;
-  is_system: Generated<boolean>;
   name: string;
   updated_at: Timestamp;
 }
@@ -2961,7 +2958,6 @@ export interface WorkspaceSiteHealthRuntime {
   discovery_url_cap: number | null;
   id: string;
   monitored_url_limit: number;
-  resolved_entitlement_lifecycle_version: number;
   resolved_registry_revision: string;
   resolved_valid_until: Timestamp | null;
   sample_url_limit: number;

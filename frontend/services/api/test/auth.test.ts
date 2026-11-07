@@ -107,13 +107,6 @@ describe('workspace membership', () => {
     expect(missingResult.body.error.message).toBe(foreignResult.body.error.message);
   });
 
-  it('never authorizes through a system workspace membership', async () => {
-    // A stray membership row: system workspaces never have legitimate ones.
-    const system = await fixtures.systemWorkspace();
-    await fixtures.member(system, userId, 'owner');
-    expect((await call(`/w/${system}`, viewerToken)).status).toBe(404);
-  });
-
   it('rejects a malformed workspace id before querying', async () => {
     const { status, body } = await call('/w/not-a-uuid', viewerToken);
     expect(status).toBe(422);

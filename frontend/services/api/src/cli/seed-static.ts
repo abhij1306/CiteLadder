@@ -211,7 +211,6 @@ export async function seedStatic(db: Database, _config: ServiceConfig, encryptio
       .updateTable('workspaces')
       .set({ name, updated_at: new Date() })
       .where('id', '=', identity.workspace_id)
-      .where('is_system', '=', false)
       .execute();
   const now = new Date();
   await db

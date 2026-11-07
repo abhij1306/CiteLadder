@@ -76,11 +76,11 @@ describe('audit HTTP family cutover', () => {
       `attachment; filename="audit-${t.auditId}.csv"`,
     );
     expect((await request(viewer, t.workspaceId, `/${t.auditId}/metrics`)).status).toBe(404);
-    // An extra HTTP funding selector cannot change manual BYOK admission.
+    // An unrecognized extra field cannot change manual BYOK admission.
     const created = await request(t.userId, t.workspaceId, '', 'POST', {
       ...body,
       repetitions: 1,
-      credential_mode: 'funded',
+      credential_mode: 'unrecognized',
     });
     expect(created.status).toBe(201);
     const [run] = (await created.json()) as [{ id: string }];

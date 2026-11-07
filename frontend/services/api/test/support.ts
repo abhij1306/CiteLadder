@@ -86,7 +86,7 @@ export class Fixtures {
   /** A tenant workspace created with its Owner, as workspace creation does. */
   async ownedWorkspace(ownerId: string): Promise<string> {
     const insert = async (trx: Database) => {
-      const workspaceId = await this.insertWorkspace(trx, false);
+      const workspaceId = await this.insertWorkspace(trx);
       await this.insertMember(trx, workspaceId, ownerId, 'owner');
       return workspaceId;
     };
@@ -110,26 +110,18 @@ export class Fixtures {
     return id;
   }
 
-  /** The reserved system workspace kind, which never has members. */
-  async systemWorkspace(): Promise<string> {
-    const id = await this.insertWorkspace(this.db, true);
-    this.workspaces.push(id);
-    return id;
-  }
-
   /** Add a member, as an accepted invitation does. */
   async member(workspaceId: string, userId: string, role: string): Promise<void> {
     await this.insertMember(this.db, workspaceId, userId, role);
   }
 
-  private async insertWorkspace(db: Database, system: boolean): Promise<string> {
+  private async insertWorkspace(db: Database): Promise<string> {
     const id = randomUUID();
     await db
       .insertInto('workspaces')
       .values({
         id,
         name: fixtureWorkspaceName(id),
-        is_system: system,
         created_at: new Date(),
         updated_at: new Date(),
       })

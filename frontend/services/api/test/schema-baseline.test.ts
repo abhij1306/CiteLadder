@@ -95,12 +95,12 @@ describe('a fresh database', () => {
         "update public.schema_migrations set checksum = $1 where version = '0001_baseline'",
         [recorded],
       );
-      await client.query('CREATE TABLE public.billing_accounts (id uuid PRIMARY KEY)');
+      await client.query('CREATE TABLE public.stray_table (id uuid PRIMARY KEY)');
 
       await expect(applyMigrations(client)).rejects.toThrow(
         /Migration 0001_baseline changed after this database applied it.*reset:db/u,
       );
-      expect(await publicTables(client)).toContain('billing_accounts');
+      expect(await publicTables(client)).toContain('stray_table');
       const ledger = await client.query<{ checksum: string }>(
         "select checksum from public.schema_migrations where version = '0001_baseline'",
       );

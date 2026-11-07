@@ -17,7 +17,6 @@ export const workspaceRoutes = [
         .selectAll('workspaces')
         .select('workspace_members.role')
         .where('workspace_members.user_id', '=', c.get('user').id)
-        .where('workspaces.is_system', '=', false)
         .orderBy('workspaces.created_at')
         .orderBy('workspaces.id')
         .execute();

@@ -82,24 +82,22 @@ type MemberLock = 'share' | 'update';
 
 /**
  * The one membership predicate every authorization check reads: the user's
- * row in a tenant (never a system) workspace, held by an active account.
+ * row in the workspace, held by an active account.
  */
 function authorizingMember(db: Database, workspaceId: string, userId: string, lock?: MemberLock) {
   const member = db
     .selectFrom('workspace_members')
-    .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
     .innerJoin('users', 'users.id', 'workspace_members.user_id')
     .select(['workspace_members.workspace_id', 'workspace_members.role'])
     .where('workspace_members.workspace_id', '=', workspaceId)
     .where('workspace_members.user_id', '=', userId)
-    .where('workspaces.is_system', '=', false)
     .where('users.is_active', '=', true);
   if (lock === 'share') return member.forShare('workspace_members');
   if (lock === 'update') return member.forUpdate('workspace_members');
   return member;
 }
 
-/** The user's membership, if any; system workspaces and disabled accounts never authorize. */
+/** The user's membership, if any; disabled accounts never authorize. */
 export async function findWorkspaceMember(
   db: Database,
   userId: string,
@@ -253,11 +251,9 @@ export function membershipQuery(db: Database, userId: string, target: Membership
       : sql<boolean>`exists (select 1 from projects where projects.id = ${projectId} and projects.workspace_id = workspace_members.workspace_id)`;
   const member = db
     .selectFrom('workspace_members')
-    .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
     .select(['workspace_members.workspace_id', 'workspace_members.role'])
     .select(holdsProject.as('holds_project'))
-    .where('workspace_members.user_id', '=', userId)
-    .where('workspaces.is_system', '=', false);
+    .where('workspace_members.user_id', '=', userId);
   switch (target.kind) {
     case 'project':
       return member.where(

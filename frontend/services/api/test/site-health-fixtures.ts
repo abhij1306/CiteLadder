@@ -382,7 +382,6 @@ export class SiteFixtures extends VisibilityFixtures {
         sample_url_limit: 10,
         discovery_mode: 'full',
         count_disclosure: true,
-        resolved_entitlement_lifecycle_version: 1,
         resolved_registry_revision: 'fixture',
         created_at: now,
         updated_at: now,

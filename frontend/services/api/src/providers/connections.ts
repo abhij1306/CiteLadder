@@ -14,10 +14,8 @@ const invalid = (message: string) => new ApiError(400, message);
 export function tenantConnections(db: Database, workspaceId: string) {
   return db
     .selectFrom('provider_connections as c')
-    .innerJoin('workspaces as w', 'w.id', 'c.workspace_id')
     .selectAll('c')
     .where('c.workspace_id', '=', workspaceId)
-    .where('w.is_system', '=', false)
     .where('c.credential_source', '=', 'byok');
 }
 export async function getConnection(db: Database, workspaceId: string, id: string, lock = false) {
@@ -160,7 +158,6 @@ async function lockWorkspace(db: Database, id: string) {
     .selectFrom('workspaces')
     .select('id')
     .where('id', '=', id)
-    .where('is_system', '=', false)
     .forUpdate()
     .executeTakeFirst();
   if (!row) throw notFound('Workspace');

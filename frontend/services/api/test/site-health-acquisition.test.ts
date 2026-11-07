@@ -78,7 +78,6 @@ async function crawl(options: CrawlOptions = {}, limits = { monitored: 50, sampl
       sample_url_limit: limits.sample,
       discovery_mode: 'full',
       count_disclosure: true,
-      resolved_entitlement_lifecycle_version: 1,
       resolved_registry_revision: 'fixture',
       created_at: now,
       updated_at: now,

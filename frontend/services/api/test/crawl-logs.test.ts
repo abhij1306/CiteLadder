@@ -46,6 +46,28 @@ const event = (changes: Record<string, unknown> = {}) => ({
   client_ip: '192.0.2.2',
   ...changes,
 });
+const ipRangeRefreshIds = async () =>
+  (
+    await db
+      .selectFrom('analytics_tasks')
+      .select('id')
+      .where('task_kind', '=', 'bot_ip_range_refresh')
+      .execute()
+  ).map((task) => task.id);
+/**
+ * One maintenance tick that removes the global bot IP range refresh tasks it
+ * enqueued, so no other test's queue claim picks them up.
+ */
+async function tick(at: Date, inspect?: () => Promise<void>) {
+  const before = new Set(await ipRangeRefreshIds());
+  try {
+    await crawlLogTick(db, at);
+    await inspect?.();
+  } finally {
+    const added = (await ipRangeRefreshIds()).filter((id) => !before.has(id));
+    if (added.length) await db.deleteFrom('analytics_tasks').where('id', 'in', added).execute();
+  }
+}
 async function setup(
   kind: 'custom' | 'upload' | 'cloudflare_worker' | 'cloudflare_logpush' = 'custom',
 ) {
@@ -1180,12 +1202,12 @@ describe('bounded maintenance', () => {
   it('stalls a quiet live source after the window and clears it on an accepted receipt', async () => {
     const { tenant, source, token } = await setup();
     const later = new Date(Date.now() + (crawlLogs.stalled_after_hours + 1) * 3600000);
-    await crawlLogTick(db, new Date());
+    await tick(new Date());
     expect((await sourceList(db, scope(tenant))).items[0]).toMatchObject({
       state: 'active',
       stall_reason: null,
     });
-    await crawlLogTick(db, later);
+    await tick(later);
     expect((await sourceList(db, scope(tenant))).items[0]).toMatchObject({
       state: 'stalled',
       stall_reason: 'no_receipts',
@@ -1230,7 +1252,7 @@ describe('bounded maintenance', () => {
     const { tenant } = await setup();
     crawlLogs.ingestion_enabled = false;
     try {
-      await crawlLogTick(db, now);
+      await tick(now);
       const tasks = await db
         .selectFrom('analytics_tasks')
         .select('task_kind')
@@ -1243,6 +1265,32 @@ describe('bounded maintenance', () => {
     } finally {
       crawlLogs.ingestion_enabled = true;
     }
+  });
+  it('schedules the global bot IP range refresh under the oldest workspace', async () => {
+    await setup();
+    const owner = await db
+      .selectFrom('workspaces')
+      .select('id')
+      .orderBy('created_at')
+      .orderBy('id')
+      .limit(1)
+      .executeTakeFirstOrThrow();
+    const ipRangeBots = crawlers.bots
+      .filter((bot) => bot.verification.method === 'ip_ranges')
+      .map((bot) => bot.bot_id);
+    expect(ipRangeBots.length).toBeGreaterThan(0);
+    await tick(now, async () => {
+      const tasks = await db
+        .selectFrom('analytics_tasks')
+        .select(['project_id', 'payload'])
+        .where('task_kind', '=', 'bot_ip_range_refresh')
+        .where('workspace_id', '=', owner.id)
+        .execute();
+      expect(tasks.every((task) => task.project_id === null)).toBe(true);
+      expect(new Set(tasks.map((task) => (task.payload as { bot_id: string }).bot_id))).toEqual(
+        new Set(ipRangeBots),
+      );
+    });
   });
   it('deletes expired raw requests while retaining receipts and projections', async () => {
     const { tenant, source } = await setup();

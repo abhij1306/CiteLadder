@@ -52,13 +52,11 @@ async function liveWorkspaceIds(db: Database, principal: EvidencePrincipal): Pro
   }
   const rows = await db
     .selectFrom('workspace_members as member')
-    .innerJoin('workspaces as workspace', 'workspace.id', 'member.workspace_id')
     .innerJoin('mcp_oauth_grants as g', 'g.user_id', 'member.user_id')
     .innerJoin('users as account', 'account.id', 'member.user_id')
     .select('member.workspace_id')
     .where('member.user_id', '=', principal.userId)
     .where('member.role', 'in', rolesWith('read'))
-    .where('workspace.is_system', '=', false)
     .where('account.is_active', '=', true)
     .where('g.id', '=', principal.grantId)
     .where('g.access_token_hash', '=', principal.tokenHash)
