@@ -9,8 +9,8 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
-import { analyzeExecution } from '../src/analysis/execution.ts';
-import { finalizeAudit } from '../src/analysis/finalization.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
+import { finalizeAudit } from '../src/audits/finalization.ts';
 import type { Citation } from '../src/answer-engines/contracts.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { createAudits } from '../src/audits/creation.ts';
@@ -124,7 +124,7 @@ async function finalizedRun(t: AuditTenant, urls: string[]) {
         transport_model: context!.task.transport_model,
         citations: urls.map((url, ordinal) => citation(url, ordinal)),
       },
-      analyzeExecution,
+      deriveExecution,
     );
   }
   await finalizeAudit(db, t.workspaceId, auditId!, async () => {});

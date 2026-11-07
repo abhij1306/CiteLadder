@@ -20,7 +20,7 @@ import { DiscoveryWorker } from './discovery-worker.ts';
 import { IntegrationWorker } from './integration-worker.ts';
 import { IntegrationDispatcher } from './integration-dispatcher.ts';
 import { AgentWorker } from './agent-worker.ts';
-import { AuditWorker } from './audit-worker.ts';
+import { AuditWorker } from '../audits/worker.ts';
 import { AuditScheduler, schedulerSettings } from './audit-scheduler.ts';
 import { SiteHealthWorker } from './site-health-worker.ts';
 import { integrationSettings } from '../integrations/config.ts';

@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { analyzeExecution } from '../src/analysis/execution.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
 import { createApp } from '../src/app.ts';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
@@ -111,7 +111,7 @@ async function analysed(owner: Tenant, auditId: string, answerText = ANSWER) {
     .selectAll()
     .where('id', '=', taskId)
     .executeTakeFirstOrThrow();
-  await db.transaction().execute((trx) => analyzeExecution(trx, task, audit, artifactId));
+  await db.transaction().execute((trx) => deriveExecution(trx, task, audit, artifactId));
   return taskId;
 }
 

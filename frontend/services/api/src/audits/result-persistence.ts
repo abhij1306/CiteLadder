@@ -195,29 +195,24 @@ async function insertFailureArtifact(
     })
     .execute();
 }
-type FailureOptions = {
-  preCall?: boolean;
-  surface?: boolean;
-  context?: ExecutionContext;
-  at?: Date;
-  recordAttempt?: boolean;
-  scraperFailure?: { outcome: string; raw?: unknown };
-  paidSurface?: boolean;
-  evidence?: (db: Database, task: AuditTask, audit: Selectable<Audits>) => Promise<void>;
+/** How one failure settles: what it spends, records and may retry. Built only by the exported writers. */
+type FailurePlan = {
+  spendsAttempt: boolean;
+  mayRetry: boolean;
+  recordsAttempt: boolean;
+  /** A failed scraper exchange keeps its own immutable artifact with this outcome. */
+  artifactOutcome: string | null;
+  evidence: ((db: Database, task: AuditTask) => Promise<void>) | null;
+  context: ExecutionContext | undefined;
+  at: Date;
 };
-/** Pre-call rejections and unpaid surface polls never spend an attempt. */
-function spendsAttempt(options: FailureOptions): boolean {
-  return !(options.preCall || (options.surface && !options.paidSurface));
-}
 function failureMetadata(
   providerMetadata: unknown,
-  scraperFailure: FailureOptions['scraperFailure'],
+  artifactOutcome: string | null,
 ): Record<string, unknown> {
   return {
     ...record(providerMetadata),
-    ...(scraperFailure
-      ? { scraper_outcome: scraperFailure.outcome, raw_response: scraperFailure.raw ?? {} }
-      : {}),
+    ...(artifactOutcome ? { scraper_outcome: artifactOutcome, raw_response: {} } : {}),
   };
 }
 async function markTaskFailed(db: Database, task: AuditTask, at: Date) {
@@ -234,67 +229,145 @@ async function markTaskFailed(db: Database, task: AuditTask, at: Date) {
     .where('workspace_id', '=', task.workspace_id)
     .execute();
 }
-/** Pre-call rejection terminalizes the task without inventing a provider attempt or debit. */
-export function persistExecutionFailure(
+/**
+ * An answer-engine failure. Before any call (`called: false`) it terminalizes the task
+ * without inventing a provider attempt or debit; after a call it spends an attempt and a
+ * retryable error parks the task for retry within its budget.
+ */
+export function persistAnswerFailure(
   db: Database,
   claimed: AuditTask,
   owner: string,
   error: ProviderError,
   runtime: AuditRuntime,
-  options: FailureOptions = {},
+  options: { called: boolean; context?: ExecutionContext; at?: Date },
 ) {
-  const at = options.at ?? new Date();
+  return persistFailure(db, claimed, owner, error, runtime, {
+    spendsAttempt: options.called,
+    mayRetry: options.called,
+    recordsAttempt: options.called,
+    artifactOutcome: null,
+    evidence: null,
+    context: options.context,
+    at: options.at ?? new Date(),
+  });
+}
+
+/** What an observed surface's failure keeps beside the task: a failure artifact or its own observation. */
+export type SurfaceFailureRecord =
+  | { kind: 'failure_artifact'; outcome: string }
+  | { kind: 'observation'; append: (db: Database, task: AuditTask) => Promise<void> };
+/**
+ * An observed surface's failure is terminal: provider recovery already happened through
+ * polling and reconciliation. `exchange` says what reached the provider: nothing, a free
+ * retrieval, or the paid submission (the only exchange that spends an attempt).
+ */
+export function persistSurfaceFailure(
+  db: Database,
+  claimed: AuditTask,
+  owner: string,
+  error: ProviderError,
+  runtime: AuditRuntime,
+  options: {
+    exchange: 'none' | 'unpaid' | 'paid';
+    record: SurfaceFailureRecord;
+    context?: ExecutionContext | null;
+    at?: Date;
+  },
+) {
+  const { record: evidence } = options;
+  return persistFailure(db, claimed, owner, error, runtime, {
+    spendsAttempt: options.exchange === 'paid',
+    mayRetry: false,
+    recordsAttempt: options.exchange !== 'none',
+    artifactOutcome: evidence.kind === 'failure_artifact' ? evidence.outcome : null,
+    evidence: evidence.kind === 'observation' ? evidence.append : null,
+    context: options.context ?? undefined,
+    at: options.at ?? new Date(),
+  });
+}
+
+function persistFailure(
+  db: Database,
+  claimed: AuditTask,
+  owner: string,
+  error: ProviderError,
+  runtime: AuditRuntime,
+  plan: FailurePlan,
+) {
   return db.transaction().execute(async (trx) => {
     const locked = await ownedAuditTask(trx, claimed, owner);
     if (!locked) return null;
-    const attempt = locked.task.attempt_count + (spendsAttempt(options) ? 1 : 0);
-    const retry =
-      !options.preCall && !options.surface && error.retryable && attempt < locked.task.max_attempts;
-    const failureArtifactId = options.scraperFailure ? randomUUID() : null;
-    const metadata = failureMetadata(locked.task.provider_metadata, options.scraperFailure);
-    if (failureArtifactId)
-      await insertFailureArtifact(trx, claimed, failureArtifactId, metadata, at);
-    const task = await trx
-      .updateTable('audit_tasks')
-      .set({
-        attempt_count: attempt,
-        error_code: error.code,
-        error_detail: `Provider execution failed: ${error.code}`,
-        updated_at: at,
-        ...(failureArtifactId
-          ? { result_artifact_id: failureArtifactId, provider_metadata: JSON.stringify(metadata) }
-          : {}),
-      })
-      .where('id', '=', claimed.id)
-      .where('workspace_id', '=', claimed.workspace_id)
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    if (!options.preCall && options.recordAttempt !== false)
-      await appendProviderAttempt(trx, task, at, {
-        error,
-        ...(failureArtifactId ? { artifactId: failureArtifactId } : {}),
-      });
-    if (failureArtifactId) await appendCostProjection(trx, task.workspace_id, failureArtifactId);
-    await options.evidence?.(trx, task, locked.audit);
-    if (error.code === 'auth_failure' && options.context)
-      await pauseExecutionCredential(trx, options.context, runtime, at);
-    if (retry)
-      await parkAuditTask(
-        trx,
-        task,
-        'retry_wait',
-        new Date(at.getTime() + retryDelay(runtime, attempt, error.retryAfterSeconds) * 1000),
-        at,
-      );
-    else await markTaskFailed(trx, task, at);
-    await auditEvent(
-      trx,
-      task.audit_id,
-      retry ? auditPolicy.constants.event_task_retry : auditPolicy.constants.event_task_failed,
-      retry ? 'task retry' : 'task failed',
-      { task_id: task.id, error_code: error.code },
-      at,
-    );
+    const attempt = locked.task.attempt_count + (plan.spendsAttempt ? 1 : 0);
+    const retry = plan.mayRetry && error.retryable && attempt < locked.task.max_attempts;
+    const failure = { error, attempt, retry };
+    const task = await recordFailedAttempt(trx, claimed, locked.task, failure, plan);
+    await plan.evidence?.(trx, task);
+    await settleFailedTask(trx, task, failure, runtime, plan);
     return { retry, attempt };
   });
+}
+type Failure = { error: ProviderError; attempt: number; retry: boolean };
+/** Writes the failed attempt: optional scraper artifact, task row, attempt and cost projection. */
+async function recordFailedAttempt(
+  trx: Database,
+  claimed: AuditTask,
+  current: AuditTask,
+  { error, attempt }: Failure,
+  plan: FailurePlan,
+) {
+  const at = plan.at;
+  const failureArtifactId = plan.artifactOutcome ? randomUUID() : null;
+  const metadata = failureMetadata(current.provider_metadata, plan.artifactOutcome);
+  if (failureArtifactId) await insertFailureArtifact(trx, claimed, failureArtifactId, metadata, at);
+  const task = await trx
+    .updateTable('audit_tasks')
+    .set({
+      attempt_count: attempt,
+      error_code: error.code,
+      error_detail: `Provider execution failed: ${error.code}`,
+      updated_at: at,
+      ...(failureArtifactId
+        ? { result_artifact_id: failureArtifactId, provider_metadata: JSON.stringify(metadata) }
+        : {}),
+    })
+    .where('id', '=', claimed.id)
+    .where('workspace_id', '=', claimed.workspace_id)
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  if (plan.recordsAttempt)
+    await appendProviderAttempt(trx, task, at, {
+      error,
+      ...(failureArtifactId ? { artifactId: failureArtifactId } : {}),
+    });
+  if (failureArtifactId) await appendCostProjection(trx, task.workspace_id, failureArtifactId);
+  return task;
+}
+/** Pauses a failed credential, then parks for retry or terminalizes. */
+async function settleFailedTask(
+  trx: Database,
+  task: AuditTask,
+  { error, attempt, retry }: Failure,
+  runtime: AuditRuntime,
+  { context, at }: FailurePlan,
+) {
+  if (error.code === 'auth_failure' && context)
+    await pauseExecutionCredential(trx, context, runtime, at);
+  if (retry)
+    await parkAuditTask(
+      trx,
+      task,
+      'retry_wait',
+      new Date(at.getTime() + retryDelay(runtime, attempt, error.retryAfterSeconds) * 1000),
+      at,
+    );
+  else await markTaskFailed(trx, task, at);
+  await auditEvent(
+    trx,
+    task.audit_id,
+    retry ? auditPolicy.constants.event_task_retry : auditPolicy.constants.event_task_failed,
+    retry ? 'task retry' : 'task failed',
+    { task_id: task.id, error_code: error.code },
+    at,
+  );
 }

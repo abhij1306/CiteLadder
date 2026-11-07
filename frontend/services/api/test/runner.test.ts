@@ -10,7 +10,7 @@ import {
 } from '../src/workers/runner.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
 import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
-import { AuditWorker } from '../src/workers/audit-worker.ts';
+import { AuditWorker } from '../src/audits/worker.ts';
 import { AuditMaintenance } from '../src/audits/maintenance.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';

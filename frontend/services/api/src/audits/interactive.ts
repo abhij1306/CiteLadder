@@ -1,7 +1,7 @@
 import { configEnvironment, policy, resolveSettingSpec, type ServiceConfig } from '../config.ts';
 import { interactiveExecution } from '../config/execution.ts';
 import type { Database } from '../db/database.ts';
-import { AuditWorker } from '../workers/audit-worker.ts';
+import { AuditWorker } from './worker.ts';
 import { configuredShelfResolver } from '../commerce/shelf.ts';
 import { auditRuntime } from './config.ts';
 import { auditProjections } from './projections.ts';

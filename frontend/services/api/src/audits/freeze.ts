@@ -3,7 +3,12 @@ import { shuffleAuditSlots } from './slot-order.ts';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
-import { providerPolicy, type Engine, type ProviderSettings } from '../providers/config.ts';
+import {
+  providerPolicy,
+  surfaceKindOf,
+  type Engine,
+  type ProviderSettings,
+} from '../providers/config.ts';
 import { approvedEndpoint } from '../providers/connections.ts';
 import { auditPolicy, auditSettings } from './config.ts';
 import type { AuditInput } from './inputs.ts';
@@ -221,7 +226,7 @@ async function freezeRoutes({
   const routes: FrozenRoute[] = [];
   for (const engine of engines) {
     const catalog = providerPolicy.routes[engine];
-    const observed = catalog.transport_provider === 'dataforseo';
+    const observed = surfaceKindOf(engine) !== 'llm';
     const selected = candidates.find((candidate) =>
       usableCandidate(candidate, engine, catalog.transport_provider, providerSettings, at),
     );

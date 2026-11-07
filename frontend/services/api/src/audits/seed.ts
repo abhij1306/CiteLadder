@@ -4,7 +4,7 @@ import { auditInput } from './inputs.ts';
 import { createAudits } from './creation.ts';
 import { auditRuntime } from './config.ts';
 import { auditProjections } from './projections.ts';
-import { AuditWorker } from '../workers/audit-worker.ts';
+import { AuditWorker } from './worker.ts';
 import type { Answer } from '../answer-engines/contracts.ts';
 import { devSeed } from '../config/dev-seed.ts';
 import { waitForPoll } from '../workers/poll.ts';

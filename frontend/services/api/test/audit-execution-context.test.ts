@@ -2,11 +2,10 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
-import {
-  directRequest,
-  frozenSurfaceRequest,
-  loadExecutionContext,
-} from '../src/audits/execution-context.ts';
+import { loadExecutionContext } from '../src/audits/execution-context.ts';
+import { directRequest } from '../src/audits/surfaces/llm.ts';
+import { frozenSurfaceRequest } from '../src/audits/surfaces/dataforseo.ts';
+import { llmScraperSurface } from '../src/audits/surfaces/llm-scraper.ts';
 import { commitSubmissionIntent } from '../src/audits/submission-intent.ts';
 import { AuditQueue } from '../src/queue/audit-queue.ts';
 import { createConnection, updateConnection } from '../src/providers/connections.ts';
@@ -196,7 +195,11 @@ describe('frozen audit execution identity', () => {
       attempt_count: 0,
       provider_task_id: '',
     });
-    const request = frozenSurfaceRequest(context, persisted.provider_submission_ref);
+    const request = frozenSurfaceRequest(
+      llmScraperSurface,
+      context,
+      persisted.provider_submission_ref,
+    );
     expect(request).toMatchObject({
       location_code: 2840,
       request_settings: { priority: 1, force_web_search: true },
@@ -238,7 +241,7 @@ describe('frozen audit execution identity', () => {
       auditTestKey,
       new Date(),
     ))!;
-    expect(() => frozenSurfaceRequest(context, 'submission-ref')).toThrow(
+    expect(() => frozenSurfaceRequest(llmScraperSurface, context, 'submission-ref')).toThrow(
       'Frozen search request has no request_settings',
     );
   });

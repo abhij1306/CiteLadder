@@ -8,7 +8,7 @@ import { auditInput } from '../src/audits/inputs.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { AuditMaintenance, cancelAudit, repairOwnedCompletion } from '../src/audits/maintenance.ts';
 import { auditProjections } from '../src/audits/projections.ts';
-import { analyzeExecution } from '../src/analysis/execution.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
 import { persistExecutionSuccess, type ExecutionResult } from '../src/audits/result-persistence.ts';
 import type { AuditTask } from '../src/queue/audit-queue.ts';
 
@@ -192,7 +192,7 @@ describe('audit recovery against PostgreSQL', () => {
       .execute();
     await cancelAudit(db, { workspaceId: t.workspaceId, projectId: null }, t.auditId);
     expect(
-      await persistExecutionSuccess(db, task, 'worker', answer(task), analyzeExecution),
+      await persistExecutionSuccess(db, task, 'worker', answer(task), deriveExecution),
     ).toBeNull();
     expect(
       (
@@ -227,7 +227,7 @@ describe('audit recovery against PostgreSQL', () => {
       task,
       'worker',
       answer(task),
-      analyzeExecution,
+      deriveExecution,
       { at },
     );
     await db

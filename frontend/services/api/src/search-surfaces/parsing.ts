@@ -9,7 +9,7 @@ import { providerPolicy } from '../providers/config.ts';
 import { classifySourceOrigin } from '../analysis/opportunities/source-patterns.ts';
 import { citationIdentity } from '../source-pages/identity.ts';
 import { costMicrousd } from '../providers/dataforseo.ts';
-import { searchPolicy, type SearchEngine } from './dataforseo.ts';
+import { searchPolicy, type ScraperEngine } from './dataforseo.ts';
 import { casefold } from '../casefold.ts';
 import { onlyOf } from '../lists.ts';
 
@@ -397,7 +397,7 @@ export function parseAds(envelope: unknown): { ads: AdItem[]; skipped: number } 
 export function parseScraper(
   payload: unknown,
   expectedId: string,
-  engine: Exclude<SearchEngine, 'google_ai_overview'>,
+  engine: ScraperEngine,
 ): ExecutionResult | 'still_pending' {
   const envelope = record(payload);
   if (envelope.status_code !== searchPolicy.constants.status_ok)

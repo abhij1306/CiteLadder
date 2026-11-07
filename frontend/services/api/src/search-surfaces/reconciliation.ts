@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ProviderError } from '../providers/errors.ts';
 import { costMicrousd } from '../providers/dataforseo.ts';
-import { searchPolicy, type Envelope, type SearchEngine } from './dataforseo.ts';
+import { isScraperEngine, searchPolicy, type Envelope, type SearchEngine } from './dataforseo.ts';
 
 export type ReconciliationState = {
   offset: number;
@@ -43,7 +43,7 @@ export function reconcilePage(
     const row = rowSchema.safeParse(value).data;
     if (!row || !submissionRef || row.metadata.tag !== submissionRef) continue;
     if (
-      engine !== 'google_ai_overview' &&
+      isScraperEngine(engine) &&
       (row.metadata.api !== 'ai_optimization' ||
         row.metadata.se !== searchPolicy.scraper.products[engine] ||
         row.metadata.function !== 'llm_scraper')

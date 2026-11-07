@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { DeriveExecution } from '../audits/result-persistence.ts';
+import type { Selectable } from 'kysely';
+import type { Database } from '../db/database.ts';
+import type { Audits } from '../generated/db-schema.ts';
+import type { AuditTask } from '../queue/audit-queue.ts';
 import { policy } from '../config.ts';
 import { record, jsonObjects } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
@@ -13,7 +16,6 @@ import { assessEntities } from './entity-assessment.ts';
 import { classifySourceDomain, classifySourceOrigin } from './opportunities/source-patterns.ts';
 import { citationIdentity } from '../source-pages/identity.ts';
 import { fanoutProjection } from './fanout.ts';
-import { enqueuePerception } from '../perception/admission.ts';
 import { answerAds, persistAds } from './ads.ts';
 
 /** A retrieved URL is never provider-resolved, so it keeps no resolved URL. */
@@ -28,8 +30,17 @@ function citationClassification(classified: ClassifiedCitation) {
   return classified.matched_competitor ? 'competitor' : 'third_party';
 }
 
-/** Caller holds the scoped audit/task lock and commits alongside the immutable artifact. */
-export const analyzeExecution: DeriveExecution = async (db, task, audit, artifactId) => {
+/**
+ * Derives one answer's analysis, mentions, citations, retrieved sources and ads from its
+ * immutable artifact. The caller holds the scoped audit/task lock and commits alongside the
+ * artifact. Returns the new analysis, or null when the artifact was already analyzed.
+ */
+export async function analyzeResponse(
+  db: Database,
+  task: AuditTask,
+  audit: Selectable<Audits>,
+  artifactId: string,
+) {
   const existing = await db
     .selectFrom('response_analyses')
     .selectAll()
@@ -39,7 +50,7 @@ export const analyzeExecution: DeriveExecution = async (db, task, audit, artifac
     .executeTakeFirst();
   if (existing) {
     if (existing.artifact_id !== artifactId) throw new Error('Analysis artifact mismatch');
-    return;
+    return null;
   }
   const artifact = await db
     .selectFrom('raw_response_artifacts')
@@ -222,11 +233,5 @@ export const analyzeExecution: DeriveExecution = async (db, task, audit, artifac
     .where('audit_id', '=', audit.id)
     .where('id', '=', task.id)
     .execute();
-  await enqueuePerception(db, {
-    workspaceId: task.workspace_id,
-    projectId: audit.project_id,
-    configuration: audit.configuration,
-    analysisId: id,
-    assessments,
-  });
-};
+  return { analysisId: id, assessments };
+}

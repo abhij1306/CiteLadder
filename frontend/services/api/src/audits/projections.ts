@@ -1,6 +1,6 @@
 import type { Database } from '../db/database.ts';
-import { analyzeExecution } from '../analysis/execution.ts';
-import { finalizeAudit } from '../analysis/finalization.ts';
+import { deriveExecution } from './derivation.ts';
+import { finalizeAudit } from './finalization.ts';
 import { prepareShelfExecution } from '../commerce/shelf.ts';
 import { finalizeCommerceShelf } from '../commerce/shelf-metrics.ts';
 import type { MeterableShelfResolver } from '../commerce/shelf.ts';
@@ -18,7 +18,7 @@ export function auditProjections(
   env: Record<string, string | undefined> = process.env,
 ) {
   return {
-    execution: analyzeExecution,
+    execution: deriveExecution,
     prepare: (context: ExecutionContext, result: ExecutionResult) =>
       prepareShelfExecution(db, context.task, result, resolver),
     finalize: async (workspaceId: string, auditId: string) => {
@@ -30,7 +30,7 @@ export function auditProjections(
         finalizeCommerceShelf,
         new Date(),
         (trx, task, audit, artifactId) =>
-          (prepared.get(task.id) ?? analyzeExecution)(trx, task, audit, artifactId),
+          (prepared.get(task.id) ?? deriveExecution)(trx, task, audit, artifactId),
       );
       await enqueueSourcePageInspection(db, workspaceId, auditId, env);
       return result;

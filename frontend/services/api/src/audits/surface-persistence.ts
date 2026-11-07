@@ -2,12 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { ProviderError } from '../providers/errors.ts';
-import { analyzeExecution } from '../analysis/execution.ts';
 import { type OverviewResult, overviewAnswer } from '../search-surfaces/parsing.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';
 import { ownedAuditTask, parkAuditTask, type AuditTask } from '../queue/audit-queue.ts';
 import {
-  persistExecutionFailure,
+  persistSurfaceFailure,
   persistExecutionSuccess,
   appendProviderAttempt,
   type DeriveExecution,
@@ -56,43 +55,56 @@ async function appendObservation(db: Database, task: AuditTask, result: Overview
       )
       .execute();
 }
+/** Whether a Google AI Overview result is an observation (present or absent) rather than a failure. */
+export const isOverviewObservation = (result: OverviewResult) =>
+  searchPolicy.surface.successful_outcomes.includes(result.outcome);
+
 /** Observation, raw evidence, derived analysis and queue terminal state share the owned transaction. */
-export function persistOverview(
+export function persistOverviewObservation(
+  db: Database,
+  task: AuditTask,
+  owner: string,
+  result: OverviewResult,
+  derive: DeriveExecution,
+  at = new Date(),
+) {
+  if (!isOverviewObservation(result)) throw new Error('Overview failure is not an observation');
+  return persistExecutionSuccess(
+    db,
+    task,
+    owner,
+    overviewAnswer(result),
+    async (trx, current, audit, artifactId) => {
+      await appendObservation(trx, current, result, at);
+      await derive(trx, current, audit, artifactId);
+    },
+    { surface: true, at },
+  );
+}
+
+/** A failed overview keeps its observation as evidence and terminalizes the task without analysis. */
+export function persistOverviewFailure(
   db: Database,
   task: AuditTask,
   owner: string,
   result: OverviewResult,
   runtime: AuditRuntime,
-  at = new Date(),
-  actualExchange = true,
-  paidSurface = false,
-  derive: DeriveExecution = analyzeExecution,
+  options: { exchange: 'none' | 'unpaid' | 'paid'; at?: Date },
 ) {
-  if (searchPolicy.surface.successful_outcomes.includes(result.outcome))
-    return persistExecutionSuccess(
-      db,
-      task,
-      owner,
-      overviewAnswer(result),
-      async (trx, current, audit, artifactId) => {
-        await appendObservation(trx, current, result, at);
-        await derive(trx, current, audit, artifactId);
-      },
-      { surface: true, at },
-    );
-  return persistExecutionFailure(
+  if (isOverviewObservation(result)) throw new Error('Overview observation is not a failure');
+  const at = options.at ?? new Date();
+  return persistSurfaceFailure(
     db,
     task,
     owner,
     new ProviderError(result.error_code || result.outcome),
     runtime,
     {
-      surface: true,
+      exchange: options.exchange,
       at,
-      recordAttempt: actualExchange,
-      paidSurface,
-      evidence: async (trx, current) => {
-        await appendObservation(trx, current, result, at);
+      record: {
+        kind: 'observation',
+        append: (trx, current) => appendObservation(trx, current, result, at),
       },
     },
   );

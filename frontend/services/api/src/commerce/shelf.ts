@@ -6,7 +6,7 @@ import type { Audits } from '../generated/db-schema.ts';
 import { record, strings } from '../db/json.ts';
 import type { AuditTask } from '../queue/audit-queue.ts';
 import type { DeriveExecution, ExecutionResult } from '../audits/result-persistence.ts';
-import { analyzeExecution } from '../analysis/execution.ts';
+import { deriveExecution } from '../audits/derivation.ts';
 import { auditPolicy } from '../audits/config.ts';
 import { createModelGateway, gatewaySettings } from '../models/gateway.ts';
 import { agentCallLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
@@ -261,11 +261,11 @@ export async function prepareShelfExecution(
     .where('workspace_id', '=', task.workspace_id)
     .where('id', '=', task.audit_id)
     .executeTakeFirstOrThrow();
-  if (audit.audit_scope !== 'commerce') return analyzeExecution;
+  if (audit.audit_scope !== 'commerce') return deriveExecution;
   const config = record(audit.configuration),
     frozen = record(config.commerce_measurement);
   const ids = frozenShelfIds(frozen);
-  if (!ids.length) return analyzeExecution;
+  if (!ids.length) return deriveExecution;
   const target = await db
     .selectFrom('commerce_prompt_targets as c')
     .innerJoin('audit_prompt_snapshots as s', 's.prompt_id', 'c.prompt_id')
@@ -276,7 +276,7 @@ export async function prepareShelfExecution(
     .where('s.audit_id', '=', audit.id)
     .where('s.id', '=', task.prompt_snapshot_id)
     .executeTakeFirst();
-  if (!target) return analyzeExecution;
+  if (!target) return deriveExecution;
   const values = Array.isArray(frozen.targets) ? frozen.targets : [];
   const parsed = frozenTargetSchema.safeParse(
     values.find((value) => {
@@ -284,7 +284,7 @@ export async function prepareShelfExecution(
       return row.kind === target.target_kind && row.id === target.target_id;
     }),
   );
-  if (!parsed.success) return analyzeExecution;
+  if (!parsed.success) return deriveExecution;
   const catalog = parsed.data;
   const prepared = await prepareRecommendations(
     result.answer_text,
@@ -314,7 +314,7 @@ export async function prepareShelfExecution(
     .join('-');
   const ctx: ShelfContext = { task, audit, target, catalog, versions, owned, locale };
   return async (trx, current, lockedAudit, artifactId) => {
-    await analyzeExecution(trx, current, lockedAudit, artifactId);
+    await deriveExecution(trx, current, lockedAudit, artifactId);
     if (
       current.id !== task.id ||
       lockedAudit.id !== audit.id ||

@@ -10,13 +10,13 @@ import { AuditQueue } from '../src/queue/audit-queue.ts';
 import { loadExecutionContext } from '../src/audits/execution-context.ts';
 import {
   persistExecutionSuccess,
-  persistExecutionFailure,
+  persistAnswerFailure,
   type ExecutionResult,
 } from '../src/audits/result-persistence.ts';
 import { ProviderError } from '../src/providers/errors.ts';
 import { record } from '../src/db/json.ts';
-import { analyzeExecution } from '../src/analysis/execution.ts';
-import { finalizeAudit } from '../src/analysis/finalization.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
+import { finalizeAudit } from '../src/audits/finalization.ts';
 
 const db = testDatabase(),
   fixtures = new VisibilityFixtures(db),
@@ -94,7 +94,7 @@ describe('atomic audit execution persistence', () => {
         },
       ],
     };
-    const derive = analyzeExecution;
+    const derive = deriveExecution;
     const artifactId = await persistExecutionSuccess(
       db,
       t.context.task,
@@ -213,12 +213,13 @@ describe('atomic audit execution persistence', () => {
   });
   it('parks the retry for a timeout, then pauses only the failing credential revision', async () => {
     const t = await seed();
-    const failure = await persistExecutionFailure(
+    const failure = await persistAnswerFailure(
       db,
       t.context.task,
       'worker',
       new ProviderError('timeout', true),
       runtime,
+      { called: true },
     );
     expect(failure).toEqual({ retry: true, attempt: 1 });
     await db
@@ -241,13 +242,13 @@ describe('atomic audit execution persistence', () => {
       .set({ credential_revision: randomUUID() })
       .where('id', '=', t.connectionId)
       .execute();
-    await persistExecutionFailure(
+    await persistAnswerFailure(
       db,
       t.context.task,
       'worker',
       new ProviderError('auth_failure'),
       runtime,
-      { context: t.context },
+      { called: true, context: t.context },
     );
     const connection = await db
       .selectFrom('provider_connections')
@@ -259,13 +260,13 @@ describe('atomic audit execution persistence', () => {
   it('records no attempt for a pre-call rejection', async () => {
     const t = await seed();
     expect(
-      await persistExecutionFailure(
+      await persistAnswerFailure(
         db,
         t.context.task,
         'worker',
         new ProviderError('provider_connection_missing'),
         runtime,
-        { preCall: true },
+        { called: false },
       ),
     ).toEqual({ retry: false, attempt: 0 });
     expect(
@@ -283,7 +284,7 @@ describe('atomic audit execution persistence', () => {
       t.context.task,
       'worker',
       { ...result, transport_model: t.context.task.transport_model },
-      analyzeExecution,
+      deriveExecution,
     );
     expect(await finalizeAudit(db, t.workspaceId, t.auditId, async () => {})).toBeNull();
     // Other frozen repetitions failed; they remain in the requested denominator.

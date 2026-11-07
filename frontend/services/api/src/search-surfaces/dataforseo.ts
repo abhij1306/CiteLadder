@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { surfaceSupports, type SearchSurface } from './locations.ts';
 import { policy, resolveSettingSpec, ConfigError } from '../config.ts';
-import { type ProviderSettings } from '../providers/config.ts';
+import { surfaceKindOf, type ProviderSettings } from '../providers/config.ts';
 import {
   acceptedStatus,
   costMicrousd,
@@ -12,6 +12,10 @@ import { ProviderError } from '../providers/errors.ts';
 
 export const searchPolicy = policy.dataforseo;
 export type SearchEngine = SearchSurface;
+/** An observed engine reached through DataForSEO's LLM scraper, with its scraper product. */
+export type ScraperEngine = keyof typeof searchPolicy.scraper.products;
+export const isScraperEngine = (engine: string): engine is ScraperEngine =>
+  surfaceKindOf(engine) === 'llm_scraper' && Object.hasOwn(searchPolicy.scraper.products, engine);
 export type SearchRequest = {
   query: string;
   location_code: number;
@@ -73,10 +77,11 @@ function providerPath(
   engine: SearchEngine,
   operation: 'task_post' | 'task_get/advanced' | 'id_list',
 ): string {
-  const scraper = engine !== 'google_ai_overview';
   if (operation === 'id_list')
-    return scraper ? searchPolicy.scraper.id_list_path : searchPolicy.constants.path_id_list;
-  if (scraper)
+    return isScraperEngine(engine)
+      ? searchPolicy.scraper.id_list_path
+      : searchPolicy.constants.path_id_list;
+  if (isScraperEngine(engine))
     return `/v3/ai_optimization/${searchPolicy.scraper.products[engine]}/llm_scraper/${operation}`;
   return operation === 'task_post'
     ? searchPolicy.constants.path_task_post
@@ -88,8 +93,8 @@ export function searchPayload(engine: SearchEngine, input: SearchRequest) {
     throw new ProviderError('invalid_submission_ref');
   // DataForSEO treats percent and plus characters as encoding syntax.
   const keyword = input.query.replaceAll('%', '%25').replaceAll('+', '%2B');
-  const limit =
-    engine === 'google_ai_overview' ? c.keyword_max_chars : searchPolicy.scraper.keyword_max_chars;
+  const scraper = isScraperEngine(engine);
+  const limit = scraper ? searchPolicy.scraper.keyword_max_chars : c.keyword_max_chars;
   if (Array.from(keyword).length > limit) throw new ProviderError('keyword_too_long');
   if (
     !surfaceSupports(engine, input.location_code, input.language_code) ||
@@ -102,15 +107,15 @@ export function searchPayload(engine: SearchEngine, input: SearchRequest) {
     language_code: input.language_code,
     tag: input.provider_submission_ref,
   };
-  return engine === 'google_ai_overview'
-    ? {
+  return scraper
+    ? { ...input.request_settings, ...market }
+    : {
         ...market,
         device: input.device,
         os: c.os_for_device[input.device],
         depth: input.depth,
         load_async_ai_overview: input.load_async_ai_overview,
-      }
-    : { ...input.request_settings, ...market };
+      };
 }
 function requireAccepted(envelope: Envelope) {
   if (!acceptedStatus(envelope.status_code)) throw envelopeStatusError(envelope.status_code);

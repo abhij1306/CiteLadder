@@ -1,25 +1,27 @@
 import { randomUUID } from 'node:crypto';
-import { sql, type Selectable } from 'kysely';
+import type { Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
 import type { Audits, AuditTasks } from '../generated/db-schema.ts';
 import { policy } from '../config.ts';
 import { record, numberRecord } from '../db/json.ts';
 import { promptTextHash } from '../prompts/normalization.ts';
-import { auditEvent, transitionAudit } from '../audits/state.ts';
 import { scoringConfig } from './scoring.ts';
-import { analyzeExecution } from './execution.ts';
 import { aggregateRun, promptTrend, type Aggregate, type AggregateExecution } from './aggregate.ts';
 import { frozenComparisonKey } from './comparison.ts';
 import { persistObservedCompetitors } from './observed-competitors.ts';
 import { round } from '../numbers.ts';
-import { getLogger } from '../logging.ts';
 import { compareText } from '../text-order.ts';
-import { insightsRefresh } from '../config/ai-traffic.ts';
-import { enqueueCoalesced } from '../queue/enqueue.ts';
-import { persistComparisonBaselines } from '../visibility/baselines.ts';
 import { persistSourceAggregates } from '../visibility/source-aggregates.ts';
 
-type ScopedTask = Selectable<AuditTasks> & { cohort: string };
+/** A run task with its prompt snapshot's cohort. */
+export type ScopedTask = Selectable<AuditTasks> & { cohort: string };
+/** Derives one successful answer inside the caller's transaction. */
+type DeriveAnswer = (
+  db: Database,
+  task: ScopedTask,
+  audit: Selectable<Audits>,
+  artifactId: string,
+) => Promise<void>;
 function coverage(tasks: ScopedTask[], completed: number) {
   const succeeded = tasks.filter((t) => t.status === 'succeeded').length;
   return {
@@ -67,17 +69,6 @@ function cohortMetrics(
   };
 }
 
-function tallyStatusCounts(statusCounts: { status: string; count: string }[]) {
-  let completed = 0,
-    failed = 0,
-    open = 0;
-  for (const { status, count } of statusCounts) {
-    if (status === 'succeeded') completed += Number(count);
-    else if (policy.task_queue.terminal.includes(status)) failed += Number(count);
-    else open += Number(count);
-  }
-  return { completed, failed, open };
-}
 type OwnedPage = { url_hash: string; canonical_url: string | null; citation_ids: string[] };
 /**
  * The run's owned citations per cited page, for the AI Traffic Pages and URL
@@ -120,269 +111,160 @@ function artifactsByTask<T extends { task_id: string }>(artifacts: T[]) {
   return byTask;
 }
 
-/** Root lock serializes progress and finalization; the caller supplies the Commerce projection owner. */
-export function finalizeAudit(
-  db: Database,
-  workspaceId: string,
-  auditId: string,
-  commerce: (db: Database, audit: Selectable<Audits>) => Promise<void>,
-  at = new Date(),
-  derive: typeof analyzeExecution = analyzeExecution,
+/**
+ * Derives a settled run inside the caller's audit lock: every successful answer, then the
+ * run's metric snapshot with its prompt, source and observed-competitor facts. Writes only
+ * derived rows; the audit's state transitions and downstream work belong to the caller.
+ */
+export async function deriveRunMetrics(
+  trx: Database,
+  audit: Selectable<Audits>,
+  tasks: ScopedTask[],
+  derive: DeriveAnswer,
+  at: Date,
 ) {
-  return db.transaction().execute(async (trx) => {
-    const audit = await trx
-      .selectFrom('audits')
-      .selectAll()
-      .where('workspace_id', '=', workspaceId)
-      .where('id', '=', auditId)
-      .forUpdate()
-      .executeTakeFirst();
-    if (!audit || policy.audits.constants.audit_terminal_statuses.includes(audit.status))
-      return null;
-    // Every settled task calls this; count by status so progress costs one aggregate, not a row load.
-    const statusCounts = await trx
-      .selectFrom('audit_tasks')
-      .select((eb) => ['status', eb.fn.countAll<string>().as('count')])
-      .where('workspace_id', '=', workspaceId)
-      .where('audit_id', '=', audit.id)
-      .groupBy('status')
-      .execute();
-    const { completed, failed, open } = tallyStatusCounts(statusCounts);
-    if (audit.completed_count !== completed || audit.failed_count !== failed)
-      await trx
-        .updateTable('audits')
-        .set({ completed_count: completed, failed_count: failed, updated_at: at })
-        .where('workspace_id', '=', workspaceId)
-        .where('id', '=', audit.id)
-        .execute();
-    if (open) return null;
-    const tasks = await trx
-      .selectFrom('audit_tasks as t')
-      .innerJoin('audit_prompt_snapshots as p', (join) =>
-        join.onRef('p.id', '=', 't.prompt_snapshot_id').onRef('p.audit_id', '=', 't.audit_id'),
-      )
-      .selectAll('t')
-      .select('p.cohort')
-      .where('t.workspace_id', '=', workspaceId)
-      .where('t.audit_id', '=', audit.id)
-      .orderBy('t.randomized_position')
-      .execute();
-    if (audit.status === 'queued') await transitionAudit(trx, workspaceId, auditId, 'running', at);
-    if (!completed) {
-      await transitionAudit(
-        trx,
-        workspaceId,
-        auditId,
-        'failed',
-        at,
-        'audit failed: no successful executions',
-      );
-      await trx
-        .updateTable('audits')
-        .set({ completed_at: at, error_message: 'no successful executions' })
-        .where('workspace_id', '=', workspaceId)
-        .where('id', '=', auditId)
-        .execute();
-      return null;
-    }
-    if (['queued', 'running'].includes(audit.status))
-      await transitionAudit(
-        trx,
-        workspaceId,
-        auditId,
-        'analyzing',
-        at,
-        'execution complete; ready for analysis',
-      );
-    else if (audit.status !== 'analyzing') return null;
-    for (const task of tasks.filter((t) => t.status === 'succeeded')) {
-      if (!task.result_artifact_id) throw new Error('Successful task has no immutable artifact');
-      await derive(trx, task, audit, task.result_artifact_id);
-    }
-    const analyses = await trx
-      .selectFrom('response_analyses')
-      .selectAll()
-      .where('workspace_id', '=', workspaceId)
-      .where('audit_id', '=', auditId)
-      .orderBy('prompt_index')
-      .orderBy('logical_engine')
-      .orderBy('repetition')
-      .execute();
-    const artifacts = await trx
-      .selectFrom('raw_response_artifacts as r')
-      .innerJoin('audits as a', 'a.id', 'r.audit_id')
-      .selectAll('r')
-      .where('a.workspace_id', '=', workspaceId)
-      .where('r.audit_id', '=', auditId)
-      .execute();
-    const byTask = artifactsByTask(artifacts);
-    const snapshots = await trx
-      .selectFrom('audit_prompt_snapshots')
-      .selectAll()
-      .where('audit_id', '=', auditId)
-      .orderBy('prompt_index')
-      .execute();
-    const promptByIndex = new Map(snapshots.map((p) => [p.prompt_index, p]));
-    const citations = await trx
-      .selectFrom('citations')
-      .selectAll()
-      .where('workspace_id', '=', workspaceId)
-      .where('audit_id', '=', auditId)
-      .orderBy('ordinal')
-      .execute();
-    const rows: AggregateExecution[] = analyses.map((a) => {
-      const prompt = promptByIndex.get(a.prompt_index),
-        artifact = byTask.get(a.task_id);
-      if (!prompt || artifact?.id !== a.artifact_id)
-        throw new Error('Analysis source provenance mismatch');
-      return {
-        prompt_index: a.prompt_index,
-        prompt_text_snapshot: prompt.text,
-        prompt_theme_snapshot: prompt.theme,
-        cohort: prompt.cohort,
-        logical_engine: a.logical_engine,
-        score: record(a.score),
-        usage: record(artifact.usage),
-        citations: citations
-          .filter((c) => c.analysis_id === a.id)
-          .map((c) => ({
-            url: c.url,
-            domain: c.domain,
-            is_owned: c.is_owned,
-            is_unintended: c.is_unintended,
-            matched_competitor: c.matched_competitor,
-          })),
-      };
-    });
-    const config = scoringConfig(audit.configuration),
-      engines = [...new Set(tasks.map((t) => t.logical_engine))].sort(compareText);
-    const organic = cohortMetrics(
-      rows,
-      tasks,
-      config,
-      policy.visibility.organic_cohorts,
-      'market_visibility',
-      engines,
-    );
-    const comparison = cohortMetrics(rows, tasks, config, ['comparison'], 'comparison', engines);
-    const diagnostic: Aggregate & { cohort: string; coverage: ReturnType<typeof coverage> } = {
-      ...aggregateRun(
-        rows.filter((r) => r.cohort === 'brand_diagnostic'),
-        config,
-      ),
-      cohort: 'brand_diagnostic',
-      coverage: coverage(
-        tasks.filter((t) => t.cohort === 'brand_diagnostic'),
-        rows.filter((r) => r.cohort === 'brand_diagnostic').length,
-      ),
+  const workspaceId = audit.workspace_id,
+    auditId = audit.id;
+  for (const task of tasks.filter((t) => t.status === 'succeeded')) {
+    if (!task.result_artifact_id) throw new Error('Successful task has no immutable artifact');
+    await derive(trx, task, audit, task.result_artifact_id); // NOSONAR -- One transaction: derivations run in order.
+  }
+  const analyses = await trx
+    .selectFrom('response_analyses')
+    .selectAll()
+    .where('workspace_id', '=', workspaceId)
+    .where('audit_id', '=', auditId)
+    .orderBy('prompt_index')
+    .orderBy('logical_engine')
+    .orderBy('repetition')
+    .execute();
+  const artifacts = await trx
+    .selectFrom('raw_response_artifacts as r')
+    .innerJoin('audits as a', 'a.id', 'r.audit_id')
+    .selectAll('r')
+    .where('a.workspace_id', '=', workspaceId)
+    .where('r.audit_id', '=', auditId)
+    .execute();
+  const byTask = artifactsByTask(artifacts);
+  const snapshots = await trx
+    .selectFrom('audit_prompt_snapshots')
+    .selectAll()
+    .where('audit_id', '=', auditId)
+    .orderBy('prompt_index')
+    .execute();
+  const promptByIndex = new Map(snapshots.map((p) => [p.prompt_index, p]));
+  const citations = await trx
+    .selectFrom('citations')
+    .selectAll()
+    .where('workspace_id', '=', workspaceId)
+    .where('audit_id', '=', auditId)
+    .orderBy('ordinal')
+    .execute();
+  const rows: AggregateExecution[] = analyses.map((a) => {
+    const prompt = promptByIndex.get(a.prompt_index),
+      artifact = byTask.get(a.task_id);
+    if (!prompt || artifact?.id !== a.artifact_id)
+      throw new Error('Analysis source provenance mismatch');
+    return {
+      prompt_index: a.prompt_index,
+      prompt_text_snapshot: prompt.text,
+      prompt_theme_snapshot: prompt.theme,
+      cohort: prompt.cohort,
+      logical_engine: a.logical_engine,
+      score: record(a.score),
+      usage: record(artifact.usage),
+      citations: citations
+        .filter((c) => c.analysis_id === a.id)
+        .map((c) => ({
+          url: c.url,
+          domain: c.domain,
+          is_owned: c.is_owned,
+          is_unintended: c.is_unintended,
+          matched_competitor: c.matched_competitor,
+        })),
     };
-    // Unbranded and branded prompts together: its own block, never a blend of
-    // the other two, so its rates are counted over the answers they share.
-    const all = cohortMetrics(
-      rows,
-      tasks,
-      config,
-      policy.visibility.all_cohorts,
-      policy.visibility.all_cohort,
-      engines,
-    );
-    const metrics = { ...organic, comparison, brand_diagnostic: diagnostic, all };
-    const visibility = organic.per_prompt.length
-      ? round(
-          organic.per_prompt.reduce((sum, p) => sum + p.composite_score, 0) /
-            organic.per_prompt.length,
-          2,
-        )
-      : 0;
-    const versions = policy.audits.analysis;
-    // The run's owned-citation fact for AI Traffic: the exact citation rows,
-    // all cohorts, so readers select it and never count citations themselves.
-    const ownedCitationIds = citations.filter((c) => c.is_owned).map((c) => c.id);
-    const ownedCitationPages = ownedPages(citations);
-    const metric = await trx
-      .insertInto('metric_snapshots')
-      .values({
-        id: randomUUID(),
-        workspace_id: workspaceId,
-        project_id: audit.project_id,
-        audit_id: auditId,
-        analyzer_version: versions.analyzer_version,
-        scoring_rule_version: versions.scoring_rule_version,
-        total_completed: analyses.length,
-        total_failed: Math.max(0, audit.requested_count - analyses.length),
-        visibility_score: visibility,
-        metrics: JSON.stringify(metrics),
-        source_analysis_ids: JSON.stringify(analyses.map((a) => a.id)),
-        source_artifact_ids: JSON.stringify(analyses.map((a) => a.artifact_id)),
-        owned_citation_count: ownedCitationIds.length,
-        owned_citation_ids: JSON.stringify(ownedCitationIds),
-        owned_citation_pages: JSON.stringify(ownedCitationPages),
-        created_at: at,
-      })
-      .returningAll()
-      .executeTakeFirstOrThrow();
-    // The run's Sources facts, beside its metric snapshot, so the Sources
-    // table reads them instead of re-joining answers and citations.
-    await persistSourceAggregates(trx, { workspaceId, auditId, at });
-    await persistPromptMetrics(
-      trx,
-      audit,
-      [...organic.per_prompt, ...comparison.per_prompt, ...diagnostic.per_prompt],
-      snapshots,
-      analyses,
-      engines.length,
-      at,
-    );
-    await persistObservedCompetitors(trx, audit, analyses, config, at);
-    await sql`savepoint commerce_shelf_finalization`.execute(trx);
-    try {
-      await commerce(trx, audit);
-    } catch {
-      await sql`rollback to savepoint commerce_shelf_finalization`.execute(trx);
-      getLogger('workers.audit').info('commerce_shelf_finalization_failed', { audit_id: audit.id });
-    }
-    await sql`release savepoint commerce_shelf_finalization`.execute(trx);
-    await trx
-      .updateTable('audits')
-      .set({
-        summary: JSON.stringify(metrics),
-        analyzer_version: versions.analyzer_version,
-        completed_count: analyses.length,
-        failed_count: metric.total_failed,
-        completed_at: audit.completed_at ?? at,
-        updated_at: at,
-      })
-      .where('workspace_id', '=', workspaceId)
-      .where('id', '=', auditId)
-      .execute();
-    await transitionAudit(trx, workspaceId, auditId, 'reporting', at, 'aggregating metrics');
-    const status = metric.total_failed ? 'partially_completed' : 'completed';
-    await transitionAudit(trx, workspaceId, auditId, status, at, `audit ${status}`);
-    // The run's comparable baseline, by the one comparison rule, for every
-    // surface that reads it. It runs once the run reads as measured, so later
-    // runs it refreshes find it among their candidates.
-    await persistComparisonBaselines(trx, { workspaceId, auditId });
-    await enqueueCoalesced(trx, {
-      ...insightsRefresh,
-      workspaceId,
-      projectId: audit.project_id,
-      now: at,
-    });
-    await auditEvent(
-      trx,
-      auditId,
-      policy.audits.constants.event_audit_completed,
-      `audit ${status}`,
-      {
-        status,
-        completed: analyses.length,
-        failed: metric.total_failed,
-        visibility_score: visibility,
-      },
-      at,
-    );
-    return metric;
   });
+  const config = scoringConfig(audit.configuration),
+    engines = [...new Set(tasks.map((t) => t.logical_engine))].sort(compareText);
+  const organic = cohortMetrics(
+    rows,
+    tasks,
+    config,
+    policy.visibility.organic_cohorts,
+    'market_visibility',
+    engines,
+  );
+  const comparison = cohortMetrics(rows, tasks, config, ['comparison'], 'comparison', engines);
+  const diagnostic: Aggregate & { cohort: string; coverage: ReturnType<typeof coverage> } = {
+    ...aggregateRun(
+      rows.filter((r) => r.cohort === 'brand_diagnostic'),
+      config,
+    ),
+    cohort: 'brand_diagnostic',
+    coverage: coverage(
+      tasks.filter((t) => t.cohort === 'brand_diagnostic'),
+      rows.filter((r) => r.cohort === 'brand_diagnostic').length,
+    ),
+  };
+  // Unbranded and branded prompts together: its own block, never a blend of
+  // the other two, so its rates are counted over the answers they share.
+  const all = cohortMetrics(
+    rows,
+    tasks,
+    config,
+    policy.visibility.all_cohorts,
+    policy.visibility.all_cohort,
+    engines,
+  );
+  const metrics = { ...organic, comparison, brand_diagnostic: diagnostic, all };
+  const visibility = organic.per_prompt.length
+    ? round(
+        organic.per_prompt.reduce((sum, p) => sum + p.composite_score, 0) /
+          organic.per_prompt.length,
+        2,
+      )
+    : 0;
+  const versions = policy.audits.analysis;
+  // The run's owned-citation fact for AI Traffic: the exact citation rows,
+  // all cohorts, so readers select it and never count citations themselves.
+  const ownedCitationIds = citations.filter((c) => c.is_owned).map((c) => c.id);
+  const ownedCitationPages = ownedPages(citations);
+  const metric = await trx
+    .insertInto('metric_snapshots')
+    .values({
+      id: randomUUID(),
+      workspace_id: workspaceId,
+      project_id: audit.project_id,
+      audit_id: auditId,
+      analyzer_version: versions.analyzer_version,
+      scoring_rule_version: versions.scoring_rule_version,
+      total_completed: analyses.length,
+      total_failed: Math.max(0, audit.requested_count - analyses.length),
+      visibility_score: visibility,
+      metrics: JSON.stringify(metrics),
+      source_analysis_ids: JSON.stringify(analyses.map((a) => a.id)),
+      source_artifact_ids: JSON.stringify(analyses.map((a) => a.artifact_id)),
+      owned_citation_count: ownedCitationIds.length,
+      owned_citation_ids: JSON.stringify(ownedCitationIds),
+      owned_citation_pages: JSON.stringify(ownedCitationPages),
+      created_at: at,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  // The run's Sources facts, beside its metric snapshot, so the Sources
+  // table reads them instead of re-joining answers and citations.
+  await persistSourceAggregates(trx, { workspaceId, auditId, at });
+  await persistPromptMetrics(
+    trx,
+    audit,
+    [...organic.per_prompt, ...comparison.per_prompt, ...diagnostic.per_prompt],
+    snapshots,
+    analyses,
+    engines.length,
+    at,
+  );
+  await persistObservedCompetitors(trx, audit, analyses, config, at);
+  return { metric, metrics, visibility, completed: analyses.length };
 }
 
 async function persistPromptMetrics(

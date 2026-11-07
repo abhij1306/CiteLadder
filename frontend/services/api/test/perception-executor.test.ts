@@ -7,7 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { analyzeExecution } from '../src/analysis/execution.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
 import { loadWorkerSettings, policy } from '../src/config.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { answerPerception } from '../src/perception/executor.ts';
@@ -79,7 +79,7 @@ async function analysed(owner: Tenant, auditId: string, answerText: string) {
       .selectAll()
       .where('id', '=', taskId)
       .executeTakeFirstOrThrow();
-    await db.transaction().execute((trx) => analyzeExecution(trx, task, audit, artifactId));
+    await db.transaction().execute((trx) => deriveExecution(trx, task, audit, artifactId));
   };
   await derive();
   const analysis = await db
