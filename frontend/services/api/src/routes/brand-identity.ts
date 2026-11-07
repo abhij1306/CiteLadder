@@ -24,8 +24,8 @@ import {
   updateBrandFact,
 } from '../projects/brand-facts.ts';
 import { businessMapUpdate, readBusinessMap, updateBusinessMap } from '../projects/business-map.ts';
-import { actorOf } from '../auth/actor.ts';
-import { acceptSuggestion } from '../commands/competitors.ts';
+import { acceptSuggestion, COMPETITORS_WRITE } from '../commands/competitors.ts';
+import { routeActor } from '../commands/permission.ts';
 import { listSuggestions } from '../projects/competitor-suggestions.ts';
 import { logoResponse } from '../projects/logos.ts';
 import { defineGetRoute, definePatchRoute, definePostRoute, definePutRoute } from './define.ts';
@@ -146,13 +146,12 @@ export const brandIdentityRoutes = [
   definePostRoute({
     family,
     exposure: 'both',
-    scope: 'competitors:write',
+    permission: COMPETITORS_WRITE,
     path: `${root}/competitor-suggestions/{candidate_id}/accept`,
-    capability: 'write',
     params: { path: { ...projectPath, candidate_id: uuid }, query: {} },
     response: competitorSchema,
     handle: ({ c, db }, { path }) =>
-      acceptSuggestion(db, actorOf(c), path.project_id, path.candidate_id),
+      acceptSuggestion(db, routeActor(c, COMPETITORS_WRITE), path.project_id, path.candidate_id),
   }),
   defineGetRoute({
     family,

@@ -1,8 +1,8 @@
 /**
  * MCP changes, listed and callable only by a grant holding `citeladder:write`.
- * Small edits run directly; larger ones are prepared (validated by a dry run
- * of their command) and run only through `confirm_change` after the user
- * agreed. The member's live role decides every change; the in-app Agent never
+ * Small edits run directly; larger ones are prepared (a dry run of their
+ * kind's `execute` in `confirmed-changes.ts`) and run only through
+ * `confirm_change`, by that same `execute`, after the user agreed. The member's live role decides every change; the in-app Agent never
  * sees this catalogue.
  */
 import { randomUUID } from 'node:crypto';
@@ -10,42 +10,54 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 import { logicalEngineSchema } from '@citeladder/contracts/providers';
 import { promptCohortSchema } from '@citeladder/contracts/project';
-import { requireCapability, type Actor } from '../auth/actor.ts';
-import { recordSecurityEvent, type McpWriteKind } from '../auth/security-events.ts';
+import { recordSecurityEvent } from '../auth/security-events.ts';
 import { scheduleCreate } from '../audits/schedule-inputs.ts';
-import { declareAction, setActionStatus } from '../commands/actions.ts';
-import { cancelAudit, launchAudit } from '../commands/audits.ts';
-import { addCompetitor, removeCompetitor } from '../commands/competitors.ts';
+import { ACTIONS_WRITE, setActionStatus } from '../commands/actions.ts';
+import { AUDITS_CANCEL, cancelAudit } from '../commands/audits.ts';
+import { addCompetitor, COMPETITORS_WRITE, removeCompetitor } from '../commands/competitors.ts';
+import { authorize, type Authorized, type Permission } from '../commands/permission.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { estimateAudit } from '../audits/estimate.ts';
 import { marketIdList } from '../audits/inputs.ts';
 import {
   confirmTopics,
-  createPrompts,
   createTopic,
   deleteTopic,
   previewTopics,
-  setPromptStatuses,
+  PROMPTS_RUN,
+  PROMPTS_WRITE,
   startGeneration,
   updatePrompt,
   updateTopic,
 } from '../commands/prompts.ts';
-import { createSchedule } from '../commands/schedules.ts';
 import { configEnvironment, policy, type ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { plainJson } from '../db/json.ts';
-import { operatorTransaction } from '../db/operator-transaction.ts';
 import { isNonEmpty } from '../lists.ts';
 import { competitorCreate } from '../projects/competitors.ts';
 import { generationInput } from '../prompts/generation-input.ts';
 import { promptInput, scopedPrompts, screenPrompts } from '../prompts/prompts.ts';
 import { listTopics, topicConfirm, topicCreate } from '../prompts/topics.ts';
 import { confirmChange, issueConfirmation } from './confirmations.ts';
-import { declarationKey, payloads, runConfirmed } from './confirmed-changes.ts';
+import { preparedChanges, type ConfirmedKind, type PreparedChange } from './confirmed-changes.ts';
 import { writeActor } from './data.ts';
 import { appLink } from './links.ts';
 import { argumentProblem, inputSchema } from './tools.ts';
 import { McpInputError, type Evidence, type McpPrincipal } from './types.ts';
+
+/** The one-step changes; each is also its tool's name. */
+type DirectKind =
+  | 'create_topic'
+  | 'rename_topic'
+  | 'update_prompt_text'
+  | 'add_competitor'
+  | 'remove_competitor'
+  | 'update_action_status'
+  | 'cancel_audit'
+  | 'delete_topic'
+  | 'confirm_topics';
+/** Each change an MCP grant can make; its security event targets the project. */
+export type McpWriteKind = DirectKind | 'generate_prompts' | ConfirmedKind;
 
 /** `origin` is the app's browser origin, for links into CiteLadder screens. */
 type Context = { db: Database; config: ServiceConfig; principal: McpPrincipal; origin: string };
@@ -94,27 +106,22 @@ const markets = marketIdList
   )
   .nullish();
 /**
- * A prepare's dry run: the real command, with every check, admission and
- * write it makes, rolled back. Owners join this transaction.
+ * A single-step change: authorized for the project against its command's
+ * permission, run, and recorded in one transaction. `run` returns the
+ * user-facing outcome.
  */
-const rehearse = <T>(db: Database, run: (trx: Database) => Promise<T>) =>
-  operatorTransaction(db, false, run);
-
-/**
- * A single-step change: authorized for the project, run, and recorded in one
- * transaction. `run` returns the user-facing outcome.
- */
-function direct<S extends z.ZodObject<{ project_id: typeof uuid }>>(
-  kind: McpWriteKind,
+function direct<S extends z.ZodObject<{ project_id: typeof uuid }>, P extends Permission>(
+  kind: DirectKind,
+  permission: P,
   definition: Omit<Definition<S>, 'run'> & {
-    run: (trx: Database, actor: Actor, args: z.output<S>) => Promise<Evidence>;
+    run: (trx: Database, actor: Authorized<P>, args: z.output<S>) => Promise<Evidence>;
   },
 ): Definition<S> {
   return {
     ...definition,
     run: ({ db, principal }, args) =>
       db.transaction().execute(async (trx) => {
-        const actor = await writeActor(trx, principal, args.project_id);
+        const actor = authorize(await writeActor(trx, principal, args.project_id), permission);
         const outcome = await definition.run(trx, actor, args);
         await recordSecurityEvent(
           trx,
@@ -167,6 +174,11 @@ async function promptSetOf(db: Database, projectId: string, requested: string | 
   return only;
 }
 
+/** A new prepared change's identity, before its rehearsal. */
+const newChange = (projectId: string): PreparedChange => ({ id: randomUUID(), projectId });
+/** A rehearsal that reads nothing back. */
+const noInspection = () => Promise.resolve(null);
+
 /** A prepared change: what will happen, and the token the user's yes unlocks. */
 async function prepared(
   context: Context,
@@ -217,7 +229,7 @@ function generated(
 }
 
 const writeDefinitions = {
-  create_topic: direct('create_topic', {
+  create_topic: direct('create_topic', PROMPTS_WRITE, {
     title: 'Create a topic',
     description:
       'Add a topic, a named group of tracked prompts (for example "Pricing" or "Integrations") that visibility is broken down by. Runs at once and returns the topic id; pass it as topic_id to prepare_add_prompts to file new prompts under it. Topic names are unique in a project, ignoring case.',
@@ -242,7 +254,7 @@ const writeDefinitions = {
       };
     },
   }),
-  rename_topic: direct('rename_topic', {
+  rename_topic: direct('rename_topic', PROMPTS_WRITE, {
     title: 'Rename a topic',
     description:
       'Rename one topic, after the user agrees. Its prompts and past results stay under it, so prefer this to delete_topic and create_topic when only the name is wrong. Runs at once and returns the new name; refused if another topic in the project already has the name, or if topic_id is not in this project.',
@@ -259,7 +271,7 @@ const writeDefinitions = {
       return { summary: `Renamed the topic to "${topic.name}".` };
     },
   }),
-  update_prompt_text: direct('update_prompt_text', {
+  update_prompt_text: direct('update_prompt_text', PROMPTS_WRITE, {
     title: 'Edit a prompt',
     description:
       "Replace the wording of one tracked prompt, after the user agrees, such as to fix a typo or make it read like a buyer's question. Runs at once and returns the new wording; earlier measurements keep the old wording, so results before and after the edit may not compare. To stop measuring a prompt use prepare_archive_prompts, and to add new ones prepare_add_prompts. Refused if prompt_id is not in this project.",
@@ -278,7 +290,7 @@ const writeDefinitions = {
       return { summary: `The prompt now reads "${prompt.text}".` };
     },
   }),
-  add_competitor: direct('add_competitor', {
+  add_competitor: direct('add_competitor', COMPETITORS_WRITE, {
     title: 'Add a competitor',
     description:
       'Track one more competitor, so visibility reads rank its mentions and citations in AI answers beside your brand. Runs at once; refused if the project already tracks that name or has reached its competitor limit. get_project_business_context lists the competitors tracked now.',
@@ -298,7 +310,7 @@ const writeDefinitions = {
       return { summary: `Now tracking ${competitor.name}.`, competitor: { id: competitor.id } };
     },
   }),
-  remove_competitor: direct('remove_competitor', {
+  remove_competitor: direct('remove_competitor', COMPETITORS_WRITE, {
     title: 'Stop tracking a competitor',
     description:
       'Stop tracking one competitor by name, as get_project_business_context lists it, so visibility reads no longer rank it. Recorded answers are kept. Runs at once and cannot be undone; add_competitor tracks it again but its aliases and domains must be given again.',
@@ -313,7 +325,7 @@ const writeDefinitions = {
       return { summary: `Stopped tracking ${competitor.name}.` };
     },
   }),
-  update_action_status: direct('update_action_status', {
+  update_action_status: direct('update_action_status', ACTIONS_WRITE, {
     title: 'Update an Action status',
     description:
       'Dismiss one Action the user does not want to act on, or reopen a dismissed one. Runs at once. To record that the work was done, use prepare_declare_implemented instead.',
@@ -330,7 +342,7 @@ const writeDefinitions = {
       return { summary: `The Action is now ${args.status}.` };
     },
   }),
-  cancel_audit: direct('cancel_audit', {
+  cancel_audit: direct('cancel_audit', AUDITS_CANCEL, {
     title: 'Cancel an audit',
     description:
       'Stop a queued or running audit, after the user agrees, such as one launched by mistake or on the wrong engines. Runs at once and cannot be undone; answers recorded so far are kept, and no further answers are collected for it. To launch a corrected audit use prepare_launch_audit. Refused if the audit is not in this project or has already finished.',
@@ -346,7 +358,7 @@ const writeDefinitions = {
       return { summary: 'The audit was cancelled.' };
     },
   }),
-  delete_topic: direct('delete_topic', {
+  delete_topic: direct('delete_topic', PROMPTS_WRITE, {
     title: 'Delete a topic',
     description:
       'Delete one topic by name, after the user agrees, when the grouping itself is no longer wanted. Its prompts are kept, still tracked, without a topic, and its subtopics become top-level; recorded answers are kept. Runs at once and cannot be undone. To fix only the name use rename_topic; to stop measuring the prompts use prepare_archive_prompts.',
@@ -370,7 +382,10 @@ const writeDefinitions = {
     schema: z.strictObject(project),
     annotations: hints(false, false),
     run: async (context, args) => {
-      const actor = await writeActor(context.db, context.principal, args.project_id);
+      const actor = authorize(
+        await writeActor(context.db, context.principal, args.project_id),
+        PROMPTS_RUN,
+      );
       const preview = await previewTopics(context.db, actor, args.project_id);
       const existing = await listTopics(context.db, args.project_id);
       return {
@@ -383,7 +398,7 @@ const writeDefinitions = {
       };
     },
   }),
-  confirm_topics: direct('confirm_topics', {
+  confirm_topics: direct('confirm_topics', PROMPTS_WRITE, {
     title: 'Confirm topics',
     description:
       "Save the topic plan the user agreed to after preview_topics, in one change: create the topics they kept or added (each with the offerings preview_topics listed for it, or none), rename and delete existing ones. A deleted topic's prompts stay tracked without a topic. Runs at once and returns the project's topics with their ids for generate_prompts; refused if a named topic is not in this project or two topics would share a name.",
@@ -444,7 +459,10 @@ const writeDefinitions = {
     annotations: hints(false, true),
     run: async (context, args) => {
       const { project_id: projectId, prompt_set_id: setId, run_key: runKey, ...request } = args;
-      const actor = await writeActor(context.db, context.principal, projectId);
+      const actor = authorize(
+        await writeActor(context.db, context.principal, projectId),
+        PROMPTS_RUN,
+      );
       const set = await promptSetOf(context.db, projectId, setId);
       const result = await startGeneration(
         context.db,
@@ -500,7 +518,11 @@ const writeDefinitions = {
     }),
     annotations: hints(false, false),
     run: async (context, args) => {
-      const actor = await writeActor(context.db, context.principal, args.project_id);
+      // Refuse a role that cannot add before showing what would be added.
+      const actor = authorize(
+        await writeActor(context.db, context.principal, args.project_id),
+        preparedChanges.add_prompts.permission,
+      );
       const set = await promptSetOf(context.db, args.project_id, args.prompt_set_id);
       const inputs = args.prompts.map((item) =>
         promptInput.parse({
@@ -510,8 +532,6 @@ const writeDefinitions = {
           cohort: item.cohort ?? 'core',
         }),
       );
-      // Refuse a role that cannot add before showing what would be added.
-      requireCapability(actor, 'write');
       const screened = await screenPrompts(
         context.db,
         { workspaceId: actor.workspaceId, projectId: args.project_id },
@@ -526,8 +546,14 @@ const writeDefinitions = {
           preview: 'None of these prompts can be added.',
           dropped,
         };
-      await rehearse(context.db, (trx) =>
-        createPrompts(trx, actor, args.project_id, set.id, admitted),
+      const change = newChange(args.project_id);
+      const { payload } = await preparedChanges.add_prompts.rehearse(
+        context.db,
+        context.config,
+        actor,
+        change,
+        { prompt_set_id: set.id, prompts: admitted },
+        async () => null,
       );
       const droppedItems = dropped.map((item) => `"${item.text}" (${item.reason})`).join('; ');
       const lines = [
@@ -536,13 +562,7 @@ const writeDefinitions = {
       ];
       return prepared(
         context,
-        {
-          actor,
-          projectId: args.project_id,
-          kind: 'add_prompts',
-          payload: payloads.add_prompts.parse({ prompt_set_id: set.id, prompts: admitted }),
-          preview: lines.filter(Boolean).join(' '),
-        },
+        { change, actor, kind: 'add_prompts', payload, preview: lines.filter(Boolean).join(' ') },
         { dropped },
       );
     },
@@ -557,7 +577,10 @@ const writeDefinitions = {
     }),
     annotations: hints(true, true),
     run: async (context, args) => {
-      const actor = await writeActor(context.db, context.principal, args.project_id);
+      const actor = authorize(
+        await writeActor(context.db, context.principal, args.project_id),
+        preparedChanges.archive_prompts.permission,
+      );
       const rows = await scopedPrompts(
         context.db,
         { workspaceId: actor.workspaceId, projectId: args.project_id },
@@ -572,26 +595,22 @@ const writeDefinitions = {
           prompt_ids: members.map((row) => row.id),
         }),
       );
-      await rehearse(context.db, async (trx) => {
-        for (const group of groups)
-          await /* NOSONAR -- One rehearsal transaction: groups apply in order. */ setPromptStatuses(
-            trx,
-            actor,
-            args.project_id,
-            group.prompt_set_id,
-            {
-              ...group,
-              status: 'archived',
-            },
-          );
-      });
+      const change = newChange(args.project_id);
+      const { payload } = await preparedChanges.archive_prompts.rehearse(
+        context.db,
+        context.config,
+        actor,
+        change,
+        { groups },
+        noInspection,
+      );
       const skipped = rows.length - active.length;
       const skippedNote = skipped ? ` ${skipped} already archived.` : '';
       return prepared(context, {
+        change,
         actor,
-        projectId: args.project_id,
         kind: 'archive_prompts',
-        payload: { groups },
+        payload,
         preview: `Archive ${active.length} prompt(s): ${quoted(active.map((row) => row.text))}. Future audits stop measuring them; past results stay.${skippedNote}`,
       });
     },
@@ -623,7 +642,10 @@ const writeDefinitions = {
     }),
     annotations: hints(false, false),
     run: async (context, args) => {
-      const actor = await writeActor(context.db, context.principal, args.project_id);
+      const actor = authorize(
+        await writeActor(context.db, context.principal, args.project_id),
+        preparedChanges.launch_audit.permission,
+      );
       const promptIds = args.prompt_ids ?? [];
       const setId = promptIds.length
         ? null
@@ -642,12 +664,14 @@ const writeDefinitions = {
         auditRuntime(configEnvironment(context.config)),
       );
       const ceiling = args.max_attempts ?? estimate.maximum_attempt_count;
-      const launch = payloads.launch_audit.shape.request.parse({
-        ...request,
-        max_attempts: ceiling,
-      });
-      await rehearse(context.db, (trx) =>
-        launchAudit(trx, context.config, actor, args.project_id, launch),
+      const change = newChange(args.project_id);
+      const { payload } = await preparedChanges.launch_audit.rehearse(
+        context.db,
+        context.config,
+        actor,
+        change,
+        { request: { ...request, max_attempts: ceiling } },
+        noInspection,
       );
       const launched =
         estimate.market_count === 1
@@ -656,10 +680,10 @@ const writeDefinitions = {
       return prepared(
         context,
         {
+          change,
           actor,
-          projectId: args.project_id,
           kind: 'launch_audit',
-          payload: { project_id: args.project_id, request: launch },
+          payload,
           preview: `Launch ${launched} of ${estimate.prompt_count} prompt(s) on ${args.engines.join(', ')}, ${estimate.repetition_count} repetition(s): ${estimate.execution_count} answers, spending at most ${estimate.execution_count} prompt run(s) in at most ${estimate.maximum_attempt_count} provider attempts (refused if the attempts exceed ${ceiling}).`,
         },
         { maximum_attempt_count: estimate.maximum_attempt_count, max_attempts: ceiling },
@@ -694,26 +718,39 @@ const writeDefinitions = {
     }),
     annotations: hints(false, false),
     run: async (context, args) => {
-      const actor = await writeActor(context.db, context.principal, args.project_id);
+      const actor = authorize(
+        await writeActor(context.db, context.principal, args.project_id),
+        preparedChanges.schedule.permission,
+      );
       const set = await promptSetOf(context.db, args.project_id, args.prompt_set_id);
-      const schedule = scheduleCreate.parse({
-        prompt_set_id: set.id,
-        cadence: args.cadence,
-        engines: args.engines,
-        ...(args.timezone ? { timezone: args.timezone } : {}),
-        repetitions: args.repetitions ?? null,
-        interval_minutes: args.interval_minutes ?? null,
-        next_run_at: args.next_run_at ?? null,
-        ...(args.market_ids ? { market_ids: args.market_ids } : {}),
-      });
-      await rehearse(context.db, (trx) => createSchedule(trx, actor, args.project_id, schedule));
+      const change = newChange(args.project_id);
+      const { payload } = await preparedChanges.schedule.rehearse(
+        context.db,
+        context.config,
+        actor,
+        change,
+        {
+          schedule: {
+            prompt_set_id: set.id,
+            cadence: args.cadence,
+            engines: args.engines,
+            ...(args.timezone ? { timezone: args.timezone } : {}),
+            repetitions: args.repetitions ?? null,
+            interval_minutes: args.interval_minutes ?? null,
+            next_run_at: args.next_run_at ?? null,
+            ...(args.market_ids ? { market_ids: args.market_ids } : {}),
+          },
+        },
+        noInspection,
+      );
+      const { schedule } = payload;
       const marketNote =
         schedule.market_ids.length > 1 ? ` in ${schedule.market_ids.length} markets` : '';
       return prepared(context, {
+        change,
         actor,
-        projectId: args.project_id,
         kind: 'schedule',
-        payload: { project_id: args.project_id, schedule },
+        payload,
         preview: `Create a ${schedule.cadence.replaceAll('_', ' ')} audit schedule for "${set.name}" on ${schedule.engines.join(', ')}${marketNote} (${schedule.timezone}), first run ${schedule.next_run_at ?? 'right away'}. Each recorded answer spends one prompt run.`,
       });
     },
@@ -732,17 +769,26 @@ const writeDefinitions = {
     }),
     annotations: hints(false, false),
     run: async (context, args) => {
-      const actor = await writeActor(context.db, context.principal, args.project_id);
-      const declaration = payloads.declare_implemented.shape.declaration.parse({
-        declared_implemented_at: args.declared_implemented_at ?? new Date().toISOString(),
-      });
-      const id = randomUUID();
-      // The dry run finds the Action only in this project.
-      await rehearse(context.db, (trx) =>
-        declareAction(trx, actor, args.project_id, args.action_id, declaration, {
-          idempotencyKey: declarationKey(id),
-        }),
+      const actor = authorize(
+        await writeActor(context.db, context.principal, args.project_id),
+        preparedChanges.declare_implemented.permission,
       );
+      const change = newChange(args.project_id);
+      // The dry run finds the Action only in this project.
+      const { payload } = await preparedChanges.declare_implemented.rehearse(
+        context.db,
+        context.config,
+        actor,
+        change,
+        {
+          action_id: args.action_id,
+          declaration: {
+            declared_implemented_at: args.declared_implemented_at ?? new Date().toISOString(),
+          },
+        },
+        noInspection,
+      );
+      const { declaration } = payload;
       const action = await context.db
         .selectFrom('actions')
         .select('target_label')
@@ -751,11 +797,10 @@ const writeDefinitions = {
         .where('id', '=', args.action_id)
         .executeTakeFirstOrThrow();
       return prepared(context, {
-        id,
+        change,
         actor,
-        projectId: args.project_id,
         kind: 'declare_implemented',
-        payload: { action_id: args.action_id, declaration },
+        payload,
         preview: `Declare the Action "${action.target_label || 'Action'}" implemented as of ${declaration.declared_implemented_at.slice(0, 10)}. CiteLadder then checks later evidence against it.`,
       });
     },
@@ -774,13 +819,7 @@ const writeDefinitions = {
     }),
     annotations: hints(true, false),
     run: async ({ db, config, principal }, args) => {
-      const { kind, result } = await confirmChange(
-        db,
-        config,
-        principal,
-        args.confirmation_token,
-        (trx, actor, change) => runConfirmed(trx, config, actor, change),
-      );
+      const { kind, result } = await confirmChange(db, config, principal, args.confirmation_token);
       return { state: 'changed', change: kind, ...result };
     },
   }),

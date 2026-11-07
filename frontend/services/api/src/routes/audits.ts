@@ -9,8 +9,15 @@ import {
 import { auditEventSchema } from '@citeladder/contracts/audit-events';
 import { configEnvironment, policy } from '../config.ts';
 import { readBody } from '../http/body.ts';
-import { actorOf, requestProjectOf } from '../auth/actor.ts';
-import { cancelAudit, createQueuedAudit, runAudit } from '../commands/audits.ts';
+import { requestProjectOf } from '../auth/actor.ts';
+import {
+  AUDITS_CANCEL,
+  AUDITS_RUN,
+  cancelAudit,
+  createQueuedAudit,
+  runAudit,
+} from '../commands/audits.ts';
+import { routeActor } from '../commands/permission.ts';
 import { auditInput } from '../audits/inputs.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { estimateAudit, estimateInput } from '../audits/estimate.ts';
@@ -58,20 +65,21 @@ export const auditRoutes = [
     family,
     path: `${root}/{audit_id}/run`,
     params,
-    capability: 'run',
+    permission: AUDITS_RUN,
     response: auditSchema,
-    handle: ({ c, db, config }, { path }) => runAudit(db, config, actorOf(c), path.audit_id),
+    handle: ({ c, db, config }, { path }) =>
+      runAudit(db, config, routeActor(c, AUDITS_RUN), path.audit_id),
   }),
   definePostRoute({
     family,
     path: root,
     params: empty,
     status: 201,
-    capability: 'run',
+    permission: AUDITS_RUN,
     body: auditInput,
     response: auditSchema.array(),
     handle: async ({ c, db, config }) =>
-      createQueuedAudit(db, config, actorOf(c), await readBody(c, auditInput)),
+      createQueuedAudit(db, config, routeActor(c, AUDITS_RUN), await readBody(c, auditInput)),
   }),
   definePostRoute({
     family,
@@ -132,14 +140,13 @@ export const auditRoutes = [
   definePostRoute({
     family,
     exposure: 'both',
-    scope: 'audits:run',
+    permission: AUDITS_CANCEL,
     publicPath: `${publicRoot}/{audit_id}/cancel`,
     path: `${root}/{audit_id}/cancel`,
     params,
-    capability: 'write',
     response: auditSchema,
     handle: ({ c, db }, { path }) =>
-      cancelAudit(db, actorOf(c), requestProjectOf(c), path.audit_id),
+      cancelAudit(db, routeActor(c, AUDITS_CANCEL), requestProjectOf(c), path.audit_id),
   }),
   definePostRoute({
     family,

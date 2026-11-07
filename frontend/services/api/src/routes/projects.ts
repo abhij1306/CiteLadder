@@ -63,7 +63,7 @@ export const projectRoutes = [
   definePatchRoute({
     family,
     path: `${root}/{project_id}`,
-    authorize: 'project',
+    authorize: 'active-project',
     capability: 'write',
     params: { path: projectPath, query: {} },
     body: projectUpdate,
@@ -79,7 +79,7 @@ export const projectRoutes = [
   defineDeleteRoute({
     family,
     path: `${root}/{project_id}`,
-    authorize: 'project',
+    authorize: 'active-project',
     capability: 'delete_projects',
     params: { path: projectPath, query: {} },
     handle: ({ c, db }, { path }) =>
@@ -91,7 +91,7 @@ export const projectRoutes = [
   definePostRoute({
     family,
     path: `${root}/{project_id}/logos/refresh`,
-    authorize: 'project',
+    authorize: 'active-project',
     capability: 'write',
     params: { path: projectPath, query: {} },
     response: projectSchema,
@@ -132,7 +132,7 @@ export const projectRoutes = [
   definePostRoute({
     family,
     path: `${root}/{project_id}/markets`,
-    authorize: 'project',
+    authorize: 'active-project',
     capability: 'write',
     status: 201,
     params: { path: projectPath, query: {} },
@@ -149,7 +149,7 @@ export const projectRoutes = [
   defineDeleteRoute({
     family,
     path: `${root}/{project_id}/markets/{market_id}`,
-    authorize: 'project',
+    authorize: 'active-project',
     capability: 'write',
     params: { path: marketPath, query: {} },
     handle: ({ c, db }, { path }) =>

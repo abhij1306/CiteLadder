@@ -14,14 +14,19 @@ import {
 } from '@citeladder/contracts/project';
 import { z } from 'zod';
 
-import { actorOf } from '../auth/actor.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { estimateAudit, estimateInput } from '../audits/estimate.ts';
 import { auditLaunchInput } from '../audits/inputs.ts';
 import { listAudits } from '../audits/reads.ts';
-import { launchAudit } from '../commands/audits.ts';
-import { addCompetitor, removeCompetitor, updateCompetitor } from '../commands/competitors.ts';
-import { createPrompts } from '../commands/prompts.ts';
+import { AUDITS_RUN, launchAudit } from '../commands/audits.ts';
+import {
+  addCompetitor,
+  COMPETITORS_WRITE,
+  removeCompetitor,
+  updateCompetitor,
+} from '../commands/competitors.ts';
+import { routeActor } from '../commands/permission.ts';
+import { createPrompts, PROMPTS_WRITE } from '../commands/prompts.ts';
 import { configEnvironment, policy } from '../config.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';
@@ -98,8 +103,7 @@ export const publicApiRoutes: readonly ProductRoute[] = [
   }),
   definePostRoute({
     ...base,
-    scope: 'prompts:write',
-    capability: 'write',
+    permission: PROMPTS_WRITE,
     status: 201,
     path: `${project}/prompt-sets/{prompt_set_id}/prompts`,
     params: { path: { ...projectPath, prompt_set_id: uuid }, query: {} },
@@ -108,7 +112,7 @@ export const publicApiRoutes: readonly ProductRoute[] = [
     handle: async ({ c, db }, { path }) => ({
       prompts: await createPrompts(
         db,
-        actorOf(c),
+        routeActor(c, PROMPTS_WRITE),
         path.project_id,
         path.prompt_set_id,
         (await readBody(c, promptBatch)).prompts,
@@ -136,20 +140,23 @@ export const publicApiRoutes: readonly ProductRoute[] = [
   }),
   definePostRoute({
     ...base,
-    scope: 'competitors:write',
-    capability: 'write',
+    permission: COMPETITORS_WRITE,
     status: 201,
     path: `${project}/competitors`,
     params: { path: projectPath, query: {} },
     body: competitorCreate,
     response: competitorSchema,
     handle: async ({ c, db }, { path }) =>
-      addCompetitor(db, actorOf(c), path.project_id, await readBody(c, competitorCreate)),
+      addCompetitor(
+        db,
+        routeActor(c, COMPETITORS_WRITE),
+        path.project_id,
+        await readBody(c, competitorCreate),
+      ),
   }),
   definePatchRoute({
     ...base,
-    scope: 'competitors:write',
-    capability: 'write',
+    permission: COMPETITORS_WRITE,
     path: `${project}/competitors/{competitor_id}`,
     params: { path: { ...projectPath, competitor_id: uuid }, query: {} },
     body: competitorUpdate,
@@ -157,7 +164,7 @@ export const publicApiRoutes: readonly ProductRoute[] = [
     handle: async ({ c, db }, { path }) =>
       updateCompetitor(
         db,
-        actorOf(c),
+        routeActor(c, COMPETITORS_WRITE),
         path.project_id,
         path.competitor_id,
         await readBody(c, competitorUpdate),
@@ -165,12 +172,11 @@ export const publicApiRoutes: readonly ProductRoute[] = [
   }),
   defineDeleteRoute({
     ...base,
-    scope: 'competitors:write',
-    capability: 'write',
+    permission: COMPETITORS_WRITE,
     path: `${project}/competitors/{competitor_id}`,
     params: { path: { ...projectPath, competitor_id: uuid }, query: {} },
     handle: ({ c, db }, { path }) =>
-      removeCompetitor(db, actorOf(c), path.project_id, path.competitor_id),
+      removeCompetitor(db, routeActor(c, COMPETITORS_WRITE), path.project_id, path.competitor_id),
   }),
   defineGetRoute({
     ...base,
@@ -227,14 +233,19 @@ export const publicApiRoutes: readonly ProductRoute[] = [
   }),
   definePostRoute({
     ...base,
-    scope: 'audits:run',
-    capability: 'run',
+    permission: AUDITS_RUN,
     status: 201,
     path: `${project}/audits`,
     params: { path: projectPath, query: {} },
     body: auditLaunchInput,
     response: auditSchema.array(),
     handle: async ({ c, db, config }, { path }) =>
-      launchAudit(db, config, actorOf(c), path.project_id, await readBody(c, auditLaunchInput)),
+      launchAudit(
+        db,
+        config,
+        routeActor(c, AUDITS_RUN),
+        path.project_id,
+        await readBody(c, auditLaunchInput),
+      ),
   }),
 ];

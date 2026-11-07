@@ -23,7 +23,7 @@ import { INT4_MAX, normalizeResponse } from './normalization.ts';
 import type { ResearchResponse } from './live.ts';
 import type { ProviderError } from '../providers/errors.ts';
 import { isDataError } from '../db/errors.ts';
-import { rolesWith } from '../auth/workspace.ts';
+import { memberCan } from '../auth/workspace.ts';
 import { scalarText } from '../text-order.ts';
 import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
 import { announceEvidence } from '../opportunities/evidence-announcement.ts';
@@ -179,14 +179,7 @@ export class AcquisitionState {
       .executeTakeFirst();
   }
   async connection(db: Database, run: Run) {
-    const member = await db
-      .selectFrom('workspace_members')
-      .select('id')
-      .where('workspace_id', '=', run.workspace_id)
-      .where('user_id', '=', run.actor_user_id)
-      .where('role', 'in', rolesWith('run'))
-      .executeTakeFirst();
-    if (!member) return undefined;
+    if (!(await memberCan(db, run.workspace_id, run.actor_user_id, 'run'))) return undefined;
     return runConnection(db, run);
   }
   start(at = new Date()) {

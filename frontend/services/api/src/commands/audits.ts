@@ -6,7 +6,6 @@
  */
 import type { z } from 'zod';
 
-import { requireCapability, type Actor } from '../auth/actor.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { createAudits } from '../audits/creation.ts';
 import { estimateAudit } from '../audits/estimate.ts';
@@ -18,16 +17,20 @@ import { configEnvironment, type ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
 import { interactiveSlots } from '../http/interactive-slots.ts';
+import { permission, type Authorized } from './permission.ts';
 
-const SCOPE = 'audits:run';
+/** Launching and driving audits, which spends prompt runs. */
+export const AUDITS_RUN = permission({ capability: 'run', scope: 'audits:run' });
+/** Cancelling an audit. */
+export const AUDITS_CANCEL = permission({ capability: 'write', scope: 'audits:run' });
+type Runner = Authorized<typeof AUDITS_RUN>;
 
 export async function createQueuedAudit(
   db: Database,
   config: ServiceConfig,
-  actor: Actor,
+  actor: Runner,
   input: z.output<typeof auditInput>,
 ) {
-  requireCapability(actor, 'run', SCOPE);
   const ids = await createAudits(
     db,
     actor.workspaceId,
@@ -43,8 +46,12 @@ export async function createQueuedAudit(
  * instance's interactive slots: a full instance answers 429 and the runner
  * keeps the queued audit.
  */
-export async function runAudit(db: Database, config: ServiceConfig, actor: Actor, auditId: string) {
-  requireCapability(actor, 'run', SCOPE);
+export async function runAudit(
+  db: Database,
+  config: ServiceConfig,
+  actor: Runner,
+  auditId: string,
+) {
   await readAudit(db, actor.workspaceId, auditId);
   await interactiveSlots.run((stopping) =>
     executeInteractiveAudit(db, config, actor.workspaceId, auditId, stopping),
@@ -60,11 +67,10 @@ export async function runAudit(db: Database, config: ServiceConfig, actor: Actor
 export async function launchAudit(
   db: Database,
   config: ServiceConfig,
-  actor: Actor,
+  actor: Runner,
   projectId: string,
   input: z.output<typeof auditLaunchInput>,
 ) {
-  requireCapability(actor, 'run', SCOPE);
   const { max_attempts: ceiling, ...request } = input;
   const runtime = auditRuntime(configEnvironment(config));
   const estimate = await estimateAudit(
@@ -94,11 +100,10 @@ export async function launchAudit(
 /** An audit outside the caller's project (when it named one) is a 404. */
 export async function cancelAudit(
   db: Database,
-  actor: Actor,
+  actor: Authorized<typeof AUDITS_CANCEL>,
   projectId: string | null,
   auditId: string,
 ) {
-  requireCapability(actor, 'write', SCOPE);
   await cancelOwnedAudit(db, { workspaceId: actor.workspaceId, projectId }, auditId);
   return readAudit(db, actor.workspaceId, auditId);
 }

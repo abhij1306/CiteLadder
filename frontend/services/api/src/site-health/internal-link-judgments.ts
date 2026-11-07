@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import { roleAllows } from '../auth/workspace.ts';
+import { memberCan } from '../auth/workspace.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { createJevClient, type JevClient } from '../models/jev.ts';
@@ -97,14 +97,9 @@ function prepare(db: Database, task: QueueTask, client: JevClient | null) {
     const run = await lockedRun(trx, task);
     if (!run || run.state === 'cancelled') return [];
     const requests = requestSchema.array().parse(record(run.manifest).requests);
-    const membership = await trx
-      .selectFrom('workspace_members')
-      .select('role')
-      .where('workspace_id', '=', run.workspace_id)
-      .where('user_id', '=', run.actor_id)
-      .executeTakeFirst();
+    const permitted = await memberCan(trx, run.workspace_id, run.actor_id, 'run');
     let reason = client ? '' : 'provider_unconfigured';
-    if (!membership || !roleAllows(membership.role, 'run')) reason = 'permission_unavailable';
+    if (!permitted) reason = 'permission_unavailable';
     const events = await trx
       .selectFrom('site_internal_link_events')
       .select(['candidate_id', 'kind'])

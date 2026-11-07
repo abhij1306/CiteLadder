@@ -157,7 +157,7 @@ export const integrationRoutes = [
     path: '/api/v1/projects/{project_id}/performance/sync',
     status: 202,
     capability: 'run',
-    authorize: 'project',
+    authorize: 'active-project',
     params: { path: { project_id: uuid }, query: {} },
     response: performanceSyncEnqueueResponseSchema,
     async handle({ c, db }, { path }) {

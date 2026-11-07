@@ -53,7 +53,11 @@ const uploadPath = {
   upload_id: { scalar: { kind: 'uuid' }, required: true },
 } as const;
 const base = { family: 'crawl-logs', authorize: 'project' } as const;
-const writes = { ...base, capability: 'manage_credentials' } as const;
+const writes = {
+  family: 'crawl-logs',
+  authorize: 'active-project',
+  capability: 'manage_credentials',
+} as const;
 const scope = (workspaceId: string, projectId: string) => ({ workspaceId, projectId });
 const uploadView = (row: Selectable<CrawlLogUploads>) =>
   crawlUploadSchema.parse({ ...row, created_at: row.created_at.toISOString() });

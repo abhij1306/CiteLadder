@@ -1,7 +1,6 @@
 /** Action workflow commands: a status decision and an implementation declaration. */
 import type { z } from 'zod';
 
-import { requireCapability, type Actor } from '../auth/actor.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { RecordScope } from '../db/workspace-scope.ts';
@@ -11,37 +10,39 @@ import { updateActionStatus } from '../opportunities/actions.ts';
 import { declarationView } from '../opportunities/declaration-view.ts';
 import { declareAction as declareOwnedAction } from '../opportunities/declarations.ts';
 import type { actionDeclarationRequestSchema } from '@citeladder/contracts/actions';
+import { permission, type Authorized } from './permission.ts';
 
-const SCOPE = 'actions:write';
+export const ACTIONS_WRITE = permission({ capability: 'write', scope: 'actions:write' });
+type Writer = Authorized<typeof ACTIONS_WRITE>;
 const KEY_MAX = policy.opportunity.opportunities.IMPLEMENTATION_IDEMPOTENCY_KEY_MAX_LEN;
 
-/** The actor's `write` grant, and the scope its Action is found in. */
-function authorize(actor: Actor, projectId: string | null): RecordScope {
-  requireCapability(actor, 'write', SCOPE);
-  return { workspaceId: actor.workspaceId, projectId };
-}
+/** The scope the actor's Action is found in. */
+const scopeOf = (actor: Writer, projectId: string | null): RecordScope => ({
+  workspaceId: actor.workspaceId,
+  projectId,
+});
 
 export function setActionStatus(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string | null,
   actionId: string,
   status: string,
 ) {
-  const scope = authorize(actor, projectId);
+  const scope = scopeOf(actor, projectId);
   return updateActionStatus(db, scope, actionId, status, actor.userId);
 }
 
 /** A repeated key replays the recorded declaration (`created: false`). */
 export async function declareAction(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string | null,
   actionId: string,
   input: z.output<typeof actionDeclarationRequestSchema>,
   { idempotencyKey }: { idempotencyKey: string | null },
 ) {
-  const scope = authorize(actor, projectId);
+  const scope = scopeOf(actor, projectId);
   const key = idempotencyKey?.trim() ?? '';
   if (!key || (idempotencyKey ?? '').length > KEY_MAX)
     throw new ApiError(422, 'A bounded Idempotency-Key is required');

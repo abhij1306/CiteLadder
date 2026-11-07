@@ -251,6 +251,35 @@ describe('project owner', () => {
     });
     expect(foreign.status).toBe(404);
   });
+  it('changes a project only through the active workspace that holds it', async () => {
+    const t = await tenant();
+    const project = await createProject(
+      db,
+      t.workspaceId,
+      t.userId,
+      projectCreate.parse({ name: 'Held' }),
+    );
+    const other = await tenant();
+    const writer = await fixtures.user();
+    await fixtures.member(t.workspaceId, writer, 'member');
+    await fixtures.member(other.workspaceId, writer, 'member');
+    const app = createApp(testConfig(), db);
+    const cookie = `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: writer, ver: 0 })}`;
+    const rename = (workspaceId: string, name: string) =>
+      app.request(`/api/v1/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: {
+          cookie,
+          'X-Workspace-Id': workspaceId,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name }),
+      });
+    expect((await rename(other.workspaceId, 'Elsewhere')).status).toBe(404);
+    const held = await rename(t.workspaceId, 'Renamed');
+    expect(held.status).toBe(200);
+    expect(await held.json()).toMatchObject({ name: 'Renamed' });
+  });
   it.each(['admin', 'member', 'viewer'] as const)(
     'admits project creation by workspace write capability for %s',
     async (role) => {
