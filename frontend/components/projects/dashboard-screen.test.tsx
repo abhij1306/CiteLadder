@@ -121,6 +121,11 @@ const commandCenter = {
   stale: false,
 };
 
+// The Launch audit dialog has its own suite; here only whether it opens matters.
+vi.mock('@/components/runs/launch-dialog', () => ({
+  LaunchDialog: ({ open }: { open: boolean }) =>
+    open ? <dialog open aria-label="Launch audit" /> : null,
+}));
 vi.mock('@tanstack/react-query', () => ({
   queryOptions: <T,>(options: T) => options,
   useQuery: (options: { queryKey: readonly unknown[] }) => {
@@ -273,15 +278,23 @@ describe('DashboardScreen', () => {
     expect(ranked.queryByText('7.5')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'No open actions' })).not.toBeInTheDocument();
   });
-  it('shows an empty state instead of a movement card before a comparable run', () => {
+  it('shows an empty state instead of a movement card before a comparable run', async () => {
+    const user = userEvent.setup();
     queryResult.data = { ...commandCenter, movements: [] };
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
-    expect(screen.getByRole('heading', { name: 'No comparable measurement yet' })).toBeVisible();
+    // At the card-title rung, beside the H3 card titles.
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'No comparable measurement yet' }),
+    ).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Movement' })).not.toBeInTheDocument();
+    // Its action opens the Launch audit dialog, where the run is confirmed.
+    expect(screen.queryByRole('dialog', { name: 'Launch audit' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Launch audit' }));
+    expect(screen.getByRole('dialog', { name: 'Launch audit' })).toBeInTheDocument();
   });
   it("lists prompts where answers named a competitor but not the brand, with each prompt's Action", () => {
     const outcome = (engine: string, gaps: Record<string, number>) => ({
@@ -489,6 +502,13 @@ describe('DashboardScreen', () => {
     // arrives on the projection but no longer has a station-tile surface.
     expect(screen.queryByRole('heading', { name: 'Product loop' })).not.toBeInTheDocument();
     expect(screen.getByText('Run the first visibility audit')).toBeVisible();
+    // The next step's button says where it goes, never a bare "Continue".
+    expect(
+      within(screen.getByRole('region', { name: 'Run the first visibility audit' })).getByRole(
+        'link',
+        { name: 'Open Runs' },
+      ),
+    ).toHaveAttribute('href', '/runs?project=00000000-0000-4000-8000-000000000001');
     expect(
       within(screen.getByRole('region', { name: 'Citation share' })).getByText('Not run'),
     ).toBeVisible();

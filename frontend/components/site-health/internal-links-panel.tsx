@@ -26,7 +26,7 @@ import { RERUN_POLL_INTERVAL_MS } from '@/lib/config/site-health';
 import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
 import { downloadInternalLinksCsv } from '@/lib/site-health/internal-link-csv';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { formatCount, formatDisplayTimestamp } from '@/lib/format';
+import { formatCount, formatDisplayTimestamp, readableUrl } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
 import { internalLinkStateNotice } from '@/lib/site-health/status';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
@@ -483,16 +483,8 @@ function PageCell({ title, url }: Readonly<{ title: string; url: string }>) {
         {title || path}
       </ClampText>
       <ClampText lines={1} tooltip={url} className="type-caption">
-        {decodeURIPath(path)}
+        {readableUrl(path)}
       </ClampText>
     </span>
   );
-}
-
-function decodeURIPath(path: string) {
-  try {
-    return decodeURIComponent(path);
-  } catch {
-    return path;
-  }
 }

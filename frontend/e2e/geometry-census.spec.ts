@@ -105,8 +105,8 @@ const ICON_TILE_SIZE = 32;
 const ROW_PART_GAP = 8;
 /** A ruled fact list pads each fact 8 above and below. */
 const FACT_ROW_PADDING_Y = 8;
-/** A field's end target (clear, reveal) is SearchField's 20px clear square. */
-const FIELD_END_TARGET_SIZE = 20;
+/** A field's end target (clear, reveal) is a 24px square, WCAG 2.5.8's minimum (D38). */
+const FIELD_END_TARGET_SIZE = 24;
 /** An inline code token is padded 8 across and 4 down. */
 const CODE_TOKEN_PADDING_X = 8;
 const CODE_TOKEN_PADDING_Y = 4;

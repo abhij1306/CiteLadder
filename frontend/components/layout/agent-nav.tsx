@@ -1,7 +1,7 @@
 'use client';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
 import { SidebarNavGroup, sidebarNavRowClasses } from '@/components/ui/app-shell';
@@ -78,6 +78,7 @@ function ChatHistory({
   scoped: (href: string) => string;
 }>) {
   const [search, setSearch] = useState('');
+  const headingId = useId();
   const needle = useDebounced(search.trim());
   const chats = useInfiniteQuery({
     ...agentQueries.chats(workspaceId, projectId, { q: needle }),
@@ -90,11 +91,12 @@ function ChatHistory({
   const rows = chats.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
-    // Recent chats are plain rows, which the rail drops.
-    <section aria-labelledby="agent-chat-history" className="shell:flex hidden flex-col gap-2">
-      <h2 id="agent-chat-history" className="type-caption flex h-7 items-center px-3">
+    // Recent chats are plain rows, which the rail drops. The sidebar precedes
+    // the page's H1, so its group titles are labels, not headings.
+    <section aria-labelledby={headingId} className="labelled:flex hidden flex-col gap-2">
+      <p id={headingId} className="type-caption flex min-h-7 items-center px-3">
         Chats
-      </h2>
+      </p>
       <SearchField
         value={search}
         onValueChange={setSearch}

@@ -2,6 +2,7 @@ import { ArrowRight, Download, TrendingUp } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { IdentityRow } from '@/components/ui/workspace';
 import { ProjectLink } from '@/components/layout/scoped-link';
+import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 
 import { Badge } from '@/components/ui/badge';
 import { TagGroup } from '@/components/ui/tag';
@@ -239,23 +240,31 @@ export function ProjectStateCard({ data }: Readonly<{ data: CommandCenter }>) {
   );
 }
 
-const RECOMMENDED = { status: 'Action recommended', link: 'Continue' };
+const RECOMMENDED = 'Action recommended';
 
-/** Every step the server can name; steps that are not a call to act say what they are. */
+/**
+ * Every step the server can name; steps that are not a call to act say what
+ * they are. The button names where it goes, never a bare "Continue".
+ */
 const NEXT_ACTION_COPY: Record<
   CommandCenter['next_action']['kind'],
   { status: string; link: string }
 > = {
-  opportunity: RECOMMENDED,
-  connect: RECOMMENDED,
-  crawl: RECOMMENDED,
-  configure_prompts: RECOMMENDED,
-  audit: RECOMMENDED,
+  opportunity: { status: RECOMMENDED, link: 'Open the Action' },
+  connect: { status: RECOMMENDED, link: 'Open Integrations' },
+  crawl: { status: RECOMMENDED, link: 'Open Site Health' },
+  configure_prompts: { status: RECOMMENDED, link: 'Choose prompts' },
+  audit: { status: RECOMMENDED, link: 'Open Runs' },
   audit_running: { status: 'In progress', link: 'View progress' },
   monitor: { status: 'Up to date', link: 'View trends' },
 };
 
 export function NextAction({ data }: Readonly<{ data: CommandCenter }>) {
+  // An opportunity whose Action is not created yet links to the Actions list.
+  const link =
+    data.next_action.kind === 'opportunity' && data.next_action.href === '/agent/actions'
+      ? 'Open Actions'
+      : NEXT_ACTION_COPY[data.next_action.kind].link;
   return (
     <Card aria-labelledby="next-action" className="text-ink flex h-full flex-col justify-between">
       <CardHeader
@@ -271,7 +280,7 @@ export function NextAction({ data }: Readonly<{ data: CommandCenter }>) {
       <CardContent>
         <Button asChild variant="primary">
           <ProjectLink href={data.next_action.href}>
-            {NEXT_ACTION_COPY[data.next_action.kind].link}
+            {link}
             <Icon icon={ArrowRight} />
           </ProjectLink>
         </Button>
@@ -325,7 +334,12 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
   );
 }
 
-/** With nothing comparable yet the section is wholly empty, so the empty state stands alone. */
+/**
+ * With nothing comparable yet the section is wholly empty, so the empty state
+ * stands alone, at the card-title rung beside its sibling cards. Its action
+ * opens the Launch audit dialog, where the person confirms the run and its
+ * credits (owner, 2026-11-06); nothing starts from here.
+ */
 export function Movement({ data }: Readonly<{ data: CommandCenter }>) {
   if (data.movements.length === 0)
     return (
@@ -333,7 +347,9 @@ export function Movement({ data }: Readonly<{ data: CommandCenter }>) {
         kind="empty"
         icon={TrendingUp}
         heading="No comparable measurement yet"
+        headingLevel={3}
         description="Needs a second run with the same prompts and engines."
+        action={<LaunchAuditButton variant="secondary" />}
       />
     );
   return (
@@ -364,6 +380,7 @@ export function RankedActionsCard({
         kind="empty"
         icon={ArrowRight}
         heading="No open actions"
+        headingLevel={3}
         description="Run another audit to look for new opportunities."
         action={<ViewAllActions />}
       />

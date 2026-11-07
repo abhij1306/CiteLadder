@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -122,5 +123,58 @@ describe('PromptLibrary first load', () => {
         .getAllByRole('columnheader')
         .map((head) => head.textContent),
     ).toEqual(['Prompt', 'Enabled', 'Actions']);
+  });
+});
+
+describe('PromptLibrary topic filter', () => {
+  it('filters the table by the topic chosen in the control strip', async () => {
+    const topic = {
+      id: '77777777-7777-4777-8777-777777777777',
+      project_id: project.id,
+      name: 'Trail',
+      description: '',
+      origin: 'manual',
+      active_count: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    };
+    const filed = makePrompt({
+      id: '88888888-8888-4888-8888-888888888888',
+      text: 'Best trail shoes?',
+      topic_id: topic.id,
+    });
+    const unfiled = makePrompt({
+      id: '99999999-9999-4999-8999-999999999999',
+      text: 'Best road shoes?',
+      topic_id: null,
+    });
+    const topicSet = makeSet([filed, unfiled]);
+    const topicProject = makeProject({ prompt_sets: [topicSet] });
+    mswServer.use(
+      http.get('/api/v1/prompt-sets', () => HttpResponse.json([topicSet])),
+      http.get(`/api/v1/prompt-sets/${topicSet.id}/candidates`, () => HttpResponse.json([])),
+      http.get(`/api/v1/projects/${topicProject.id}/topics`, () => HttpResponse.json([topic])),
+      http.get(`/api/v1/projects/${topicProject.id}/visibility/prompts`, () =>
+        HttpResponse.json([]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<PromptLibrary />, {
+      projectSelection: {
+        projects: [topicProject],
+        activeProject: topicProject,
+        activeProjectId: topicProject.id,
+        status: 'ready',
+      },
+    });
+
+    const table = await screen.findByRole('table', { name: 'Prompts' });
+    expect(within(table).getByText('Best road shoes?')).toBeVisible();
+    await user.click(await screen.findByRole('button', { name: 'Topic: All topics' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: /^Trail/ }));
+
+    expect(within(table).getByText('Best trail shoes?')).toBeVisible();
+    expect(within(table).queryByText('Best road shoes?')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Topic: Trail' })).toBeVisible();
   });
 });

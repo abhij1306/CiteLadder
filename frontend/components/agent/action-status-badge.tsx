@@ -2,7 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   ACTION_STATUS_LABEL,
   ACTION_STATUS_TONE,
-  PRIORITY_BAND_TONE,
+  PRIORITY_BAND_VALUE,
   priorityBand,
 } from '@/lib/agent/vocabulary';
 import type { ActionStatus } from '@/lib/api/actions';
@@ -25,7 +25,7 @@ export function ActionPriorityBadge({ score }: Readonly<{ score: number | null }
   if (score === null) return <Badge>Not scored</Badge>;
   const band = priorityBand(score);
   return (
-    <Badge variant="status" value={PRIORITY_BAND_TONE[band]}>
+    <Badge variant="priority" value={PRIORITY_BAND_VALUE[band]}>
       {band}
     </Badge>
   );

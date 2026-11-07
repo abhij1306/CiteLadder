@@ -432,7 +432,7 @@
         "styles": [
           {
             "name": "eyebrow",
-            "fontSize": "11px",
+            "fontSize": "12px",
             "lineHeight": "16px",
             "fontWeight": 500,
             "letterSpacing": "0.08em",

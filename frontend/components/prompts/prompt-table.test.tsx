@@ -50,10 +50,10 @@ describe('PromptTable pagination', () => {
 
     const [, tagged, untagged] = screen.getAllByRole('row');
     expect(within(tagged!).getAllByRole('cell')[0]!.textContent).toBe(
-      'Prompt number 1No topic · Branded · Discovery · Consideration',
+      'Prompt number 1No topic Branded · Discovery · Consideration',
     );
     expect(within(untagged!).getAllByRole('cell')[0]!.textContent).toBe(
-      'Prompt number 2No topic · Unbranded',
+      'Prompt number 2No topic Unbranded',
     );
   });
 
@@ -116,13 +116,13 @@ describe('PromptTable pagination', () => {
 
     const [, filed, unassigned, unresolved] = screen.getAllByRole('row');
     expect(within(unresolved!).getAllByRole('cell')[0]!.textContent).toBe(
-      'Prompt number 3Topic unavailable · Unbranded · Discovery',
+      'Prompt number 3Topic unavailable Unbranded · Discovery',
     );
     expect(within(filed!).getAllByRole('cell')[0]!.textContent).toBe(
-      'Prompt number 1Running shoes · Unbranded · Discovery',
+      'Prompt number 1Running shoes Unbranded · Discovery',
     );
     expect(within(unassigned!).getAllByRole('cell')[0]!.textContent).toBe(
-      'Prompt number 2No topic · Unbranded · Discovery',
+      'Prompt number 2No topic Unbranded · Discovery',
     );
   });
 

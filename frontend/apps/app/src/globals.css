@@ -18,9 +18,18 @@
    width at which a component's own internals (a form's two columns, a
    table's secondary columns, a list beside its detail) stop stacking.
    `sm:`/`md:`/`lg:`/`xl:` (640, 768, 1024, 1280) and `2xl:` (1440) are the
-   website's. */
+   website's.
+
+   The shell's navigation has two more states (owner, 2026-11-06): from
+   `rail:` (900px) the sidebar column shows, as the icon rail below `shell:`;
+   below it a menu button opens the same sidebar in a left drawer. `labelled:`
+   is where the sidebar shows its labels: from `shell:`, and always inside
+   that drawer (`data-nav-drawer`). `rail:` is declared first so a `shell:`
+   rule for the same property follows it in the stylesheet and wins. */
+@custom-variant rail (@media (min-width: 900px));
 @custom-variant shell (@media (min-width: 1280px));
 @custom-variant desktop (@media (min-width: 981px));
+@custom-variant labelled (@media (min-width: 1280px), &:where([data-nav-drawer] *));
 
 @theme {
   /* Faces. Cal Sans (display) sets headings and big numbers at weight 400
@@ -137,7 +146,9 @@
   --text-caption: 12px;
   --text-caption--line-height: 16px;
   --text-caption--font-weight: 400;
-  --text-eyebrow: 11px;
+  /* 12px: the 0.75rem floor for any text (owner audit, 2026-11-06); the mono
+     face, caps and tracking set it apart from the caption. */
+  --text-eyebrow: 12px;
   --text-eyebrow--line-height: 16px;
   --text-eyebrow--font-weight: 500;
   --text-eyebrow--letter-spacing: 0.08em;

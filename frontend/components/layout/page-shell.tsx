@@ -5,12 +5,14 @@ import { useLocation } from 'react-router-dom';
 
 import { AgentPanelTrigger } from '@/components/agent/agent-panel-host';
 import { AppGrid } from '@/components/ui/app-grid';
+import { NavMenuButton } from '@/components/ui/app-shell';
 import { BackButton } from '@/components/ui/back-button';
 import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { PageHeader } from '@/components/ui/page-header';
 import { QueryState } from '@/components/ui/query-state';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
 
+import { NavDrawerContext } from './nav-drawer-context';
 import { PageTitleContext } from './page-title-context';
 import { resolveTitle } from './page-titles';
 
@@ -145,6 +147,7 @@ function PageShell<T extends string>({
   ...layout
 }: ScreenBands<T> & FillLayout & Readonly<{ back?: PageBack }>) {
   const resolved = useRouteTitle(title);
+  const navDrawer = useContext(NavDrawerContext);
   const content = <PageContent {...layout}>{children}</PageContent>;
   const tabBand = tabs ? (
     <div data-page-band="control">
@@ -162,9 +165,15 @@ function PageShell<T extends string>({
       <PageHeader
         title={resolved}
         lead={
-          back ? (
-            <BackButton href={back.href} label={back.label} projectId={back.projectId} />
-          ) : undefined
+          <>
+            {/* Below 900px the header leads with the navigation menu. */}
+            {navDrawer ? (
+              <NavMenuButton expanded={navDrawer.open} onOpen={navDrawer.onOpen} />
+            ) : null}
+            {back ? (
+              <BackButton href={back.href} label={back.label} projectId={back.projectId} />
+            ) : null}
+          </>
         }
         actions={
           <>

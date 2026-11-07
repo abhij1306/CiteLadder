@@ -224,6 +224,14 @@ function isPlainText(children: ReactNode) {
  */
 export const TableTextLinesContext = createContext<1 | 2>(2);
 
+/**
+ * The lines a `TableCellLines` title takes: one by default; two in a
+ * `DataTable` of three-line rows (`rowLines={3}`), where a long title (a
+ * prompt) wraps over its caption instead of being cut at one line. The
+ * title then always holds two lines, so every row keeps one height.
+ */
+export const TableTitleLinesContext = createContext<1 | 2>(1);
+
 function isCut(node: HTMLElement) {
   return node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1;
 }
@@ -341,9 +349,13 @@ export function TableCellLines({
   secondaryTooltip?: ReactNode;
   title?: boolean;
 }>) {
+  const titleLines = useContext(TableTitleLinesContext);
   return (
     <span className="grid min-w-0">
-      <ClampText lines={1} className={title ? textRole('itemTitle') : undefined}>
+      <ClampText
+        lines={titleLines}
+        className={cn(title ? textRole('itemTitle') : undefined, titleLines === 2 && 'min-h-[2lh]')}
+      >
         {primary}
       </ClampText>
       {secondary ? (

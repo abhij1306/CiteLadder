@@ -1,4 +1,5 @@
 import type { HTMLAttributes, ReactNode } from 'react';
+import { SignalHigh, SignalLow, SignalMedium, type LucideIcon } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -57,7 +58,26 @@ const runStatusTone = {
   cancelled: 'neutral',
 } as const satisfies Record<string, BadgeTone>;
 
+/**
+ * Priority is an order, not a state: High takes the accent tint, Medium and
+ * Low stay neutral, and a signal glyph of three, two or one bars tells the
+ * three apart without colour (owner, 2026-11-06). Red stays reserved for
+ * errors and destructive actions.
+ */
+const priorityTone = {
+  high: 'accent',
+  medium: 'neutral',
+  low: 'neutral',
+} as const satisfies Record<string, BadgeTone>;
+
+const PRIORITY_ICON = {
+  high: SignalHigh,
+  medium: SignalMedium,
+  low: SignalLow,
+} as const satisfies Record<keyof typeof priorityTone, LucideIcon>;
+
 export type StatusValue = keyof typeof statusTone;
+export type PriorityValue = keyof typeof priorityTone;
 export type SentimentValue = keyof typeof sentimentTone;
 export type ClassificationValue = keyof typeof classificationTone;
 export type RunStatusValue = keyof typeof runStatusTone;
@@ -82,6 +102,7 @@ export type BadgeProps = {
   | { variant: 'sentiment'; value: SentimentValue }
   | { variant: 'classification'; value: ClassificationValue }
   | { variant: 'run-status'; value: RunStatusValue }
+  | { variant: 'priority'; value: PriorityValue }
   | { variant?: undefined; value?: undefined; tone?: BadgeTone }
 ) &
   Omit<HTMLAttributes<HTMLSpanElement>, 'children'>;
@@ -96,6 +117,8 @@ function badgeTone(props: BadgeProps): BadgeTone {
       return classificationTone[props.value];
     case 'run-status':
       return runStatusTone[props.value];
+    case 'priority':
+      return priorityTone[props.value];
     default:
       return props.tone ?? 'neutral';
   }
@@ -119,6 +142,7 @@ export function Badge(props: Readonly<BadgeProps>) {
     ...attributes
   } = { tone: undefined, ...props };
   const tone = badgeTone(props);
+  const PriorityIcon = props.variant === 'priority' ? PRIORITY_ICON[props.value] : null;
   return (
     <span
       {...attributes}
@@ -132,6 +156,7 @@ export function Badge(props: Readonly<BadgeProps>) {
       )}
     >
       {dot ? <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden /> : null}
+      {PriorityIcon ? <PriorityIcon className="size-3.5 shrink-0" aria-hidden /> : null}
       {children}
     </span>
   );

@@ -8,8 +8,8 @@ import type { ReorderItem } from '@/components/ui/reorder-list';
 import { TextLink } from '@/components/ui/text-link';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { CommandCenter, Opportunity } from '@/lib/api/types';
-import { availabilityLabel } from '@/lib/format';
-import { severityBadgeValue, severityLabel } from '@/lib/site-health/issues';
+import { availabilityLabel, readableUrl } from '@/lib/format';
+import { severityLabel, severityPriority } from '@/lib/site-health/issues';
 import { textRole } from '@/components/ui/typography';
 
 /** A change against the previous comparable run, as every Command Center delta reads it. */
@@ -92,14 +92,14 @@ export function actionItem(action: Opportunity): ReorderItem {
           >
             {action.title}
           </TextLink>
-          {/* The one severity mapping the evidence drawer and Site Health use. */}
-          <Badge variant="status" value={severityBadgeValue(action.severity)}>
+          {/* The one priority mapping the evidence drawer uses. */}
+          <Badge variant="priority" value={severityPriority(action.severity)}>
             {severityLabel(action.severity)}
           </Badge>
         </Inline>
         <p className="type-caption truncate">
-          {action.target_label ?? 'Project-wide'} · {action.evidence_summary.count} persisted
-          evidence item(s)
+          {action.target_label ? readableUrl(action.target_label) : 'Project-wide'} ·{' '}
+          {action.evidence_summary.count} persisted evidence item(s)
         </p>
       </Stack>
     ),

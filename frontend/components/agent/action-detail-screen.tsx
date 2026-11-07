@@ -41,6 +41,7 @@ import { actionsMutations, actionsQueries, type ActionDetail } from '@/lib/api/a
 import { agentQueries } from '@/lib/api/agent';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { queryKeys } from '@/lib/api/query-keys';
+import { readableUrl } from '@/lib/format';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 
 const BACK = { href: '/agent/actions', label: 'Back to Actions' } as const;
@@ -104,7 +105,7 @@ function ActionDetailView({
   const update = useStatusUpdate(workspaceId);
   return (
     <DetailScreen
-      title={action.target_label}
+      title={readableUrl(action.target_label)}
       back={{ ...BACK, projectId: action.project_id }}
       actions={<ActionControls action={action} update={update} />}
       lead={<ActionFacts action={action} />}

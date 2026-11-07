@@ -108,8 +108,8 @@ export function Input({
 
 /**
  * FieldEndButton — the one icon target at a field's end (clear a search,
- * reveal a password): SearchField's clear face, a 20px `radius-xs` square
- * with the 16px glyph, `ink-muted` until hovered, its focus ring 1px out.
+ * reveal a password): SearchField's clear face, a 24px `radius-xs` square
+ * (the WCAG 2.5.8 minimum target) with the 16px glyph, `ink-muted` until hovered, its focus ring 1px out.
  * Pass it as an `Input`'s `endContent`. `label` is its accessible name.
  */
 export function FieldEndButton({
@@ -127,7 +127,7 @@ export function FieldEndButton({
     <button
       type="button"
       data-field-end-target=""
-      className="focus-ring text-ink-muted enabled:hover:bg-surface-sunken enabled:hover:text-ink grid size-5 shrink-0 place-items-center rounded-xs transition-colors focus-visible:outline-offset-1"
+      className="focus-ring text-ink-muted enabled:hover:bg-surface-sunken enabled:hover:text-ink grid size-6 shrink-0 place-items-center rounded-xs transition-colors focus-visible:outline-offset-1"
       disabled={disabled}
       onClick={onClick}
       aria-label={label}

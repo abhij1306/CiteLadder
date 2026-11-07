@@ -18,7 +18,7 @@ import {
 import { actionsQueries, type actionsApi, type Action, type ActionStatus } from '@/lib/api/actions';
 import { actionStatusSchema } from '@citeladder/contracts/actions';
 import { queueCount, useActionStatusCounts } from '@/lib/agent/use-action-status-counts';
-import { formatCount } from '@/lib/format';
+import { formatCount, readableUrl } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -170,9 +170,9 @@ function ActionRow({ action }: Readonly<{ action: Action }>) {
     <TableRow>
       <TableCell>
         <div className="grid min-w-0">
-          <ClampText lines={1} tooltip={action.target_label}>
+          <ClampText lines={1} tooltip={readableUrl(action.target_label)}>
             <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
-              {action.target_label}
+              {readableUrl(action.target_label)}
             </TextLink>
           </ClampText>
           <ClampText lines={1} className={textRole('caption')}>

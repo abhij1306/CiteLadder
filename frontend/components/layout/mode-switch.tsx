@@ -57,8 +57,8 @@ export function ModeSwitch() {
               aria-current={selected ? 'page' : undefined}
               className={modeSegmentClasses(selected)}
             >
-              <Icon className="shell:hidden size-4" aria-hidden />
-              <span className="shell:not-sr-only sr-only">{label}</span>
+              <Icon className="labelled:hidden size-4" aria-hidden />
+              <span className="labelled:not-sr-only sr-only">{label}</span>
             </Link>
           </SidebarRowTooltip>
         );

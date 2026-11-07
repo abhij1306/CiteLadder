@@ -37,6 +37,7 @@ import { approachLabel, priorityBand, targetKindLabel } from '@/lib/agent/vocabu
 import { actionsQueries, type Action } from '@/lib/api/actions';
 import type { AgentWorkflow } from '@/lib/api/agent';
 import { AGENT_TOP_ACTIONS } from '@/lib/config/agent';
+import { readableUrl } from '@/lib/format';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useProjectContext } from '@/lib/project/project-context';
 
@@ -210,7 +211,7 @@ function AttachedAction({
       <span className={textRole('label')}>Working on</span>
       <Inline className="flex-wrap">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
-          {action.target_label}
+          {readableUrl(action.target_label)}
         </TextLink>
         <ActionStatusBadge status={action.status} />
       </Inline>
@@ -255,7 +256,7 @@ function TopActionRow({ action }: Readonly<{ action: Action }>) {
     <Inline as="li" gap="compact" className={cn(cardClasses(), 'flex-wrap')}>
       <Stack gap="tight" className="min-w-0 flex-1">
         <TextLink href={`/agent/actions/${action.id}`} text="itemTitle" className="truncate">
-          {action.target_label}
+          {readableUrl(action.target_label)}
         </TextLink>
         <span className={textRole('caption')}>
           {[

@@ -82,81 +82,74 @@ export function OptionRow({
   );
 }
 
-/**
- * A tree rail: the selectable list beside a library that filters it (topics
- * and their subtopics). Each item is a 32px navigation row — the label,
- * truncated with the whole name behind a tooltip, an optional count, and
- * icon actions (`IconButton`s) at the row's end. A nested item (one level
- * deep) is indented 12 from its parent. The rail owns the row height, the
- * indent and the gaps; the page passes names, counts and actions.
- */
-export function RailItem({
-  label,
-  accessibleName,
-  count,
-  selected,
-  nested = false,
-  onSelect,
-  actions,
-}: Readonly<{
-  label: string;
-  /** A fuller name for assistive technology (a subtopic names its parent). */
-  accessibleName?: string;
-  count?: number;
-  selected: boolean;
-  nested?: boolean;
-  onSelect: () => void;
-  actions?: ReactNode;
-}>) {
+/** A tree list: its `TreeItem`s and `TreeItemForm`s, 2 apart. */
+export function TreeList({ label, children }: Readonly<{ label: string; children: ReactNode }>) {
   return (
-    <div
-      className={cn(
-        'group flex min-w-0 items-center gap-0.5 pe-0.5',
-        nested && 'ms-3',
-        listRowClasses({ selected }),
-      )}
-    >
-      <Pressable
-        type="button"
-        data-rail-item=""
-        onClick={onSelect}
-        aria-label={accessibleName}
-        aria-current={selected ? 'true' : undefined}
-        className={cn(
-          'focus-ring flex h-[var(--nav-item-height)] min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-left type-control',
-          selected && textRole('emphasis'),
-        )}
-      >
-        <ClampText lines={1} className="flex-1">
-          {label}
-        </ClampText>
-        {typeof count === 'number' ? (
-          <span className="type-caption shrink-0 font-mono">{count}</span>
-        ) : null}
-      </Pressable>
-      {actions}
-    </div>
+    <ul aria-label={label} className="flex min-w-0 flex-col gap-0.5">
+      {children}
+    </ul>
   );
 }
 
 /**
- * A rail item's name edited in place: the field and its submit on one row,
+ * A tree list's row (topics and their subtopics, in the dialog that manages
+ * them): one control tall — the label, truncated with the whole name behind
+ * a tooltip, an optional count, and icon actions (`IconButton`s) at the
+ * row's end. A nested item (one level deep) is indented 12 from its parent.
+ * The row owns the height, the indent and the gaps; the page passes names,
+ * counts and actions.
+ */
+export function TreeItem({
+  label,
+  count,
+  nested = false,
+  actions,
+}: Readonly<{
+  label: string;
+  count?: number;
+  nested?: boolean;
+  actions?: ReactNode;
+}>) {
+  return (
+    <li
+      data-tree-item=""
+      className={cn(
+        'text-ink flex min-h-[var(--nav-item-height)] min-w-0 items-center gap-2 ps-3 pe-0.5',
+        nested && 'ms-3',
+        listRowClasses(),
+      )}
+    >
+      <ClampText lines={1} className="type-control flex-1">
+        {label}
+      </ClampText>
+      {typeof count === 'number' ? (
+        <span className="type-caption shrink-0 font-mono">{count}</span>
+      ) : null}
+      {actions}
+    </li>
+  );
+}
+
+/**
+ * A tree item's name edited in place: the field and its submit on one row,
  * at the item's own indent so the edit stays where the name was.
  */
-export function RailItemForm({
+export function TreeItemForm({
   nested = false,
   onSubmit,
   children,
 }: Readonly<{ nested?: boolean; onSubmit: () => void; children: ReactNode }>) {
   return (
-    <form
-      className={cn('flex items-center gap-2', nested && 'ms-3')}
-      onSubmit={(event: FormEvent) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      {children}
-    </form>
+    <li>
+      <form
+        className={cn('flex items-center gap-2', nested && 'ms-3')}
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        {children}
+      </form>
+    </li>
   );
 }

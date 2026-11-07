@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
   TableTextLinesContext,
+  TableTitleLinesContext,
   type TableMinWidth,
 } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
@@ -58,6 +59,8 @@ const COLUMN_WIDTH = {
   name: 'w-56',
   /** A row's trailing link or icon control. */
   action: 'w-24',
+  /** One compact control under a one-word header ("Enabled", "Actions"). */
+  control: 'w-20',
   /** A row's trailing buttons, up to two (`TableActionsCell`). */
   rowActions: 'w-64',
 } as const;
@@ -122,8 +125,8 @@ export type DataTableSelection = Readonly<{
  *            of a paged table is exactly `rowLines` tall: its text is cut to
  *            that many lines (the rest in a tooltip), so a page of long
  *            values is no taller than a page of short ones. Rows of two
- *            lines (`rowLines={2}`, cells on `TableCellLines`) are padded
- *            with two-line blanks. A fixed list with `pageSize` and no
+ *            lines (`rowLines={2}`, cells on `TableCellLines`; 3 for a
+ *            two-line title) are padded with blanks. A fixed list with `pageSize` and no
  *            pager (top movers) always reserves its rows.
  *   pager  — the shared `Pager`, framed as the table's footer, drawn only
  *            while the rows run past one page: a table that fits on one page
@@ -170,8 +173,8 @@ export function DataTable({
   rowCount?: number;
   /** Rows per page: the footprint reserved for rows and for every state. */
   pageSize?: number;
-  /** Lines per row: 2 when every row stacks a caption under its value. */
-  rowLines?: 1 | 2;
+  /** Lines per row: 2 for a caption under the value, 3 for a two-line title over it. */
+  rowLines?: RowLines;
   /** What to show instead of rows. */
   state?: DataTableState;
   pager?: DataTablePager;
@@ -227,16 +230,18 @@ export function DataTable({
         className={cn(pinFirstColumn && PINNED_FIRST_COLUMN)}
       >
         <DataTableColumns columns={columns} selection={selection} />
-        <TableTextLinesContext value={pager || pageSize !== undefined ? rowLines : 2}>
-          <DataTableBody
-            colSpan={colSpan}
-            state={state}
-            pageSize={paging.pageSize}
-            rowCount={rowCount}
-            rowLines={rowLines}
-          >
-            {children}
-          </DataTableBody>
+        <TableTextLinesContext value={(pager || pageSize !== undefined) && rowLines === 1 ? 1 : 2}>
+          <TableTitleLinesContext value={rowLines === 3 ? 2 : 1}>
+            <DataTableBody
+              colSpan={colSpan}
+              state={state}
+              pageSize={paging.pageSize}
+              rowCount={rowCount}
+              rowLines={rowLines}
+            >
+              {children}
+            </DataTableBody>
+          </TableTitleLinesContext>
         </TableTextLinesContext>
       </Table>
       <DataTableFoot footer={footer} pager={paging.pager} />
@@ -381,7 +386,7 @@ function DataTableBody({
   state?: DataTableState;
   pageSize?: number;
   rowCount?: number;
-  rowLines: 1 | 2;
+  rowLines: RowLines;
   children?: ReactNode;
 }>) {
   if (state) {
@@ -411,7 +416,7 @@ function DataTableBody({
       <TableFillerRows
         count={filler}
         colSpan={colSpan}
-        spacer={rowLines === 2 ? <TableCellLines primary={BLANK} secondary={BLANK} /> : null}
+        spacer={rowLines === 1 ? null : <TableCellLines primary={BLANK} secondary={BLANK} />}
       />
     </TableBody>
   );
@@ -420,12 +425,16 @@ function DataTableBody({
 /**
  * A row's height by its lines, so a state holds exactly a page of rows: one
  * line sits on the row floor; two lines are a body line over a caption line
- * between the cell's padding (`TableCellLines`).
+ * between the cell's padding (`TableCellLines`); three are a two-line title
+ * over the caption.
  */
 const ROW_HEIGHT = {
   1: 'var(--table-row-height)',
   2: 'calc(2*var(--table-cell-padding-y)+var(--text-body-sm--line-height)+var(--text-caption--line-height))',
-} as const;
+  3: 'calc(2*var(--table-cell-padding-y)+2*var(--text-body-sm--line-height)+var(--text-caption--line-height))',
+} as const satisfies Record<RowLines, string>;
+
+type RowLines = 1 | 2 | 3;
 
 /** A non-breaking space: a blank line that still takes a line's height. */
 const BLANK = ' ';
