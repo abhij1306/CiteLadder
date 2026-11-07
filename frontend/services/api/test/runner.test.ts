@@ -237,24 +237,43 @@ describe('bounded runner', () => {
   });
 
   it('releases a contended Site Health task without failing the lane or charging an attempt', async () => {
-    const db = createDatabase(testConfig({}), { execution: true });
+    const db = createDatabase(testConfig({ DB_LOCK_TIMEOUT_MS: '200' }), { execution: true });
     const fixtures = new SiteFixtures(db);
     const restore = setLogSink(() => {});
     try {
       const seed = await fixtures.crawl('running');
       const id = await fixtures.task(seed);
-      const lockTimeout = () => Object.assign(new Error('lock timeout'), { code: '55P03' });
       const worker = new SiteHealthWorker(db, {
         taskScope: { workspaceId: seed.workspaceId, crawlId: seed.crawlId },
-        executors: {
-          link_metrics: async () => {
-            throw lockTimeout();
-          },
-        },
+        executors: { link_metrics: async () => {} },
       });
-      // A sibling still holds the crawl lock when the failure is settled.
-      vi.spyOn(worker, 'fail').mockRejectedValueOnce(lockTimeout());
-      expect(await worker.runOnce(1)).toBe(1);
+      // A sibling holds the crawl lock for the whole run, so both the task's
+      // own lock and the settle that follows time out.
+      let release = () => {};
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let locked = () => {};
+      const holding = new Promise<void>((resolve) => {
+        locked = resolve;
+      });
+      const sibling = db.transaction().execute(async (trx) => {
+        await trx
+          .selectFrom('site_crawls')
+          .select('id')
+          .where('id', '=', seed.crawlId)
+          .forUpdate()
+          .execute();
+        locked();
+        await released;
+      });
+      await holding;
+      try {
+        expect(await worker.runOnce(1)).toBe(1);
+      } finally {
+        release();
+        await sibling;
+      }
       expect(
         await db
           .selectFrom('site_crawl_tasks')

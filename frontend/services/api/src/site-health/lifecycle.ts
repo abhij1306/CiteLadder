@@ -22,7 +22,7 @@ import { rootFailure } from './reads/crawl.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 import { recordCrawlEvent } from './site-task.ts';
 import { persistCrawlSnapshot, refreshLiveScoreSummary } from './snapshot.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { failedAs } from './task-outcome.ts';
 import { publishFinalPageAnalyses } from './terminal-analysis.ts';
 import { persistTerminalCounters } from './terminal-counters.ts';

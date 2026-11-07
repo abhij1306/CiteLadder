@@ -6,8 +6,7 @@ import * as lifecycle from '../src/site-health/lifecycle.ts';
 import { recoverExpiredLeases } from '../src/site-health/lease-recovery.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
-import { TaskCancelledError } from '../src/queue/executor.ts';
-import { lockSiteTask } from '../src/site-health/task-fence.ts';
+import { lockSiteTask } from '../src/site-health/site-task.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 import { testDatabase } from './support.ts';
 
@@ -84,9 +83,18 @@ it('reclaims retryable leases, spends one attempt, and fences the old owner afte
   expect(tasks.map((task) => task.id)).toEqual([id]);
   expect(await worker.queue.markRunning(id, worker.owner)).toBe(true);
   expect(await worker.queue.heartbeat(id, 'dead-worker', seed.workspaceId)).toBe(false);
-  await expect(
-    db.transaction().execute((trx) => lockSiteTask(trx, claimed, 'dead-worker')),
-  ).rejects.toBeInstanceOf(TaskCancelledError);
+  const lockAs = (owner: string, task = claimed) =>
+    db
+      .transaction()
+      .execute(
+        async (trx) => (await lockSiteTask(trx, { queue: worker.queue, owner }, task))?.task,
+      );
+  expect(await lockAs('dead-worker')).toBeUndefined();
+  expect(await lockAs(worker.owner, await row(id))).toMatchObject({
+    id,
+    status: 'running',
+    lease_owner: 'replacement',
+  });
   // Finish the fixture so subsequent queue-drain tests cannot claim it.
   await db
     .updateTable('site_crawl_tasks')

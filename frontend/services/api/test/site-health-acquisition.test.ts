@@ -17,6 +17,7 @@ import { pages } from '../src/site-health/reads/pages.ts';
 import { SitePageFetcher, siteFetchSettings } from '../src/site-health/page-fetch.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { runSiteSetup, setupSettings } from '../src/site-health/site-setup-task.ts';
+import { runSiteTask } from '../src/site-health/site-task.ts';
 import { classifyUrlAdmission } from '../src/site-health/url-admission.ts';
 import { canonicalIdentity } from '../src/site-health/url-identity.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
@@ -712,10 +713,21 @@ describe('site setup', () => {
       .where('id', '=', full.crawlId)
       .execute();
     await lease(resumed, site.owner);
-    await runSiteSetup(site.acquisition, await task(resumed), {
-      ...setupSettings({}),
-      maxDocuments: 3,
-    });
+    await runSiteTask(
+      {
+        db,
+        owner: site.owner,
+        queue: site.queue,
+        fetcher: site.fetcher,
+        settings: site.settings,
+      },
+      await task(resumed),
+      {
+        kind: 'acquire',
+        run: (ctx, claimed) =>
+          runSiteSetup(ctx, claimed, { ...setupSettings({}), maxDocuments: 3 }),
+      },
+    );
     const walked = record((await crawlRow(full)).site_facts);
     expect(walked.sitemap).toEqual({
       fetched: true,

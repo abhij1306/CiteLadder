@@ -18,7 +18,7 @@ import { compareText } from '../text-order.ts';
 import { classifyUrlAdmission, type Admission, type Scope } from './url-admission.ts';
 import { canonicalIdentity, hostTwinHash } from './url-identity.ts';
 import { expectedTaskFailure } from './coverage.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { taskOutcome } from './task-outcome.ts';
 import {
   activateMemberships,

@@ -30,7 +30,7 @@ import {
   type Resolution,
 } from './resolution-evidence.ts';
 import { publishFinalPageAnalyses } from './terminal-analysis.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { hardExcluded } from './url-admission.ts';
 import { canonicalUrl, canonicalIdentity } from './url-identity.ts';
 

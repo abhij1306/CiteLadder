@@ -1,7 +1,7 @@
 /** Exact attempt and artifact provenance for terminal URL resolution checks. */
 import type { Database } from '../db/database.ts';
 import { policy } from '../config.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { taskOutcome } from './task-outcome.ts';
 import { canonicalUrl } from './url-identity.ts';
 import {

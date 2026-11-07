@@ -19,7 +19,7 @@ import {
   issueSummary,
   unfilteredIssues,
 } from './reads/issues.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 export async function persistIssueCatalog(db: Database, crawl: Crawl): Promise<void> {
   const now = new Date();

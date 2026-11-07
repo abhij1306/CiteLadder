@@ -26,7 +26,7 @@ import {
   previewCrawlUrls,
   previewRequest,
 } from '../site-health/planner-policy.ts';
-import { loadCrawl, projectCrawl, rootFailure } from '../site-health/reads/crawl.ts';
+import { crawlProjection, loadCrawl, rootFailure } from '../site-health/reads/crawl.ts';
 import { requireAdmitted } from '../site-health/reads/pages.ts';
 import {
   bulkMonitoredSet,
@@ -100,7 +100,9 @@ export const siteHealthCrawlRoutes = [
         },
         0,
       )(() => worker.runUntilIdle(signal, interactive.admission_seconds));
-      return siteCrawlSchema.parse(projectCrawl(await loadCrawl(db, workspaceId, path.crawl_id)));
+      return siteCrawlSchema.parse(
+        await crawlProjection(db, await loadCrawl(db, workspaceId, path.crawl_id)),
+      );
     },
   }),
   definePostRoute({
@@ -120,7 +122,7 @@ export const siteHealthCrawlRoutes = [
         windowSeconds: Number(resolveSettingSpec(policy.abuse.crawl_create_window_seconds)),
       });
       const crawl = await db.transaction().execute((trx) => createCrawl(trx, workspaceId, request));
-      return siteCrawlSchema.parse(projectCrawl(crawl));
+      return siteCrawlSchema.parse(await crawlProjection(db, crawl));
     },
   }),
   definePostRoute({
@@ -142,7 +144,7 @@ export const siteHealthCrawlRoutes = [
         .execute(async (trx) =>
           createCrawl(trx, workspaceId, await recrawlRequest(trx, workspaceId, path.crawl_id)),
         );
-      return siteCrawlSchema.parse(projectCrawl(crawl));
+      return siteCrawlSchema.parse(await crawlProjection(db, crawl));
     },
   }),
   definePostRoute({
@@ -194,7 +196,9 @@ export const siteHealthCrawlRoutes = [
       await cancelCrawl(db, workspaceId, path.crawl_id);
       const crawl = await loadCrawl(db, workspaceId, path.crawl_id);
       return siteCrawlSchema.parse(
-        projectCrawl(crawl, { failureSummary: (await rootFailure(db, crawl)).summary }),
+        await crawlProjection(db, crawl, {
+          failureSummary: (await rootFailure(db, crawl)).summary,
+        }),
       );
     },
   }),

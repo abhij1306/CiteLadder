@@ -10,7 +10,7 @@ import type { SiteRuleEvaluations } from '../generated/db-schema.ts';
 import type { RuleEvaluation } from './analysis/rules.ts';
 import { appliedSiteChecks, crawlSiteChecks, scoreAnalysis } from './analysis/scoring.ts';
 import { refreshIssueCurrency } from './issue-currency.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 export function persistedEvaluation(row: Selectable<SiteRuleEvaluations>): RuleEvaluation {
   return {

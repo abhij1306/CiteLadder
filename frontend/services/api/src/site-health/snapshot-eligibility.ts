@@ -3,7 +3,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { MeasurementProjection } from './score-summary.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { taskOutcome } from './task-outcome.ts';
 import { compareText } from '../text-order.ts';
 

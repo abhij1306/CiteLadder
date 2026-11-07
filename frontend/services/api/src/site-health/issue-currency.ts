@@ -19,7 +19,7 @@ import { sql } from 'kysely';
 
 import type { Database } from '../db/database.ts';
 import { persistIssueCatalog } from './issue-catalog.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 /** Recompute the flag for every issue of the crawl, writing only the rows that change. */
 export async function refreshIssueCurrency(db: Database, crawl: Crawl): Promise<void> {

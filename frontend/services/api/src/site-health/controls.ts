@@ -12,7 +12,7 @@ import {
 import { parseUuid } from '../http/uuid.ts';
 import { crawlSetting } from './planner-policy.ts';
 import { requireProject } from '../projects/access.ts';
-import { isTerminal, projectCrawl } from './reads/crawl.ts';
+import { crawlProjection, isTerminal } from './reads/crawl.ts';
 import { recordCrawlEvent } from './site-task.ts';
 import { persistTerminalCounters } from './terminal-counters.ts';
 
@@ -47,7 +47,7 @@ export async function listCrawls(
   const items = rows.slice(0, input.limit);
   const last = items.at(-1);
   return {
-    items: items.map((crawl) => projectCrawl(crawl)),
+    items: await Promise.all(items.map((crawl) => crawlProjection(db, crawl))),
     next_cursor:
       rows.length > input.limit && last
         ? encodeKeysetCursor('crawls', filters, [last.created_at.toISOString(), last.id])

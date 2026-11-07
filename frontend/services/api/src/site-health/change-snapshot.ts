@@ -21,7 +21,7 @@ import {
   type ExpectedChange,
   type RuleState,
 } from './change-compare.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { enqueueTerminalAnalyticsRefresh } from './terminal-handoff.ts';
 import { isPageRerun, pageRerunSql } from './page-rerun.ts';
 import { expectedRuleOutcome } from '../opportunities/verification-decisions.ts';

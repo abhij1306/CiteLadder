@@ -9,11 +9,35 @@ import {
   type FetchOptions,
   type WebsiteFetcher,
 } from '../src/safe-fetch.ts';
+import { extractPageFacts } from '../src/site-health/analysis/facts.ts';
 import { canonicalIdentity } from '../src/site-health/url-identity.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
 type SiteWorkerOptions = NonNullable<ConstructorParameters<typeof SiteHealthWorker>[1]>;
+
+const isPlain = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+/** `value` laid over `base`, object by object; anything else replaces. */
+function overlay(base: unknown, value: unknown): unknown {
+  if (!isPlain(base) || !isPlain(value)) return value;
+  const keys = new Set([...Object.keys(base), ...Object.keys(value)]);
+  return Object.fromEntries(
+    [...keys].map((key) => [key, key in value ? overlay(base[key], value[key]) : base[key]]),
+  );
+}
+/**
+ * Page facts as the extractor persists them for an empty HTML page, with
+ * `override` laid over them: every field a reader expects is present.
+ */
+export function storedFacts(override: Record<string, unknown> = {}): Record<string, unknown> {
+  const empty = extractPageFacts(Buffer.from('<html><body></body></html>'), {
+    finalUrl: 'https://example.test/',
+    contentType: 'text/html',
+    statusCode: 200,
+  });
+  return overlay(empty, override) as Record<string, unknown>;
+}
 export type SiteSeed = Tenant & { crawlId: string; profileId: string; root: string };
 export class SiteFixtures extends VisibilityFixtures {
   readonly siteDb: Database;

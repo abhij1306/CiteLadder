@@ -27,6 +27,10 @@ export function siteWorkerSettings(env: Record<string, string | undefined> = pro
     conflictMax: number('db_conflict_max_requeues'),
     conflictBase: number('db_conflict_base_delay_seconds'),
     conflictJitter: number('db_conflict_jitter_seconds'),
+    /** An analysis waiting on its discover or setup prerequisite rechecks on this backoff. */
+    dependencyRetry: number('analysis_dependency_retry_seconds'),
+    dependencyRetryMax: number('analysis_dependency_retry_max_seconds'),
+    dependencyMaxWait: number('analysis_dependency_max_wait_seconds'),
     reclaimBatch: number('lease_reclaim_batch_size'),
     drainBudget: number('drain_budget_seconds'),
     lifecycle: {

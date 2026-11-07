@@ -28,8 +28,8 @@ import {
   readFacts,
   sellsCatalog,
   shelfLinks,
-  type CatalogFacts,
 } from './projection-facts.ts';
+import type { CatalogFacts } from '../site-health/analysis/catalog-facts.ts';
 
 type Source = Awaited<ReturnType<typeof sourceOf>>;
 

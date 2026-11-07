@@ -1,7 +1,7 @@
 /** Which crawls are one-page reruns rather than site crawls. */
 import { sql } from 'kysely';
 import { record } from '../db/json.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 /** A one-page rerun re-reads a page; it is no site comparison. Reruns carry `page_rerun`. */
 export function isPageRerun(crawl: Pick<Crawl, 'configuration'>) {

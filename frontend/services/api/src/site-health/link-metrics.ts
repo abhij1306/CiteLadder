@@ -5,7 +5,7 @@ import { record } from '../db/json.ts';
 import { policy } from '../config.ts';
 import { enqueueCrawlTasks } from './admission-writes.ts';
 import { buildLinkMetrics, type LinkPage } from './link-graph.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 async function linkPages(db: Database, crawl: Crawl): Promise<LinkPage[]> {
   const observations = await db

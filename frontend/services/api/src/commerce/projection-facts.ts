@@ -1,49 +1,13 @@
 import { getDomain } from 'tldts';
-import { z } from 'zod';
 import { policy } from '../config.ts';
 import { jsonObject, record, strings } from '../db/json.ts';
 import { onlyOf } from '../lists.ts';
+import { catalogFactsSchema, type CatalogFacts } from '../site-health/analysis/catalog-facts.ts';
 import { canonicalUrl } from '../site-health/url-identity.ts';
 
-const texts = z.array(z.string()).default([]);
-const link = z.looseObject({
-  url: z.string().default(''),
-  title: z.string().default(''),
-  region: z.string().default(''),
-});
-const product = z.looseObject({
-  name: texts,
-  description: texts,
-  brand: texts,
-  price: z.array(z.union([z.string(), z.number()])).default([]),
-  price_currency: texts,
-  sku: texts,
-  gtin: texts,
-  mpn: texts,
-  category: texts,
-  availability: texts,
-  variants: z.array(z.unknown()).default([]),
-});
-const commerce = z.looseObject({
-  breadcrumbs: texts,
-  breadcrumb_links: z.array(link).default([]),
-  product_cards: z.array(link).default([]),
-  visible_price: z.string().default(''),
-  visible_price_context: z.string().default(''),
-  category_role: z.string().default('unknown'),
-});
-const factsSchema = z.looseObject({
-  title: z.string().default(''),
-  meta_description: z.string().default(''),
-  canonical_url: z.string().default(''),
-  structured_data: z.looseObject({ product: product.prefault({}) }).prefault({}),
-  commerce: commerce.prefault({}),
-  headings: z.looseObject({ h1_texts: texts }).prefault({}),
-  links: z.looseObject({ anchors: z.array(link).default([]) }).prefault({}),
-});
-export type CatalogFacts = z.output<typeof factsSchema>;
+/** Site Health's persisted page facts, read through the producer's schema. */
 export const readFacts = (value: unknown): CatalogFacts =>
-  factsSchema.parse(jsonObject(value, 'site_fetch_artifacts.normalized_facts'));
+  catalogFactsSchema.parse(jsonObject(value, 'site_fetch_artifacts.normalized_facts'));
 const indexNames = new Set<string>(policy.commerce.breadcrumb_index_names);
 /** Category identity: `commerce_categories.normalized_name`. */
 export const categoryKey = (name: string) => name.trim().toLowerCase().replaceAll(/\s+/gu, ' ');
@@ -122,7 +86,7 @@ function adjacentAmount(text: string, start: number, direction: 1 | -1): string 
 }
 
 function visiblePrice(facts: CatalogFacts) {
-  const { visible_price: text, visible_price_context: context } = facts.commerce;
+  const { visible_price: text, visible_price_context: context = '' } = facts.commerce;
   const surrounding = `${text} ${context}`.toLowerCase();
   if (policy.commerce.ambiguous_price_tokens.some((token) => surrounding.includes(token)))
     return { price: null, currency: '' };

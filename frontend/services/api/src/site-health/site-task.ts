@@ -1,50 +1,75 @@
 /**
- * Plumbing shared by the network-bound Site Health executors (discover, site
- * setup, analyze): the context they run in, lease-owned task updates,
- * cooperative cancellation, crawl start and retry backoff. Each executor
- * acquires outside any transaction and settles its task with its evidence.
+ * The one Site Health task runner. Every task kind runs under it: the lease
+ * heartbeat, a mandatory workspace access check, one lock (crawl, then the
+ * queue-fenced task), one settle with one retry backoff, and one handling of a
+ * thrown failure. Network-bound kinds (discover, site setup, analyze) acquire
+ * outside any transaction and commit through `commitTask`; the rest run inside
+ * one transaction the runner opens.
  */
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { isActiveCrawl } from '@citeladder/contracts/site-health';
-import { sql } from 'kysely';
+import type { Selectable } from 'kysely';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
-import type { SiteTask } from '../queue/task-queue.ts';
+import type { SiteCrawls } from '../generated/db-schema.ts';
+import { getLogger } from '../logging.ts';
+import { TaskCancelledError } from '../queue/executor.ts';
+import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
+import type { SiteTask, TaskQueue } from '../queue/task-queue.ts';
 import type { SitePageFetcher } from './page-fetch.ts';
-import type { Crawl } from './task-fence.ts';
+import type { SiteWorkerSettings } from './runtime.ts';
+
+export type Crawl = Selectable<SiteCrawls>;
+export type HeldTask = { crawl: Crawl; task: SiteTask };
 
 export const statuses = policy.task_queue.statuses;
-/** Thrown inside a transaction to roll back work staged before the lease was re-checked. */
+/** Thrown inside a commit to roll back work staged before the lease was re-checked. */
 export class Abandoned extends Error {}
+/** Thrown by a commit's lock when the crawl stopped; the task is cancelled after the rollback. */
+class CrawlStopped extends Abandoned {}
 const COUNT_BEARING = new Set<string>(policy.site_health.reads.event_count_bearing_keys);
+const logger = getLogger('app.workers.site_health_worker');
 
-export function siteTaskSettings(env: Record<string, string | undefined> = process.env) {
-  const spec = policy.site_health.settings;
-  const number = (name: keyof typeof spec) => Number(resolveSettingSpec(spec[name], env));
-  return {
-    dependencyRetry: number('analysis_dependency_retry_seconds'),
-    dependencyRetryMax: number('analysis_dependency_retry_max_seconds'),
-    dependencyMaxWait: number('analysis_dependency_max_wait_seconds'),
-    retryBase: number('retry_base_delay_seconds'),
-    retryMax: number('retry_max_delay_seconds'),
-    retryJitter: number('retry_jitter_seconds'),
-  };
-}
-export type SiteTaskSettings = ReturnType<typeof siteTaskSettings>;
-export type SiteTaskContext = {
+/** What every task kind runs with; the runner adds the lease signal. */
+export type SiteTaskRunner = {
   db: Database;
   owner: string;
+  queue: TaskQueue<'site_crawl_tasks'>;
   fetcher: SitePageFetcher;
-  settings: SiteTaskSettings;
+  settings: SiteWorkerSettings;
   signal?: AbortSignal;
 };
+export type SiteTaskContext = SiteTaskRunner & { signal: AbortSignal };
 
-/** Exponential retry backoff with deterministic jitter (the attempt number, not a random draw). */
-const retryDelay = (settings: SiteTaskSettings, attempt: number) =>
-  Math.min(settings.retryBase * 2 ** attempt, settings.retryMax) +
-  ((attempt * 0.37) % 1) * settings.retryJitter;
+/** How a kind runs: it acquires and commits itself, or it runs inside the runner's transaction. */
+export type SiteTaskWork =
+  | { kind: 'acquire'; run: (ctx: SiteTaskContext, task: SiteTask) => Promise<void> }
+  | { kind: 'transaction'; run: (trx: Database, crawl: Crawl, task: SiteTask) => Promise<unknown> };
+
+/** How a held task settles. */
+export type SiteTaskOutcome =
+  | { kind: 'succeeded'; artifactId: string | null }
+  | {
+      kind: 'failed';
+      retryable: boolean;
+      errorCode: string;
+      errorDetail: string;
+      retryAfterSeconds?: number;
+    }
+  /** Lock contention: retried on the conflict budget without spending an attempt. */
+  | { kind: 'conflict'; errorDetail: string }
+  /** Waiting on a prerequisite: requeued without spending an attempt. */
+  | { kind: 'deferred'; delaySeconds: number };
+
+/** Uniform jitter in [0, seconds), millisecond resolution. */
+const jitter = (seconds: number) => randomInt(Math.max(1, Math.round(seconds * 1000))) / 1000;
+
+/** The delay after failed attempt `attempt` (1-based): exponential from the base, capped, jittered. */
+const retryDelay = (settings: SiteWorkerSettings, attempt: number) =>
+  Math.min(settings.retryMax, settings.retryBase * 2 ** Math.max(0, attempt - 1)) +
+  jitter(settings.retryJitter);
 
 /** Server retry advice: delta seconds or an HTTP date; invalid advice uses normal backoff. */
 export function retryAfterSeconds(header: string | undefined, now = Date.now()) {
@@ -121,7 +146,7 @@ export async function startCrawl(db: Database, crawl: Crawl) {
  * when its crawl is no longer active) when it must not run.
  */
 export async function prepareTask(ctx: SiteTaskContext, claimed: SiteTask) {
-  ctx.signal?.throwIfAborted();
+  ctx.signal.throwIfAborted();
   const scope = await loadScope(ctx.db, claimed);
   if (!scope || !isActiveCrawl(scope.crawl.status)) {
     await cancelTask(ctx.db, claimed, ctx.owner);
@@ -132,12 +157,8 @@ export async function prepareTask(ctx: SiteTaskContext, claimed: SiteTask) {
   return scope;
 }
 
-export async function markRunning(db: Database, task: SiteTask, owner: string) {
-  const result = await owned(db, task, owner)
-    .set({ status: statuses.running, heartbeat_at: new Date(), updated_at: new Date() })
-    .where('status', '=', statuses.leased)
-    .executeTakeFirst();
-  return result.numUpdatedRows > 0n;
+export function markRunning(ctx: SiteTaskContext, task: SiteTask) {
+  return ctx.queue.markRunning(task.id, ctx.owner);
 }
 
 /** Classify a returned HTTP status: a 4xx is terminal except 429; every 5xx is retryable. */
@@ -151,59 +172,149 @@ export function httpError(status: number): [string, boolean] | null {
 export const finalFailure = (task: SiteTask, retryable: boolean) =>
   !retryable || task.attempt_count + 1 >= task.max_attempts;
 
-/** Settle the leased task: success with its artifact, a backed-off retry, or a terminal failure. */
-export async function settleTask(
+/**
+ * Site Health's one write lock, in its canonical order: the crawl (of a live
+ * project), then the claimed task through the queue's fence (still this
+ * owner's, unexpired, at the claimed attempt, not terminal). Null when either
+ * no longer holds. `keyShare` lets the heartbeat extend the lease while a long
+ * transaction holds the task.
+ */
+export async function lockSiteTask(
   trx: Database,
+  runner: Pick<SiteTaskRunner, 'queue' | 'owner'>,
+  claimed: SiteTask,
+  strength: 'update' | 'keyShare' = 'update',
+): Promise<HeldTask | null> {
+  const crawl = await trx
+    .selectFrom('site_crawls as crawl')
+    .innerJoin('projects as project', (join) =>
+      join
+        .onRef('project.id', '=', 'crawl.project_id')
+        .onRef('project.workspace_id', '=', 'crawl.workspace_id'),
+    )
+    .selectAll('crawl')
+    .where('crawl.id', '=', claimed.crawl_id)
+    .where('crawl.workspace_id', '=', claimed.workspace_id)
+    .forNoKeyUpdate('crawl')
+    .executeTakeFirst();
+  const task = await runner.queue.fence(trx, claimed, runner.owner, undefined, strength);
+  return crawl && task?.crawl_id === claimed.crawl_id ? { crawl, task } : null;
+}
+
+/**
+ * One transaction that ends holding the task's lock. `body` takes any locks
+ * that precede the crawl in Site Health order, then calls `lock()`, which
+ * throws `Abandoned` when the lease was lost. A stopped crawl rolls the body
+ * back and cancels the task. Resolves false when nothing committed.
+ */
+export async function commitTask(
   ctx: SiteTaskContext,
+  claimed: SiteTask,
+  body: (trx: Database, lock: () => Promise<HeldTask>) => Promise<void>,
+): Promise<boolean> {
+  ctx.signal.throwIfAborted();
+  const committed = await ctx.db
+    .transaction()
+    .execute(async (trx) => {
+      await body(trx, async () => {
+        const held = await lockSiteTask(trx, ctx, claimed);
+        if (!held) throw new Abandoned();
+        if (!isActiveCrawl(held.crawl.status)) throw new CrawlStopped();
+        return held;
+      });
+      return true;
+    })
+    .catch((error: unknown) => {
+      if (error instanceof CrawlStopped) return null;
+      if (error instanceof Abandoned) return false;
+      throw error;
+    });
+  if (committed === null) await cancelTask(ctx.db, claimed, ctx.owner);
+  return committed === true;
+}
+
+/** Settle a task this worker holds: success, a retry (backed off or on the conflict budget), a deferral, or a terminal failure. */
+export async function settleTask(
+  db: Database,
+  ctx: Pick<SiteTaskRunner, 'owner' | 'settings'>,
   task: SiteTask,
-  outcome:
-    | { succeeded: true; artifactId: string | null }
-    | {
-        succeeded: false;
-        retryable: boolean;
-        errorCode: string;
-        errorDetail: string;
-        retryAfterSeconds?: number;
-      },
+  outcome: SiteTaskOutcome,
 ) {
   const now = new Date();
-  const attempt = task.attempt_count + 1;
+  const at = (seconds: number) => new Date(now.getTime() + seconds * 1000);
   const released = {
     lease_owner: null,
     lease_expires_at: null,
     heartbeat_at: null,
     updated_at: now,
   };
-  if (outcome.succeeded) {
-    await owned(trx, task, ctx.owner)
-      .set({
-        ...released,
-        status: statuses.succeeded,
-        attempt_count: attempt,
-        result_artifact_id: outcome.artifactId,
-        completed_at: now,
-        error_code: '',
-        error_detail: '',
-      })
-      .execute();
-    return;
+  const update = owned(db, task, ctx.owner);
+  switch (outcome.kind) {
+    case 'succeeded':
+      await update
+        .set({
+          ...released,
+          status: statuses.succeeded,
+          attempt_count: task.attempt_count + 1,
+          result_artifact_id: outcome.artifactId,
+          completed_at: now,
+          error_code: '',
+          error_detail: '',
+        })
+        .execute();
+      return;
+    case 'deferred':
+      await update
+        .set({
+          ...released,
+          status: statuses.queued,
+          available_at: at(outcome.delaySeconds),
+          error_code: '',
+          error_detail: '',
+        })
+        .execute();
+      return;
+    case 'conflict': {
+      const conflicts = task.conflict_count + 1;
+      const retry = conflicts <= ctx.settings.conflictMax;
+      await update
+        .set({
+          ...released,
+          status: retry ? statuses.retry_wait : statuses.failed,
+          conflict_count: conflicts,
+          available_at: at(ctx.settings.conflictBase + jitter(ctx.settings.conflictJitter)),
+          completed_at: retry ? null : now,
+          error_code: 'db_conflict',
+          error_detail: outcome.errorDetail.slice(0, 2000),
+        })
+        .execute();
+      return;
+    }
+    case 'failed': {
+      const attempt = task.attempt_count + 1;
+      const retry = !finalFailure(task, outcome.retryable);
+      const delay =
+        outcome.retryAfterSeconds === undefined
+          ? retryDelay(ctx.settings, attempt)
+          : Math.min(outcome.retryAfterSeconds, ctx.settings.retryMax);
+      await update
+        .set({
+          ...released,
+          status: retry ? statuses.retry_wait : statuses.failed,
+          attempt_count: attempt,
+          available_at: at(retry ? delay : 0),
+          completed_at: retry ? null : now,
+          error_code: outcome.errorCode.slice(0, 32),
+          error_detail: outcome.errorDetail.slice(0, 2000),
+        })
+        .execute();
+      return;
+    }
+    default: {
+      const exhaustive: never = outcome;
+      throw new Error(`Unknown Site Health outcome ${JSON.stringify(exhaustive)}`);
+    }
   }
-  const retry = !finalFailure(task, outcome.retryable);
-  const delay =
-    outcome.retryAfterSeconds === undefined
-      ? retryDelay(ctx.settings, attempt)
-      : Math.min(outcome.retryAfterSeconds, ctx.settings.retryMax);
-  await owned(trx, task, ctx.owner)
-    .set({
-      ...released,
-      status: retry ? statuses.retry_wait : statuses.failed,
-      attempt_count: attempt,
-      available_at: new Date(now.getTime() + (retry ? delay * 1000 : 0)),
-      completed_at: retry ? null : now,
-      error_code: outcome.errorCode.slice(0, 32),
-      error_detail: outcome.errorDetail.slice(0, 2000),
-    })
-    .execute();
 }
 
 /** Append a crawl event, dropping count-bearing keys unless the crawl discloses counts. */
@@ -232,29 +343,76 @@ export async function recordCrawlEvent(
     .execute();
 }
 
+const failureDetail = (error: unknown) =>
+  error instanceof Error ? error.message.slice(0, 2000) : 'Site Health task failed';
+function isConflict(error: unknown) {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
+  return typeof code === 'string' && ['40001', '40P01', '55P03'].includes(code);
+}
+
+/** A transaction kind: the task held for the body, then settled under the settling lock. */
+async function runInTransaction(
+  ctx: SiteTaskContext,
+  claimed: SiteTask,
+  run: Extract<SiteTaskWork, { kind: 'transaction' }>['run'],
+) {
+  if (!(await markRunning(ctx, claimed))) return;
+  await ctx.db.transaction().execute(async (trx) => {
+    ctx.signal.throwIfAborted();
+    const held = await lockSiteTask(trx, ctx, claimed, 'keyShare');
+    if (!held) throw new TaskCancelledError('Site Health task lost its lease or scope');
+    await run(trx, held.crawl, held.task);
+    ctx.signal.throwIfAborted();
+    if (!(await lockSiteTask(trx, ctx, claimed)))
+      throw new TaskCancelledError('Site Health task lost its lease or scope');
+    await settleTask(trx, ctx, held.task, { kind: 'succeeded', artifactId: null });
+  });
+}
+
 /**
- * Lock crawl then task in Site Health order and confirm this worker still
- * runs the task on an active crawl; null when either no longer holds.
+ * Settle a thrown failure exactly as a returned one: a retryable attempt on the
+ * same backoff, or contention on the conflict budget. When a sibling still
+ * holds the crawl lock, only the task row is released, so the settle cannot
+ * contend again; past the conflict bound recovery settles it at lease expiry.
  */
-export async function lockRunningTask(trx: Database, claimed: SiteTask, owner: string) {
-  const crawl = await trx
-    .selectFrom('site_crawls')
-    .selectAll()
-    .where('id', '=', claimed.crawl_id)
-    .where('workspace_id', '=', claimed.workspace_id)
-    .forNoKeyUpdate()
-    .executeTakeFirst();
-  const task = await trx
-    .selectFrom('site_crawl_tasks')
-    .selectAll()
-    .where('id', '=', claimed.id)
-    .where('workspace_id', '=', claimed.workspace_id)
-    .where('lease_owner', '=', owner)
-    .where('status', '=', statuses.running)
-    // An expired lease is the sweeper's to reclaim; late writes stay fenced.
-    .where('lease_expires_at', '>', sql<Date>`clock_timestamp()`)
-    .forUpdate()
-    .executeTakeFirst();
-  if (!crawl || !task) return null;
-  return { crawl, task };
+async function settleThrown(ctx: SiteTaskContext, claimed: SiteTask, error: unknown) {
+  const detail = failureDetail(error);
+  const outcome: SiteTaskOutcome = isConflict(error)
+    ? { kind: 'conflict', errorDetail: detail }
+    : { kind: 'failed', retryable: true, errorCode: 'task_failed', errorDetail: detail };
+  try {
+    await ctx.db.transaction().execute(async (trx) => {
+      const held = await lockSiteTask(trx, ctx, claimed);
+      if (held) await settleTask(trx, ctx, held.task, outcome);
+    });
+  } catch (error_) {
+    if (!isConflict(error_)) throw error_;
+    const task = (await loadScope(ctx.db, claimed))?.task;
+    if (task?.lease_owner === ctx.owner && task.conflict_count < ctx.settings.conflictMax)
+      await settleTask(ctx.db, ctx, task, { kind: 'conflict', errorDetail: detail });
+  }
+}
+
+/**
+ * Run one claimed task to settlement under its heartbeat. A throw that is not
+ * a lost lease or a cancellation settles through the same settle as a
+ * returned failure.
+ */
+export async function runSiteTask(runner: SiteTaskRunner, claimed: SiteTask, work: SiteTaskWork) {
+  const heartbeat = maintainLease(
+    () => runner.queue.heartbeat(claimed.id, runner.owner, claimed.workspace_id),
+    runner.settings.heartbeat * 1000,
+    (error) => logger.exception('heartbeat failed', error, { task_id: claimed.id }),
+  );
+  const ctx: SiteTaskContext = { ...runner, signal: leaseSignal(heartbeat.signal, runner.signal) };
+  try {
+    if (work.kind === 'acquire') await work.run(ctx, claimed);
+    else await runInTransaction(ctx, claimed, work.run);
+  } catch (error) {
+    if (heartbeat.signal.aborted || error instanceof TaskCancelledError) return;
+    logger.exception('site health task failed', error, { task_id: claimed.id });
+    await settleThrown(ctx, claimed, error);
+  } finally {
+    await heartbeat.stop();
+  }
 }

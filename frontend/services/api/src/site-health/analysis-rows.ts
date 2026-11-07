@@ -16,7 +16,7 @@ import type { analyzePage } from './analysis/analyze-page.ts';
 import { createsIssue, type RuleEvaluation } from './analysis/rules.ts';
 import type { Facts } from './analysis/read-facts.ts';
 import { refreshIssueCurrency } from './issue-currency.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { refreshTerminalCounters } from './terminal-counters.ts';
 import { canonicalIdentity } from './url-identity.ts';
 

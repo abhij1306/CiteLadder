@@ -18,7 +18,7 @@ import { WorkspaceScope } from '../../db/workspace-scope.ts';
 import { notFound } from '../../errors.ts';
 import { parseUuid } from '../../http/uuid.ts';
 import { firstOf } from '../../lists.ts';
-import type { Crawl } from '../task-fence.ts';
+import type { Crawl } from '../site-task.ts';
 import { failedAs } from '../task-outcome.ts';
 
 const reads = policy.site_health.reads;
@@ -26,7 +26,6 @@ const NOT_MEASURED = 'not_measured';
 
 export type { Crawl };
 type Counters = z.input<typeof crawlCountersSchema>;
-type ScoreSummary = ReturnType<typeof scoreSummary>;
 export type FailureSummary = {
   code: string;
   message: string;
@@ -151,7 +150,8 @@ export function scoreSummary(crawl: Crawl) {
     selected_count: int(summary.selected_count),
     analyzed_count: int(summary.analyzed_count),
     issue_count: int(summary.issue_count),
-    scoring_version: text(summary.scoring_version, crawl.scoring_version || reads.scoring_version),
+    // The version the crawl was pinned to, never the current configuration.
+    scoring_version: text(summary.scoring_version, crawl.scoring_version),
     classified_page_count: int(summary.classified_page_count),
     other_page_count: int(summary.other_page_count),
     classification_error_page_count: int(summary.classification_error_page_count),
@@ -164,33 +164,6 @@ export function scoreSummary(crawl: Crawl) {
     scored_page_kind_set: strings(summary.scored_page_kind_set),
     scored_page_count_by_kind: record(summary.scored_page_count_by_kind),
     by_page_kind: Object.fromEntries(byKind),
-  };
-}
-
-/** Counters derived from the crawl row alone (list and detail reads). */
-function rowCounters(crawl: Crawl, summary: ScoreSummary): Counters {
-  const terminal = crawl.completed_at !== null;
-  return {
-    discovered: countDisclosure(crawl) ? crawl.admitted_url_count : null,
-    selected: summary?.selected_count ?? 0,
-    queued: 0,
-    running: 0,
-    analyzed: crawl.analyzed_url_count,
-    errors: crawl.failed_url_count,
-    blocked: 0,
-    failure_breakdown: { robots_denied: 0, http_4xx: 0, http_5xx: 0, timeout: 0 },
-    activity: {
-      state: terminal ? 'terminal' : 'working',
-      reason: terminal ? 'terminal' : 'active_work',
-      queue_depth: 0,
-      next_available_at: null,
-    },
-    by_page_kind: Object.fromEntries(
-      Object.entries(summary?.by_page_kind ?? {}).map(([kind, bucket]) => [
-        kind,
-        bucket.analyzed_count,
-      ]),
-    ),
   };
 }
 
@@ -219,9 +192,20 @@ function publicSiteFacts(facts: Record<string, unknown>) {
   };
 }
 
+/** The crawl contract with its chosen counters. */
+export async function crawlProjection(
+  db: Database,
+  crawl: Crawl,
+  options: { failureSummary?: FailureSummary | null } = {},
+) {
+  return projectCrawl(crawl, await crawlCounters(db, crawl), options);
+}
+
+/** The crawl contract; `counters` come from `crawlCounters`, the one chooser. */
 export function projectCrawl(
   crawl: Crawl,
-  options: { failureSummary?: FailureSummary | null; counters?: Counters } = {},
+  counters: Counters,
+  options: { failureSummary?: FailureSummary | null } = {},
 ) {
   const disclose = countDisclosure(crawl);
   const summary = scoreSummary(crawl);
@@ -244,7 +228,7 @@ export function projectCrawl(
     failed_count: crawl.failed_url_count,
     discovery_requested_count: crawl.discovery_requested_count,
     analysis_requested_count: crawl.analysis_requested_count,
-    counters: options.counters ?? rowCounters(crawl, summary),
+    counters,
     discovered_count: disclose ? inventoryTotal : null,
     total_url_count: disclose && crawl.inventory_complete ? inventoryTotal : null,
     has_more_site_urls: disclose ? !crawl.inventory_complete : null,
@@ -372,23 +356,19 @@ async function selectedCount(db: Database, crawl: Crawl) {
 }
 
 /**
- * The dashboard counters. An active crawl counts its tasks live; a terminal
- * one reads the counters its terminalization persisted
- * (`site-health/terminal-counters.ts`), and without them the row's own
- * persisted counts, never a scan of its tasks.
+ * The one counter chooser every crawl read uses, with the live selection. An
+ * active crawl counts its tasks live; a terminal one reads the counters its
+ * terminalization persisted (`site-health/terminal-counters.ts`). A terminal
+ * crawl without persisted counters is counted from its tasks rather than
+ * reported as zeros it never observed.
  */
-export async function dashboardCounters(db: Database, crawl: Crawl): Promise<Counters> {
-  if (!isTerminal(crawl)) return crawlCounters(db, crawl);
-  const selected = await selectedCount(db, crawl);
-  if (crawl.terminal_counters === null)
-    return { ...rowCounters(crawl, scoreSummary(crawl)), selected };
-  return { ...terminalCountersSchema.parse(crawl.terminal_counters), selected };
-}
-
-/** Live task counters, with the live selection. */
 export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counters> {
+  const persisted =
+    isTerminal(crawl) && crawl.terminal_counters !== null
+      ? terminalCountersSchema.parse(crawl.terminal_counters)
+      : null;
   const [counters, selected] = await Promise.all([
-    taskCounters(db, crawl),
+    persisted ?? taskCounters(db, crawl),
     selectedCount(db, crawl),
   ]);
   return { ...counters, selected };

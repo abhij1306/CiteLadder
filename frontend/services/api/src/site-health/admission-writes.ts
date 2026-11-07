@@ -11,7 +11,7 @@ import { sql } from 'kysely';
 import { policy, resolveSettingSpec } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { Candidate } from './frontier.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 /** What admission already finds for a batch, keyed by URL hash or site URL id. */
 export type AdmissionState = {

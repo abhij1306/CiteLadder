@@ -15,7 +15,7 @@ import {
 import { readinessDiagnostic, webDiagnostic } from './snapshot-diagnostics.ts';
 import { snapshotEligibility } from './snapshot-eligibility.ts';
 import { snapshotIssues } from './snapshot-issues.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 const reads = policy.site_health.reads;
 const versions = reads.measurement_versions;

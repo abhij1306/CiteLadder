@@ -710,6 +710,38 @@ describe('crawl-control HTTP contracts', () => {
     expect((await counters(outsider)).status).toBe(404);
   });
 
+  it('lists a crawl with the same counters its dashboard reads, live or persisted', async () => {
+    const seed = await fixtures.crawl('running');
+    await fixtures.page(seed, '/a', {});
+    await fixtures.page(seed, '/b', {});
+    const listed = async () => {
+      const response = await request(seed, `/site-crawls?project_id=${seed.projectId}`);
+      const items = record(await response.json()).items as unknown[];
+      return record(record(items.find((item) => record(item).id === seed.crawlId)).counters);
+    };
+    expect(await listed()).toMatchObject({ analyzed: 2, by_page_kind: { product: 2 } });
+    // A terminal crawl with no persisted counters is counted, never reported as zero.
+    await db
+      .updateTable('site_crawls')
+      .set({ status: 'completed', completed_at: new Date() })
+      .where('id', '=', seed.crawlId)
+      .execute();
+    expect(await listed()).toMatchObject({ analyzed: 2, by_page_kind: { product: 2 } });
+    // Once persisted, the stored counters win over later task rows.
+    await db
+      .updateTable('site_crawls')
+      .set({
+        terminal_counters: JSON.stringify({
+          ...(await listed()),
+          analyzed: 5,
+        }),
+      })
+      .where('id', '=', seed.crawlId)
+      .execute();
+    await fixtures.page(seed, '/late', {});
+    expect(await listed()).toMatchObject({ analyzed: 5 });
+  });
+
   it('retries an actual PostgreSQL crawl lock timeout before cancelling', async () => {
     const seed = await fixtures.crawl('running');
     const impatient = testDatabase({

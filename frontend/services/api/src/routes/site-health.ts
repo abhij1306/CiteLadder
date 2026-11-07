@@ -37,7 +37,7 @@ import {
   dashboardCrawl,
   isTerminal,
   loadCrawl,
-  projectCrawl,
+  crawlProjection,
   rootFailure,
 } from '../site-health/reads/crawl.ts';
 import { dashboard } from '../site-health/reads/dashboard.ts';
@@ -226,7 +226,9 @@ export const siteHealthRoutes = [
     async handle({ c, db }, { path }) {
       const crawl = await loadCrawl(db, c.get('workspace').workspaceId, path.crawl_id);
       const root = await rootFailure(db, crawl);
-      return siteCrawlSchema.parse(projectCrawl(crawl, { failureSummary: root.summary }));
+      return siteCrawlSchema.parse(
+        await crawlProjection(db, crawl, { failureSummary: root.summary }),
+      );
     },
   }),
   defineGetRoute({

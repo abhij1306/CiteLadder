@@ -4,7 +4,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { failedAs } from './task-outcome.ts';
 
 export type CoverageSignals = {

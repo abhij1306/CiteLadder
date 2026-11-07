@@ -4,7 +4,7 @@ import { siteHealthDashboardSchema } from '@citeladder/contracts/site-health';
 import type { Database } from '../../db/database.ts';
 import { WorkspaceScope } from '../../db/workspace-scope.ts';
 import {
-  dashboardCounters,
+  crawlCounters,
   dashboardCrawl,
   projectCrawl,
   rootFailure,
@@ -62,7 +62,7 @@ export async function dashboard(
       .where('project_id', '=', projectId)
       .where('active', '=', true)
       .executeTakeFirst(),
-    crawl ? Promise.all([rootFailure(db, crawl), dashboardCounters(db, crawl)]) : null,
+    crawl ? Promise.all([rootFailure(db, crawl), crawlCounters(db, crawl)]) : null,
     crawl
       ? workspace
           .selectFrom(db, 'site_health_snapshots')
@@ -72,10 +72,11 @@ export async function dashboard(
       : undefined,
   ]);
   const summary = crawl ? scoreSummary(crawl) : null;
-  const [root, counters] = details ?? [{ summary: null, errors: [] }, undefined];
+  const [root, counters] = details ?? [{ summary: null, errors: [] }, null];
   return siteHealthDashboardSchema.parse({
     project_id: projectId,
-    crawl: crawl ? projectCrawl(crawl, { failureSummary: root.summary, counters }) : null,
+    crawl:
+      crawl && counters ? projectCrawl(crawl, counters, { failureSummary: root.summary }) : null,
     score_summary: summary,
     snapshot_id: snapshot?.id ?? null,
     phase: resolvePhase(crawl, summary, projectMonitored !== undefined),

@@ -27,7 +27,7 @@ import {
 } from './planner-policy.ts';
 import { inventoryCrawlIds } from './reads/crawl.ts';
 import { recordCrawlEvent } from './site-task.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { classifyUrlAdmission, type Scope } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
 

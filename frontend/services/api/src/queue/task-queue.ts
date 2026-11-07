@@ -273,12 +273,16 @@ async function advanceTurns(
     .execute();
 }
 
+/** FOR UPDATE to settle; FOR KEY SHARE to hold a row the heartbeat still extends. */
+export type FenceStrength = 'update' | 'keyShare';
 type FencedClaim = { id: string; workspace_id: string; attempt_count: number };
 
 /**
  * The fenced lock a terminal write takes inside its transaction: the claimed
  * row, still leased to `owner` at the claimed attempt and not terminal (and
  * in one of `inStatus` when given), or undefined when the lease was lost.
+ * `keyShare` holds the row through a long transaction while the heartbeat's
+ * non-key UPDATE still extends the lease; a settling write takes FOR UPDATE.
  */
 export async function fenceLease<T extends LaneTable>(
   trx: Database,
@@ -286,6 +290,7 @@ export async function fenceLease<T extends LaneTable>(
   claimed: FencedClaim,
   owner: string,
   inStatus?: readonly string[],
+  strength: FenceStrength = 'update',
 ): Promise<TaskFor<T> | undefined> {
   const table: LaneTable = lane.table;
   const row = await queueDatabase(trx)
@@ -297,7 +302,7 @@ export async function fenceLease<T extends LaneTable>(
     .where('lease_owner', '=', owner)
     .where('lease_expires_at', '>', sql<Date>`clock_timestamp()`)
     .$if(inStatus !== undefined, (query) => query.where('status', 'in', inStatus!))
-    .forUpdate()
+    .$call((query) => (strength === 'keyShare' ? query.forKeyShare() : query.forUpdate()))
     .executeTakeFirst();
   return row === undefined || terminal.includes(row.status)
     ? undefined
@@ -452,8 +457,9 @@ export class TaskQueue<T extends LaneTable = 'analytics_tasks'> {
     claimed: FencedClaim,
     owner: string,
     inStatus?: readonly string[],
+    strength: FenceStrength = 'update',
   ): Promise<TaskFor<T> | undefined> {
-    return fenceLease(trx, this.#lane, claimed, owner, inStatus);
+    return fenceLease(trx, this.#lane, claimed, owner, inStatus, strength);
   }
 
   /** Whether the row reached a terminal status or is gone (cooperative cancel). */

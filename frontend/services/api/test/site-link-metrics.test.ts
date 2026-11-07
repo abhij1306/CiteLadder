@@ -4,6 +4,7 @@ import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { SITE_HEALTH_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { record } from '../src/db/json.ts';
+import { pageDetail, pages } from '../src/site-health/reads/pages.ts';
 import { testDatabase } from './support.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
 
@@ -223,6 +224,38 @@ it('persists scoped current-page metrics and admits one architecture successor i
       .execute(),
   ).toHaveLength(0);
   expect(await worker.runOnce()).toBe(0);
+});
+it("reads a crawl's link metrics at the formula the crawl wrote, not the current one", async () => {
+  const seed = await fixtures.crawl();
+  await fixtures.page(seed, '/', { links: { anchors: [anchor('/product')] } }, { observed: true });
+  const product = await fixtures.page(seed, '/product', {}, { observed: true });
+  await db
+    .updateTable('site_page_analyses')
+    .set({ web_fundamentals_state: 'measured', aeo_measurement_state: 'measured' })
+    .where('crawl_id', '=', seed.crawlId)
+    .execute();
+  await fixtures.task(seed);
+  expect(await fixtures.worker(seed, { owner: 'pinned', settings }).runOnce()).toBe(1);
+  // A later release changes the formula; this crawl's rows stay what it measured.
+  await db
+    .updateTable('site_page_link_metrics')
+    .set({ formula_version: 'historical' })
+    .where('crawl_id', '=', seed.crawlId)
+    .execute();
+  const detail = await pageDetail(db, seed.workspaceId, seed.crawlId, product.id);
+  expect(detail.internal_links).toMatchObject({
+    inbound_count: 1,
+    depth_from_home: 1,
+    formula_version: 'historical',
+  });
+  const listed = await pages(db, seed.workspaceId, seed.crawlId, {}, 'url', {
+    limit: 10,
+    cursor: null,
+  });
+  expect(listed.items.map((row) => [row.normalized_url, row.inbound_count])).toEqual([
+    ['https://example.test/', 0],
+    ['https://example.test/product', 1],
+  ]);
 });
 it('parallel claims are disjoint and give each workspace a turn before another row', async () => {
   const first = await fixtures.crawl();
