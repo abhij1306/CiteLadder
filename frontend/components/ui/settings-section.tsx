@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 /**
  * SettingsSection — one card of settings: its title and one line of help,
- * then its rows (FormRows, or the controls that act at once), 16 apart.
+ * then its rows (fields, or the controls that act at once), 16 apart.
  *
  * The danger zone is its own section, last, with a `danger` Button and the
  * consequence in its description. Stack sections in `SettingsSections`.

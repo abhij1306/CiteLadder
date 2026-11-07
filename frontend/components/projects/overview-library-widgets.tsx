@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 
 import { overviewWidgetTitles, type OverviewWidgetKey } from '@citeladder/contracts/overview';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { QueryState } from '@/components/ui/query-state';
@@ -144,7 +144,7 @@ export function VisibilityTrendWidget({ project }: Readonly<{ project: Project }
             <TrendChart
               data={toChartPoints(points, 'brand_mention_rate')}
               label="Brand mention rate by run"
-              height={160}
+              height="sm"
               yMax={100}
               yFormat={(value) => `${Math.round(value)}%`}
               legend={false}

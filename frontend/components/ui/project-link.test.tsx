@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import { ProjectLink } from './scoped-link';
+import { ProjectLink } from './project-link';
 
 vi.mock('@/lib/project/project-context', () => ({
   useOptionalProjectContext: () => null,

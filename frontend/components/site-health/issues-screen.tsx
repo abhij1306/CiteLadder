@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 
 import { Button } from '@/components/ui/button';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';

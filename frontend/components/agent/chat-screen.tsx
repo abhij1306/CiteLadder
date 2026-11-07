@@ -12,7 +12,7 @@ import { OutputPane } from '@/components/agent/output-pane';
 import { useFollowLatest } from '@/components/agent/use-follow-latest';
 import { useChatDetail } from '@/components/agent/use-chat-turns';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { ComposerDock } from '@/components/ui/chat-dock';

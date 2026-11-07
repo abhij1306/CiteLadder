@@ -1,12 +1,13 @@
-import { lazy, Suspense, type ComponentType, type ReactNode } from 'react';
+import { lazy, Suspense } from 'react';
 import { redirect, type RouteObject } from 'react-router-dom';
 
 import { RouteLoadingScreen } from '@/components/layout/page-shell';
 import { ShellFallback } from '@/components/layout/shell-fallback';
 import { QueryState } from '@/components/ui/query-state';
+import { APP_ROUTES, MODE_HOMES, type AppRouteRecord } from '@/lib/navigation/app-routes';
+import { registerRouteChunk } from '@/lib/navigation/route-chunks';
 import { bootstrapPrivateRoutes } from '@/lib/project/bootstrap-loader';
 import { NotFoundScreen, RouteError, ScreenError } from './route-error';
-import { registerRouteChunk } from '@/lib/navigation/route-chunks';
 import { ApplicationRouteLayout, PrivateRouteLayout } from './private-routes';
 
 /**
@@ -16,155 +17,30 @@ import { ApplicationRouteLayout, PrivateRouteLayout } from './private-routes';
  * the route's own loading frame (identity band + loading box), not a bare
  * pane; the flow routes outside the shell (sign-in, setup) keep the box alone.
  */
-function productRoute(
-  path: string,
-  importRoute: () => Promise<{ default: ComponentType }>,
-  fallback: ReactNode = <QueryState kind="loading" />,
-): RouteObject {
-  let module: ReturnType<typeof importRoute> | undefined;
-  const load = () => (module ??= importRoute());
-  registerRouteChunk(path, load);
+function manifestRoute(route: AppRouteRecord): RouteObject {
+  let module: ReturnType<AppRouteRecord['screen']> | undefined;
+  const load = () => (module ??= route.screen());
+  registerRouteChunk(route.path, load);
   const Screen = lazy(load);
   return {
-    path,
+    path: route.path,
     loader: () => {
       // React.lazy surfaces any failure through RouteError when the leaf mounts.
       void load().catch(() => {});
       return null;
     },
     element: (
-      <Suspense fallback={fallback}>
+      <Suspense fallback={route.shell ? <RouteLoadingScreen /> : <QueryState kind="loading" />}>
         <Screen />
       </Suspense>
     ),
   };
 }
 
-/** A route drawn inside the application shell, whose wait is its page's loading frame. */
-function screenRoute(
-  path: string,
-  importRoute: () => Promise<{ default: ComponentType }>,
-): RouteObject {
-  return productRoute(path, importRoute, <RouteLoadingScreen />);
-}
-
-/** Screens rendered inside the application shell. */
-const screenRoutes: RouteObject[] = [
-  screenRoute('/projects', () =>
-    import('@/components/projects/projects-screen').then(({ ProjectsScreen }) => ({
-      default: ProjectsScreen,
-    })),
-  ),
-  screenRoute('/site', () =>
-    import('./product-routes-site-issues').then(({ WebsiteRoute }) => ({
-      default: WebsiteRoute,
-    })),
-  ),
-  screenRoute('/site/crawls/:crawlId/pages/:siteUrlId', () =>
-    import('./product-routes-site-issues').then(({ WebsitePageDetailRoute }) => ({
-      default: WebsitePageDetailRoute,
-    })),
-  ),
-  screenRoute('/issues', () =>
-    import('./product-routes-site-issues').then(({ IssuesRoute }) => ({
-      default: IssuesRoute,
-    })),
-  ),
-  // One download per screen: a shared module for unrelated screens made
-  // `/demand` fetch Performance and its chart library.
-  screenRoute('/demand', () =>
-    import('@/components/demand/demand-projection').then(({ DemandProjection }) => ({
-      default: DemandProjection,
-    })),
-  ),
-  screenRoute('/search-intelligence', () =>
-    import('@/components/search-intelligence/search-intelligence-page').then(
-      ({ SearchIntelligencePage }) => ({ default: SearchIntelligencePage }),
-    ),
-  ),
-  screenRoute('/performance', () =>
-    import('@/components/performance/performance-screen').then(({ PerformanceScreen }) => ({
-      default: PerformanceScreen,
-    })),
-  ),
-  screenRoute('/agent', () =>
-    import('./product-routes-agent').then(({ NewChatRouteElement }) => ({
-      default: NewChatRouteElement,
-    })),
-  ),
-  screenRoute('/agent/chats/:chatId', () =>
-    import('./product-routes-agent').then(({ ChatRouteElement }) => ({
-      default: ChatRouteElement,
-    })),
-  ),
-  // Actions are a table and a detail, not a conversation. Their own module
-  // keeps the chat screen's markdown renderer and the other Agent screens out
-  // of the Actions download.
-  screenRoute('/agent/actions', () =>
-    import('./product-routes-actions').then(({ ActionsRouteElement }) => ({
-      default: ActionsRouteElement,
-    })),
-  ),
-  screenRoute('/agent/actions/:actionId', () =>
-    import('./product-routes-actions').then(({ ActionDetailRouteElement }) => ({
-      default: ActionDetailRouteElement,
-    })),
-  ),
-  screenRoute('/agent/skills', () =>
-    import('./product-routes-agent').then(({ SkillsRouteElement }) => ({
-      default: SkillsRouteElement,
-    })),
-  ),
-  screenRoute('/agent/context', () =>
-    import('./product-routes-agent').then(({ ContextRouteElement }) => ({
-      default: ContextRouteElement,
-    })),
-  ),
-  screenRoute('/visibility', () =>
-    import('./product-routes-visibility-runs').then(({ VisibilityRouteElement }) => ({
-      default: VisibilityRouteElement,
-    })),
-  ),
-  screenRoute('/runs', () =>
-    import('./product-routes-visibility-runs').then(({ RunsRouteElement }) => ({
-      default: RunsRouteElement,
-    })),
-  ),
-  screenRoute('/runs/:runId', () =>
-    import('./product-routes-visibility-runs').then(({ RunDetailRouteElement }) => ({
-      default: RunDetailRouteElement,
-    })),
-  ),
-  screenRoute('/prompts', () =>
-    import('@/components/prompts/prompts-route-content').then(({ PromptsRouteContent }) => ({
-      default: PromptsRouteContent,
-    })),
-  ),
-  screenRoute('/prompts/:promptId', () =>
-    import('@/components/prompts/prompt-detail-screen').then(({ PromptDetailScreen }) => ({
-      default: PromptDetailScreen,
-    })),
-  ),
-  screenRoute('/products', () =>
-    import('@/components/products/products-route-content').then(({ ProductsRouteContent }) => ({
-      default: ProductsRouteContent,
-    })),
-  ),
-  screenRoute('/ai-traffic', () =>
-    import('@/components/ai-traffic/ai-traffic-route-content').then(
-      ({ AiTrafficRouteContent }) => ({ default: AiTrafficRouteContent }),
-    ),
-  ),
-  screenRoute('/settings', () =>
-    import('./product-routes-settings').then(({ SettingsRouteElement }) => ({
-      default: SettingsRouteElement,
-    })),
-  ),
-  { path: '*', element: <NotFoundScreen /> },
-];
+const routes: readonly AppRouteRecord[] = APP_ROUTES;
 
 export const appRoutes: RouteObject[] = [
-  { path: '/', loader: () => redirect('/projects') },
+  { path: '/', loader: () => redirect(MODE_HOMES.dashboard) },
   {
     element: <PrivateRouteLayout />,
     // Resolve the local user, workspace and project BEFORE the shell mounts, so
@@ -179,13 +55,7 @@ export const appRoutes: RouteObject[] = [
     hydrateFallbackElement: <ShellFallback />,
     ErrorBoundary: RouteError,
     children: [
-      productRoute('/onboarding', () =>
-        import('@/components/onboarding/onboarding-page-client').then(
-          ({ OnboardingPageClient }) => ({
-            default: OnboardingPageClient,
-          }),
-        ),
-      ),
+      ...routes.filter((route) => !route.shell).map(manifestRoute),
       {
         element: <ApplicationRouteLayout />,
         children: [
@@ -193,7 +63,10 @@ export const appRoutes: RouteObject[] = [
             // Pathless and element-less: a screen's render error replaces only
             // the screen, so the shell's navigation remains.
             ErrorBoundary: ScreenError,
-            children: screenRoutes,
+            children: [
+              ...routes.filter((route) => route.shell).map(manifestRoute),
+              { path: '*', element: <NotFoundScreen /> },
+            ],
           },
         ],
       },

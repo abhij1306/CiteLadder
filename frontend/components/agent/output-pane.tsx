@@ -10,7 +10,7 @@ import { EvidenceChips } from '@/components/agent/evidence-chips';
 import { OutputEditor, type OutputDraft } from '@/components/agent/output-editor';
 import { OutputHistory } from '@/components/agent/output-history';
 import { WebSources } from '@/components/agent/web-sources';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CopyButton } from '@/components/ui/copy-button';

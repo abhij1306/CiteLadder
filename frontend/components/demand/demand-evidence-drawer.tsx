@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { ArrowUpRight, ShieldCheck, Split } from 'lucide-react';
 
 import { SignalInsight } from '@/components/demand/demand-signal-insight';

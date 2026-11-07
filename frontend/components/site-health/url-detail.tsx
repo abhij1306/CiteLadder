@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, type MutableRefObject } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 
@@ -35,6 +35,13 @@ const HISTORY_LIMIT = 25;
 const RERUN_SEARCH_PARAM = 'rerun';
 
 /** Query and rerun controller for a crawl-bounded Site Health URL detail. */
+/** `/site/crawls/:crawlId/pages/:siteUrlId`: one crawl-bounded page detail. */
+export function PageDetailScreen() {
+  const { crawlId, siteUrlId } = useParams<{ crawlId: string; siteUrlId: string }>();
+  if (!crawlId || !siteUrlId) return null;
+  return <UrlDetail crawlId={crawlId} siteUrlId={siteUrlId} />;
+}
+
 export function UrlDetail({
   crawlId,
   siteUrlId,

@@ -7,6 +7,7 @@ import type { LucideIcon } from 'lucide-react';
 import { SidebarRowTooltip } from '@/components/ui/app-shell';
 import { MODE_TRACK, modeSegmentClasses } from '@/components/ui/tabs';
 import { ICONS } from '@/lib/icons';
+import { MODE_HOMES, navigationMode } from '@/lib/navigation/app-routes';
 import { scopedNavigationDestination } from '@/lib/navigation/project-destination';
 import {
   rememberModeRoute,
@@ -15,11 +16,9 @@ import {
 } from '@/lib/navigation/mode-memory';
 import { useProjectContext } from '@/lib/project/project-context';
 
-import { AGENT_HOME, navigationMode } from './nav-items';
-
-const MODES: readonly { mode: NavigationMode; label: string; home: string; icon: LucideIcon }[] = [
-  { mode: 'dashboard', label: 'Dashboard', home: '/projects', icon: ICONS.overview },
-  { mode: 'agent', label: 'Agent', home: AGENT_HOME, icon: ICONS.agent },
+const MODES: readonly { mode: NavigationMode; label: string; icon: LucideIcon }[] = [
+  { mode: 'dashboard', label: 'Dashboard', icon: ICONS.overview },
+  { mode: 'agent', label: 'Agent', icon: ICONS.agent },
 ];
 
 /**
@@ -42,9 +41,9 @@ export function ModeSwitch() {
 
   return (
     <nav aria-label="Mode" data-segmented-track="" className={MODE_TRACK}>
-      {MODES.map(({ mode, label, home, icon: Icon }) => {
+      {MODES.map(({ mode, label, icon: Icon }) => {
         const selected = mode === current;
-        const target = rememberedModeRoute(mode, activeProjectId) ?? home;
+        const target = rememberedModeRoute(mode, activeProjectId) ?? MODE_HOMES[mode];
         return (
           <SidebarRowTooltip key={mode} label={label}>
             <Link

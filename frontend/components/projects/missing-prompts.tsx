@@ -3,7 +3,7 @@
 import { ArrowRight } from 'lucide-react';
 import { useMemo } from 'react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Icon } from '@/components/ui/icon';

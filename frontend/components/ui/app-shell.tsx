@@ -1,9 +1,12 @@
-import type { ComponentPropsWithoutRef, ReactNode, Ref } from 'react';
+import { useId, type ComponentPropsWithoutRef, type ReactNode, type Ref } from 'react';
 import { ChevronsUpDown, Menu, type LucideIcon } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 import { IconButton } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/drawer';
+import { Spinner } from '@/components/ui/spinner';
 import { Tooltip } from '@/components/ui/tooltip';
+import { textRole } from '@/components/ui/typography';
 import { cn } from '@/lib/utils';
 
 /**
@@ -277,6 +280,76 @@ export function NavDrawer({
       </div>
     </Drawer>
   );
+}
+
+/**
+ * A list of records below the sidebar's destinations (Agent mode's chats):
+ * its label, then its controls and rows, 8 apart. The rail drops it: its rows
+ * are plain records, not destinations. The sidebar precedes the page's H1, so
+ * the label is not a heading.
+ */
+export function SidebarRecordSection({
+  label,
+  children,
+}: Readonly<{ label: string; children: ReactNode }>) {
+  const labelId = useId();
+  return (
+    <section aria-labelledby={labelId} className="labelled:flex hidden flex-col gap-2">
+      <p id={labelId} className="type-caption flex min-h-7 items-center px-3">
+        {label}
+      </p>
+      {children}
+    </section>
+  );
+}
+
+/** A sentence standing in for a record list's rows (none yet, none match, a failed read). */
+export function SidebarRecordNotice({ children }: Readonly<{ children: ReactNode }>) {
+  return <p className={textRole('caption', 'px-3')}>{children}</p>;
+}
+
+/** A record list's rows. */
+export function SidebarRecordRows({ children }: Readonly<{ children: ReactNode }>) {
+  return <ul className="flex flex-col gap-0.5">{children}</ul>;
+}
+
+/** One record row: its title over a caption line, current when it is the page. */
+export function SidebarRecordRow({
+  href,
+  active,
+  title,
+  meta,
+}: Readonly<{ href: string; active: boolean; title: string; meta: ReactNode }>) {
+  return (
+    <li>
+      <Link
+        to={href}
+        aria-current={active ? 'page' : undefined}
+        className={cn(
+          sidebarNavRowClasses(active, true),
+          'h-auto flex-col items-stretch gap-0.5 py-2',
+        )}
+      >
+        <span className="truncate">{title}</span>
+        {meta}
+      </Link>
+    </li>
+  );
+}
+
+/** A record row's caption line, or a working marker while the record runs. */
+export function SidebarRecordMeta({
+  working,
+  children,
+}: Readonly<{ working?: boolean; children?: ReactNode }>) {
+  if (working)
+    return (
+      <span className={textRole('caption', 'flex items-center gap-2')}>
+        <Spinner className="text-ink-muted" />
+        Working…
+      </span>
+    );
+  return children ? <span className={textRole('caption', 'truncate')}>{children}</span> : null;
 }
 
 /** Names a row in the rail; above it the row's own label does, so it never opens. */

@@ -1,6 +1,6 @@
 import { ArrowLeft } from 'lucide-react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { cn } from '@/lib/utils';
 
 import { buttonClasses } from './button';

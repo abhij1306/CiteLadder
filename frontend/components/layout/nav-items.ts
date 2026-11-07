@@ -1,121 +1,49 @@
 import type { LucideIcon } from 'lucide-react';
 
 import { ICONS } from '@/lib/icons';
-import type { NavigationMode } from '@/lib/navigation/mode-memory';
+import { navDestinations, type NavDestination } from '@/lib/navigation/app-routes';
 
-export type NavItem = {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-  /** A live count shown beside the label. */
-  badge?: 'open-actions';
-  /** Project is the default; workspace destinations never inherit a project. */
-  scope?: 'project' | 'workspace';
-};
+/** A manifest nav entry with its glyph resolved, ready to render as a link. */
+export type NavItem = Omit<NavDestination, 'icon'> & { icon: LucideIcon };
 
-export type NavGroup = {
+type NavGroup = {
   /** Null renders the group without a heading. */
   title: 'Analyze' | 'Act' | 'Track' | null;
   items: readonly NavItem[];
 };
 
-export const AGENT_HOME = '/agent';
-
-const ACTIONS = {
-  label: 'Actions',
-  href: '/agent/actions',
-  icon: ICONS.opportunities,
-  badge: 'open-actions',
-} as const satisfies NavItem;
-
-/** Dashboard navigation in the order of the product loop. */
-export const NAV_GROUPS = [
-  {
-    title: null,
-    items: [{ label: 'Overview', href: '/projects', icon: ICONS.overview }],
-  },
-  {
-    title: 'Analyze',
-    items: [
-      { label: 'Website', href: '/site', icon: ICONS.site },
-      { label: 'Search Demand', href: '/demand', icon: ICONS.demand },
-      { label: 'Issues', href: '/issues', icon: ICONS.issues },
-      {
-        label: 'Keyword Research',
-        href: '/search-intelligence',
-        icon: ICONS.searchIntelligence,
-      },
-      { label: 'Performance', href: '/performance', icon: ICONS.performance },
-      { label: 'Commerce Suite', href: '/products', icon: ICONS.products },
-    ],
-  },
-  {
-    title: 'Act',
-    items: [ACTIONS],
-  },
-  {
-    title: 'Track',
-    items: [
-      { label: 'Prompts', href: '/prompts', icon: ICONS.prompts },
-      { label: 'AI Visibility', href: '/visibility', icon: ICONS.visibility },
-      { label: 'Runs', href: '/runs', icon: ICONS.runs },
-      { label: 'AI Traffic', href: '/ai-traffic', icon: ICONS.aiTraffic },
-    ],
-  },
-] as const satisfies readonly NavGroup[];
-
-/** Setup destinations shown below the Dashboard groups. */
-export const SETUP_NAV_ITEMS = [
-  {
-    label: 'Integrations',
-    href: '/settings?tab=integrations',
-    icon: ICONS.setup,
-    scope: 'workspace',
-  },
-] as const satisfies readonly NavItem[];
-
-/** Agent mode's fixed destinations, below New chat and above the chat list. */
-export const AGENT_NAV_ITEMS = [
-  ACTIONS,
-  { label: 'Skills', href: '/agent/skills', icon: ICONS.skills },
-  { label: 'Context', href: '/agent/context', icon: ICONS.context },
-] as const satisfies readonly NavItem[];
-
-export function navigationMode(pathname: string): NavigationMode {
-  return pathname === AGENT_HOME || pathname.startsWith(`${AGENT_HOME}/`) ? 'agent' : 'dashboard';
+function navItems(placement: Parameters<typeof navDestinations>[0]): readonly NavItem[] {
+  return navDestinations(placement).map((entry) => ({ ...entry, icon: ICONS[entry.icon] }));
 }
 
-const SUPPORT_NAV_ITEMS = [
-  ...SETUP_NAV_ITEMS,
-  {
-    label: 'Providers',
-    href: '/settings?tab=providers',
-    icon: ICONS.settings,
-    scope: 'workspace',
-  },
-  { label: 'Settings', href: '/settings', icon: ICONS.settings, scope: 'workspace' },
-] as const satisfies readonly NavItem[];
+/** Dashboard navigation in the order of the product loop. */
+export const NAV_GROUPS: readonly NavGroup[] = [
+  { title: null, items: navItems('dashboard:overview') },
+  { title: 'Analyze', items: navItems('dashboard:analyze') },
+  { title: 'Act', items: navItems('dashboard:act') },
+  { title: 'Track', items: navItems('dashboard:track') },
+];
+
+/** Setup destinations shown below the Dashboard groups. */
+export const SETUP_NAV_ITEMS = navItems('dashboard:setup');
+
+/** Agent mode's fixed destinations, below New chat and above the chat list. */
+export const AGENT_NAV_ITEMS = navItems('agent');
+
+/** The user menu's workspace and account links. */
+export const USER_MENU_ITEMS = navItems('user-menu');
+
+const PALETTE_GROUPS = ['Overview', 'Analyze', 'Track', 'Agent', 'Settings'] as const;
 
 /** Every shell destination, grouped for the command palette. */
 export function resolveCommandGroups(): readonly {
   title: string;
   items: readonly NavItem[];
 }[] {
-  return [
-    // Actions is listed once, under Agent.
-    ...NAV_GROUPS.filter((group) => group.title !== 'Act').map((group) => ({
-      title: group.title ?? 'Overview',
-      items: group.items,
-    })),
-    {
-      title: 'Agent',
-      items: [{ label: 'New chat', href: AGENT_HOME, icon: ICONS.newChat }, ...AGENT_NAV_ITEMS],
-    },
-    {
-      title: 'Settings',
-      items: SUPPORT_NAV_ITEMS,
-    },
-  ];
+  return PALETTE_GROUPS.map((title) => ({
+    title,
+    items: navItems(`palette:${title}`),
+  }));
 }
 
 /**

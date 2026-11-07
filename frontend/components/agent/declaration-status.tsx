@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { VerificationObservations } from '@/components/opportunities/verification-observations';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

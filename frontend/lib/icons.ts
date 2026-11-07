@@ -16,6 +16,7 @@ import {
   MessageSquareText,
   OctagonAlert,
   Package,
+  Plug,
   Radar,
   SquarePen,
   Settings,
@@ -85,6 +86,7 @@ export const ICONS = {
   context: BookOpen,
   setup: Wrench,
   settings: Settings,
+  connect: Plug,
   // Shared UI concepts.
   market: MapPin,
   spinner: LoaderCircle,
@@ -92,3 +94,6 @@ export const ICONS = {
   danger: AlertCircle,
   success: Check,
 } as const;
+
+/** A product concept with a canonical glyph. */
+export type IconName = keyof typeof ICONS;

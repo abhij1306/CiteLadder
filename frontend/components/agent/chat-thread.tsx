@@ -6,7 +6,7 @@ import { Composer } from '@/components/agent/composer';
 import { Conversation } from '@/components/agent/conversation';
 import { SkillPicker } from '@/components/agent/skill-picker';
 import { useCancelRun, useFollowUp, type FollowUp } from '@/components/agent/use-chat-turns';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { latestOutput } from '@/lib/agent/documents';

@@ -16,7 +16,7 @@ import { commerceApi } from '@/lib/api/commerce';
 import { queryKeys } from '@/lib/api/query-keys';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import { LaunchDialog } from '@/components/runs/launch-dialog';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { useRunEvents } from '@/lib/runs/use-run-events';
 import { sameTarget } from '@/lib/products/use-commerce-target';
 

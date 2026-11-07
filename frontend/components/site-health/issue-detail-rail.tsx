@@ -1,6 +1,6 @@
 'use client';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 
 import { Badge } from '@/components/ui/badge';
 import { IssueEvidence } from '@/components/site-health/issue-evidence';

@@ -3,18 +3,19 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { AgentPanelHost } from '@/components/agent/agent-panel-host';
+import { AgentPanelHost, AgentPanelTrigger } from '@/components/agent/agent-panel-host';
 import { AppShellFrame, NavDrawer, SidebarFrame } from '@/components/ui/app-shell';
 import { CommandPalette, CommandPaletteTrigger } from '@/components/ui/command-palette';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AgentPanelProvider } from '@/lib/agent/panel-context';
+import { resolveTitle } from '@/lib/navigation/app-routes';
 import { useProjectContext } from '@/lib/project/project-context';
 
 import { ModeSwitch } from './mode-switch';
-import { NavDrawerContext } from './nav-drawer-context';
+import { resolveCommandGroups } from './nav-items';
 import { PageTitleContext } from './page-title-context';
-import { resolveTitle } from './page-titles';
 import { ProjectSwitcher } from './project-switcher';
+import { ShellContext } from './shell-context';
 import { SidebarNav } from './sidebar-nav';
 import { UserMenuTrigger } from './user-menu';
 import { useRouteAnnouncement } from './use-route-announcement';
@@ -40,14 +41,17 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
   // (a destination, the project switcher, the mode switch) closes it.
   const [drawerLocation, setDrawerLocation] = useState<string | null>(null);
   const drawerOpen = drawerLocation === location.key;
-  const navDrawer = useMemo(
-    () => ({ open: drawerOpen, onOpen: () => setDrawerLocation(location.key) }),
+  const shell = useMemo(
+    () => ({
+      navDrawer: { open: drawerOpen, onOpen: () => setDrawerLocation(location.key) },
+      agentTrigger: <AgentPanelTrigger />,
+    }),
     [drawerOpen, location.key],
   );
 
   return (
     <PageTitleContext.Provider value={setTitleOverride}>
-      <NavDrawerContext.Provider value={navDrawer}>
+      <ShellContext.Provider value={shell}>
         <AgentPanelProvider>
           <TooltipProvider>
             <AppShellFrame sidebar={<AppSidebar />}>{children}</AppShellFrame>
@@ -57,11 +61,11 @@ export function AppShell({ children }: Readonly<{ children: ReactNode }>) {
             >
               <AppSidebar />
             </NavDrawer>
-            <CommandPalette />
+            <CommandPalette destinations={resolveCommandGroups} />
             <AgentPanelHost />
           </TooltipProvider>
         </AgentPanelProvider>
-      </NavDrawerContext.Provider>
+      </ShellContext.Provider>
     </PageTitleContext.Provider>
   );
 }

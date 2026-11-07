@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { isRouteErrorResponse, useRouteError } from 'react-router-dom';
 
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { ShellFallback } from '@/components/layout/shell-fallback';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';

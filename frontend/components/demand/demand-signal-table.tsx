@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

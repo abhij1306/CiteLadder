@@ -5,7 +5,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { DeclarationStatus } from '@/components/agent/declaration-status';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { DateField } from '@/components/ui/date-field';

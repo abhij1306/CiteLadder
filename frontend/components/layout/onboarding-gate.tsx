@@ -6,8 +6,9 @@ import { useEffect, type ReactNode } from 'react';
 import { GateNoticeFrame } from '@/components/layout/gate-notice-frame';
 import { Button } from '@/components/ui/button';
 import { RouteLoadingScreen } from '@/components/layout/page-shell';
+import { isWorkspaceOnlyRoute } from '@/lib/navigation/app-routes';
 import { useCanonicalProjectUrl, workspaceDestination } from '@/lib/navigation/project-destination';
-import { isWorkspaceOnlyRoute, resolveGate, type NoticeKind } from '@/lib/project/bootstrap';
+import { resolveGate, type NoticeKind } from '@/lib/project/bootstrap';
 import { useProjectContext } from '@/lib/project/project-context';
 import type { FailureScope } from '@/lib/project/selection';
 

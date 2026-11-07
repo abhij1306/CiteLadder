@@ -15,6 +15,7 @@ import {
   beforeEach,
 } from 'vite-plus/test';
 
+import { resolveCommandGroups } from '@/components/layout/nav-items';
 import { runsQueries } from '@/lib/api/runs';
 import { mswServer } from '@/test/msw-server';
 
@@ -75,7 +76,7 @@ function Palette() {
   return (
     <>
       <CommandPaletteTrigger />
-      <CommandPalette />
+      <CommandPalette destinations={resolveCommandGroups} />
     </>
   );
 }
@@ -240,7 +241,7 @@ describe('CommandPalette', () => {
     renderPalette(
       <>
         <input data-testid="outside" />
-        <CommandPalette />
+        <CommandPalette destinations={resolveCommandGroups} />
       </>,
     );
     const outside = screen.getByTestId('outside');

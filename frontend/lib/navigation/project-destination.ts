@@ -5,6 +5,7 @@ import { useCallback, useEffect } from 'react';
 
 import { useOptionalProjectContext, useProjectContext } from '@/lib/project/project-context';
 import { isAppRoute } from '@/lib/navigation/app-route';
+import { projectSwitchPathname } from '@/lib/navigation/app-routes';
 
 const PROJECT_PARAM = 'project';
 const WORKSPACE_PARAM = 'workspace';
@@ -113,29 +114,6 @@ export function useCanonicalProjectUrl(enabled: boolean) {
       },
     );
   }, [activeProjectId, enabled, pathname, router, searchParams]);
-}
-
-/**
- * Routes whose path carries a resource owned by ONE project.
- *
- * Keeping such a path across a project switch asks the new project for another
- * project's crawl or run: the page resolves to "unavailable" and the reader
- * has to navigate out by hand to see anything. Each entry names the section
- * root to land on instead — the same treatment the workspace switcher already
- * gives, for the same reason.
- */
-const PROJECT_OWNED_PATH_ROOTS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/^\/site\/crawls\//, '/site'],
-  [/^\/runs\/[^/]+/, '/runs'],
-  [/^\/prompts\/[^/]+/, '/prompts'],
-  [/^\/agent\/chats\/[^/]+/, '/agent'],
-  [/^\/agent\/actions\/[^/]+/, '/agent/actions'],
-];
-
-/** The path a project switch should land on, given where the reader is now. */
-function projectSwitchPathname(pathname: string): string {
-  const owned = PROJECT_OWNED_PATH_ROOTS.find(([pattern]) => pattern.test(pathname));
-  return owned ? owned[1] : pathname;
 }
 
 /**

@@ -9,12 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from './card';
 import { Citation } from './citation';
 import { EmptyState } from './empty-state';
 import { EngineMark } from './engine-mark';
-import { Field, FormRow } from './field';
+import { Field } from './field';
 import { Input } from './input';
 import { Kbd } from './kbd';
 import { BusyBar, ProgressBar } from './progress-bar';
 import { Rungs } from './rungs';
-import { ScoreRing, scoreFill } from './score-ring';
+import { ScoreRing } from './score-ring';
 import { Skeleton } from './skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './table';
 import { TrendChart } from './trend-chart';
@@ -88,18 +88,6 @@ describe('Input + Field', () => {
     const ref = createRef<HTMLInputElement>();
     render(<Input ref={ref} aria-label="Search" startContent={<span>S</span>} />);
     expect(ref.current).toBe(screen.getByRole('textbox', { name: 'Search' }));
-  });
-});
-
-describe('FormRow', () => {
-  it('names its control by the row label', () => {
-    render(
-      <FormRow label="Workspace name" description="Shown on invoices" htmlFor="workspace-name">
-        <Input id="workspace-name" />
-      </FormRow>,
-    );
-    expect(screen.getByRole('textbox', { name: 'Workspace name' })).toBeInTheDocument();
-    expect(screen.getByText('Shown on invoices')).toBeInTheDocument();
   });
 });
 
@@ -214,16 +202,6 @@ describe('EngineMark', () => {
     const mark = container.querySelector('svg');
     expect(mark).toHaveAttribute('data-engine-mark', 'claude');
     expect(mark).toHaveAttribute('aria-hidden', 'true');
-  });
-});
-
-describe('scoreFill', () => {
-  it('keeps one ink, or bands a compared score at 80 and 50', () => {
-    expect(scoreFill('ink', 20)).toBe('ink');
-    expect(scoreFill('auto', 80)).toBe('positive');
-    expect(scoreFill('auto', 79)).toBe('warning');
-    expect(scoreFill('auto', 50)).toBe('warning');
-    expect(scoreFill('auto', 49)).toBe('negative');
   });
 });
 

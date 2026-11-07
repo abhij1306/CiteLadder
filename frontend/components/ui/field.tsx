@@ -99,36 +99,3 @@ function FieldFoot({
     </div>
   );
 }
-
-/**
- * FormRow — one row of a settings card: the label and a one-sentence
- * description in a 2-part column, the control (or a stack of controls) in a
- * 3-part column that stops at `container-narrow`, `space-8` apart with
- * `space-6` above and below; consecutive rows are divided by a `line` rule.
- * Below the desktop breakpoint the columns stack. Pass the control without its own label and
- * its id as `htmlFor`.
- */
-export function FormRow({
-  label,
-  description,
-  htmlFor,
-  children,
-}: Readonly<{
-  label: string;
-  description?: ReactNode;
-  htmlFor?: string;
-  children: ReactNode;
-}>) {
-  const LabelTag = htmlFor ? 'label' : 'p';
-  return (
-    <div className="border-line desktop:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] desktop:gap-[var(--page-section-gap)] grid grid-cols-1 gap-3 py-[var(--card-padding)] first:pt-0 last:pb-0 [&+&]:border-t">
-      <div>
-        <LabelTag {...(htmlFor ? { htmlFor } : {})} className="text-label text-ink block">
-          {label}
-        </LabelTag>
-        {description ? <p className="text-body-sm text-ink-secondary mt-1">{description}</p> : null}
-      </div>
-      <div className="max-w-narrow flex min-w-0 flex-col gap-3">{children}</div>
-    </div>
-  );
-}

@@ -28,11 +28,12 @@ import type { Project, Workspace } from '@citeladder/contracts';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import { projectDestination, workspaceDestination } from '@/lib/navigation/project-destination';
 import { prefetchProjectShell, prefetchRoute } from '@/lib/navigation/route-prefetch';
+import { isWorkspaceOnlyRoute } from '@/lib/navigation/app-routes';
 import {
   readStoredActiveProjectId,
   readStoredActiveWorkspaceId,
 } from '@/lib/project/active-project-storage';
-import { isWorkspaceOnlyRoute, resolveGate } from '@/lib/project/bootstrap';
+import { resolveGate } from '@/lib/project/bootstrap';
 import {
   pickActiveProject,
   resolveProjectId,

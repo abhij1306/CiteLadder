@@ -1,7 +1,7 @@
 import { ArrowRight, Download, TrendingUp } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { IdentityRow } from '@/components/ui/workspace';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 
 import { Badge } from '@/components/ui/badge';

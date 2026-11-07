@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
-import { Card, CardEyebrow, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 /**
@@ -124,7 +123,7 @@ export function useChartWidth<T extends HTMLElement>(fallback = 640) {
 }
 
 /** The Other texture: `data-other` stripes on the `chart-grid` ground. */
-export function ChartHatchPattern({ id }: Readonly<{ id: string }>) {
+function ChartHatchPattern({ id }: Readonly<{ id: string }>) {
   return (
     <pattern
       id={id}
@@ -295,6 +294,15 @@ const chartFrameClasses = {
 export type ChartHeight = keyof typeof chartFrameClasses;
 
 /**
+ * The roles in pixels, for a chart that draws its plot to a measured box. The
+ * same values as the `--chart-height-*` tokens in `apps/app/src/globals.css`.
+ */
+export const CHART_HEIGHT_PX = { sm: 160, md: 240, lg: 320 } as const satisfies Record<
+  ChartHeight,
+  number
+>;
+
+/**
  * The box a chart and every state standing in for it share: the chart's
  * height role as a floor, so loading, a read error or an empty selection
  * occupy the plot's footprint and nothing under the card moves.
@@ -304,48 +312,4 @@ export function ChartFrame({
   children,
 }: Readonly<{ height: ChartHeight; children: ReactNode }>) {
   return <div className={cn('grid min-w-0 *:min-w-0', chartFrameClasses[height])}>{children}</div>;
-}
-
-/**
- * ChartCard — a Card framing one chart: the title (and an optional eyebrow)
- * with a range or engine control on the right, optional stats above, the
- * chart, and a footnote naming the source and period. 24 between summary,
- * chart and footnote. One chart per card.
- */
-export function ChartCard({
-  title,
-  eyebrow,
-  controls,
-  summary,
-  footnote,
-  children,
-  ...props
-}: Readonly<{
-  title: ReactNode;
-  eyebrow?: ReactNode;
-  /** A range or engine control (Tabs); it keeps its width as the selection changes. */
-  controls?: ReactNode;
-  /** Stats or a Delta above the chart. */
-  summary?: ReactNode;
-  /** The source and period, e.g. "Source: 412 answers, 27 Oct – 2 Nov 2026". */
-  footnote?: ReactNode;
-  children: ReactNode;
-  'aria-labelledby'?: string;
-  'data-testid'?: string;
-}>) {
-  return (
-    <Card {...props}>
-      <CardHeader actions={controls}>
-        <div className="grid min-w-0 gap-1">
-          {eyebrow ? <CardEyebrow>{eyebrow}</CardEyebrow> : null}
-          <CardTitle>{title}</CardTitle>
-        </div>
-      </CardHeader>
-      <div className="text-ink grid min-w-0 gap-y-6">
-        {summary ? <div className="flex flex-wrap gap-x-8 gap-y-4">{summary}</div> : null}
-        <div className="min-w-0">{children}</div>
-        {footnote ? <p className="text-caption text-ink-muted">{footnote}</p> : null}
-      </div>
-    </Card>
-  );
 }

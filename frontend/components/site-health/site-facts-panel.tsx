@@ -10,7 +10,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
 import { ClampText, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { formatCount, pluralCount } from '@/lib/format';

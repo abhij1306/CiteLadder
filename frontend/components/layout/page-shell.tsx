@@ -3,7 +3,6 @@
 import { useContext, useLayoutEffect, type ReactNode, type RefObject } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { AgentPanelTrigger } from '@/components/agent/agent-panel-host';
 import { AppGrid } from '@/components/ui/app-grid';
 import { NavMenuButton } from '@/components/ui/app-shell';
 import { BackButton } from '@/components/ui/back-button';
@@ -11,10 +10,10 @@ import { FilterBar, type FilterBarProps } from '@/components/ui/filter-bar';
 import { PageHeader } from '@/components/ui/page-header';
 import { QueryState } from '@/components/ui/query-state';
 import { TabRow, type TabRowProps } from '@/components/ui/tabs';
+import { resolveTitle } from '@/lib/navigation/app-routes';
 
-import { NavDrawerContext } from './nav-drawer-context';
 import { PageTitleContext } from './page-title-context';
-import { resolveTitle } from './page-titles';
+import { ShellContext } from './shell-context';
 
 /**
  * A detail route's way back to the collection it was opened from, drawn as
@@ -46,7 +45,7 @@ export type PageBack = Readonly<{
  * A page passes data, organisms and slots and adds no margins between bands.
  */
 type ScreenBands<T extends string> = Readonly<{
-  /** Overrides the route-derived title (rare — prefer `page-titles.ts`). */
+  /** Overrides the route-derived title (rare — prefer the route manifest's title). */
   title?: string;
   /** Route-owned controls; their state and outcomes stay with the route owner. */
   actions?: ReactNode;
@@ -147,7 +146,8 @@ function PageShell<T extends string>({
   ...layout
 }: ScreenBands<T> & FillLayout & Readonly<{ back?: PageBack }>) {
   const resolved = useRouteTitle(title);
-  const navDrawer = useContext(NavDrawerContext);
+  const shell = useContext(ShellContext);
+  const navDrawer = shell?.navDrawer;
   const content = <PageContent {...layout}>{children}</PageContent>;
   const tabBand = tabs ? (
     <div data-page-band="control">
@@ -178,7 +178,7 @@ function PageShell<T extends string>({
         actions={
           <>
             {actions}
-            <AgentPanelTrigger />
+            {shell?.agentTrigger}
           </>
         }
       />

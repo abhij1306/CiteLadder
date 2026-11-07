@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

@@ -13,7 +13,7 @@ import {
 import { projectDestination } from '@/lib/navigation/project-destination';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { DisplayTime } from '@/components/ui/display-time';

@@ -3,7 +3,7 @@
 import { Info, Inbox, RefreshCw, SearchX } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { QueryState } from '@/components/ui/query-state';

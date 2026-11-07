@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable } from '@/components/ui/data-table';

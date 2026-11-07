@@ -1,26 +1,32 @@
 'use client';
 
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { useEffect, useId, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
-import { SidebarNavGroup, sidebarNavRowClasses } from '@/components/ui/app-shell';
-import { Button } from '@/components/ui/button';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
+import { NavLink } from '@/components/layout/nav-link';
+import { AGENT_NAV_ITEMS } from '@/components/layout/nav-items';
+import { StationLinks } from '@/components/layout/sidebar-nav';
+import {
+  SidebarNavGroup,
+  SidebarRecordMeta,
+  SidebarRecordNotice,
+  SidebarRecordRow,
+  SidebarRecordRows,
+  SidebarRecordSection,
+} from '@/components/ui/app-shell';
+import { Button } from '@/components/ui/button';
 import { SearchField } from '@/components/ui/search-field';
-import { Spinner } from '@/components/ui/spinner';
-import { textRole } from '@/components/ui/typography';
 import { agentQueries, type AgentChatSummary } from '@/lib/api/agent';
 import { AGENT_CHAT_LIST_POLL_MS, AGENT_CHAT_SEARCH_DEBOUNCE_MS } from '@/lib/config/agent';
 import { ICONS } from '@/lib/icons';
+import { MODE_HOMES } from '@/lib/navigation/app-routes';
 import { scopedNavigationDestination } from '@/lib/navigation/project-destination';
 import { useRouteIntent } from '@/lib/navigation/use-route-intent';
 import { useProjectContext } from '@/lib/project/project-context';
-import { cn } from '@/lib/utils';
 
-import { NavLink } from './nav-link';
-import { AGENT_HOME, AGENT_NAV_ITEMS } from './nav-items';
-import { StationLinks } from './sidebar-nav';
+const AGENT_HOME = MODE_HOMES.agent;
 
 /**
  * Agent mode: New chat, Actions (with the open count), Skills, Context, then
@@ -38,7 +44,12 @@ export function AgentNav() {
       <SidebarNavGroup>
         <li>
           <NavLink
-            item={{ label: 'New chat', href: scoped(AGENT_HOME), icon: ICONS.newChat }}
+            item={{
+              label: 'New chat',
+              href: scoped(AGENT_HOME),
+              icon: ICONS.newChat,
+              scope: 'project',
+            }}
             active={pathname === AGENT_HOME}
             onIntent={onIntent}
           />
@@ -78,7 +89,6 @@ function ChatHistory({
   scoped: (href: string) => string;
 }>) {
   const [search, setSearch] = useState('');
-  const headingId = useId();
   const needle = useDebounced(search.trim());
   const chats = useInfiniteQuery({
     ...agentQueries.chats(workspaceId, projectId, { q: needle }),
@@ -91,12 +101,7 @@ function ChatHistory({
   const rows = chats.data?.pages.flatMap((page) => page.items) ?? [];
 
   return (
-    // Recent chats are plain rows, which the rail drops. The sidebar precedes
-    // the page's H1, so its group titles are labels, not headings.
-    <section aria-labelledby={headingId} className="labelled:flex hidden flex-col gap-2">
-      <p id={headingId} className="type-caption flex min-h-7 items-center px-3">
-        Chats
-      </p>
+    <SidebarRecordSection label="Chats">
       <SearchField
         value={search}
         onValueChange={setSearch}
@@ -120,7 +125,7 @@ function ChatHistory({
           Show more chats
         </Button>
       ) : null}
-    </section>
+    </SidebarRecordSection>
   );
 }
 
@@ -143,52 +148,37 @@ function ChatRows({
 }>) {
   if (state === 'loading') return null;
   if (state === 'error')
-    return <p className={textRole('caption', 'px-3')}>Chats could not be loaded.</p>;
+    return <SidebarRecordNotice>Chats could not be loaded.</SidebarRecordNotice>;
   if (rows.length === 0)
     return (
-      <p className={textRole('caption', 'px-3')}>
+      <SidebarRecordNotice>
         {state === 'filtered' ? 'No chats match this search.' : 'No chats yet.'}
-      </p>
+      </SidebarRecordNotice>
     );
   return (
-    <ul className="flex flex-col gap-0.5">
+    <SidebarRecordRows>
       {rows.map((chat) => {
         const href = `/agent/chats/${chat.id}`;
-        const active = pathname === href;
         return (
-          <li key={chat.id}>
-            <Link
-              to={scoped(href)}
-              aria-current={active ? 'page' : undefined}
-              className={cn(
-                sidebarNavRowClasses(active, true),
-                'h-auto flex-col items-stretch gap-0.5 py-2',
-              )}
-            >
-              <span className="truncate">{chat.title}</span>
-              <ChatMeta chat={chat} />
-            </Link>
-          </li>
+          <SidebarRecordRow
+            key={chat.id}
+            href={scoped(href)}
+            active={pathname === href}
+            title={chat.title}
+            meta={<ChatMeta chat={chat} />}
+          />
         );
       })}
-    </ul>
+    </SidebarRecordRows>
   );
 }
 
 function ChatMeta({ chat }: Readonly<{ chat: AgentChatSummary }>) {
   const { kindLabel } = useAgentCatalog();
   const marker = chat.output_kind ? kindLabel(chat.output_kind) : null;
-  if (chat.running)
-    return (
-      <span className={textRole('caption', 'flex items-center gap-2')}>
-        <Spinner className="text-ink-muted" />
-        Working…
-      </span>
-    );
-  if (!chat.target_label && !marker) return null;
   return (
-    <span className={textRole('caption', 'truncate')}>
+    <SidebarRecordMeta working={chat.running}>
       {[chat.target_label, marker].filter(Boolean).join(' · ')}
-    </span>
+    </SidebarRecordMeta>
   );
 }

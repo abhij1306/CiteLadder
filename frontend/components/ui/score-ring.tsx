@@ -9,7 +9,7 @@ export type ScoreTone = 'ink' | 'auto';
 
 type ScoreFill = 'ink' | 'positive' | 'warning' | 'negative';
 
-export function scoreFill(tone: ScoreTone, value: number): ScoreFill {
+function scoreFill(tone: ScoreTone, value: number): ScoreFill {
   if (tone === 'ink') return 'ink';
   if (value >= 80) return 'positive';
   return value >= 50 ? 'warning' : 'negative';
@@ -37,7 +37,7 @@ const RING = {
  * beside a score card's number. A `chart-grid` track; the arc is `ink`, or
  * banded with `tone="auto"` where several scores are compared and in score
  * cards. Pair the 96px ring with the failing count and the crawl time beside
- * it, never alone; shares are a `DonutChart`. It has no other size and shows
+ * it, never alone; shares are a `StackedBar`. It has no other size and shows
  * no percent sign.
  */
 export function ScoreRing({

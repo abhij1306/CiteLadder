@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 
 import { readFromIntent, warmQuery } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
+import { findAppRoute, type AppRoutePath } from '@/lib/navigation/app-routes';
 import { preloadRouteChunk } from '@/lib/navigation/route-chunks';
 
 export type ProjectScope = { projectId: string; workspaceId: string };
@@ -22,7 +23,7 @@ type RoutePrefetcher = (client: QueryClient, scope: ProjectScope) => Promise<voi
  * The extra microtask before the request is free: nothing awaits a prefetch,
  * and the chunk is already warm by the second hover.
  */
-const ROUTE_PREFETCHERS: Readonly<Record<string, RoutePrefetcher>> = {
+const ROUTE_PREFETCHERS: Readonly<Partial<Record<AppRoutePath, RoutePrefetcher>>> = {
   '/projects': prefetchOverview,
   '/site': prefetchSiteHealth,
   '/issues': prefetchIssues,
@@ -267,7 +268,10 @@ export function prefetchRoute(
 ): Promise<void> {
   const pathname = new URL(href, 'https://citeladder.local').pathname;
   preloadRouteChunk(pathname);
-  const prefetcher = project ? ROUTE_PREFETCHERS[pathname] : undefined;
+  const route = findAppRoute(pathname);
+  // Only a destination's own path warms its read; a record under it has its own.
+  const prefetcher =
+    project && route?.path === pathname ? ROUTE_PREFETCHERS[route.path] : undefined;
   if (!project || !prefetcher) return Promise.resolve();
   // Intent is best-effort: a chunk that fails to load must not surface here,
   // and the navigation that follows will report the failure properly.

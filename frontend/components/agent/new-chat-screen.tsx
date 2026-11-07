@@ -15,7 +15,7 @@ import { useComposerCommands } from '@/components/agent/use-composer-commands';
 import { WorkflowGallery, WorkflowStart } from '@/components/agent/workflow-gallery';
 import { ListScreen } from '@/components/layout/page-shell';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { Disclosure } from '@/components/ui/disclosure';

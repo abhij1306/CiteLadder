@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 
 import { CohortCompositionContext } from './cohort-composition-context';
 import { AppGrid } from '@/components/ui/app-grid';
@@ -226,7 +226,7 @@ function TrendCard({ data }: Readonly<{ data: SiteHealthOverview['trend'] }>) {
             data={data.series}
             label="AEO Readiness trend"
             name="AEO Readiness"
-            height={160}
+            height="sm"
             yMax={100}
           />
           {data.state === 'unavailable' ? (

@@ -13,7 +13,6 @@ import {
   useSyncExternalStore,
 } from 'react';
 
-import { resolveCommandGroups } from '@/components/layout/nav-items';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Kbd } from '@/components/ui/kbd';
@@ -25,6 +24,17 @@ import {
 import { cn } from '@/lib/utils';
 import { OPEN_COMMAND_PALETTE_EVENT } from '@/lib/navigation/shell-events';
 import { useRouteIntent } from '@/lib/navigation/use-route-intent';
+
+/** A group of shell destinations the palette lists; the shell supplies them. */
+type PaletteGroup = Readonly<{
+  title: string;
+  items: readonly Readonly<{
+    label: string;
+    href: string;
+    icon: LucideIcon;
+    scope: 'project' | 'workspace';
+  }>[];
+}>;
 
 /**
  * CommandPalette — ⌘K / Ctrl+K navigation for the authed shell.
@@ -118,7 +128,12 @@ function toSections(results: readonly Command[]) {
   return sections;
 }
 
-export function CommandPalette() {
+export function CommandPalette({
+  destinations,
+}: Readonly<{
+  /** The shell's destinations by group. */
+  destinations: () => readonly PaletteGroup[];
+}>) {
   const router = useNavigate();
   const { projects, activeProjectId, activeWorkspaceId } = useProjectContext();
   const selectProject = useSelectProject();
@@ -197,11 +212,11 @@ export function CommandPalette() {
   }, [open]);
 
   const commands = useMemo<Command[]>(() => {
-    const navigation = resolveCommandGroups().flatMap((group) =>
+    const navigation = destinations().flatMap((group) =>
       group.items.map((item) => {
         const href = scopedNavigationDestination(
           item.href,
-          item.scope ?? 'project',
+          item.scope,
           activeProjectId,
           activeWorkspaceId,
         );
@@ -230,7 +245,7 @@ export function CommandPalette() {
     }));
 
     return [...navigation, ...projectCommands];
-  }, [router, projects, activeProjectId, activeWorkspaceId, selectProject]);
+  }, [router, projects, activeProjectId, activeWorkspaceId, selectProject, destinations]);
 
   const results = useMemo(() => {
     const needle = query.trim().toLowerCase();

@@ -13,7 +13,7 @@ import { DeclarationStatus } from '@/components/agent/declaration-status';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { ActionPriorityBadge, ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { DetailScreen } from '@/components/layout/page-shell';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { EvidenceDrawer } from '@/components/opportunities/evidence-drawer';
 import { Callout } from '@/components/ui/callout';
 import { Card, CardContent, CardHeader, CardTitle, cardClasses } from '@/components/ui/card';

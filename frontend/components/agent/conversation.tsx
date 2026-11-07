@@ -8,7 +8,7 @@ import { skillLabel, useSkillCatalog } from '@/components/agent/skill-picker';
 import { LiveReply } from '@/components/agent/live-reply';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { WebSources } from '@/components/agent/web-sources';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { cardClasses } from '@/components/ui/card';
