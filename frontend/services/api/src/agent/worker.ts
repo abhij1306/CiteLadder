@@ -39,10 +39,20 @@ export async function runAgentOnce(
     agentPolicy.heartbeat_seconds * 1000,
   );
   try {
-    await runtime.execute(lease, leaseSignal(heartbeat.signal, options.signal), options.events);
-    // A lost lease belongs to recovery; a caller's stop is answered here while the lease holds.
-    if (options.signal?.aborted && !heartbeat.signal.aborted)
-      await runtime.fail(lease, stoppedCode(options.signal));
+    const stopped = await runtime.execute(
+      lease,
+      leaseSignal(heartbeat.signal, options.signal),
+      options.events,
+    );
+    // A caller's stop is answered here: a closed browser keeps a document it
+    // already streamed (B69). A heartbeat that gave up ends the turn as
+    // interrupted now rather than at lease expiry; the fence decides, so a
+    // lease another owner or recovery already took is left alone.
+    if (options.signal?.aborted) {
+      const code = stoppedCode(options.signal);
+      if (code === 'interrupted' && stopped) await stopped.saveDocuments();
+      else await runtime.fail(lease, code);
+    } else if (heartbeat.signal.aborted) await runtime.fail(lease, 'interrupted');
   } catch (error) {
     if (!(error instanceof AgentError && error.code === 'lease')) throw error;
   } finally {

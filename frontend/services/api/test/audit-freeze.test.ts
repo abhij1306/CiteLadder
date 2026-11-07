@@ -3,6 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { prepareAudit } from '../src/audits/freeze.ts';
 import { auditSettings } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
+import { readFrozenConfiguration } from '../src/audits/frozen-configuration.ts';
 import { createConnection, updateConnection } from '../src/providers/connections.ts';
 import { createConnectionInput, updateConnectionInput } from '../src/providers/inputs.ts';
 import { providerSettings } from '../src/providers/config.ts';
@@ -82,6 +83,34 @@ describe('audit admission freeze', () => {
     expect(plan.configuration.country_code).toBe('US');
     expect(plan.prompts[0]?.text).toBe('Which running shoes suit road use?');
   });
+  it('reads back what was frozen and leaves missing or malformed fields unavailable', async () => {
+    const t = await seed();
+    const plan = await prepareAudit(
+      db,
+      t.workspaceId,
+      auditInput.parse({ project_id: t.projectId, prompt_set_id: t.setId, engines: ['chatgpt'] }),
+      settings,
+      providers,
+      'manual',
+      { search: searchSettings({}) },
+    );
+    const stored = JSON.parse(JSON.stringify(plan.configuration));
+    expect(readFrozenConfiguration(stored)).toMatchObject({
+      country_code: 'US',
+      max_run_seconds: settings.max_run_seconds,
+      measurement_policy: { retrieval_enabled: true },
+    });
+    const damaged = readFrozenConfiguration({
+      ...stored,
+      max_run_seconds: 'soon',
+      anthropic_max_uses: undefined,
+      measurement_policy: { retrieval_enabled: 'yes', max_output_tokens: 900 },
+    });
+    expect(damaged.country_code).toBe('US');
+    expect(damaged.max_run_seconds).toBeUndefined();
+    expect(damaged.anthropic_max_uses).toBeUndefined();
+    expect(damaged.measurement_policy).toEqual({ max_output_tokens: 900 });
+  });
   it('freezes a common-word brand as needing context', async () => {
     const t = await seed();
     await db
@@ -103,7 +132,7 @@ describe('audit admission freeze', () => {
       entities: { target: { mode: 'context_required' } },
     });
   });
-  it('rejects foreign, disabled and unreviewed explicit selections as a whole', async () => {
+  it('rejects foreign and archived explicit selections as a whole', async () => {
     const t = await seed();
     const foreign = await seed();
     const prepare = (ids: string[]) =>
@@ -119,7 +148,7 @@ describe('audit admission freeze', () => {
     await expect(prepare([t.promptId, foreign.promptId])).rejects.toMatchObject({ status: 400 });
     await db
       .updateTable('prompts')
-      .set({ status: 'proposed' })
+      .set({ status: 'archived' })
       .where('id', '=', t.promptId)
       .execute();
     await expect(prepare([t.promptId])).rejects.toMatchObject({ status: 400 });

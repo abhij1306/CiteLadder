@@ -1,3 +1,4 @@
+import { isRecordKind, type RecordKindName } from '@citeladder/contracts/record-kinds';
 import { sql, type Selectable } from 'kysely';
 import { z } from 'zod';
 
@@ -274,11 +275,11 @@ const records = {
     'auxiliary',
     'created_at',
   ]),
-} as const;
-// Kinds resolved by their owners rather than the column allowlist.
-const OWNED_KINDS = ['project', 'prompt', 'action'] as const;
-const OWNED_KIND_NAMES: readonly string[] = OWNED_KINDS;
-type Kind = keyof typeof records | (typeof OWNED_KINDS)[number];
+} as const satisfies Record<Exclude<RecordKindName, OwnedKind>, Descriptor>;
+/** Kinds resolved by their owners rather than the column allowlist. */
+type OwnedKind = 'project' | 'prompt' | 'action';
+/** Every allowlisted kind is a contracts record kind. */
+type Kind = RecordKindName;
 
 const NOT_A_RECORD = 'id must be an allowlisted citeladder:// record URI';
 export function parseRecordId(value: string): { kind: Kind; id: string; part: number } {
@@ -293,7 +294,7 @@ export function parseRecordId(value: string): { kind: Kind; id: string; part: nu
     uri.port ||
     uri.hash ||
     !id ||
-    (!OWNED_KIND_NAMES.includes(kind) && !Object.hasOwn(records, kind))
+    !isRecordKind(kind)
   ) {
     throw new McpInputError(NOT_A_RECORD);
   }
@@ -307,7 +308,7 @@ export function parseRecordId(value: string): { kind: Kind; id: string; part: nu
   const part = Number(parts[0] ?? 0);
   if (!Number.isSafeInteger(part))
     throw new McpInputError('Record part must be a non-negative integer');
-  return { kind: kind as Kind, id, part };
+  return { kind, id, part };
 }
 
 const missing = () => new McpInputError('The requested record was not found in this account');

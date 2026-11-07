@@ -6,7 +6,7 @@
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { issueImpact, siteLevelScope } from './reads/rules.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { compareText } from '../text-order.ts';
 
 export async function snapshotIssues(db: Database, crawl: Crawl, evaluationIds: string[]) {

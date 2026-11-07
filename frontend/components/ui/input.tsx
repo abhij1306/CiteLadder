@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils';
 
 /**
  * The field box every text control shares (Input, SearchField, Select's
- * trigger, ChipInput): `surface` with a soft 1px `line` edge and the faint
- * `shadow-edge` smudge under it, never a dark hairline (decision D5),
- * `radius-md`, `control-md` tall. Hover steps the edge to `line-strong`;
- * focus turns it `focus` with a 3px `line` halo, and an invalid field turns
- * it `negative` (globals.css `.focus-input`/`.focus-frame`, which win over hover).
+ * trigger, ChipInput, Textarea, the composer): `surface` with the soft 1px
+ * `line` edge and the faint `shadow-edge` smudge under it (decision D5;
+ * owner, 6 November 2026: no dark edge), `radius-md`, `control-md` tall.
+ * Hover steps the edge to `line-strong`; focus
+ * thickens it to a 2px `focus` line inside a 3px `line` halo, and an invalid
+ * field turns it `negative` (globals.css `.focus-input`/`.focus-frame`, which
+ * win over hover).
  */
 export const FIELD_EDGE = 'bg-surface shadow-edge border border-line hover:border-line-strong';
 
@@ -108,8 +110,8 @@ export function Input({
 
 /**
  * FieldEndButton — the one icon target at a field's end (clear a search,
- * reveal a password): SearchField's clear face, a 20px `radius-xs` square
- * with the 16px glyph, `ink-muted` until hovered, its focus ring 1px out.
+ * reveal a password): SearchField's clear face, a 24px `radius-xs` square
+ * (the WCAG 2.5.8 minimum target) with the 16px glyph, `ink-muted` until hovered, its focus ring 1px out.
  * Pass it as an `Input`'s `endContent`. `label` is its accessible name.
  */
 export function FieldEndButton({
@@ -127,7 +129,7 @@ export function FieldEndButton({
     <button
       type="button"
       data-field-end-target=""
-      className="focus-ring text-ink-muted enabled:hover:bg-surface-sunken enabled:hover:text-ink grid size-5 shrink-0 place-items-center rounded-xs transition-colors focus-visible:outline-offset-1"
+      className="focus-ring text-ink-muted enabled:hover:bg-surface-sunken enabled:hover:text-ink grid size-6 shrink-0 place-items-center rounded-xs transition-colors focus-visible:outline-offset-1"
       disabled={disabled}
       onClick={onClick}
       aria-label={label}

@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import { renderWithProviders as render } from '@/test/render';
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteHealthDashboard } from '@citeladder/contracts';
 
 import { ScoreSection } from './score-section';
 

@@ -187,9 +187,21 @@ export const performanceTablePageSchema = responseObject({
   page_size: z.number().int(),
 });
 
+// A range projection is an analytics queue task, so its statuses are the queue statuses.
+export const performanceRangeTaskStatusSchema = z.enum([
+  'queued',
+  'leased',
+  'running',
+  'retry_wait',
+  'succeeded',
+  'failed',
+  'cancelled',
+]);
+export type PerformanceRangeTaskStatus = z.infer<typeof performanceRangeTaskStatusSchema>;
+
 export const performanceRangeTaskSchema = responseObject({
   task_id: uuid(),
-  status: z.string(),
+  status: performanceRangeTaskStatusSchema,
   window_start: z.string(),
   window_end: z.string(),
 });

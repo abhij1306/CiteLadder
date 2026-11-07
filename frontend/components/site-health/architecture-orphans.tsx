@@ -12,7 +12,7 @@ import { Drawer } from '@/components/ui/drawer';
 import { Stack } from '@/components/ui/layout';
 import type { StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
-import type { SiteArchitecture } from '@/lib/api/types';
+import type { SiteArchitecture } from '@citeladder/contracts';
 import { pluralCount } from '@/lib/format';
 
 // Scope, in the metric's own words. The count is a fact about the pages this

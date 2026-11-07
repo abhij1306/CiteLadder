@@ -40,7 +40,16 @@ export function requireCapability(
     );
 }
 
-/** The request's actor: its API key's, or the local user's. */
+/**
+ * The project the request named: a public API path's (always), a browser
+ * route's under `/projects/{project_id}`, or null on a flat browser route.
+ * Commands find the records they change only in it.
+ */
+export function requestProjectOf(c: Context<AppEnv>): string | null {
+  return c.get('workspace').projectId;
+}
+
+/** The request's actor: its API key's, or the signed-in member's. */
 export function actorOf(c: Context<AppEnv>): Actor {
   const actor = c.get('actor');
   if (actor) return actor;

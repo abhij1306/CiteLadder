@@ -1,4 +1,4 @@
-import type { PromptCandidate } from '@/lib/api/types';
+import type { PromptCandidate } from '@citeladder/contracts';
 
 export function qualityStatusLabel(candidate: PromptCandidate): string {
   switch (candidate.quality_status) {

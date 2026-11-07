@@ -1,49 +1,22 @@
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type { Database } from '../db/database.ts';
-import { hash } from '../traffic/normalization.ts';
+import { hash } from '../crypto-text.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { recordSecurityEvent } from '../auth/security-events.ts';
 import { lockAuthorizedWorkspace } from '../workspaces/service.ts';
 import { lockCrawlState, enqueueRollup, type CrawlScope } from './state.ts';
-import { enqueueTrafficInsights } from './insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
+import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { crawlers } from '../config/crawlers.ts';
 import { requirePubSubReader } from './gcp-client.ts';
 import { crawlLogAvailabilitySchema } from '@citeladder/contracts/ai-traffic';
+import { crawlSourceCreateRequestSchema } from '@citeladder/contracts/crawl-log-requests';
 
-const samplingSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('none') }),
-  z.strictObject({ kind: z.literal('sampled'), rate: z.number().gt(0).max(1) }),
-  z.strictObject({ kind: z.literal('filtered'), description: z.string().trim().min(1).max(512) }),
-]);
-/** `projects/<project id>/subscriptions/<subscription id>`, as Pub/Sub names them. */
-const SUBSCRIPTION =
-  /^projects\/[a-z][a-z0-9-]{4,28}[a-z0-9]\/subscriptions\/[A-Za-z][\w.~%+-]{2,254}$/u;
-export const createSourceSchema = z
-  .strictObject({
-    setup: z.enum([
-      'cloudflare_worker',
-      'cloudflare_logpush',
-      'aws_firehose',
-      'gcp_pubsub_pull',
-      'custom',
-      'upload',
-    ]),
-    origin: z.url().max(512),
-    format: z.enum(['ndjson', 'json_array', 'combined']).default('ndjson'),
-    collection_point: z.enum(['cdn_edge', 'origin', 'application', 'uploaded_file']).optional(),
-    sampling: samplingSchema.optional(),
-    /** Firehose buffer interval declared at setup; it widens the coverage gap bound. */
-    buffer_interval_seconds: z.int().min(60).max(900).optional(),
-    /** The stream runs CiteLadder's filter Lambda, so quiet periods send nothing. */
-    declared_filtered: z.boolean().optional(),
-    /** The Pub/Sub subscription a Google Cloud pull source drains. */
-    subscription: z.string().max(255).regex(SUBSCRIPTION).optional(),
-    /** The load balancer logging sample rate the customer configured. */
-    declared_sample_rate: z.number().min(0.001).max(1).multipleOf(0.001).optional(),
-  })
+/** The contract body plus each setup's declaration rules. */
+export const createSourceSchema = crawlSourceCreateRequestSchema
   .refine(
     (input) =>
       input.setup === 'aws_firehose'
@@ -234,7 +207,7 @@ export async function createSource(
       })
       .execute();
     await recordSecurityEvent(trx, 'crawl_log.create', actorId, scope.workspaceId, id);
-    await enqueueTrafficInsights(trx, scope);
+    await enqueueCoalesced(trx, { ...insightsRefresh, ...scope });
     return { id, token: secret };
   });
 }
@@ -281,7 +254,7 @@ export async function mutateSource(
       id,
     );
     if (action === 'revoke') await enqueueRollup(trx, scope, new Date());
-    await enqueueTrafficInsights(trx, scope);
+    await enqueueCoalesced(trx, { ...insightsRefresh, ...scope });
     return { id, token: secret };
   });
 }

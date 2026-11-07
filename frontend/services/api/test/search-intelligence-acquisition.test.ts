@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ProviderError } from '../src/answer-engines/contracts.ts';
+import { ProviderError } from '../src/providers/errors.ts';
 import { resolveLive, sendLive } from '../src/search-intelligence/live.ts';
 import { INT4_MAX, normalizeResponse } from '../src/search-intelligence/normalization.ts';
 
@@ -78,6 +78,24 @@ describe('single-dispatch research transport and scoped normalization', () => {
     await expect(
       executeLive(input, { send: async () => new Response(' '.repeat(8 * 1024 * 1024 + 1)) }),
     ).rejects.toMatchObject({ code: 'parse_error' });
+  });
+  it.each([
+    ['an unauthorized envelope', { status_code: 40100, tasks: null }, 'auth_failure'],
+    ['an unfunded envelope', { status_code: 40200, tasks: null }, 'provider_account_unavailable'],
+    [
+      'a paused account task',
+      { status_code: 20000, tasks: [{ id: 'task', status_code: 40204 }] },
+      'provider_account_unavailable',
+    ],
+    [
+      'an unauthorized task',
+      { status_code: 20000, tasks: [{ id: 'task', status_code: 40100 }] },
+      'auth_failure',
+    ],
+  ])('reports %s as a refusal, not a malformed body', async (_case, envelope, code) => {
+    await expect(
+      executeLive(input, { send: async () => Response.json(envelope) }),
+    ).rejects.toMatchObject({ code });
   });
   it.each([null, 42, true, ['task'], { id: 'task' }])(
     'retains receipts without inventing an ID from %j',

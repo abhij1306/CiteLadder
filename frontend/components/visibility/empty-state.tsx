@@ -1,4 +1,4 @@
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Rocket } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';

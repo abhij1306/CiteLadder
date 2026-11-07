@@ -1,6 +1,8 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
+import { catalogHandler } from './provider-catalog-fixture';
+
 /**
  * The workspace every test account belongs to, unless a test says otherwise.
  */
@@ -30,6 +32,9 @@ const defaultHandlers = [
       },
     ]),
   ),
+  // Every screen names engines from the provider catalogue, which the shell
+  // reads before any of them; answer it like the workspace list.
+  catalogHandler(),
 ];
 
 /**

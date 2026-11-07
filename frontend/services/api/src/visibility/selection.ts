@@ -10,6 +10,7 @@
 import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
+import { surfaceKindOf } from '../config/providers.ts';
 import type { Database } from '../db/database.ts';
 import { timestamptz } from '../db/timestamps.ts';
 import { epochMicros, toUtc, type ParsedDatetime } from '../http/datetimes.ts';
@@ -54,7 +55,7 @@ export type RunSelection = {
 };
 
 export function isLogicalEngine(engine: string): boolean {
-  return visibility.logical_engines.includes(engine);
+  return surfaceKindOf(engine) !== null;
 }
 
 export function unknownEngine(engine: string): TrendQueryError {
@@ -183,15 +184,42 @@ export function evidenceScope(db: Database, selection: RunSelection) {
 }
 
 /**
- * The project's dashboard-ready runs the selection names, or those of its
- * market and window: the runs `evidenceScope` reads answers from, for
- * readers of a run's persisted facts.
+ * The latest dashboard-ready brand run of a market (`null` is the project
+ * default), or null when none finished: what "latest" means on every
+ * Visibility, Opportunity and Overview read. A Commerce run is never it.
+ */
+export async function latestBrandRunId(
+  db: Database,
+  scope: { workspaceId: string; projectId: string; marketId: string | null },
+): Promise<string | null> {
+  const latest = await db
+    .selectFrom('audits')
+    .select('id')
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
+    .where('audit_scope', '=', visibility.brand_audit_scope)
+    .where('market_id', 'is not distinct from', scope.marketId)
+    .where('status', 'in', visibility.dashboard_audit_statuses)
+    .orderBy(sql`completed_at desc nulls last`)
+    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  return latest?.id ?? null;
+}
+
+/**
+ * The project's dashboard-ready brand runs the selection names, or those of
+ * its market and window: the runs `evidenceScope` reads answers from, for
+ * readers of a run's persisted facts. Visibility measures brand runs only, so
+ * a named Commerce run reads as empty here.
  */
 export function selectedRuns(db: Database, selection: RunSelection) {
   let query = db
     .selectFrom('audits as audit')
     .where('audit.workspace_id', '=', selection.workspaceId)
     .where('audit.project_id', '=', selection.projectId)
+    .where('audit.audit_scope', '=', visibility.brand_audit_scope)
     .where('audit.status', 'in', visibility.dashboard_audit_statuses);
   if (selection.auditId !== null) query = query.where('audit.id', '=', selection.auditId);
   if (selection.auditIds?.length) query = query.where('audit.id', 'in', selection.auditIds);

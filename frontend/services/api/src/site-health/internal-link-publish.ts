@@ -10,9 +10,9 @@ import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
-import type { Executor } from '../workers/executor.ts';
-import { payloadString, taskProject } from '../workers/executor.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import type { Executor } from '../queue/executor.ts';
+import { payloadString, taskProject } from '../queue/executor.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import type { LinkCandidate } from './internal-link-candidates.ts';
 
 const probability = z.number().min(0).max(1);

@@ -2,7 +2,7 @@ import { fireEvent, render as renderUi, screen, within } from '@testing-library/
 import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { RankingRow } from '@/lib/api/types';
+import type { RankingRow } from '@citeladder/contracts';
 import { RankingRowsTable } from './ranking-rows';
 
 // The app shell owns the TooltipProvider the column hints need.

@@ -4,7 +4,7 @@ import { KpiRow, type StatSegment } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ICONS } from '@/lib/icons';
-import type { SiteCrawl, SiteHealthDashboard, SiteHealthOverview } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard, SiteHealthOverview } from '@citeladder/contracts';
 
 /** One Site Health score as a `KpiRow` segment: the score ring and where to act. */
 export type AuditMetric = {

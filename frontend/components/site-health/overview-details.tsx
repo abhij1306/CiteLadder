@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 
 import { CohortCompositionContext } from './cohort-composition-context';
 import { AppGrid } from '@/components/ui/app-grid';
@@ -16,7 +16,7 @@ import { TrendChart } from '@/components/ui/trend-chart';
 import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { SiteHealthOverview } from '@/lib/api/types';
+import type { SiteHealthOverview } from '@citeladder/contracts';
 import { issueTitle } from '@/lib/site-health/issues';
 import { formatScore, PLACEHOLDER, statusLabel } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
@@ -226,7 +226,7 @@ function TrendCard({ data }: Readonly<{ data: SiteHealthOverview['trend'] }>) {
             data={data.series}
             label="AEO Readiness trend"
             name="AEO Readiness"
-            height={160}
+            height="sm"
             yMax={100}
           />
           {data.state === 'unavailable' ? (

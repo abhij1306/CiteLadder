@@ -13,7 +13,7 @@ import { sql } from 'kysely';
 
 import { policy } from '../config.ts';
 import { isoDateText } from '../db/timestamps.ts';
-import { payloadArtifactId, requireProject, type Executor } from '../workers/executor.ts';
+import { payloadArtifactId, requireProject, type Executor } from '../queue/executor.ts';
 import { classifyReferralSignals } from './classification.ts';
 import { enqueueAiReferralsSnapshotRefresh } from './enqueue.ts';
 import { ownedArtifact } from './ingest.ts';

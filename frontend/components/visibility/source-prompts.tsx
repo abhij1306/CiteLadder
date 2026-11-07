@@ -17,10 +17,12 @@ import { Tooltip } from '@/components/ui/tooltip';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { TruncationNotice } from '@/components/visibility/evidence-states';
-import { queryKeys } from '@/lib/api/query-keys';
-import type { VisibilityEvidenceResponse, VisibilityExecutionEvidence } from '@/lib/api/types';
-import { visibilityApi } from '@/lib/api/visibility';
-import { engineLabel, productModelLabel } from '@/lib/providers/catalog';
+import type {
+  VisibilityEvidenceResponse,
+  VisibilityExecutionEvidence,
+} from '@citeladder/contracts';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import { count, hostOf, sinceLabel } from '@/lib/visibility/sources';
 import { selectionHasNoRun, type SourceQueries } from '@/lib/visibility/use-source-analysis';
@@ -67,13 +69,11 @@ export function SourcePrompts({
     url: url ?? undefined,
   };
   const query = useQuery({
-    queryKey: queryKeys.visibility.evidence(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getVisibilityEvidence(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
-    enabled: Boolean(queries.projectId && queries.activeRunId && (domain || url)),
+    ...visibilityQueries.evidence(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
+      params,
+    ),
+    enabled: Boolean(queries.activeRunId && (domain || url)),
   });
 
   // The answer opens over this screen rather than routing to the run that
@@ -159,17 +159,17 @@ function PromptRow({
   item: VisibilityExecutionEvidence;
   onOpenAnswer: (subject: EvidenceSubject) => void;
 }>) {
+  const engines = useEngineCatalog();
   return (
     <TableRow>
       <TableCell>
         <Inline as="span" className="items-start">
-          <BrandMark name={engineLabel(item.logical_engine) || item.logical_engine} />
+          <BrandMark name={engines.label(item.logical_engine)} />
           <span className="grid min-w-0">
             <ClampText lines={1}>{item.prompt_text || 'Untitled prompt'}</ClampText>
             <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
-              {productModelLabel(item.logical_engine, item.transport_model) ||
-                engineLabel(item.logical_engine) ||
-                item.logical_engine}
+              {engines.modelLabel(item.logical_engine, item.transport_model) ||
+                engines.label(item.logical_engine)}
             </ClampText>
           </span>
         </Inline>

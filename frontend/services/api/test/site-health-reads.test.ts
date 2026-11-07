@@ -272,6 +272,7 @@ describe('page projections', () => {
         .execute();
     };
     await fail('/robots', 'robots_denied');
+    await fail('/rejected', 'url_admission_rejected');
     await fail('/broken', 'http_5xx');
     // No analyze task at all: monitored waits; unmonitored was never selected.
     for (const path of ['/waiting', '/ignored']) {
@@ -292,6 +293,11 @@ describe('page projections', () => {
       analysis_status: 'blocked',
       error_code: 'robots_denied',
     });
+    // A redirect the crawl's own admission refused is a policy refusal, not a page error.
+    expect(pages['/rejected']).toMatchObject({
+      analysis_status: 'blocked',
+      error_code: 'url_admission_rejected',
+    });
     expect(pages['/broken']).toMatchObject({ analysis_status: 'error', error_code: 'http_5xx' });
     expect(pages['/waiting']!.analysis_status).toBe('pending');
     expect(pages['/ignored']!.analysis_status).toBe('not_selected');
@@ -308,7 +314,7 @@ describe('page projections', () => {
       failures.push(new URL(body.items[0]!.normalized_url).pathname);
       cursor = body.next_cursor ? `&cursor=${body.next_cursor}` : '';
     } while (cursor);
-    expect(failures.sort()).toEqual(['/broken', '/robots']);
+    expect(failures.sort()).toEqual(['/broken', '/rejected', '/robots']);
 
     await db
       .updateTable('site_crawls')
@@ -947,6 +953,34 @@ describe('conditional snapshot reads', () => {
 });
 
 describe('snapshot projections', () => {
+  it('read the earlier site crawl after a page rerun, unless the rerun is named', async () => {
+    const seed = await fixtures.crawl();
+    const site = await fixtures.snapshot(seed, 'complete');
+    const rerun = {
+      ...seed,
+      crawlId: await fixtures.sibling(seed, {
+        configuration: JSON.stringify({ page_rerun: true }),
+        created_at: new Date(Date.now() + 60_000),
+      }),
+    };
+    const rerunSnapshot = await fixtures.snapshot(rerun, 'partial');
+    await db
+      .updateTable('site_health_snapshots')
+      .set({
+        aeo_measurement_state: 'not_measured',
+        web_fundamentals_state: 'measured',
+        classification_state: 'complete',
+        search_eligibility: 'eligible',
+      })
+      .where('id', 'in', [site, rerunSnapshot])
+      .execute();
+    const path = `/projects/${seed.projectId}/site-health/overview`;
+    const read = async (query: string) =>
+      (await json(seed, `${path}${query}`, siteHealthOverviewSchema)).snapshot_id;
+    expect(await read('')).toBe(site);
+    expect(await read(`?crawl_id=${rerun.crawlId}`)).toBe(rerunSnapshot);
+  });
+
   it('fill presentation fields an older frozen snapshot lacks, and never recompute it', async () => {
     const seed = await fixtures.crawl();
     expect((await get(seed, `/projects/${seed.projectId}/site-health/overview`)).status).toBe(404);

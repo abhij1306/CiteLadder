@@ -20,7 +20,7 @@ import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
-import { engineLabel } from '@/lib/visibility/dashboard';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import {
   coverageLine,
   formatNet,
@@ -248,6 +248,7 @@ function QuoteLink({ quote }: Readonly<{ quote: PerceptionQuote }>) {
 }
 
 function NegativeQuotes({ quotes }: Readonly<{ quotes: PerceptionQuote[] }>) {
+  const { label: engineLabel } = useEngineCatalog();
   return (
     <Card>
       <CardHeader>

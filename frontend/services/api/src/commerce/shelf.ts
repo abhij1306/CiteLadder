@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Selectable } from 'kysely';
+import type { SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import type { Audits } from '../generated/db-schema.ts';
 import { record, strings } from '../db/json.ts';
 import type { AuditTask } from '../queue/audit-queue.ts';
 import type { DeriveExecution, ExecutionResult } from '../audits/result-persistence.ts';
-import { analyzeExecution } from '../analysis/execution.ts';
+import { deriveExecution } from '../audits/derivation.ts';
 import { auditPolicy } from '../audits/config.ts';
 import { createModelGateway, gatewaySettings } from '../models/gateway.ts';
-import { agentCallLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { meterFor, type Meter } from '../models/metering.ts';
 import { lockCatalog } from './catalog-store.ts';
 import { ownedHosts } from './discovery-validation.ts';
@@ -36,7 +37,7 @@ export type MeterableShelfResolver = {
   resolve(spans: string[], meter: Meter): Promise<unknown>;
 };
 export function configuredShelfResolver(
-  env: Record<string, string | undefined> = process.env,
+  env: SettingSource = process.env,
   signal?: AbortSignal,
 ): MeterableShelfResolver | undefined {
   try {
@@ -74,7 +75,7 @@ function metered(
   return {
     model: resolver.model,
     resolve: async (spans) => {
-      await enforceWorkspaceRequest(db, workspaceId, agentCallLimit(1));
+      await spendBudget(db, budget('agent_provider_call', process.env), workspaceId);
       return resolver.resolve(spans, meterFor(db, workspaceId));
     },
   };
@@ -87,7 +88,7 @@ type ShelfContext = {
   audit: Selectable<Audits>;
   target: { target_kind: string; target_id: string };
   catalog: FrozenShelfTarget;
-  versions: { parser: string; matcher: string };
+  versions: { parser: string; matcher: string; resolver: string };
   owned: string[];
   locale: string;
 };
@@ -156,18 +157,25 @@ async function observedCandidate(
   });
   return url ? findOrCreateCandidate(db, ctx, resolved, span.text, url) : null;
 }
-function observationClassification(matched: ShelfMatch, candidate: { id: string } | null) {
+/**
+ * An AI-observed candidate is classified by its review state when the answer
+ * is recorded: approved holds a slot like a frozen competitor, pending is its
+ * own class outside the share, and rejected is excluded from the shelf.
+ */
+function observationClassification(matched: ShelfMatch, candidate: { state: string } | null) {
   if (matched.product) return 'owned';
   if (matched.competitor) return 'approved_competitor';
-  return candidate ? 'ai_observed_competitor' : 'unresolved';
+  if (!candidate) return 'unresolved';
+  if (candidate.state === 'approved') return 'approved_competitor';
+  return candidate.state === 'rejected' ? 'rejected_competitor' : 'ai_observed_competitor';
 }
 async function recordObservation(
   db: Database,
   { task, audit, target, versions, locale }: ShelfContext,
-  { span, resolved, model }: PreparedItem,
+  { span, resolved, model, outcome }: PreparedItem,
   evidence: {
     matched: ShelfMatch;
-    candidate: { id: string; product_name: string; brand_name: string } | null;
+    candidate: { id: string; product_name: string; brand_name: string; state: string } | null;
     artifactId: string;
     answerText: string;
     citations: { id: string; url: string }[];
@@ -217,6 +225,9 @@ async function recordObservation(
       merchant_url: merchant.url,
       merchant_domain: merchant.domain,
       model_version: model,
+      resolver_outcome: outcome,
+      // The resolver's prompt template, recorded whenever its model was called.
+      resolver_template_version: model ? versions.resolver : null,
       match_confidence: matched.confidence,
       rank: span.rank,
       order_observable: span.orderObservable,
@@ -251,11 +262,11 @@ export async function prepareShelfExecution(
     .where('workspace_id', '=', task.workspace_id)
     .where('id', '=', task.audit_id)
     .executeTakeFirstOrThrow();
-  if (audit.audit_scope !== 'commerce') return analyzeExecution;
+  if (audit.audit_scope !== 'commerce') return deriveExecution;
   const config = record(audit.configuration),
     frozen = record(config.commerce_measurement);
   const ids = frozenShelfIds(frozen);
-  if (!ids.length) return analyzeExecution;
+  if (!ids.length) return deriveExecution;
   const target = await db
     .selectFrom('commerce_prompt_targets as c')
     .innerJoin('audit_prompt_snapshots as s', 's.prompt_id', 'c.prompt_id')
@@ -266,7 +277,7 @@ export async function prepareShelfExecution(
     .where('s.audit_id', '=', audit.id)
     .where('s.id', '=', task.prompt_snapshot_id)
     .executeTakeFirst();
-  if (!target) return analyzeExecution;
+  if (!target) return deriveExecution;
   const values = Array.isArray(frozen.targets) ? frozen.targets : [];
   const parsed = frozenTargetSchema.safeParse(
     values.find((value) => {
@@ -274,7 +285,7 @@ export async function prepareShelfExecution(
       return row.kind === target.target_kind && row.id === target.target_id;
     }),
   );
-  if (!parsed.success) return analyzeExecution;
+  if (!parsed.success) return deriveExecution;
   const catalog = parsed.data;
   const prepared = await prepareRecommendations(
     result.answer_text,
@@ -294,13 +305,17 @@ export async function prepareShelfExecution(
       typeof frozen.matcher_version === 'string'
         ? frozen.matcher_version
         : auditPolicy.commerce_versions.matcher_version,
+    resolver:
+      typeof frozen.resolver_template_version === 'string'
+        ? frozen.resolver_template_version
+        : auditPolicy.commerce_versions.resolver_template_version,
   };
   const locale = [config.language_code, config.country_code]
     .filter((value) => typeof value === 'string' && value)
     .join('-');
   const ctx: ShelfContext = { task, audit, target, catalog, versions, owned, locale };
   return async (trx, current, lockedAudit, artifactId) => {
-    await analyzeExecution(trx, current, lockedAudit, artifactId);
+    await deriveExecution(trx, current, lockedAudit, artifactId);
     if (
       current.id !== task.id ||
       lockedAudit.id !== audit.id ||

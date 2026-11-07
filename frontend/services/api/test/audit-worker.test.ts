@@ -4,12 +4,15 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant, auditTestKey } from './audit-fixtures.ts';
-import { auditRuntime } from '../src/audits/config.ts';
+import { sql } from 'kysely';
+import { auditPolicy, auditRuntime } from '../src/audits/config.ts';
+import { providerPolicy } from '../src/providers/config.ts';
+import { searchPolicy } from '../src/search-surfaces/dataforseo.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditInput } from '../src/audits/inputs.ts';
-import { AuditWorker } from '../src/workers/audit-worker.ts';
-import { analyzeExecution } from '../src/analysis/execution.ts';
-import { finalizeAudit } from '../src/analysis/finalization.ts';
+import { AuditWorker } from '../src/audits/worker.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
+import { finalizeAudit } from '../src/audits/finalization.ts';
 import { createConnection } from '../src/providers/connections.ts';
 import { createConnectionInput } from '../src/providers/inputs.ts';
 import { probeConnection } from '../src/providers/probes.ts';
@@ -54,7 +57,11 @@ afterEach(async () => {
 afterAll(async () => {
   await db.destroy();
 });
-async function seed(surface = false, extraPrompts: string[] = []) {
+async function seed(
+  surface = false,
+  extraPrompts: string[] = [],
+  observed: 'chatgpt_search' | 'google_ai_overview' = 'chatgpt_search',
+) {
   const t = await auditTenant(db, fixtures);
   workspaces.push(t.workspaceId);
   for (const text of extraPrompts) await prompt(db, t.setId, text);
@@ -71,7 +78,7 @@ async function seed(surface = false, extraPrompts: string[] = []) {
         transport_provider: 'dataforseo',
         api_login: login,
         api_password: 'test',
-        routes: [{ logical_engine: 'chatgpt_search' }],
+        routes: [{ logical_engine: observed }],
       }),
       auditTestKey,
       runtime.providers,
@@ -87,7 +94,7 @@ async function seed(surface = false, extraPrompts: string[] = []) {
     auditInput.parse({
       project_id: t.projectId,
       prompt_set_id: t.setId,
-      engines: [surface ? 'chatgpt_search' : 'chatgpt'],
+      engines: [surface ? observed : 'chatgpt'],
     }),
     {},
     runtime,
@@ -118,7 +125,7 @@ function worker(
     settings,
     auditTestKey,
     {
-      execution: analyzeExecution,
+      execution: deriveExecution,
       finalize: (workspaceId, auditId) => finalizeAudit(db, workspaceId, auditId, async () => {}),
     },
     { owner: 'worker', taskScope: scope, send, ...(now ? { now } : {}) },
@@ -516,6 +523,188 @@ describe('leased audit worker phases', () => {
         .where('task_id', '=', t.task.id)
         .execute(),
     ).toHaveLength(0);
+  });
+  it('observes a Google AI Overview with one paid submission and a free retrieval', async () => {
+    const t = await seed(true, [], 'google_ai_overview'),
+      paths: string[] = [];
+    // The provider's per-second pool admits the retrieval once the clock moves on.
+    let tick = Date.now();
+    const clock = () => new Date(tick);
+    const w = worker(
+      t,
+      async (input) => {
+        const url = String(input);
+        paths.push(url.split('/').slice(-2).join('/'));
+        if (url.endsWith('/task_post'))
+          return Response.json({
+            status_code: 20000,
+            tasks: [{ id: 'aio-task', status_code: 20100, cost: 0.002 }],
+          });
+        return Response.json({
+          status_code: 20000,
+          tasks: [
+            {
+              id: 'aio-task',
+              status_code: 20000,
+              result: [
+                {
+                  items: [
+                    {
+                      type: 'ai_overview',
+                      items: [
+                        {
+                          type: 'ai_overview_element',
+                          text: 'Acme Running shoes',
+                          links: [{ url: 'https://acme.example/shoes' }],
+                        },
+                      ],
+                      references: [{ url: 'https://publisher.example/guide' }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        });
+      },
+      runtime,
+      clock,
+    );
+    await w.runOnce();
+    expect(await stored(t.task.id)).toMatchObject({
+      status: 'awaiting_provider_result',
+      provider_task_id: 'aio-task',
+      attempt_count: 1,
+    });
+    tick += 2000;
+    await ready(t.task.id);
+    await w.runOnce();
+    expect(paths).toEqual(['organic/task_post', 'advanced/aio-task']);
+    expect(await stored(t.task.id)).toMatchObject({ status: 'succeeded', attempt_count: 1 });
+    const observation = await db
+      .selectFrom('aio_observations')
+      .select(['outcome', 'provider_task_id', 'reference_count'])
+      .where('task_id', '=', t.task.id)
+      .executeTakeFirstOrThrow();
+    expect(observation).toEqual({
+      outcome: 'ai_overview_present',
+      provider_task_id: 'aio-task',
+      reference_count: 1,
+    });
+    const artifact = await db
+      .selectFrom('raw_response_artifacts')
+      .select('usage')
+      .where('task_id', '=', t.task.id)
+      .executeTakeFirstOrThrow();
+    expect(record(artifact.usage).provider_cost_microusd).toBe(2000);
+  });
+  it('stops a Google AI Overview at the poll ceiling without another provider call', async () => {
+    const t = await seed(true, [], 'google_ai_overview');
+    const connectionId = record(t.task.provider_route_snapshot).connection_id as string;
+    const { credential_revision } = await db
+      .selectFrom('provider_connections')
+      .select('credential_revision')
+      .where('id', '=', connectionId)
+      .executeTakeFirstOrThrow();
+    await db
+      .updateTable('audit_tasks')
+      .set({
+        provider_submission_ref: 'paid-intent',
+        provider_task_submitted_at: new Date(Date.now() - 60000),
+        provider_task_id: 'aio-task',
+        provider_poll_count: 1000,
+        attempt_count: 1,
+        provider_connection_id: connectionId,
+        provider_credential_revision: credential_revision,
+      })
+      .where('id', '=', t.task.id)
+      .execute();
+    let calls = 0;
+    await worker(t, async () => {
+      calls++;
+      throw new Error('Unexpected provider call');
+    }).runOnce();
+    expect(calls).toBe(0);
+    expect(await stored(t.task.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'poll_ceiling_exceeded',
+      attempt_count: 1,
+    });
+    expect(
+      await db
+        .selectFrom('aio_observations')
+        .select(['outcome', 'error_code'])
+        .where('task_id', '=', t.task.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ outcome: 'execution_failure', error_code: 'poll_ceiling_exceeded' });
+  });
+  it('records a retrieval whose credential is gone with its full failure code', async () => {
+    const t = await seed(true, [], 'google_ai_overview');
+    const connectionId = record(t.task.provider_route_snapshot).connection_id as string;
+    await db
+      .updateTable('audit_tasks')
+      .set({
+        provider_submission_ref: 'paid-intent',
+        provider_task_submitted_at: new Date(Date.now() - 60000),
+        provider_task_id: 'aio-task',
+        attempt_count: 1,
+        provider_connection_id: connectionId,
+      })
+      .where('id', '=', t.task.id)
+      .execute();
+    await db
+      .updateTable('provider_connections')
+      .set({ active: false })
+      .where('id', '=', connectionId)
+      .execute();
+    let calls = 0;
+    await worker(t, async () => {
+      calls++;
+      throw new Error('Unexpected provider call');
+    }).runOnce();
+    expect(calls).toBe(0);
+    expect(await stored(t.task.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'credential_unavailable_for_retrieval',
+    });
+    expect(
+      await db
+        .selectFrom('aio_observations')
+        .select(['outcome', 'error_code'])
+        .where('task_id', '=', t.task.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ outcome: 'execution_failure', error_code: 'credential_unavailable_for_retrieval' });
+  });
+});
+describe('audit failure codes', () => {
+  it('fit every column that records them', async () => {
+    const declared = [
+      ...searchPolicy.surface.execution_failure_codes,
+      ...searchPolicy.surface.terminal_outcomes,
+      searchPolicy.surface.error_poll_ceiling_exceeded,
+      searchPolicy.surface.error_submission_unreconciled,
+      searchPolicy.surface.error_credential_unavailable,
+      searchPolicy.constants.error_account_unavailable,
+      auditPolicy.constants.error_run_deadline,
+      auditPolicy.constants.error_cancelled,
+      auditPolicy.constants.error_no_connection,
+      ...Object.values(providerPolicy.errors),
+    ];
+    const { rows: widths } = await sql<{ table_name: string; character_maximum_length: number }>`
+      select table_name, character_maximum_length from information_schema.columns
+      where table_schema = 'public' and column_name = 'error_code'
+        and table_name in ('audit_tasks', 'provider_attempts', 'aio_observations')
+      order by table_name`.execute(db);
+    expect(widths.map((column) => column.table_name)).toEqual([
+      'aio_observations',
+      'audit_tasks',
+      'provider_attempts',
+    ]);
+    for (const { table_name, character_maximum_length } of widths)
+      expect({
+        table_name,
+        tooLong: declared.filter((code) => code.length > character_maximum_length),
+      }).toEqual({ table_name, tooLong: [] });
   });
 });
 describe('audit runner lane', () => {

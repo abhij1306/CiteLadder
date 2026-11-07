@@ -172,3 +172,15 @@ it('cancels an analysis in progress', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   await expect.poll(() => cancelled).toBe(true);
 });
+
+it('offers a stopped analysis its recovery: review and run it again', async () => {
+  renderPage({
+    ...readiness,
+    latest_run: { ...run, status: 'failed', error_code: 'acquisition_queue_terminal' },
+  });
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'The analysis stopped before every request finished.',
+  );
+  await userEvent.click(screen.getByRole('button', { name: 'Review again' }));
+  expect(await screen.findByRole('dialog', { name: 'Review analysis cost' })).toBeInTheDocument();
+});

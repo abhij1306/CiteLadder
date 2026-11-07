@@ -1,7 +1,7 @@
 import { businessModelSchema } from '@citeladder/contracts/project';
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { BrandProfile, BusinessMap } from '@/lib/api/types';
+import type { BrandProfile, BusinessMap } from '@citeladder/contracts';
 import { BUSINESS_MODEL_CHOICES } from '@/lib/project/identity-facets';
 
 import {

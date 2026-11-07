@@ -5,7 +5,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { aggregateMeasurements, aggregateByPageKind } from './analysis/measurement-aggregation.ts';
 import { persistedEvaluation } from './terminal-analysis.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { compareText, scalarText } from '../text-order.ts';
 
 function classificationState(classified: number, expected: number) {

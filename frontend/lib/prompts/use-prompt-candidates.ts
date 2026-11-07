@@ -1,12 +1,15 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { humanizeApiError } from '@/lib/api/errors';
-import { promptsApi } from '@/lib/api/prompts';
-import { queryKeys } from '@/lib/api/query-keys';
-import type { PromptCandidate, PromptCandidateReviewResponse, PromptSet } from '@/lib/api/types';
+import { promptsMutations, promptsQueries } from '@/lib/api/prompts';
+import type {
+  PromptCandidate,
+  PromptCandidateReviewResponse,
+  PromptSet,
+} from '@citeladder/contracts';
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
@@ -21,54 +24,51 @@ function reviewNotice(result: PromptCandidateReviewResponse): string {
 }
 
 /**
- * Pending generated candidates for a prompt set, plus accept/reject.
- * Accepting adds tracked prompts, so `onReviewed` refreshes the library.
+ * Pending generated candidates for a prompt set, plus accept/reject. A
+ * review refreshes the library through its descriptor; `onAccepted` is the
+ * screen's own reaction to newly tracked prompts.
  */
 export function usePromptCandidates({
+  projectId,
   promptSet,
   workspaceId,
-  onReviewed,
+  onAccepted,
 }: Readonly<{
+  projectId: string;
   promptSet: PromptSet | null;
   workspaceId: string;
-  onReviewed: () => Promise<void>;
+  onAccepted: () => void;
 }>) {
   const promptSetId = promptSet?.id ?? null;
-  const queryClient = useQueryClient();
+  const scope = { workspaceId, projectId };
   const [notice, setNotice] = useState<string | null>(null);
   const query = useQuery({
-    queryKey: promptSetId
-      ? queryKeys.prompts.candidates(promptSetId)
-      : ['prompts', 'candidates', 'none'],
-    queryFn: ({ signal }) =>
-      promptsApi.listCandidates(promptSetId as string, { signal, workspaceId }),
-    enabled: Boolean(promptSetId && workspaceId),
+    ...promptsQueries.candidates(scope, promptSetId),
+    enabled: Boolean(promptSetId),
   });
   const candidates: PromptCandidate[] = query.data ?? [];
 
-  const refresh = async () => {
-    if (promptSetId)
-      await queryClient.invalidateQueries({ queryKey: queryKeys.prompts.candidates(promptSetId) });
-  };
-
+  const review = promptsMutations.reviewCandidates(scope);
   const mutation = useMutation({
-    mutationFn: (input: { accept_ids?: string[]; reject_ids?: string[] }) =>
-      promptsApi.reviewCandidates(promptSetId as string, input, { workspaceId }),
+    ...review,
     onMutate: () => setNotice(null),
-    onSuccess: async (result) => {
+    onSuccess: async (result, ...rest) => {
       setNotice(reviewNotice(result));
-      await refresh();
-      if (result.accepted.length) await onReviewed();
+      await review.onSuccess?.(result, ...rest);
+      if (result.accepted.length) onAccepted();
     },
   });
+  const submit = (input: { accept_ids: string[] } | { reject_ids: string[] }) => {
+    if (promptSetId) mutation.mutate({ promptSetId, input });
+  };
 
   return {
     candidates,
     isLoading: Boolean(promptSetId && workspaceId) && query.isPending,
     loadError: query.isError ? humanizeApiError(query.error).message : undefined,
-    refresh,
-    accept: (ids: string[]) => mutation.mutate({ accept_ids: ids }),
-    reject: (ids: string[]) => mutation.mutate({ reject_ids: ids }),
+    retry: () => void query.refetch(),
+    accept: (ids: string[]) => submit({ accept_ids: ids }),
+    reject: (ids: string[]) => submit({ reject_ids: ids }),
     isReviewing: mutation.isPending,
     error: mutation.isError ? humanizeApiError(mutation.error).message : undefined,
     notice,

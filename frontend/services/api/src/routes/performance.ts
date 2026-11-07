@@ -1,18 +1,20 @@
 import {
   performanceDashboardSchema,
   performanceRangeTaskSchema,
+  performanceRangeTaskStatusSchema,
   performanceTablePageSchema,
   projectReadinessSchema,
 } from '@citeladder/contracts/performance';
 import { sql } from 'kysely';
 import { z } from 'zod';
 
-import { configEnvironment, loadWorkerSettings, policy } from '../config.ts';
+import { policy } from '../config.ts';
+import { loadWorkerSettings } from '../config/analytics.ts';
 import { AnalyticsWorker } from '../workers/analytics-worker.ts';
 import { projectPerformanceRange } from '../traffic/snapshot.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { revalidatable } from '../http/revalidate.ts';
-import { enqueueTask, taskKey } from '../referrals/enqueue.ts';
+import { enqueueTask, taskKey } from '../queue/enqueue.ts';
 import {
   clampedCustomWindow,
   getPerformance,
@@ -37,7 +39,8 @@ function taskResponse(task: { id: string; status: string; payload: unknown }) {
   const payload = record(task.payload);
   return {
     task_id: task.id,
-    status: task.status,
+    // The column is plain text; a value outside the queue lifecycle is a defect, not a status.
+    status: performanceRangeTaskStatusSchema.parse(task.status),
     window_start: scalarText(payload.window_start ?? ''),
     window_end: scalarText(payload.window_end ?? ''),
   };
@@ -62,7 +65,7 @@ export const performanceRoutes = [
           .where('id', '=', path.task_id)
           .executeTakeFirst();
       if (!(await read())) throw notFound('Performance range task');
-      const worker = new AnalyticsWorker(db, loadWorkerSettings(configEnvironment(config)), {
+      const worker = new AnalyticsWorker(db, loadWorkerSettings(config.settings), {
         taskScope: { workspaceId: workspace.workspaceId, taskIds: [path.task_id] },
         executors: { performance_range_projection: projectPerformanceRange },
       });
@@ -185,7 +188,6 @@ export const performanceRoutes = [
         kind,
         payload: { window_start: from, window_end: to },
         keyParts,
-        maxAttempts: loadWorkerSettings().taskMaxAttempts,
       });
       const row = await tasks()
         .where('idempotency_key', '=', taskKey(kind, keyParts))

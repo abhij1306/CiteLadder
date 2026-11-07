@@ -1,6 +1,6 @@
 'use client';
 
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -13,7 +13,7 @@ import { DeclarationStatus } from '@/components/agent/declaration-status';
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { ActionPriorityBadge, ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { DetailScreen } from '@/components/layout/page-shell';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { EvidenceDrawer } from '@/components/opportunities/evidence-drawer';
 import { Callout } from '@/components/ui/callout';
 import { Card, CardContent, CardHeader, CardTitle, cardClasses } from '@/components/ui/card';
@@ -40,18 +40,19 @@ import {
 import { actionsMutations, actionsQueries, type ActionDetail } from '@/lib/api/actions';
 import { agentQueries } from '@/lib/api/agent';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { queryKeys } from '@/lib/api/query-keys';
-import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
+import { readableUrl } from '@/lib/format';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 const BACK = { href: '/agent/actions', label: 'Back to Actions' } as const;
 
 /** One Action: diagnosis, member evidence, its declaration and linked chats. */
 export function ActionDetailScreen() {
   const { actionId = '' } = useParams();
-  const { activeProjectId, activeWorkspaceId } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const query = useQuery({
-    ...actionsQueries.detail(activeWorkspaceId ?? '', actionId),
-    enabled: Boolean(activeWorkspaceId && actionId),
+    ...actionsQueries.detail(workspaceId, actionId),
+    enabled: Boolean(actionId),
   });
 
   if (query.isError)
@@ -64,19 +65,13 @@ export function ActionDetailScreen() {
         />
       </DetailScreen>
     );
-  if (!activeWorkspaceId)
-    return (
-      <DetailScreen back={BACK}>
-        <Callout tone="info">Choose a workspace to open this Action.</Callout>
-      </DetailScreen>
-    );
   if (!query.data)
     return (
       <DetailScreen back={BACK}>
         <QueryState kind="loading" />
       </DetailScreen>
     );
-  if (query.data.project_id !== activeProjectId)
+  if (query.data.project_id !== projectId)
     return (
       <DetailScreen back={BACK}>
         <Callout tone="negative">
@@ -85,13 +80,7 @@ export function ActionDetailScreen() {
       </DetailScreen>
     );
   // Keyed so a mutation's state (and its Retry) never outlives its Action.
-  return (
-    <ActionDetailView
-      key={query.data.id}
-      action={query.data}
-      workspaceId={activeWorkspaceId ?? ''}
-    />
-  );
+  return <ActionDetailView key={query.data.id} action={query.data} workspaceId={workspaceId} />;
 }
 
 function ActionDetailView({
@@ -104,7 +93,7 @@ function ActionDetailView({
   const update = useStatusUpdate(workspaceId);
   return (
     <DetailScreen
-      title={action.target_label}
+      title={readableUrl(action.target_label)}
       back={{ ...BACK, projectId: action.project_id }}
       actions={<ActionControls action={action} update={update} />}
       lead={<ActionFacts action={action} />}
@@ -142,11 +131,7 @@ function ActionDetailView({
 }
 
 function useStatusUpdate(workspaceId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    ...actionsMutations.updateStatus(workspaceId),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.actions.all }),
-  });
+  return useMutation(actionsMutations.updateStatus(workspaceId));
 }
 
 type StatusUpdate = ReturnType<typeof useStatusUpdate>;
@@ -334,7 +319,7 @@ function LinkedChats({
 }: Readonly<{ action: ActionDetail; workspaceId: string }>) {
   const { kindLabel } = useAgentCatalog();
   const chats = useInfiniteQuery(
-    agentQueries.chats(workspaceId, action.project_id, { actionId: action.id }),
+    agentQueries.chats({ workspaceId, projectId: action.project_id }, { actionId: action.id }),
   );
   const rows = chats.data?.pages.flatMap((page) => page.items) ?? [];
   return (

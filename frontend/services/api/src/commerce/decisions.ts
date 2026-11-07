@@ -1,6 +1,7 @@
 import type { Database } from '../db/database.ts';
 import { buyerPrompts, candidates, commerceMissing, type CommerceScope } from './reads.ts';
 import { firstOf } from '../lists.ts';
+import { updatePrompt } from '../prompts/prompts.ts';
 
 export function decideCandidate(
   db: Database,
@@ -36,19 +37,21 @@ export function decideBuyerPrompt(
   approved: boolean,
 ) {
   return db.transaction().execute(async (trx) => {
-    // Lock Prompt first, then its Commerce target. Creation uses
-    // the same parent-before-child order; generic Prompt writes touch only p.
+    // The prompt's own writer first (project lock, then the prompt row), then
+    // its Commerce target: creation uses the same parent-before-child order.
     const prompt = await trx
       .selectFrom('prompts as p')
       .innerJoin('prompt_sets as ps', 'ps.id', 'p.prompt_set_id')
       .innerJoin('projects as project', 'project.id', 'ps.project_id')
+      .innerJoin('commerce_prompt_targets as t', 't.prompt_id', 'p.id')
       .select('p.id')
       .where('project.workspace_id', '=', scope.workspaceId)
       .where('project.id', '=', scope.projectId)
+      .where('t.project_id', '=', scope.projectId)
       .where('p.id', '=', id)
-      .forUpdate('p')
       .executeTakeFirst();
     if (!prompt) commerceMissing('Buyer prompt not found');
+    await updatePrompt(trx, scope, prompt.id, { enabled: approved });
     const target = await trx
       .selectFrom('commerce_prompt_targets')
       .select('id')
@@ -58,11 +61,6 @@ export function decideBuyerPrompt(
       .forUpdate()
       .executeTakeFirst();
     if (!target) commerceMissing('Buyer prompt not found');
-    await trx
-      .updateTable('prompts')
-      .set({ enabled: approved, updated_at: new Date() })
-      .where('id', '=', prompt.id)
-      .execute();
     await trx
       .updateTable('commerce_prompt_targets')
       .set({ approved_at: approved ? new Date() : null })

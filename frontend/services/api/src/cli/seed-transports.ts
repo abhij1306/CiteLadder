@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { devSeed } from '../config/dev-seed.ts';
-import type { WebsiteFetcher } from '../projects/safe-fetch.ts';
+import type { WebsiteFetcher } from '../safe-fetch.ts';
 import { IntegrationClient } from '../integrations/client.ts';
 
 function seedLabels(bucket: number) {

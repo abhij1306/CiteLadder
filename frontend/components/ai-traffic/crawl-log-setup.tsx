@@ -21,6 +21,8 @@ import { Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { CopyButton } from '@/components/ui/copy-button';
 import { TextLink } from '@/components/ui/text-link';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -89,7 +91,11 @@ export function CrawlLogSetup({
         </Field>
         {fields}
       </Stack>
-      {mutation.isError ? <Callout tone="negative">{mutation.error.message}</Callout> : null}
+      {mutation.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(mutation.error, { action: 'set up the crawl-log source' })}
+        />
+      ) : null}
       {setup === 'upload' ? <UploadForm model={model} /> : null}
     </Stack>
   );
@@ -250,13 +256,13 @@ export function CrawlLogCredential({
 export function CrawlLogSetupSubmit({
   model,
 }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
-  const { canManage, sources, mutation, issued } = model;
+  const { canManage, sources, mutation, issued, issueSource } = model;
   return (
     <Button
       variant="primary"
       disabled={!canManage || sources.data?.availability !== 'available' || issued !== null}
       pending={mutation.isPending}
-      onClick={() => mutation.mutate({ kind: 'create' })}
+      onClick={() => issueSource({ kind: 'create' })}
     >
       Create source
     </Button>
@@ -338,20 +344,16 @@ function UploadForm({ model }: Readonly<{ model: ReturnType<typeof useCrawlConne
         </Callout>
       ) : null}
       {upload.isError ? (
-        <Callout tone="negative">
-          <Stack>
-            <p>{upload.error.message}</p>
-            {progress ? (
-              <Button
-                variant="secondary"
-                className="w-fit"
-                onClick={() => upload.mutate(progress.uploadId)}
-              >
+        <MutationNotice
+          notice={mutationNoticeForError(upload.error, { action: 'upload the log file' })}
+          recovery={
+            progress ? (
+              <Button variant="secondary" onClick={() => upload.mutate(progress.uploadId)}>
                 Resume upload
               </Button>
-            ) : null}
-          </Stack>
-        </Callout>
+            ) : undefined
+          }
+        />
       ) : null}
     </Stack>
   );

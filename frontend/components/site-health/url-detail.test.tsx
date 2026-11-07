@@ -3,11 +3,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-p
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders as raw } from '@/test/render';
 import type { ReactElement } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { PageDetail } from '@/lib/api/types';
+import type { PageDetail } from '@citeladder/contracts';
 
 import { UrlDetail } from './url-detail';
 
@@ -64,6 +65,7 @@ function renderUrlDetail(
       {ui}
       <LocationDisplay />
     </>,
+    { projectSelection: { activeProject: makeProject() } },
   );
 }
 

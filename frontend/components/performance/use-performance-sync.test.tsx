@@ -1,20 +1,47 @@
 import { useQuery } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { useMemo } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { queryKeys } from '@/lib/api/query-keys';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { usePerformanceSync } from './use-performance-sync';
 
 const { syncNow, getSync } = vi.hoisted(() => ({ syncNow: vi.fn(), getSync: vi.fn() }));
-vi.mock('@/lib/api/performance', () => ({ performanceApi: { syncNow } }));
-vi.mock('@/lib/api/integrations', () => ({ integrationsApi: { getSync } }));
+// The enqueue and the run read stand in for the API; the cache keys and the
+// refresh of every imported read stay real.
+vi.mock('@/lib/api/performance', () => ({
+  performanceMutations: { syncNow: () => ({ mutationFn: () => syncNow() }) },
+}));
+vi.mock('@/lib/api/integrations', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/integrations')>();
+  return {
+    ...actual,
+    integrationsQueries: {
+      ...actual.integrationsQueries,
+      sync: (workspaceId: string | null, connectionId: string, syncId: string | null) => ({
+        ...actual.integrationsQueries.sync(workspaceId, connectionId, syncId),
+        queryFn: () => getSync(),
+      }),
+    },
+  };
+});
 
+/** The sync control under the project route's gate, for the selected project. */
 function Sync({ projectId }: Readonly<{ projectId: string }>) {
-  const sync = usePerformanceSync(projectId);
+  const project = useMemo(() => makeProject({ id: projectId }), [projectId]);
   return (
-    <button onClick={() => sync.mutation.mutate()}>{sync.syncing ? 'Syncing' : 'Sync now'}</button>
+    <ActiveProjectScopeProvider project={project}>
+      <SyncButton />
+    </ActiveProjectScopeProvider>
   );
+}
+
+function SyncButton() {
+  const sync = usePerformanceSync();
+  return <button onClick={sync.start}>{sync.syncing ? 'Syncing' : 'Sync now'}</button>;
 }
 
 afterEach(() => {

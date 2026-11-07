@@ -1,51 +1,13 @@
 import { getDomain } from 'tldts';
-import { z } from 'zod';
 import { policy } from '../config.ts';
 import { jsonObject, record, strings } from '../db/json.ts';
 import { onlyOf } from '../lists.ts';
+import { catalogFactsSchema, type CatalogFacts } from '../site-health/analysis/catalog-facts.ts';
+import { canonicalUrl } from '../site-health/url-identity.ts';
 
-const texts = z.array(z.string()).default([]);
-const link = z.looseObject({
-  url: z.string().default(''),
-  title: z.string().default(''),
-  region: z.string().default(''),
-});
-const product = z.looseObject({
-  name: texts,
-  description: texts,
-  brand: texts,
-  price: z.array(z.union([z.string(), z.number()])).default([]),
-  price_currency: texts,
-  sku: texts,
-  gtin: texts,
-  mpn: texts,
-  category: texts,
-  availability: texts,
-  variants: z.array(z.unknown()).default([]),
-});
-const commerce = z.looseObject({
-  breadcrumbs: texts,
-  breadcrumb_links: z.array(link).default([]),
-  product_cards: z.array(link).default([]),
-  visible_price: z.string().default(''),
-  visible_price_context: z.string().default(''),
-  category_role: z.string().default('unknown'),
-});
-const factsSchema = z.looseObject({
-  title: z.string().default(''),
-  meta_description: z.string().default(''),
-  canonical_url: z.string().default(''),
-  structured_data: z.looseObject({ product: product.prefault({}) }).prefault({}),
-  commerce: commerce.prefault({}),
-  headings: z.looseObject({ h1_texts: texts }).prefault({}),
-  links: z.looseObject({ anchors: z.array(link).default([]) }).prefault({}),
-});
-export type CatalogFacts = z.output<typeof factsSchema>;
+/** Site Health's persisted page facts, read through the producer's schema. */
 export const readFacts = (value: unknown): CatalogFacts =>
-  factsSchema.parse(jsonObject(value, 'site_fetch_artifacts.normalized_facts'));
-const schemes = new Set<string>(policy.traffic.url_schemes);
-const ports = new Set<number>(policy.traffic.url_ports);
-const ignoredQueryKeys = new Set<string>(policy.traffic.ignored_query_keys);
+  catalogFactsSchema.parse(jsonObject(value, 'site_fetch_artifacts.normalized_facts'));
 const indexNames = new Set<string>(policy.commerce.breadcrumb_index_names);
 /** Category identity: `commerce_categories.normalized_name`. */
 export const categoryKey = (name: string) => name.trim().toLowerCase().replaceAll(/\s+/gu, ' ');
@@ -56,30 +18,17 @@ const named = (name: string) => /[\p{L}\p{N}]/u.test(name);
 export const isCategoryName = (name: string) =>
   named(name) && categoryKey(name) !== UNCATEGORIZED_KEY && !indexNames.has(categoryKey(name));
 
-export function catalogUrl(value: string, base?: string): string {
-  try {
-    const url = new URL(value, base);
-    if (!schemes.has(url.protocol.slice(0, -1)) || url.username || url.password) return '';
-    if (!ports.has(Number(url.port || (url.protocol === 'https:' ? 443 : 80)))) return '';
-    url.hash = '';
-    const query = new URLSearchParams(
-      [...url.searchParams].filter(([key]) => !ignoredQueryKeys.has(key.toLowerCase())),
-    );
-    query.sort();
-    url.search = query.toString();
-    return url.href;
-  } catch {
-    return '';
-  }
-}
-
 // Private suffixes count: on a shared host (a.myshopify.com) another tenant is another site.
 const site = (url: string) => getDomain(url, { allowPrivateDomains: true });
 
-export function pageIdentity(facts: CatalogFacts, base: string): string {
-  const declared = facts.canonical_url ? catalogUrl(facts.canonical_url, base) : '';
+/**
+ * The page's catalog URL in Site Health's identity (`site_urls.normalized_url`), so
+ * shelves and products link by the same key; null when no public URL identifies it.
+ */
+export function pageIdentity(facts: CatalogFacts, base: string): string | null {
+  const declared = facts.canonical_url ? canonicalUrl(facts.canonical_url, base) : null;
   const domain = site(base);
-  return declared && domain && site(declared) === domain ? declared : catalogUrl(base);
+  return declared && domain && site(declared) === domain ? declared : canonicalUrl(base);
 }
 
 export function productAlias(value: string): string {
@@ -137,7 +86,7 @@ function adjacentAmount(text: string, start: number, direction: 1 | -1): string 
 }
 
 function visiblePrice(facts: CatalogFacts) {
-  const { visible_price: text, visible_price_context: context } = facts.commerce;
+  const { visible_price: text, visible_price_context: context = '' } = facts.commerce;
   const surrounding = `${text} ${context}`.toLowerCase();
   if (policy.commerce.ambiguous_price_tokens.some((token) => surrounding.includes(token)))
     return { price: null, currency: '' };
@@ -221,7 +170,7 @@ export function productCategories(facts: CatalogFacts, url: string, aliases: str
   const crumbs = facts.commerce.breadcrumbs
     .map((value) => value.trim().replaceAll(/\s+/gu, ' '))
     .filter(named);
-  const ownUrls = new Set([url, ...aliases].map((value) => catalogUrl(value)).filter(Boolean));
+  const ownUrls = new Set([url, ...aliases].flatMap((value) => canonicalUrl(value) ?? []));
   const base = aliases.find(Boolean) || url;
   let cursor = 0;
   const linked = new Set<number>();
@@ -231,7 +180,7 @@ export function productCategories(facts: CatalogFacts, url: string, aliases: str
     );
     if (position < 0) continue;
     cursor = position + 1;
-    const target = catalogUrl(link.url, base);
+    const target = canonicalUrl(link.url, base);
     if (target && !ownUrls.has(target) && !ownUrls.has(productAlias(target))) linked.add(position);
   }
   const ancestors = crumbs.slice(1, linked.has(crumbs.length - 1) ? undefined : -1);
@@ -243,7 +192,7 @@ export function productCategories(facts: CatalogFacts, url: string, aliases: str
 export function shelfLinks(facts: CatalogFacts, base: string): string[] {
   const cards = facts.commerce.product_cards.filter((link) => link.url.trim());
   const links = cards.length ? cards : facts.links.anchors.filter((link) => link.region === 'main');
-  return [...new Set(links.map((link) => catalogUrl(link.url, base)).filter(Boolean))];
+  return [...new Set(links.flatMap((link) => canonicalUrl(link.url, base) ?? []))];
 }
 
 const CATALOG_MODELS = new Set<string>(policy.discovery.constants.commerce_business_models);

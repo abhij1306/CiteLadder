@@ -5,9 +5,9 @@ import { Bot } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import type { Visibility } from '@/lib/api/types';
+import type { Visibility } from '@citeladder/contracts';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import {
-  engineLabel,
   formatRate,
   measured,
   visibleEngines,
@@ -32,7 +32,8 @@ export function EngineComparison({
   filter: VisibilityFilters['engine'];
   onSelect?: (engine: string) => void;
 }>) {
-  const engines = visibleEngines(visibility, filter);
+  const catalog = useEngineCatalog();
+  const engines = visibleEngines(visibility, filter, catalog.order);
   return (
     <DataTable
       title="By model"
@@ -49,10 +50,10 @@ export function EngineComparison({
           <TableCell>
             {onSelect ? (
               <Button variant="ghost" onClick={() => onSelect(engine.logical_engine)}>
-                {engineLabel(engine.logical_engine)}
+                {catalog.label(engine.logical_engine)}
               </Button>
             ) : (
-              <ClampText lines={1}>{engineLabel(engine.logical_engine)}</ClampText>
+              <ClampText lines={1}>{catalog.label(engine.logical_engine)}</ClampText>
             )}
             <ClampText lines={1} className={textRole('caption', 'text-ink-secondary')}>
               {visibility.model_provenance

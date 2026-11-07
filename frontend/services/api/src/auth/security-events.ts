@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
+import type { McpWriteKind } from '../mcp/write-tools.ts';
 
 type SecurityEvent =
   | 'acquisition.control'
@@ -14,24 +15,6 @@ type SecurityEvent =
   | 'credential.update'
   | 'credential.delete'
   | `mcp.write.${McpWriteKind}`;
-
-/** Each change an MCP grant can make; its event targets the project. */
-export type McpWriteKind =
-  | 'create_topic'
-  | 'rename_topic'
-  | 'update_prompt_text'
-  | 'add_competitor'
-  | 'remove_competitor'
-  | 'delete_topic'
-  | 'confirm_topics'
-  | 'generate_prompts'
-  | 'update_action_status'
-  | 'cancel_audit'
-  | 'add_prompts'
-  | 'archive_prompts'
-  | 'launch_audit'
-  | 'schedule'
-  | 'declare_implemented';
 
 /** Append in the mutation transaction; no arbitrary payload or secrets. */
 export async function recordSecurityEvent(

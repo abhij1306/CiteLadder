@@ -4,6 +4,7 @@ import { policy } from '../src/config.ts';
 import { aiReferralSources } from '../src/analytics/ai-referrals.ts';
 import { metricSeriesPoints } from '../src/analytics/metric-series.ts';
 import { domainMatches, isGroundingRedirect, normalizeDomain } from '../src/analysis/domains.ts';
+import { landingPage, pathIdentity } from '../src/page-identity.ts';
 import { classifySourceDomain } from '../src/analysis/opportunities/source-patterns.ts';
 import { epochMicros, parseDatetime } from '../src/http/datetimes.ts';
 import { RequestValidationError, validateParams } from '../src/http/params.ts';
@@ -62,6 +63,32 @@ describe('recorded evidence normalization', () => {
     expect(isGroundingRedirect('grounding-api-redirect/xyz')).toBe(true);
     expect(isGroundingRedirect('evil-grounding-api-redirect.example')).toBe(false);
     expect(isGroundingRedirect('https://pub.example/a?ref=grounding-api-redirect')).toBe(false);
+  });
+
+  it('keeps landing-page and crawl-path identities, persisted join keys, byte for byte', () => {
+    const hosts = new Set(['www.example.com', 'xn--bcher-kva.example']);
+    expect(landingPage('/Guides/./best?utm_source=x#top', 'WWW.Example.com', hosts)).toBe(
+      'https://www.example.com/Guides/best',
+    );
+    expect(landingPage('/Docs/caf%C3%A9', 'xn--bcher-kva.example', hosts)).toBe(
+      'https://xn--bcher-kva.example/Docs/caf%C3%A9',
+    );
+    expect(landingPage('/x', 'evil.test', hosts)).toBeNull();
+    expect(pathIdentity('/Docs/caf%C3%A9?x=1', 'https://Bücher.example')).toEqual({
+      display_path: '/Docs/café',
+      canonical_url: 'https://xn--bcher-kva.example/Docs/caf%C3%A9',
+      identity: 'exact',
+      identity_reason: null,
+      url_hash: 'eab21221180f091f09f75d437afba34ad162d39455885504c5b9e2b785c74a95',
+      folder: '/Docs/café',
+      resource_class: 'page',
+    });
+    expect(pathIdentity('/a/./b/token=abc123', 'https://example.com')).toMatchObject({
+      display_path: '/a/b/[redacted]',
+      canonical_url: null,
+      identity: 'non_joinable',
+      url_hash: null,
+    });
   });
 });
 

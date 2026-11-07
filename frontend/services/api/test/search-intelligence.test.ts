@@ -71,7 +71,7 @@ async function connection(tenant: Tenant, options: { active?: boolean; tested?: 
       base_url: '',
       credential_revision: REVISION,
       active: options.active ?? true,
-      last_test_status: options.tested === false ? 'failed' : si.connection_test_ok,
+      last_test_status: options.tested === false ? 'failed' : policy.providers.test_status_ok,
       created_at: now(),
       updated_at: now(),
     })
@@ -302,14 +302,13 @@ describe('Search Intelligence readiness and preferences', () => {
       .insertInto('owned_domains')
       .values([
         // The primary website's own origin, and a child subdomain.
-        { id: randomUUID(), project_id: t.projectId, domain: 'acme.example', created_at: now() },
-        {
+        ...['acme.example', 'blog.acme.example', 'www.acme.co.uk'].map((domain) => ({
           id: randomUUID(),
+          workspace_id: t.workspaceId,
           project_id: t.projectId,
-          domain: 'blog.acme.example',
+          domain,
           created_at: now(),
-        },
-        { id: randomUUID(), project_id: t.projectId, domain: 'www.acme.co.uk', created_at: now() },
+        })),
       ])
       .execute();
     await fixtures.competitor(t.projectId, { name: 'Rival', domains: ['www.rival.co.uk'] });
@@ -489,6 +488,25 @@ describe('Search Intelligence run confirmation and cancellation', () => {
     }
     const missing = await call<ErrorBody>(`/runs/${randomUUID()}/cancel`, { method: 'POST' });
     expect(missing.status).toBe(404);
+  });
+
+  it('fails the collecting datasets of a cancelled run and keeps its published ones', async () => {
+    const runId = await review(t, await connection(t), { status: 'running' });
+    const collecting = await dataset(t, runId, { status: 'collecting', coverage: 'unknown' });
+    const published = await dataset(t, runId);
+    const cancelled = await call<Run>(`/runs/${runId}/cancel`, { method: 'POST' });
+    expect(cancelled.body.status).toBe('cancelled');
+    const datasets = await db
+      .selectFrom('search_intelligence_datasets')
+      .select(['id', 'status'])
+      .where('run_id', '=', runId)
+      .execute();
+    expect(new Map(datasets.map((row) => [row.id, row.status]))).toEqual(
+      new Map([
+        [collecting, 'failed'],
+        [published, 'published'],
+      ]),
+    );
   });
 
   it('lists confirmed runs newest first, pages them and hides other projects’ runs', async () => {

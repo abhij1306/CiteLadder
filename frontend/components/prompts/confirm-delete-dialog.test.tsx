@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { Prompt, Topic } from '@/lib/api/types';
+import type { Prompt, Topic } from '@citeladder/contracts';
 
 import { ConfirmDeleteDialog, type PendingDelete } from './confirm-delete-dialog';
 

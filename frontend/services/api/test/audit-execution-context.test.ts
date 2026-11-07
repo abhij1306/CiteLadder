@@ -2,11 +2,10 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
-import {
-  directRequest,
-  frozenSurfaceRequest,
-  loadExecutionContext,
-} from '../src/audits/execution-context.ts';
+import { loadExecutionContext } from '../src/audits/execution-context.ts';
+import { directRequest } from '../src/audits/surfaces/llm.ts';
+import { frozenSurfaceRequest } from '../src/audits/surfaces/dataforseo.ts';
+import { llmScraperSurface } from '../src/audits/surfaces/llm-scraper.ts';
 import { commitSubmissionIntent } from '../src/audits/submission-intent.ts';
 import { AuditQueue } from '../src/queue/audit-queue.ts';
 import { createConnection, updateConnection } from '../src/providers/connections.ts';
@@ -15,7 +14,7 @@ import { probeConnection } from '../src/providers/probes.ts';
 import { record } from '../src/db/json.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
-import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 
 const db = testDatabase(),
   fixtures = new VisibilityFixtures(db),
@@ -65,7 +64,7 @@ async function seed(surface = false) {
     {},
     runtime,
   );
-  const [task] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId: id });
+  const [task] = await claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId: id });
   expect(task?.audit_id).toBe(id);
   return { ...t, connectionId, task: task! };
 }
@@ -85,7 +84,7 @@ describe('frozen audit execution identity', () => {
     const context = await loadExecutionContext(
       db,
       t.task,
-      'worker',
+      t.task.lease_owner,
       {
         ...runtime,
         audits: { ...runtime.audits, audit_timeout_seconds: 1, audit_max_output_tokens: 5 },
@@ -138,7 +137,7 @@ describe('frozen audit execution identity', () => {
       {},
       runtime,
     );
-    const [task] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId: id });
+    const [task] = await claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId: id });
     const context = await loadExecutionContext(
       db,
       task!,
@@ -181,7 +180,7 @@ describe('frozen audit execution identity', () => {
       new Date(),
     ))!;
     const intents = await Promise.all(
-      [1, 2].map(() => commitSubmissionIntent(db, context, 'worker')),
+      [1, 2].map(() => commitSubmissionIntent(db, context, t.task.lease_owner)),
     );
     expect(intents.map((intent) => intent?.fresh).sort()).toEqual([false, true]);
     const persisted = await db
@@ -196,7 +195,11 @@ describe('frozen audit execution identity', () => {
       attempt_count: 0,
       provider_task_id: '',
     });
-    const request = frozenSurfaceRequest(context, persisted.provider_submission_ref, runtime);
+    const request = frozenSurfaceRequest(
+      llmScraperSurface,
+      context,
+      persisted.provider_submission_ref,
+    );
     expect(request).toMatchObject({
       location_code: 2840,
       request_settings: { priority: 1, force_web_search: true },
@@ -222,6 +225,26 @@ describe('frozen audit execution identity', () => {
       loadExecutionContext(db, t.task, 'worker', runtime, auditTestKey, new Date()),
     ).rejects.toMatchObject({ code: 'connection_changed' });
   });
+  it('refuses a scraper submission whose frozen request lost its scraper settings', async () => {
+    const t = await seed(true);
+    const { request_settings: _dropped, ...snapshot } = record(t.task.request_snapshot);
+    await db
+      .updateTable('audit_tasks')
+      .set({ request_snapshot: JSON.stringify(snapshot) })
+      .where('id', '=', t.task.id)
+      .execute();
+    const context = (await loadExecutionContext(
+      db,
+      t.task,
+      'worker',
+      runtime,
+      auditTestKey,
+      new Date(),
+    ))!;
+    expect(() => frozenSurfaceRequest(llmScraperSurface, context, 'submission-ref')).toThrow(
+      'Frozen search request has no request_settings',
+    );
+  });
   it('refuses to commit a stale credential snapshot after a concurrent rotation', async () => {
     const t = await seed(true);
     const context = (await loadExecutionContext(
@@ -241,7 +264,7 @@ describe('frozen audit execution identity', () => {
       auditTestKey,
       runtime.providers,
     );
-    await expect(commitSubmissionIntent(db, context, 'worker')).rejects.toMatchObject({
+    await expect(commitSubmissionIntent(db, context, t.task.lease_owner)).rejects.toMatchObject({
       code: 'connection_changed',
     });
     const task = await db

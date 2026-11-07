@@ -4,21 +4,25 @@ import type {
   promptCandidateReviewResponseSchema,
   promptCandidateSchema,
   promptSchema,
+  promptSetListSchema,
   promptSetSchema,
   topicSchema,
 } from '@citeladder/contracts/project';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { sql } from 'kysely';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 
-import { enforceWorkspaceRequest } from '../src/abuse/usage.ts';
+import { spendBudget, type Budget } from '../src/abuse/usage.ts';
 import { createApp } from '../src/app.ts';
 import { ApiError } from '../src/errors.ts';
 import { candidate, generationRun, prompt, promptSet, topic } from './prompt-fixtures.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
+import { acquireProjectLock } from '../src/prompts/locks.ts';
 
 type Prompt = z.infer<typeof promptSchema>;
 type PromptSet = z.infer<typeof promptSetSchema>;
+type PromptSetList = z.infer<typeof promptSetListSchema>;
 type Topic = z.infer<typeof topicSchema>;
 type Candidate = z.infer<typeof promptCandidateSchema>;
 type Review = z.infer<typeof promptCandidateReviewResponseSchema>;
@@ -75,8 +79,17 @@ describe('prompt sets', () => {
     await prompt(db, created.body.id, 'acme running shoes');
     const edited = await patch<PromptSet>(`/prompt-sets/${created.body.id}`, { description: 'd' });
     expect(edited.body).toMatchObject({ name: 'B', description: 'd', prompt_count: 1 });
-    const listed = await call<PromptSet[]>(`/prompt-sets?project_id=${t.projectId}`);
-    expect(listed.body.map((set) => set.id).sort()).toEqual([t.setId, created.body.id].sort());
+    const listed = await call<PromptSetList>(`/prompt-sets?project_id=${t.projectId}`);
+    expect(listed.body.prompt_sets.map((set) => set.id).sort()).toEqual(
+      [t.setId, created.body.id].sort(),
+    );
+    // The listed form bounds are the ones the write schemas enforce.
+    const { persona_max_chars: personaMax } = listed.body.limits;
+    const id = await prompt(db, t.setId, 'acme trail shoes');
+    expect((await patch(`/prompts/${id}`, { persona: 'x'.repeat(personaMax) })).status).toBe(200);
+    expect((await patch(`/prompts/${id}`, { persona: 'x'.repeat(personaMax + 1) })).status).toBe(
+      422,
+    );
 
     const other = await fixtures.tenant();
     const foreign = await promptSet(db, other.projectId);
@@ -209,6 +222,41 @@ describe('prompt edits', () => {
     expect((await patch(`/prompts/${stray}`, { status: 'active' })).status).toBe(422);
   });
 
+  it('binds an activation against a topic change that committed while it waited for the project lock', async () => {
+    const trail = await topic(db, t.projectId, 'Trail gear', 'hydration packs');
+    const archived = await prompt(db, t.setId, 'lightest hydration packs', {
+      status: 'archived',
+      topicId: trail,
+    });
+    // The topic writer deletes the prompt's topic, detaching it and taking
+    // "hydration packs" out of the project vocabulary.
+    const activation = await db.transaction().execute(async (deletion) => {
+      const { rows } = await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(deletion);
+      const blocker = rows[0]!.pid;
+      await acquireProjectLock(deletion, t.projectId);
+      await deletion.deleteFrom('topics').where('id', '=', trail).execute();
+      const pending = patch<ErrorBody>(`/prompts/${archived}`, { status: 'active' });
+      await vi.waitFor(
+        async () => {
+          const blocked = await sql<{ waiting: boolean }>`select exists (
+            select 1 from pg_stat_activity where ${blocker} = any(pg_blocking_pids(pid))
+          ) as waiting`.execute(db);
+          expect(blocked.rows[0]!.waiting).toBe(true);
+        },
+        { timeout: 5000, interval: 20 },
+      );
+      return { pending };
+    });
+    const refused = await activation.pending;
+    expect([refused.status, refused.body.error.code]).toEqual([422, 'prompt_off_topic']);
+    const stored = await db
+      .selectFrom('prompts')
+      .select(['status', 'topic_id'])
+      .where('id', '=', archived)
+      .executeTakeFirstOrThrow();
+    expect(stored).toEqual({ status: 'archived', topic_id: null });
+  });
+
   it('requires topical binding when an active prompt is moved to another topic', async () => {
     const topicId = await topic(db, t.projectId, 'Trail gear', 'hydration packs');
     const fits = await prompt(db, t.setId, 'lightest hydration packs');
@@ -307,11 +355,14 @@ describe('import', () => {
   });
 
   it('spends the workspace import budget before reading the upload', async () => {
-    const limit = { operation: `bulk_import_test_${randomUUID()}`, limit: 1, windowSeconds: 3600 };
-    await enforceWorkspaceRequest(db, t.workspaceId, limit);
-    const refused = await enforceWorkspaceRequest(db, t.workspaceId, limit).catch(
-      (error: unknown) => error,
-    );
+    const limit: Budget = {
+      subject: 'workspace',
+      operation: `bulk_import_test_${randomUUID()}`,
+      limit: 1,
+      windowSeconds: 3600,
+    };
+    await spendBudget(db, limit, t.workspaceId);
+    const refused = await spendBudget(db, limit, t.workspaceId).catch((error: unknown) => error);
     expect(refused).toBeInstanceOf(ApiError);
     expect((refused as ApiError).status).toBe(429);
     expect(Number((refused as ApiError).headers?.['retry-after'])).toBeGreaterThan(0);

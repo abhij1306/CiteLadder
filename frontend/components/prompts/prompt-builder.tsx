@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
@@ -12,10 +12,14 @@ import { Inline } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
-import type { PromptGenerateInput } from '@/lib/api/prompts';
-import { queryKeys } from '@/lib/api/query-keys';
-import { topicsApi } from '@/lib/api/topics';
-import type { PromptGenerateResponse, SeedQueries, Topic } from '@/lib/api/types';
+import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
+import { topicsQueries } from '@/lib/api/topics';
+import type {
+  PromptFormLimits,
+  PromptGenerateResponse,
+  SeedQueries,
+  Topic,
+} from '@citeladder/contracts';
 import { personaChoices } from '@/lib/prompts/builder-business';
 import { defaultRunSettings, runRequest, type RunSettings } from '@/lib/prompts/builder-run';
 
@@ -46,17 +50,17 @@ type PromptBuilderProps = {
   topics: Topic[];
   hasCompetitors: boolean;
   /** Runs one generate request; null when it failed (the error arrives as `generateError`). */
-  generate: (input: PromptGenerateInput) => Promise<PromptGenerateResponse | null>;
+  generate: (input: PromptGenerateRequest) => Promise<PromptGenerateResponse | null>;
   isGenerating: boolean;
   generateError?: unknown;
   /** The pending-candidate review list. */
   review: ReactNode;
-  /** Refreshes the library's reads after topics change. */
-  onTopicsChanged: () => Promise<void>;
+  /** The request bounds the API enforces, from the prompt-set list. */
+  limits: PromptFormLimits;
 };
 
 /** What this open of the builder generated: its request and every run it made. */
-type Session = { request: PromptGenerateInput; results: PromptGenerateResponse[] };
+type Session = { request: PromptGenerateRequest; results: PromptGenerateResponse[] };
 
 /**
  * The Prompt Builder: a right-hand sheet on the Prompts screen that steers
@@ -77,23 +81,13 @@ export function PromptBuilder(props: Readonly<PromptBuilderProps>) {
 }
 
 function BuilderSheet(props: Readonly<PromptBuilderProps>) {
-  const { projectId, workspaceId, topics, hasCompetitors, isGenerating, generateError } = props;
-  const queryClient = useQueryClient();
+  const { projectId, workspaceId, topics, hasCompetitors, isGenerating, generateError, limits } =
+    props;
+  const scope = { workspaceId, projectId };
   const [step, setStep] = useState<BuilderStep>(props.initialStep);
   const business = useBuilderBusiness({ projectId, workspaceId });
-  const seedsQuery = useQuery({
-    queryKey: queryKeys.topics.seedQueries(projectId),
-    queryFn: ({ signal }) => topicsApi.seedQueries(projectId, { signal, workspaceId }),
-  });
-  const topicStep = useBuilderTopics({
-    projectId,
-    workspaceId,
-    topics,
-    onConfirmed: async () => {
-      await props.onTopicsChanged();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.topics.seedQueries(projectId) });
-    },
-  });
+  const seedsQuery = useQuery(topicsQueries.seedQueries(scope));
+  const topicStep = useBuilderTopics({ scope, topics });
   const [edited, setEdited] = useState<RunSettings | null>(null);
   const settings = edited ?? defaultRunSettings();
   const personas = business.draft ? personaChoices(business.draft) : [];
@@ -101,10 +95,11 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
     seeds: seedsQuery.data ?? null,
     hasCompetitors,
     personaChoices: personas,
+    limits,
   });
   const [run, setRun] = useState<Session | null>(null);
 
-  const generate = async (request: PromptGenerateInput, more: boolean) => {
+  const generate = async (request: PromptGenerateRequest, more: boolean) => {
     const result = await props.generate(request);
     if (!result) return;
     setRun((current) =>
@@ -161,6 +156,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
             business={business}
             runContext={settings.runContext}
             onRunContextChange={(runContext) => setEdited({ ...settings, runContext })}
+            limits={limits}
           />
         </TabPanel>
         <TabPanel value="topics">
@@ -170,6 +166,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
           <BuilderDistributionStep
             settings={settings}
             onChange={setEdited}
+            limits={limits}
             hasCompetitors={hasCompetitors}
             personaChoices={personas}
             seeds={{ data: seedsQuery.data, status: <SeedsReadState read={seedsQuery} /> }}

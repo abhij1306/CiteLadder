@@ -15,11 +15,30 @@ export const WORKSPACE_ID = '22222222-2222-4222-8222-222222222222';
 const ROUTE_ID = '33333333-3333-4333-8333-333333333333';
 export const CHATGPT_MODEL = 'gpt-6.1-terra';
 
+/** A consumer-app surface observed through DataForSEO's LLM scraper. */
+const scraped = (logical_engine: string, label: string, model: string) => ({
+  logical_engine,
+  label,
+  routes: [
+    {
+      transport_provider: 'dataforseo',
+      transport_model: model,
+      retrieval_enabled: null,
+      reasoning_effort: null,
+      surface_kind: 'llm_scraper',
+    },
+  ],
+});
+
+/** The catalogue as the backend serves it: every engine, in display order, labelled. */
 export const providerCatalogFixture = {
   transports: ['openai', 'anthropic', 'google', 'dataforseo'],
   engines: [
+    scraped('chatgpt_search', 'ChatGPT Search', 'chat_gpt-llm-scraper'),
+    scraped('gemini_consumer', 'Gemini', 'gemini-llm-scraper'),
     {
       logical_engine: 'chatgpt',
+      label: 'ChatGPT API',
       routes: [
         {
           transport_provider: 'openai',
@@ -32,6 +51,7 @@ export const providerCatalogFixture = {
     },
     {
       logical_engine: 'gemini',
+      label: 'Gemini API',
       routes: [
         {
           transport_provider: 'google',
@@ -44,6 +64,7 @@ export const providerCatalogFixture = {
     },
     {
       logical_engine: 'claude',
+      label: 'Claude API',
       routes: [
         {
           transport_provider: 'anthropic',
@@ -59,6 +80,7 @@ export const providerCatalogFixture = {
       // no request to pin them on, and the fixture keeps them null so a test
       // cannot pass against a shape the backend never sends.
       logical_engine: 'google_ai_overview',
+      label: 'Google AI Overview',
       routes: [
         {
           transport_provider: 'dataforseo',

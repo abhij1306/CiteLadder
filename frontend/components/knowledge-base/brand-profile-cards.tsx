@@ -7,6 +7,7 @@ import { AppGrid } from '@/components/ui/app-grid';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChipInput, ChipList } from '@/components/ui/chip-input';
 import { Field } from '@/components/ui/field';
@@ -15,8 +16,8 @@ import { Stack } from '@/components/ui/layout';
 import { SegmentedControl } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
-import { humanizeApiError } from '@/lib/api/errors';
-import type { Project } from '@/lib/api/types';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
+import type { Project } from '@citeladder/contracts';
 import { BUYER_TYPE_CHOICES, MARKET_SCOPE_CHOICES } from '@/lib/project/identity-facets';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
@@ -24,7 +25,12 @@ import type { BrandProfileForm } from './use-brand-profile-form';
 
 /** The profile save's outcome, above the tab it was saved from. */
 export function ProfileSaveNotices({ form }: Readonly<{ form: BrandProfileForm }>) {
-  if (form.error) return <Callout tone="negative">{humanizeApiError(form.error).message}</Callout>;
+  if (form.error)
+    return (
+      <MutationNotice
+        notice={mutationNoticeForError(form.error, { action: 'save the brand profile' })}
+      />
+    );
   return form.notice ? <Callout tone="positive">{form.notice}</Callout> : null;
 }
 

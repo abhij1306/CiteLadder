@@ -1,7 +1,7 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
-import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { createAudits } from '../src/audits/creation.ts';
@@ -11,7 +11,12 @@ import { createConnectionInput } from '../src/providers/inputs.ts';
 import { probeConnection } from '../src/providers/probes.ts';
 import { loadExecutionContext } from '../src/audits/execution-context.ts';
 import { commitSubmissionIntent } from '../src/audits/submission-intent.ts';
-import { persistOverview, persistSurfaceExchange } from '../src/audits/surface-persistence.ts';
+import {
+  persistOverviewFailure,
+  persistOverviewObservation,
+  persistSurfaceExchange,
+} from '../src/audits/surface-persistence.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
 import { parseOverview } from '../src/search-surfaces/parsing.ts';
 import { record } from '../src/db/json.ts';
 const db = testDatabase(),
@@ -64,7 +69,7 @@ async function seed() {
     {},
     runtime,
   );
-  const [task] = await queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId });
+  const [task] = await claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId });
   await queue.markRunning(task!, 'worker');
   tasks.push(task!.id);
   const context = await loadExecutionContext(
@@ -148,8 +153,10 @@ describe('durable surface evidence', () => {
       'provider-id',
     );
     if (typeof result === 'string') throw new Error('Expected observation');
-    await persistOverview(db, t.task, 'worker', result, runtime);
-    expect(await persistOverview(db, t.task, 'worker', result, runtime)).toBeNull();
+    await persistOverviewObservation(db, t.task, 'worker', result, deriveExecution);
+    expect(
+      await persistOverviewObservation(db, t.task, 'worker', result, deriveExecution),
+    ).toBeNull();
     const artifact = await db
       .selectFrom('raw_response_artifacts')
       .selectAll()
@@ -204,7 +211,7 @@ describe('durable surface evidence', () => {
       'provider-id',
     );
     if (typeof result === 'string') throw new Error('Expected failure');
-    await persistOverview(db, t.task, 'worker', result, runtime);
+    await persistOverviewFailure(db, t.task, 'worker', result, runtime, { exchange: 'unpaid' });
     expect(
       await db
         .selectFrom('aio_observations')

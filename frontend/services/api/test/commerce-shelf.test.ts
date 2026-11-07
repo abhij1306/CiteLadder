@@ -69,8 +69,14 @@ describe('frozen Commerce shelf projections', () => {
         throw new Error('unavailable');
       },
     });
+    // A failed resolver call keeps the span as evidence and records the failure.
     expect(unresolved).toMatchObject([
-      { span: { rank: 1, orderObservable: true }, resolved: null, model: '' },
+      {
+        span: { rank: 1, orderObservable: true },
+        resolved: null,
+        model: 'fixture',
+        outcome: 'failed',
+      },
     ]);
     const extracted = await prepareRecommendations('1. Choose either option', emptyTarget, {
       model: 'fixture',
@@ -102,6 +108,25 @@ describe('frozen Commerce shelf projections', () => {
       },
     );
     expect(calls).toEqual([['Consider the Rival Runner.', 'Try one at $90.']]);
+  });
+  it('records whether each span needed the resolver, had none, or was left out by it', async () => {
+    const answer = 'Shoes matter. Consider the Rival Runner. Try one at $90.';
+    const outcomes = (rows: Awaited<ReturnType<typeof prepareRecommendations>>) =>
+      rows.map((row) => [row.span.text, row.outcome, row.model]);
+    expect(outcomes(await prepareRecommendations(answer, emptyTarget))).toEqual([
+      ['Shoes matter.', 'not_needed', ''],
+      ['Consider the Rival Runner.', 'unavailable', ''],
+      ['Try one at $90.', 'unavailable', ''],
+    ]);
+    const partial = await prepareRecommendations(answer, emptyTarget, {
+      model: 'fixture',
+      resolve: async () => ({ recommendations: [{ span: 0, title: 'Rival Runner' }] }),
+    });
+    expect(outcomes(partial)).toEqual([
+      ['Shoes matter.', 'not_needed', ''],
+      ['Consider the Rival Runner.', 'resolved', 'fixture'],
+      ['Try one at $90.', 'omitted', 'fixture'],
+    ]);
   });
   it("accepts an AI-observed PDP only when the answer carries it and it is not the business's own", () => {
     // The sentence's full stop is not part of the URL.
@@ -211,6 +236,35 @@ describe('frozen Commerce shelf projections', () => {
       recognized_slot_count: 2,
     });
   });
+  it('shares the shelf between owned products and approved competitors only', () => {
+    const row = (classification: string, holder: string) => ({
+      id: randomUUID(),
+      task_id: 'one',
+      classification,
+      rank: null,
+      order_observable: false,
+      product_id: classification === 'owned' ? holder : null,
+      competitor_candidate_id: classification === 'owned' ? null : holder,
+    });
+    const owned = row('owned', 'product');
+    const approved = row('approved_competitor', 'approved-rival');
+    const pending = row('ai_observed_competitor', 'pending-rival');
+    const rejected = row('rejected_competitor', 'rejected-rival');
+    expect(shelfMetrics(['one'], [owned, pending, rejected])).toMatchObject({
+      share_of_shelf: 1,
+      recognized_slot_count: 1,
+    });
+    expect(shelfMetrics(['one'], [owned, approved, pending, rejected])).toMatchObject({
+      share_of_shelf: 0.5,
+      recognized_slot_count: 2,
+    });
+    // A shelf held only by unreviewed or rejected rivals has no slot to share.
+    expect(shelfMetrics(['one'], [pending, rejected])).toMatchObject({
+      product_visibility: 0,
+      share_of_shelf: null,
+      recognized_slot_count: 0,
+    });
+  });
   it('persists frozen matches, pending independent PDPs, citation provenance and replay-safe target snapshots', async () => {
     const t = await auditTenant(db, fixtures),
       foreign = await auditTenant(db, fixtures);
@@ -253,7 +307,7 @@ describe('frozen Commerce shelf projections', () => {
     );
     const queue = new AuditQueue(db, 120),
       [claim] = await queue.claim('shelf-worker', 1, { workspaceId: t.workspaceId, auditId });
-    const running = await queue.markRunning(claim!, 'shelf-worker');
+    const running = await queue.markRunning(claim!, claim!.lease_owner);
     const task = running!.task;
     tasks.push(task.id);
     await db
@@ -318,7 +372,7 @@ describe('frozen Commerce shelf projections', () => {
     await expect(
       prepareShelfExecution(db, { ...task, workspace_id: foreign.workspaceId }, result, null),
     ).rejects.toThrow();
-    const artifactId = await persistExecutionSuccess(db, task, 'shelf-worker', result, derive);
+    const artifactId = await persistExecutionSuccess(db, task, claim!.lease_owner, result, derive);
     await db.transaction().execute((trx) => derive(trx, task, running!.audit, artifactId!));
     const observations = await db
       .selectFrom('commerce_recommendation_observations')
@@ -331,6 +385,13 @@ describe('frozen Commerce shelf projections', () => {
       'owned',
       'ai_observed_competitor',
       'unresolved',
+    ]);
+    expect(
+      observations.map((row) => [row.resolver_outcome, row.resolver_template_version]),
+    ).toEqual([
+      ['not_needed', null],
+      ['resolved', 'commerce-shelf-resolver-1'],
+      ['resolved', 'commerce-shelf-resolver-1'],
     ]);
     expect(observations[0]).toMatchObject({
       product_id: product.id,
@@ -375,9 +436,10 @@ describe('frozen Commerce shelf projections', () => {
       .where('audit_id', '=', auditId)
       .execute();
     expect(snapshots).toHaveLength(1);
+    // The pending AI-observed rival holds no slot until it is approved.
     expect(snapshots[0]).toMatchObject({
       product_visibility: 1,
-      share_of_shelf: 0.5,
+      share_of_shelf: 1,
       average_shelf_position: 1,
       first_position_win_rate: 1,
       successful_execution_count: 1,

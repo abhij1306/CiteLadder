@@ -8,6 +8,7 @@ import type {
 } from '../generated/db-schema.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { record } from '../db/json.ts';
+import { CHECKS, isCheckKind } from './checks/registry.ts';
 
 const a = policy.opportunity.actions;
 type Declaration = Selectable<OpportunityImplementationEvents>;
@@ -139,9 +140,13 @@ export async function measurementLegs(
   now = new Date(),
 ) {
   const checks = Array.isArray(row.expected_checks) ? row.expected_checks : [];
-  const mapping: Record<string, string> = a.CHECK_KIND_MEASUREMENT_LEG;
   const legs = [
-    ...new Set(checks.map((check) => mapping[String(record(check).kind)]).filter(Boolean)),
+    ...new Set(
+      checks.flatMap((check) => {
+        const kind = record(check).kind;
+        return isCheckKind(kind) ? [CHECKS[kind].leg] : [];
+      }),
+    ),
   ];
   const result: Leg[] = [];
   for (const leg of legs) {

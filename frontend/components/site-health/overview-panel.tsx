@@ -8,9 +8,9 @@ import { OverviewMetricCards } from './overview-metrics';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { httpErrorStatus } from '@/lib/api/client';
-import { siteHealthQueries } from '@/lib/api/site-health';
-import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
-import { shouldPollCrawl } from '@/lib/site-health/status';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
+import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
+import { CRAWL_STATES } from '@/lib/site-health/status';
 
 /**
  * Overview shares the screen's single polling dashboard while a crawl runs.
@@ -29,9 +29,9 @@ export function OverviewPanel({
   crawl: SiteCrawl | null;
   dashboard: SiteHealthDashboard | undefined;
 }>) {
-  const terminal = crawl ? !shouldPollCrawl(crawl) : false;
+  const terminal = crawl ? !CRAWL_STATES[crawl.status].active : false;
   const overview = useQuery({
-    ...siteHealthQueries.overview(workspaceId, projectId, crawlId),
+    ...siteHealthQueries.overview({ workspaceId, projectId }, crawlId),
     enabled: terminal,
   });
   const data = overview.data;

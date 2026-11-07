@@ -5,16 +5,17 @@ import type { Database } from '../db/database.ts';
 import { strings } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { resolveSite } from '../projects/site-resolution.ts';
-import { fetchWebsite } from '../projects/safe-fetch.ts';
+import { fetchWebsite } from '../safe-fetch.ts';
 import {
   preferencesBody,
   reviewBody,
   type ReviewInput,
 } from '../routes/search-intelligence-contracts.ts';
 import { competitorTarget, ownedTargets, type CanonicalTarget } from './targets.ts';
+import { canonicalJson } from '../canonical-json.ts';
 import {
   buildRequest,
-  canonicalJson,
+  isBacklinkKind,
   pageEstimateMicrousd,
   quoteDataset,
   scopeHash,
@@ -23,7 +24,9 @@ import {
 } from './requests.ts';
 import type { Scope } from './reads.ts';
 import { runView } from './views.ts';
-import { connectionIdentity, reviewConnection } from './credentials.ts';
+import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
+import { reviewConnection } from './credentials.ts';
+import { connectionPoolIdentity } from '../providers/dataforseo-identity.ts';
 
 const error = (code: string, message: string) =>
   new ApiError(422, message, { code: asApiErrorCode(code) });
@@ -148,19 +151,19 @@ async function frozenConnection(
   encryptionKey: string,
 ) {
   const connection = await reviewConnection(trx, scope.workspace, connectionId);
-  const identity = connectionIdentity(connection, encryptionKey);
+  const identity = connectionPoolIdentity(connection, encryptionKey);
   return { connection, identity };
 }
 function assertSupportedMarket(payload: Review, location: number | null, language: string) {
   if (
-    payload.datasets.some((item) => !si.backlink_kinds.includes(item.kind)) &&
+    payload.datasets.some((item) => !isBacklinkKind(item.kind)) &&
     (!location || !surfaceSupports('google_ai_overview', location, searchLanguageOf(language)))
   )
     throw error('unsupported_market', 'Select a supported Labs location and language');
 }
 function datasetDepth(selection: Review['datasets'][number]) {
   if (selection.kind === 'backlink_history') return si.history_max_observations;
-  if (['footprint', 'backlink_summary'].includes(selection.kind)) return 1;
+  if (SEARCH_DATASET_KINDS[selection.kind].fixedDepth) return 1;
   return selection.depth;
 }
 /** A recent complete dataset for the same scope, reused instead of buying it again. */

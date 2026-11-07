@@ -1,5 +1,5 @@
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { PageDetail } from '@/lib/api/types';
+import type { PageDetail } from '@citeladder/contracts';
 import { ICONS } from '@/lib/icons';
 import { AuditScores } from './overview-metrics';
 

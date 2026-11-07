@@ -4,7 +4,7 @@ import { siteHealthDashboardSchema } from '@citeladder/contracts/site-health';
 import type { Database } from '../../db/database.ts';
 import { WorkspaceScope } from '../../db/workspace-scope.ts';
 import {
-  dashboardCounters,
+  crawlCounters,
   dashboardCrawl,
   projectCrawl,
   rootFailure,
@@ -39,8 +39,7 @@ export function resolvePhase(
     (summary.web_fundamentals_state !== 'not_measured' ||
       summary.aeo_measurement_state !== 'not_measured');
   if (scored) return 'dashboard';
-  if (crawl.status === 'failed' || crawl.status === 'cancelled' || crawl.status === 'paused')
-    return 'terminal';
+  if (crawl.status === 'failed' || crawl.status === 'cancelled') return 'terminal';
   // A committed monitored set seeds analysis at creation; `analysis_status`
   // only lags until the first reconcile.
   if (hasMonitoredSelection) return 'analyzing';
@@ -63,7 +62,7 @@ export async function dashboard(
       .where('project_id', '=', projectId)
       .where('active', '=', true)
       .executeTakeFirst(),
-    crawl ? Promise.all([rootFailure(db, crawl), dashboardCounters(db, crawl)]) : null,
+    crawl ? Promise.all([rootFailure(db, crawl), crawlCounters(db, crawl)]) : null,
     crawl
       ? workspace
           .selectFrom(db, 'site_health_snapshots')
@@ -73,10 +72,11 @@ export async function dashboard(
       : undefined,
   ]);
   const summary = crawl ? scoreSummary(crawl) : null;
-  const [root, counters] = details ?? [{ summary: null, errors: [] }, undefined];
+  const [root, counters] = details ?? [{ summary: null, errors: [] }, null];
   return siteHealthDashboardSchema.parse({
     project_id: projectId,
-    crawl: crawl ? projectCrawl(crawl, { failureSummary: root.summary, counters }) : null,
+    crawl:
+      crawl && counters ? projectCrawl(crawl, counters, { failureSummary: root.summary }) : null,
     score_summary: summary,
     snapshot_id: snapshot?.id ?? null,
     phase: resolvePhase(crawl, summary, projectMonitored !== undefined),

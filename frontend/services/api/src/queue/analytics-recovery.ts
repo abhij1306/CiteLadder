@@ -3,16 +3,16 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
+import { ANALYTICS_KIND_NAMES } from '../workers/analytics-kinds.ts';
 import { reclaimExpiredLeases } from './recovery.ts';
-import type { ClaimScope } from './task-queue.ts';
+import { ANALYTICS_LANE, type ClaimScope } from './task-queue.ts';
 const { statuses } = policy.task_queue;
 
 export async function recoverAnalyticsLeases(db: Database, batchSize: number, scope?: ClaimScope) {
   if (scope && !scope.taskIds.length) return 0;
-  const kinds = sql<boolean>`task_kind in (${sql.join(policy.analytics.ts_owned_task_kinds)})`;
+  const kinds = sql<boolean>`task_kind in (${sql.join(ANALYTICS_KIND_NAMES)})`;
   const rows = await reclaimExpiredLeases(db, {
-    table: 'analytics_tasks',
-    charge: 1,
+    lane: ANALYTICS_LANE,
     batchSize,
     scope: scope
       ? sql<boolean>`${kinds} and workspace_id = ${scope.workspaceId} and id in (${sql.join(scope.taskIds)})`

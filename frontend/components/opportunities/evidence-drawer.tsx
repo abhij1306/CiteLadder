@@ -15,11 +15,11 @@ import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Label, textRole } from '@/components/ui/typography';
 import { opportunitiesQueries } from '@/lib/api/opportunities';
-import type { OpportunityDetail } from '@/lib/api/types';
-import { severityBadgeValue, severityLabel } from '@/lib/site-health/issues';
+import type { OpportunityDetail } from '@citeladder/contracts';
+import { severityLabel, severityPriority } from '@/lib/site-health/issues';
 import { panelClasses } from '@/components/ui/panel';
 import { Limitations } from '@/components/ui/passage';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /** One Action member's evidence, backed by the persisted detail projection. */
 export function EvidenceDrawer({
@@ -33,7 +33,7 @@ export function EvidenceDrawer({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }>) {
-  const workspaceId = useActiveWorkspaceId() ?? '';
+  const { workspaceId } = useProjectScope();
   const detailQuery = useQuery({
     ...opportunitiesQueries.detail(workspaceId, opportunityId ?? ''),
     enabled: open && opportunityId !== null,
@@ -77,7 +77,7 @@ function OpportunityDetailBody({ detail }: Readonly<{ detail: OpportunityDetail 
       <Stack>
         <h2 className={textRole('sectionTitle')}>{detail.title}</h2>
         <Inline className="flex-wrap">
-          <Badge variant="status" value={severityBadgeValue(detail.severity)}>
+          <Badge variant="priority" value={severityPriority(detail.severity)}>
             {severityLabel(detail.severity)} impact
           </Badge>
           <OpportunityTypeBadge type={detail.opportunity_type} />

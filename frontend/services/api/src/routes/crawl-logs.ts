@@ -46,21 +46,6 @@ const root = '/api/v1/projects/{project_id}/crawl-logs';
 const ingestPath = policy.api.machine_prefix + '/crawl-logs/ingest/{source_id}';
 const firehosePath = policy.api.machine_prefix + '/crawl-logs/firehose/{source_id}';
 const uploadBatchPath = root + '/sources/{source_id}/uploads/{upload_id}/batches';
-const selfBounded = [ingestPath, firehosePath, uploadBatchPath].map((template) =>
-  template.split('/'),
-);
-const matchesTemplate = (template: string[], segments: string[]) =>
-  template.length === segments.length &&
-  template.every((part, i) => (part.startsWith('{') ? segments[i] !== '' : part === segments[i]));
-/**
- * POST routes that authenticate and spend attempt quota before streaming their
- * own compressed/decompressed body bound; the app must not pre-read them.
- */
-export function streamsOwnBody(method: string, path: string) {
-  if (method !== 'POST') return false;
-  const segments = path.split('/');
-  return selfBounded.some((template) => matchesTemplate(template, segments));
-}
 const path = { project_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const sourcePath = { ...path, source_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const uploadPath = {
@@ -68,7 +53,11 @@ const uploadPath = {
   upload_id: { scalar: { kind: 'uuid' }, required: true },
 } as const;
 const base = { family: 'crawl-logs', authorize: 'project' } as const;
-const writes = { ...base, capability: 'manage_credentials' } as const;
+const writes = {
+  family: 'crawl-logs',
+  authorize: 'active-project',
+  capability: 'manage_credentials',
+} as const;
 const scope = (workspaceId: string, projectId: string) => ({ workspaceId, projectId });
 const uploadView = (row: Selectable<CrawlLogUploads>) =>
   crawlUploadSchema.parse({ ...row, created_at: row.created_at.toISOString() });
@@ -167,6 +156,7 @@ export const crawlLogRoutes = [
     family: 'crawl-log-ingest',
     authorize: 'public',
     raw: true,
+    streamsBody: true,
     path: ingestPath,
     params: { path: { source_id: sourcePath.source_id }, query: {} },
     response: crawlReceiptSchema,
@@ -209,6 +199,7 @@ export const crawlLogRoutes = [
     family: 'crawl-log-ingest',
     authorize: 'public',
     raw: true,
+    streamsBody: true,
     path: firehosePath,
     params: { path: { source_id: sourcePath.source_id }, query: {} },
     response: firehoseResponseSchema,
@@ -265,6 +256,7 @@ export const crawlLogRoutes = [
   }),
   definePostRoute({
     ...writes,
+    streamsBody: true,
     path: uploadBatchPath,
     params: { path: uploadPath, query: {} },
     body: uploadBatchSchema,

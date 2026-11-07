@@ -89,7 +89,7 @@ for (const width of [1280, 390]) {
     });
     let reading = false;
     await stubAuthedShell(page, [
-      ['**/api/v1/agent/skills', { skills: SKILLS }],
+      ['**/api/v1/agent/skills', { skills: SKILLS, limits: { mentions_max: 5 } }],
       [
         `**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`,
         { items: [], next_cursor: null, status_counts: {} },
@@ -162,7 +162,7 @@ for (const width of [1280, 390]) {
       const sends: { key: string | undefined; body: unknown }[] = [];
       let reads = 0;
       await stubAuthedShell(page, [
-        ['**/api/v1/agent/skills', { skills: SKILLS }],
+        ['**/api/v1/agent/skills', { skills: SKILLS, limits: { mentions_max: 5 } }],
         [
           `**/api/v1/projects/${FIXTURE_PROJECT.id}/actions*`,
           { items: [], next_cursor: null, status_counts: {} },

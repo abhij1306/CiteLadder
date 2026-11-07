@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +13,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
 import { agentMutations, agentQueries } from '@/lib/api/agent';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { queryKeys } from '@/lib/api/query-keys';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 /**
@@ -23,9 +22,9 @@ import { useWorkspaceCapability } from '@/lib/project/project-context';
  * save action, so the state lives here rather than in the card.
  */
 export function useAgentInstructions(workspaceId: string, projectId: string) {
-  const query = useQuery(agentQueries.instructions(workspaceId, projectId));
+  const scope = { workspaceId, projectId };
+  const query = useQuery(agentQueries.instructions(scope));
   const mayEdit = useWorkspaceCapability('run');
-  const queryClient = useQueryClient();
   const text = query.data?.text ?? '';
   // Null follows persisted data; a local edit survives background refreshes.
   const [edit, setEdit] = useState<{ text: string | null; baseline: string; version: number }>({
@@ -34,30 +33,36 @@ export function useAgentInstructions(workspaceId: string, projectId: string) {
     version: 0,
   });
   const draft = edit.text ?? text;
-  const save = useMutation({
-    ...agentMutations.saveInstructions(workspaceId),
-    onMutate: () => ({ version: edit.version, draft }),
-    onSuccess: (saved, submitted, submittedEdit) => {
-      queryClient.setQueryData(queryKeys.agent.instructions(projectId), saved);
-      setEdit((current) => ({
-        text:
-          current.version === submittedEdit?.version && submittedEdit.draft === submitted.text
-            ? null
-            : (current.text ?? current.baseline),
-        baseline: saved.text,
-        version: current.version,
-      }));
-    },
-  });
+  const save = useMutation(agentMutations.saveInstructions(scope));
+  /**
+   * Send `submitted`. The draft clears only when nothing was typed after it
+   * (the edit version and text still match); later typing stays the draft.
+   */
+  const submit = (submitted: string) => {
+    const submittedVersion = edit.version;
+    save.mutate(submitted, {
+      onSuccess: (saved) =>
+        setEdit((current) => ({
+          text:
+            current.version === submittedVersion && draft === submitted
+              ? null
+              : (current.text ?? current.baseline),
+          baseline: saved.text,
+          version: current.version,
+        })),
+    });
+  };
   return {
     query,
     draft,
     mayEdit,
     /** Something to save: loaded, editable, changed and not already saving. */
     canSave: Boolean(query.data) && mayEdit && draft.trim() !== text.trim() && !save.isPending,
-    save: () => save.mutate({ projectId, text: draft }),
+    save: () => submit(draft),
     saveError: save.isError ? save.error : null,
-    retry: () => save.variables && save.mutate(save.variables),
+    retry: () => {
+      if (save.variables !== undefined) submit(save.variables);
+    },
     setDraft: (next: string) =>
       setEdit((current) => ({
         text: next === text ? null : next,

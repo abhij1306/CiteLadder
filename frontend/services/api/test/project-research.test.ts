@@ -1,9 +1,10 @@
 import { gzipSync } from 'node:zlib';
 import { createServer } from 'node:http';
 
-import { expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recordingMeter } from './meter-fixtures.ts';
 
+import { ApiError } from '../src/errors.ts';
 import { extractPage, offeringLinks } from '../src/projects/html-evidence.ts';
 import { rasterType } from '../src/projects/logo-refresh.ts';
 import {
@@ -13,7 +14,7 @@ import {
   pinnedRequest,
   validateAddress,
   websiteIdentity,
-} from '../src/projects/safe-fetch.ts';
+} from '../src/safe-fetch.ts';
 import { resolveSite } from '../src/projects/site-resolution.ts';
 import {
   identityEnvelope,
@@ -355,27 +356,121 @@ it('retains supported field citations but refuses a field citing only unknown ev
     ),
   ).toEqual([{ name: 'Globex', domains: ['globex.com'], aliases: [] }]);
 });
-it('bounds model attempts and records failed research without fabricating identity', async () => {
-  const structured = vi.fn(async () => {
-    throw new Error('invalid output');
+it.each([
+  ['an unusable answer', new Error('invalid output'), true],
+  ['a gateway refusal', new ApiError(403, 'The model gateway refused the request'), false],
+])(
+  'fails research on %s from the identity request instead of an empty review',
+  async (_label, failure, retryable) => {
+    const structured = vi.fn(async () => {
+      throw failure;
+    });
+    const gateway = {
+      model: 'test-model',
+      maxOutputTokens: 100,
+      baseUrlHost: 'model.example',
+      adapter: 'openai_compatible' as const,
+      converse: vi.fn(),
+      complete: vi.fn(),
+      completeStructured: vi.fn(),
+      structured,
+    };
+    await expect(
+      researchBrand(
+        discoveryCreate.parse({
+          brand_name: 'Acme',
+          website_url: 'acme.com',
+          primary_market: 'US',
+        }),
+        { url: 'https://acme.com/', domain: 'acme.com', page: null, warning: 'research_degraded' },
+        { meter, gateway, env: {} },
+      ),
+    ).rejects.toMatchObject({ code: 'brand_identity_unavailable', retryable });
+    expect(structured).toHaveBeenCalledTimes(1);
+  },
+);
+describe('identity deadline', () => {
+  const acme = discoveryCreate.parse({
+    brand_name: 'Acme',
+    website_url: 'acme.com',
+    primary_market: 'US',
   });
-  const gateway = {
-    model: 'test-model',
-    maxOutputTokens: 100,
-    baseUrlHost: 'model.example',
-    adapter: 'openai_compatible' as const,
-    converse: vi.fn(),
-    complete: vi.fn(),
-    completeStructured: vi.fn(),
-    structured,
-  };
-  const result = await researchBrand(
-    discoveryCreate.parse({ brand_name: 'Acme', website_url: 'acme.com', primary_market: 'US' }),
-    { url: 'https://acme.com/', domain: 'acme.com', page: null, warning: 'research_degraded' },
-    { meter, gateway, env: {} },
-  );
-  expect(structured).toHaveBeenCalledTimes(1);
-  expect(result.profile.description).toBe('');
-  expect(result.competitors).toEqual([]);
-  expect(result.snapshot.model_calls).toMatchObject([{ phase: 'identity', outcome: 'failed' }]);
+  const site = { url: 'https://acme.com/', domain: 'acme.com', page: null, warning: '' };
+  const searchProvider: ResearchTransport = async (target) =>
+    new URL(String(target)).pathname === '/v1/fetch'
+      ? Response.json({ markdown: 'Recorded company evidence' })
+      : Response.json({
+          results: [
+            { title: 'Acme', url: 'https://acme.com/about', snippet: 'Analytics services' },
+          ],
+        });
+  /** The real gateway over a provider whose identity answer takes `identityMs` on the fake clock. */
+  function slowIdentityGateway(identityMs: number) {
+    const replies = [
+      { status: 'ready', profile: { category: 'Analytics' }, signature: { category: 'Analytics' } },
+      { competitors: [{ name: 'Globex', domains: ['globex.com'] }] },
+    ];
+    let calls = 0;
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      (_url, init) =>
+        new Promise((resolve, reject) => {
+          const reply = Response.json({
+            choices: [{ message: { content: JSON.stringify(replies.shift()) } }],
+          });
+          const timer = setTimeout(() => resolve(reply), calls++ === 0 ? identityMs : 1_000);
+          init?.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            reject(init.signal?.reason);
+          });
+        }),
+    );
+    return createModelGateway(
+      {
+        apiKey: 'test-only',
+        baseUrl: 'https://model.example/v1',
+        model: 'test-model',
+        timeoutSeconds: 600,
+        maxOutputTokens: 2000,
+        attempts: 1,
+        baseDelaySeconds: 0,
+        maxDelaySeconds: 0,
+      },
+      { fetch, sleep: async () => {} },
+    );
+  }
+  async function research(identityMs: number, budgetMs?: number) {
+    const outcome = researchBrand(acme, site, {
+      meter,
+      gateway: slowIdentityGateway(identityMs),
+      transport: searchProvider,
+      env: { KEENABLE_API_KEY: 'test-only' },
+      ...(budgetMs === undefined ? {} : { budgetEndsAt: performance.now() + budgetMs }),
+    }).then(
+      (result) => ({ result, error: null }),
+      (error: unknown) => ({ result: null, error }),
+    );
+    await vi.advanceTimersByTimeAsync(identityMs + 2_000);
+    return outcome;
+  }
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  it('waits past the old 40-second cap for a slow identity and still suggests competitors', async () => {
+    const { result, error } = await research(60_000);
+    expect(error).toBeNull();
+    expect(result?.competitors.map((item) => item.name)).toEqual(['Globex']);
+    expect(result?.warnings).toEqual([]);
+  });
+  it('fails an identity that outlasts its deadline or the remaining budget', async () => {
+    expect((await research(100_000)).error).toMatchObject({
+      code: 'brand_identity_unavailable',
+      retryable: true,
+    });
+    expect((await research(60_000, 50_000)).error).toMatchObject({
+      code: 'brand_identity_unavailable',
+    });
+  });
 });

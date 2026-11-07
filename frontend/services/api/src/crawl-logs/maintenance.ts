@@ -2,17 +2,20 @@ import { createHash, randomUUID } from 'node:crypto';
 import ipaddr from 'ipaddr.js';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { crawlers } from '../config/crawlers.ts';
-import { fetchWebsite, type WebsiteFetcher } from '../projects/safe-fetch.ts';
-import { hash } from '../traffic/normalization.ts';
+import { fetchWebsite, type WebsiteFetcher } from '../safe-fetch.ts';
+import { hash } from '../crypto-text.ts';
 import { record } from '../db/json.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask, enqueueCoalesced } from '../queue/enqueue.ts';
 import type { Database } from '../db/database.ts';
-import type { Executor } from '../workers/executor.ts';
+import type { Executor } from '../queue/executor.ts';
 import { sql } from 'kysely';
 import { enqueueRollup, lockCrawlState, type CrawlScope } from './state.ts';
-import { enqueueTrafficInsights } from './insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
 import { stallQuietSources } from './stall.ts';
 import { enqueueDuePulls } from './pull.ts';
+import { failureFacts, getLogger } from '../logging.ts';
+
+const logger = getLogger('crawl_logs.maintenance');
 
 export function botIpRangeRefresh(fetcher: WebsiteFetcher = fetchWebsite): Executor {
   return async (task, { checkCancelled }) => {
@@ -48,8 +51,14 @@ export function botIpRangeRefresh(fetcher: WebsiteFetcher = fetchWebsite): Execu
       if (!cidrs.length) throw new Error('Empty IP range response');
       cidrs.forEach((c) => ipaddr.parseCIDR(c));
       status = 'succeeded';
-    } catch {
+    } catch (error) {
+      // A failed refresh persists a `failed` snapshot with no ranges.
       cidrs = [];
+      logger.warning('bot_ip_range_refresh_failed', {
+        bot_id: bot.bot_id,
+        ...failureFacts(error),
+        elapsed_ms: Date.now() - fetchedAt.getTime(),
+      });
     }
     return {
       error: null,
@@ -151,7 +160,9 @@ async function refreshDailyInsights(db: Database, now: Date, canAdmit: () => boo
   for (const scope of due.rows) {
     if (!canAdmit()) return false;
     // One project at a time keeps each enqueue inside the tick's admission budget.
-    await db.transaction().execute((trx) => enqueueTrafficInsights(trx, scope, now)); // NOSONAR
+    await db
+      .transaction()
+      .execute((trx) => enqueueCoalesced(trx, { ...insightsRefresh, ...scope, now })); // NOSONAR
   }
   if (due.rows.length < crawlLogs.sweep_batch_size) insightsSweptDay = day;
   return true;

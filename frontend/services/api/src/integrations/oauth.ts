@@ -8,6 +8,7 @@ import { resolveWorkspaceMember } from '../auth/workspace.ts';
 import { lockAuthorizedWorkspace } from '../workspaces/service.ts';
 import { ApiError } from '../errors.ts';
 import { enqueueSyncRun } from './sync.ts';
+import { recordIntegrationEvents } from './events.ts';
 import { getLogger } from '../logging.ts';
 import {
   endpoints,
@@ -200,6 +201,20 @@ export async function completeOAuth(
       .where('transport', '=', transport)
       .forUpdate()
       .executeTakeFirst();
+    // A claimed revocation is about to revoke the old tokens at the provider,
+    // which can end the whole grant; reconnecting over it would keep a grant
+    // that dies with them. Once revoked (or the claim lapses) a reconnect is fine.
+    if (
+      existing?.status === 'pending_revocation' &&
+      existing.refresh_claim_id !== null &&
+      existing.refresh_claim_expires_at !== null &&
+      existing.refresh_claim_expires_at.getTime() > Date.now()
+    )
+      throw new IntegrationError(
+        'oauth_revocation_in_progress',
+        'The previous connection is still being disconnected',
+        true,
+      );
     const grantId = existing?.id ?? randomUUID();
     const createdAt = existing?.created_at ?? new Date();
     const scopes = bundle.scopes;
@@ -267,19 +282,15 @@ export async function completeOAuth(
         .onConflict((conflict) => conflict.columns(['grant_id', 'provider']).doNothing())
         .execute();
     }
-    await trx
-      .insertInto('integration_events')
-      .values({
-        id: randomUUID(),
-        workspace_id: workspaceId,
-        connection_id: null,
-        grant_id: grantId,
-        event_type: 'integration.connected',
+    await recordIntegrationEvents(trx, [
+      {
+        workspaceId,
+        grantId,
+        type: 'integration.connected',
         message: `Integration connected via ${transport}`,
-        payload: JSON.stringify({ provider: input.provider, transport, providers }),
-        created_at: new Date(),
-      })
-      .execute();
+        payload: { provider: input.provider, transport, providers },
+      },
+    ]);
     return grantId;
   });
   await queueCatchUp(db, workspaceId, connectedGrant);

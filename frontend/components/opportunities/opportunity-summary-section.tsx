@@ -1,7 +1,7 @@
 import { OpportunityKvRow } from '@/components/opportunities/opportunity-kv-row';
 import { TextLink } from '@/components/ui/text-link';
 import { Label } from '@/components/ui/typography';
-import type { OpportunityDetail } from '@/lib/api/types';
+import type { OpportunityDetail } from '@citeladder/contracts';
 import { formatAudited } from '@/lib/site-health/status';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { ledgerClasses } from '@/components/ui/workspace';

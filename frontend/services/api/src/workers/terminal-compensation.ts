@@ -6,17 +6,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { getLogger } from '../logging.ts';
 import type { QueueTask, ClaimScope } from '../queue/task-queue.ts';
-import { compensateInternalLinks } from '../site-health/internal-link-judgments.ts';
-import { compensateInspection } from '../source-pages/inspector.ts';
-import { compensatePerception } from '../perception/executor.ts';
-import { compensateFactVerification } from '../perception/fact-verification.ts';
-
-const compensators: Record<string, (db: Database, task: QueueTask) => Promise<void>> = {
-  source_page_inspection: compensateInspection,
-  internal_link_judgment: compensateInternalLinks,
-  answer_perception: compensatePerception,
-  fact_verification: compensateFactVerification,
-};
+import { ANALYTICS_COMPENSATORS as compensators } from './analytics-kinds.ts';
 
 function mark(db: Database, task: QueueTask, fields: Record<string, unknown>) {
   return db

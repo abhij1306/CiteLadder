@@ -148,4 +148,5 @@ export const skills = {
       next: [{ workflow_id: 'internal_links', prompt: 'Plan internal links that support' }],
     },
   ],
+  limits: { mentions_max: 5 },
 };

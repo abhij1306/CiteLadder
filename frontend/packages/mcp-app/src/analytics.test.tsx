@@ -72,10 +72,10 @@ describe('CiteLadder MCP App', () => {
       record_uri: `citeladder://visibility_result/${answerId}`,
       audit_id: audit,
       prompt_text: 'Best CRM for a small agency?',
-      answer_text: 'Acme and Competitor are popular choices.',
       logical_engine: 'chatgpt',
       completed_at: '2026-10-03T12:00:00Z',
     };
+    const answerText = 'Acme and Competitor are popular choices.';
     const responses: Record<string, unknown> = {
       list_projects: {
         projects: [{ id: project, workspace_name: 'Team', name: 'Acme' }],
@@ -83,6 +83,7 @@ describe('CiteLadder MCP App', () => {
       },
       read_visibility_overview: overviewEvidence,
       read_visibility_sources: {
+        state: 'available',
         items: [
           {
             key: 'publisher.example',
@@ -96,6 +97,7 @@ describe('CiteLadder MCP App', () => {
         pagination: { next_cursor: null },
       },
       read_visibility_results: { state: 'available', audit_id: audit, items: [answer] },
+      fetch: { id: answer.record_uri, title: 'Visibility Result', text: answerText },
     };
     const controller = createController({
       call: vi.fn(async (name: string) => responses[name]),
@@ -109,7 +111,8 @@ describe('CiteLadder MCP App', () => {
     await act(() => controller.select({ ...controller.getSnapshot().selection, view: 'sources' }));
     await user.click(screen.getByRole('button', { name: 'Answers' }));
     expect(screen.getByRole('heading', { name: answer.prompt_text })).toBeVisible();
-    expect(screen.getByText(answer.answer_text)).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Read retained answer' }));
+    expect(await screen.findByText(answerText)).toBeVisible();
     expect(screen.getByText('Acme · Selected audit')).toBeVisible();
     expect(screen.getByRole('link', { name: 'Open CiteLadder' })).toHaveAttribute(
       'href',
@@ -483,7 +486,7 @@ describe('CiteLadder MCP App', () => {
       selection: { project_id: project, view: 'site_health' },
       evidence: { crawl_id: audit, state: 'partial' },
     });
-    await expect(controller.sitePages()).rejects.toThrow('revoked');
+    await expect(controller.sitePages(audit)).rejects.toThrow('revoked');
     await Promise.resolve();
     expect(controller.getSnapshot().result).toBeNull();
     expect(controller.getSnapshot().error).toMatch(/reconnect/);
@@ -543,7 +546,7 @@ describe('CiteLadder MCP App', () => {
     ]);
   });
   it('uses concrete source drill-down IDs and validates untrusted model selections', async () => {
-    const call = vi.fn(async () => ({ items: [] }));
+    const call = vi.fn(async () => ({ state: 'available', items: [] }));
     const controller = createController({ call, context: vi.fn(async () => undefined) });
     controller.receive({
       ...result(),

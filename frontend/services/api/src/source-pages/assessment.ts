@@ -2,7 +2,7 @@
 import { policy } from '../config.ts';
 import { routePageKind } from '../site-health/routes.ts';
 import type { ExtractedPage } from './extract.ts';
-import { publicUrl } from '../projects/safe-fetch.ts';
+import { publicUrl } from '../safe-fetch.ts';
 import {
   DENSE_SCRIPT,
   entityOffset,

@@ -21,47 +21,7 @@ import type {
   ProviderConnectionState,
   ProviderConnectionStateEntry,
   TransportProvider,
-} from '@/lib/api/types';
-
-/** Logical engines rendered as cards, in display order. */
-export const ENGINE_ORDER: readonly LogicalEngine[] = [
-  'chatgpt_search',
-  'gemini_consumer',
-  'chatgpt',
-  'gemini',
-  'claude',
-  'google_ai_overview',
-] as const;
-
-/** Human display names for each logical engine. */
-export const ENGINE_LABELS: Record<LogicalEngine, string> = {
-  chatgpt: 'ChatGPT API',
-  gemini: 'Gemini API',
-  claude: 'Claude API',
-  chatgpt_search: 'ChatGPT Search',
-  gemini_consumer: 'Gemini',
-  google_ai_overview: 'Google AI Overview',
-};
-
-/**
- * The engines that are OBSERVED on a results page rather than asked a question.
- *
- * Kept as its own list because the difference is real everywhere it shows up:
- * nothing is sent to an observed surface, it has no model and no retrieval
- * state, and a filter that calls the whole set "models" misdescribes it. The
- * backend carries the same distinction as `surface_kind` on the route.
- */
-const SEARCH_SURFACE_ENGINES: readonly LogicalEngine[] = ['google_ai_overview'] as const;
-
-/** True when this engine key names an observed surface. */
-export function isSearchSurfaceEngine(key: string): boolean {
-  const surfaces: readonly string[] = SEARCH_SURFACE_ENGINES;
-  return surfaces.includes(key);
-}
-
-export function isConsumerEngine(key: string): boolean {
-  return key === 'chatgpt_search' || key === 'gemini_consumer' || isSearchSurfaceEngine(key);
-}
+} from '@citeladder/contracts';
 
 /** Human display names for each transport provider. */
 export const TRANSPORT_LABELS: Record<TransportProvider, string> = {
@@ -89,11 +49,6 @@ export const ENGINE_LOGOS: Record<string, string> = {
   perplexity: '/brand/perplexity.webp',
 };
 
-/** Human label for an engine key (falls back to the raw key). */
-export function engineLabel(key: string): string {
-  return ENGINE_LABELS[key as LogicalEngine] ?? key;
-}
-
 /** Human label for a transport key (falls back to the raw key). */
 export function transportLabel(key: string): string {
   return TRANSPORT_LABELS[key as TransportProvider] ?? key;
@@ -111,16 +66,6 @@ export function transportLabel(key: string): string {
  */
 export function productTransportLabel(key: string): string | null {
   return key === 'dataforseo' ? null : transportLabel(key);
-}
-
-/**
- * The same rule for a transport MODEL id. An LLM route's model is real
- * provenance a reader compares runs by; an observed surface's is the vendor's
- * endpoint name, which describes our plumbing rather than what was measured.
- */
-export function productModelLabel(engine: string, model: string | null | undefined): string | null {
-  if (!model) return null;
-  return isConsumerEngine(engine) ? null : model;
 }
 
 /** The single fixed route on an engine card. */
@@ -202,12 +147,11 @@ export function buildEngineCards(
   catalog: ProviderCatalog | undefined,
   states?: readonly ProviderConnectionStateEntry[],
 ): EngineCardModel[] {
-  const byEngine = new Map(catalog?.engines.map((e) => [e.logical_engine, e]) ?? []);
   const byKey = new Map((states ?? []).map((entry) => [entry.key, entry]));
 
-  return ENGINE_ORDER.map((engine) => {
-    const approved = byEngine.get(engine)?.routes ?? [];
-    const approvedRoute = approved[0];
+  // The catalogue lists engines in display order, each with its label.
+  return (catalog?.engines ?? []).map(({ logical_engine: engine, label, routes }) => {
+    const approvedRoute = routes[0];
     const route: EngineRouteOption | null = approvedRoute
       ? {
           transport_provider: approvedRoute.transport_provider,
@@ -220,7 +164,7 @@ export function buildEngineCards(
     const entry = byKey.get(engine) ?? byKey.get(`provider.${engine}`);
     return {
       logical_engine: engine,
-      label: ENGINE_LABELS[engine],
+      label,
       route,
       availability: route ? ('available' as const) : ('unavailable' as const),
       state: entry?.state ?? ('missing' as const),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Prompt } from '@/lib/api/types';
+import type { Prompt } from '@citeladder/contracts';
 import { emptyFilters, filterPrompts } from './filter';
 
 function prompt(overrides: Partial<Prompt> = {}): Prompt {

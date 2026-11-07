@@ -1,7 +1,7 @@
 import type { InternalLink } from '@citeladder/contracts/site-health';
 import { useState } from 'react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { CopyButton } from '@/components/ui/copy-button';

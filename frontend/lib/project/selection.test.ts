@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Project, Workspace } from '@/lib/api/types';
+import type { Project, Workspace } from '@citeladder/contracts';
 
 import {
   pickActiveProject,

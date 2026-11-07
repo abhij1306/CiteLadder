@@ -173,8 +173,7 @@ export function useWarmDimensionTable(
     warmQuery(
       queryClient,
       performanceQueries.table(
-        workspaceId,
-        projectId,
+        { workspaceId, projectId },
         tableParams(snapshot, {
           dimension,
           sort: defaultSort(dimension),
@@ -244,8 +243,7 @@ export function DimensionTable({
     ],
     query: (request) =>
       performanceQueries.table(
-        workspaceId,
-        projectId,
+        { workspaceId, projectId },
         tableParams(
           { snapshotId, compareSnapshotId },
           { dimension, sort: activeSort, cursor: request.cursor, size: request.limit },

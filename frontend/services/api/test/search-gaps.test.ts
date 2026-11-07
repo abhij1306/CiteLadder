@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
+import { targetColumns } from '../src/analysis/opportunities/targets.ts';
 import {
   searchGapDecisions,
   type GapInputs,
@@ -86,9 +87,12 @@ describe('keyword-gap decisions', () => {
         row('trail socks', { search_volume: 900 }),
       ]),
     );
-    expect(hits.map((hit) => hit.target_theme)).toEqual(['running shoes', 'trail socks']);
+    expect(hits.map((hit) => targetColumns(hit.target).target_theme)).toEqual([
+      'running shoes',
+      'trail socks',
+    ]);
     const [merged, single] = hits;
-    expect(merged!.evidence.competitor_names).toEqual(['Other Co', 'Rival']);
+    expect(merged!.evidence).toMatchObject({ competitor_names: ['Other Co', 'Rival'] });
     expect(merged!.gap_factor).toBeGreaterThan(single!.gap_factor);
     expect(merged!.value_factor).toBe(single!.value_factor);
   });
@@ -117,17 +121,17 @@ describe('keyword-gap decisions', () => {
     const { hits } = searchGapDecisions(
       inputs([row('running shoes'), row('trail socks'), row('tennis rackets')], { pages }),
     );
-    const byTheme = new Map(hits.map((hit) => [hit.target_theme, hit]));
+    const byTheme = new Map(hits.map((hit) => [targetColumns(hit.target).target_theme, hit]));
     expect(byTheme.get('running shoes')).toMatchObject({
-      target_url: 'https://www.example.com/running',
+      target: { kind: 'search_gap', url: 'https://www.example.com/running' },
       source_analysis_ids: ['a1'],
       evidence: { site_url_id: 'p1' },
     });
     expect(byTheme.get('trail socks')).toMatchObject({
-      target_url: null,
+      target: { kind: 'search_gap', url: null },
       evidence: { target_resolution: { state: 'ambiguous' } },
     });
-    expect(byTheme.get('tennis rackets')?.target_url).toBeNull();
+    expect(byTheme.get('tennis rackets')?.target).toMatchObject({ url: null });
   });
 
   it('caps one refresh and says what it left out', () => {

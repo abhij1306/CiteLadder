@@ -19,11 +19,10 @@ import {
   TruncationNotice,
   type EvidenceTabProps,
 } from '@/components/visibility/evidence-states';
-import { queryKeys } from '@/lib/api/query-keys';
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { visibilityApi } from '@/lib/api/visibility';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { engineLabel } from '@/lib/visibility/dashboard';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import {
   normalizeSearch,
   SEARCH_MAX_LENGTH,
@@ -117,14 +116,12 @@ export function FanoutEvidence({
   isFiltered,
   onClearFilters,
   limit,
-  projectId,
   runId,
   scope,
   scopeReady,
   scopeNarrowed,
 }: EvidenceTabProps &
   Readonly<{
-    projectId: string | null;
     runId: string | null;
     scope: FanoutScope;
     scopeReady: boolean;
@@ -146,9 +143,9 @@ export function FanoutEvidence({
     pageCount,
     from,
     to,
-  } = useSearchTable(query, projectId, runId);
+  } = useSearchTable(query, runId);
   const serverNeedle = useDebouncedNeedle(needle);
-  const summary = useFanoutSummary(projectId, scope, scopeReady, serverNeedle);
+  const summary = useFanoutSummary(scope, scopeReady, serverNeedle);
   const summaryMatchesInput = serverNeedle === needle && !summary.isFetching;
   // False whenever the server is counting a different population than the
   // table shows; the headline then falls back to what the reader can see.
@@ -219,18 +216,14 @@ export function FanoutEvidence({
  * grouping, filter by text, page the result, and total what survives — and
  * reading it inline buried the four states the component actually renders.
  */
-function useSearchTable(
-  query: EvidenceTabProps['query'],
-  projectId: string | null,
-  runId: string | null,
-) {
+function useSearchTable(query: EvidenceTabProps['query'], runId: string | null) {
   const [grouping, setGrouping] = useUrlState('group', groupCodec);
   const [search, setSearch] = useUrlState('q', optionalStringUrlCodec, { history: 'replace' });
   // Trimmed and capped ONCE: the table filter, the server scope, the match
   // count and the empty state all read this, so none of them can be asking
   // about a different string than the others.
   const needle = useMemo(() => normalizeSearch(search), [search]);
-  const topicOf = usePromptTopics(projectId, runId, grouping === 'topic');
+  const topicOf = usePromptTopics(runId, grouping === 'topic');
   const items = useMemo(() => query.data?.items ?? [], [query.data]);
   const groups = useMemo(() => {
     if (grouping === 'prompt') return searchRowsByPrompt(items);
@@ -310,6 +303,7 @@ function useDebouncedNeedle(needle: string): string {
  * group restarted the column widths at each prompt and left nothing aligned.
  */
 function SearchGroupRows({ group }: Readonly<{ group: SearchGroup }>) {
+  const { label: engineLabel } = useEngineCatalog();
   const undisclosedNoun = group.undisclosed === 1 ? 'answer' : 'answers';
   const unavailableNoun = group.unavailable === 1 ? 'answer has' : 'answers have';
   const noExposedNoun = group.noExposedQueries === 1 ? 'answer' : 'answers';
@@ -371,13 +365,8 @@ function SearchGroupRows({ group }: Readonly<{ group: SearchGroup }>) {
  * past the first page was previously unfindable. It is the SAME value the
  * table filters by, so the two can never disagree about what matched.
  */
-function useFanoutSummary(
-  projectId: string | null,
-  scope: FanoutScope,
-  scopeReady: boolean,
-  needle: string,
-) {
-  const workspaceId = useActiveWorkspaceId();
+function useFanoutSummary(scope: FanoutScope, scopeReady: boolean, needle: string) {
+  const { workspaceId, projectId } = useProjectScope();
   const params = useMemo(
     // Already normalized by `normalizeSearch`, which caps it at the bound the
     // endpoint declares — a longer value is rejected as a 422 before it can
@@ -386,13 +375,11 @@ function useFanoutSummary(
     [scope, needle],
   );
   const result = useQuery({
-    queryKey: queryKeys.visibility.fanout(projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getFanoutSummary(projectId ?? '', params, { signal, workspaceId }),
-    enabled: Boolean(projectId && workspaceId) && scopeReady,
+    ...visibilityQueries.fanout({ workspaceId, projectId }, params),
+    enabled: scopeReady,
     // Totals for a selection do not change while the reader pages through it;
     // keeping the previous values avoids the headline flickering to blank.
-    placeholderData: (data, query) => retainPreviousDataForScope(projectId ?? '', data, query),
+    placeholderData: (data, query) => retainPreviousDataForScope(projectId, data, query),
   });
   return {
     distinctQueries: result.data?.distinct_queries ?? null,
@@ -409,16 +396,11 @@ function useFanoutSummary(
  * one per prompt, so the join happens here rather than being pushed into the
  * evidence endpoint. Only fetched when the reader actually groups by topic.
  */
-function usePromptTopics(projectId: string | null, runId: string | null, enabled: boolean) {
-  const workspaceId = useActiveWorkspaceId();
+function usePromptTopics(runId: string | null, enabled: boolean) {
+  const { workspaceId, projectId } = useProjectScope();
   const result = useQuery({
-    queryKey: [...queryKeys.visibility.prompts(projectId ?? '', runId ?? undefined), 'topics'],
-    queryFn: ({ signal }) =>
-      visibilityApi.getPromptMetrics(projectId ?? '', runId ?? undefined, {
-        signal,
-        workspaceId,
-      }),
-    enabled: enabled && Boolean(projectId && runId && workspaceId),
+    ...visibilityQueries.prompts({ workspaceId, projectId }, runId),
+    enabled: enabled && Boolean(runId),
   });
   return useMemo(() => {
     const map = new Map<string, string>();

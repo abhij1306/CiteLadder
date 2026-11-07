@@ -340,3 +340,6 @@ export const visibilityFanoutSummarySchema = responseObject({
     }),
   ),
 });
+
+export type VisibilityExecutionEvidence = z.infer<typeof visibilityExecutionEvidenceSchema>;
+export type VisibilityEvidenceResponse = z.infer<typeof visibilityEvidenceResponseSchema>;

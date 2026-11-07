@@ -8,6 +8,7 @@ import {
   type RuleState,
 } from '../src/site-health/change-compare.ts';
 import { contentRecord, declaredCheckField } from '../src/site-health/change-snapshot.ts';
+import { changesSummary } from '../src/site-health/reads/projections.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
 import { testDatabase } from './support.ts';
@@ -43,15 +44,14 @@ function page(
     },
   };
 }
+/** A complete pair whose B inventory observed none of A's unanalyzed pages. */
+const COMPLETE = { completePair: true, inventoryB: new Set<string>() } as const;
 const classes = (before: ChangePage, after: ChangePage) =>
-  compareCrawls([before], [after], { completePair: true }).map((item) => [
-    item.field,
-    item.change_class,
-  ]);
+  compareCrawls([before], [after], COMPLETE).map((item) => [item.field, item.change_class]);
 
 describe('crawl comparison', () => {
   it('a re-analysed page with identical evidence makes no claim', () => {
-    expect(compareCrawls([page()], [page()], { completePair: true })).toEqual([]);
+    expect(compareCrawls([page()], [page()], COMPLETE)).toEqual([]);
   });
   it('classifies rule and HTTP transitions and links the declared implementation', () => {
     const after = page(
@@ -64,7 +64,7 @@ describe('crawl comparison', () => {
     const expected = new Map([
       [expectedKey(after.siteUrlId, 'title'), { eventId: 'event', expectedValue: 'Missing' }],
     ]);
-    const changes = compareCrawls([page()], [after], { completePair: true, expected });
+    const changes = compareCrawls([page()], [after], { ...COMPLETE, expected });
     const title = changes.find((item) => item.field === 'title')!;
     expect(title).toMatchObject({
       change_class: 'critical-regression',
@@ -80,7 +80,7 @@ describe('crawl comparison', () => {
     const expected = new Map([
       [expectedKey(after.siteUrlId, 'title'), { eventId: 'event', expectedValue: 'fail' }],
     ]);
-    const [change] = compareCrawls([page()], [after], { completePair: true, expected });
+    const [change] = compareCrawls([page()], [after], { ...COMPLETE, expected });
     expect(change).toMatchObject({
       field: 'title',
       change_class: 'potential-regression',
@@ -104,7 +104,7 @@ describe('crawl comparison', () => {
     const added = page({ siteUrlId: '00000000-0000-0000-0000-000000000002' });
     expect(compareCrawls([page()], [added], { completePair: false })).toEqual([]);
     expect(
-      compareCrawls([page()], [added], { completePair: true }).map((item) => [
+      compareCrawls([page()], [added], COMPLETE).map((item) => [
         item.site_url_id,
         item.after_value,
         item.change_class,
@@ -112,6 +112,11 @@ describe('crawl comparison', () => {
     ).toEqual([
       [added.siteUrlId, true, 'improvement'],
       ['00000000-0000-0000-0000-000000000001', false, 'potential-regression'],
+    ]);
+    // A page B still observed but did not analyze is not removed.
+    const observed = { completePair: true, inventoryB: new Set([page().siteUrlId]) } as const;
+    expect(compareCrawls([page()], [added], observed).map((item) => item.site_url_id)).toEqual([
+      added.siteUrlId,
     ]);
   });
 });
@@ -132,9 +137,8 @@ describe('content comparison', () => {
       },
     );
   const result = (before: ChangePage, after: ChangePage) =>
-    compareCrawls([before], [after], { completePair: true }).find(
-      (item) => item.field === 'content_change',
-    )!.after_value as Record<string, unknown>;
+    compareCrawls([before], [after], COMPLETE).find((item) => item.field === 'content_change')!
+      .after_value as Record<string, unknown>;
   const same = ['alpha beta gamma delta epsilon'];
 
   it('text change and metadata consistency are independent judgements', () => {
@@ -261,8 +265,10 @@ describe('change_intel task', () => {
       summary: { total: 0, counts_by_class: {} },
     });
     expect(snapshot!.source_analysis_ids).toHaveLength(4);
-    // Without GA4 the project derives no AI Traffic insights.
+    // The insights refresh is requested regardless of GA4; its executor settles
+    // a project without GA4 without deriving anything.
     expect(await analyticsTasks(b)).toEqual([
+      { task_kind: 'ai_traffic_insights_refresh', payload: {} },
       {
         task_kind: 'opportunity_refresh',
         payload: { trigger_kind: 'site_change', trigger_id: snapshot!.id },
@@ -357,6 +363,67 @@ describe('change_intel task', () => {
     expect((await analyticsTasks(b)).map((task) => task.task_kind)).toContain(
       'opportunity_refresh',
     );
+  });
+
+  it('claims a removal only for a page absent from B’s inventory, not one B left unanalyzed', async () => {
+    const { a, b } = await pair();
+    const deselected = await fixtures.page(a, '/deselected', facts, { observed: true });
+    const retired = await fixtures.page(a, '/retired', facts, { observed: true });
+    // B's discovery still observed the deselected page; it only did not analyze it.
+    await db
+      .insertInto('site_url_observations')
+      .values({
+        id: randomUUID(),
+        workspace_id: b.workspaceId,
+        project_id: b.projectId,
+        crawl_id: b.crawlId,
+        site_url_id: deselected.id,
+        source_kind: 'link',
+        observed_url: 'https://example.test/deselected',
+        final_url: 'https://example.test/deselected',
+        status_code: 200,
+        content_type: 'text/html',
+        depth: 1,
+        title: '',
+        rewrite_reason: '',
+        rewrite_version: '',
+        value_kind: '',
+        value_priority: 0,
+        created_at: new Date(),
+      })
+      .execute();
+    await run(b);
+    const [snapshot] = await snapshots(b);
+    const presence = await db
+      .selectFrom('site_change_observations')
+      .select(['site_url_id', 'after_value'])
+      .where('snapshot_id', '=', snapshot!.id)
+      .where('field', '=', 'url_presence')
+      .execute();
+    expect(snapshot!.complete_pair).toBe(true);
+    expect(presence).toEqual([{ site_url_id: retired.id, after_value: false }]);
+  });
+
+  it('an older crawl’s late comparison never supersedes or replaces the newer crawl’s', async () => {
+    const { a, b, urls } = await pair();
+    await run(b);
+    await run(a);
+    const [newer] = await snapshots(b);
+    const [late] = await snapshots(a);
+    expect([newer!.supersedes_id, late!.supersedes_id]).toEqual([null, null]);
+    const current = await changesSummary(db, b.workspaceId, b.projectId, { a: null, b: null });
+    expect([current.snapshot_id, current.crawl_b_id]).toEqual([newer!.id, b.crawlId]);
+    // A revision of the newer crawl's comparison chains onto its own snapshot.
+    await db
+      .updateTable('site_page_analyses')
+      .set({ is_current: false })
+      .where('crawl_id', '=', b.crawlId)
+      .where('site_url_id', '=', urls[0]!)
+      .execute();
+    await fixtures.page(b, '/', { ...facts, title: 'Home' }, { siteUrlId: urls[0] });
+    await run(b);
+    const revised = (await snapshots(b)).find((row) => row.id !== newer!.id);
+    expect(revised!.supersedes_id).toBe(newer!.id);
   });
 
   it('a page cap keeps the snapshot partial and says so', async () => {

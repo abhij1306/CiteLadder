@@ -123,8 +123,3 @@ function currentTheme(): Theme {
 export function useTheme(): Theme {
   return useSyncExternalStore(subscribe, currentTheme, () => 'light');
 }
-
-/** The stored choice: light, dark or system. */
-export function useThemePreference(): ThemePreference {
-  return useSyncExternalStore(subscribe, storedPreference, () => 'system');
-}

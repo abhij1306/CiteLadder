@@ -54,7 +54,7 @@ describe('screen phase', () => {
       false,
       'terminal',
     ],
-    ['a parked crawl', crawl({ status: 'paused' }), null, false, 'terminal'],
+    ['a cancelled crawl', crawl({ status: 'cancelled' }), null, false, 'terminal'],
     ['an active crawl with a monitored set', crawl({}), null, true, 'analyzing'],
     ['active discovery', crawl({}), null, false, 'discovering'],
     [

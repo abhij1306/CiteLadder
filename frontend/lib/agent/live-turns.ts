@@ -12,6 +12,7 @@ import { useSyncExternalStore } from 'react';
 import type { z } from 'zod';
 
 import { agentTurnEventSchema } from '@citeladder/contracts/agent';
+import { AGENT_RUN_RETRY, AGENT_STREAM_IDLE_MS } from '@/lib/config/agent';
 import { API_BASE_URL } from '@/lib/config/operational';
 import { readSseResponse, streamHeaders } from '@/lib/sse/use-event-stream';
 
@@ -105,38 +106,87 @@ export function applyTurnEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
   }
 }
 
-async function read(response: Response, onEvent: (event: TurnEvent) => void) {
+/**
+ * Reads the stream until it ends. A stream with no frame, keep-alives
+ * included, for the idle bound is aborted, which closes it.
+ */
+async function read(
+  response: Response,
+  controller: AbortController,
+  onEvent: (event: TurnEvent) => void,
+) {
   if (!response.body) return;
-  await readSseResponse(
-    response.body,
-    () => false,
-    ({ data }) => {
-      if (!data) return;
-      try {
-        const parsed = agentTurnEventSchema.safeParse(JSON.parse(data));
-        if (parsed.success) onEvent(parsed.data);
-      } catch {
-        // An unreadable frame is skipped; the persisted read still arrives.
-      }
-    },
-  );
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const arm = () => {
+    clearTimeout(idle);
+    idle = setTimeout(() => controller.abort(), AGENT_STREAM_IDLE_MS);
+  };
+  arm();
+  try {
+    await readSseResponse(
+      response.body,
+      () => false,
+      ({ data }) => {
+        arm();
+        if (!data) return;
+        try {
+          const parsed = agentTurnEventSchema.safeParse(JSON.parse(data));
+          if (parsed.success) onEvent(parsed.data);
+        } catch {
+          // An unreadable frame is skipped; the persisted read still arrives.
+        }
+      },
+    );
+  } finally {
+    clearTimeout(idle);
+  }
 }
 
-/** Opens the run's stream; the server's turn limit bounds it, so it has no timeout of its own. */
+/** The 429 `Retry-After` delay in milliseconds, or the default when absent or unreadable. */
+function retryDelayMs(response: Response): number {
+  const seconds = Number(response.headers.get('retry-after') ?? '');
+  return Number.isFinite(seconds) && seconds >= 0
+    ? Math.ceil(seconds) * 1000
+    : AGENT_RUN_RETRY.defaultDelayMs;
+}
+
+/**
+ * Posts `/run` and reads its stream. A busy instance answers 429: the queued
+ * run waits for this retry, so it re-posts after `Retry-After` (a run another
+ * request claimed or ended answers done, so a re-post is safe). Any other
+ * refusal ends the live turn and the persisted read shows the run.
+ */
+async function runStream(url: string, workspaceId: string | null, runId: string) {
+  for (let attempt = 1; ; attempt += 1) {
+    const controller = new AbortController();
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: streamHeaders(workspaceId, null),
+      signal: controller.signal,
+    });
+    if (response.status === 429 && attempt < AGENT_RUN_RETRY.maxAttempts) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, retryDelayMs(response));
+      });
+      continue;
+    }
+    if (!response.ok) return;
+    await read(response, controller, (event) =>
+      update(runId, (turn) => applyTurnEvent(turn, event)),
+    );
+    return;
+  }
+}
+
+/** Opens the run's stream; the server's turn limit bounds it, and a silent stream closes after the idle bound. */
 export function startLiveTurn(chatId: string, runId: string, workspaceId: string | null) {
   if (turns.has(runId)) return;
   turns.set(runId, liveTurn(Date.now()));
   for (const stale of [...turns.keys()].slice(0, Math.max(0, turns.size - KEEP)))
     turns.delete(stale);
-  void fetch(`${API_BASE_URL}/agent/chats/${chatId}/runs/${runId}/run`, {
-    method: 'POST',
-    credentials: 'include',
-    cache: 'no-store',
-    headers: streamHeaders(workspaceId, null),
-  })
-    .then((response) =>
-      read(response, (event) => update(runId, (turn) => applyTurnEvent(turn, event))),
-    )
+  void runStream(`${API_BASE_URL}/agent/chats/${chatId}/runs/${runId}/run`, workspaceId, runId)
     .catch(() => undefined)
     .finally(() => update(runId, (turn) => ({ ...turn, connected: false })));
   for (const listener of listeners) listener();

@@ -10,6 +10,7 @@ import { sql, type Selectable, type SqlBool } from 'kysely';
 
 import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import type { Actions } from '../generated/db-schema.ts';
 import { ApiError, notFound } from '../errors.ts';
 import {
@@ -22,7 +23,7 @@ import { refreshActionStatus, validateStatus } from './action-status.ts';
 import { OPPORTUNITY_COLUMNS, projectItem } from './projection.ts';
 import type { Scope } from './sources.ts';
 import { declarationView } from './declaration-view.ts';
-import { memberMeasurementLeg } from './declaration-checks.ts';
+import { memberMeasurementLeg } from './checks/registry.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import { normalizeDomain } from '../analysis/domains.ts';
 import { pageGroupKey, plannedPageKey, selectApproach } from '../analysis/opportunities/actions.ts';
@@ -223,15 +224,16 @@ export async function listActions(
 
 export async function requireAction(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   actionId: string,
   lock = false,
 ) {
   let query = db
     .selectFrom('actions')
     .selectAll()
-    .where('workspace_id', '=', workspaceId)
+    .where('workspace_id', '=', scope.workspaceId)
     .where('id', '=', actionId);
+  if (scope.projectId !== null) query = query.where('project_id', '=', scope.projectId);
   if (lock) query = query.forUpdate();
   const row = await query.executeTakeFirst();
   if (!row) throw notFound('Action');
@@ -282,7 +284,7 @@ const measuredBy = measurementLegSchema.shape.leg.nullable();
 export async function getAction(db: Database, workspaceId: string, actionId: string) {
   // The declaration and members key on the Action id, so all three run together.
   const [action, declaration, rows] = await Promise.all([
-    requireAction(db, workspaceId, actionId),
+    requireAction(db, { workspaceId, projectId: null }, actionId),
     db
       .selectFrom('opportunity_implementation_events')
       .selectAll()
@@ -340,16 +342,16 @@ export async function recordStatus(
 
 export async function updateActionStatus(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   actionId: string,
   status: string,
   userId: string,
 ) {
   await inTransaction(db, async (trx) => {
-    const action = await requireAction(trx, workspaceId, actionId, true);
+    const action = await requireAction(trx, scope, actionId, true);
     if (!a.ACTION_USER_STATUSES.includes(action.status))
       throw new ApiError(422, 'A declared Action cannot be changed');
     await recordStatus(trx, action, status, userId);
   });
-  return actionItem(await requireAction(db, workspaceId, actionId));
+  return actionItem(await requireAction(db, scope, actionId));
 }

@@ -1,24 +1,25 @@
 import type { Database } from '../db/database.ts';
-import { analyzeExecution } from '../analysis/execution.ts';
-import { finalizeAudit } from '../analysis/finalization.ts';
+import { deriveExecution } from './derivation.ts';
+import { finalizeAudit } from './finalization.ts';
 import { prepareShelfExecution } from '../commerce/shelf.ts';
 import { finalizeCommerceShelf } from '../commerce/shelf-metrics.ts';
 import type { MeterableShelfResolver } from '../commerce/shelf.ts';
 import type { ExecutionContext } from './execution-context.ts';
 import type { ExecutionResult } from './result-persistence.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
-import { policy, resolveSettingSpec } from '../config.ts';
-import { getLogger } from '../logging.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { prepareSavedShelf } from '../commerce/shelf-recovery.ts';
 
 /** Compose existing deterministic analysis, bounded shelf preparation and persisted downstream work. */
 export function auditProjections(
   db: Database,
   resolver?: MeterableShelfResolver | null,
-  env: Record<string, string | undefined> = process.env,
+  env: SettingSource = process.env,
 ) {
   return {
-    execution: analyzeExecution,
+    execution: deriveExecution,
     prepare: (context: ExecutionContext, result: ExecutionResult) =>
       prepareShelfExecution(db, context.task, result, resolver),
     finalize: async (workspaceId: string, auditId: string) => {
@@ -30,7 +31,7 @@ export function auditProjections(
         finalizeCommerceShelf,
         new Date(),
         (trx, task, audit, artifactId) =>
-          (prepared.get(task.id) ?? analyzeExecution)(trx, task, audit, artifactId),
+          (prepared.get(task.id) ?? deriveExecution)(trx, task, audit, artifactId),
       );
       await enqueueSourcePageInspection(db, workspaceId, auditId, env);
       return result;
@@ -43,7 +44,7 @@ async function enqueueSourcePageInspection(
   db: Database,
   workspaceId: string,
   auditId: string,
-  env: Record<string, string | undefined>,
+  env: SettingSource,
 ) {
   const audit = await db
     .selectFrom('audits')
@@ -63,9 +64,10 @@ async function enqueueSourcePageInspection(
         resolveSettingSpec(policy.analytics.worker_settings.task_max_attempts, env),
       ),
     });
-  } catch {
-    getLogger('workers.audit').info('source_page_inspection_enqueue_failed', {
+  } catch (error) {
+    getLogger('workers.audit').warning('source_page_inspection_enqueue_failed', {
       audit_id: auditId,
+      ...failureFacts(error),
     });
   }
 }

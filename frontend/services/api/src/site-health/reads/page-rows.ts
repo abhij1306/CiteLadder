@@ -20,9 +20,9 @@ import {
 } from '../../http/keyset-cursor.ts';
 import { containsPattern } from '../../db/like.ts';
 import { parseUuid } from '../../http/uuid.ts';
+import { failedAs } from '../task-outcome.ts';
 import { inventoryCrawlIds, isTerminal, ROW_TASK, ROW_TASK_ORDER, type Crawl } from './crawl.ts';
 
-const reads = policy.site_health.reads;
 const PERSISTED = ['completed', 'partially_completed'];
 // The largest integer depth; an unmeasured page sorts after every measured one.
 const UNMEASURED_DEPTH = 2_147_483_647;
@@ -192,7 +192,7 @@ export async function pageRows(
             case when m.site_url_id is not null then ${unmonitoredStatus} else 'not_selected' end
           when t.status = 'cancelled' then 'cancelled'
           when t.status = 'failed' then
-            case when t.error_code = any(${reads.policy_blocking_error_codes}::text[])
+            case when ${failedAs('t', ['blocked', 'excluded'])}
               then 'blocked' else 'error' end
           when t.status in ('running', 'leased') then 'running'
           else 'pending'
@@ -237,11 +237,14 @@ export async function pageRows(
           and t.site_url_id = u.id and ${ROW_TASK}
         order by ${ROW_TASK_ORDER}, t.created_at desc limit 1
       ) t on true
-      left join site_page_link_metrics l
-        on l.workspace_id = u.workspace_id and l.project_id = u.project_id
-        and l.crawl_id = ${crawl.id} and l.site_url_id = u.id
-        and l.extractor_version = ${crawl.extractor_version}
-        and l.formula_version = ${policy.site_health.link_metrics.formula_version}
+      left join lateral (
+        -- The formula the crawl's own link-metrics run wrote, not today's configuration.
+        select * from site_page_link_metrics l
+        where l.workspace_id = u.workspace_id and l.project_id = u.project_id
+          and l.crawl_id = ${crawl.id} and l.site_url_id = u.id
+          and l.extractor_version = ${crawl.extractor_version}
+        order by l.created_at, l.formula_version limit 1
+      ) l on true
       where u.workspace_id = ${crawl.workspace_id} and u.project_id = ${crawl.project_id}
         and exists (
           select 1 from site_url_observations o

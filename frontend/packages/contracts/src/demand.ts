@@ -20,6 +20,40 @@ export const demandSignalSchema = responseObject({
   action_id: z.uuid().nullable(),
 });
 
+/** The detectors one demand snapshot runs; every snapshot reports each of them. */
+export const demandDetectorSchema = z.enum([
+  'striking_distance',
+  'cannibalization',
+  'property_relative_ctr_gap',
+  'high_impression_low_ctr',
+  'query_trends',
+]);
+export type DemandDetector = z.infer<typeof demandDetectorSchema>;
+
+/** How far one detector ran: in full, partly, not at all, or held back for history. */
+export const demandDetectorStateSchema = z.enum([
+  'available',
+  'partial',
+  'unavailable',
+  'insufficient_history',
+]);
+export type DemandDetectorState = z.infer<typeof demandDetectorStateSchema>;
+
+/** What a snapshot's detectors found: written by the snapshot task, read by the signal filters. */
+export const demandSnapshotSummarySchema = responseObject({
+  signal_count: z.number().int(),
+  counts_by_type: z.record(z.string(), z.number().int()),
+  detectors: z.record(
+    demandDetectorSchema,
+    responseObject({
+      state: demandDetectorStateSchema,
+      counts_by_classification: z.record(z.string(), z.number().int()),
+      limitations: z.array(z.string()),
+    }),
+  ),
+});
+export type DemandSnapshotSummary = z.infer<typeof demandSnapshotSummarySchema>;
+
 export const demandSnapshotSchema = responseObject({
   id: z.uuid(),
   project_id: z.uuid(),
@@ -30,7 +64,7 @@ export const demandSnapshotSchema = responseObject({
   source_artifact_ids: z.array(z.string()),
   source_metric_row_ids: z.array(z.string()),
   coverage: z.record(z.string(), z.unknown()),
-  summary: z.record(z.string(), z.unknown()),
+  summary: demandSnapshotSummarySchema,
   comparison: z.record(z.string(), z.unknown()).nullable(),
   formula_version: z.string(),
   analyzer_version: z.string(),
@@ -42,3 +76,22 @@ export const demandRecomputeResponseSchema = responseObject({
   task_id: z.uuid().nullable(),
   status: z.string(),
 });
+
+/**
+ * A manual recompute of one date window. The API refines it so `window_end`
+ * is not before `window_start`.
+ */
+export const demandRecomputeRequestSchema = z.strictObject({
+  window_start: z.iso.date(),
+  window_end: z.iso.date(),
+});
+export type DemandRecomputeRequest = z.input<typeof demandRecomputeRequestSchema>;
+
+/** An owner's branded/non-branded call for one search query. */
+export const demandClassificationOverrideRequestSchema = z.strictObject({
+  query: z.string().min(1).max(512),
+  classification: z.enum(['branded', 'non_branded', 'ambiguous']),
+});
+export type DemandClassificationOverrideRequest = z.input<
+  typeof demandClassificationOverrideRequestSchema
+>;

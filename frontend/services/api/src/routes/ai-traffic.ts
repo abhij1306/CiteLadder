@@ -13,7 +13,7 @@ import {
   crawlCoverageResponseSchema,
 } from '@citeladder/contracts/ai-traffic';
 import { z } from 'zod';
-import { aiTrafficOverview } from '../crawl-logs/overview.ts';
+import { aiTrafficOverview } from '../ai-traffic/overview.ts';
 import {
   crawlerPage,
   crawlerExport,

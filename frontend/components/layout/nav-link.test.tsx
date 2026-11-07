@@ -36,6 +36,7 @@ describe('Navigation row', () => {
               href: '/agent/actions',
               icon: ListChecks,
               badge: 'open-actions',
+              scope: 'project',
             }}
             active={false}
             onIntent={() => {}}

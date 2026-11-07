@@ -6,34 +6,35 @@
  * walk and its admission land in a second commit under the same lease. A
  * reclaimed task whose facts are published but still pending resumes at the walk.
  */
-import { randomUUID } from 'node:crypto';
-
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import type { SiteTask } from '../queue/task-queue.ts';
 import { SitemapCollector, SitemapParseError, sitemapRef } from '../web-evidence/sitemaps.ts';
 import { robotsPolicy } from '../web-evidence/acquisition.ts';
 import { crawlerRootFacts, crawlerSamplePolicy } from './crawler-policy.ts';
+import { insertObservations } from './admission-writes.ts';
 import { insertRobotsSnapshot } from './robots-snapshots.ts';
 import { admitCandidates, candidate, crawlScope, lockRuntime, type Candidate } from './frontier.ts';
 import {
   Abandoned,
-  ACTIVE_CRAWL,
+  commitTask,
   loadScope,
-  lockRunningTask,
   markRunning,
   prepareTask,
   settleTask,
+  type Crawl,
   type SiteTaskContext,
 } from './site-task.ts';
-import type { Crawl } from './task-fence.ts';
 import { classifyUrlAdmission } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
 const crawlPolicy = policy.site_health.crawl;
+const logger = getLogger('site_health.setup');
 
-export function setupSettings(env: Record<string, string | undefined> = process.env) {
+export function setupSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (name: keyof typeof spec) => Number(resolveSettingSpec(spec[name], env));
   return {
@@ -63,8 +64,22 @@ function robotsStatus(robots: Robots | null) {
   return crawlPolicy.robots_statuses.not_found;
 }
 
+/**
+ * A best-effort site document could not be fetched. A stop of the lease or
+ * the drain is not a fetch failure: the task's commit re-checks it.
+ */
+function logFetchFailure(ctx: SiteTaskContext, phase: string, error: unknown, startedAt: number) {
+  if (ctx.signal.aborted) return;
+  logger.warning('site_health_document_fetch_failed', {
+    phase,
+    ...failureFacts(error),
+    elapsed_ms: Math.round(performance.now() - startedAt),
+  });
+}
+
 async function wellKnown(ctx: SiteTaskContext, url: string, settings: Settings) {
   const fetch = ctx.fetcher.settings.acquisition;
+  const startedAt = performance.now();
   try {
     return await ctx.fetcher.acquirer.fetch(url, {
       signal: ctx.signal,
@@ -74,7 +89,9 @@ async function wellKnown(ctx: SiteTaskContext, url: string, settings: Settings) 
       redirects: fetch.redirects,
       contentTypes: ['*'],
     });
-  } catch {
+  } catch (error) {
+    // Unfetched stays distinct from absent: the llms.txt fact records `fetched: false`.
+    logFetchFailure(ctx, 'llms_txt', error, startedAt);
     return null;
   }
 }
@@ -123,6 +140,7 @@ type SiteFacts = Record<string, unknown>;
 
 async function sitemapDocument(ctx: SiteTaskContext, url: string, settings: Settings) {
   const fetch = ctx.fetcher.settings.acquisition;
+  const startedAt = performance.now();
   try {
     const page = await ctx.fetcher.acquirer.fetch(url, {
       signal: ctx.signal,
@@ -138,7 +156,9 @@ async function sitemapDocument(ctx: SiteTaskContext, url: string, settings: Sett
       },
     });
     return page.status >= 200 && page.status < 300 ? page : null;
-  } catch {
+  } catch (error) {
+    // The walk counts the attempt against its budget and moves on to the next document.
+    logFetchFailure(ctx, 'sitemap', error, startedAt);
     return null;
   }
 }
@@ -179,7 +199,7 @@ async function walkSitemaps(
     attempted += wave.length;
     // Waves are bounded and sequential: a wave's references feed the next one.
     const pages = await Promise.all(wave.map(({ url }) => sitemapDocument(ctx, url, settings))); // NOSONAR
-    ctx.signal?.throwIfAborted();
+    ctx.signal.throwIfAborted();
     for (const [index, entry] of wave.entries()) collect(walk, entry, pages[index] ?? null);
   }
   return {
@@ -267,62 +287,34 @@ async function observeSitemapUrls(
   crawl: Crawl,
   candidates: Candidate[],
   siteUrlIds: Map<string, string>,
-  settings: Settings,
 ) {
-  const now = new Date();
-  const rows = candidates.flatMap((item) => {
-    const siteUrlId = siteUrlIds.get(item.hash);
-    return siteUrlId
-      ? [
-          {
-            id: randomUUID(),
-            workspace_id: crawl.workspace_id,
-            project_id: crawl.project_id,
-            crawl_id: crawl.id,
-            site_url_id: siteUrlId,
-            source_kind: 'sitemap',
-            value_kind: 'other',
-            value_priority: 0,
-            rewrite_reason: '',
-            rewrite_version: '',
-            depth: item.depth,
-            observed_url: item.url,
-            final_url: item.url,
-            content_type: '',
-            title: '',
-            created_at: now,
-          },
-        ]
-      : [];
-  });
-  for (let offset = 0; offset < rows.length; offset += settings.batch)
-    await trx // NOSONAR: batches bound each insert's bind parameters, in order in one transaction.
-      .insertInto('site_url_observations')
-      .values(rows.slice(offset, offset + settings.batch))
-      .onConflict((conflict) => conflict.columns(['crawl_id', 'site_url_id']).doNothing())
-      .execute();
-}
-
-/** Run `body` inside a transaction that holds crawl and task; false when the lease or crawl was lost. */
-function underLease(
-  ctx: SiteTaskContext,
-  claimed: SiteTask,
-  body: (trx: Database, crawl: Crawl, task: SiteTask) => Promise<void>,
-): Promise<boolean> {
-  return ctx.db
-    .transaction()
-    .execute(async (trx) => {
-      ctx.signal?.throwIfAborted();
-      const locked = await lockRunningTask(trx, claimed, ctx.owner);
-      if (!locked || !ACTIVE_CRAWL.has(locked.crawl.status)) throw new Abandoned();
-      await body(trx, locked.crawl, locked.task);
-      ctx.signal?.throwIfAborted();
-      return true;
-    })
-    .catch((error: unknown) => {
-      if (error instanceof Abandoned) return false;
-      throw error;
-    });
+  await insertObservations(
+    trx,
+    crawl,
+    candidates.flatMap((item) => {
+      const siteUrlId = siteUrlIds.get(item.hash);
+      return siteUrlId
+        ? [
+            {
+              siteUrlId,
+              sourceKind: 'sitemap',
+              valueKind: 'other',
+              valuePriority: 0,
+              rewriteReason: '',
+              rewriteVersion: '',
+              depth: item.depth,
+              observedUrl: item.url,
+              finalUrl: item.url,
+              artifactId: null,
+              parentSiteUrlId: null,
+              statusCode: null,
+              contentType: '',
+              title: '',
+            },
+          ]
+        : [];
+    }),
+  );
 }
 
 /** Same-origin known URLs, root first: sitemap URLs, then those the crawl has observed. */
@@ -364,63 +356,57 @@ async function persist(
   urls: string[],
   settings: Settings,
 ) {
-  await ctx.db
-    .transaction()
-    .execute(async (trx) => {
-      const live = await loadScope(trx, claimed);
-      if (live?.task.lease_owner !== ctx.owner) throw new Abandoned();
-      const { crawl } = live;
-      let admitted = 0;
-      const exact = record(crawl.configuration).input_mode === 'exact_urls';
-      if (urls.length && !crawl.sample_mode && !exact) {
-        const runtime = await lockRuntime(trx, crawl.workspace_id);
-        const candidates = sitemapCandidates(urls);
-        const admission = await admitCandidates(trx, crawl, candidates, runtime);
-        await observeSitemapUrls(trx, crawl, candidates, admission.siteUrlIds, settings);
-        admitted = admission.admitted;
-      }
-      const locked = await lockRunningTask(trx, claimed, ctx.owner);
-      if (!locked || !ACTIVE_CRAWL.has(locked.crawl.status)) throw new Abandoned();
-      const { pending: _pending, ...sitemap } = record(facts.sitemap);
-      const robots = record(facts.robots);
-      const snapshot = crawl.robots_snapshot_id
-        ? await trx
-            .selectFrom('robots_snapshots')
-            .select(['body', 'truncated'])
-            .where('workspace_id', '=', crawl.workspace_id)
-            .where('project_id', '=', crawl.project_id)
-            .where('id', '=', crawl.robots_snapshot_id)
-            .executeTakeFirst()
-        : undefined;
-      const origin = new URL(crawl.root_url).origin;
-      const sample = await policySample(trx, crawl, origin, urls, settings.policySampleSize);
-      const parsed = robotsPolicy(origin, Number(robots.status_code ?? 0), snapshot?.body ?? '');
-      const tokens = new Map(policy.crawlers.bots.map((bot) => [bot.bot_id, bot.robots_tokens]));
-      // Root access and the matched group were published in commit one and stay frozen.
-      const bots = (Array.isArray(robots.bots) ? robots.bots.map(record) : []).map((bot) => ({
-        ...bot,
-        ...crawlerSamplePolicy(
-          parsed,
-          tokens.get(String(bot.bot_id)) ?? [],
-          tokens.has(String(bot.bot_id)) ? sample : [],
-          snapshot?.truncated,
-        ),
-      }));
-      await trx
-        .updateTable('site_crawls')
-        .set((eb) => ({
-          site_facts: JSON.stringify({ ...facts, sitemap, robots: { ...robots, bots } }),
-          admitted_url_count: eb('admitted_url_count', '+', admitted),
-          updated_at: new Date(),
-        }))
-        .where('id', '=', locked.crawl.id)
-        .where('workspace_id', '=', locked.crawl.workspace_id)
-        .execute();
-      await settleTask(trx, ctx, locked.task, { succeeded: true, artifactId: null });
-    })
-    .catch((error: unknown) => {
-      if (!(error instanceof Abandoned)) throw error;
-    });
+  await commitTask(ctx, claimed, async (trx, lock) => {
+    const live = await loadScope(trx, claimed);
+    if (live?.task.lease_owner !== ctx.owner) throw new Abandoned();
+    const { crawl } = live;
+    let admitted = 0;
+    const exact = record(crawl.configuration).input_mode === 'exact_urls';
+    if (urls.length && !crawl.sample_mode && !exact) {
+      const runtime = await lockRuntime(trx, crawl.workspace_id);
+      const candidates = sitemapCandidates(urls);
+      const admission = await admitCandidates(trx, crawl, candidates, runtime);
+      await observeSitemapUrls(trx, crawl, candidates, admission.siteUrlIds);
+      admitted = admission.admitted;
+    }
+    const locked = await lock();
+    const { pending: _pending, ...sitemap } = record(facts.sitemap);
+    const robots = record(facts.robots);
+    const snapshot = crawl.robots_snapshot_id
+      ? await trx
+          .selectFrom('robots_snapshots')
+          .select(['body', 'truncated'])
+          .where('workspace_id', '=', crawl.workspace_id)
+          .where('project_id', '=', crawl.project_id)
+          .where('id', '=', crawl.robots_snapshot_id)
+          .executeTakeFirst()
+      : undefined;
+    const origin = new URL(crawl.root_url).origin;
+    const sample = await policySample(trx, crawl, origin, urls, settings.policySampleSize);
+    const parsed = robotsPolicy(origin, Number(robots.status_code ?? 0), snapshot?.body ?? '');
+    const tokens = new Map(policy.crawlers.bots.map((bot) => [bot.bot_id, bot.robots_tokens]));
+    // Root access and the matched group were published in commit one and stay frozen.
+    const bots = (Array.isArray(robots.bots) ? robots.bots.map(record) : []).map((bot) => ({
+      ...bot,
+      ...crawlerSamplePolicy(
+        parsed,
+        tokens.get(String(bot.bot_id)) ?? [],
+        tokens.has(String(bot.bot_id)) ? sample : [],
+        snapshot?.truncated,
+      ),
+    }));
+    await trx
+      .updateTable('site_crawls')
+      .set((eb) => ({
+        site_facts: JSON.stringify({ ...facts, sitemap, robots: { ...robots, bots } }),
+        admitted_url_count: eb('admitted_url_count', '+', admitted),
+        updated_at: new Date(),
+      }))
+      .where('id', '=', locked.crawl.id)
+      .where('workspace_id', '=', locked.crawl.workspace_id)
+      .execute();
+    await settleTask(trx, ctx, locked.task, { kind: 'succeeded', artifactId: null });
+  });
 }
 
 export async function runSiteSetup(
@@ -429,14 +415,15 @@ export async function runSiteSetup(
   settings = setupSettings(),
 ) {
   const scope = await prepareTask(ctx, claimed);
-  if (!scope || !(await markRunning(ctx.db, scope.task, ctx.owner))) return;
+  if (!scope || !(await markRunning(ctx, scope.task))) return;
   const { crawl, task } = scope;
   const published = crawl.site_facts === null ? null : record(crawl.site_facts);
   const resuming = record(published?.sitemap).pending === true;
   if (published && !resuming) {
-    await underLease(ctx, claimed, (trx, _crawl, locked) =>
-      settleTask(trx, ctx, locked, { succeeded: true, artifactId: null }),
-    );
+    await commitTask(ctx, claimed, async (trx, lock) => {
+      const held = await lock();
+      await settleTask(trx, ctx, held.task, { kind: 'succeeded', artifactId: null });
+    });
     return;
   }
   let origin = '';
@@ -453,7 +440,8 @@ export async function runSiteSetup(
     facts = observed.facts;
     const evidence = facts;
     // Commit one: the root page's wait clears here, before the walk.
-    const committed = await underLease(ctx, claimed, async (trx, locked) => {
+    const committed = await commitTask(ctx, claimed, async (trx, lock) => {
+      const { crawl: locked } = await lock();
       const snapshot =
         origin && observed.body !== null
           ? await insertRobotsSnapshot(

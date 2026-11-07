@@ -9,15 +9,16 @@
  */
 import { asApiErrorCode, type ApiErrorCode } from '@citeladder/contracts/error-codes';
 
-import { loadWorkerSettings, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObjects } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
-import { enqueueTask, taskKey } from '../referrals/enqueue.ts';
+import { enqueueTask, taskKey } from '../queue/enqueue.ts';
 import type { Preferences } from '../routes/search-intelligence-contracts.ts';
 import type { Scope } from './reads.ts';
 import { runConnection } from './credentials.ts';
 import { runView } from './views.ts';
+import { closeCollecting } from './acquisition-state.ts';
 
 const si = policy.search_intelligence;
 const { statuses: taskStatuses, terminal: TERMINAL_TASK_STATUSES } = policy.task_queue;
@@ -85,7 +86,6 @@ async function enqueueAcquisition(trx: Database, scope: Scope, runId: string): P
     kind: si.task_kind,
     payload: { run_id: runId },
     keyParts: [runId],
-    maxAttempts: loadWorkerSettings().taskMaxAttempts,
   });
   if (created !== null) return created;
   const existing = await scope.workspace
@@ -152,6 +152,12 @@ export function cancelRun(db: Database, scope: Scope, runId: string) {
         .where('status', 'not in', TERMINAL_TASK_STATUSES)
         .execute();
     }
+    // The worker stops on a cancelled run, so nothing else would end its datasets.
+    await closeCollecting(
+      trx,
+      { workspaceId: run.workspace_id, projectId: run.project_id, runId },
+      now,
+    );
     return runView(cancelled);
   });
 }

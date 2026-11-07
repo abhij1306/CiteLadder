@@ -7,7 +7,7 @@
  * one when the chat is created, so a tampered or stale id fails there, never
  * here. Parsing drops anything malformed rather than guessing.
  */
-import type { AgentContextRefs } from '@/lib/api/agent';
+import type { AgentContextRefs } from '@citeladder/contracts/agent';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

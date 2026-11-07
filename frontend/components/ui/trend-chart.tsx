@@ -5,6 +5,7 @@ import { useState, type KeyboardEvent } from 'react';
 import {
   CHART_AXIS_TEXT,
   CHART_DASH,
+  CHART_HEIGHT_PX,
   CHART_PLOT_FRAME,
   CHART_FILL,
   CHART_STROKE,
@@ -14,6 +15,7 @@ import {
   chartPath,
   chartTone,
   useChartWidth,
+  type ChartHeight,
   type ChartTone,
 } from '@/components/ui/chart';
 import {
@@ -69,7 +71,8 @@ const defaultFormat = (value: number) => `${Math.round(value * 100) / 100}`;
  * the arrow keys. A visually hidden table carries every value.
  *
  * Width follows the container (the viewBox is measured pixels, so text stays
- * 12px); `height` is fixed (240 by default). A missing value is a gap.
+ * 12px); the height is a chart height role (`md`, 240, by default). A
+ * missing value is a gap.
  */
 export function TrendChart({
   data,
@@ -77,7 +80,7 @@ export function TrendChart({
   series = [],
   events = [],
   label,
-  height = 240,
+  height: heightRole = 'md',
   yMin,
   yMax,
   yFormat = defaultFormat,
@@ -94,7 +97,8 @@ export function TrendChart({
   events?: readonly TrendEvent[];
   /** What the chart shows, e.g. "Mention rate over time". */
   label: string;
-  height?: number;
+  /** `sm` beside other content, `md` by default, `lg` for a page's primary chart. */
+  height?: ChartHeight;
   yMin?: number;
   yMax?: number;
   /** An axis tick: `42` as `42%`. */
@@ -107,6 +111,7 @@ export function TrendChart({
 }>) {
   const [plotRef, width] = useChartWidth<HTMLDivElement>();
   const [active, setActive] = useState<number | null>(null);
+  const height = CHART_HEIGHT_PX[heightRole];
   const plotted: readonly Readonly<{
     name: string;
     values: readonly (number | null)[];

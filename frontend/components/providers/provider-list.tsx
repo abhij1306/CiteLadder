@@ -5,9 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { ledgerClasses } from '@/components/ui/workspace';
-import { providersApi } from '@/lib/api/providers';
-import { queryKeys } from '@/lib/api/query-keys';
-import type { LogicalEngine } from '@/lib/api/types';
+import { providerQueries } from '@/lib/api/providers';
+import type { LogicalEngine } from '@citeladder/contracts';
 import { buildEngineCards, buildProviderGroups, transportForEngine } from '@/lib/providers/catalog';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -25,26 +24,15 @@ import { ProviderRow } from './provider-row';
 export function ProviderList({
   expandEngine = null,
 }: Readonly<{ expandEngine?: LogicalEngine | null }>) {
-  const catalogQuery = useQuery({
-    queryKey: queryKeys.providers.catalog(),
-    queryFn: ({ signal }) => providersApi.getCatalog({ signal, workspaceId: null }),
-  });
-
-  // Provider connections belong to the workspace, so the read is keyed and
-  // sent for one: without that, switching workspace showed the previous
-  // workspace's engines as configured.
+  const catalogQuery = useQuery(providerQueries.catalog());
   const workspaceId = useActiveWorkspaceId();
   const connectionsQuery = useQuery({
-    queryKey: queryKeys.providers.connections(workspaceId ?? 'unresolved'),
-    queryFn: ({ signal }) => providersApi.listConnections({ signal, workspaceId }),
+    ...providerQueries.connections(workspaceId),
     enabled: workspaceId !== null,
   });
-
-  // The AUTHENTICATED state projection. A failure here leaves every row at its
-  // fail-closed default rather than implying `connected`.
+  // A failure here leaves every row at its fail-closed default.
   const statesQuery = useQuery({
-    queryKey: queryKeys.providers.states(workspaceId ?? 'unresolved'),
-    queryFn: ({ signal }) => providersApi.getConnectionStates({ signal, workspaceId }),
+    ...providerQueries.states(workspaceId),
     enabled: workspaceId !== null,
   });
 

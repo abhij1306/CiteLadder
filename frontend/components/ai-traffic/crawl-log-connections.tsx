@@ -9,7 +9,8 @@ import type { crawlSourceSchema } from '@citeladder/contracts/ai-traffic';
 import type { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
@@ -97,7 +98,7 @@ function Connections({
           canManage={canManage}
           onRotate={(id) => {
             setOpen(true);
-            mutation.mutate({ kind: 'rotate', id });
+            model.issueSource({ kind: 'rotate', id });
           }}
           onRevoke={setRevoking}
           onSetup={(id) => {
@@ -114,9 +115,16 @@ function Connections({
           canManage={canManage}
         />
       ) : null}
-      <RevokeSourceDialog source={revoking} mutation={mutation} onClose={() => setRevoking(null)} />
+      <RevokeSourceDialog
+        source={revoking}
+        mutation={mutation}
+        onRevoke={(id, onSettled) => model.issueSource({ kind: 'revoke', id }, onSettled)}
+        onClose={() => setRevoking(null)}
+      />
       {mutation.isError && !open ? (
-        <Callout tone="negative">{mutation.error.message}</Callout>
+        <MutationNotice
+          notice={mutationNoticeForError(mutation.error, { action: 'update the crawl-log source' })}
+        />
       ) : null}
       <Dialog
         open={open}
@@ -177,7 +185,11 @@ function SetupAvailability({ model }: Readonly<{ model: ReturnType<typeof useCra
   if (sources.data.availability === 'available') return <CrawlLogSetup model={model} />;
   return (
     <>
-      {mutation.isError ? <Callout tone="negative">{mutation.error.message}</Callout> : null}
+      {mutation.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(mutation.error, { action: 'update the crawl-log source' })}
+        />
+      ) : null}
       <CrawlLogAvailabilityNotice availability={sources.data.availability} />
     </>
   );
@@ -299,10 +311,12 @@ function SourceDiagnostics({
 function RevokeSourceDialog({
   source,
   mutation,
+  onRevoke,
   onClose,
 }: Readonly<{
   source: z.infer<typeof crawlSourceSchema> | null;
   mutation: ReturnType<typeof useCrawlConnections>['mutation'];
+  onRevoke: (id: string, onSettled: () => void) => void;
   onClose: () => void;
 }>) {
   return (
@@ -323,9 +337,7 @@ function RevokeSourceDialog({
             disabled={!source}
             pending={mutation.isPending}
             pendingLabel="Revoking…"
-            onClick={() =>
-              source && mutation.mutate({ kind: 'revoke', id: source.id }, { onSettled: onClose })
-            }
+            onClick={() => source && onRevoke(source.id, onClose)}
           >
             Revoke source
           </Button>

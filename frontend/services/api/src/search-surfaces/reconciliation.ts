@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { ProviderError } from '../answer-engines/contracts.ts';
-import { providerCharge, searchPolicy, type Envelope, type SearchEngine } from './dataforseo.ts';
+import { ProviderError } from '../providers/errors.ts';
+import { costMicrousd } from '../providers/dataforseo.ts';
+import { isScraperEngine, searchPolicy, type Envelope, type SearchEngine } from './dataforseo.ts';
 
 export type ReconciliationState = {
   offset: number;
@@ -14,7 +15,7 @@ export type Reconciliation = {
 };
 const rowSchema = z.object({
   id: z.string().min(1),
-  cost: z.number().nonnegative().nullable().optional(),
+  cost: z.unknown().optional(),
   metadata: z.object({
     tag: z.string(),
     api: z.string().optional(),
@@ -42,13 +43,13 @@ export function reconcilePage(
     const row = rowSchema.safeParse(value).data;
     if (!row || !submissionRef || row.metadata.tag !== submissionRef) continue;
     if (
-      engine !== 'google_ai_overview' &&
+      isScraperEngine(engine) &&
       (row.metadata.api !== 'ai_optimization' ||
         row.metadata.se !== searchPolicy.scraper.products[engine] ||
         row.metadata.function !== 'llm_scraper')
     )
       continue;
-    matches[row.id] = providerCharge(row.cost);
+    matches[row.id] = costMicrousd(row.cost);
   }
   const entries = Object.entries(matches);
   if (entries.length > 1) return { state: { ...state, matches }, ambiguous: true, match: null };

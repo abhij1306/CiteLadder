@@ -5,7 +5,7 @@ import { mutedWhenMissing, TableCell, TableRow } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ICONS } from '@/lib/icons';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
-import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import { byPageKindRows } from '@/lib/site-health/page-kinds';
 import { formatScore, measurementCaveat } from '@/lib/site-health/status';
 

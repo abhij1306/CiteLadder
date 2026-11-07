@@ -1,4 +1,4 @@
-import type { Topic } from '@/lib/api/types';
+import type { Topic } from '@citeladder/contracts';
 
 export type RailTopic = { topic: Topic; nested: boolean; label: string };
 

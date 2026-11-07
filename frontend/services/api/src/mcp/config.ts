@@ -1,4 +1,4 @@
-import { configEnvironment, policy, resolveSettingSpec, type ServiceConfig } from '../config.ts';
+import { policy, resolveSettingSpec, type ServiceConfig, type SettingSource } from '../config.ts';
 
 export const mcpPolicy = policy.mcp.constants;
 
@@ -17,10 +17,7 @@ const originOf = (value: string) => {
  * MCP is served when `MCP_TOKEN` is set: a client sends it as its bearer
  * token and acts as the local user with read and write scopes.
  */
-export function loadMcpConfig(
-  config: ServiceConfig,
-  env: Record<string, string | undefined> = configEnvironment(config),
-) {
+export function loadMcpConfig(config: ServiceConfig, env: SettingSource = config.settings) {
   const token = String(resolveSettingSpec(policy.mcp.settings.token, env)).trim();
   return {
     enabled: token.length > 0,

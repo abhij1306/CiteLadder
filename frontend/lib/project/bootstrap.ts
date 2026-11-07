@@ -13,21 +13,6 @@
  */
 import type { SelectionStatus } from '@/lib/project/selection';
 
-/**
- * Routes that manage the WORKSPACE rather than work inside a project.
- *
- * A workspace with no projects is a perfectly valid workspace: its settings
- * stay reachable, and project creation itself must not redirect to itself.
- */
-const WORKSPACE_ONLY_PREFIXES = ['/onboarding', '/settings'] as const;
-
-export function isWorkspaceOnlyRoute(pathname: string | null): boolean {
-  if (!pathname) return false;
-  return WORKSPACE_ONLY_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
-
 /** Which standing notice, if any, this state owes the reader. */
 export type NoticeKind = 'failed' | 'missing-project' | 'no-projects';
 export type GateState = NoticeKind | 'ready' | 'loading' | 'redirecting';

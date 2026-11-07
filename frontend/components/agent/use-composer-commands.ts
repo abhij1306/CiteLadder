@@ -6,8 +6,8 @@ import { useCallback, useRef, useState } from 'react';
 import type { ComposerCommands, Mention } from '@/components/agent/command-menu';
 import { matchOptions, type CommandOption, type CommandToken } from '@/lib/agent/composer-commands';
 import { approachLabel } from '@/lib/agent/vocabulary';
+import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { actionsQueries } from '@/lib/api/actions';
-import { AGENT_MENTIONS_MAX } from '@/lib/config/agent';
 
 const ACTION = 'action:';
 
@@ -41,8 +41,10 @@ export function useComposerCommands({
   const onTrigger = useCallback((trigger: CommandToken['trigger']) => {
     if (trigger === '@') setPoolWanted(true);
   }, []);
+  // The mention bound the server enforces travels on the catalog the composer screens load.
+  const mentionsMax = useAgentCatalog().limits?.mentions_max ?? null;
   const actions = useQuery({
-    ...actionsQueries.mentionPool(workspaceId, projectId),
+    ...actionsQueries.mentionPool({ workspaceId, projectId }),
     enabled: poolWanted && Boolean(workspaceId && projectId),
   });
 
@@ -59,7 +61,8 @@ export function useComposerCommands({
   return {
     options: (token) => {
       if (token.trigger === '/') return [];
-      if (mentions.length >= AGENT_MENTIONS_MAX) return [];
+      // Until the catalog lists the bound, no mention is offered that the server might refuse.
+      if (mentionsMax === null || mentions.length >= mentionsMax) return [];
       return matchOptions(actionOptions, token.query);
     },
     onTrigger,

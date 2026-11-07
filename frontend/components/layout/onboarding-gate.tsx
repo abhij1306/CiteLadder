@@ -6,8 +6,10 @@ import { useEffect, type ReactNode } from 'react';
 import { GateNoticeFrame } from '@/components/layout/gate-notice-frame';
 import { Button } from '@/components/ui/button';
 import { RouteLoadingScreen } from '@/components/layout/page-shell';
+import { isWorkspaceOnlyRoute } from '@/lib/navigation/app-routes';
 import { useCanonicalProjectUrl, workspaceDestination } from '@/lib/navigation/project-destination';
-import { isWorkspaceOnlyRoute, resolveGate, type NoticeKind } from '@/lib/project/bootstrap';
+import { resolveGate, type NoticeKind } from '@/lib/project/bootstrap';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import { useProjectContext } from '@/lib/project/project-context';
 import type { FailureScope } from '@/lib/project/selection';
 
@@ -28,7 +30,8 @@ import type { FailureScope } from '@/lib/project/selection';
  */
 export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) {
   const pathname = useLocation().pathname;
-  const { status, errorScope, activeWorkspaceId, activeWorkspace, retry } = useProjectContext();
+  const { status, errorScope, activeWorkspaceId, activeWorkspace, activeProject, retry } =
+    useProjectContext();
 
   // A role that may not create a project is not offered the affordance. This
   // reads the effective capability the backend published, not a role name, and
@@ -58,6 +61,13 @@ export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) 
     );
   }
 
+  // A ready project-required route always has its project resolved; the
+  // screen receives it non-null instead of re-checking the selection.
+  if (projectRequired && activeProject) {
+    return (
+      <ActiveProjectScopeProvider project={activeProject}>{children}</ActiveProjectScopeProvider>
+    );
+  }
   return <>{children}</>;
 }
 

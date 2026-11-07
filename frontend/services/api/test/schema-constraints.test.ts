@@ -1,14 +1,25 @@
 /**
  * Schema decisions the writers rely on, enforced by PostgreSQL itself:
  * uniqueness that makes replays idempotent, composite foreign keys that pin a
- * child row to its parent's workspace, and the delete rules that keep or remove
- * dependants. Writer behaviour is covered by each owner's tests.
+ * child row to its parent's workspace, the delete rules that keep or remove
+ * dependants, and the status vocabularies each owner declares. Writer
+ * behaviour is covered by each owner's tests.
  */
 import { randomUUID } from 'node:crypto';
 
+import { actionStatusSchema } from '@citeladder/contracts/actions';
+import { auditStatusSchema } from '@citeladder/contracts/audits';
+import { promptStatusSchema } from '@citeladder/contracts/project';
+import { searchRunStatusSchema } from '@citeladder/contracts/search-intelligence';
+import {
+  crawlAnalysisStatusSchema,
+  crawlDiscoveryStatusSchema,
+  crawlOverallStatusSchema,
+} from '@citeladder/contracts/site-health/crawl';
 import { sql } from 'kysely';
 import { afterAll, describe, expect, it } from 'vitest';
 
+import { policy } from '../src/config.ts';
 import type { DB } from '../src/generated/db-schema.ts';
 import { seedImport, seedMetricRow } from './referral-fixtures.ts';
 import { SiteFixtures } from './site-health-fixtures.ts';
@@ -568,4 +579,81 @@ describe('integrations', () => {
     ] as const)
       expect([table, await count(table, 'workspace_id', seed.workspaceId)]).toEqual([table, 0]);
   });
+});
+
+describe('status vocabularies', () => {
+  const CHECK = '23514';
+  const UNKNOWN = 'not_a_state';
+
+  /**
+   * The values a table's own CHECK constraints refuse for one column. Each
+   * value goes into a scratch copy of the table that keeps its CHECKs but no
+   * NOT NULLs, keys or foreign keys, so only the column's vocabulary decides.
+   */
+  async function refused(table: keyof DB, column: string, values: readonly string[]) {
+    return db.transaction().execute(async (trx) => {
+      await sql`create temp table status_probe
+        (like ${sql.table(`public.${table}`)} including constraints) on commit drop`.execute(trx);
+      const required = await sql<{ name: string }>`select attname as name from pg_attribute
+        where attrelid = 'status_probe'::regclass and attnum > 0 and attnotnull`.execute(trx);
+      for (const { name } of required.rows)
+        await sql`alter table status_probe alter column ${sql.ref(name)} drop not null`.execute(
+          trx,
+        );
+      const out: string[] = [];
+      for (const value of values) {
+        await sql`savepoint probe`.execute(trx);
+        try {
+          await sql`insert into status_probe (${sql.ref(column)}) values (${value})`.execute(trx);
+        } catch (error) {
+          if (!(error instanceof Error && 'code' in error && error.code === CHECK)) throw error;
+          out.push(value);
+        }
+        await sql`rollback to savepoint probe`.execute(trx);
+      }
+      return out;
+    });
+  }
+
+  const queue = Object.values(policy.task_queue.statuses);
+  const candidate = policy.prompts.candidate;
+  const columns: [keyof DB, string, readonly string[]][] = [
+    ['agent_runs', 'status', queue],
+    ['analytics_tasks', 'status', queue],
+    // An audit task is a queue row that may also wait for its reservation.
+    ['audit_tasks', 'status', [...queue, 'pending_reservation']],
+    ['brand_discovery_tasks', 'status', queue],
+    ['integration_sync_runs', 'status', queue],
+    ['site_crawl_tasks', 'status', queue],
+    ['audits', 'status', auditStatusSchema.options],
+    ['site_crawls', 'status', crawlOverallStatusSchema.options],
+    ['site_crawls', 'discovery_status', crawlDiscoveryStatusSchema.options],
+    ['site_crawls', 'analysis_status', crawlAnalysisStatusSchema.options],
+    ['search_intelligence_runs', 'status', searchRunStatusSchema.options],
+    [
+      'search_intelligence_calls',
+      'status',
+      ['intent', 'dispatched', 'succeeded', 'failed', 'uncertain'],
+    ],
+    ['search_intelligence_datasets', 'status', ['collecting', 'published', 'failed']],
+    [
+      'integration_oauth_grants',
+      'status',
+      ['connected', 'needs_reauth', 'pending_revocation', 'revoked', 'error'],
+    ],
+    ['actions', 'status', actionStatusSchema.options],
+    ['prompts', 'status', promptStatusSchema.options],
+    [
+      'prompt_candidates',
+      'disposition',
+      [candidate.pending, candidate.accepted, candidate.rejected, ...candidate.outcomes],
+    ],
+  ];
+
+  it.each(columns)(
+    '%s.%s accepts every declared value and refuses an unknown one',
+    async (table, column, values) => {
+      expect(await refused(table, column, [...values, UNKNOWN])).toEqual([UNKNOWN]);
+    },
+  );
 });

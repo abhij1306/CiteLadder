@@ -17,10 +17,8 @@ import { VisibilityActions, VisibilityToolbar } from '@/components/visibility/vi
 import { VisibilityTrends } from '@/components/visibility/visibility-trends';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
-import { useProjectContext } from '@/lib/project/project-context';
 import { useBrandFacts } from '@/lib/project/use-brand-facts';
 import { visibleTabs, type VisibilityTab } from '@/lib/visibility/dashboard';
 import {
@@ -29,16 +27,12 @@ import {
   useVisibilityQueries,
 } from '@/lib/visibility/use-visibility-dashboard';
 
-type VisibilityDashboardState = 'loading' | 'missing-project' | 'error' | 'empty' | null;
+type VisibilityDashboardState = 'loading' | 'error' | 'empty' | null;
 
 export function VisibilityDashboard() {
-  const { activeProject, isLoading: projectLoading } = useProjectContext();
-  const projectId = activeProject?.id ?? null;
   const filters = useVisibilityFilters();
-  const queries = useVisibilityQueries(projectId, filters);
+  const queries = useVisibilityQueries(filters);
   const state = dashboardState(
-    projectId,
-    projectLoading,
     queries.auditsQuery.isLoading,
     queries.auditsQuery.isError,
     queries.hasRuns,
@@ -47,14 +41,11 @@ export function VisibilityDashboard() {
 }
 
 function dashboardState(
-  projectId: string | null,
-  projectLoading: boolean,
   auditsLoading: boolean,
   auditsError: boolean,
   hasRuns: boolean,
 ): VisibilityDashboardState {
-  if (projectLoading || (Boolean(projectId) && auditsLoading)) return 'loading';
-  if (!projectId) return 'missing-project';
+  if (auditsLoading) return 'loading';
   if (auditsError) return 'error';
   if (!hasRuns) return 'empty';
   return null;
@@ -68,7 +59,6 @@ function DashboardState({
   auditsQuery: ReturnType<typeof useVisibilityQueries>['auditsQuery'];
 }>) {
   if (state === 'loading') return <QueryState kind="loading" label="Loading visibility…" />;
-  if (state === 'missing-project') return <ProjectRequiredState />;
   if (state === 'error')
     return (
       <QueryState
@@ -92,8 +82,7 @@ function VisibilityWorkspace({
   state: VisibilityDashboardState;
 }>) {
   // The Accuracy tab exists only inside the fact-checking pilot.
-  const factChecking =
-    useBrandFacts(queries.projectId ?? null, queries.workspaceId ?? null).data?.enabled ?? false;
+  const factChecking = useBrandFacts().data?.enabled ?? false;
   const sourceDimension = useSourceDimensionSwitch();
   if (state === 'empty') {
     return (
@@ -203,7 +192,6 @@ function DashboardPanel({
         isFiltered={filters.isFiltered}
         onClearFilters={filters.clearEvidenceFilters}
         limit={EVIDENCE_LIMIT}
-        projectId={queries.projectId}
         runId={queries.activeRunId}
         scope={queries.evidenceScope}
         scopeReady={queries.hasEvidenceScope}

@@ -5,7 +5,7 @@ import { classifyProjectQueries } from '../src/demand/classification.ts';
 import { resolveOwnedPages } from '../src/demand/page-equivalence.ts';
 import { buildQueryEvidence } from '../src/demand/query-evidence.ts';
 import { recomputeDemand } from '../src/demand/snapshot.ts';
-import { hash } from '../src/traffic/normalization.ts';
+import { hash } from '../src/crypto-text.ts';
 import { refreshTrafficSnapshot } from '../src/traffic/snapshot.ts';
 import { enqueue, seedProject } from './referral-fixtures.ts';
 import { Fixtures, testDatabase } from './support.ts';
@@ -60,7 +60,6 @@ async function siteUrl(owner: Tenant, url: string) {
       url_hash: hash(url),
       host: new URL(url).hostname,
       depth: 0,
-      discovery_status: 'discovered',
       corpus_disposition: 'analyze',
       disposition_reason: 'html_content',
       disposition_version: '1',

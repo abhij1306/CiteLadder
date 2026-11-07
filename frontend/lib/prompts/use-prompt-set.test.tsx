@@ -5,9 +5,9 @@ import { afterEach, expect, it, vi } from 'vite-plus/test';
 
 import { promptsApi } from '@/lib/api/prompts';
 import { ApiError } from '@/lib/api/errors';
-import type { PromptSet } from '@/lib/api/types';
+import type { PromptSet, PromptSetList } from '@citeladder/contracts';
 import { makeProject } from '@/test/fixtures/project';
-import { makeSet } from '@/test/fixtures/prompts';
+import { makeSet, makeSetList } from '@/test/fixtures/prompts';
 import { renderWithProviders } from '@/test/render';
 import { usePromptSet } from './use-prompt-set';
 
@@ -56,14 +56,14 @@ function renderConsumers() {
 }
 
 it('waits for an in-flight list and reuses its set instead of creating one', async () => {
-  const read = deferred<PromptSet[]>();
+  const read = deferred<PromptSetList>();
   const list = vi.spyOn(promptsApi, 'listPromptSets').mockReturnValue(read.promise);
   const create = vi.spyOn(promptsApi, 'createPromptSet');
   renderConsumers();
   await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
   await userEvent.setup().click(screen.getByRole('button', { name: 'First' }));
   expect(create).not.toHaveBeenCalled();
-  read.resolve([makeSet([])]);
+  read.resolve(makeSetList([makeSet([])]));
   await waitFor(() =>
     expect(screen.getByRole('status', { name: 'First result' })).toHaveTextContent(makeSet([]).id),
   );
@@ -72,7 +72,7 @@ it('waits for an in-flight list and reuses its set instead of creating one', asy
 
 it('serializes simultaneous creates from different consumers in the same project', async () => {
   let saved: PromptSet[] = [];
-  vi.spyOn(promptsApi, 'listPromptSets').mockImplementation(async () => saved);
+  vi.spyOn(promptsApi, 'listPromptSets').mockImplementation(async () => makeSetList(saved));
   const write = deferred<PromptSet>();
   const create = vi.spyOn(promptsApi, 'createPromptSet').mockImplementation(async () => {
     const set = await write.promise;

@@ -4,7 +4,8 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { policy } from '../src/config.ts';
 import { refreshTrafficSnapshot, projectPerformanceRange } from '../src/traffic/snapshot.ts';
 import { buildTrafficProjection, TrafficProjectionBuilder } from '../src/traffic/projection.ts';
-import { TaskCancelledError } from '../src/workers/executor.ts';
+import { TaskCancelledError } from '../src/queue/executor.ts';
+import { ReferralClassifications } from '../src/referrals/persisted.ts';
 import { Fixtures, testDatabase } from './support.ts';
 import {
   importSeed,
@@ -19,6 +20,7 @@ import {
 const db = testDatabase(),
   fixtures = new Fixtures(db);
 const context = { db, maxAttempts: 3, checkCancelled: async () => {} };
+const unclassified = new ReferralClassifications([]);
 let t: Tenant, request: ReturnType<typeof requests>;
 beforeEach(async () => {
   t = await tenant(db, fixtures);
@@ -565,6 +567,7 @@ describe('traffic projections and Performance', () => {
       windowStart: WINDOW[0],
       windowEnd: WINDOW[1],
       granularity: 'day',
+      referrals: unclassified,
       rows: [...rows, ...ga4],
     });
     expect(projection.metrics.totals).toMatchObject({
@@ -585,6 +588,7 @@ describe('traffic projections and Performance', () => {
       windowStart: WINDOW[0],
       windowEnd: WINDOW[1],
       granularity: 'day',
+      referrals: unclassified,
       projectOrigin: 'https://example.test',
       rows: [
         {
@@ -617,7 +621,12 @@ describe('traffic projections and Performance', () => {
       resync_seq: 0,
       metrics: { clicks: true, impressions: Number.NaN, position: Infinity },
     };
-    const options = { windowStart: WINDOW[0], windowEnd: WINDOW[1], granularity: 'day' };
+    const options = {
+      windowStart: WINDOW[0],
+      windowEnd: WINDOW[1],
+      granularity: 'day',
+      referrals: unclassified,
+    };
     expect(buildTrafficProjection({ ...options, rows: [row] }).metrics.totals).toMatchObject({
       clicks: 0,
       impressions: 0,

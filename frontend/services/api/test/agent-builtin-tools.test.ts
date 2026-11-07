@@ -79,7 +79,7 @@ describe('Agent built-in tools', () => {
     expect(saveDocument(catalog, turn, draft, bounds)).toEqual({
       ok: true,
       document: 2,
-      text: 'Document 2: staged as a new document in Article format; it is saved with your reply. Now reply briefly; do not repeat the document.',
+      text: 'Document 2: staged as a new document in Article format; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.',
     });
     expect(turn.staged.get(2)).toEqual({
       kind: 'content',
@@ -153,7 +153,7 @@ describe('Agent built-in tools', () => {
     ).toEqual({
       ok: true,
       document: 1,
-      text: 'Document 1: applied 2 edits in FAQ format; it is saved with your reply. Now reply briefly; do not repeat the document.',
+      text: 'Document 1: applied 2 edits in FAQ format; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.',
     });
     expect(turn.staged.get(1)).toEqual({
       kind: 'content',

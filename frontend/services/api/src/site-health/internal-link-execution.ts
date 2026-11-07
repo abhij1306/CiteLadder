@@ -1,6 +1,7 @@
 /** Request-bound execution of one authorized analysis through the existing queue owner. */
 import { sql } from 'kysely';
-import { configEnvironment, loadWorkerSettings, policy, type ServiceConfig } from '../config.ts';
+import { policy, type ServiceConfig } from '../config.ts';
+import { loadWorkerSettings } from '../config/analytics.ts';
 import type { Database } from '../db/database.ts';
 import { createJevClient, jevSettings } from '../models/jev.ts';
 import { AnalyticsWorker } from '../workers/analytics-worker.ts';
@@ -14,7 +15,7 @@ export async function executeLinkRun(
   scope: LinkScope,
   runId: string,
 ) {
-  const env = configEnvironment(config);
+  const env = config.settings;
   const settings = loadWorkerSettings(env);
   const tasks = (kind: string) =>
     db

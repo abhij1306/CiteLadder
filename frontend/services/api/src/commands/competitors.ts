@@ -1,20 +1,23 @@
 /** Tracked-competitor commands: add, edit, remove and accept a suggestion. */
 import type { z } from 'zod';
 
-import { requireCapability, type Actor } from '../auth/actor.ts';
 import type { Database } from '../db/database.ts';
 import type { ProjectScope } from '../projects/brand-profile.ts';
 import { acceptSuggestion as acceptOwnedSuggestion } from '../projects/competitor-suggestions.ts';
 import * as competitors from '../projects/competitors.ts';
+import { permission, type Authorized } from './permission.ts';
 
-function scopeOf(actor: Actor, projectId: string): ProjectScope {
-  requireCapability(actor, 'write', 'competitors:write');
-  return { workspaceId: actor.workspaceId, projectId };
-}
+export const COMPETITORS_WRITE = permission({ capability: 'write', scope: 'competitors:write' });
+type Writer = Authorized<typeof COMPETITORS_WRITE>;
+
+const scopeOf = (actor: Writer, projectId: string): ProjectScope => ({
+  workspaceId: actor.workspaceId,
+  projectId,
+});
 
 export function addCompetitor(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string,
   input: z.output<typeof competitors.competitorCreate>,
 ) {
@@ -23,7 +26,7 @@ export function addCompetitor(
 
 export function updateCompetitor(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string,
   competitorId: string,
   input: z.output<typeof competitors.competitorUpdate>,
@@ -33,7 +36,7 @@ export function updateCompetitor(
 
 export function removeCompetitor(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string,
   competitorId: string,
 ) {
@@ -42,7 +45,7 @@ export function removeCompetitor(
 
 export function acceptSuggestion(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string,
   candidateId: string,
 ) {

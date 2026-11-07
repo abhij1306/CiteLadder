@@ -2,24 +2,26 @@
  * Prompts: manual create, edit, delete, bulk review transitions and bulk
  * import.
  *
- * Every insert path takes the project lock, then the set lock, the order
- * generation and Commerce use. The per-set hash uniqueness stays the final
- * race guard. Text entering active measurement passes topical
+ * Inserts go through `insertPrompts` (`insert.ts`), which takes the project
+ * and set locks in that order and drops duplicates. Text entering active
+ * measurement passes topical
  * binding (`binding.ts`) against the persisted project identity and the
  * prompt's own topic.
  */
-import { randomUUID } from 'node:crypto';
-
+import type { promptCohortSchema } from '@citeladder/contracts/project';
 import {
-  buyerStageSchema,
-  promptCohortSchema,
-  promptStatusSchema,
-} from '@citeladder/contracts/project';
+  promptBulkStatusRequestSchema,
+  promptCreateRequestSchema,
+  promptImportRequestSchema,
+  promptImportRowRequestSchema,
+  promptUpdateRequestSchema,
+} from '@citeladder/contracts/prompt-requests';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { isUniqueViolation } from '../db/errors.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
@@ -31,6 +33,7 @@ import {
   type BindingFailure,
 } from './binding.ts';
 import { brandFiling } from './brand-filing.ts';
+import { brandedCohort, DUPLICATE_PROMPT, insertPrompts } from './insert.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { promptTextHash } from './normalization.ts';
 import { readPromptSet, scopedPromptSet } from './prompt-sets.ts';
@@ -40,9 +43,8 @@ import { firstOf, isNonEmpty, type NonEmpty } from '../lists.ts';
 
 const P = policy.prompts;
 const INTENTS = new Set(P.intents);
-const BRANDED = new Set(P.branded_cohorts);
 const UNIQUE_TEXT = 'uq_prompt_set_normalized_text';
-const DUPLICATE = 'An equivalent prompt already exists in this set';
+const DUPLICATE = DUPLICATE_PROMPT;
 
 const text = z.string().trim().min(1).max(P.text_max_chars);
 const theme = z.string().max(P.theme_max_chars);
@@ -50,45 +52,30 @@ const intent = z.string().max(P.intent_max_chars);
 const persona = z.string().trim().max(P.persona_max_chars);
 
 /** An omitted cohort is filed by whether the text names the brand (`brand-filing.ts`). */
-export const promptInput = z.strictObject({
+export const promptInput = promptCreateRequestSchema.extend({
   text,
   theme: theme.default(''),
   intent: intent.default(''),
-  buyer_stage: buyerStageSchema.default(''),
   persona: persona.default(''),
-  cohort: promptCohortSchema.optional(),
-  enabled: z.boolean().default(true),
-  topic_id: z.uuid().nullish(),
 });
 export const promptBatch = z.strictObject({
   prompts: z.array(promptInput).min(1).max(P.create_batch_max),
 });
-export const promptUpdate = z.strictObject({
+export const promptUpdate = promptUpdateRequestSchema.extend({
   text: text.nullish(),
   theme: theme.nullish(),
   intent: intent.nullish(),
-  buyer_stage: buyerStageSchema.nullish(),
   persona: persona.nullish(),
-  cohort: promptCohortSchema.nullish(),
-  enabled: z.boolean().nullish(),
-  status: promptStatusSchema.nullish(),
-  topic_id: z.uuid().nullish(),
 });
-export const promptBulkStatus = z.strictObject({
-  prompt_ids: z.array(z.uuid()).min(1),
-  status: promptStatusSchema,
-});
-const importRow = z.strictObject({
+export const promptBulkStatus = promptBulkStatusRequestSchema;
+const importRow = promptImportRowRequestSchema.extend({
   text: z.string().trim().max(P.text_max_chars),
   theme: theme.default(''),
   intent: intent.default(''),
-  buyer_stage: buyerStageSchema.default(''),
   persona: persona.default(''),
-  cohort: promptCohortSchema.optional(),
-  enabled: z.boolean().default(true),
   topic: z.string().trim().max(P.topic_name_max_chars).default(''),
 });
-export const promptImport = z.strictObject({
+export const promptImport = promptImportRequestSchema.extend({
   prompts: z.array(importRow).max(P.import_max_rows),
 });
 
@@ -99,21 +86,50 @@ function normalizeIntent(value: string): string {
 }
 
 type Cohort = z.infer<typeof promptCohortSchema>;
-const cohortColumns = (cohort: Cohort) => ({ cohort, branded: BRANDED.has(cohort) });
+const cohortColumns = (cohort: Cohort) => ({ cohort, branded: brandedCohort(cohort) });
 
-/** A prompt in the caller's workspace with its project, or `Prompt not found`. */
-export async function scopedPrompt(db: Kysely<DB>, workspaceId: string, promptId: string) {
-  const row = await db
+/** A prompt in the caller's workspace (and named project) with its project, or `Prompt not found`. */
+export async function scopedPrompt(
+  db: Kysely<DB>,
+  workspaceId: string,
+  promptId: string,
+  projectId: string | null = null,
+) {
+  const query = db
     .selectFrom('prompts')
     .innerJoin('prompt_sets', 'prompt_sets.id', 'prompts.prompt_set_id')
     .innerJoin('projects', 'projects.id', 'prompt_sets.project_id')
     .selectAll('prompts')
     .select('prompt_sets.project_id')
     .where('prompts.id', '=', promptId)
-    .where('projects.workspace_id', '=', workspaceId)
-    .executeTakeFirst();
+    .where('projects.workspace_id', '=', workspaceId);
+  const row = await (
+    projectId === null ? query : query.where('projects.id', '=', projectId)
+  ).executeTakeFirst();
   if (row === undefined) throw notFound('Prompt');
   return row;
+}
+
+/** Every one of `promptIds` in the project, or a 404 naming how many are not in it. */
+export async function scopedPrompts(
+  db: Kysely<DB>,
+  scope: { workspaceId: string; projectId: string },
+  promptIds: readonly string[],
+) {
+  const ids = [...new Set(promptIds)];
+  const rows = isNonEmpty(ids)
+    ? await db
+        .selectFrom('prompts')
+        .innerJoin('prompt_sets', 'prompt_sets.id', 'prompts.prompt_set_id')
+        .select(['prompts.id', 'prompts.text', 'prompts.status', 'prompts.prompt_set_id'])
+        .where('prompts.id', 'in', ids)
+        .where('prompts.workspace_id', '=', scope.workspaceId)
+        .where('prompt_sets.project_id', '=', scope.projectId)
+        .execute()
+    : [];
+  if (rows.length !== ids.length)
+    throw new ApiError(404, `${ids.length - rows.length} prompt(s) were not found in this project`);
+  return rows;
 }
 
 /** The topic's persisted name and description, or 404 outside the project. */
@@ -149,11 +165,11 @@ export async function listPrompts(
 
 export async function createPrompt(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptSetId: string,
   input: z.infer<typeof promptInput>,
 ): Promise<PromptView> {
-  return firstOf(await createPrompts(db, workspaceId, promptSetId, [input]), 'created prompt');
+  return firstOf(await createPrompts(db, scope, promptSetId, [input]), 'created prompt');
 }
 
 /**
@@ -217,11 +233,11 @@ async function screen<T extends { text: string; topic_id?: string | null }>(
  */
 export async function screenPrompts(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptSetId: string,
   inputs: readonly z.infer<typeof promptInput>[],
 ) {
-  const set = await scopedPromptSet(db, workspaceId, promptSetId);
+  const set = await scopedPromptSet(db, scope.workspaceId, promptSetId, scope.projectId);
   const screened = await screen(db, set, inputs);
   return {
     admitted: screened.flatMap((item) => (item.problem === null ? [item.input] : [])),
@@ -242,93 +258,94 @@ export async function screenPrompts(
 
 export async function createPrompts(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptSetId: string,
   inputs: NonEmpty<z.infer<typeof promptInput>>,
 ): Promise<PromptView[]> {
-  try {
-    return await inTransaction(db, async (trx) => {
-      const set = await scopedPromptSet(trx, workspaceId, promptSetId);
-      await acquireProjectLock(trx, set.project_id);
-      await acquirePromptSetLock(trx, set.id);
-      // Screened under the project lock, so the topic vocabulary cannot change before the insert.
-      const screened = await screen(trx, set, inputs);
-      for (const { problem } of screened)
-        if (problem?.kind === 'binding') throw bindingError(problem.failure);
-      if (screened.some((item) => item.problem !== null)) throw new ApiError(409, DUPLICATE);
-      const planned = screened.map(({ input, hash }) => ({ input, id: randomUUID(), hash }));
-      const filing = await brandFiling(trx, set.project_id);
-      const now = new Date();
-      const rows = await trx
-        .insertInto('prompts')
-        .values(
-          planned.map(({ input, id, hash }, index) => ({
-            id,
-            prompt_set_id: set.id,
-            topic_id: input.topic_id ?? null,
-            text: input.text,
-            normalized_text_hash: hash,
-            theme: input.theme.trim(),
-            intent: normalizeIntent(input.intent),
-            buyer_stage: input.buyer_stage,
-            persona: input.persona,
-            ...cohortColumns(input.cohort ?? filing(input.text)),
-            enabled: input.enabled,
-            status: P.status_active,
-            origin: P.origins.manual,
-            // A millisecond apart, so creation-ordered lists keep the request's order.
-            created_at: new Date(now.getTime() + index),
-            updated_at: now,
-          })),
-        )
-        .returningAll()
-        .execute();
-      // RETURNING order is unspecified; answer in request order.
-      const byId = new Map(rows.map((row) => [row.id, promptView(row)]));
-      return planned.flatMap(({ id }) => byId.get(id) ?? []);
-    });
-  } catch (error) {
-    if (isUniqueViolation(error, UNIQUE_TEXT)) throw new ApiError(409, DUPLICATE);
-    throw error;
-  }
+  return inTransaction(db, async (trx) => {
+    const set = await scopedPromptSet(trx, scope.workspaceId, promptSetId, scope.projectId);
+    await acquireProjectLock(trx, set.project_id);
+    await acquirePromptSetLock(trx, set.id);
+    // Screened under the project lock, so the topic vocabulary cannot change before the insert.
+    const screened = await screen(trx, set, inputs);
+    for (const { problem } of screened)
+      if (problem?.kind === 'binding') throw bindingError(problem.failure);
+    const filing = await brandFiling(trx, set.project_id);
+    const rows = await insertPrompts(
+      trx,
+      set,
+      inputs.map((input) => ({
+        text: input.text,
+        topic_id: input.topic_id ?? null,
+        theme: input.theme.trim(),
+        intent: normalizeIntent(input.intent),
+        buyer_stage: input.buyer_stage,
+        persona: input.persona,
+        cohort: input.cohort ?? filing(input.text),
+        enabled: input.enabled,
+      })),
+      { origin: 'manual', onDuplicate: 'reject' },
+    );
+    return rows.flatMap((row) => (row === null ? [] : [promptView(row)]));
+  });
 }
 
 export async function updatePrompt(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptId: string,
   input: z.infer<typeof promptUpdate>,
 ): Promise<PromptView> {
   try {
-    return await inTransaction(db, (trx) => applyPromptUpdate(trx, workspaceId, promptId, input));
+    return await inTransaction(db, (trx) => applyPromptUpdate(trx, scope, promptId, input));
   } catch (error) {
     if (isUniqueViolation(error, UNIQUE_TEXT)) throw new ApiError(409, DUPLICATE);
     throw error;
   }
 }
 
+/** The prompt row `FOR UPDATE`, read after its project lock; 404 once it is deleted. */
+async function lockedPrompt(db: Kysely<DB>, promptId: string): Promise<PromptRow> {
+  const prompt = await db
+    .selectFrom('prompts')
+    .selectAll()
+    .where('id', '=', promptId)
+    .forUpdate()
+    .executeTakeFirst();
+  if (prompt === undefined) throw notFound('Prompt');
+  return prompt;
+}
+
 /**
  * The edit, under the project lock that topic writers take, so the topic and
- * vocabulary it binds against cannot change before it commits.
+ * vocabulary it binds against cannot change before it commits. The prompt is
+ * re-read under that lock: a re-file or status change that committed while
+ * this edit waited decides what it must bind to.
  */
 async function applyPromptUpdate(
   db: Kysely<DB>,
-  workspaceId: string,
+  scope: RecordScope,
   promptId: string,
   input: z.infer<typeof promptUpdate>,
 ): Promise<PromptView> {
-  const prompt = await scopedPrompt(db, workspaceId, promptId);
-  await acquireProjectLock(db, prompt.project_id);
+  const { project_id: projectId } = await scopedPrompt(
+    db,
+    scope.workspaceId,
+    promptId,
+    scope.projectId,
+  );
+  await acquireProjectLock(db, projectId);
+  const prompt = await lockedPrompt(db, promptId);
   // An explicit null detaches the prompt; an absent key leaves its topic.
   const topicGiven = 'topic_id' in input;
   const topicId = topicGiven ? (input.topic_id ?? null) : prompt.topic_id;
-  if (topicGiven && topicId !== null) await topicText(db, prompt.project_id, topicId);
+  if (topicGiven && topicId !== null) await topicText(db, projectId, topicId);
   const activates = input.status === P.status_active && prompt.status !== P.status_active;
   // Re-filing an active prompt under another topic changes what it must bind to.
   const refiled =
     topicId !== prompt.topic_id && (input.status ?? prompt.status) === P.status_active;
   if (input.text != null || activates || refiled) {
-    await requireBinding(db, prompt.project_id, input.text ?? prompt.text, topicId);
+    await requireBinding(db, projectId, input.text ?? prompt.text, topicId);
   }
   const changes: Partial<PromptRow> = {
     ...(input.text == null
@@ -354,10 +371,10 @@ async function applyPromptUpdate(
 
 export async function deletePrompt(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptId: string,
 ): Promise<void> {
-  const prompt = await scopedPrompt(db, workspaceId, promptId);
+  const prompt = await scopedPrompt(db, scope.workspaceId, promptId, scope.projectId);
   await db.deleteFrom('prompts').where('id', '=', prompt.id).execute();
 }
 
@@ -374,13 +391,13 @@ function failures<T>(items: readonly T[], check: (item: T) => BindingFailure | n
 /** Archive or activate prompts of one set; all of them, or none (404). */
 export async function bulkSetStatus(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptSetId: string,
   input: z.infer<typeof promptBulkStatus>,
 ): Promise<PromptSetView> {
   const ids = [...new Set(input.prompt_ids)];
   await inTransaction(db, async (trx) => {
-    const set = await scopedPromptSet(trx, workspaceId, promptSetId);
+    const set = await scopedPromptSet(trx, scope.workspaceId, promptSetId, scope.projectId);
     await acquireProjectLock(trx, set.project_id);
     await acquirePromptSetLock(trx, set.id);
     if (input.status === P.status_active) {
@@ -419,24 +436,24 @@ export async function bulkSetStatus(
       throw new ApiError(404, 'Prompt(s) not found in this set');
     }
   });
-  return readPromptSet(db, workspaceId, promptSetId);
+  return readPromptSet(db, scope.workspaceId, promptSetId);
 }
 
 /**
  * Import parsed rows as `imported` prompts, atomically: every non-blank row
- * must bind, and an over-allowance import inserts nothing. Blank rows are
- * skipped and duplicates (in the set, or repeated in the upload) are dropped
- * before occupancy is charged. A row's topic name reuses a project topic
+ * must bind. Blank rows are skipped and duplicates (in the set, or repeated
+ * in the upload) are dropped. A row's topic name reuses a project topic
  * (case-insensitively) or creates one, only for rows that insert.
  */
 export async function importPrompts(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptSetId: string,
   input: z.infer<typeof promptImport>,
 ): Promise<PromptSetView> {
+  const { workspaceId } = scope;
   await db.transaction().execute(async (trx) => {
-    const set = await scopedPromptSet(trx, workspaceId, promptSetId);
+    const set = await scopedPromptSet(trx, workspaceId, promptSetId, scope.projectId);
     await acquireProjectLock(trx, set.project_id);
     await acquirePromptSetLock(trx, set.id);
     const rows = input.prompts.map((row, index) => ({ ...row, index }));
@@ -454,6 +471,7 @@ export async function importPrompts(
         },
       );
     }
+    // Topics are created only for rows that insert, so screen duplicates first.
     const byHash = new Map<string, (typeof rows)[number]>();
     for (const row of rows) {
       const hash = row.text ? promptTextHash(row.text) : '';
@@ -468,36 +486,28 @@ export async function importPrompts(
       .execute();
     for (const { normalized_text_hash: hash } of existing) byHash.delete(hash);
     if (byHash.size === 0) return;
+    // A refusal from the insert rolls these topics back with it.
     const topics = await resolveTopicsByName(
       trx,
-      set.project_id,
+      { workspaceId, projectId: set.project_id },
       [...byHash.values()].map((row) => row.topic),
     );
-    const now = new Date();
     const filing = await brandFiling(trx, set.project_id);
-    await trx
-      .insertInto('prompts')
-      .values(
-        [...byHash].map(([hash, row]) => ({
-          id: randomUUID(),
-          prompt_set_id: set.id,
-          topic_id: topics.get(row.topic.toLowerCase()) ?? null,
-          text: row.text,
-          normalized_text_hash: hash,
-          theme: row.theme.trim(),
-          intent: normalizeIntent(row.intent),
-          buyer_stage: row.buyer_stage,
-          persona: row.persona,
-          ...cohortColumns(row.cohort ?? filing(row.text)),
-          enabled: row.enabled,
-          status: P.status_active,
-          origin: P.origins.imported,
-          created_at: now,
-          updated_at: now,
-        })),
-      )
-      .onConflict((conflict) => conflict.constraint(UNIQUE_TEXT).doNothing())
-      .execute();
+    await insertPrompts(
+      trx,
+      set,
+      [...byHash.values()].map((row) => ({
+        text: row.text,
+        topic_id: topics.get(row.topic.toLowerCase()) ?? null,
+        theme: row.theme.trim(),
+        intent: normalizeIntent(row.intent),
+        buyer_stage: row.buyer_stage,
+        persona: row.persona,
+        cohort: row.cohort ?? filing(row.text),
+        enabled: row.enabled,
+      })),
+      { origin: 'imported', onDuplicate: 'skip' },
+    );
   });
   return readPromptSet(db, workspaceId, promptSetId);
 }

@@ -18,8 +18,8 @@ import { cn } from '@/lib/utils';
  * Table — the app's data table:
  *  - the header is a sticky 36px `surface-sunken` band with `radius-sm` ends;
  *    its labels are 12/16 medium `ink-secondary`, `ink` while sorted
- *  - `table-row-height` rows (40 in the app) divided by `line` rules, `surface-sunken` on hover and when
- *    selected; `highlight` tints the tracked brand's own row `accent-soft`
+ *  - `table-row-height` rows (40 in the app) divided by `line` rules, `surface-sunken` when
+ *    selected and, for a row that opens or selects on press, on hover; `highlight` tints the tracked brand's own row `accent-soft`
  *    (one row per table, never for emphasis); no zebra stripes, no column
  *    rules, no colour by status (that is a Badge cell)
  *  - text never runs past two lines: `ClampText` cuts it there and moves the
@@ -123,11 +123,15 @@ export function TableRow({
   highlight,
   ...props
 }: Readonly<HTMLAttributes<HTMLTableRowElement> & { highlight?: boolean }>) {
+  // Only a row that does something when pressed answers the pointer: a
+  // row of a table with nothing to select stays still on hover.
+  const pressable = props.onClick !== undefined;
   return (
     <tr
       {...props}
       className={cn(
-        'hover:bg-surface-sunken h-[var(--table-row-height)] transition-colors duration-[var(--motion-fast)]',
+        'h-[var(--table-row-height)] transition-colors duration-[var(--motion-fast)]',
+        pressable && 'hover:bg-surface-sunken',
         // A selected row takes `surface-sunken`; the tracked brand's own row
         // takes `accent-soft`, and hover never changes it.
         'aria-selected:bg-surface-sunken',
@@ -223,6 +227,14 @@ function isPlainText(children: ReactNode) {
  * so the pager and everything below it moved on every page turn.
  */
 export const TableTextLinesContext = createContext<1 | 2>(2);
+
+/**
+ * The lines a `TableCellLines` title takes: one by default; two in a
+ * `DataTable` of three-line rows (`rowLines={3}`), where a long title (a
+ * prompt) wraps over its caption instead of being cut at one line. The
+ * title then always holds two lines, so every row keeps one height.
+ */
+export const TableTitleLinesContext = createContext<1 | 2>(1);
 
 function isCut(node: HTMLElement) {
   return node.scrollHeight > node.clientHeight + 1 || node.scrollWidth > node.clientWidth + 1;
@@ -341,9 +353,13 @@ export function TableCellLines({
   secondaryTooltip?: ReactNode;
   title?: boolean;
 }>) {
+  const titleLines = useContext(TableTitleLinesContext);
   return (
     <span className="grid min-w-0">
-      <ClampText lines={1} className={title ? textRole('itemTitle') : undefined}>
+      <ClampText
+        lines={titleLines}
+        className={cn(title ? textRole('itemTitle') : undefined, titleLines === 2 && 'min-h-[2lh]')}
+      >
         {primary}
       </ClampText>
       {secondary ? (

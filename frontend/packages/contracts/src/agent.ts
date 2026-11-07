@@ -230,6 +230,8 @@ export const agentSkillCatalogSchema = responseObject({
   workflow_groups: z.array(responseObject({ id: z.string(), label: z.string() })).default([]),
   workflows: z.array(agentWorkflowSchema).default([]),
   output_kinds: z.array(agentOutputKindSchema).default([]),
+  /** Bounds the API enforces on a composed message, for the composer that reads this catalog. */
+  limits: responseObject({ mentions_max: z.number().int() }),
 });
 
 export const agentInstructionsSchema = responseObject({
@@ -276,6 +278,11 @@ export const agentContextRefsSchema = z.strictObject({
   output_revision_reference: z.strictObject({ output_id: uuid(), revision_id: uuid() }).nullish(),
   search_intelligence_reference: agentSearchReferenceSchema.nullish(),
 });
+/**
+ * Typed evidence a new chat starts from. The server resolves and authorizes
+ * every identifier on each run; the browser never sends evidence content.
+ */
+export type AgentContextRefs = z.input<typeof agentContextRefsSchema>;
 
 /** Request bounds come from the policy owner; the shared wire shape lives here. */
 export function agentRequestSchemas(bounds: {
@@ -311,3 +318,9 @@ export function agentRequestSchemas(bounds: {
     instructions: z.strictObject({ text: z.string().max(bounds.instructions_max_chars) }),
   };
 }
+type AgentRequestSchemas = ReturnType<typeof agentRequestSchemas>;
+/** A new chat; a defined workflow pins its skill and format on the server. */
+export type AgentChatCreateRequest = z.input<AgentRequestSchemas['create']>;
+export type AgentMessageRequest = z.input<AgentRequestSchemas['message']>;
+export type AgentOutputEditRequest = z.input<AgentRequestSchemas['edit']>;
+export type AgentInstructionsRequest = z.input<AgentRequestSchemas['instructions']>;

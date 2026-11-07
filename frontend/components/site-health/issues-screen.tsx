@@ -1,20 +1,18 @@
 'use client';
 
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 
 import { Button } from '@/components/ui/button';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { ListScreen } from '@/components/layout/page-shell';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { IssuesCatalog } from '@/components/site-health/issues-catalog';
 import { ICONS } from '@/lib/icons';
-import { siteHealthQueries } from '@/lib/api/site-health';
-import type { SiteHealthDashboard } from '@/lib/api/types';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
+import type { SiteHealthDashboard } from '@citeladder/contracts';
 import { httpErrorStatus } from '@/lib/api/errors';
-import { useProjectContext } from '@/lib/project/project-context';
-import { resolveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * Issues screen container (Slice 8, mockup 710).
@@ -25,43 +23,19 @@ import { resolveProjectRequestScope } from '@/lib/project/request-scope';
  * Health first (the catalog is per-crawl and there is nothing to group).
  */
 export function IssuesScreen() {
-  const { activeProject, activeWorkspaceId, isLoading: projectLoading } = useProjectContext();
-  const projectId = activeProject?.id ?? null;
-  const requestScope = resolveProjectRequestScope(activeWorkspaceId, projectId);
-
-  const dashboardQuery = useQuery({
-    ...siteHealthQueries.dashboard(requestScope.workspaceId, requestScope.projectId),
-    enabled: requestScope.enabled,
-  });
-
-  return (
-    <IssuesDataRegion
-      projectId={projectId}
-      workspaceId={activeWorkspaceId}
-      projectLoading={projectLoading}
-      dashboard={dashboardQuery}
-    />
-  );
+  const { workspaceId, projectId } = useProjectScope();
+  const dashboardQuery = useQuery(siteHealthQueries.dashboard({ workspaceId, projectId }));
+  return <IssuesDataRegion workspaceId={workspaceId} dashboard={dashboardQuery} />;
 }
 
 function IssuesDataRegion({
-  projectId,
   workspaceId,
-  projectLoading,
   dashboard,
 }: Readonly<{
-  projectId: string | null;
-  workspaceId: string | null;
-  projectLoading: boolean;
+  workspaceId: string;
   dashboard: UseQueryResult<SiteHealthDashboard, Error>;
 }>) {
-  if (!projectId && !projectLoading)
-    return (
-      <ListScreen>
-        <ProjectRequiredState />
-      </ListScreen>
-    );
-  if (projectLoading || dashboard.isLoading)
+  if (dashboard.isLoading)
     return (
       <ListScreen>
         <QueryState kind="loading" label="Loading issues…" />
@@ -95,12 +69,12 @@ function IssuesLoadedRegion({
   workspaceId,
   dashboard,
 }: Readonly<{
-  workspaceId: string | null;
+  workspaceId: string;
   dashboard: UseQueryResult<SiteHealthDashboard, Error>;
 }>) {
   const crawl = dashboard.data?.crawl ?? null;
   if (dashboard.isError) {
-    return crawl && workspaceId ? (
+    return crawl ? (
       <IssuesCatalog
         workspaceId={workspaceId}
         crawlId={crawl.id}
@@ -142,5 +116,5 @@ function IssuesLoadedRegion({
       </ListScreen>
     );
   }
-  return workspaceId ? <IssuesCatalog workspaceId={workspaceId} crawlId={crawl.id} /> : null;
+  return <IssuesCatalog workspaceId={workspaceId} crawlId={crawl.id} />;
 }

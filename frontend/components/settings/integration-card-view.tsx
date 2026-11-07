@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 import { ConnectionRow } from '@/components/settings/integration-connection-row';
 import { Dialog } from '@/components/ui/dialog';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import {
   FAMILY_META,
   isGrantGone,
@@ -11,10 +11,10 @@ import {
   type GrantFamily,
   type GrantModel,
 } from '@/components/settings/grant-model';
-import { useRefreshImportedReads } from '@/components/integrations/data-sources';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import {
   Card,
   CardContent,
@@ -25,7 +25,11 @@ import {
 } from '@/components/ui/card';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, MetaFooter } from '@/components/ui/workspace';
-import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
+import {
+  integrationsApi,
+  integrationsMutations,
+  type IntegrationConnection,
+} from '@/lib/api/integrations';
 import { hardNavigate } from '@/lib/navigation/hard-navigate';
 import { textRole } from '@/components/ui/typography';
 
@@ -152,21 +156,11 @@ function ConnectCard({
  * resumes the same history.
  */
 function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
-  // Disconnecting stops imports into the same projections a new property feeds.
-  const refresh = useRefreshImportedReads();
   const [open, setOpen] = useState(false);
   const title = FAMILY_META[grant.family].title;
   const [connection] = grant.connections;
-  const disconnect = useMutation({
-    mutationFn: () =>
-      integrationsApi.delete(connection.id, {
-        workspaceId: connection.workspace_id,
-      }),
-    onSuccess: async () => {
-      setOpen(false);
-      await refresh();
-    },
-  });
+  // Disconnecting stops imports into the same projections a new property feeds.
+  const disconnect = useMutation(integrationsMutations.disconnect(connection.workspace_id));
   const sources = joinProviderLabels(grant.connections.map((item) => item.provider));
   return (
     <>
@@ -191,7 +185,7 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
             </Button>
             <Button
               variant="danger"
-              onClick={() => disconnect.mutate()}
+              onClick={() => disconnect.mutate(connection.id, { onSuccess: () => setOpen(false) })}
               pending={disconnect.isPending}
               pendingLabel="Disconnecting…"
             >
@@ -206,7 +200,11 @@ function DisconnectGrant({ grant }: Readonly<{ grant: GrantModel }>) {
             one property, use Remove on its row instead.
           </p>
           {disconnect.isError ? (
-            <Callout tone="negative">{humanizeApiError(disconnect.error).message}</Callout>
+            <MutationNotice
+              notice={mutationNoticeForError(disconnect.error, {
+                action: 'disconnect the integration',
+              })}
+            />
           ) : null}
         </Stack>
       </Dialog>

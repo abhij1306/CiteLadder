@@ -148,6 +148,38 @@ describe('Internal links', () => {
     expect(await screen.findByText(/42 pages/)).toBeInTheDocument();
   });
 
+  it('names each saved analysis by its own state', async () => {
+    const states = [
+      'completed',
+      'queued',
+      'running',
+      'partial',
+      'unavailable',
+      'cancelled',
+      'failed',
+    ];
+    const history = states.map((state, index) => ({
+      id: index ? uuid(300 + index) : run,
+      created_at: '2026-09-28T10:00:00Z',
+      state,
+    }));
+    mswServer.use(http.get(endpoint, () => HttpResponse.json({ ...read(analysis()), history })));
+    renderPanel();
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Saved analysis' }));
+    const labels = (await screen.findAllByRole('option')).map((option) =>
+      option.textContent?.split(' · ').at(-1),
+    );
+    expect(labels).toEqual([
+      'Complete',
+      'Queued',
+      'Running',
+      'Partial',
+      'Unavailable',
+      'Cancelled',
+      'Failed',
+    ]);
+  });
+
   it('replaces search history while preserving deliberate analysis navigation', async () => {
     const link = {
       id: uuid(200),

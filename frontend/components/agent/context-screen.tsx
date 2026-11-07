@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -18,7 +18,6 @@ import {
   type BrandProfileForm,
 } from '@/components/knowledge-base/use-brand-profile-form';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { CompetitorSuggestions } from '@/components/visibility/prompt-insights';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,11 +27,11 @@ import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { projectQueries } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
-import type { BrandProfile, Project } from '@/lib/api/types';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
+import type { BrandProfile, Project } from '@citeladder/contracts';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { useBrandFacts } from '@/lib/project/use-brand-facts';
 
 const CONTEXT_TABS = [
@@ -71,41 +70,24 @@ const TAB_SAVE: Readonly<Record<ContextTab, 'profile' | 'instructions' | null>> 
  * on a card; the identity band carries the active tab's save.
  */
 export function ContextScreen() {
-  const { activeProject, activeWorkspaceId } = useProjectContext();
-  if (!activeProject || !activeWorkspaceId)
-    return (
-      <ListScreen>
-        <ProjectRequiredState />
-      </ListScreen>
-    );
+  const { workspaceId, project } = useProjectScope();
   // Keyed by project so an unsaved draft never carries to another project.
-  return (
-    <ContextWorkspace
-      key={activeProject.id}
-      workspaceId={activeWorkspaceId}
-      project={activeProject}
-    />
-  );
+  return <ContextWorkspace key={project.id} workspaceId={workspaceId} project={project} />;
 }
 
 function ContextWorkspace({
   workspaceId,
   project,
 }: Readonly<{ workspaceId: string; project: Project }>) {
-  const queryClient = useQueryClient();
   const [requestedTab, setTab] = useUrlState('tab', CONTEXT_TAB_CODEC);
-  const profile = useQuery(projectQueries.brandProfile(workspaceId, project.id));
+  const profile = useQuery(projectQueries.brandProfile({ workspaceId, projectId: project.id }));
   // The pilot gate is known before the tabs render, so its tab never appears
   // late. Outside the pilot there is no tab; an unreadable gate shows its error there.
-  const facts = useBrandFacts(project.id, workspaceId);
+  const facts = useBrandFacts();
   const form = useBrandProfileForm({
     projectId: project.id,
     workspaceId,
     profile: profile.data,
-    onSaved: () =>
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.projects.commandCenter(project.id),
-      }),
   });
   const instructions = useAgentInstructions(workspaceId, project.id);
   const offersBrandFacts = facts.isError || Boolean(facts.data?.enabled);
@@ -202,11 +184,9 @@ function ContextPanels({
   brandFacts: ReactNode;
   instructions: ReactNode;
 }>) {
-  const suggestions = useQuery({
-    queryKey: queryKeys.visibility.competitorSuggestions(project.id),
-    queryFn: ({ signal }) =>
-      visibilityApi.listCompetitorSuggestions(project.id, { signal, workspaceId }),
-  });
+  const suggestions = useQuery(
+    visibilityQueries.competitorSuggestions({ workspaceId, projectId: project.id }),
+  );
   return (
     <>
       <TabPanel value="facts">

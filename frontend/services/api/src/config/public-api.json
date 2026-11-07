@@ -11,6 +11,7 @@
   "idempotency": {
     "key_max_chars": 255,
     "retention_hours": 24,
+    "in_progress_max_seconds": 300,
     "purge_batch": 500
   },
   "page": { "default_limit": 50, "max_limit": 100 },

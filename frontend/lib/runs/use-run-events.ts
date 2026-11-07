@@ -5,7 +5,7 @@ import { useCallback, useRef } from 'react';
 
 import { API_BASE_URL } from '@/lib/config/operational';
 import { invalidationsFor, parseAuditEvent, type RawSseFrame } from '@/lib/api/run-events';
-import { AUDIT_RESULT_QUERY_ROOTS, queryKeys } from '@/lib/api/query-keys';
+import { refreshAuditDetail, refreshAuditExecutions, refreshAuditResults } from '@/lib/api/runs';
 import {
   RUN_STREAM_INVALIDATE_DEBOUNCE_MS,
   RUN_STREAM_RECONNECT_BASE_MS,
@@ -44,13 +44,9 @@ export function useRunEvents(
     const families = pending.current;
     pending.current = new Set();
     if (!auditId) return;
-    if (families.has('audit'))
-      void queryClient.invalidateQueries({ queryKey: queryKeys.runs.detail(auditId) });
-    if (families.has('executions'))
-      void queryClient.invalidateQueries({ queryKey: queryKeys.runs.executions(auditId) });
-    if (families.has('visibility') && projectId)
-      for (const queryKey of AUDIT_RESULT_QUERY_ROOTS)
-        void queryClient.invalidateQueries({ queryKey });
+    if (families.has('audit')) void refreshAuditDetail(queryClient, auditId);
+    if (families.has('executions')) void refreshAuditExecutions(queryClient, auditId);
+    if (families.has('visibility') && projectId) void refreshAuditResults(queryClient);
   }, [auditId, projectId, queryClient]);
 
   useSseEventStream({

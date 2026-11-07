@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ChipList } from '@/components/ui/chip-input';
@@ -14,9 +14,8 @@ import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
-import type { BrandProfile } from '@/lib/api/types';
+import { projectQueries } from '@/lib/api/projects';
+import type { BrandProfile } from '@citeladder/contracts';
 import {
   businessDraft,
   showsServiceAreas,
@@ -92,10 +91,7 @@ function BusinessMapBody({
   workspaceId,
   profile,
 }: Readonly<{ projectId: string; workspaceId: string; profile: BrandProfile }>) {
-  const query = useQuery({
-    queryKey: queryKeys.projects.businessMap(projectId),
-    queryFn: ({ signal }) => projectsApi.getBusinessMap(projectId, { signal, workspaceId }),
-  });
+  const query = useQuery(projectQueries.businessMap({ workspaceId, projectId }));
   if (query.isPending) return <QueryState kind="loading" label="Loading the business map" />;
   if (query.isError)
     return (

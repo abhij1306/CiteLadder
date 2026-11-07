@@ -1,6 +1,6 @@
 import { policy } from '../config.ts';
 import { extractPage, type PageEvidence } from './html-evidence.ts';
-import { FetchError, fetchWebsite, websiteIdentity, type WebsiteFetcher } from './safe-fetch.ts';
+import { FetchError, fetchWebsite, websiteIdentity, type WebsiteFetcher } from '../safe-fetch.ts';
 
 export type ResolvedSite = {
   url: string;

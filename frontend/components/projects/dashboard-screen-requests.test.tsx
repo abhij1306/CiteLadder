@@ -28,7 +28,7 @@ describe('Overview opening requests', () => {
       recordedProjectRead(project.id, 'visibility/prompts', 'prompts', asked, []),
     );
 
-    renderWithProviders(<DashboardScreen />);
+    renderWithProviders(<DashboardScreen />, { projectSelection: { activeProject: project } });
 
     await vi.waitFor(() =>
       expect([...asked].sort()).toEqual(['command-center', 'layout', 'prompts']),

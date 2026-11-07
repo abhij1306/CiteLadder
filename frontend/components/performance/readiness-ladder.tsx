@@ -3,19 +3,20 @@
 import { useQuery } from '@tanstack/react-query';
 import { Circle, CircleCheck } from 'lucide-react';
 
-import { Callout } from '@/components/ui/callout';
+import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
 import { Spinner } from '@/components/ui/spinner';
 import { textRole } from '@/components/ui/typography';
 import {
-  performanceApi,
+  performanceQueries,
   type ProjectReadiness,
   type ProjectReadinessStage,
 } from '@/lib/api/performance';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { queryKeys } from '@/lib/api/query-keys';
+import { pollReadiness } from '@/lib/performance/status';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { formatWindowDate } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -55,20 +56,6 @@ const EXPLANATION: Record<Exclude<ProjectReadinessStage, 'not_connected'>, strin
   analysis_ready: 'Everything is ready.',
 };
 
-/**
- * Stages nothing will advance on its own.
- *
- * Everything else is work in flight — including `core_data_ready`, where the
- * search numbers have landed but CiteLadder's analysis is still computing.
- * Polling only the earlier rungs left the ladder stuck one step short of
- * ready until the reader reloaded the page.
- */
-const SETTLED_STAGES: ReadonlySet<ProjectReadinessStage> = new Set([
-  'analysis_ready',
-  'import_failed',
-  'not_connected',
-]);
-
 function stageIndex(stage: ProjectReadinessStage): number {
   const index = LADDER.findIndex((step) => step.stage === stage);
   // Off-ladder states (nothing connected, a failed import) have no rung, so
@@ -90,19 +77,13 @@ function StepMark({ state }: Readonly<{ state: 'done' | 'active' | 'pending' }>)
  * read the same cache entry, so they can never disagree about which stage a
  * project is on.
  */
-export function useProjectReadiness(projectId: string | null) {
-  const workspaceId = useActiveWorkspaceId();
+export function useProjectReadiness() {
+  const { workspaceId, projectId } = useProjectScope();
   return useQuery({
-    queryKey: queryKeys.performance.readiness(projectId ?? ''),
-    queryFn: ({ signal }) => performanceApi.getReadiness(projectId!, { signal, workspaceId }),
-    enabled: Boolean(projectId && workspaceId),
+    ...performanceQueries.readiness({ workspaceId, projectId }),
     // While an import is in flight the answer changes on its own, so this
     // keeps asking rather than stranding the user on a stale stage.
-    refetchInterval: (query) => {
-      const stage = query.state.data?.stage;
-      if (stage === undefined) return false;
-      return SETTLED_STAGES.has(stage) ? false : 15_000;
-    },
+    refetchInterval: (query) => pollReadiness(query.state.data?.stage),
   });
 }
 
@@ -112,11 +93,29 @@ function ladderStepState(index: number, reached: number): 'done' | 'active' | 'p
   return index === reached ? 'active' : 'pending';
 }
 
-export function ReadinessLadder({ data }: Readonly<{ data: ProjectReadiness | undefined }>) {
+export function ReadinessLadder({
+  data,
+  sync,
+}: Readonly<{
+  data: ProjectReadiness | undefined;
+  /** Starts a new sync, the recovery for a failed import; omitted while one runs. */
+  sync?: () => void;
+}>) {
   if (!data || data.stage === 'analysis_ready' || data.stage === 'not_connected') return null;
 
   if (data.stage === 'import_failed') {
-    return <Callout tone="negative">{EXPLANATION.import_failed}</Callout>;
+    return (
+      <MutationNotice
+        notice={{ message: EXPLANATION.import_failed, retryable: false }}
+        recovery={
+          sync ? (
+            <Button type="button" variant="secondary" onClick={sync}>
+              Sync again
+            </Button>
+          ) : undefined
+        }
+      />
+    );
   }
 
   const reached = stageIndex(data.stage);

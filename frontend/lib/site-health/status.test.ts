@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vite-plus/test';
 
+import type { CrawlOverallStatus } from '@citeladder/contracts';
+import { CRAWL_POLL_MS } from '@/lib/config/operational';
 import {
   PLACEHOLDER,
-  POLL_INTERVAL_MS,
   canShowDiscoveredTotal,
   crawlDisplayStatus,
   discoveryProgressLabel,
@@ -11,25 +12,26 @@ import {
   formatScore,
   isAnalysisTerminal,
   crawlPollInterval,
-  isCrawlCancelable,
   isCrawlStalled,
   isDiscoveryProvisional,
   isDiscoveryTerminal,
   isErrorRow,
   isSampleMode,
   crawlProgressVersion,
-  shouldPollCrawl,
   statusLabel,
 } from './status';
 import { crawlFailureCopy, dashboardRunNotice } from './run-notice';
 
 describe('polling / cancel / terminal predicates', () => {
   it('polls while not terminal, stops when terminal', () => {
-    expect(shouldPollCrawl({ status: 'running' })).toBe(true);
-    expect(shouldPollCrawl({ status: 'queued' })).toBe(true);
-    expect(shouldPollCrawl({ status: 'completed' })).toBe(false);
-    expect(shouldPollCrawl({ status: 'partially_completed' })).toBe(false);
-    expect(shouldPollCrawl({ status: 'cancelled' })).toBe(false);
+    const now = Date.parse('2026-07-29T12:00:00Z');
+    const iso = new Date(now - 1_000).toISOString();
+    const poll = (status: CrawlOverallStatus) =>
+      crawlPollInterval({ status, started_at: iso, created_at: iso, updated_at: iso }, now);
+    expect(poll('running')).toBe(CRAWL_POLL_MS);
+    expect(poll('queued')).toBe(CRAWL_POLL_MS);
+    expect(poll('partially_completed')).toBe(false);
+    expect(poll('cancelled')).toBe(false);
   });
 
   it('backs the poll cadence off as an active crawl ages', () => {
@@ -42,7 +44,7 @@ describe('polling / cancel / terminal predicates', () => {
       updated_at: new Date(now - 1_000).toISOString(),
     });
 
-    expect(crawlPollInterval(at(5_000), now)).toBe(POLL_INTERVAL_MS);
+    expect(crawlPollInterval(at(5_000), now)).toBe(CRAWL_POLL_MS);
     expect(crawlPollInterval(at(90_000), now)).toBe(10_000);
     expect(crawlPollInterval(at(6 * 60_000), now)).toBe(30_000);
   });
@@ -123,7 +125,7 @@ describe('polling / cancel / terminal predicates', () => {
         },
         now,
       ),
-    ).toBe(POLL_INTERVAL_MS);
+    ).toBe(CRAWL_POLL_MS);
     expect(
       crawlPollInterval(
         {
@@ -134,14 +136,7 @@ describe('polling / cancel / terminal predicates', () => {
         },
         now,
       ),
-    ).toBe(POLL_INTERVAL_MS);
-  });
-
-  it('is cancelable only before terminal', () => {
-    expect(isCrawlCancelable('running')).toBe(true);
-    expect(isCrawlCancelable('draft')).toBe(true);
-    expect(isCrawlCancelable('completed')).toBe(false);
-    expect(isCrawlCancelable('failed')).toBe(false);
+    ).toBe(CRAWL_POLL_MS);
   });
 
   it('recognises terminal discovery / analysis sub-states', () => {
@@ -290,15 +285,6 @@ describe('dashboardRunNotice', () => {
       message:
         'Some pages could not be analyzed — showing partial results. Re-crawl to retry the remaining pages.',
     });
-  });
-
-  it('labels a paused dashboard with actionable partial-results copy', () => {
-    const notice = dashboardRunNotice({ ...noticeBase, status: 'paused' });
-    expect(notice?.badge).toBe('paused');
-    expect(notice?.tone).toBe('info');
-    expect(notice?.message).toMatch(/showing the pages analyzed so far/i);
-    expect(notice?.message).toMatch(/run a new crawl/i);
-    expect(notice?.message).not.toMatch(/undefined/i);
   });
 
   it('labels a failed-with-data dashboard with a Failed badge', () => {

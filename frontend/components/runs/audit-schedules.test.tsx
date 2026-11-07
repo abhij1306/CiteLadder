@@ -1,21 +1,16 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { ApiError } from '@/lib/api/errors';
 import { providersApi } from '@/lib/api/providers';
 import { runsApi } from '@/lib/api/runs';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
 import { AuditSchedules } from './audit-schedules';
-
-vi.mock('@/lib/api/runs', () => ({
-  runsApi: {
-    listSchedules: vi.fn(),
-    createSchedule: vi.fn(),
-    updateSchedule: vi.fn(),
-  },
-}));
 
 vi.mock('@/lib/api/providers', () => ({ providersApi: { listConnections: vi.fn() } }));
 
@@ -30,15 +25,23 @@ const tested = (...engines: string[]) =>
       routes: engines.map((logical_engine) => ({ logical_engine })),
     },
   ] as never;
-const createSchedule = vi.mocked(runsApi.createSchedule);
-const listSchedules = vi.mocked(runsApi.listSchedules);
-const updateSchedule = vi.mocked(runsApi.updateSchedule);
+// The schedule descriptors read through runsApi, so the transport is stubbed there.
+const createSchedule = vi.spyOn(runsApi, 'createSchedule');
+const listSchedules = vi.spyOn(runsApi, 'listSchedules');
+const updateSchedule = vi.spyOn(runsApi, 'updateSchedule');
 const WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 let workspaceId = WORKSPACE_ID;
 
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => workspaceId,
-}));
+/** The schedules on `/runs`, under the gate's project in the current workspace. */
+function RoutedSchedules(props: ComponentProps<typeof AuditSchedules>) {
+  return (
+    <ActiveProjectScopeProvider
+      project={makeProject({ id: props.projectId, workspace_id: workspaceId })}
+    >
+      <AuditSchedules {...props} />
+    </ActiveProjectScopeProvider>
+  );
+}
 
 describe('AuditSchedules', () => {
   beforeEach(() => {
@@ -55,7 +58,7 @@ describe('AuditSchedules', () => {
   it('preserves the schedule payload while shared controls own its inputs', async () => {
     const user = userEvent.setup();
     renderWithProviders(
-      <AuditSchedules
+      <RoutedSchedules
         projectId="11111111-1111-4111-8111-111111111111"
         promptSets={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Core prompts' } as never]}
       />,
@@ -87,7 +90,7 @@ describe('AuditSchedules', () => {
   it('offers no engine and schedules nothing while no provider is connected', async () => {
     listConnections.mockResolvedValue([]);
     renderWithProviders(
-      <AuditSchedules
+      <RoutedSchedules
         projectId="11111111-1111-4111-8111-111111111111"
         promptSets={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Core prompts' } as never]}
       />,
@@ -105,7 +108,7 @@ describe('AuditSchedules', () => {
   it('reports a failed schedules read without calling the list empty', async () => {
     listSchedules.mockRejectedValue(new ApiError('Schedules are unavailable.', 400, ''));
     renderWithProviders(
-      <AuditSchedules projectId="11111111-1111-4111-8111-111111111111" promptSets={[]} />,
+      <RoutedSchedules projectId="11111111-1111-4111-8111-111111111111" promptSets={[]} />,
     );
     expect(await screen.findByText('Schedules are unavailable.')).toBeVisible();
     expect(screen.queryByText('No scheduled audits yet.')).toBeNull();
@@ -125,7 +128,7 @@ describe('AuditSchedules', () => {
       } as never,
     ]);
     renderWithProviders(
-      <AuditSchedules projectId="11111111-1111-4111-8111-111111111111" promptSets={[]} />,
+      <RoutedSchedules projectId="11111111-1111-4111-8111-111111111111" promptSets={[]} />,
     );
     expect(await screen.findByText(/Ran once/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
@@ -147,7 +150,7 @@ describe('AuditSchedules', () => {
       } as never,
     ]);
     updateSchedule.mockResolvedValue(null as never);
-    renderWithProviders(<AuditSchedules projectId={projectId} promptSets={[]} />);
+    renderWithProviders(<RoutedSchedules projectId={projectId} promptSets={[]} />);
 
     expect(await screen.findByText(/Paused/)).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Resume' }));
@@ -165,7 +168,7 @@ describe('AuditSchedules', () => {
   it('does not reuse a fresh schedules cache entry after a workspace transition', async () => {
     const projectId = '11111111-1111-4111-8111-111111111111';
     const otherWorkspace = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-    const view = () => <AuditSchedules projectId={projectId} promptSets={[]} />;
+    const view = () => <RoutedSchedules projectId={projectId} promptSets={[]} />;
     const { rerender } = renderWithProviders(view());
     await screen.findByText('No scheduled audits yet.');
     let release!: (schedules: Awaited<ReturnType<typeof runsApi.listSchedules>>) => void;

@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { OpportunityDetail } from '@/lib/api/types';
+import type { OpportunityDetail } from '@citeladder/contracts';
 import { renderWithProviders } from '@/test/render';
 
 import { OpportunityEvidenceSection } from './opportunity-evidence-section';

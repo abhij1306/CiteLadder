@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Database } from '../src/db/database.ts';
 import { policy } from '../src/config.ts';
-import { SiteFixtures } from './site-health-fixtures.ts';
+import { SiteFixtures, storedFacts } from './site-health-fixtures.ts';
 import { prompt, promptSet } from './prompt-fixtures.ts';
 import { testDatabase } from './support.ts';
 
@@ -14,6 +14,7 @@ async function seed(db: Database) {
     .insertInto('brands')
     .values({
       id: brandId,
+      workspace_id: seed.workspaceId,
       project_id: seed.projectId,
       name: 'Acme',
       created_at: now,
@@ -43,15 +44,20 @@ async function seed(db: Database) {
     const url = product
       ? 'https://example.com/products/widget'
       : 'https://example.com/collections/tools';
-    const page = await fixtures.page(seed, url, {
-      canonical_url: url,
-      headings: { h1_texts: [product ? 'Widget' : 'Tools'] },
-      structured_data: product
-        ? { product: { sku: ['W1'], price: ['12.50'], price_currency: ['USD'] } }
-        : {},
-      links: { anchors: [{ region: 'main', url: '/collections/tools/products/widget' }] },
-    });
-    await db
+    const page =
+      await /* NOSONAR -- Fixture pages insert in a fixed order; `analyses` keeps it. */ fixtures.page(
+        seed,
+        url,
+        storedFacts({
+          canonical_url: url,
+          headings: { h1_texts: [product ? 'Widget' : 'Tools'] },
+          structured_data: product
+            ? { product: { sku: ['W1'], price: ['12.50'], price_currency: ['USD'] } }
+            : {},
+          links: { anchors: [{ region: 'main', url: '/collections/tools/products/widget' }] },
+        }),
+      );
+    await db // NOSONAR -- Needs this page's analysis id.
       .updateTable('site_page_analyses')
       .set({ page_kind: product ? 'product' : 'category' })
       .where('id', '=', page.analysisId)

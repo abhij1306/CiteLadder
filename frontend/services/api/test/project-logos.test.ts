@@ -3,10 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
+import { setLogSink } from '../src/logging.ts';
 import { projectCreate } from '../src/projects/inputs.ts';
 import { refreshLogos } from '../src/projects/logo-refresh.ts';
 import { createProject, updateProject } from '../src/projects/service.ts';
-import type { WebsiteFetcher } from '../src/projects/safe-fetch.ts';
+import type { WebsiteFetcher } from '../src/safe-fetch.ts';
 import { Fixtures, testDatabase } from './support.ts';
 
 const db = testDatabase();
@@ -124,7 +125,22 @@ it('negative caches failures and refuses to attach a result after identity chang
   const failed = vi.fn<WebsiteFetcher>(async () => {
     throw new Error('recorded unavailable');
   });
-  await refreshLogos(db, t, failed);
+  const records: Record<string, unknown>[] = [];
+  const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+  try {
+    await refreshLogos(db, t, failed);
+  } finally {
+    setLogSink(restore);
+  }
+  // The homepage and the well-known fallback each fail with a logged cause.
+  expect(
+    records
+      .filter((entry) => entry.event === 'brand_logo_fetch_failed')
+      .map((entry) => [entry.phase, entry.error_class]),
+  ).toEqual([
+    ['homepage', 'Error'],
+    ['icon', 'Error'],
+  ]);
   const count = failed.mock.calls.length;
   await refreshLogos(db, t, failed);
   expect(failed).toHaveBeenCalledTimes(count);

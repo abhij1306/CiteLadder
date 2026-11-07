@@ -2,17 +2,15 @@ import { getDomain } from 'tldts';
 import { z } from 'zod';
 import { record } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
-import {
-  ProviderError,
-  type Citation,
-  type RetrievedSource,
-  type SearchEvent,
-} from '../answer-engines/contracts.ts';
+import type { Citation, RetrievedSource, SearchEvent } from '../answer-engines/contracts.ts';
+import { ProviderError } from '../providers/errors.ts';
 import type { ExecutionResult } from '../audits/result-persistence.ts';
 import { providerPolicy } from '../providers/config.ts';
 import { classifySourceOrigin } from '../analysis/opportunities/source-patterns.ts';
 import { citationIdentity } from '../source-pages/identity.ts';
-import { providerCharge, searchPolicy, type SearchEngine } from './dataforseo.ts';
+import { costMicrousd } from '../providers/dataforseo.ts';
+import { searchPolicy, type ScraperEngine } from './dataforseo.ts';
+import { casefold } from '../casefold.ts';
 import { onlyOf } from '../lists.ts';
 
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -159,16 +157,7 @@ function overviewContent(walked: [number, Record<string, unknown>][]) {
   for (const [index, element] of walked) {
     for (const fragment of fragments(element)) {
       // Casefold and whitespace only; punctuation distinguishes visible fragments.
-      const key = fragment
-        .split(/\s+/u)
-        .filter(Boolean)
-        .join(' ')
-        .replaceAll(
-          /./gsu,
-          (char) =>
-            searchPolicy.casefold_overrides[char as keyof typeof searchPolicy.casefold_overrides] ??
-            char.toLowerCase(),
-        );
+      const key = casefold(fragment.split(/\s+/u).filter(Boolean).join(' '));
       if (!key || seenText.has(key)) continue;
       seenText.add(key);
       parts.push(fragment.trim());
@@ -220,7 +209,7 @@ export function parseOverview(
     ),
     aio_present: Boolean(block),
     observed_at: observedAt(page, task),
-    provider_cost_microusd: providerCharge(task.cost),
+    provider_cost_microusd: costMicrousd(task.cost),
   };
   if (!block) return base;
   try {
@@ -408,7 +397,7 @@ export function parseAds(envelope: unknown): { ads: AdItem[]; skipped: number } 
 export function parseScraper(
   payload: unknown,
   expectedId: string,
-  engine: Exclude<SearchEngine, 'google_ai_overview'>,
+  engine: ScraperEngine,
 ): ExecutionResult | 'still_pending' {
   const envelope = record(payload);
   if (envelope.status_code !== searchPolicy.constants.status_ok)
@@ -475,7 +464,7 @@ export function parseScraper(
     finish_reason: 'stop',
     raw_finish_reason: '',
     latency_ms: 0,
-    normalized_usage: { ...emptyUsage, provider_cost_microusd: providerCharge(task.cost) },
+    normalized_usage: { ...emptyUsage, provider_cost_microusd: costMicrousd(task.cost) },
     provider_metadata: {
       raw_response: envelope,
       provider_reported_model: page!.model ?? null,

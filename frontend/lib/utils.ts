@@ -54,14 +54,6 @@ export function ownValue<V>(table: Readonly<Record<string, V>>, key: string): V 
   return Object.hasOwn(table, key) ? table[key] : undefined;
 }
 
-/** The entry for position `index`, wrapping around a list that is never empty. */
-export function cycled<Items extends readonly [unknown, ...unknown[]]>(
-  items: Items,
-  index: number,
-): Items[number] {
-  return items[index % items.length] ?? items[0];
-}
-
 /**
  * Two-letter avatar initials from an email address, taken from the local part
  * (before the `@`) and upper-cased. Falls back to the raw value when there is

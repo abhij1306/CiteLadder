@@ -4,7 +4,8 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
+import { failedAs } from './task-outcome.ts';
 
 export type CoverageSignals = {
   sampleMode: boolean;
@@ -141,24 +142,30 @@ export async function valueKindCoverage(db: Database, crawl: Crawl): Promise<Val
   );
 }
 
-const EXCLUDED_ERRORS = [
-  ...policy.site_health.reads.corpus_exclusion_error_codes,
-  ...policy.site_health.reads.non_page_error_codes,
-];
-const GONE_STATUSES = policy.site_health.reads.corpus_exclusion_status_codes;
-
 /**
- * A failed `site_crawl_tasks` row whose failure is expected: the site's
- * robots.txt or admission policy excluded the URL, it answered 404/410, or it
- * is not an HTML page. A crawl that met only these still explored everything
- * it could, so they never make it partial or its coverage unknown.
+ * A failed `site_crawl_tasks` row whose failure is expected: the URL was
+ * excluded, is gone or is not an HTML page. A crawl that met only these still
+ * explored everything it could, so they never make it partial or its coverage
+ * unknown.
  */
-export const expectedTaskFailure = sql<boolean>`(site_crawl_tasks.error_code = any(${EXCLUDED_ERRORS}::text[])
-  or exists (select 1 from site_fetch_attempts a
-    where a.task_id = site_crawl_tasks.id and a.workspace_id = site_crawl_tasks.workspace_id
-      and a.status_code = any(${GONE_STATUSES}::int[])))`;
+export const expectedTaskFailure = failedAs('site_crawl_tasks', ['excluded', 'not_page', 'gone']);
 
 export async function crawlCoverage(db: Database, crawl: Crawl) {
+  return assessCoverage({
+    ...(await coverageSignals(db, crawl)),
+    valueKinds: await valueKindCoverage(db, crawl),
+  });
+}
+
+/**
+ * Whether the crawl inventoried the whole site: coverage `complete`, so no
+ * limit, pending frontier, sample or other bound cut discovery short.
+ */
+export async function inventoryComplete(db: Database, crawl: Crawl) {
+  return assessCoverage(await coverageSignals(db, crawl)).state === 'complete';
+}
+
+async function coverageSignals(db: Database, crawl: Crawl): Promise<CoverageSignals> {
   const discovery = await db
     .selectFrom('site_crawl_tasks')
     .select([
@@ -186,7 +193,7 @@ export async function crawlCoverage(db: Database, crawl: Crawl) {
     .where('crawl_id', '=', crawl.id)
     .executeTakeFirstOrThrow();
   const config = record(crawl.configuration);
-  return assessCoverage({
+  return {
     sampleMode: crawl.sample_mode,
     inputMode:
       typeof config.input_mode === 'string' && config.input_mode ? config.input_mode : 'auto',
@@ -202,6 +209,5 @@ export async function crawlCoverage(db: Database, crawl: Crawl) {
     analyzedUrlCount: crawl.analyzed_url_count,
     failedUrlCount: crawl.failed_url_count,
     automaticLimit: allowance(config[policy.site_health.crawl.automatic_monitor_limit_key]),
-    valueKinds: await valueKindCoverage(db, crawl),
-  });
+  };
 }

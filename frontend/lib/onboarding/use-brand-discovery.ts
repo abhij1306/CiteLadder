@@ -1,10 +1,17 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { brandDiscoveriesApi, type BrandDiscoveryInput } from '@/lib/api/brand-discoveries';
-import { brandDiscoveryKeys } from '@/lib/api/query-keys/brand-discovery';
+import type { BrandDiscoveryCreateRequest } from '@citeladder/contracts/brand-discovery-requests';
+
+import {
+  brandDiscoveriesApi,
+  brandDiscoveryMutations,
+  brandDiscoveryQueries,
+  type BrandDiscovery,
+} from '@/lib/api/brand-discoveries';
+import { isDiscoveryActive, pollDiscovery } from '@/lib/onboarding/discovery-activity';
 
 let fallbackOperationSequence = 0;
 
@@ -19,15 +26,8 @@ function useDiscoveryExecution(
   active: boolean,
   workspaceId: string | null,
 ) {
-  const queryClient = useQueryClient();
   const startedFor = useRef<string | null>(null);
-  const run = useMutation({
-    mutationFn: ({ id, workspace }: { id: string; workspace: string | null }) =>
-      brandDiscoveriesApi.run(id, { workspaceId: workspace }),
-    onSettled: (_data, _error, { id, workspace }) => {
-      void queryClient.invalidateQueries({ queryKey: brandDiscoveryKeys.detail(workspace, id) });
-    },
-  });
+  const run = useMutation(brandDiscoveryMutations.run());
   const executionKey = discoveryId ? JSON.stringify([workspaceId, discoveryId]) : null;
   useEffect(() => {
     if (!discoveryId || !active || startedFor.current === executionKey) return;
@@ -48,7 +48,7 @@ function useDiscoveryExecution(
 }
 
 export function useBrandDiscovery(
-  input: BrandDiscoveryInput | null,
+  input: BrandDiscoveryCreateRequest | null,
   resumeId: string | null = null,
   workspaceId: string | null = null,
 ) {
@@ -58,6 +58,29 @@ export function useBrandDiscovery(
   const fingerprint = useMemo(() => JSON.stringify({ input, workspaceId }), [input, workspaceId]);
   const createdFor = useRef<string | null>(null);
   const [responseFor, setResponseFor] = useState<string | null>(null);
+  // A run started again replaces the shown discovery until another one is
+  // created, and only in the workspace that started it.
+  const [restartedIn, setRestartedIn] = useState<{
+    workspace: string | null;
+    discovery: BrandDiscovery;
+  } | null>(null);
+  // Called once the new run exists, so a failed request leaves the old review intact.
+  const onRestarted = useRef<(() => void) | null>(null);
+  const restart = useMutation({
+    mutationFn: ({
+      id,
+      idempotencyKey,
+      workspace,
+    }: {
+      id: string;
+      idempotencyKey: string;
+      workspace: string | null;
+    }) => brandDiscoveriesApi.rerun(id, idempotencyKey, { workspaceId: workspace }),
+    onSuccess: (data, variables) => {
+      setRestartedIn({ workspace: variables.workspace, discovery: data });
+      onRestarted.current?.();
+    },
+  });
   const create = useMutation({
     // The fingerprint AND the workspace travel with the request, so the
     // response is matched against the operation that actually produced it —
@@ -67,11 +90,13 @@ export function useBrandDiscovery(
       idempotencyKey,
       workspace,
     }: {
-      payload: BrandDiscoveryInput;
+      payload: BrandDiscoveryCreateRequest;
       idempotencyKey: string;
       fingerprint: string;
       workspace: string | null;
     }) => brandDiscoveriesApi.create(payload, idempotencyKey, { workspaceId: workspace }),
+    // A newly created discovery supersedes one that was run again.
+    onMutate: () => setRestartedIn(null),
     onSuccess: (_data, variables) => {
       setResponseFor(variables.fingerprint);
     },
@@ -88,24 +113,33 @@ export function useBrandDiscovery(
     });
   }, [create, fingerprint, input, resumeId, workspaceId]);
 
-  const createdDiscoveryId = responseFor === fingerprint ? create.data?.id : undefined;
+  const created = responseFor === fingerprint ? create.data : undefined;
+  const restarted = restartedIn?.workspace === workspaceId ? restartedIn.discovery : undefined;
+  const started = restarted ?? created;
   // A successful retry supersedes a resumed row. Until that response arrives,
   // the persisted resume id remains visible instead of blanking the timeline.
-  const discoveryId = createdDiscoveryId ?? resumeId;
+  const discoveryId = started?.id ?? resumeId;
   const query = useQuery({
-    queryKey: brandDiscoveryKeys.detail(workspaceId, String(discoveryId)),
-    queryFn: ({ signal }) => brandDiscoveriesApi.get(String(discoveryId), { signal, workspaceId }),
+    ...brandDiscoveryQueries.detail(workspaceId, String(discoveryId)),
     enabled: Boolean(discoveryId),
-    initialData: !createdDiscoveryId ? undefined : create.data,
-    refetchInterval: (result) =>
-      result.state.data?.status === 'queued' || result.state.data?.status === 'running'
-        ? 1000
-        : false,
+    initialData: started,
+    refetchInterval: (result) => pollDiscovery(result.state.data?.status),
   });
-  const discovery = query.data ?? (createdDiscoveryId ? create.data : undefined);
-  const active = discovery?.status === 'queued' || discovery?.status === 'running';
+  const discovery = query.data ?? started;
+  const active = isDiscoveryActive(discovery?.status);
   const execution = useDiscoveryExecution(discoveryId, active, workspaceId);
+  /** A new discovery from this one's input; a finished task is never reset. */
+  const rerun = (onStarted?: () => void) => {
+    if (!discoveryId || restart.isPending) return;
+    onRestarted.current = onStarted ?? null;
+    restart.mutate({ id: discoveryId, idempotencyKey: operationKey(), workspace: workspaceId });
+  };
   const retry = () => {
+    // A failed rerun request repeats with its own key, so it creates at most one discovery.
+    if (restart.error && restart.variables && !restart.isPending) {
+      restart.mutate(restart.variables);
+      return;
+    }
     // A failed progress read resumes the existing operation, even before its
     // saved input has loaded. Creating another discovery would duplicate work.
     if (discoveryId && !create.error) {
@@ -124,8 +158,9 @@ export function useBrandDiscovery(
   };
   return {
     discovery,
-    isRunning: create.isPending || active,
-    error: create.error ?? query.error ?? execution.error,
+    isRunning: create.isPending || restart.isPending || active,
+    error: restart.error ?? create.error ?? query.error ?? execution.error,
     retry,
+    rerun,
   };
 }

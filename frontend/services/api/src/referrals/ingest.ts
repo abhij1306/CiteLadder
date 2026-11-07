@@ -14,7 +14,7 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
-import { payloadArtifactId, requireProject, type Executor } from '../workers/executor.ts';
+import { payloadArtifactId, requireProject, type Executor } from '../queue/executor.ts';
 import { enqueueClassifyReferrals } from './enqueue.ts';
 import { referralEventFields } from './events.ts';
 import { compareText } from '../text-order.ts';

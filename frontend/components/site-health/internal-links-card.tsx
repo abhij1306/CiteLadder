@@ -4,7 +4,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { FactList } from '@/components/ui/facts';
 import { TextLink } from '@/components/ui/text-link';
 import { Label, textRole } from '@/components/ui/typography';
-import type { PageDetail } from '@/lib/api/types';
+import type { PageDetail } from '@citeladder/contracts';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 

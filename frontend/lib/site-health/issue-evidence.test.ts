@@ -130,6 +130,7 @@ describe('evidenceFacts', () => {
           depth_from_home: 5,
         },
       ],
+      page_kind_counts: { article: 11 },
       coverage_state: 'complete',
     };
     expect(evidenceFacts('architecture.excessive_depth', evidence)).toEqual([
@@ -155,7 +156,9 @@ describe('evidenceFacts', () => {
     expect(
       siteLevelEvidence('architecture.unhubbed_page_kind', {
         count: 1,
-        page_kinds: [{ page_kind: 'product', page_count: 40, site_url_ids: [] }],
+        page_kinds: [{ page_kind: 'product', page_count: 40, duplicate_metadata_count: 2 }],
+        page_kind_counts: { product: 40 },
+        coverage_state: 'complete',
       }),
     ).toEqual({ kind: 'page_kinds', pageKinds: [{ pageKind: 'product', pageCount: 40 }] });
     expect(siteLevelEvidence('technical.indexable', { noindex: true })).toBeNull();
@@ -165,6 +168,8 @@ describe('evidenceFacts', () => {
     const evidence = {
       count: 159,
       pages: [],
+      page_kind_counts: { article: 158, collection: 1 },
+      coverage_state: 'complete',
       sections: [
         {
           path_prefix: '/blogs/testimonials',
@@ -193,7 +198,13 @@ describe('evidenceFacts', () => {
       page_kind: 'homepage',
       artifact_id: '0b1c6a42-5a50-4f3c-9d8e-2f6f1f0c0e11',
     };
+    const shared = {
+      linking_page_kinds: ['homepage'],
+      page_kind_counts: { homepage: 1 },
+      resolution_source_ids: [],
+    };
     const evidence = {
+      ...shared,
       count: 438,
       targets: [
         {
@@ -208,14 +219,17 @@ describe('evidenceFacts', () => {
     expect(evidenceFacts('technical.sitewide_link_redirect', evidence)).toEqual([
       '/collections/trail-shoes → /collections/running/ (on 438 pages)',
     ]);
+    // An unanswered link is named unreachable, not dropped.
     expect(
       evidenceFacts('technical.sitewide_broken_link', {
+        ...shared,
         count: 6,
         targets: [
           { url: 'https://example.test/gone', status_code: 404, linking_page_count: 6, pages: [] },
+          { url: 'https://example.test/down', status_code: null, linking_page_count: 2, pages: [] },
         ],
       }),
-    ).toEqual(['/gone → 404 (on 6 pages)']);
+    ).toEqual(['/gone → 404 (on 6 pages)', '/down → unreachable (on 2 pages)']);
     expect(siteLevelEvidence('technical.sitewide_link_redirect', evidence)).toEqual({
       kind: 'link_targets',
       total: 438,
@@ -240,10 +254,6 @@ describe('evidenceFacts', () => {
         },
       ],
     });
-    // An unrecorded count stays unknown rather than reading as no pages.
-    expect(
-      siteLevelEvidence('technical.sitewide_broken_link', { reason: 'unchecked_targets' }),
-    ).toEqual({ kind: 'link_targets', total: null, targets: [] });
   });
 
   it('spells redirects as where they land, and an abandoned one as a loop', () => {

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { aiTrafficApi, aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { stringUrlCodec, optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { saveBlob } from '@/lib/download';
@@ -84,39 +84,32 @@ function viewFilters(tab: TrafficDataTab, selection: ReturnType<typeof useTraffi
  */
 export function useOverviewWarmup(active: boolean) {
   const client = useQueryClient();
-  const { activeProject } = useProjectContext();
-  const workspaceId = activeProject?.workspace_id ?? '',
-    projectId = activeProject?.id ?? '';
+  const { workspaceId, projectId } = useProjectScope();
   const { range, verification } = selectedFilters('overview', useTrafficSelection());
-  const ready = active && !!workspaceId && !!projectId;
   useEffect(() => {
-    if (!ready) return;
+    if (!active) return;
     // The overview's own filters: its folder and resource narrowing are unset,
     // and an unset filter is absent from both the key and the request.
-    void client.prefetchQuery(
-      aiTrafficQueries.overview(workspaceId, projectId, { range, verification }),
-    );
-    void client.prefetchQuery(aiTrafficQueries.insights(workspaceId, projectId, range));
-  }, [client, ready, workspaceId, projectId, range, verification]);
+    const scope = { workspaceId, projectId };
+    void client.prefetchQuery(aiTrafficQueries.overview(scope, { range, verification }));
+    void client.prefetchQuery(aiTrafficQueries.insights(scope, range));
+  }, [client, active, workspaceId, projectId, range, verification]);
 }
 
 export function useTrafficData(tab: TrafficDataTab) {
-  const { activeProject, isLoading } = useProjectContext();
-  const workspaceId = activeProject?.workspace_id ?? '',
-    projectId = activeProject?.id ?? '';
-  const options = { workspaceId },
-    enabled = !!workspaceId && !!projectId;
+  const { workspaceId, projectId } = useProjectScope();
+  const options = { workspaceId };
   const selection = useTrafficSelection(),
     filters = selectedFilters(tab, selection);
   const summary = useQuery({
-    ...aiTrafficQueries.overview(workspaceId, projectId, filters),
-    enabled: enabled && tab === 'overview',
+    ...aiTrafficQueries.overview({ workspaceId, projectId }, filters),
+    enabled: tab === 'overview',
   });
   // The table tabs read their own pages (`useCursorTableQuery`), so a page
   // turn keeps the rows and the pager on screen.
   const catalog = useQuery({
-    ...aiTrafficQueries.catalog(workspaceId, projectId),
-    enabled: enabled && tab !== 'overview',
+    ...aiTrafficQueries.catalog({ workspaceId, projectId }),
+    enabled: tab !== 'overview',
   });
   const exporting = useMutation({
     mutationFn: async () => {
@@ -129,7 +122,6 @@ export function useTrafficData(tab: TrafficDataTab) {
   });
   return {
     tab,
-    isLoading,
     workspaceId,
     projectId,
     selection,

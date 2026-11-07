@@ -8,7 +8,15 @@ describe('CsvImportDialog file flow', () => {
   it('previews topic and prompt, then imports only the importable rows', async () => {
     const user = userEvent.setup();
     const onImport = vi.fn();
-    render(<CsvImportDialog open onOpenChange={vi.fn()} onImport={onImport} isImporting={false} />);
+    render(
+      <CsvImportDialog
+        open
+        onOpenChange={vi.fn()}
+        onImport={onImport}
+        isImporting={false}
+        limits={{ import_rows_max: 500, persona_max_chars: 120 }}
+      />,
+    );
 
     await user.upload(
       screen.getByLabelText('CSV file'),

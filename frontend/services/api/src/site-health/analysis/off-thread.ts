@@ -4,7 +4,8 @@
  * cost more than many analyses on a one-vCPU runner.
  */
 import { Worker } from 'node:worker_threads';
-import { policy, resolveSettingSpec } from '../../config.ts';
+import { policy } from '../../config.ts';
+import { resolveSettingSpec } from '../../config/settings.ts';
 import type { analyzePage, PageContext } from './analyze-page.ts';
 import type { Delivery, factSettings, PageFacts } from './facts.ts';
 import type { Facts } from './read-facts.ts';

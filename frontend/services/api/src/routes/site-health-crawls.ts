@@ -7,13 +7,17 @@ import {
   siteCrawlListPageSchema,
   urlPreviewResponseSchema,
 } from '@citeladder/contracts/site-health';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { configEnvironment, policy, resolveSettingSpec } from '../config.ts';
+import {
+  monitoredUrlsBulkSelectRequestSchema,
+  monitoredUrlsReplaceRequestSchema,
+} from '@citeladder/contracts/site-health-requests';
+import { budget, spendBudget } from '../abuse/usage.ts';
+import { policy } from '../config.ts';
 import { SiteHealthWorker } from '../workers/site-health-worker.ts';
 import { exclusiveDrain } from '../workers/runner.ts';
 import { siteWorkerSettings } from '../site-health/runtime.ts';
 import { SitePageFetcher, siteFetchSettings } from '../site-health/page-fetch.ts';
-import { fetchWebsite } from '../projects/safe-fetch.ts';
+import { fetchWebsite } from '../safe-fetch.ts';
 import { leaseSignal } from '../queue/heartbeat.ts';
 import { ApiError } from '../errors.ts';
 import { readBody } from '../http/body.ts';
@@ -26,7 +30,7 @@ import {
   previewCrawlUrls,
   previewRequest,
 } from '../site-health/planner-policy.ts';
-import { loadCrawl, projectCrawl, rootFailure } from '../site-health/reads/crawl.ts';
+import { crawlProjection, loadCrawl, rootFailure } from '../site-health/reads/crawl.ts';
 import { requireAdmitted } from '../site-health/reads/pages.ts';
 import {
   bulkMonitoredSet,
@@ -42,17 +46,10 @@ const projectFamily = { family, authorize: 'active-project' } as const;
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid };
 const projectRoot = '/api/v1/projects/{project_id}/monitored-urls';
-const replaceBody = z.strictObject({
+const replaceBody = monitoredUrlsReplaceRequestSchema.extend({
   site_url_ids: z.array(z.uuid()).max(policy.site_health.crawl.monitored_url_selection_max),
-  expected_selection_version: z.int(),
 });
-const bulkBody = z.strictObject({
-  crawl_id: z.uuid(),
-  mode: z.enum(['first_n', 'all', 'none']),
-  count: z.int().nullable().optional(),
-  query: z.string().nullable().optional(),
-  expected_selection_version: z.int(),
-});
+const bulkBody = monitoredUrlsBulkSelectRequestSchema;
 
 export const siteHealthCrawlRoutes = [
   definePostRoute({
@@ -64,7 +61,7 @@ export const siteHealthCrawlRoutes = [
     async handle({ c, db, config }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
       await loadCrawl(db, workspaceId, path.crawl_id);
-      const env = configEnvironment(config);
+      const env = config.settings;
       const interactive = policy.site_health.interactive;
       const signal = AbortSignal.timeout(interactive.timeout_seconds * 1000);
       const settings = siteWorkerSettings(env);
@@ -100,7 +97,9 @@ export const siteHealthCrawlRoutes = [
         },
         0,
       )(() => worker.runUntilIdle(signal, interactive.admission_seconds));
-      return siteCrawlSchema.parse(projectCrawl(await loadCrawl(db, workspaceId, path.crawl_id)));
+      return siteCrawlSchema.parse(
+        await crawlProjection(db, await loadCrawl(db, workspaceId, path.crawl_id)),
+      );
     },
   }),
   definePostRoute({
@@ -111,16 +110,12 @@ export const siteHealthCrawlRoutes = [
     response: siteCrawlSchema,
     status: 201,
     capability: 'run',
-    async handle({ c, db }) {
+    async handle({ c, db, config }) {
       const request = await readBody(c, createCrawlRequest);
       const workspaceId = c.get('workspace').workspaceId;
-      await enforceWorkspaceRequest(db, workspaceId, {
-        operation: 'site_health.crawl_create',
-        limit: Number(resolveSettingSpec(policy.abuse.crawl_create_limit)),
-        windowSeconds: Number(resolveSettingSpec(policy.abuse.crawl_create_window_seconds)),
-      });
+      await spendBudget(db, budget('crawl_create', config.settings), workspaceId);
       const crawl = await db.transaction().execute((trx) => createCrawl(trx, workspaceId, request));
-      return siteCrawlSchema.parse(projectCrawl(crawl));
+      return siteCrawlSchema.parse(await crawlProjection(db, crawl));
     },
   }),
   definePostRoute({
@@ -130,19 +125,15 @@ export const siteHealthCrawlRoutes = [
     response: siteCrawlSchema,
     status: 201,
     capability: 'run',
-    async handle({ c, db }, { path }) {
+    async handle({ c, db, config }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
-      await enforceWorkspaceRequest(db, workspaceId, {
-        operation: 'site_health.crawl_create',
-        limit: Number(resolveSettingSpec(policy.abuse.crawl_create_limit)),
-        windowSeconds: Number(resolveSettingSpec(policy.abuse.crawl_create_window_seconds)),
-      });
+      await spendBudget(db, budget('crawl_create', config.settings), workspaceId);
       const crawl = await db
         .transaction()
         .execute(async (trx) =>
           createCrawl(trx, workspaceId, await recrawlRequest(trx, workspaceId, path.crawl_id)),
         );
-      return siteCrawlSchema.parse(projectCrawl(crawl));
+      return siteCrawlSchema.parse(await crawlProjection(db, crawl));
     },
   }),
   definePostRoute({
@@ -194,7 +185,9 @@ export const siteHealthCrawlRoutes = [
       await cancelCrawl(db, workspaceId, path.crawl_id);
       const crawl = await loadCrawl(db, workspaceId, path.crawl_id);
       return siteCrawlSchema.parse(
-        projectCrawl(crawl, { failureSummary: (await rootFailure(db, crawl)).summary }),
+        await crawlProjection(db, crawl, {
+          failureSummary: (await rootFailure(db, crawl)).summary,
+        }),
       );
     },
   }),

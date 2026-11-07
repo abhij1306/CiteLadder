@@ -270,7 +270,10 @@ it('pages prompts stably while context includes only active prompts and foreign 
   const at = (offset: number) => new Date(Date.UTC(2026, 0, 1) + offset);
   const first = await prompt(db, set, 'Acme first', { createdAt: at(0), topicId: nets });
   const second = await prompt(db, set, 'Acme second', { createdAt: at(1) });
-  const retired = await prompt(db, set, 'Acme retired', { status: 'retired', createdAt: at(2) });
+  const archived = await prompt(db, set, 'Acme archived', {
+    status: 'archived',
+    createdAt: at(2),
+  });
   // Accepted from a grounded candidate: the portfolio says so without the query identity.
   await db
     .updateTable('prompts')
@@ -308,8 +311,8 @@ it('pages prompts stably while context includes only active prompts and foreign 
     second,
   ]);
   expect(
-    record(await fetchRecord(db, principal, `citeladder://prompt/${retired}`, origin)),
-  ).toMatchObject({ status: 'retired' });
+    record(await fetchRecord(db, principal, `citeladder://prompt/${archived}`, origin)),
+  ).toMatchObject({ status: 'archived' });
   const foreign = await fixtures.tenant();
   const secret = await prompt(db, await promptSet(db, foreign.projectId), 'Acme private');
   await expect(fetchRecord(db, principal, `citeladder://prompt/${secret}`, origin)).rejects.toThrow(
@@ -486,7 +489,7 @@ it('exposes published dataset aggregates without treating them as backlink edges
       base_url: '',
       credential_revision: randomUUID(),
       active: true,
-      last_test_status: policy.search_intelligence.connection_test_ok,
+      last_test_status: policy.providers.test_status_ok,
       created_at: new Date(),
       updated_at: new Date(),
     })
@@ -504,7 +507,7 @@ it('exposes published dataset aggregates without treating them as backlink edges
       estimated_credits: null,
       charged_credits: null,
       platform_call_id: null,
-      status: 'completed',
+      status: 'succeeded',
       action: 'analysis',
       idempotency_key: runId,
       frozen_scope: '{}',
@@ -632,7 +635,13 @@ it('lists only active Actions as the current work and reads a dismissed one only
       .execute((trx) => attachOrCreateAction(trx, scope, 'planned_page', topic, tenant.userId));
   const kept = await attach('Buyer guide');
   const dismissed = await attach('Old guide');
-  await updateActionStatus(db, tenant.workspaceId, dismissed.id, 'dismissed', tenant.userId);
+  await updateActionStatus(
+    db,
+    { workspaceId: tenant.workspaceId, projectId: null },
+    dismissed.id,
+    'dismissed',
+    tenant.userId,
+  );
   const current = await read('read_actions');
   expect((current.items as { id: string }[]).map((item) => item.id)).toEqual([kept.id]);
   expect(current.status_counts).toMatchObject({ open: 1, dismissed: 1 });
@@ -655,7 +664,12 @@ it('serves answer perception with the same numbers as the Perception read, and i
   const auditId = await fixtures.audit(tenant, {
     configuration: {
       brand_name: 'Acme',
-      perception: { extractor_version: 'mcp-test', template_version: 't', metrics_version: 'm' },
+      perception: {
+        extractor_version: 'mcp-test',
+        template_version: 't',
+        metrics_version: 'm',
+        model: 'test',
+      },
     },
   });
   const { taskId, analysisId } = await fixtures.execution(tenant, { auditId, analysis: {} });

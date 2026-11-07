@@ -11,7 +11,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses, SubsectionHeader } from '@/components/ui/workspace';
-import type { AioRate, SurfaceRates } from '@/lib/api/types';
+import type { AioRate, SurfaceRates } from '@citeladder/contracts';
 
 /**
  * The five AI Overview rates, each shown with what it divided by.

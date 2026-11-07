@@ -9,8 +9,7 @@
  * the not-measured placeholder when no ranked answer exists.
  */
 import type { TrendPoint, TrendSeries } from '@/components/ui/trend-chart';
-import type { LogicalEngine, VisibilityTrendPoint } from '@/lib/api/types';
-import { ENGINE_ORDER } from '@/lib/providers/catalog';
+import type { VisibilityTrendPoint } from '@citeladder/contracts';
 import { formatDisplayDate, formatDisplayShortDate } from '@/lib/format';
 
 /** Trend granularity — mirrors the backend `granularity=run|week|month`. */
@@ -32,9 +31,6 @@ export const RANGE_OPTIONS: readonly { value: TrendRange; label: string }[] = [
   { value: '1y', label: 'Last 12 months' },
   { value: 'all', label: 'All time' },
 ] as const;
-
-/** Engines offered by the trend engine filter (canonical display order). */
-export const TREND_ENGINES: readonly LogicalEngine[] = ENGINE_ORDER;
 
 /**
  * Resolve a range preset into an inclusive UTC `from` bound (ISO 8601), or

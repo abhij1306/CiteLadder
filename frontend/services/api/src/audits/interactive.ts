@@ -1,7 +1,8 @@
-import { configEnvironment, policy, resolveSettingSpec, type ServiceConfig } from '../config.ts';
+import { policy, type ServiceConfig } from '../config.ts';
 import { interactiveExecution } from '../config/execution.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
-import { AuditWorker } from '../workers/audit-worker.ts';
+import { AuditWorker } from './worker.ts';
 import { configuredShelfResolver } from '../commerce/shelf.ts';
 import { auditRuntime } from './config.ts';
 import { auditProjections } from './projections.ts';
@@ -11,10 +12,13 @@ export async function executeInteractiveAudit(
   config: ServiceConfig,
   workspaceId: string,
   auditId: string,
+  /** Stops the drive early, e.g. on shutdown; the runner continues the audit. */
+  stopping?: AbortSignal,
 ) {
-  const env = configEnvironment(config);
+  const env = config.settings;
   const runtime = auditRuntime(env);
-  const signal = AbortSignal.timeout(interactiveExecution.timeoutSeconds * 1000);
+  const timeout = AbortSignal.timeout(interactiveExecution.timeoutSeconds * 1000);
+  const signal = stopping ? AbortSignal.any([timeout, stopping]) : timeout;
   runtime.audits.worker_concurrency = Math.min(
     runtime.audits.worker_concurrency,
     config.execution.poolSize,

@@ -3,6 +3,8 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
+import { setLogSink } from '../src/logging.ts';
+import { FetchError } from '../src/safe-fetch.ts';
 import {
   admitCandidates,
   candidate,
@@ -17,6 +19,7 @@ import { pages } from '../src/site-health/reads/pages.ts';
 import { SitePageFetcher, siteFetchSettings } from '../src/site-health/page-fetch.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
 import { runSiteSetup, setupSettings } from '../src/site-health/site-setup-task.ts';
+import { runSiteTask } from '../src/site-health/site-task.ts';
 import { classifyUrlAdmission } from '../src/site-health/url-admission.ts';
 import { canonicalIdentity } from '../src/site-health/url-identity.ts';
 import { SiteHealthWorker } from '../src/workers/site-health-worker.ts';
@@ -253,7 +256,6 @@ describe('discover', () => {
       [url('/'), policy.site_health.crawl.analyze_priority_boost],
     ]);
     expect(await crawlRow(seed)).toMatchObject({ admitted_url_count: 3, discovered_url_count: 1 });
-    expect((await urlRow(seed, '/')).discovery_status).toBe('completed');
 
     // A selected child is handed its analysis by its own fetch; an unselected one is inventory only.
     const children = await tasks(seed, 'discover');
@@ -302,25 +304,67 @@ describe('discover', () => {
     ]);
     const counters = await crawlCounters(db, await crawlRow(seed));
     expect(counters).toMatchObject({ errors: 2, failure_breakdown: { http_4xx: 2 } });
-    // A final failure settles the URL's discovery as a fetch does, never leaving it running.
-    const statuses = await Promise.all(
-      ['/a', '/gone', '/seeded'].map(async (path) => (await urlRow(seed, path)).discovery_status),
-    );
-    expect(statuses).toEqual(['completed', 'failed', 'failed']);
   });
 
-  it('settles a robots-excluded link failed rather than leaving it running', async () => {
+  it('records a seed an earlier crawl knew as this crawl’s sighting when it is discovered again', async () => {
     const seed = await crawl();
-    const root = await queued(seed, 'discover');
-    const site = worker({
-      '/robots.txt': { body: 'User-agent: *\nDisallow: /private\n', contentType: 'text/plain' },
-      '/': { body: links('/private') },
+    const earlier = await fixtures.sibling(seed);
+    const identity = canonicalIdentity('/seeded', seed.root);
+    const then = new Date(Date.now() - 86_400_000);
+    // The earlier crawl left the URL excluded, deeper, and sighted from a sitemap.
+    await db
+      .insertInto('site_urls')
+      .values({
+        id: randomUUID(),
+        workspace_id: seed.workspaceId,
+        project_id: seed.projectId,
+        normalized_url: identity.url,
+        url_hash: identity.hash,
+        display_url: identity.url,
+        host: 'example.test',
+        depth: 3,
+        corpus_disposition: 'exclude',
+        disposition_reason: 'http_404',
+        disposition_version: 'fixture',
+        item_kind: 'page',
+        latest_source_kind: 'sitemap',
+        latest_title: '',
+        latest_content_type: '',
+        first_seen_crawl_id: earlier,
+        last_seen_crawl_id: earlier,
+        first_seen_at: then,
+        last_seen_at: then,
+      })
+      .execute();
+    const before = await urlRow(seed, '/seeded');
+    const seeded = await queued(seed, 'discover', '/seeded', 1);
+
+    await run(worker({ '/seeded': { body: links() } }), seeded);
+
+    const after = await urlRow(seed, '/seeded');
+    expect({
+      id: after.id,
+      depth: after.depth,
+      disposition: after.corpus_disposition,
+      source: after.latest_source_kind,
+      first_seen: after.first_seen_crawl_id,
+      last_seen: after.last_seen_crawl_id,
+    }).toEqual({
+      id: before.id,
+      depth: 1,
+      disposition: 'analyze',
+      source: 'link',
+      first_seen: earlier,
+      last_seen: seed.crawlId,
     });
-    await run(site, root);
-    expect((await urlRow(seed, '/private')).discovery_status).toBe('running');
-    const children = await tasks(seed, 'discover');
-    await run(site, children.find((row) => row.requested_url === url('/private'))!.id);
-    expect((await urlRow(seed, '/private')).discovery_status).toBe('failed');
+    const observations = await db
+      .selectFrom('site_url_observations')
+      .select(['crawl_id', 'source_kind', 'status_code'])
+      .where('site_url_id', '=', before.id)
+      .execute();
+    expect(observations).toEqual([
+      { crawl_id: seed.crawlId, source_kind: 'link', status_code: 200 },
+    ]);
   });
 
   it('keeps a document as inventory and excludes a canonical alias of an active page', async () => {
@@ -648,10 +692,21 @@ describe('site setup', () => {
       .where('id', '=', full.crawlId)
       .execute();
     await lease(resumed, site.owner);
-    await runSiteSetup(site.acquisition, await task(resumed), {
-      ...setupSettings({}),
-      maxDocuments: 3,
-    });
+    await runSiteTask(
+      {
+        db,
+        owner: site.owner,
+        queue: site.queue,
+        fetcher: site.fetcher,
+        settings: site.settings,
+      },
+      await task(resumed),
+      {
+        kind: 'acquire',
+        run: (ctx, claimed) =>
+          runSiteSetup(ctx, claimed, { ...setupSettings({}), maxDocuments: 3 }),
+      },
+    );
     const walked = record((await crawlRow(full)).site_facts);
     expect(walked.sitemap).toEqual({
       fetched: true,
@@ -659,6 +714,38 @@ describe('site setup', () => {
       urls: [],
       lastmod: {},
     });
+  });
+
+  it('records an unreachable llms.txt as not fetched and logs why it failed', async () => {
+    const seed = await crawl();
+    const setup = await queued(seed, 'site_setup');
+    const records: Record<string, unknown>[] = [];
+    const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+    try {
+      await run(
+        worker({
+          '/robots.txt': robots,
+          '/llms.txt': {
+            onFetch: async () => {
+              throw new FetchError('connect_timeout');
+            },
+          },
+        }),
+        setup,
+      );
+    } finally {
+      setLogSink(restore);
+    }
+    const facts = record((await crawlRow(seed)).site_facts);
+    expect(facts.llms_txt).toMatchObject({ fetched: false, present: false, status_code: null });
+    expect(records.filter((entry) => entry.event === 'site_health_document_fetch_failed')).toEqual([
+      expect.objectContaining({
+        phase: 'llms_txt',
+        error_class: 'FetchError',
+        error_code: 'connect_timeout',
+        elapsed_ms: expect.any(Number),
+      }),
+    ]);
   });
 
   it('preserves an overlong sitemap declaration without fetching a truncated URL', async () => {

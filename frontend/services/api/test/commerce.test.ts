@@ -16,6 +16,7 @@ import { enqueue } from './referral-fixtures.ts';
 import { actionRow, opportunityRow } from './opportunity-fixtures.ts';
 import { prompt } from './prompt-fixtures.ts';
 import { commerceHits } from '../src/opportunities/refresh-hits.ts';
+import { targetKey } from '../src/analysis/opportunities/targets.ts';
 import { updateActionStatus } from '../src/opportunities/actions.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
@@ -478,7 +479,9 @@ describe('decisions and persisted reads', () => {
       .execute();
     const hits = await commerceHits(db, t, audit);
     expect(
-      hits.filter((hit) => hit.rule_id === 'product_not_mentioned').map((hit) => hit.target_key),
+      hits
+        .filter((hit) => hit.rule_id === 'product_not_mentioned')
+        .map((hit) => targetKey(hit.target)),
     ).toEqual([`product:${measured}`]);
   });
   it('reads active and requested discovery tasks without starting discovery', async () => {
@@ -644,7 +647,13 @@ describe('decisions and persisted reads', () => {
       .insertInto('commerce_shelf_snapshots')
       .values(snapshot(later, new Date('2026-10-02T00:00:00Z'), 0))
       .execute();
-    await updateActionStatus(db, t.workspaceId, action.id, 'dismissed', t.userId);
+    await updateActionStatus(
+      db,
+      { workspaceId: t.workspaceId, projectId: null },
+      action.id,
+      'dismissed',
+      t.userId,
+    );
     const failed = (await call<Shelf>(path)).body;
     expect(failed.snapshot).toMatchObject({
       product_visibility: null,

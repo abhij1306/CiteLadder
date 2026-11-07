@@ -7,31 +7,44 @@
  * commit with the status transition: a terminal crawl without them is a state
  * no retry can repair, because the snapshot is written once per crawl.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { ACTIVE_CRAWL_STATUSES, isActiveCrawl } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
+import { enqueueCrawlTasks } from './admission-writes.ts';
 import { reconcileDuplicateAliases } from './canonical-alias.ts';
-import { expectedTaskFailure } from './coverage.ts';
+import { expectedTaskFailure, inventoryComplete } from './coverage.ts';
 import { finalizeCrawlAnalyses } from './lifecycle-finalize.ts';
 import { rootFailure } from './reads/crawl.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 import { recordCrawlEvent } from './site-task.ts';
 import { persistCrawlSnapshot, refreshLiveScoreSummary } from './snapshot.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
+import { failedAs } from './task-outcome.ts';
 import { publishFinalPageAnalyses } from './terminal-analysis.ts';
 import { persistTerminalCounters } from './terminal-counters.ts';
 import { enqueueTerminalAnalyticsRefresh } from './terminal-handoff.ts';
 
 const logger = getLogger('app.workers.site_health.lifecycle');
 const TERMINAL_TASK = policy.task_queue.terminal;
-/** `paused` is never written; a crawl in it is left alone rather than terminalized. */
-const ACTIVE = ['draft', 'validating', 'queued', 'running'];
 const LIFECYCLE_KINDS = ['discover', 'site_setup', 'analyze'];
-const EXCLUSIONS = policy.site_health.reads.corpus_exclusion_error_codes;
+const EXCLUDED = failedAs('site_crawl_tasks', ['excluded']);
 const OVERDUE = policy.site_health.page_analysis.acquisition.error_codes.crawl_overdue;
+/**
+ * The row is its page's latest generation of its kind: a rerun's generation
+ * supersedes the earlier ones, so a page is counted once, by its newest
+ * outcome (the `ROW_TASK_ORDER` rule the crawl counters read).
+ */
+const LATEST_GENERATION = sql<boolean>`not exists (
+  select 1 from site_crawl_tasks newer
+  where newer.workspace_id = site_crawl_tasks.workspace_id
+    and newer.crawl_id = site_crawl_tasks.crawl_id
+    and newer.task_kind = site_crawl_tasks.task_kind
+    and newer.url_hash = site_crawl_tasks.url_hash
+    and newer.generation > site_crawl_tasks.generation)`;
 
 type Counts = {
   total: number;
@@ -73,9 +86,7 @@ async function taskSummary(db: Database, crawl: Crawl): Promise<Summary> {
       sql<number>`count(*) filter (where status = 'succeeded')::int`.as('succeeded'),
       sql<number>`count(*) filter (where status = 'cancelled')::int`.as('cancelled'),
       sql<number>`count(*) filter (where status = 'failed')::int`.as('failed'),
-      sql<number>`count(*) filter (where status = 'failed' and error_code = any(${EXCLUSIONS}::text[]))::int`.as(
-        'excluded',
-      ),
+      sql<number>`count(*) filter (where status = 'failed' and ${EXCLUDED})::int`.as('excluded'),
       // Discovery that met only robots/admission exclusions and 404/410s is complete.
       sql<number>`count(*) filter (where status = 'failed' and ${expectedTaskFailure})::int`.as(
         'expected',
@@ -84,6 +95,7 @@ async function taskSummary(db: Database, crawl: Crawl): Promise<Summary> {
     .where('workspace_id', '=', crawl.workspace_id)
     .where('crawl_id', '=', crawl.id)
     .where('task_kind', 'in', LIFECYCLE_KINDS)
+    .where(LATEST_GENERATION)
     .groupBy('task_kind')
     .execute();
   const kind = (name: string): Counts => rows.find((row) => row.task_kind === name) ?? NONE;
@@ -108,7 +120,8 @@ async function failedUrlCount(db: Database, crawl: Crawl) {
     .where('status', '=', 'failed')
     .where('task_kind', 'in', ['discover', 'analyze'])
     .where('url_hash', '!=', '')
-    .where(sql<boolean>`error_code <> all(${EXCLUSIONS}::text[])`)
+    .where(sql<boolean>`not ${EXCLUDED}`)
+    .where(LATEST_GENERATION)
     .executeTakeFirstOrThrow();
   return row.count;
 }
@@ -130,18 +143,38 @@ async function refreshCounters(db: Database, crawl: Crawl, summary: Summary) {
   crawl.admitted_url_count = Math.max(crawl.admitted_url_count, observed.count);
 }
 
-/** Progressive discovery state; returns whether the crawl failed outright and whether discovery fell short. */
+/**
+ * Progressive discovery state; returns whether the crawl failed outright and
+ * whether discovery fell short. A crawl fails outright when discovery found
+ * nothing and nothing was analyzed, or when it had pages to analyze and every
+ * one of them failed: a root that answered is no evidence about any page.
+ */
 function reconcileDiscovery(crawl: Crawl, summary: Summary) {
   const discoveryFailed = crawl.discovered_url_count === 0;
   // A recrawl that analyzed monitored pages after its root was blocked holds
   // useful partial evidence; it is not a failed crawl.
-  const fullyFailed = discoveryFailed && summary.analyzeSucceeded === 0;
-  if (!summary.discoverOpen) {
-    if (crawl.discovery_status === 'running')
-      crawl.discovery_status = discoveryFailed ? 'failed' : 'completed';
-    crawl.inventory_complete = !discoveryFailed;
-  }
+  const fullyFailed =
+    summary.analyzeSucceeded === 0 && (discoveryFailed || summary.analyzeApplicable > 0);
+  if (!summary.discoverOpen && crawl.discovery_status === 'running')
+    crawl.discovery_status = discoveryFailed ? 'failed' : 'completed';
   return { fullyFailed, discoveryPartial: summary.discoverFailed > 0 && !fullyFailed };
+}
+
+/**
+ * `inventory_complete` once discovery has drained: only an inventory no limit,
+ * pending frontier, sample or other bound cut short is the whole site. Its
+ * inputs settle with discovery, so it is decided when discovery settles and
+ * again when the crawl drains (a sample or rerun never runs discovery here).
+ */
+async function reconcileInventory(
+  db: Database,
+  crawl: Crawl,
+  summary: Summary,
+  discoveryWasRunning: boolean,
+) {
+  if (summary.discoverOpen) return;
+  if (!discoveryWasRunning && summary.analyzeOpen) return;
+  crawl.inventory_complete = crawl.discovered_url_count > 0 && (await inventoryComplete(db, crawl));
 }
 
 function analysisOutcome(summary: Summary, fullyFailed: boolean) {
@@ -178,42 +211,16 @@ async function enqueueSuccessors(db: Database, crawl: Crawl) {
     },
     { kind: 'link_metrics', key: `link-metrics:${crawl.id}:${linkVersion}` },
   ];
-  const idempotency = {
-    change_intel: `${crawl.id}:change_intel:${policy.site_health.change_intel.analyzer_version}`,
-    link_metrics: `${crawl.id}:link_metrics:${linkVersion}`,
-  };
-  const now = new Date();
-  await db
-    .insertInto('site_crawl_tasks')
-    .values(
-      successors.map(({ kind, key }) => ({
-        id: randomUUID(),
-        workspace_id: crawl.workspace_id,
-        crawl_id: crawl.id,
-        task_kind: kind,
-        requested_url: crawl.root_url,
-        url_hash: createHash('sha256').update(key).digest('hex'),
-        idempotency_key: idempotency[kind as keyof typeof idempotency],
-        status: 'queued',
-        max_attempts: Number(
-          resolveSettingSpec(policy.site_health.settings.max_attempts, process.env),
-        ),
-        depth: 0,
-        generation: 0,
-        priority: 0,
-        randomized_position: 0,
-        attempt_count: 0,
-        conflict_count: 0,
-        classification_expected: false,
-        error_code: '',
-        error_detail: '',
-        available_at: now,
-        created_at: now,
-        updated_at: now,
-      })),
-    )
-    .onConflict((conflict) => conflict.column('idempotency_key').doNothing())
-    .execute();
+  await enqueueCrawlTasks(
+    db,
+    crawl,
+    successors.map(({ kind, key }) => ({
+      kind,
+      url: crawl.root_url,
+      hash: createHash('sha256').update(key).digest('hex'),
+    })),
+    'once',
+  );
 }
 
 async function saveState(db: Database, crawl: Crawl) {
@@ -280,10 +287,12 @@ type ReconcileOptions = {
 
 /** Reconcile one crawl whose row the caller holds FOR UPDATE. */
 async function reconcileLockedCrawl(db: Database, crawl: Crawl, options: ReconcileOptions = {}) {
-  if (!ACTIVE.includes(crawl.status)) return;
+  if (!isActiveCrawl(crawl.status)) return;
   const summary = await taskSummary(db, crawl);
   await refreshCounters(db, crawl, summary);
+  const discoveryWasRunning = crawl.discovery_status === 'running';
   const { fullyFailed, discoveryPartial } = reconcileDiscovery(crawl, summary);
+  await reconcileInventory(db, crawl, summary, discoveryWasRunning);
   reconcileAnalysis(crawl, summary, fullyFailed);
   if (summary.discoverOpen || summary.analyzeOpen) {
     await saveState(db, crawl);
@@ -419,7 +428,7 @@ export async function reconcileAfterTask(
   if (!cadence.admits(task.crawl_id)) return;
   await db.transaction().execute(async (trx) => {
     const crawl = await lockCrawl(trx, task.workspace_id, task.crawl_id);
-    if (crawl && ACTIVE.includes(crawl.status)) await refreshLiveScoreSummary(trx, crawl);
+    if (crawl && isActiveCrawl(crawl.status)) await refreshLiveScoreSummary(trx, crawl);
   });
 }
 
@@ -456,7 +465,7 @@ export async function reconcileStalled(db: Database, settings: SiteWorkerSetting
   const stalled = await db
     .selectFrom('site_crawls as c')
     .select(['c.id', 'c.workspace_id'])
-    .where('c.status', 'in', ACTIVE)
+    .where('c.status', 'in', ACTIVE_CRAWL_STATUSES)
     .where('c.updated_at', '<', cutoff)
     // Retired kinds left in an old database are not work any worker will claim.
     .where(({ not, exists, selectFrom }) =>
@@ -493,7 +502,7 @@ export async function reconcileOverdue(db: Database, settings: SiteWorkerSetting
   const candidates = await db
     .selectFrom('site_crawls')
     .select(['id', 'workspace_id'])
-    .where('status', 'in', ACTIVE)
+    .where('status', 'in', ACTIVE_CRAWL_STATUSES)
     .where(sql<Date>`coalesce(started_at, created_at)`, '<', cutoff)
     .orderBy('created_at')
     .limit(settings.batch)
@@ -501,7 +510,7 @@ export async function reconcileOverdue(db: Database, settings: SiteWorkerSetting
   return eachCrawl(candidates, 'overdue crawl reconcile failed', async (candidate) => {
     const abandoned = await db.transaction().execute(async (trx) => {
       const crawl = await lockCrawl(trx, candidate.workspace_id, candidate.id);
-      if (!crawl || !ACTIVE.includes(crawl.status)) return null;
+      if (!crawl || !isActiveCrawl(crawl.status)) return null;
       if (new Date(crawl.started_at ?? crawl.created_at) >= cutoff) return null;
       const now = new Date();
       const failed = await trx

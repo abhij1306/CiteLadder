@@ -7,9 +7,6 @@ import { compareText } from '../../text-order.ts';
 const p = policy.opportunity.earned_actions;
 const s = policy.opportunity.source_pages;
 
-/** The Opportunity and Action target for one page. */
-export const earnedTargetKey = (urlHash: string) => `${p.EARNED_PAGE_TARGET_PREFIX}${urlHash}`;
-
 /**
  * A page earns the Action when it was read well enough to trust an absence,
  * answers to tracked prompts keep citing it, it is the kind of page that takes
@@ -39,10 +36,12 @@ export function detectEarnedPageOpportunities(evidence: EarnedPageEvidence): Det
       const gap = pageCompetitorPresenceFactor(competitorsOf(page).length);
       return {
         rule_id: p.RULE_EARNED_PAGE_ACQUIRE,
-        target_key: earnedTargetKey(page.url_hash),
-        target_prompt_id: null,
-        target_url: page.canonical_url,
-        target_theme: page.themes[0] ?? null,
+        target: {
+          kind: 'earned_page',
+          url_hash: page.url_hash,
+          url: page.canonical_url,
+          theme: page.themes[0] ?? null,
+        },
         evidence: {
           content_handoff: earnedPageBrief(page, evidence),
           priority_factors: {

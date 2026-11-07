@@ -1,9 +1,6 @@
 'use client';
 
-import { QueryState } from '@/components/ui/query-state';
-import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 import { CommerceWorkspace } from './commerce-workspace';
 
@@ -17,19 +14,5 @@ import { CommerceWorkspace } from './commerce-workspace';
  * `?target=`.
  */
 export function ProductsScreen() {
-  const { activeProject, isLoading } = useProjectContext();
-  const projectId = activeProject?.id ?? '';
-  if (isLoading)
-    return (
-      <ListScreen>
-        <QueryState kind="loading" label="Loading Commerce…" />
-      </ListScreen>
-    );
-  if (!projectId)
-    return (
-      <ListScreen>
-        <ProjectRequiredState />
-      </ListScreen>
-    );
-  return <CommerceWorkspace projectId={projectId} />;
+  return <CommerceWorkspace projectId={useProjectScope().projectId} />;
 }

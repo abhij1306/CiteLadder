@@ -11,12 +11,18 @@ import { randomUUID } from 'node:crypto';
 
 import type { Kysely } from 'kysely';
 import { sql } from 'kysely';
+import {
+  topicConfirmRequestSchema,
+  topicCreateRequestSchema,
+  topicUpdateRequestSchema,
+} from '@citeladder/contracts/prompt-requests';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
 import { isUniqueViolation } from '../db/errors.ts';
 import { record, strings } from '../db/json.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { requireProject } from '../projects/access.ts';
@@ -31,15 +37,13 @@ const DUPLICATE = 'A topic with this name already exists in the project';
 const name = z.string().trim().min(1).max(P.topic_name_max_chars);
 const description = z.string().max(1024);
 
-export const topicCreate = z.object({
+export const topicCreate = topicCreateRequestSchema.extend({
   name,
   description: description.default(''),
-  parent_id: z.uuid().nullish(),
 });
-export const topicUpdate = z.object({
+export const topicUpdate = topicUpdateRequestSchema.extend({
   name: name.nullish(),
   description: description.nullish(),
-  parent_id: z.uuid().nullish(),
 });
 const offeringName = z.string().trim().min(1).max(policy.brand_identity.profile_product_max_chars);
 /**
@@ -47,10 +51,11 @@ const offeringName = z.string().trim().min(1).max(policy.brand_identity.profile_
  * topics to create (a proposal names the saved offerings it covers), existing
  * topics to rename and existing topics to delete.
  */
-export const topicConfirm = z.object({
+const confirmShape = topicConfirmRequestSchema.shape;
+export const topicConfirm = topicConfirmRequestSchema.extend({
   create: z
     .array(
-      z.object({
+      confirmShape.create.unwrap().element.extend({
         name,
         offerings: z.array(offeringName).max(P.create_batch_max).default([]),
       }),
@@ -58,7 +63,7 @@ export const topicConfirm = z.object({
     .max(P.create_batch_max)
     .default([]),
   rename: z
-    .array(z.object({ id: z.uuid(), name }))
+    .array(confirmShape.rename.unwrap().element.extend({ name }))
     .max(P.create_batch_max)
     // One final name per topic: a repeated id would apply only its first name.
     .refine((items) => new Set(items.map((item) => item.id)).size === items.length, {
@@ -69,18 +74,16 @@ export const topicConfirm = z.object({
 });
 export type TopicConfirm = z.infer<typeof topicConfirm>;
 
-async function scopedTopic(
-  db: Kysely<DB>,
-  workspaceId: string,
-  topicId: string,
-): Promise<TopicRow> {
-  const topic = await db
+async function scopedTopic(db: Kysely<DB>, scope: RecordScope, topicId: string): Promise<TopicRow> {
+  const query = db
     .selectFrom('topics')
     .innerJoin('projects', 'projects.id', 'topics.project_id')
     .selectAll('topics')
     .where('topics.id', '=', topicId)
-    .where('projects.workspace_id', '=', workspaceId)
-    .executeTakeFirst();
+    .where('projects.workspace_id', '=', scope.workspaceId);
+  const topic = await (
+    scope.projectId === null ? query : query.where('projects.id', '=', scope.projectId)
+  ).executeTakeFirst();
   if (topic === undefined) throw notFound('Topic');
   return topic;
 }
@@ -174,6 +177,7 @@ export async function createTopic(
         .insertInto('topics')
         .values({
           id: randomUUID(),
+          workspace_id: workspaceId,
           project_id: projectId,
           parent_id: parentId,
           name: input.name,
@@ -191,13 +195,13 @@ export async function createTopic(
 
 export async function updateTopic(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   topicId: string,
   input: z.infer<typeof topicUpdate>,
 ): Promise<TopicView> {
   return writing(() =>
     inTransaction(db, async (trx) => {
-      const topic = await scopedTopic(trx, workspaceId, topicId);
+      const topic = await scopedTopic(trx, scope, topicId);
       // Every topic edit changes binding vocabulary or hierarchy: serialize it
       // with the prompt writers that read them.
       await acquireProjectLock(trx, topic.project_id);
@@ -224,11 +228,11 @@ export async function updateTopic(
 
 export async function deleteTopic(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   topicId: string,
 ): Promise<void> {
   await inTransaction(db, async (trx) => {
-    const topic = await scopedTopic(trx, workspaceId, topicId);
+    const topic = await scopedTopic(trx, scope, topicId);
     await acquireProjectLock(trx, topic.project_id);
     await trx.deleteFrom('topics').where('id', '=', topic.id).execute();
   });
@@ -330,6 +334,7 @@ export async function confirmTopics(
           .values(
             created.map((item) => ({
               id: item.id,
+              workspace_id: workspaceId,
               project_id: projectId,
               parent_id: null,
               name: item.name,
@@ -357,7 +362,7 @@ export async function confirmTopics(
  */
 export async function resolveTopicsByName(
   db: Kysely<DB>,
-  projectId: string,
+  { workspaceId, projectId }: { workspaceId: string; projectId: string },
   names: readonly string[],
 ): Promise<Map<string, string>> {
   const wanted = new Map<string, string>();
@@ -369,6 +374,7 @@ export async function resolveTopicsByName(
   const existing = await db
     .selectFrom('topics')
     .select(['id', 'name'])
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .execute();
   const resolved = new Map<string, string>();
@@ -384,6 +390,7 @@ export async function resolveTopicsByName(
       .values(
         created.map(([, topicName]) => ({
           id: randomUUID(),
+          workspace_id: workspaceId,
           project_id: projectId,
           parent_id: null,
           name: topicName,

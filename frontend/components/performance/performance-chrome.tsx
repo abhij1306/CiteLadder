@@ -141,7 +141,7 @@ export function PerformanceActions({
       </span>
       <Button
         variant="secondary"
-        onClick={() => sync.mutation.mutate()}
+        onClick={sync.start}
         disabled={!hasConnections}
         pending={sync.syncing || sync.mutation.isPending}
         pendingLabel="Syncing…"

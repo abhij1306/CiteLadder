@@ -1,9 +1,11 @@
 import { sql } from 'kysely';
 import { inTransaction, type Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { policy } from '../config.ts';
-import { getLogger } from '../logging.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';
+import { surfaceKindOf } from '../providers/config.ts';
 import { ownedAuditTask, type AuditTask } from '../queue/audit-queue.ts';
 import { leasedStatuses } from '../queue/next-due.ts';
 import { auditPolicy } from './config.ts';
@@ -11,8 +13,13 @@ import { auditEvent, transitionAudit } from './state.ts';
 
 const batchSize = auditPolicy.constants.audit_lease_sweep_batch_size;
 type Parent = { workspaceId: string; auditId: string };
-function expiredLeaseStatus(uncertain: boolean, failed: boolean, auditStatus: string) {
-  if (uncertain) return 'submission_uncertain';
+/** Where a reclaimed lease goes; `pending` names a paid submission that still needs no new attempt. */
+function expiredLeaseStatus(
+  pending: 'submission_uncertain' | 'awaiting_provider_result' | null,
+  failed: boolean,
+  auditStatus: string,
+) {
+  if (pending) return pending;
   if (!failed) return 'retry_wait';
   return auditStatus === 'cancelled' ? 'cancelled' : 'failed';
 }
@@ -23,7 +30,7 @@ export function repairOwnedCompletion(db: Database, claimed: AuditTask, owner: s
     if (!locked) return false;
     const { task, audit } = locked;
     const observation =
-      task.logical_engine === 'google_ai_overview'
+      surfaceKindOf(task.logical_engine) === 'search_ai'
         ? await trx
             .selectFrom('aio_observations')
             .select(['outcome', 'error_code'])
@@ -76,16 +83,20 @@ export function repairOwnedCompletion(db: Database, claimed: AuditTask, owner: s
 /** Scope, cancellation, queue transitions and unused funding release commit together. */
 export async function cancelAudit(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   auditId: string,
   at = new Date(),
 ) {
+  const { workspaceId } = scope;
   return inTransaction(db, async (trx) => {
-    const audit = await trx
+    const query = trx
       .selectFrom('audits')
       .selectAll()
       .where('workspace_id', '=', workspaceId)
-      .where('id', '=', auditId)
+      .where('id', '=', auditId);
+    const audit = await (
+      scope.projectId === null ? query : query.where('project_id', '=', scope.projectId)
+    )
       .forUpdate()
       .executeTakeFirst();
     if (!audit) throw notFound('Audit');
@@ -146,64 +157,71 @@ export class AuditMaintenance {
     let reclaimed = 0;
     for (const candidate of expired) {
       if (!canAdmit()) break;
-      const terminal = await this.db.transaction().execute(async (trx) => {
-        // Match all other audit writers' lock order. SKIP LOCKED never waits on a live writer.
-        const audit = await trx
-          .selectFrom('audits')
-          .selectAll()
-          .where('workspace_id', '=', candidate.workspace_id)
-          .where('id', '=', candidate.audit_id)
-          .where('project_id', '=', candidate.project_id)
-          .forUpdate()
-          .skipLocked()
-          .executeTakeFirst();
-        if (!audit) return null;
-        const task = await trx
-          .selectFrom('audit_tasks')
-          .selectAll()
-          .where('workspace_id', '=', candidate.workspace_id)
-          .where('id', '=', candidate.id)
-          .where('audit_id', '=', audit.id)
-          .where('status', 'in', leasedStatuses)
-          .where('lease_expires_at', '<=', sql<Date>`clock_timestamp()`)
-          .forUpdate()
-          .skipLocked()
-          .executeTakeFirst();
-        if (!task) return null;
-        const parentTerminal = auditPolicy.constants.audit_terminal_statuses.includes(audit.status);
-        const uncertain = Boolean(
-          task.provider_submission_ref && !task.provider_task_id && !parentTerminal,
-        );
-        const attempts = task.attempt_count + (uncertain || parentTerminal ? 0 : 1);
-        const failed = !uncertain && (parentTerminal || attempts >= task.max_attempts);
-        await trx
-          .updateTable('audit_tasks')
-          .set({
-            status: expiredLeaseStatus(uncertain, failed, audit.status),
-            attempt_count: attempts,
-            available_at: at,
-            lease_owner: null,
-            lease_expires_at: null,
-            heartbeat_at: null,
-            updated_at: at,
-            ...(failed
-              ? {
-                  completed_at: at,
-                  error_code:
-                    task.error_code ||
-                    (audit.status === 'cancelled'
-                      ? 'cancelled'
-                      : policy.task_queue.max_attempts_error),
-                  error_detail: task.error_detail || 'lease expired after max attempts exhausted',
-                }
-              : {}),
-          })
-          .where('workspace_id', '=', task.workspace_id)
-          .where('audit_id', '=', audit.id)
-          .where('id', '=', task.id)
-          .execute();
-        return failed;
-      });
+      const terminal = await /* NOSONAR -- Admission is checked before each reclaim. */ this.db
+        .transaction()
+        .execute(async (trx) => {
+          // Match all other audit writers' lock order. SKIP LOCKED never waits on a live writer.
+          const audit = await trx
+            .selectFrom('audits')
+            .selectAll()
+            .where('workspace_id', '=', candidate.workspace_id)
+            .where('id', '=', candidate.audit_id)
+            .where('project_id', '=', candidate.project_id)
+            .forUpdate()
+            .skipLocked()
+            .executeTakeFirst();
+          if (!audit) return null;
+          const task = await trx
+            .selectFrom('audit_tasks')
+            .selectAll()
+            .where('workspace_id', '=', candidate.workspace_id)
+            .where('id', '=', candidate.id)
+            .where('audit_id', '=', audit.id)
+            .where('status', 'in', leasedStatuses)
+            .where('lease_expires_at', '<=', sql<Date>`clock_timestamp()`)
+            .forUpdate()
+            .skipLocked()
+            .executeTakeFirst();
+          if (!task) return null;
+          const parentTerminal = auditPolicy.constants.audit_terminal_statuses.includes(
+            audit.status,
+          );
+          // A paid submission is never charged again: an unconfirmed one is reconciled, and
+          // one with a provider task id goes back to polling, bounded by the recovery deadline.
+          let pending: 'submission_uncertain' | 'awaiting_provider_result' | null = null;
+          if (!parentTerminal && task.provider_task_id) pending = 'awaiting_provider_result';
+          else if (!parentTerminal && task.provider_submission_ref)
+            pending = 'submission_uncertain';
+          const attempts = task.attempt_count + (pending || parentTerminal ? 0 : 1);
+          const failed = !pending && (parentTerminal || attempts >= task.max_attempts);
+          await trx
+            .updateTable('audit_tasks')
+            .set({
+              status: expiredLeaseStatus(pending, failed, audit.status),
+              attempt_count: attempts,
+              available_at: at,
+              lease_owner: null,
+              lease_expires_at: null,
+              heartbeat_at: null,
+              updated_at: at,
+              ...(failed
+                ? {
+                    completed_at: at,
+                    error_code:
+                      task.error_code ||
+                      (audit.status === 'cancelled'
+                        ? 'cancelled'
+                        : policy.task_queue.max_attempts_error),
+                    error_detail: task.error_detail || 'lease expired after max attempts exhausted',
+                  }
+                : {}),
+            })
+            .where('workspace_id', '=', task.workspace_id)
+            .where('audit_id', '=', audit.id)
+            .where('id', '=', task.id)
+            .execute();
+          return failed;
+        });
       if (terminal === null) continue;
       reclaimed++;
       if (terminal)
@@ -225,9 +243,32 @@ export class AuditMaintenance {
     await this.finalizeParents(parents.values(), canAdmit);
     return reclaimed;
   }
+  /**
+   * Deletes capacity leases that expired more than the retention window ago,
+   * released or not: capacity counts only live leases, and every acquire
+   * locks its bucket and sums that bucket's leases. One batch per pass.
+   */
+  async purgeCapacityLeases(at = new Date()) {
+    const cutoff = new Date(
+      at.getTime() - auditPolicy.constants.capacity_lease_retention_seconds * 1000,
+    );
+    const purged = await this.db
+      .deleteFrom('provider_capacity_leases')
+      .where('id', 'in', (eb) =>
+        eb
+          .selectFrom('provider_capacity_leases')
+          .select('id')
+          .where('expires_at', '<', cutoff)
+          .orderBy('expires_at')
+          .limit(batchSize),
+      )
+      .executeTakeFirst();
+    return Number(purged.numDeletedRows);
+  }
   async runOnce(at = new Date(), canAdmit = () => true) {
     if (!canAdmit()) return 0;
     const { reclaimed, parents } = await this.#reclaim(at, canAdmit);
+    if (canAdmit()) await this.purgeCapacityLeases(at);
     // A separate sweeper may have failed the final BYOK task without owning audit finalization.
     const ready = await this.db
       .selectFrom('audits as a')
@@ -290,9 +331,11 @@ export class AuditMaintenance {
       if (!canAdmit()) break;
       try {
         await this.finalize(parent.workspaceId, parent.auditId); // NOSONAR -- Settle each parent before admitting the next within budget.
-      } catch {
-        getLogger('workers.audit').info('audit_maintenance_finalize_failed', {
+      } catch (error) {
+        // One parent's finalize never blocks the others; the next sweep retries it.
+        getLogger('workers.audit').warning('audit_maintenance_finalize_failed', {
           audit_id: parent.auditId,
+          ...failureFacts(error),
         });
       }
     }

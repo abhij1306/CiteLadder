@@ -4,8 +4,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
+import { commerceQueries } from '@/lib/api/commerce';
 import { ProjectSelectionProvider } from '@/lib/project/project-scope';
 import { mswServer } from '@/test/msw-server';
 import { testProjectSelection } from '@/test/render';
@@ -40,8 +39,7 @@ function wrapper(client: QueryClient) {
 /** The catalog read the screen makes, and the projection beside it. */
 function useScreen() {
   const catalog = useQuery({
-    queryKey: queryKeys.commerce.catalog(PROJECT),
-    queryFn: ({ signal }) => commerceApi.catalog(PROJECT, { signal, workspaceId: WORKSPACE }),
+    ...commerceQueries.catalog({ workspaceId: WORKSPACE, projectId: PROJECT }),
   });
   return { catalog, projection: useCatalogProjection(PROJECT, catalog) };
 }

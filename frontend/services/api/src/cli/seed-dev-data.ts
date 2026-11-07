@@ -1,4 +1,5 @@
-import { loadConfig, policy, resolveSettingSpec } from '../config.ts';
+import { loadConfig, policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { createDatabase } from '../db/database.ts';
 import { localEnvironment } from './local-environment.ts';
 import { operatorMain, requireLocalDevelopment } from './operator.ts';

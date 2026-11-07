@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -13,8 +13,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { Select } from '@/components/ui/select';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi } from '@/lib/api/runs';
+import { runsMutations, runsQueries } from '@/lib/api/runs';
 import { toggleMarket } from '@/lib/runs/launch';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
 import type {
@@ -22,15 +21,15 @@ import type {
   AuditScheduleCadence,
   LogicalEngine,
   PromptSet,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { DisplayTime } from '@/components/ui/display-time';
 import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
-import { ENGINE_LABELS } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { useConfiguredEngines } from '@/lib/runs/use-configured-engines';
 import { schedulePauseReason } from '@/lib/runs/status';
 
@@ -42,22 +41,12 @@ const CADENCE_LABELS: Record<AuditScheduleCadence, string> = {
   weekly: 'Weekly',
 };
 
-function useAuditSchedules(projectId: string | null) {
-  const workspaceId = useActiveWorkspaceId();
-  return useQuery({
-    queryKey: queryKeys.runs.schedules(workspaceId, projectId ?? ''),
-    queryFn: ({ signal }) => runsApi.listSchedules(projectId!, { signal, workspaceId }),
-    enabled: Boolean(projectId && workspaceId),
-  });
-}
-
 /** Compact schedule ledger: schedules use the same frozen prompt set and engines as a run. */
 export function AuditSchedules({
   projectId,
   promptSets,
 }: Readonly<{ projectId: string; promptSets: PromptSet[] }>) {
-  const workspaceId = useActiveWorkspaceId();
-  if (!workspaceId) return <Callout tone="info">Loading your workspace…</Callout>;
+  const { workspaceId } = useProjectScope();
   return (
     <WorkspaceSchedules
       key={`${workspaceId}:${projectId}`}
@@ -77,52 +66,38 @@ function WorkspaceSchedules({
   projectId: string;
   promptSets: PromptSet[];
 }>) {
-  const queryClient = useQueryClient();
+  const scope = { workspaceId, projectId };
   const [promptSetId, setPromptSetId] = useState(promptSets[0]?.id ?? '');
   const [auditScope, setAuditScope] = useState<'brand' | 'commerce'>('brand');
   const [cadence, setCadence] = useState<AuditScheduleCadence>('weekly');
   const [intervalMinutes, setIntervalMinutes] = useState('60');
   // Only engines with a tested connection can run; until someone picks, the first of them.
-  const { configuredEngines, enginesReady } = useConfiguredEngines(true, workspaceId);
+  const { configuredEngines, enginesReady, catalog } = useConfiguredEngines(true, workspaceId);
   const [picked, setPicked] = useState<LogicalEngine[] | null>(null);
   const engines = (picked ?? configuredEngines.slice(0, 1)).filter((engine) =>
     configuredEngines.includes(engine),
   );
   const [marketIds, setMarketIds] = useState<(string | null)[]>([null]);
-  const schedulesQuery = useAuditSchedules(projectId);
+  const schedulesQuery = useQuery(runsQueries.schedules(scope));
   const markets = useProjectMarkets(projectId, workspaceId);
-  const createMutation = useMutation({
-    mutationFn: () => {
-      return runsApi.createSchedule(
-        projectId,
-        {
-          prompt_set_id: promptSetId,
-          audit_scope: auditScope,
-          cadence,
-          interval_minutes: cadence === 'every_n_minutes' ? Number(intervalMinutes) : undefined,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
-          engines,
-          market_ids: marketIds,
-        },
-        { workspaceId },
-      );
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.runs.schedules(workspaceId, projectId),
-      });
-    },
-  });
-  const canCreate = !createMutation.isPending && scheduleReady(promptSetId, engines, marketIds);
-  const resumeMutation = useMutation({
-    mutationFn: (scheduleId: string) =>
-      runsApi.updateSchedule(projectId, scheduleId, { enabled: true }, { workspaceId }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.runs.schedules(workspaceId, projectId),
-      });
-    },
-  });
+  const createMutation = useMutation(runsMutations.createSchedule(scope));
+  const createSchedule = () =>
+    createMutation.mutate({
+      prompt_set_id: promptSetId,
+      audit_scope: auditScope,
+      cadence,
+      interval_minutes: cadence === 'every_n_minutes' ? Number(intervalMinutes) : undefined,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+      engines,
+      market_ids: marketIds,
+    });
+  // The engine choices come from the catalogue; until it loads none are shown,
+  // so nothing may be scheduled against an engine the user cannot see.
+  const canCreate =
+    !createMutation.isPending &&
+    catalog.order.length > 0 &&
+    scheduleReady(promptSetId, engines, marketIds);
+  const resumeMutation = useMutation(runsMutations.resumeSchedule(scope));
 
   return (
     <Card>
@@ -217,7 +192,7 @@ function WorkspaceSchedules({
                     {configuredEngines.map((engine) => (
                       <Checkbox
                         key={engine}
-                        label={ENGINE_LABELS[engine]}
+                        label={catalog.label(engine)}
                         checked={engines.includes(engine)}
                         onCheckedChange={() =>
                           setPicked(
@@ -233,11 +208,7 @@ function WorkspaceSchedules({
               </Stack>
               <MarketChecklist markets={markets} marketIds={marketIds} onToggle={setMarketIds} />
               <div className="flex items-end">
-                <Button
-                  variant="primary"
-                  onClick={() => createMutation.mutate()}
-                  disabled={!canCreate}
-                >
+                <Button variant="primary" onClick={createSchedule} disabled={!canCreate}>
                   {createMutation.isPending ? 'Scheduling…' : 'Schedule audit'}
                 </Button>
               </div>
@@ -248,7 +219,7 @@ function WorkspaceSchedules({
               notice={mutationNoticeForError(createMutation.error, {
                 action: 'schedule the audit',
               })}
-              onRetry={() => createMutation.mutate()}
+              onRetry={createSchedule}
             />
           ) : null}
           <ResumeNotice
@@ -325,12 +296,13 @@ function ScheduleRow({
   resuming: boolean;
   onResume: () => void;
 }>) {
+  const catalog = useEngineCatalog();
   return (
     <Inline as="li" className={ledgerItemClasses('type-body flex-wrap justify-between')}>
       <span className={textRole('emphasis', 'text-ink')}>{CADENCE_LABELS[schedule.cadence]}</span>
       {schedule.enabled ? (
         <span className="text-ink-secondary">
-          {schedule.engines.map((engine) => ENGINE_LABELS[engine] ?? engine).join(', ')} · next{' '}
+          {schedule.engines.map((engine) => catalog.label(engine)).join(', ')} · next{' '}
           {schedule.next_run_at ? (
             <DisplayTime value={schedule.next_run_at} />
           ) : (

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Dialog } from '@/components/ui/dialog';
 import { IntegrationSettings } from '@/components/settings/integration-settings';
 import { McpConnections } from '@/components/settings/mcp-connections';
@@ -16,9 +17,8 @@ import { ProviderSettings } from '@/components/settings/provider-settings';
 import { TimeZoneSetting } from '@/components/settings/time-zone-setting';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { ListScreen } from '@/components/layout/page-shell';
-import { projectsApi } from '@/lib/api/projects';
-import { humanizeApiError } from '@/lib/api/errors';
-import { queryKeys } from '@/lib/api/query-keys';
+import { projectMutations } from '@/lib/api/projects';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import { useSelectProject, workspaceDestination } from '@/lib/navigation/project-destination';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
@@ -52,39 +52,32 @@ const SETTINGS_TAB_CODEC = stringUrlCodec(
 
 function ProjectDeletionControls() {
   const router = useNavigate();
-  const queryClient = useQueryClient();
   const { activeProject, activeWorkspaceId } = useProjectContext();
   const selectProject = useSelectProject();
   const mayDelete = useWorkspaceCapability('delete_projects');
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const deleteMutation = useMutation({
-    mutationFn: (projectId: string) =>
-      projectsApi.deleteProject(projectId, { workspaceId: activeWorkspaceId }),
-    onSuccess: async (_data, deletedId) => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-      const refreshedProjects = await queryClient.fetchQuery({
-        queryKey: queryKeys.projects.list(String(activeWorkspaceId)),
-        queryFn: ({ signal }) =>
-          projectsApi.listProjects({ signal, workspaceId: activeWorkspaceId }),
-      });
-      const next = refreshedProjects.find((project) => project.id !== deletedId) ?? null;
-      if (next) {
-        // Navigate, do not merely re-select: the deleted id may be the one in
-        // `?project=`, and leaving it there would resolve to a project that no
-        // longer exists and present as "that project is unavailable". Replace
-        // rather than push for the same reason — Back must not return to it.
-        selectProject(next.id, { replace: true });
-        setConfirmOpen(false);
-      } else {
-        router(
-          activeWorkspaceId
-            ? workspaceDestination('/onboarding', null, activeWorkspaceId)
-            : '/onboarding',
-          { replace: true },
-        );
-      }
-    },
-  });
+  const deleteMutation = useMutation(projectMutations.remove(activeWorkspaceId));
+  const deleteProject = (projectId: string) =>
+    deleteMutation.mutate(projectId, {
+      onSuccess: (remaining, deletedId) => {
+        const next = remaining.find((project) => project.id !== deletedId) ?? null;
+        if (next) {
+          // Navigate, do not merely re-select: the deleted id may be the one in
+          // `?project=`, and leaving it there would resolve to a project that no
+          // longer exists and present as "that project is unavailable". Replace
+          // rather than push for the same reason — Back must not return to it.
+          selectProject(next.id, { replace: true });
+          setConfirmOpen(false);
+        } else {
+          router(
+            activeWorkspaceId
+              ? workspaceDestination('/onboarding', null, activeWorkspaceId)
+              : '/onboarding',
+            { replace: true },
+          );
+        }
+      },
+    });
 
   // Only a role that may delete (Owner/Admin) sees the control.
   if (!mayDelete) return null;
@@ -123,7 +116,11 @@ function ProjectDeletionControls() {
               generated content. This cannot be undone.
             </Callout>
             {deleteMutation.isError ? (
-              <Callout tone="negative">{humanizeApiError(deleteMutation.error).message}</Callout>
+              <MutationNotice
+                notice={mutationNoticeForError(deleteMutation.error, {
+                  action: 'delete the project',
+                })}
+              />
             ) : null}
           </>
         ) : (
@@ -148,7 +145,7 @@ function ProjectDeletionControls() {
             </Button>
             <Button
               variant="danger"
-              onClick={() => activeProject && deleteMutation.mutate(activeProject.id)}
+              onClick={() => activeProject && deleteProject(activeProject.id)}
               disabled={deleteMutation.isPending || !activeProject}
             >
               {deleteMutation.isPending ? 'Deleting…' : 'Delete project'}

@@ -7,11 +7,15 @@
 import { businessModelSchema, marketScopeSchema } from '@citeladder/contracts/project';
 import { z } from 'zod';
 
-import type { BrandProfileUpdateInput, BusinessMapUpdateInput } from '@/lib/api/projects';
-import type { BrandProfile, BusinessMap } from '@/lib/api/types';
+import type {
+  BrandProfileUpdateRequest,
+  BusinessMapOfferingEdit,
+  BusinessMapUpdateRequest,
+} from '@citeladder/contracts/project-requests';
+import type { BrandProfile, BusinessMap } from '@citeladder/contracts';
 
 type BusinessModel = z.infer<typeof businessModelSchema>;
-type OfferingMapDraft = BusinessMapUpdateInput['offerings'][number];
+type OfferingMapDraft = BusinessMapOfferingEdit;
 export type MapEntryDraft = OfferingMapDraft['audiences'][number];
 
 export type BusinessDraft = {
@@ -34,7 +38,7 @@ const CONTEXT_LISTS = [
   ['serviceAreas', 'service_areas'],
   ['categoryTerms', 'category_terms'],
   ['jobs', 'jobs_to_be_done'],
-] as const satisfies readonly (readonly [keyof BusinessDraft, keyof BrandProfileUpdateInput])[];
+] as const satisfies readonly (readonly [keyof BusinessDraft, keyof BrandProfileUpdateRequest])[];
 
 const stringList = z.array(z.string()).catch([]);
 const sameValue = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -95,8 +99,8 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export function profileChanges(
   draft: BusinessDraft,
   saved: BusinessDraft,
-): BrandProfileUpdateInput {
-  const update: BrandProfileUpdateInput = {};
+): BrandProfileUpdateRequest {
+  const update: BrandProfileUpdateRequest = {};
   if (!same(draft.offerings, saved.offerings)) update.products_services = draft.offerings;
   if (draft.businessModel && draft.businessModel !== saved.businessModel)
     update.business_model = draft.businessModel;
@@ -127,7 +131,7 @@ const MAP_DIMENSIONS = ['audiences', 'situations', 'attributes'] as const;
 export function mapChanges(
   draft: BusinessDraft,
   saved: BusinessDraft,
-): BusinessMapUpdateInput | null {
+): BusinessMapUpdateRequest | null {
   const changed = draft.maps.some((map) => {
     const prior = saved.maps.find((item) => sameValue(item.offering, map.offering));
     return !prior || MAP_DIMENSIONS.some((key) => !same(map[key], prior[key]));

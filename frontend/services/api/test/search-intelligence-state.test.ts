@@ -9,7 +9,7 @@ import { confirmRun } from '../src/search-intelligence/runs.ts';
 import { reviewBody } from '../src/routes/search-intelligence-contracts.ts';
 import { createSecretCipher } from '../src/integrations/fernet.ts';
 import { WorkspaceScope } from '../src/db/workspace-scope.ts';
-import { ProviderError } from '../src/answer-engines/contracts.ts';
+import { ProviderError } from '../src/providers/errors.ts';
 import { reconcileResearch } from '../src/search-intelligence/maintenance.ts';
 import { pageEstimateMicrousd } from '../src/search-intelligence/requests.ts';
 import { policy } from '../src/config.ts';
@@ -301,6 +301,17 @@ describe('durable paid acquisition boundaries', () => {
       stop: true,
     });
     expect((await remote.state.run().executeTakeFirst())?.error_code).toBe('auth_failure');
+  });
+  it('stops the run when the provider account refuses every request', async () => {
+    const t = await run(),
+      sent = dispatched(await t.state.prepare(t.plans[0]!, 0));
+    await t.state.dispatch(sent);
+    expect(
+      await t.state.fail(sent, new ProviderError('provider_account_unavailable')),
+    ).toMatchObject({ stop: true, wait: null });
+    expect((await t.state.run().executeTakeFirst())?.error_code).toBe(
+      'provider_account_unavailable',
+    );
   });
   it('recovers a saved response with exact row provenance and settles it once', async () => {
     const t = await run(),

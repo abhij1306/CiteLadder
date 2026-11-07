@@ -11,7 +11,7 @@ import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/
  * that is 88px on one route and 152px on the next — and those are what made
  * the app look inconsistent (docs/design.md, Behaviour every surface keeps). So this
  * walks every product route at the owner's viewport (982×900, DPR 1) and at
- * 1280×900, in light and dark, measures every visible control, badge, tab,
+ * 1280×900 (light: dark rebinds only colours and shadows), measures every visible control, badge, tab,
  * band, box and query state, and asserts ONE value per role — the same
  * literals in every configuration. The expected values are literals on
  * purpose: deriving them from the tokens would let a token edit move the
@@ -46,8 +46,6 @@ const ROUTES = [
 
 /** One control height for the product: control-md, 32 in the app (decision D11). */
 const CONTROL_HEIGHT = 32;
-/** The ThemeSwitch is the system's one control-sm atom. */
-const THEME_SWITCH_HEIGHT = 28;
 /** One badge height. */
 const BADGE_HEIGHT = 22;
 /** Text controls and tabs share one horizontal padding; icon-only controls have none. */
@@ -107,8 +105,8 @@ const ICON_TILE_SIZE = 32;
 const ROW_PART_GAP = 8;
 /** A ruled fact list pads each fact 8 above and below. */
 const FACT_ROW_PADDING_Y = 8;
-/** A field's end target (clear, reveal) is SearchField's 20px clear square. */
-const FIELD_END_TARGET_SIZE = 20;
+/** A field's end target (clear, reveal) is a 24px square, WCAG 2.5.8's minimum (D38). */
+const FIELD_END_TARGET_SIZE = 24;
 /** An inline code token is padded 8 across and 4 down. */
 const CODE_TOKEN_PADDING_X = 8;
 const CODE_TOKEN_PADDING_Y = 4;
@@ -190,7 +188,7 @@ function measure({ route, shellMinWidth }: { route: string; shellMinWidth: numbe
   for (const element of all('[role="tab"]'))
     add('tab.padding-x', element, px(getComputedStyle(element).paddingLeft));
   for (const element of all(
-    '[data-segmented-track], [role="radiogroup"]:not([data-segmented-track] *, [data-theme-switch])',
+    '[data-segmented-track], [role="radiogroup"]:not([data-segmented-track] *)',
   )) {
     // In the icon rail the Dashboard | Agent track stands on end: one control wide.
     if (rail && element.closest('aside'))
@@ -207,8 +205,6 @@ function measure({ route, shellMinWidth }: { route: string; shellMinWidth: numbe
   // end on one line, the rule under both, scrolled or not.
   for (const element of all('[data-top-bar], [data-page-header]'))
     add('top-bar.bottom', element, element.getBoundingClientRect().bottom);
-  for (const element of all('[data-theme-switch]'))
-    add('theme-switch.height', element, element.getBoundingClientRect().height);
   for (const element of all('aside a, nav a')) {
     if (element.closest('[role="radiogroup"], [role="tablist"], [data-segmented-track]')) continue;
     if (!hasText(element)) continue;
@@ -222,12 +218,11 @@ function measure({ route, shellMinWidth }: { route: string; shellMinWidth: numbe
     add('badge.height', element, element.getBoundingClientRect().height);
   }
   // The header cluster: every control on the identity band's row, the
-  // shell's own glyphs included; the ThemeSwitch is its own role above.
+  // shell's own glyphs included.
   const identity = document.querySelector('[data-page-band="identity"]');
   if (identity && visible(identity)) {
     const band = identity.getBoundingClientRect();
     for (const element of all('button, a[role="button"]')) {
-      if (element.closest('[data-theme-switch]')) continue;
       const rect = element.getBoundingClientRect();
       if (rect.top >= band.top && rect.bottom <= band.bottom && rect.left >= band.left)
         add('header-cluster.height', element, rect.height);
@@ -511,18 +506,18 @@ const CONNECTIONS = [
   },
 ];
 
-// Both themes, each at both widths (WIDTHS): the same literals everywhere.
-for (const theme of ['light', 'dark'] as const) {
-  test.describe(`${theme} theme`, () => {
-    test.use({ deviceScaleFactor: 1, colorScheme: theme });
+// One theme, at both widths (WIDTHS). The dark theme rebinds colour and
+// shadow tokens only (globals.css), neither of which moves a box, so a
+// second pass in it measured the same geometry again.
+test.describe('light theme', () => {
+  test.use({ deviceScaleFactor: 1, colorScheme: 'light' });
 
-    test('every product route renders one value per geometric role', async ({ page }) => {
-      test.setTimeout(240_000);
-      // With no stored choice the theme follows the emulated device scheme.
-      await expectOneGeometry(page);
-    });
+  test('every product route renders one value per geometric role', async ({ page }) => {
+    test.setTimeout(240_000);
+    // With no stored choice the theme follows the emulated device scheme.
+    await expectOneGeometry(page);
   });
-}
+});
 
 async function expectOneGeometry(page: Page) {
   await stubAuthedShell(page);
@@ -580,7 +575,9 @@ async function expectOneGeometry(page: Page) {
       label: '/projects (account menu)',
       prepare: async (current) => {
         await current.getByRole('button', { name: /^Account menu/ }).click();
-        await expect(current.getByRole('radiogroup', { name: 'Theme' })).toBeVisible();
+        await expect(
+          current.getByRole('button', { name: /^Switch to (?:light|dark) theme$/ }),
+        ).toBeVisible();
       },
     })),
   );
@@ -592,7 +589,6 @@ async function expectOneGeometry(page: Page) {
   expectOneValue(records, 'segmented.height', CONTROL_HEIGHT);
   expectOneValue(records, 'nav-row.height', CONTROL_HEIGHT);
   expectOneValue(records, 'header-cluster.height', CONTROL_HEIGHT);
-  expectOneValue(records, 'theme-switch.height', THEME_SWITCH_HEIGHT);
   expectOneValue(records, 'control.font-size', 14);
   expectOneValue(records, 'badge.height', BADGE_HEIGHT);
   expectOneValue(records, 'button.padding-x.text', TEXT_CONTROL_PADDING_X);

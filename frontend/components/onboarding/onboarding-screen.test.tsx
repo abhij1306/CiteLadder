@@ -65,6 +65,7 @@ vi.mock('@/lib/onboarding/use-brand-discovery', async (importOriginal) => {
         isRunning: Boolean(resolved) && ['queued', 'running'].includes(discoveryState.status),
         error: null,
         retry: vi.fn(),
+        rerun: vi.fn(),
       };
     },
   };
@@ -228,6 +229,58 @@ describe('OnboardingScreen', () => {
     await userEvent.setup().click(retry);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
     expect(creations).toBe(0);
+  });
+
+  it.each([
+    {
+      label: 'a review without competitors',
+      finished: {
+        ...discovery('ready', 'preparing_review'),
+        competitors: [],
+        warnings: ['research_degraded', 'competitors_not_found'],
+      },
+      message: 'No competitors were confirmed. You can continue with none or add them yourself.',
+    },
+    {
+      label: 'failed research',
+      finished: {
+        ...discovery('failed', 'preparing_review'),
+        warnings: ['research_degraded'],
+        error_code: 'brand_identity_unavailable',
+      },
+      message: 'Research did not finish. Run discovery again; your brand details are kept.',
+    },
+  ])('runs discovery again after $label and follows the new run', async ({ finished, message }) => {
+    useRealDiscovery = true;
+    searchParams = `discovery=${DISCOVERY_ID}&step=discovery`;
+    const RERUN_ID = '33333333-3333-4333-8333-333333333333';
+    const rerunKeys: (string | null)[] = [];
+    const rerun = { ...discovery('ready', 'preparing_review'), id: RERUN_ID };
+    mswServer.use(
+      catalogHandler(),
+      http.get(`/api/v1/brand-discoveries/${DISCOVERY_ID}`, () => HttpResponse.json(finished)),
+      http.post(`/api/v1/brand-discoveries/${DISCOVERY_ID}/rerun`, ({ request }) => {
+        rerunKeys.push(request.headers.get('idempotency-key'));
+        const queued = { ...discovery('queued', 'opening_website'), id: RERUN_ID };
+        return HttpResponse.json({ ...queued, competitors: [] }, { status: 202 });
+      }),
+      http.post(`/api/v1/brand-discoveries/${RERUN_ID}/run`, () => HttpResponse.json(rerun)),
+      http.get(`/api/v1/brand-discoveries/${RERUN_ID}`, () => HttpResponse.json(rerun)),
+    );
+    renderOnboarding();
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button', { name: 'Run discovery again' });
+    expect(buttons).toHaveLength(1);
+    await userEvent.setup().click(buttons[0]!);
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        `/onboarding?discovery=${RERUN_ID}&step=discovery`,
+      ),
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+    expect(screen.queryByRole('button', { name: 'Run discovery again' })).toBeNull();
+    expect(screen.getByText('Globex')).toBeInTheDocument();
+    expect(rerunKeys).toEqual([expect.stringMatching(/\S/)]);
   });
 
   it('starts research once while polling persisted progress during the bounded request', async () => {

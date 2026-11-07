@@ -15,10 +15,8 @@ import {
   brandProfileReviewStateSchema,
   brandProfileSchema,
   brandProfileSourceSchema,
-  businessModelSchema,
-  buyerTypeSchema,
-  marketScopeSchema,
 } from '@citeladder/contracts/project';
+import { brandProfileUpdateRequestSchema } from '@citeladder/contracts/project-requests';
 import type { Selectable } from 'kysely';
 import { z } from 'zod';
 
@@ -59,15 +57,12 @@ const contextList = z
   .nullish();
 
 /** A partial edit: an absent or null field is left untouched. */
-export const brandProfileUpdate = z.object({
+export const brandProfileUpdate = brandProfileUpdateRequestSchema.extend({
   description: text,
   positioning: text,
   products_services: z.array(z.string().max(PRODUCT_MAX)).max(PRODUCTS_MAX).nullish(),
   target_audience: text,
   category: categoryInput.nullish(),
-  buyer_type: buyerTypeSchema.nullish(),
-  market_scope: marketScopeSchema.nullish(),
-  business_model: businessModelSchema.nullish(),
   service_areas: contextList,
   buyer_roles: contextList,
   category_terms: contextList,

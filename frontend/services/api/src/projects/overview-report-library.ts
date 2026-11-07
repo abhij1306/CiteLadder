@@ -8,7 +8,7 @@ import { overviewWidgetTitles, type OverviewWidgetKey } from '@citeladder/contra
 import type { z } from 'zod';
 
 import { getAiReferrals } from '../analytics/ai-referrals.ts';
-import type { PdfReport } from './pdf.ts';
+import type { PdfReport } from '../documents/pdf.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { crawlSummary } from '../crawl-logs/reads.ts';

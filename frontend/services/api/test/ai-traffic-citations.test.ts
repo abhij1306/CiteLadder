@@ -9,18 +9,18 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
-import { analyzeExecution } from '../src/analysis/execution.ts';
-import { finalizeAudit } from '../src/analysis/finalization.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
+import { finalizeAudit } from '../src/audits/finalization.ts';
 import type { Citation } from '../src/answer-engines/contracts.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { loadExecutionContext } from '../src/audits/execution-context.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { persistExecutionSuccess, type ExecutionResult } from '../src/audits/result-persistence.ts';
-import { aiTrafficOverview } from '../src/crawl-logs/overview.ts';
+import { aiTrafficOverview } from '../src/ai-traffic/overview.ts';
 import { AuditQueue } from '../src/queue/audit-queue.ts';
 import { persistSourceAggregates } from '../src/visibility/source-aggregates.ts';
-import { auditTenant, auditTestKey } from './audit-fixtures.ts';
+import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
@@ -83,6 +83,7 @@ async function tenant() {
     .insertInto('owned_domains')
     .values({
       id: randomUUID(),
+      workspace_id: t.workspaceId,
       project_id: t.projectId,
       domain: 'acme.example',
       created_at: new Date(),
@@ -102,7 +103,7 @@ async function finalizedRun(t: AuditTenant, urls: string[]) {
     {},
     runtime,
   );
-  const claim = () => queue.claim('worker', 1, { workspaceId: t.workspaceId, auditId });
+  const claim = () => claimAsWorker(db, queue, 1, { workspaceId: t.workspaceId, auditId });
   for (let claimed = await claim(); claimed[0]; claimed = await claim()) {
     const running = await queue.markRunning(claimed[0], 'worker');
     const context = await loadExecutionContext(
@@ -123,7 +124,7 @@ async function finalizedRun(t: AuditTenant, urls: string[]) {
         transport_model: context!.task.transport_model,
         citations: urls.map((url, ordinal) => citation(url, ordinal)),
       },
-      analyzeExecution,
+      deriveExecution,
     );
   }
   await finalizeAudit(db, t.workspaceId, auditId!, async () => {});

@@ -4,8 +4,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { createAppQueryClient } from '@/lib/api/query-client';
-import type { PromptHistory } from '@/lib/api/types';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
+import { testQueryClient } from '@/test/render';
+import type { PromptHistory } from '@citeladder/contracts';
 
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -133,11 +135,16 @@ function history(latestStates: PromptHistory['points'][number]['answer_states'])
 function renderScreen(path = `/prompts/${PROMPT}`) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <QueryClientProvider client={createAppQueryClient()}>
+      <QueryClientProvider client={testQueryClient()}>
         <TooltipProvider>
-          <Routes>
-            <Route path="/prompts/:promptId" element={<PromptDetailScreen />} />
-          </Routes>
+          {/* A project route: the gate hands the screen its project. */}
+          <ActiveProjectScopeProvider
+            project={makeProject({ id: PROJECT, workspace_id: WORKSPACE })}
+          >
+            <Routes>
+              <Route path="/prompts/:promptId" element={<PromptDetailScreen />} />
+            </Routes>
+          </ActiveProjectScopeProvider>
         </TooltipProvider>
       </QueryClientProvider>
     </MemoryRouter>,

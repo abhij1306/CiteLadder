@@ -8,11 +8,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TrendChart, type TrendPoint } from '@/components/ui/trend-chart';
 import { textRole } from '@/components/ui/typography';
 import {
-  searchIntelligenceApi,
+  searchIntelligenceQueries,
   type SearchIntelligenceDataset,
 } from '@/lib/api/search-intelligence';
-import { searchIntelligenceKeys } from '@/lib/api/query-keys/search-intelligence';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /** One month of saved history; a null value is an unobserved month and draws as a gap. */
 type HistoryRow = {
@@ -25,21 +24,10 @@ type HistoryRow = {
 export function SearchIntelligenceHistory({
   dataset,
 }: Readonly<{ dataset: SearchIntelligenceDataset }>) {
-  const { activeProject } = useProjectContext();
-  const query = useQuery({
-    queryKey: [
-      ...searchIntelligenceKeys.dataset(activeProject?.workspace_id, activeProject?.id, dataset.id),
-      'history',
-    ],
-    queryFn: ({ signal }) =>
-      searchIntelligenceApi.rows(
-        activeProject!.id,
-        dataset.id,
-        { signal, workspaceId: activeProject!.workspace_id },
-        { limit: 200 },
-      ),
-    enabled: Boolean(activeProject),
-  });
+  const { workspaceId, projectId } = useProjectScope();
+  const query = useQuery(
+    searchIntelligenceQueries.datasetHistory({ workspaceId, projectId }, dataset.id),
+  );
   if (query.isError)
     return <ReadError {...readErrorProps(query)} fallback="Saved history could not be loaded." />;
   if (query.isPending) return <Skeleton variant="chart" />;

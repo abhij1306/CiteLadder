@@ -25,13 +25,13 @@ import { StatRow } from '@/components/ui/stat-row';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
-import { siteHealthQueries } from '@/lib/api/site-health';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type {
   ArchitectureNode,
   ArchitecturePageKind,
   CoverageState,
   SiteArchitecture,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 import { PLACEHOLDER } from '@/lib/site-health/status';
 
 const COVERAGE_LABELS: Record<CoverageState, string> = {
@@ -78,7 +78,9 @@ export function ArchitecturePanel({
   projectId,
   crawlId,
 }: Readonly<{ workspaceId: string; projectId: string; crawlId?: string }>) {
-  const architecture = useQuery(siteHealthQueries.architecture(workspaceId, projectId, crawlId));
+  const architecture = useQuery(
+    siteHealthQueries.architecture({ workspaceId, projectId }, crawlId),
+  );
 
   if (architecture.isLoading) {
     return <QueryState kind="loading" label="Loading the observed architecture" />;

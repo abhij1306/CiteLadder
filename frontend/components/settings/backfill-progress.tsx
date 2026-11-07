@@ -4,8 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { Inline } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
-import { integrationsApi, type IntegrationBackfillProgress } from '@/lib/api/integrations';
-import { queryKeys } from '@/lib/api/query-keys';
+import { integrationsQueries, type IntegrationBackfillProgress } from '@/lib/api/integrations';
 import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
 import { formatShortDate } from '@/lib/format';
 
@@ -60,9 +59,7 @@ function useBackfillProgress(workspaceId: string, connectionId: string) {
 
 function useBackfillProgressQuery(workspaceId: string, connectionId: string) {
   return useQuery({
-    queryKey: queryKeys.integrations.backfillProgress(connectionId),
-    queryFn: ({ signal }) =>
-      integrationsApi.getBackfillProgress(connectionId, { signal, workspaceId }),
+    ...integrationsQueries.backfillProgress(workspaceId, connectionId),
     // Poll only while windows are still draining; a settled import is static.
     refetchInterval: (query) =>
       query.state.data?.state === 'importing' ? SYNC_RUN_POLL_MS : false,

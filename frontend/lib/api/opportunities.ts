@@ -16,10 +16,11 @@ import {
   opportunitiesPageSchema,
   opportunityDetailSchema,
   opportunityOrderResponseSchema,
+  type OpportunityOrderUpdateRequest,
 } from '@citeladder/contracts/opportunities';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
-import type { OpportunitiesPage, OpportunityDetail } from './types';
+import type { OpportunitiesPage, OpportunityDetail } from '@citeladder/contracts';
 
 /** Keyset catalog params. Ordering is server-owned (priority desc, id desc). */
 export type OpportunitiesParams = {
@@ -30,11 +31,6 @@ export type OpportunitiesParams = {
   status?: string;
   rule_id?: string;
   min_priority?: number;
-};
-
-export type OpportunityOrderUpdate = {
-  ordered_opportunity_ids: string[];
-  expected_version: number;
 };
 
 export const opportunitiesApi = {
@@ -49,7 +45,7 @@ export const opportunitiesApi = {
   },
   updateOrder: async (
     projectId: string,
-    input: OpportunityOrderUpdate,
+    input: OpportunityOrderUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.put(`/projects/${projectId}/opportunities/order`, input, options);
@@ -57,45 +53,14 @@ export const opportunitiesApi = {
   },
 };
 
-function extractProjectId(queryKey: readonly unknown[] | undefined): string | undefined {
-  if (queryKey?.[0] !== 'opportunities') return undefined;
-  if (queryKey[1] === 'list') {
-    return typeof queryKey[2] === 'string' ? queryKey[2] : undefined;
-  }
-  return undefined;
-}
-
-function isSameProjectQuery(
-  previousQuery: { queryKey: readonly unknown[] } | undefined,
-  projectId: string,
-): boolean {
-  return extractProjectId(previousQuery?.queryKey) === projectId;
-}
-
 /**
- * React Query option factories. The query key ↔ endpoint pairing lives here
- * so screens pass these straight to `useQuery` / `useMutation`. Every
- * `queryFn` forwards the abort signal.
+ * Opportunity reads. Screens reach the catalog through Actions and the
+ * command center, so the browser reads one Opportunity: the evidence drawer's.
  */
 export const opportunitiesQueries = {
-  list: (workspaceId: string, projectId: string, params?: OpportunitiesParams) =>
+  detail: (workspaceId: string | null, opportunityId: string) =>
     queryOptions({
-      queryKey: queryKeys.opportunities.list(projectId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-        type: params?.type ?? null,
-        severity: params?.severity ?? null,
-        status: params?.status ?? null,
-        rule_id: params?.rule_id ?? null,
-        min_priority: params?.min_priority ?? null,
-      }),
-      queryFn: ({ signal }) => opportunitiesApi.list(projectId, params, { signal, workspaceId }),
-      placeholderData: (previousData, previousQuery) =>
-        isSameProjectQuery(previousQuery, projectId) ? previousData : undefined,
-    }),
-  detail: (workspaceId: string, opportunityId: string) =>
-    queryOptions({
-      queryKey: queryKeys.opportunities.detail(opportunityId),
+      queryKey: queryKeys.opportunities.detail(workspaceId, opportunityId),
       queryFn: ({ signal }) => opportunitiesApi.get(opportunityId, { signal, workspaceId }),
     }),
 };

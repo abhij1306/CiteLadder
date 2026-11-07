@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -96,6 +97,14 @@ test('a light chart series must hold 3:1 on every ground', () => {
   assert.ok(
     violations.some((violation) => violation.includes('--color-data-3 on --color-surface-sunken')),
   );
+});
+
+test('the shipped palette meets every pair in both themes', () => {
+  const source = readFileSync(
+    new URL('../frontend/apps/app/src/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.deepEqual(paletteViolations(source), []);
 });
 
 test('positive and negative too close in lightness and under red-green loss fail', () => {

@@ -46,12 +46,16 @@ vi.mock('@/lib/project/project-context', () => ({
 
 const deleteProject = vi.fn().mockResolvedValue(undefined);
 const listProjects = vi.fn().mockResolvedValue([]);
-vi.mock('@/lib/api/projects', () => ({
-  projectsApi: {
+// The transport is replaced on the module's own client object, so the real
+// deletion descriptor (its refresh and its re-read of the list) runs against it.
+vi.mock('@/lib/api/projects', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/api/projects')>();
+  Object.assign(actual.projectsApi, {
     deleteProject: (id: string) => deleteProject(id),
     listProjects: () => listProjects(),
-  },
-}));
+  });
+  return actual;
+});
 
 // The Provider Settings tab fetches the catalog/connections; stub the panel so
 // this suite stays focused on the tab shell (the panel has its own suite in

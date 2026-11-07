@@ -20,19 +20,19 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { redirect } from 'react-router-dom';
 
-import { authApi } from '@/lib/api/auth';
-import { projectQueries, projectsApi } from '@/lib/api/projects';
+import { authQueries } from '@/lib/api/auth';
+import { projectQueries } from '@/lib/api/projects';
 import { getAppQueryClient } from '@/lib/api/query-client';
-import { queryKeys } from '@/lib/api/query-keys';
-import type { Project, Workspace } from '@/lib/api/types';
-import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
+import { workspaceQueries } from '@/lib/api/workspaces';
+import type { Project, Workspace } from '@citeladder/contracts';
 import { projectDestination, workspaceDestination } from '@/lib/navigation/project-destination';
 import { prefetchProjectShell, prefetchRoute } from '@/lib/navigation/route-prefetch';
+import { isWorkspaceOnlyRoute } from '@/lib/navigation/app-routes';
 import {
   readStoredActiveProjectId,
   readStoredActiveWorkspaceId,
 } from '@/lib/project/active-project-storage';
-import { isWorkspaceOnlyRoute, resolveGate } from '@/lib/project/bootstrap';
+import { resolveGate } from '@/lib/project/bootstrap';
 import {
   pickActiveProject,
   resolveProjectId,
@@ -62,10 +62,7 @@ async function settle<T>(work: Promise<T>): Promise<T | null> {
  */
 async function loadLocalUser(client: QueryClient): Promise<boolean> {
   try {
-    await client.ensureQueryData({
-      queryKey: queryKeys.auth.me(),
-      queryFn: ({ signal }) => authApi.me({ signal, timeoutMs: getBootstrapReadTimeoutMs() }),
-    });
+    await client.ensureQueryData(authQueries.me());
     return true;
   } catch {
     return false;
@@ -161,17 +158,7 @@ async function resolveScope(client: QueryClient, url: URL): Promise<Scope | null
   // A membership list needs only the session cookie and the project only its
   // id; neither depends on the other's answer. Sent together they cost one
   // round trip instead of two — and one place to stall instead of two.
-  const workspacesPending = settle<Workspace[]>(
-    client.ensureQueryData({
-      queryKey: queryKeys.workspaces.list(),
-      queryFn: ({ signal }) =>
-        projectsApi.listWorkspaces({
-          signal,
-          workspaceId: null,
-          timeoutMs: getBootstrapReadTimeoutMs(),
-        }),
-    }),
-  );
+  const workspacesPending = settle(client.ensureQueryData(workspaceQueries.list()));
   const projectPending = requestedProjectId
     ? requestedProject(client, url, requestedProjectId, urlWorkspaceId)
     : null;

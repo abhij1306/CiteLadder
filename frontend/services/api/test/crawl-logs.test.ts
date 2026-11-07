@@ -18,7 +18,7 @@ import {
 } from '../src/crawl-logs/maintenance.ts';
 import { crawlers } from '../src/config/crawlers.ts';
 import { crawlSummary, activityPage, crawlerPage } from '../src/crawl-logs/reads.ts';
-import { pagesRead } from '../src/crawl-logs/pages.ts';
+import { pagesRead } from '../src/ai-traffic/pages.ts';
 import { dispatchTool } from '../src/mcp/tools.ts';
 import { verifyBot } from '../src/crawl-logs/identity.ts';
 import { sourceList } from '../src/crawl-logs/source-reads.ts';

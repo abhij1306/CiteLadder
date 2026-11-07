@@ -4,9 +4,9 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { useQuery } from '@tanstack/react-query';
 
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
+import { commerceQueries } from '@/lib/api/commerce';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import type { useCompetitorDiscovery } from '@/lib/products/competitor-discovery';
 
@@ -14,6 +14,8 @@ import type { CommerceQueries } from './commerce-queries';
 import { TargetDetail } from './target-detail';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+/** Commerce renders on a project route, under the gate's project. */
+const projectRoute = { projectSelection: { activeProject: makeProject({ id: PROJECT_ID }) } };
 const PRODUCT_A = '22222222-2222-4222-8222-222222222222';
 const PRODUCT_B = '33333333-3333-4333-8333-333333333333';
 
@@ -54,8 +56,7 @@ const staticDiscovery = {
  */
 function ShelfHarness({ target, label }: Readonly<{ target: CommerceTarget; label: string }>) {
   const shelf = useQuery({
-    queryKey: queryKeys.commerce.shelf(PROJECT_ID, target),
-    queryFn: ({ signal }) => commerceApi.shelf(PROJECT_ID, target, { signal }),
+    ...commerceQueries.shelf({ workspaceId: null, projectId: PROJECT_ID }, target),
   });
   const queries: CommerceQueries = {
     catalog: emptyRowsQuery,
@@ -111,6 +112,7 @@ describe('TargetDetail', () => {
 
     const { rerender } = renderWithProviders(
       <ShelfHarness target={{ kind: 'product', id: PRODUCT_A }} label="Product A" />,
+      projectRoute,
     );
 
     expect(await screen.findByText('50.0%')).toBeVisible();
@@ -146,6 +148,7 @@ describe('TargetDetail', () => {
     );
     const { rerender } = renderWithProviders(
       <ShelfHarness target={{ kind: 'product', id: PRODUCT_A }} label="Product A" />,
+      projectRoute,
     );
     await screen.findByText('50.0%');
     fireEvent.change(screen.getByRole('textbox', { name: 'Manual buyer prompt' }), {

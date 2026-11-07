@@ -22,7 +22,10 @@ The complete piece the person asked for, in the chosen format, grounded in the b
 
 ## What good looks like
 
+- If the target page's crawled text is empty, or it fails the check for content in the server HTML, crawlers cannot read it: the first recommendation is to make its text readable without JavaScript. Draft copy for it only when the person asks.
 - Refresh, expand or merge before creating a near-duplicate; in a rewrite, keep what already works.
+- On policy, legal, terms and pricing pages, add rather than rewrite unless the person asks for a rewrite.
+- Restating what a page already says is not an improvement; say what each change adds.
 - Give the reader something beyond a generic summary: a hard decision explained, real data, a worked example, usable steps.
 - Lead with the answer. Tables for comparable facts, steps for processes, FAQs only for real questions; no word counts or keyword density.
 - A fact the data does not supply is listed once in the editorial notes, never guessed or left as a placeholder in the copy.

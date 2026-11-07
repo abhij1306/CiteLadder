@@ -1,21 +1,22 @@
 /** Audit schedule commands for the browser and the public API. */
 import type { z } from 'zod';
 
-import { requireCapability, type Actor } from '../auth/actor.ts';
 import type { scheduleCreate, scheduleUpdate } from '../audits/schedule-inputs.ts';
 import * as schedules from '../audits/schedules.ts';
 import type { Database } from '../db/database.ts';
+import { permission, type Authorized } from './permission.ts';
 
-const SCOPE = 'schedules:write';
+export const SCHEDULES_WRITE = permission({ capability: 'write', scope: 'schedules:write' });
+type Writer = Authorized<typeof SCHEDULES_WRITE>;
 
-function scopeOf(actor: Actor, projectId: string): schedules.ScheduleScope {
-  requireCapability(actor, 'write', SCOPE);
-  return { workspaceId: actor.workspaceId, projectId };
-}
+const scopeOf = (actor: Writer, projectId: string): schedules.ScheduleScope => ({
+  workspaceId: actor.workspaceId,
+  projectId,
+});
 
 export function createSchedule(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string,
   input: z.output<typeof scheduleCreate>,
 ) {
@@ -24,7 +25,7 @@ export function createSchedule(
 
 export function updateSchedule(
   db: Database,
-  actor: Actor,
+  actor: Writer,
   projectId: string,
   scheduleId: string,
   input: z.output<typeof scheduleUpdate>,
@@ -32,6 +33,6 @@ export function updateSchedule(
   return schedules.updateSchedule(db, scopeOf(actor, projectId), scheduleId, input);
 }
 
-export function deleteSchedule(db: Database, actor: Actor, projectId: string, scheduleId: string) {
+export function deleteSchedule(db: Database, actor: Writer, projectId: string, scheduleId: string) {
   return schedules.deleteSchedule(db, scopeOf(actor, projectId), scheduleId);
 }

@@ -13,9 +13,8 @@ import { QueryState } from '@/components/ui/query-state';
 import { Stack } from '@/components/ui/layout';
 import { Tooltip } from '@/components/ui/tooltip';
 import { DisplayTime } from '@/components/ui/display-time';
-import { aiTrafficApi, aiTrafficQueries, type TrafficFilters } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
-import { useProjectContext } from '@/lib/project/project-context';
+import { aiTrafficQueries, type TrafficFilters } from '@/lib/api/ai-traffic';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { projectDestination } from '@/lib/navigation/project-destination';
 import { aiSourceLabel } from '@/lib/ai-traffic/series';
 import { coverageLabel, legStateLabel, reasonLabel, words } from '@/lib/ai-traffic/vocabulary';
@@ -71,18 +70,11 @@ export function UrlPanel({
   onClose,
   filters = {},
 }: Readonly<{ urlHash: string | null; onClose: () => void; filters?: TrafficFilters }>) {
-  const { activeProject } = useProjectContext(),
-    workspaceId = activeProject?.workspace_id ?? '',
-    projectId = activeProject?.id ?? '';
-  const query = useQuery({
-    queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'url', { urlHash, ...filters }),
-    queryFn: ({ signal }) =>
-      aiTrafficApi.url(projectId, urlHash!, filters, { workspaceId, signal }),
-    enabled: !!urlHash && !!workspaceId && !!projectId,
-  });
+  const { workspaceId, projectId } = useProjectScope();
+  const query = useQuery(aiTrafficQueries.url({ workspaceId, projectId }, urlHash, filters));
   const catalog = useQuery({
-    ...aiTrafficQueries.catalog(workspaceId, projectId),
-    enabled: !!urlHash && !!workspaceId && !!projectId,
+    ...aiTrafficQueries.catalog({ workspaceId, projectId }),
+    enabled: !!urlHash,
   });
   const botLabel = (botId: string) =>
     catalog.data?.bots.find((bot) => bot.bot_id === botId)?.label ?? words(botId);

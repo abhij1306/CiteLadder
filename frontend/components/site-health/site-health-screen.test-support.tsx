@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
 import { makeProject } from '@/test/fixtures/project';
-import { renderWithProviders } from '@/test/render';
+import { renderWithProviders, ResolvedProjectRoute } from '@/test/render';
 import {
   COMPLETE_CLASSIFICATION_PROJECTION,
   EMPTY_WEB_FUNDAMENTALS,
@@ -11,7 +11,7 @@ import {
 } from '@/test/site-health-fixtures';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { ProjectProvider } from '@/lib/project/project-context';
-import type { SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteHealthDashboard } from '@citeladder/contracts';
 import { SiteHealthScreen } from './site-health-screen';
 
 function setSearch(value: string) {
@@ -188,7 +188,9 @@ function mockRoutes(
 function renderScreen() {
   return renderWithProviders(
     <ProjectProvider>
-      <SiteHealthScreen />
+      <ResolvedProjectRoute>
+        <SiteHealthScreen />
+      </ResolvedProjectRoute>
     </ProjectProvider>,
   );
 }

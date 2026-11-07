@@ -3,14 +3,21 @@ import { shuffleAuditSlots } from './slot-order.ts';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
-import { providerPolicy, type Engine, type ProviderSettings } from '../providers/config.ts';
+import {
+  providerPolicy,
+  surfaceKindOf,
+  type Engine,
+  type ProviderSettings,
+} from '../providers/config.ts';
 import { approvedEndpoint } from '../providers/connections.ts';
 import { auditPolicy, auditSettings } from './config.ts';
 import type { AuditInput } from './inputs.ts';
+import { frozenConfiguration } from './frozen-configuration.ts';
 import { freezeCommerceContext } from '../commerce/audit-context.ts';
 import { frozenEntityMatching, projectEntityMatching } from '../analysis/entity-matching.ts';
 import { strings } from '../db/json.ts';
 import { admittedFactCheck, admittedPerceptionVersions } from '../perception/admission.ts';
+import { gatewaySettings } from '../models/gateway.ts';
 import { marketLabel } from '@citeladder/contracts/markets';
 import type { Market } from '../projects/markets.ts';
 import {
@@ -219,7 +226,7 @@ async function freezeRoutes({
   const routes: FrozenRoute[] = [];
   for (const engine of engines) {
     const catalog = providerPolicy.routes[engine];
-    const observed = catalog.transport_provider === 'dataforseo';
+    const observed = surfaceKindOf(engine) !== 'llm';
     const selected = candidates.find((candidate) =>
       usableCandidate(candidate, engine, catalog.transport_provider, providerSettings, at),
     );
@@ -411,7 +418,7 @@ export async function prepareAudit(
   const panelHash = promptPanelHash(promptRows);
   const seed = parseSeed(input.random_seed);
   const brandName = brand?.name ?? project.brand_name;
-  const configuration = {
+  const configuration = frozenConfiguration({
     brand_name: brandName,
     brand_aliases: aliases.map((row) => row.alias),
     owned_domains: owned.map((row) => row.domain),
@@ -444,8 +451,12 @@ export async function prepareAudit(
     anthropic_max_uses: providerSettings.anthropicMaxUses,
     openai_max_tool_calls: providerSettings.openaiMaxToolCalls,
     slot_order_version: 'mt19937-v1',
-    // Perception results carry the versions in force at admission (brand audits only).
-    perception: admittedPerceptionVersions(input.audit_scope, factCheck),
+    // Perception results carry the versions and model in force at admission (brand audits only).
+    perception: admittedPerceptionVersions({
+      auditScope: input.audit_scope,
+      factCheck,
+      model: gatewaySettings().model,
+    }),
     // Fact-checking pilot: the confirmed fact revisions this audit checks against.
     fact_check: factCheck,
     panel_id: panelHash.slice(0, 16),
@@ -466,7 +477,7 @@ export async function prepareAudit(
           ),
         }
       : {}),
-  };
+  });
   return {
     project,
     prompts,

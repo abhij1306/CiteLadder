@@ -2,7 +2,7 @@
 import { policy } from '../config.ts';
 import { record } from '../db/json.ts';
 import type { MeasurementProjection } from './score-summary.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { compareText } from '../text-order.ts';
 import { firstOf } from '../lists.ts';
 

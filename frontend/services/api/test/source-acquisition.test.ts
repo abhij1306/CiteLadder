@@ -1,7 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { expect, it, vi } from 'vitest';
 
-import { createWebsiteFetcher, decodedBody, FetchError } from '../src/projects/safe-fetch.ts';
+import { createWebsiteFetcher, decodedBody, FetchError } from '../src/safe-fetch.ts';
 import {
   acquisitionSettings,
   HostPacer,
@@ -15,7 +15,8 @@ import {
   ownedFacts,
   type ComparisonPage,
 } from '../src/source-pages/differentiation.ts';
-import { canonicalIdentity, citationIdentity } from '../src/site-health/url-identity.ts';
+import { canonicalIdentity } from '../src/site-health/url-identity.ts';
+import { pageIdentity } from '../src/source-pages/identity.ts';
 import { policy } from '../src/config.ts';
 import { organicResults } from '../src/source-pages/sync.ts';
 
@@ -277,7 +278,7 @@ it('derives page formats from a page address and keeps redirect tokens unresolve
   expect(urlFormat('https://example.test/compare/tools').format).toBe('comparison');
   expect(urlFormat('https://example.test/notes')).toEqual({ format: 'unresolved', method: 'none' });
   expect(
-    citationIdentity('https://vertexaisearch.cloud.google.com/grounding-api-redirect/token'),
+    pageIdentity('https://vertexaisearch.cloud.google.com/grounding-api-redirect/token'),
   ).toBeNull();
   expect(
     canonicalIdentity('https://EXAMPLE.test:443/%7euser?utm_source=x&b=2&a=1#section').url,

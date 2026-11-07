@@ -10,6 +10,7 @@ import type { Audits } from '../generated/db-schema.ts';
 import { listOpportunities } from '../opportunities/reads.ts';
 import { persistedBaseline } from '../visibility/comparison.ts';
 import { getRunVisibility, type VisibilityResponse } from '../visibility/dashboard.ts';
+import { latestBrandRunId } from '../visibility/selection.ts';
 import { compareText } from '../text-order.ts';
 import type { ProjectScope } from './brand-profile.ts';
 import { readProject } from './service.ts';
@@ -52,15 +53,14 @@ async function comparableAudits(db: Database, scope: ProjectScope, auditId: stri
     .where('workspace_id', '=', scope.workspaceId)
     .where('project_id', '=', scope.projectId)
     .where('status', 'in', policy.visibility.dashboard_audit_statuses)
-    .where('audit_scope', '=', policy.visibility.brand_audit_scope)
-    .orderBy('completed_at', 'desc')
-    .orderBy('id', 'desc');
-  const [latest, chosen] = await Promise.all([
-    // The overview follows the default market; a chosen run brings its own.
-    query.where('market_id', 'is', null).limit(1).executeTakeFirst(),
-    auditId ? query.where('id', '=', auditId).executeTakeFirst() : undefined,
-  ]);
-  const selected = auditId ? chosen : latest;
+    .where('audit_scope', '=', policy.visibility.brand_audit_scope);
+  // The overview follows the default market's latest brand run, the one
+  // Visibility calls latest; a chosen run brings its own market.
+  const latestId = await latestBrandRunId(db, { ...scope, marketId: null });
+  const selectedId = auditId ?? latestId;
+  const selected = selectedId
+    ? await query.where('id', '=', selectedId).executeTakeFirst()
+    : undefined;
   if (!selected) {
     if (auditId) throw notFound('Completed command-center measurement');
     return null;
@@ -89,7 +89,7 @@ async function comparableAudits(db: Database, scope: ProjectScope, auditId: stri
     previous,
     comparisonStatus,
     engines: engines.map((row) => row.logical_engine).sort(compareText),
-    historical: selected.id !== latest?.id,
+    historical: selected.id !== latestId,
   };
 }
 async function visibility(

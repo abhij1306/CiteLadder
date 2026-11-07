@@ -1,4 +1,4 @@
-import type { IssueOccurrence } from '@/lib/api/types';
+import type { IssueOccurrence } from '@citeladder/contracts';
 import { evidenceFacts, evidenceLead } from '@/lib/site-health/issue-evidence';
 
 /**

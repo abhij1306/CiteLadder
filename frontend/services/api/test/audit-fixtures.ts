@@ -1,4 +1,5 @@
 import type { Database } from '../src/db/database.ts';
+import type { AuditQueue } from '../src/queue/audit-queue.ts';
 import { createConnection } from '../src/providers/connections.ts';
 import { createConnectionInput } from '../src/providers/inputs.ts';
 import { providerSettings } from '../src/providers/config.ts';
@@ -37,4 +38,28 @@ export async function auditTenant(db: Database, fixtures: VisibilityFixtures) {
     }),
   );
   return { ...t, setId, promptId, connectionId: connection.id };
+}
+
+/**
+ * Claims like a worker named `worker`: each claim leases under its own owner
+ * token, so the tests that act as `worker` pin the claimed rows to that name.
+ */
+export async function claimAsWorker(
+  db: Database,
+  queue: AuditQueue,
+  limit: number,
+  scope: Parameters<AuditQueue['claim']>[2],
+) {
+  const rows = await queue.claim('worker', limit, scope);
+  if (rows.length)
+    await db
+      .updateTable('audit_tasks')
+      .set({ lease_owner: 'worker' })
+      .where(
+        'id',
+        'in',
+        rows.map((row) => row.id),
+      )
+      .execute();
+  return rows.map((row) => ({ ...row, lease_owner: 'worker' }));
 }

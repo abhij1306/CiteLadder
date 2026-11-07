@@ -5,6 +5,7 @@ import { DisplayTime } from '@/components/ui/display-time';
 import { Drawer } from '@/components/ui/drawer';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
@@ -14,17 +15,8 @@ import { textRole } from '@/components/ui/typography';
 import type { SearchIntelligenceRun } from '@/lib/api/search-intelligence';
 import { formatCount } from '@/lib/format';
 import { words } from '@/lib/ai-traffic/vocabulary';
+import { SEARCH_RUN_STATES } from '@/lib/search-intelligence/status';
 import { reportedCost, runEstimate } from './search-intelligence-format';
-
-const RUN_STATUS_LABELS: Readonly<Record<string, string>> = {
-  succeeded: 'Complete',
-  partial: 'Stopped early',
-  failed: 'Failed',
-  uncertain: 'Outcome unknown',
-  cancelled: 'Cancelled',
-  queued: 'Queued',
-  running: 'Running',
-};
 
 /** Why an acquisition stopped, in the reader's terms. */
 const STOP_REASONS: Readonly<Record<string, string>> = {
@@ -49,14 +41,17 @@ const STOP_REASONS: Readonly<Record<string, string>> = {
 export function RunNotice({
   run,
   onCancel,
+  onReview,
   cancelling,
 }: Readonly<{
   run: SearchIntelligenceRun | null;
   onCancel: (runId: string) => void;
+  /** Opens the analysis review: the recovery for a stopped run. */
+  onReview: () => void;
   cancelling: boolean;
 }>) {
   if (!run) return null;
-  if (run.status === 'queued' || run.status === 'running')
+  if (SEARCH_RUN_STATES[run.status].active)
     return (
       <Inline
         gap="compact"
@@ -75,20 +70,23 @@ export function RunNotice({
       </Inline>
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
+  const reason =
+    STOP_REASONS[run.error_code] ||
+    run.error_detail ||
+    `${run.completed_calls} of ${run.planned_calls} requests completed.`;
+  // A stopped analysis is recovered by reviewing and running it again.
   return (
-    <output className={panelClasses({ tone: 'none' }, 'type-body bg-warning-soft block')}>
-      <Stack gap="tight">
-        <p className={textRole('itemTitle')}>
-          Analysis {RUN_STATUS_LABELS[run.status]?.toLowerCase()}
-        </p>
-        <p className="text-ink-muted">
-          {STOP_REASONS[run.error_code] ||
-            run.error_detail ||
-            `${run.completed_calls} of ${run.planned_calls} requests completed.`}{' '}
-          Saved results remain available below.
-        </p>
-      </Stack>
-    </output>
+    <MutationNotice
+      notice={{
+        message: `Analysis ${SEARCH_RUN_STATES[run.status].label.toLowerCase()}. ${reason} Saved results remain available below.`,
+        retryable: false,
+      }}
+      recovery={
+        <Button type="button" variant="secondary" onClick={onReview}>
+          Review again
+        </Button>
+      }
+    />
   );
 }
 
@@ -116,7 +114,7 @@ export function CostDetails({
           <Stack as="li" gap="compact" key={run.id} className={panelClasses({ tone: 'well' })}>
             <Stack gap="tight">
               <p className={textRole('itemTitle')}>
-                {words(run.action)} · {RUN_STATUS_LABELS[run.status] ?? run.status}
+                {words(run.action)} · {SEARCH_RUN_STATES[run.status].label}
               </p>
               <p className={textRole('caption')}>
                 <DisplayTime value={run.created_at} />

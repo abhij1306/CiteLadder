@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Settings2, Unplug } from 'lucide-react';
 
 import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
@@ -21,16 +21,16 @@ import { SavedViewControls, scopeControls } from './search-intelligence-scope';
 import { Stack } from '@/components/ui/layout';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import {
-  searchIntelligenceApi,
+  searchIntelligenceMutations,
   searchIntelligenceQueries,
   type SearchIntelligenceDataset,
   type SearchIntelligenceRun,
 } from '@/lib/api/search-intelligence';
-import { searchIntelligenceKeys } from '@/lib/api/query-keys/search-intelligence';
+import type { SearchReviewAction } from '@citeladder/contracts/search-intelligence-requests';
 import { searchMarketLabel } from '@/lib/config/search-intelligence';
+import { pollSearchRun } from '@/lib/search-intelligence/status';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { useProjectContext } from '@/lib/project/project-context';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 const PROVIDER_SETTINGS = '/settings?tab=providers';
 const TABS = [
@@ -86,8 +86,7 @@ function selectDatasets(
 }
 
 export function SearchIntelligencePage() {
-  const { activeProject } = useProjectContext();
-  const queryClient = useQueryClient();
+  const { workspaceId, projectId } = useProjectScope();
   const [tab, setTab] = useUrlState('tab', TAB_CODEC);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
@@ -96,56 +95,20 @@ export function SearchIntelligencePage() {
   const [comparison, setComparison] = useState<SearchIntelligenceDataset | null>(null);
   const [market, setMarket] = useState('');
   const [scope, setScope] = useState('');
-  const [action, setAction] = useState('analysis');
-  const requestScope = resolveActiveProjectRequestScope(activeProject);
+  const [action, setAction] = useState<SearchReviewAction>('analysis');
+  const requestScope = { workspaceId, projectId };
   const readiness = useQuery({
-    ...searchIntelligenceQueries.readiness(requestScope.workspaceId, requestScope.projectId),
-    enabled: requestScope.enabled,
-    refetchInterval: (query) =>
-      ['queued', 'running'].includes(query.state.data?.latest_run?.status ?? '') ? 5000 : false,
+    ...searchIntelligenceQueries.readiness(requestScope),
+    refetchInterval: (query) => pollSearchRun(query.state.data?.latest_run?.status),
   });
   const runsQuery = useQuery({
-    queryKey: searchIntelligenceKeys.runs(activeProject?.workspace_id, activeProject?.id),
-    queryFn: ({ signal }) =>
-      searchIntelligenceApi.runs(activeProject!.id, {
-        signal,
-        workspaceId: activeProject!.workspace_id,
-      }),
-    enabled: Boolean(activeProject && costOpen),
+    ...searchIntelligenceQueries.runs(requestScope),
+    enabled: costOpen,
   });
-  const invalidateReadiness = () =>
-    queryClient.invalidateQueries({
-      queryKey: searchIntelligenceKeys.readiness(activeProject?.workspace_id, activeProject?.id),
-    });
-  const cancelMutation = useMutation({
-    mutationFn: (runId: string) =>
-      searchIntelligenceApi.cancel(activeProject!.id, runId, {
-        workspaceId: activeProject!.workspace_id,
-      }),
-    onSettled: invalidateReadiness,
-  });
-  const reviewMutation = useMutation({
-    mutationFn: (payload: Parameters<typeof searchIntelligenceApi.review>[1]) =>
-      searchIntelligenceApi.review(activeProject!.id, payload, {
-        workspaceId: activeProject!.workspace_id,
-      }),
-  });
-  const confirmMutation = useMutation({
-    mutationFn: (runId: string) =>
-      searchIntelligenceApi.confirm(activeProject!.id, runId, {
-        workspaceId: activeProject!.workspace_id,
-      }),
-    onSuccess: async () => {
-      setDrawerOpen(false);
-      await Promise.all([
-        invalidateReadiness(),
-        queryClient.invalidateQueries({
-          queryKey: searchIntelligenceKeys.runs(activeProject?.workspace_id, activeProject?.id),
-        }),
-      ]);
-    },
-  });
-  const openReview = (nextAction: string) => {
+  const cancelMutation = useMutation(searchIntelligenceMutations.cancel(requestScope));
+  const reviewMutation = useMutation(searchIntelligenceMutations.review(requestScope));
+  const confirmMutation = useMutation(searchIntelligenceMutations.confirm(requestScope));
+  const openReview = (nextAction: SearchReviewAction) => {
     setAction(nextAction);
     setDrawerOpen(true);
   };
@@ -254,6 +217,7 @@ export function SearchIntelligencePage() {
           <RunNotice
             run={data.latest_run}
             onCancel={(runId) => cancelMutation.mutate(runId)}
+            onReview={() => openReview('analysis')}
             cancelling={cancelMutation.isPending}
           />
           <TabPanel value="overview" className="min-w-0">
@@ -300,10 +264,7 @@ export function SearchIntelligencePage() {
               key={citationOrigin}
               datasets={datasets}
               targetOrigin={citationOrigin}
-              onDerived={async () => {
-                setCitationOpen(false);
-                await invalidateReadiness();
-              }}
+              onDerived={() => setCitationOpen(false)}
             />
           </Drawer>
           <CostDetails
@@ -315,7 +276,7 @@ export function SearchIntelligencePage() {
             onRetry={() => void runsQuery.refetch()}
           />
           <SearchIntelligenceReviewDrawer
-            key={`${activeProject?.workspace_id}:${activeProject?.id}:${action}:${drawerOpen}`}
+            key={`${workspaceId}:${projectId}:${action}:${drawerOpen}`}
             open={drawerOpen}
             action={action}
             readiness={data}
@@ -325,6 +286,7 @@ export function SearchIntelligencePage() {
             }
             onConfirm={async (runId) => {
               await confirmMutation.mutateAsync(runId);
+              setDrawerOpen(false);
             }}
             busy={reviewMutation.isPending || confirmMutation.isPending}
           />
@@ -340,7 +302,7 @@ function PageActions({
   onCost,
 }: Readonly<{
   hasDatasets: boolean;
-  onReview: (action: string) => void;
+  onReview: (action: SearchReviewAction) => void;
   onCost: () => void;
 }>) {
   return (

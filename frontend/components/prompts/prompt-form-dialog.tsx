@@ -5,14 +5,15 @@ import { useMemo } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { Prompt, Topic } from '@/lib/api/types';
+import type { Prompt, PromptFormLimits, Topic } from '@citeladder/contracts';
 import {
   buyerStageLabels,
   buyerStageValues,
@@ -55,7 +56,10 @@ export function PromptFormDialog({
   onSubmit,
   isSaving,
   error,
+  limits,
 }: Readonly<{
+  /** The persona bound the API enforces, from the prompt-set list. */
+  limits: Pick<PromptFormLimits, 'persona_max_chars'>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   prompt?: Prompt;
@@ -64,13 +68,18 @@ export function PromptFormDialog({
   defaultTopicId: string | null;
   onSubmit: (values: PromptFormValues) => Promise<void> | void;
   isSaving?: boolean;
-  error?: string;
+  error?: MutationNoticeData;
 }>) {
   const isEdit = Boolean(prompt);
   // Stable across renders: `values` re-syncs the form whenever it changes.
   const initialValues = useMemo(
     () => (prompt ? promptToFormValues(prompt) : emptyPromptForm(defaultTopicId)),
     [prompt, defaultTopicId],
+  );
+  const personaMaxChars = limits.persona_max_chars;
+  const schema = useMemo(
+    () => promptFormSchema({ persona_max_chars: personaMaxChars }),
+    [personaMaxChars],
   );
   const {
     register,
@@ -79,7 +88,7 @@ export function PromptFormDialog({
     reset,
     formState: { errors },
   } = useForm<PromptFormValues>({
-    resolver: zodResolver(promptFormSchema),
+    resolver: zodResolver(schema),
     values: initialValues,
   });
 
@@ -115,7 +124,7 @@ export function PromptFormDialog({
     >
       <form noValidate onSubmit={submit}>
         <Stack gap="workspace">
-          {error ? <Callout tone="negative">{error}</Callout> : null}
+          {error ? <MutationNotice notice={error} /> : null}
 
           <Field label="Topic">
             {(props) => (

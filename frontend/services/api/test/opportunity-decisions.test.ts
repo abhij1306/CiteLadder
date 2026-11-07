@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
+import { siteHealth } from '../src/config/site-health.ts';
 import type { SourcePageEvidence } from '../src/analysis/opportunities/evidence.ts';
 import { detectEarnedPageOpportunities } from '../src/analysis/opportunities/earned-pages.ts';
 import { changeRule } from '../src/opportunities/refresh-hits.ts';
@@ -17,7 +18,7 @@ import {
   type CheckOutcome,
 } from '../src/opportunities/verification-decisions.ts';
 
-const r = policy.opportunity.refresh;
+const r = siteHealth.change_intel;
 
 const entity = (kind: string, name: string, presence: string, matches = 1) => ({
   entity_kind: kind,
@@ -70,7 +71,7 @@ describe('earned page opportunities', () => {
     const [hit] = detect([page()]);
     expect(hit).toMatchObject({
       rule_id: 'earned_page_acquire_listing',
-      target_key: 'earned-page:hash-a',
+      target: { kind: 'earned_page', url_hash: 'hash-a' },
       source_analysis_ids: ['analysis-1'],
       value_factor: 1.5,
       gap_factor: 1.4,
@@ -113,10 +114,10 @@ describe('earned page opportunities', () => {
 
 describe('site change promotion', () => {
   const content = (after: unknown) =>
-    changeRule({ change_class: 'changed', field: r.content_change_field, after });
+    changeRule({ change_class: 'changed', field: r.change_field, after });
 
   it('promotes approved regressions by class', () => {
-    expect(changeRule({ change_class: r.change_class_critical, field: 'title', after: null })).toBe(
+    expect(changeRule({ change_class: r.class_critical, field: 'title', after: null })).toBe(
       'site_change_critical_regression',
     );
   });

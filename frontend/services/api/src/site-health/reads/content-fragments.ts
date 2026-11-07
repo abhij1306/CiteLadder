@@ -1,4 +1,5 @@
 /** Bounded lexical selection over persisted crawl evidence; no acquisition. */
+import { TERMINAL_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { policy } from '../../config.ts';
 import type { Database } from '../../db/database.ts';
@@ -187,7 +188,7 @@ export async function selectContentFragments(
     .select(['c.id', 'c.completed_at'])
     .where('c.workspace_id', '=', scope.workspaceId)
     .where('c.project_id', '=', scope.projectId)
-    .where('c.status', 'in', policy.site_health.reads.terminal_crawl_statuses)
+    .where('c.status', 'in', TERMINAL_CRAWL_STATUSES)
     .where((eb) =>
       eb.exists(
         pagesQuery(db, scope)

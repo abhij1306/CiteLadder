@@ -166,3 +166,29 @@ export const integrationSyncEnqueueSchema = responseObject({
 // connection of the project, so the 202 carries one C3 enqueue object per
 // queued run — a bare array ("{sync_run_id, connection_id, status} per run").
 export const performanceSyncEnqueueResponseSchema = z.array(integrationSyncEnqueueSchema);
+
+/** Optional body of `POST /integrations/{id}/sync`: the project and window (ISO dates). */
+export const integrationSyncRequestSchema = z.strictObject({
+  project_id: uuid().optional(),
+  window_start: z.iso.date().optional(),
+  window_end: z.iso.date().optional(),
+});
+export type IntegrationSyncRequest = z.input<typeof integrationSyncRequestSchema>;
+
+/** Optional body of `POST /integrations/{id}/properties`: naming the project marks its site's properties. */
+export const integrationPropertyDiscoveryRequestSchema = z.strictObject({
+  project_id: uuid().optional(),
+});
+export type IntegrationPropertyDiscoveryRequest = z.input<
+  typeof integrationPropertyDiscoveryRequestSchema
+>;
+
+/** Body of `POST /integrations/{id}/mappings`: map one provider property to a project. */
+export const integrationPropertyMappingRequestSchema = z.strictObject({
+  provider: integrationProviderSchema,
+  property_ref: z.string().min(1).max(512),
+  project_id: uuid(),
+});
+export type IntegrationPropertyMappingRequest = z.input<
+  typeof integrationPropertyMappingRequestSchema
+>;

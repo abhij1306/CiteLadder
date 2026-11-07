@@ -1,4 +1,7 @@
 /** Frozen persisted evidence shared by the PR7 detector foundation. */
+import type { OpportunityEvidence } from '@citeladder/contracts/opportunity-evidence';
+import type { TargetRef } from './targets.ts';
+
 export type CitationEvidence = {
   domain: string;
   url: string;
@@ -52,11 +55,9 @@ export type SiteEvidence = {
 };
 export type DetectorHit = {
   rule_id: string;
-  target_key: string;
-  target_prompt_id: string | null;
-  target_url: string | null;
-  target_theme: string | null;
-  evidence: Record<string, unknown>;
+  target: TargetRef;
+  /** The rule's evidence, shaped by `opportunityEvidenceSchemas`. */
+  evidence: OpportunityEvidence;
   source_analysis_ids: string[];
   source_issue_ids: string[];
   source_metric_ids: string[];

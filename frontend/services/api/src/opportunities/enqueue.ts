@@ -7,7 +7,7 @@ import { sql, type Transaction } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { DB } from '../generated/db-schema.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import { MAX_WINDOW_DAYS } from './verification-decisions.ts';
 
 const versions = policy.opportunity.opportunities;
@@ -16,7 +16,8 @@ type Trigger = {
   projectId: string;
   triggerKind: string;
   triggerId: string;
-  maxAttempts: number;
+  /** Defaults to the analytics task attempt budget. */
+  maxAttempts?: number;
 };
 
 /** One automatic Opportunity projection refresh for an evidence trigger. */

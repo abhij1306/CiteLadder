@@ -1,25 +1,27 @@
 /** Workspace-authorized Action reads, workflow decisions and declarations. */
 import { z } from 'zod';
-import { actorOf } from '../auth/actor.ts';
-import { declareAction, setActionStatus } from '../commands/actions.ts';
+import { requestProjectOf } from '../auth/actor.ts';
+import { ACTIONS_WRITE, declareAction, setActionStatus } from '../commands/actions.ts';
+import { routeActor } from '../commands/permission.ts';
 import { policy } from '../config.ts';
 import { readBody } from '../http/body.ts';
 import { getAction, listActions } from '../opportunities/actions.ts';
 import { defineGetRoute, definePatchRoute, definePostRoute } from './define.ts';
 import {
+  actionDeclarationRequestSchema,
   actionDeclarationSchema,
   actionDetailSchema,
   actionItemSchema,
   actionsPageSchema,
 } from '@citeladder/contracts/actions';
-import { declarationCreate, statusPatch } from './action-contracts.ts';
+import { statusPatch } from './action-contracts.ts';
 
 const family = 'actions';
 const a = policy.opportunity.actions;
 const o = policy.opportunity.opportunities;
 const actionPath = { action_id: { scalar: { kind: 'uuid' }, required: true } } as const;
 const publicAction = `${policy.api.machine_prefix}/projects/{project_id}/actions/{action_id}`;
-const publicWrite = { exposure: 'both', scope: 'actions:write' } as const;
+const publicWrite = { exposure: 'both', permission: ACTIONS_WRITE } as const;
 export const actionRoutes = [
   defineGetRoute({
     family,
@@ -63,13 +65,18 @@ export const actionRoutes = [
     ...publicWrite,
     publicPath: publicAction,
     path: '/api/v1/actions/{action_id}',
-    capability: 'write',
     params: { path: actionPath, query: {} },
     body: statusPatch,
     response: actionItemSchema,
     async handle({ c, db }, { path }) {
       const body = await readBody(c, statusPatch);
-      return setActionStatus(db, actorOf(c), path.action_id, body.status);
+      return setActionStatus(
+        db,
+        routeActor(c, ACTIONS_WRITE),
+        requestProjectOf(c),
+        path.action_id,
+        body.status,
+      );
     },
   }),
   definePostRoute({
@@ -77,9 +84,8 @@ export const actionRoutes = [
     ...publicWrite,
     publicPath: `${publicAction}/declaration`,
     path: '/api/v1/actions/{action_id}/declaration',
-    capability: 'write',
     params: { path: actionPath, query: {} },
-    body: declarationCreate,
+    body: actionDeclarationRequestSchema,
     response: actionDeclarationSchema,
     status: 201,
     alsoStatus: 200,
@@ -94,9 +100,10 @@ export const actionRoutes = [
     async handle({ c, db }, { path }) {
       const result = await declareAction(
         db,
-        actorOf(c),
+        routeActor(c, ACTIONS_WRITE),
+        requestProjectOf(c),
         path.action_id,
-        await readBody(c, declarationCreate),
+        await readBody(c, actionDeclarationRequestSchema),
         { idempotencyKey: c.req.header('Idempotency-Key') ?? null },
       );
       return c.json(result.declaration, result.created ? 201 : 200);

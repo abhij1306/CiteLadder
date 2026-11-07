@@ -1,5 +1,6 @@
 /**
- * Site Health domain endpoints + query/mutation options.
+ * Site Health domain endpoints (F2); its query and mutation descriptors live in
+ * `site-health-queries.ts`.
  *
  * Owns transport for the Site Health slice: crawl create/list/
  * get/cancel, progressive keyset inventory, the persistent monitored set,
@@ -11,12 +12,10 @@
  * The frontend never invents a discovered total: count-bearing fields the
  * backend redacts arrive `null`/absent and are validated as such.
  */
-import { mutationOptions, queryOptions } from '@tanstack/react-query';
 import { API_BASE_URL, SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 import { startInteractiveWork } from './interactive-work';
 import { apiClient, type ApiRequestOptions } from './client';
-import { queryKeys } from './query-keys';
-import { retainPreviousDataForScope } from './query-client';
+import type { queryKeys } from './query-keys';
 import {
   aeoReadinessSchema,
   architectureSchema,
@@ -37,6 +36,10 @@ import {
   urlPreviewResponseSchema,
   robotsHistoryPageSchema,
 } from '@citeladder/contracts/site-health';
+import type {
+  SiteCrawlCreateRequest,
+  UrlPreviewRequest,
+} from '@citeladder/contracts/site-health-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
 import type {
@@ -57,34 +60,13 @@ import type {
   SiteIssueDetail,
   SiteIssuesPage,
   UrlPreviewResponse,
-} from './types';
+} from '@citeladder/contracts';
 
-/** `POST /site-crawls` body. Workspace is resolved from `X-Workspace-Id`. */
-type CreateCrawlInput = {
-  project_id: string;
-  include_globs?: string[];
-  exclude_globs?: string[];
-  /**
-   * Optional deterministic 64-bit seed as a decimal string. The backend
-   * create contract names this `seed` (it aliases the model's `random_seed`),
-   * so the wire field must be `seed`.
-   */
-  seed?: string;
-  input_mode?: 'auto' | 'exact_urls' | 'discovery_seeds';
-  requested_page_limit?: number;
-  discovery_count?: number;
-  seed_urls?: string[];
-  page_kinds?: string[];
-};
-/** A new crawl, or with `recrawl_of` a rerun of that crawl's frozen scope and settings. */
-export type StartCrawlInput = CreateCrawlInput & { recrawl_of?: string };
-export type UrlPreviewInput = Pick<
-  CreateCrawlInput,
-  'project_id' | 'include_globs' | 'exclude_globs'
-> & {
-  content: string | string[] | Record<string, unknown>;
-  input_format?: 'text' | 'csv' | 'json';
-};
+/**
+ * A new crawl, or with `recrawl_of` a rerun of that crawl's frozen scope and
+ * settings. `recrawl_of` picks the route; it is never part of the body.
+ */
+export type StartCrawlInput = SiteCrawlCreateRequest & { recrawl_of?: string };
 
 /** Keyset inventory query params. `limit<=200`, ordering is URL-only. */
 export type InventoryParams = {
@@ -97,7 +79,7 @@ export type InventoryParams = {
   page_kind?: string;
 };
 
-type CrawlListParams = { project_id: string; limit?: number; cursor?: string };
+export type CrawlListParams = { project_id: string; limit?: number; cursor?: string };
 /** Server-backed orderings of the pages list (keyset, never a client sort). */
 export type PagesSort = 'status' | 'url' | 'inbound' | 'main_content_inbound' | 'depth';
 export type PagesParams = {
@@ -110,7 +92,7 @@ export type PagesParams = {
   /** Ordering. Part of the cursor fingerprint, so changing it resets paging. */
   sort?: PagesSort;
 };
-type ChangesPageRequest = Parameters<typeof queryKeys.siteHealth.changes>[2];
+export type ChangesPageRequest = Parameters<typeof queryKeys.siteHealth.changes>[1];
 export type IssuesParams = {
   cursor?: string;
   limit?: number;
@@ -126,9 +108,9 @@ export type IssuesParams = {
 };
 
 /** Keyset params for a grouped issue's affected-URL page and a URL's issue history. */
-type IssueDetailParams = Pick<IssuesParams, 'cursor' | 'limit' | 'page_kind'>;
-type IssueHistoryParams = Pick<IssuesParams, 'cursor' | 'limit'>;
-type RobotsPage = Pick<IssuesParams, 'cursor' | 'limit'>;
+export type IssueDetailParams = Pick<IssuesParams, 'cursor' | 'limit' | 'page_kind'>;
+export type IssueHistoryParams = Pick<IssuesParams, 'cursor' | 'limit'>;
+export type RobotsPage = Pick<IssuesParams, 'cursor' | 'limit'>;
 
 export const siteHealthApi = {
   getRobotsHistory: async (projectId: string, page: RobotsPage, options?: ApiRequestOptions) => {
@@ -148,7 +130,7 @@ export const siteHealthApi = {
     });
     return crawl;
   },
-  previewUrls: async (input: UrlPreviewInput, options?: ApiRequestOptions) => {
+  previewUrls: async (input: UrlPreviewRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<UrlPreviewResponse>(
       '/site-crawls/url-preview',
       input,
@@ -301,181 +283,4 @@ export const siteHealthApi = {
     const base = `${API_BASE_URL}/site-crawls/${crawlId}/export.${format}`;
     return view ? `${base}?view=${view}` : base;
   },
-};
-
-/**
- * React Query option factories. Screens (Tasks 7/8) pass these straight to
- * `useQuery` / `useMutation`, so the query key ↔ endpoint pairing lives in one
- * place. Every `queryFn` forwards the abort signal.
- */
-export const siteHealthQueries = {
-  robotsHistory: (workspaceId: string, projectId: string, page: RobotsPage) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.robotsHistory(workspaceId, projectId, page),
-      // Opening history refreshes the project's observation sequence, irrespective of selected crawl.
-      refetchOnMount: 'always',
-      queryFn: ({ signal }) =>
-        siteHealthApi.getRobotsHistory(projectId, page, { signal, workspaceId }),
-    }),
-  dashboard: (workspaceId: string, projectId: string, crawlId?: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.dashboard(projectId, crawlId),
-      queryFn: ({ signal }) =>
-        siteHealthApi.getDashboard(projectId, crawlId, { signal, workspaceId }),
-    }),
-  aeoReadiness: (workspaceId: string, projectId: string, crawlId?: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.aeoReadiness(projectId, crawlId),
-      queryFn: ({ signal }) =>
-        siteHealthApi.getAeoReadiness(projectId, crawlId, { signal, workspaceId }),
-    }),
-  overview: (workspaceId: string, projectId: string, crawlId?: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.overview(projectId, crawlId),
-      queryFn: ({ signal }) =>
-        siteHealthApi.getOverview(projectId, crawlId, { signal, workspaceId }),
-    }),
-  architecture: (workspaceId: string, projectId: string, crawlId?: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.architecture(projectId, crawlId),
-      queryFn: ({ signal }) =>
-        siteHealthApi.getArchitecture(projectId, crawlId, { signal, workspaceId }),
-    }),
-  changesSummary: (workspaceId: string, projectId: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.changesSummary(projectId),
-      queryFn: ({ signal }) => siteHealthApi.getChangesSummary(projectId, { signal, workspaceId }),
-    }),
-  /** One page of a compared pair's changes; the summary names the pair. */
-  changes: (workspaceId: string, projectId: string, page: ChangesPageRequest) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.changes(workspaceId, projectId, page),
-      queryFn: ({ signal }) => {
-        const { crawlAId, crawlBId, cursor, limit } = page;
-        if (!crawlAId || !crawlBId) throw new Error('A persisted crawl pair is required');
-        return siteHealthApi.getChanges(projectId, crawlAId, crawlBId, cursor, limit, {
-          signal,
-          workspaceId,
-        });
-      },
-    }),
-  crawls: (workspaceId: string, params: CrawlListParams) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.crawls(params.project_id, {
-        limit: params.limit ?? null,
-        cursor: params.cursor ?? null,
-      }),
-      queryFn: ({ signal }) => siteHealthApi.listCrawls(params, { signal, workspaceId }),
-      placeholderData: (previousData, previousQuery) =>
-        retainPreviousDataForScope(params.project_id, previousData, previousQuery),
-    }),
-  crawl: (workspaceId: string, crawlId: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.crawl(crawlId),
-      queryFn: ({ signal }) => siteHealthApi.getCrawl(crawlId, { signal, workspaceId }),
-    }),
-  inventory: (workspaceId: string, crawlId: string, params?: InventoryParams) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.inventory(crawlId, workspaceId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-        query: params?.query ?? null,
-        status: params?.status ?? null,
-        monitored: params?.monitored ?? null,
-        page_kind: params?.page_kind ?? null,
-      }),
-      queryFn: ({ signal }) => siteHealthApi.getInventory(crawlId, params, { signal, workspaceId }),
-      placeholderData: (previousData, previousQuery) =>
-        retainPreviousDataForScope(crawlId, previousData, previousQuery),
-    }),
-  monitored: (workspaceId: string, projectId: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.monitored(projectId),
-      queryFn: ({ signal }) => siteHealthApi.getMonitoredUrls(projectId, { signal, workspaceId }),
-    }),
-  pages: (workspaceId: string, crawlId: string, params?: PagesParams) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.pages(crawlId, workspaceId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-        status: params?.status ?? null,
-        monitored: params?.monitored ?? null,
-        page_kind: params?.page_kind ?? null,
-        // The sort changes the server's ordering, so it must be part of the
-        // cache identity — otherwise two sorts share one entry and the table
-        // renders the previous ordering's rows.
-        sort: params?.sort ?? null,
-      }),
-      queryFn: ({ signal }) => siteHealthApi.getPages(crawlId, params, { signal, workspaceId }),
-      placeholderData: (previousData, previousQuery) =>
-        retainPreviousDataForScope(crawlId, previousData, previousQuery),
-    }),
-  page: (workspaceId: string, crawlId: string, siteUrlId: string) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.page(crawlId, siteUrlId),
-      queryFn: ({ signal }) => siteHealthApi.getPage(crawlId, siteUrlId, { signal, workspaceId }),
-    }),
-  issues: (workspaceId: string, crawlId: string, params?: IssuesParams) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.issues(crawlId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-        query: params?.query ?? null,
-        severity: params?.severity ?? null,
-        category: params?.category ?? null,
-        dimension: params?.dimension ?? null,
-        rule: params?.rule ?? null,
-        site_url_id: params?.site_url_id ?? null,
-        finding_class: params?.finding_class ?? 'defect',
-        page_kind: params?.page_kind ?? null,
-        detail_limit: params?.detail_limit ?? null,
-      }),
-      queryFn: ({ signal }) => siteHealthApi.getIssues(crawlId, params, { signal, workspaceId }),
-      placeholderData: (previousData, previousQuery) =>
-        retainPreviousDataForScope(crawlId, previousData, previousQuery),
-    }),
-  issue: (workspaceId: string, crawlId: string, groupId: string, params?: IssueDetailParams) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.issue(crawlId, groupId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-        page_kind: params?.page_kind ?? null,
-      }),
-      queryFn: ({ signal }) =>
-        siteHealthApi.getIssue(crawlId, groupId, params, { signal, workspaceId }),
-      placeholderData: (previousData, previousQuery) =>
-        retainPreviousDataForScope(crawlId, previousData, previousQuery),
-    }),
-  issueHistory: (
-    workspaceId: string,
-    crawlId: string,
-    siteUrlId: string,
-    params?: IssueHistoryParams,
-  ) =>
-    queryOptions({
-      queryKey: queryKeys.siteHealth.issueHistory(crawlId, siteUrlId, workspaceId, {
-        cursor: params?.cursor ?? null,
-        limit: params?.limit ?? null,
-      }),
-      queryFn: ({ signal }) =>
-        siteHealthApi.getIssueHistory(crawlId, siteUrlId, params, { signal, workspaceId }),
-      placeholderData: (previousData, previousQuery) =>
-        retainPreviousDataForScope(crawlId, previousData, previousQuery),
-    }),
-};
-
-export const siteHealthMutations = {
-  createCrawl: (workspaceId: string) =>
-    mutationOptions({
-      mutationFn: (input: StartCrawlInput) => siteHealthApi.createCrawl(input, { workspaceId }),
-    }),
-  cancelCrawl: (workspaceId: string) =>
-    mutationOptions({
-      mutationFn: (crawlId: string) => siteHealthApi.cancelCrawl(crawlId, { workspaceId }),
-    }),
-  rerunPage: (workspaceId: string) =>
-    mutationOptions({
-      mutationFn: (vars: { crawlId: string; siteUrlId: string }) =>
-        siteHealthApi.rerunPage(vars.crawlId, vars.siteUrlId, { workspaceId }),
-    }),
 };

@@ -11,8 +11,7 @@ import { Delta } from '@/components/ui/delta';
 import { Stack } from '@/components/ui/layout';
 import { EditorialSectionHeader } from '@/components/ui/workspace';
 import type { SourceFilters } from '@/components/visibility/source-rows';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { pathOf, percent } from '@/lib/visibility/sources';
 import { selectionParams, type SourceQueries } from '@/lib/visibility/use-source-analysis';
 import type { visibilitySourceMoversSchema } from '@citeladder/contracts/visibility-evidence';
@@ -42,13 +41,11 @@ export function useSourceMovers(
     limit: MOVER_ROWS,
   };
   return useQuery({
-    queryKey: queryKeys.visibility.sourceMovers(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getSourceMovers(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
-    enabled: enabled && Boolean(queries.projectId && queries.activeRunId && baseline?.length),
+    ...visibilityQueries.sourceMovers(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
+      params,
+    ),
+    enabled: enabled && Boolean(queries.activeRunId && baseline?.length),
   });
 }
 

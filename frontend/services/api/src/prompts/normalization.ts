@@ -5,7 +5,8 @@
  * supply it explicitly.
  */
 import { policy } from '../config.ts';
-import { collapseIdentityWhitespace, hash } from '../traffic/normalization.ts';
+import { hash } from '../crypto-text.ts';
+import { collapseIdentityWhitespace } from '../traffic/normalization.ts';
 
 const TRAILING = new Set(policy.prompts.trailing_punctuation);
 

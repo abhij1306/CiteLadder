@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,18 +16,15 @@ import { EditorialSectionHeader } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { skillGroupLabel } from '@/lib/agent/vocabulary';
 import { agentQueries, type AgentSkill } from '@/lib/api/agent';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * The skills the agent can apply: name, one sentence and what each produces.
  * Read-only; methodology text is never shown and nothing is downloadable.
  */
 export function SkillsScreen() {
-  const workspaceId = useActiveWorkspaceId() ?? '';
-  const query = useQuery({
-    ...agentQueries.skills(workspaceId),
-    enabled: Boolean(workspaceId),
-  });
+  const { workspaceId } = useProjectScope();
+  const query = useQuery(agentQueries.skills(workspaceId));
 
   let body;
   if (query.isError)

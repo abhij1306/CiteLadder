@@ -105,6 +105,7 @@ export function DiscoveryStage({
   brandName,
   discovery,
   onEdit,
+  onRerun,
   actions,
 }: Readonly<{
   brandName: string | undefined;
@@ -117,9 +118,20 @@ export function DiscoveryStage({
     retry: () => void;
   };
   onEdit: () => void;
+  onRerun: () => void;
   actions: StageActions;
 }>) {
   const found = discoveryResults(discovery.discovery);
+  const warnings = discovery.discovery?.warnings ?? [];
+  const failed = discovery.discovery?.status === 'failed';
+  const errorCode = discovery.discovery?.error_code ?? '';
+  // One recovery per screen: the failure carries it, else the first degraded warning.
+  const rerunWarning = failed ? undefined : warnings.find((code) => RERUN_WARNINGS.has(code));
+  const rerun = (
+    <Button variant="secondary" onClick={onRerun} disabled={discovery.isRunning}>
+      Run discovery again
+    </Button>
+  );
   return (
     <OnboardingStep
       titleId={STAGE_HEADING_ID}
@@ -134,23 +146,28 @@ export function DiscoveryStage({
         stagger
       />
       {found.length > 0 ? <StepFindings title="Found so far" items={found} /> : null}
-      {(discovery.discovery?.warnings ?? []).map((warning) => (
-        <Callout key={warning} tone="warning">
+      {warnings.map((warning) => (
+        <Callout key={warning} tone="warning" action={warning === rerunWarning ? rerun : undefined}>
           {warningMessage(warning)}
         </Callout>
       ))}
-      {discovery.discovery?.status === 'failed' ? (
+      {failed ? (
         <Callout
           tone="negative"
           action={
-            <Button variant="secondary" onClick={onEdit}>
-              Edit website
-            </Button>
+            SITE_FAILURES.has(errorCode) ? (
+              <>
+                <Button variant="secondary" onClick={onEdit}>
+                  Edit website
+                </Button>
+                {rerun}
+              </>
+            ) : (
+              rerun
+            )
           }
         >
-          {discovery.discovery.error_code === 'invalid_url'
-            ? 'The website address is invalid. Go back and correct it.'
-            : 'We could not confirm that this website exists. Check the address and try again.'}
+          {failureMessage(errorCode)}
         </Callout>
       ) : null}
       {discovery.error ? (
@@ -361,6 +378,19 @@ function CompletionStateAlert({ failed }: Readonly<{ failed: boolean }>) {
     );
   }
   return null;
+}
+
+/** Warnings a fresh run may clear: research that did not finish or found no competitors. */
+const RERUN_WARNINGS = new Set(['research_degraded', 'competitors_not_found']);
+/** Failures caused by the website address itself; the reader may need to correct it. */
+const SITE_FAILURES = new Set(['invalid_url', 'site_not_found', 'ssrf_blocked', 'out_of_scope']);
+
+function failureMessage(code: string): string {
+  if (code === 'invalid_url')
+    return 'The website address is invalid. Correct it, or run discovery again.';
+  if (SITE_FAILURES.has(code))
+    return 'We could not open this website. Check the address, or run discovery again.';
+  return 'Research did not finish. Run discovery again; your brand details are kept.';
 }
 
 function warningMessage(code: string): string {

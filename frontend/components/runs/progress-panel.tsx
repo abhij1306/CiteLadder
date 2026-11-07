@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { MeasurementContext } from '@/components/runs/measurement-context';
-import { ENGINE_LABELS } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { marketLabel } from '@citeladder/contracts/markets';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,16 +16,11 @@ import { StatRow } from '@/components/ui/stat-row';
 import { humanizeApiError } from '@/lib/api/errors';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { runsApi } from '@/lib/api/runs';
-import type { Audit } from '@/lib/api/types';
+import type { Audit } from '@citeladder/contracts';
 import { saveBlob } from '@/lib/download';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate, formatDisplayTime } from '@/lib/format';
-import {
-  auditBadgeValue,
-  auditStatusLabel,
-  isAuditCancelable,
-  shouldPollAudit,
-} from '@/lib/runs/status';
+import { AUDIT_STATES, isAuditCancelable } from '@/lib/runs/status';
 
 type ExportFormat = 'csv' | 'md';
 
@@ -113,17 +108,17 @@ export function RunActions({
 }
 
 function ProgressStatus({ audit, polling }: Readonly<{ audit: Audit; polling: boolean }>) {
+  const engines = useEngineCatalog();
   return (
     <Inline className="flex-wrap">
-      <Badge variant="run-status" value={auditBadgeValue(audit.status)}>
-        {auditStatusLabel(audit.status)}
+      <Badge variant="run-status" value={AUDIT_STATES[audit.status].badge}>
+        {AUDIT_STATES[audit.status].label}
       </Badge>
       <Badge>{marketLabel(audit.market)}</Badge>
       <MeasurementContext provenance={audit.model_provenance} />
       {audit.not_applicable_engines.length ? (
         <Badge>
-          Not available in this market:{' '}
-          {audit.not_applicable_engines.map((engine) => ENGINE_LABELS[engine]).join(', ')}
+          Not available in this market: {audit.not_applicable_engines.map(engines.label).join(', ')}
         </Badge>
       ) : null}
       {polling ? (
@@ -219,7 +214,7 @@ export function ProgressPanel({
   rerunNotice?: MutationNoticeData | null;
   onRerunRetry?: () => void;
 }>) {
-  const polling = shouldPollAudit(audit.status);
+  const polling = AUDIT_STATES[audit.status].active;
 
   return (
     <Card>

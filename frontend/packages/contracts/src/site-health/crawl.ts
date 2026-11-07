@@ -4,16 +4,39 @@ import { responseObject, uuid } from './core.ts';
 
 // Independent crawl lifecycle sub-states.
 export const crawlOverallStatusSchema = z.enum([
-  'draft',
-  'validating',
   'queued',
   'running',
-  'paused',
   'completed',
   'partially_completed',
   'failed',
   'cancelled',
 ]);
+type CrawlStatus = z.infer<typeof crawlOverallStatusSchema>;
+/** A crawl that still runs: its tasks may claim, write and settle. */
+export const ACTIVE_CRAWL_STATUSES = [
+  'queued',
+  'running',
+] as const satisfies readonly CrawlStatus[];
+/** A crawl that has ended; its counters and snapshot are persisted. */
+export const TERMINAL_CRAWL_STATUSES = [
+  'completed',
+  'partially_completed',
+  'failed',
+  'cancelled',
+] as const satisfies readonly CrawlStatus[];
+/** An ended crawl whose analyses are readable results (a cancelled one keeps what it analyzed). */
+export const USABLE_CRAWL_STATUSES = [
+  'completed',
+  'partially_completed',
+  'cancelled',
+] as const satisfies readonly CrawlStatus[];
+// Membership tests over a stored status: persisted rows hold plain text.
+const ACTIVE: readonly string[] = ACTIVE_CRAWL_STATUSES;
+const TERMINAL: readonly string[] = TERMINAL_CRAWL_STATUSES;
+const USABLE: readonly string[] = USABLE_CRAWL_STATUSES;
+export const isActiveCrawl = (status: string) => ACTIVE.includes(status);
+export const isTerminalCrawl = (status: string) => TERMINAL.includes(status);
+export const isUsableCrawl = (status: string) => USABLE.includes(status);
 export const crawlDiscoveryStatusSchema = z.enum([
   'pending',
   'running',
@@ -238,3 +261,13 @@ export const urlPreviewResponseSchema = responseObject({
   counts: z.record(z.string(), z.number().int()),
   policy_version: z.string(),
 });
+
+export type CrawlOverallStatus = z.infer<typeof crawlOverallStatusSchema>;
+export type CrawlDiscoveryStatus = z.infer<typeof crawlDiscoveryStatusSchema>;
+export type CrawlAnalysisStatus = z.infer<typeof crawlAnalysisStatusSchema>;
+export type PageAnalysisStatus = z.infer<typeof pageAnalysisStatusSchema>;
+export type PageKind = z.infer<typeof pageKindSchema>;
+export type PageKindScoreSummary = z.infer<typeof pageKindScoreSummarySchema>;
+export type SiteScoreSummary = z.infer<typeof siteScoreSummarySchema>;
+export type SiteCrawl = z.infer<typeof siteCrawlSchema>;
+export type UrlPreviewResponse = z.infer<typeof urlPreviewResponseSchema>;

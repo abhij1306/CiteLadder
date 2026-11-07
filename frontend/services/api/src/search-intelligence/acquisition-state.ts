@@ -9,19 +9,24 @@ import type {
   SearchIntelligenceCalls,
   SearchIntelligenceDatasets,
 } from '../generated/db-schema.ts';
+import { policy } from '../config.ts';
 import { runConnection } from './credentials.ts';
-import { datasetKind, pageEstimateMicrousd, si, usdUnits } from './requests.ts';
+import {
+  datasetKind,
+  isBacklinkKind,
+  pageEstimateMicrousd,
+  si,
+  usdUnits,
+  type DatasetKind,
+} from './requests.ts';
 import { INT4_MAX, normalizeResponse } from './normalization.ts';
 import type { ResearchResponse } from './live.ts';
-import type { ProviderError } from '../answer-engines/contracts.ts';
+import type { ProviderError } from '../providers/errors.ts';
 import { isDataError } from '../db/errors.ts';
-import { rolesWith } from '../auth/workspace.ts';
-import { loadWorkerSettings } from '../config.ts';
+import { memberCan } from '../auth/workspace.ts';
 import { scalarText } from '../text-order.ts';
-import {
-  enqueueImplementationVerification,
-  enqueueOpportunityRefresh,
-} from '../opportunities/enqueue.ts';
+import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
+import { announceEvidence } from '../opportunities/evidence-announcement.ts';
 
 /** Datasets whose rows say whether the project ranks for a search. */
 const KEYWORD_EVIDENCE_KINDS = new Set(['missing_keywords', 'ranking_keywords', 'shared_keywords']);
@@ -41,6 +46,11 @@ export type PreparedResearch =
       ordinal: number;
       connection: Selectable<ProviderConnections>;
     };
+/** Provider refusals that every later call on the same connection would repeat. */
+const REFUSED_CODES = new Set([
+  'auth_failure',
+  policy.dataforseo.constants.error_account_unavailable,
+]);
 const terminal = new Set(['succeeded', 'failed', 'partial', 'cancelled', 'uncertain']);
 /** What one failed send means for the call and the run. */
 function failureStates(error: ProviderError, ordinal: number) {
@@ -53,8 +63,9 @@ function failureStates(error: ProviderError, ordinal: number) {
   let callStatus = 'failed';
   if (retry) callStatus = 'intent';
   else if (uncertain) callStatus = 'uncertain';
-  // Every remaining call would use the same refused credential.
-  return { uncertain, retry, refused: error.code === 'auth_failure', attempt, callStatus };
+  // Every remaining call would use the same refused credential or account.
+  const refused = REFUSED_CODES.has(error.code);
+  return { uncertain, retry, refused, attempt, callStatus };
 }
 /** When a rate-limited call may be sent again: the provider's wait, bounded. */
 const retryAt = (error: ProviderError, at: Date) =>
@@ -97,23 +108,20 @@ function costUpdate(run: Run, call: Call, at: Date) {
 function datasetCoverage(o: {
   resultAvailable: boolean;
   received: number;
-  kind: string;
+  kind: DatasetKind;
   exhausted: boolean;
   saved: number;
   requested: number;
 }) {
   if (!o.resultAvailable) return 'unknown';
   if (o.received === 0) return 'empty';
-  const whole =
-    ['footprint', 'backlink_summary', 'backlink_history'].includes(o.kind) ||
-    o.exhausted ||
-    o.saved >= o.requested;
+  const whole = SEARCH_DATASET_KINDS[o.kind].fixedDepth || o.exhausted || o.saved >= o.requested;
   return whole ? 'complete' : 'partial';
 }
 /** Whether the provider holds more rows than were saved for a list dataset. */
-function isTruncated(coverage: string, kind: string, total: number | null, saved: number) {
+function isTruncated(coverage: string, kind: DatasetKind, total: number | null, saved: number) {
   if (coverage === 'partial') return true;
-  return !['footprint', 'backlink_summary'].includes(kind) && total !== null && total > saved;
+  return !SEARCH_DATASET_KINDS[kind].summary && total !== null && total > saved;
 }
 
 /** Root run lock precedes queue/call locks, matching cancellation's lock order. */
@@ -171,14 +179,7 @@ export class AcquisitionState {
       .executeTakeFirst();
   }
   async connection(db: Database, run: Run) {
-    const member = await db
-      .selectFrom('workspace_members')
-      .select('id')
-      .where('workspace_id', '=', run.workspace_id)
-      .where('user_id', '=', run.actor_user_id)
-      .where('role', 'in', rolesWith('run'))
-      .executeTakeFirst();
-    if (!member) return undefined;
+    if (!(await memberCan(db, run.workspace_id, run.actor_user_id, 'run'))) return undefined;
     return runConnection(db, run);
   }
   start(at = new Date()) {
@@ -362,12 +363,13 @@ export class AcquisitionState {
   ) {
     return this.db.transaction().execute(async (trx) => {
       const run = await this.run(trx).forUpdate().executeTakeFirst();
-      if (
-        run?.status !== 'running' ||
-        !(await this.owned(trx)) ||
-        !(await this.connection(trx, run))
-      )
+      if (run?.status !== 'running' || !(await this.owned(trx))) return false;
+      // A connection or member change since `prepare` ends the run, as there:
+      // returning without a transition would leave it running with its hold.
+      if (!(await this.connection(trx, run))) {
+        await this.failChangedConnection(trx, run, at);
         return false;
+      }
       const call = await this.calls(trx)
         .where('id', '=', prepared.call.id)
         .where('status', '=', 'intent')
@@ -544,10 +546,11 @@ export class AcquisitionState {
       const received = dataset.raw_rows_received + normalized.received,
         exhausted = normalized.received < Number(record(plan.request).limit ?? 1),
         finished = !later.some((item) => item.dataset_key === plan.dataset_key) || exhausted;
+      const kind = datasetKind(dataset.dataset_kind);
       const coverage = datasetCoverage({
         resultAvailable: Boolean(normalized.summary.result_available),
         received,
-        kind: dataset.dataset_kind,
+        kind,
         exhausted,
         saved: count.count,
         requested: dataset.requested_rows,
@@ -568,7 +571,7 @@ export class AcquisitionState {
             ? {
                 status: 'published',
                 coverage,
-                truncated: isTruncated(coverage, dataset.dataset_kind, total, count.count),
+                truncated: isTruncated(coverage, kind, total, count.count),
                 collection_ended_at: at,
                 published_at: at,
               }
@@ -720,10 +723,8 @@ export class AcquisitionState {
           target_hostname: String(target.hostname),
           target_origin: String(target.origin),
           comparison_origin: scalarText(comparison.origin ?? ''),
-          location_code: si.backlink_kinds.includes(kind) ? null : Number(request.location_code),
-          language_code: si.backlink_kinds.includes(kind)
-            ? ''
-            : scalarText(request.language_code ?? ''),
+          location_code: isBacklinkKind(kind) ? null : Number(request.location_code),
+          language_code: isBacklinkKind(kind) ? '' : scalarText(request.language_code ?? ''),
           requested_rows: Number(plan.requested_rows),
           provider_filters: JSON.stringify({
             ...request,
@@ -791,15 +792,11 @@ export class AcquisitionState {
   }
   /** A published keyword dataset can open or close keyword-gap Actions. */
   private async announce(trx: Database, datasetId: string) {
-    const trigger = {
-      workspaceId: this.task.workspace_id,
-      projectId: this.projectId,
-      triggerKind: 'search_intelligence_dataset',
-      triggerId: datasetId,
-      maxAttempts: loadWorkerSettings().taskMaxAttempts,
-    };
-    await enqueueOpportunityRefresh(trx, trigger);
-    await enqueueImplementationVerification(trx, trigger);
+    await announceEvidence(
+      trx,
+      { workspaceId: this.task.workspace_id, projectId: this.projectId },
+      { kind: 'search_intelligence_dataset', id: datasetId },
+    );
   }
   /** Publish a saved receipt; one the schema refuses fails its dataset instead of blocking the run. */
   async settle(
@@ -909,15 +906,24 @@ export class AcquisitionState {
       .execute();
     await this.closeCollecting(trx, at);
   }
-  /** A terminal run cannot leave a dataset waiting for another paid dispatch. */
   closeCollecting(db: Database, at: Date) {
-    return db
-      .updateTable('search_intelligence_datasets')
-      .set({ status: 'failed', coverage: 'unknown', collection_ended_at: at })
-      .where('workspace_id', '=', this.task.workspace_id)
-      .where('project_id', '=', this.task.project_id)
-      .where('run_id', '=', this.runId)
-      .where('status', '=', 'collecting')
-      .execute();
+    const { workspace_id: workspaceId, project_id: projectId } = this.task;
+    return closeCollecting(db, { workspaceId, projectId, runId: this.runId }, at);
   }
+}
+
+/** A terminal run cannot leave a dataset waiting for another paid dispatch. */
+export function closeCollecting(
+  db: Database,
+  run: { workspaceId: string; projectId: string | null; runId: string },
+  at: Date,
+) {
+  return db
+    .updateTable('search_intelligence_datasets')
+    .set({ status: 'failed', coverage: 'unknown', collection_ended_at: at })
+    .where('workspace_id', '=', run.workspaceId)
+    .where('project_id', '=', run.projectId)
+    .where('run_id', '=', run.runId)
+    .where('status', '=', 'collecting')
+    .execute();
 }

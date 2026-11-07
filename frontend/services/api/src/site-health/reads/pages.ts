@@ -25,7 +25,7 @@ import {
   type Referrer,
 } from './page-rows.ts';
 import { issueOccurrence, ruleTitle, severityOrder, type IssueRow } from './rules.ts';
-import { hash } from '../../traffic/normalization.ts';
+import { hash } from '../../crypto-text.ts';
 
 type Paging = { limit: number; cursor: string | null };
 // A pathological artifact never balloons a detail response.
@@ -224,7 +224,10 @@ export async function pageDetail(
       .where('crawl_id', '=', crawl.id)
       .where('site_url_id', '=', siteUrlId)
       .where('extractor_version', '=', crawl.extractor_version)
-      .where('formula_version', '=', policy.site_health.link_metrics.formula_version)
+      // The formula the crawl's own link-metrics run wrote, not today's configuration.
+      .orderBy('created_at')
+      .orderBy('formula_version')
+      .limit(1)
       .executeTakeFirst(),
     linkedFrom(db, crawl, [siteUrlId]),
   ]);

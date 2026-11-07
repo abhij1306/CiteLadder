@@ -2,21 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/lib/api/query-keys';
 import { retainPreviousDataForScope, warmQuery } from '@/lib/api/query-client';
-import { useActiveProject, useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope, type ActiveProjectScope } from '@/lib/project/active-project-scope';
 import {
   cohortUrlCodec,
   writeStoredCohort,
   type PromptCohort,
 } from '@/lib/visibility/prompt-cohort';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
-import { resolveProjectRequestScope, type ProjectRequestScope } from '@/lib/project/request-scope';
 import { runsQueries } from '@/lib/api/runs';
 import { useMarketVisibility } from '@/lib/visibility/use-market-visibility';
 import { useSurfaceRates } from '@/lib/visibility/use-surface-rates';
-import { visibilityApi } from '@/lib/api/visibility';
-import { visibilityQueries } from '@/lib/api/visibility-queries';
+import { refreshVisibility, visibilityQueries } from '@/lib/api/visibility-queries';
 import {
   findActiveRun,
   isEvidenceTab,
@@ -24,20 +21,16 @@ import {
   toRunOptions,
   type VisibilityTab,
 } from '@/lib/visibility/dashboard';
-import { shouldPollAudit } from '@/lib/runs/status';
-import { ACTIVE_RUN_POLL_MS, EVIDENCE_LIMIT } from '@/lib/config/operational';
+import { pollAudits } from '@/lib/runs/status';
+import { EVIDENCE_LIMIT } from '@/lib/config/operational';
 import {
   optionalStringUrlCodec,
   setUrlParams,
   stringUrlCodec,
   useUrlState,
 } from '@/lib/navigation/url-state';
-import {
-  rangeToFrom,
-  TREND_ENGINES,
-  type TrendGranularity,
-  type TrendRange,
-} from '@/lib/visibility/trends';
+import { logicalEngineSchema } from '@citeladder/contracts/providers';
+import { rangeToFrom, type TrendGranularity, type TrendRange } from '@/lib/visibility/trends';
 
 export { EVIDENCE_LIMIT } from '@/lib/config/operational';
 
@@ -54,7 +47,8 @@ const tabCodec = stringUrlCodec(
   VISIBILITY_TABS.map(({ id }) => id),
   'trends' as VisibilityTab,
 );
-const engineCodec = stringUrlCodec(['all', ...TREND_ENGINES], 'all');
+// The URL accepts any engine the wire contract names; the toolbar offers the catalogue's.
+const engineCodec = stringUrlCodec(['all', ...logicalEngineSchema.options], 'all');
 const rangeCodec = stringUrlCodec<TrendRange>(['all', '30d', '90d', '1y'], '90d');
 const granularityCodec = stringUrlCodec<TrendGranularity>(['run', 'day', 'week', 'month'], 'run');
 
@@ -100,7 +94,7 @@ export function useVisibilityFilters() {
   });
   const [granularity, setGranularity] = useUrlState('granularity', granularityCodec);
   // Without `cohort` in the URL the project's remembered choice applies.
-  const projectId = useActiveProject()?.id ?? null;
+  const { projectId } = useProjectScope();
   const cohortCodec = useMemo(() => cohortUrlCodec(projectId), [projectId]);
   const [cohort, setCohortUrl] = useUrlState('cohort', cohortCodec, {
     clearKeys: pageKeys,
@@ -225,12 +219,9 @@ function resolvedSelection(
   };
 }
 
-export function useVisibilityQueries(
-  projectId: string | null,
-  filters: ReturnType<typeof useVisibilityFilters>,
-) {
-  const workspaceId = useActiveWorkspaceId();
-  const requestScope = resolveProjectRequestScope(workspaceId, projectId);
+export function useVisibilityQueries(filters: ReturnType<typeof useVisibilityFilters>) {
+  const { workspaceId, projectId } = useProjectScope();
+  const requestScope = { workspaceId, projectId };
   const { queryClient, auditsQuery, runOptions, hasRuns, activeRun } = useVisibilityRuns(
     requestScope,
     filters.market,
@@ -247,16 +238,11 @@ export function useVisibilityQueries(
     [filters.fromAt, filters.range],
   );
   const selectedParams = selectionParams(filters, from, engine);
-  const projectionOptions = visibilityQueries.project(
-    requestScope.workspaceId,
-    requestScope.projectId,
-    selectedParams,
-  );
+  const projectionOptions = visibilityQueries.project(requestScope, selectedParams);
   // Every tab resolves the same concrete run before dependent requests.
   const visibilityQuery = useQuery({
     ...projectionOptions,
-    enabled: requestScope.enabled,
-    placeholderData: (data, query) => retainPreviousDataForScope(projectId!, data, query),
+    placeholderData: (data, query) => retainPreviousDataForScope(projectId, data, query),
   });
   const { activeRunId, selectedRunIds } = resolvedSelection(visibilityQuery.data);
   const trendParams = {
@@ -267,19 +253,14 @@ export function useVisibilityQueries(
     granularity: filters.granularity,
     cohort: filters.cohort,
   };
-  const trendOptions = visibilityQueries.trends(
-    requestScope.workspaceId,
-    requestScope.projectId,
-    trendParams,
-  );
+  const trendOptions = visibilityQueries.trends(requestScope, trendParams);
   const trendQuery = useQuery({
     ...trendOptions,
-    enabled: requestScope.enabled && filters.activeTab === 'trends',
-    placeholderData: (data, query) => retainPreviousDataForScope(projectId!, data, query),
+    enabled: filters.activeTab === 'trends',
+    placeholderData: (data, query) => retainPreviousDataForScope(projectId, data, query),
   });
   const { surfaceEngine, surfaceRatesQuery } = useSurfaceRates({
     requestScope,
-    projectId,
     engine,
     cohort: filters.cohort,
     onTrendsTab: filters.activeTab === 'trends',
@@ -289,16 +270,10 @@ export function useVisibilityQueries(
   // A range that resolved to NO runs sends neither `audit_id` nor a usable
   // `audit_ids`, so the request would read the project unscoped and answer a
   // question nobody asked. An empty selection has empty evidence.
-  const hasEvidenceScope =
-    requestScope.enabled && Boolean(activeRunId) && selectedRunIds?.length !== 0;
+  const hasEvidenceScope = Boolean(activeRunId) && selectedRunIds?.length !== 0;
   const evidenceParams = evidenceSelectionParams(filters, activeRunId, selectedRunIds, engine);
   const evidenceOptions = {
-    queryKey: queryKeys.visibility.evidence(projectId ?? '', evidenceParams),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      visibilityApi.getVisibilityEvidence(requestScope.projectId, evidenceParams, {
-        signal,
-        workspaceId: requestScope.workspaceId,
-      }),
+    ...visibilityQueries.evidence(requestScope, evidenceParams),
   };
   const evidenceQuery = useQuery({
     ...evidenceOptions,
@@ -307,11 +282,10 @@ export function useVisibilityQueries(
     // reading page one and asking for page two blanked what you were reading.
     // Scoped to the project, so a switch still returns to an explicit load
     // rather than relabelling the previous workspace's evidence.
-    placeholderData: (data, query) => retainPreviousDataForScope(projectId!, data, query),
+    placeholderData: (data, query) => retainPreviousDataForScope(projectId, data, query),
     enabled: hasEvidenceScope && isEvidenceTab(filters.activeTab),
   });
   const prefetchTab = (tab: VisibilityTab) => {
-    if (!requestScope.enabled) return;
     if (tab === 'trends') {
       warmQuery(queryClient, projectionOptions);
       warmQuery(queryClient, trendOptions);
@@ -358,15 +332,16 @@ export function useVisibilityQueries(
   };
 }
 
-function useVisibilityRuns(requestScope: ProjectRequestScope, market: string | null) {
+function useVisibilityRuns(
+  requestScope: Pick<ActiveProjectScope, 'workspaceId' | 'projectId'>,
+  market: string | null,
+) {
   const { workspaceId, projectId } = requestScope;
   const timeZone = useDisplayTimeZone();
   const queryClient = useQueryClient();
   const auditsQuery = useQuery({
-    ...runsQueries.list(workspaceId, projectId),
-    enabled: requestScope.enabled,
-    refetchInterval: (query) =>
-      query.state.data?.some((audit) => shouldPollAudit(audit.status)) ? ACTIVE_RUN_POLL_MS : false,
+    ...runsQueries.list({ workspaceId, projectId }),
+    refetchInterval: (query) => pollAudits(query.state.data?.map((audit) => audit.status)),
   });
   // The run picker offers the selected market's runs only; markets never pool.
   const runOptions = useMemo(
@@ -400,11 +375,9 @@ function useVisibilityRuns(requestScope: ProjectRequestScope, market: string | n
     previousSignal.current = runSignal;
     // `undefined` is the first resolved list, not a transition to react to.
     if (previous !== undefined && previous !== runSignal) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.visibility.all,
-      });
+      void refreshVisibility(queryClient, projectId);
     }
-  }, [auditsLoaded, runSignal, queryClient]);
+  }, [auditsLoaded, runSignal, queryClient, projectId]);
 
   return { queryClient, auditsQuery, runOptions, hasRuns, activeRun };
 }

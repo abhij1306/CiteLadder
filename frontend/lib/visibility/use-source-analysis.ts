@@ -3,8 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
 import type { SourceFilters } from '@/components/visibility/source-rows';
 import type { useVisibilityQueries } from '@/lib/visibility/use-visibility-dashboard';
 
@@ -57,7 +56,7 @@ export function selectionParams(
 
 /** Whether a selection reads anything: a range with no runs reads nothing. */
 export function selectionEnabled(queries: SourceQueries): boolean {
-  return Boolean(queries.projectId && queries.activeRunId && queries.selectedRunIds?.length !== 0);
+  return Boolean(queries.activeRunId && queries.selectedRunIds?.length !== 0);
 }
 
 /**
@@ -98,16 +97,14 @@ export function useSourceAnalysis(
     limit: scope.pageSize,
   };
   const sourceQuery = useQuery({
-    queryKey: queryKeys.visibility.sources(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getSources(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
-    enabled: Boolean(queries.projectId && queries.activeRunId),
+    ...visibilityQueries.sources(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
+      params,
+    ),
+    enabled: Boolean(queries.activeRunId),
     // Hold the page on screen while the next one loads: without it the header
     // fell back to "Unknown" and the table emptied on every offset change.
-    placeholderData: (data, query) => retainPreviousDataForScope(queries.projectId!, data, query),
+    placeholderData: (data, query) => retainPreviousDataForScope(queries.projectId, data, query),
   });
   return { params, sourceQuery };
 }
@@ -136,19 +133,17 @@ export function useSourceSeries(
     source_type: set(scope.sourceType),
   };
   return useQuery({
-    queryKey: queryKeys.visibility.sourceSeries(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getSourceSeries(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
-    enabled: Boolean(queries.projectId && queries.activeRunId),
+    ...visibilityQueries.sourceSeries(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
+      params,
+    ),
+    enabled: Boolean(queries.activeRunId),
     // Hold the plot while the next one loads, exactly as the table above does.
     // The legend sits ABOVE the chart and wraps to as many lines as it needs,
     // so dropping to a bare skeleton did not just blank the plot -- it removed
     // those lines and shortened the card, moving the table underneath on every
     // filter change.
-    placeholderData: (data, query) => retainPreviousDataForScope(queries.projectId!, data, query),
+    placeholderData: (data, query) => retainPreviousDataForScope(queries.projectId, data, query),
   });
 }
 
@@ -156,13 +151,11 @@ export function useSourceSeries(
 export function useSourceUrl(filters: SourceFilters, queries: SourceQueries, url: string | null) {
   const params = { ...selectionParams(filters, queries), url: url ?? '' };
   return useQuery({
-    queryKey: queryKeys.visibility.sourceUrl(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getSourceUrl(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
-    enabled: Boolean(queries.projectId && queries.activeRunId && url),
+    ...visibilityQueries.sourceUrl(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
+      params,
+    ),
+    enabled: Boolean(queries.activeRunId && url),
   });
 }
 
@@ -181,13 +174,11 @@ export function useSourceDomains(filters: SourceFilters, queries: SourceQueries)
     limit: SOURCE_DOMAIN_OPTIONS,
   };
   const query = useQuery({
-    queryKey: queryKeys.visibility.sources(queries.projectId ?? '', params),
-    queryFn: ({ signal }) =>
-      visibilityApi.getSources(queries.projectId!, params, {
-        signal,
-        workspaceId: queries.workspaceId,
-      }),
-    enabled: Boolean(queries.projectId && queries.activeRunId),
+    ...visibilityQueries.sources(
+      { workspaceId: queries.workspaceId, projectId: queries.projectId },
+      params,
+    ),
+    enabled: Boolean(queries.activeRunId),
   });
   return (query.data?.items ?? []).map((item) => item.key).filter(Boolean);
 }

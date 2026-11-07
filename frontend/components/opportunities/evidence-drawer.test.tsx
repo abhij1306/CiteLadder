@@ -3,15 +3,15 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { ApiError } from '@/lib/api/errors';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const OPPORTUNITY = '22222222-2222-4222-8222-222222222222';
 const queryState = vi.hoisted(() => ({ data: null as unknown, error: null as unknown }));
 
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-}));
+/** The drawer opens on a project route, under the gate's project. */
+const projectRoute = { projectSelection: { activeProject: makeProject({ id: PROJECT }) } };
 
 vi.mock('@/lib/api/opportunities', () => ({
   opportunitiesQueries: {
@@ -53,6 +53,7 @@ describe('EvidenceDrawer authorization and recovery', () => {
         open
         onOpenChange={vi.fn()}
       />,
+      projectRoute,
     );
 
     expect(await screen.findByText(/unavailable in the selected project/i)).toBeVisible();
@@ -70,6 +71,7 @@ describe('EvidenceDrawer authorization and recovery', () => {
         open
         onOpenChange={onOpenChange}
       />,
+      projectRoute,
     );
 
     expect(await screen.findByText('Opportunity not found')).toBeVisible();

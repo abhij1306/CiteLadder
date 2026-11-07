@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Visibility } from '@/lib/api/types';
+import type { Visibility } from '@citeladder/contracts';
 import {
   PLACEHOLDER,
   findActiveRun,
   formatRate,
   formatScore,
   isDashboardStatus,
-  presentEngines,
   sortedRankings,
   toRunOptions,
   visibleEngines,
@@ -117,12 +116,17 @@ describe('visibility dashboard helpers', () => {
         },
       ],
     });
-    expect(visibleEngines(visibility, 'all').map((e) => e.logical_engine)).toEqual([
+    const order = ['chatgpt', 'gemini', 'claude'];
+    expect(visibleEngines(visibility, 'all', order).map((e) => e.logical_engine)).toEqual([
       'chatgpt',
       'claude',
     ]);
-    expect(visibleEngines(visibility, 'claude').map((e) => e.logical_engine)).toEqual(['claude']);
-    expect(presentEngines(visibility)).toEqual(['chatgpt', 'claude']);
+    expect(
+      visibleEngines(visibility, 'all', ['claude', 'chatgpt']).map((e) => e.logical_engine),
+    ).toEqual(['claude', 'chatgpt']);
+    expect(visibleEngines(visibility, 'claude', order).map((e) => e.logical_engine)).toEqual([
+      'claude',
+    ]);
   });
 
   it('sorts rankings by share-of-voice descending', () => {

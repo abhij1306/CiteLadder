@@ -1,20 +1,23 @@
 /**
- * Actions query-key namespace — one unit of work per target. Lists are keyed
- * by project and filters; a status change invalidates `actionKeys.all`.
+ * Actions query-key namespace — one unit of work per target. Lists are scoped
+ * keys (`[actions, projectId, 'list', workspaceId, filters]`); a status change
+ * or a declaration invalidates `actionKeys.all`.
  */
+import { scopedKeys, type ProjectScope } from './scope';
+
+const actions = scopedKeys('actions');
 export const actionKeys = {
-  all: ['actions'] as const,
-  lists: (projectId: string) => ['actions', 'list', projectId] as const,
-  /** The project at index 2 and its workspace beside it, for retained pages. */
+  ...actions,
   list: (
-    workspaceId: string,
-    projectId: string,
+    scope: ProjectScope,
     filters: {
       status: string | null;
       targetKind: string | null;
       cursor: string | null;
       limit: number;
     },
-  ) => ['actions', 'list', projectId, workspaceId, filters] as const,
-  detail: (actionId: string) => ['actions', 'detail', actionId] as const,
+  ) => actions.read('list', scope, filters),
+  // An Action page knows only its id; the workspace follows it.
+  detail: (workspaceId: string | null, actionId: string) =>
+    ['actions', 'detail', actionId, workspaceId] as const,
 };

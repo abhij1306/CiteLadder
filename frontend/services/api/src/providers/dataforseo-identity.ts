@@ -1,16 +1,20 @@
 import { createHmac, hkdfSync } from 'node:crypto';
 import { z } from 'zod';
+import { casefold } from '../casefold.ts';
 import { policy } from '../config.ts';
-import { createSecretCipher } from '../integrations/fernet.ts';
+import { connectionSecret } from './connection-secret.ts';
 
 const credential = z.object({ login: z.string().min(1), password: z.string().min(1) });
 const stripCharacters = new Set(Array.from(policy.dataforseo.strip_characters));
-/** Password changes and connection IDs do not split a provider account's quota pool. */
-export function dataforseoAccountIdentity(encryptedSecret: string, encryptionKey: string) {
-  return dataforseoSecretIdentity(
-    createSecretCipher(encryptionKey).decrypt(encryptedSecret),
-    encryptionKey,
-  );
+/**
+ * The quota-pool identity of a DataForSEO connection's account: password
+ * changes and connection IDs do not split a provider account's pool.
+ */
+export function connectionPoolIdentity(
+  connection: Parameters<typeof connectionSecret>[0],
+  encryptionKey: string,
+) {
+  return dataforseoSecretIdentity(connectionSecret(connection, encryptionKey), encryptionKey);
 }
 /** The quota-pool identity of a decrypted DataForSEO login pair. */
 export function dataforseoSecretIdentity(packed: string, encryptionKey: string) {
@@ -22,16 +26,12 @@ export function dataforseoSecretIdentity(packed: string, encryptionKey: string) 
   }
   const result = credential.safeParse(payload);
   if (!result.success) throw new Error('Stored DataForSEO credential is unreadable');
-  const overrides: Record<string, string> = policy.dataforseo.casefold_overrides;
   const characters = Array.from(result.data.login);
   let start = 0,
     end = characters.length;
   while (start < end && stripCharacters.has(characters[start]!)) start += 1;
   while (end > start && stripCharacters.has(characters[end - 1]!)) end -= 1;
-  const login = characters
-    .slice(start, end)
-    .map((char) => overrides[char] ?? char.toLowerCase())
-    .join('');
+  const login = casefold(characters.slice(start, end).join(''));
   const key = hkdfSync(
     'sha256',
     Buffer.from(encryptionKey, 'utf8'),

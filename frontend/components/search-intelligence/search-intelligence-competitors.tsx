@@ -9,7 +9,10 @@ import type {
   SearchIntelligenceDataset,
   SearchIntelligenceReadiness,
 } from '@/lib/api/search-intelligence';
-import { COMPARISON_DATASET_KINDS, SEARCH_DATASET_LABELS } from '@/lib/config/search-intelligence';
+import { searchDatasetKindsWith } from '@citeladder/contracts/search-intelligence';
+import { SEARCH_DATASET_LABELS } from '@/lib/config/search-intelligence';
+
+const COMPARISON_KINDS = searchDatasetKindsWith('comparison');
 import { datasetCount } from './search-intelligence-format';
 import { SearchValue } from './search-intelligence-value';
 
@@ -85,7 +88,7 @@ export function SearchIntelligenceCompetitors({
                 fetched={Boolean(footprint)}
               />
             </TableCell>
-            {COMPARISON_DATASET_KINDS.map((kind) => {
+            {COMPARISON_KINDS.map((kind) => {
               const dataset = comparison(kind);
               return (
                 <TableCell numeric key={kind}>

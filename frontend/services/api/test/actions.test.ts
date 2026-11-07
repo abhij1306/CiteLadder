@@ -10,6 +10,10 @@ import {
 } from '@citeladder/contracts/actions';
 import { searchConsoleState } from '../src/opportunities/measurement-legs.ts';
 import { refreshActionStatus } from '../src/opportunities/action-status.ts';
+import { policy } from '../src/config.ts';
+import { declarationChecks } from '../src/opportunities/declaration-checks.ts';
+import { CHECKS, memberMeasurementLeg } from '../src/opportunities/checks/registry.ts';
+import type { OpportunityRow } from '../src/opportunities/projection.ts';
 import { actionFixture, type ActionSeed } from './action-support.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 
@@ -386,6 +390,103 @@ describe('Action routes', () => {
     });
     expect(stale.status).toBe(422);
     expect((await detailBody(await request(s, actionPath(s)))).declaration).toBeNull();
+  });
+
+  it('promises before declaration the reading each enabled rule freezes', async () => {
+    const s = await seed();
+    const other = await seed();
+    const evidence = {
+      site_url_id: randomUUID(),
+      issue_rule_id: 'aeo.answer_first',
+      content_handoff: { affected_prompts: [{ prompt_id: s.prompt0_id }] },
+      keyword: 'crm for startups',
+      normalized_keyword: 'crm for startups',
+      query_key: 'crm for startups',
+      search_volume: null,
+      intent: null,
+      market: { location_code: 2840, language_code: 'en' },
+      owned_origin: 'https://acme.test',
+      competitors: [],
+      competitor_names: [],
+      target_resolution: { state: 'no_covering_page', candidates: [] },
+      provider: 'dataforseo',
+      statement: 'Competitors rank for crm for startups.',
+    };
+    const member = (rule_id: string, values: Partial<OpportunityRow> = {}): OpportunityRow => ({
+      id: randomUUID(),
+      project_id: s.project_id,
+      rule_id,
+      opportunity_type: 'site',
+      severity: 'medium',
+      priority_score: 1,
+      title: rule_id,
+      remediation: '',
+      target_key: `fixture:${rule_id}`,
+      target_prompt_id: s.prompt0_id,
+      target_url: 'https://acme.test/a',
+      target_theme: 'crm for startups',
+      evidence,
+      source_analysis_ids: [],
+      source_issue_ids: [],
+      source_metric_ids: [],
+      source_traffic_ids: [],
+      analyzer_version: '',
+      rule_version: '',
+      formula_version: '',
+      action_id: null,
+      superseded_by_id: null,
+      created_text: '',
+      updated_text: '',
+      superseded_text: null,
+      ...values,
+    });
+    const freeze = async (row: OpportunityRow, scope = s) =>
+      declarationChecks(
+        db,
+        { workspaceId: scope.workspace_id, projectId: scope.project_id },
+        [row],
+        { auditId: s.audit_id, declaredDay: day },
+      );
+    // Contextual links freeze only selected suggestions; internal-links-routes declares one.
+    const enabled = Object.values(policy.opportunity.opportunities.OPPORTUNITY_RULES_BY_ID).filter(
+      (rule) => rule.enabled && rule.check_kind !== 'contextual_link',
+    );
+    const shown: Record<string, string | null> = {};
+    const frozen: Record<string, string[]> = {};
+    for (const rule of enabled) {
+      const row = member(rule.rule_id);
+      shown[rule.rule_id] = memberMeasurementLeg(row);
+      frozen[rule.rule_id] = (await freeze(row)).map(({ check }) => CHECKS[check.kind].leg);
+    }
+    expect(Object.keys(shown).length).toBeGreaterThan(20);
+    for (const rule of enabled)
+      expect([rule.rule_id, frozen[rule.rule_id]]).toEqual([
+        rule.rule_id,
+        shown[rule.rule_id] === null ? [] : [shown[rule.rule_id]],
+      ]);
+    expect([shown.search_keyword_gap, shown.brand_absent_high_value_prompt]).toEqual([
+      'next_search_console_window',
+      'next_visibility_run',
+    ]);
+    // A member nothing can isolate promises no reading and freezes none.
+    const unscoped = member('brand_absent_high_value_prompt', {
+      target_prompt_id: null,
+      evidence: {},
+    });
+    expect([memberMeasurementLeg(unscoped), await freeze(unscoped)]).toEqual([null, []]);
+    // The baseline comes from this project's audit, never another workspace's.
+    await db
+      .updateTable('metric_snapshots')
+      .set({ metrics: JSON.stringify({ per_prompt: [{ prompt_index: 0, composite_score: 12 }] }) })
+      .where('id', '=', s.metric_snapshot_id)
+      .execute();
+    const [own] = await freeze(member('brand_absent_high_value_prompt'));
+    expect(own?.check).toMatchObject({
+      baseline_metric_snapshot_id: s.metric_snapshot_id,
+      baseline_value: 12,
+    });
+    const [foreign] = await freeze(member('brand_absent_high_value_prompt'), other);
+    expect(foreign?.check).not.toHaveProperty('baseline_metric_snapshot_id');
   });
 
   it('records work no reading can isolate without inventing a check', async () => {

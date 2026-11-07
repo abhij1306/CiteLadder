@@ -9,17 +9,20 @@
  * judgment becomes a text-free outcome record for judge calibration; any
  * other rejected or redundant candidate is deleted.
  */
-import { randomUUID } from 'node:crypto';
-
+import { promptCohortSchema } from '@citeladder/contracts/project';
+import { promptCandidateReviewRequestSchema } from '@citeladder/contracts/prompt-requests';
 import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { jsonObject, record } from '../db/json.ts';
 import { ApiError } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { compareText } from '../text-order.ts';
+import { insertPrompts, type PromptDraft } from './insert.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { scopedPromptSet } from './prompt-sets.ts';
 import {
@@ -32,7 +35,6 @@ import {
 
 const P = policy.prompts;
 const C = P.candidate;
-const BRANDED = new Set(P.branded_cohorts);
 const HOUR_MS = 3_600_000;
 
 /** The audience the generation plan wrote the prompt for, from its planned cell. */
@@ -42,12 +44,9 @@ function plannedPersona(refs: unknown[]): string {
   return typeof audience === 'string' ? audience.trim().slice(0, P.persona_max_chars) : '';
 }
 const setting = (name: keyof typeof P.generation_settings) =>
-  resolveSettingSpec(P.generation_settings[name]) as number;
+  resolveSettingSpec(P.generation_settings[name], process.env) as number;
 
-export const candidateReview = z.object({
-  accept_ids: z.array(z.uuid()).default([]),
-  reject_ids: z.array(z.uuid()).default([]),
-});
+export const candidateReview = promptCandidateReviewRequestSchema;
 
 export type CandidateReview = {
   accepted: PromptView[];
@@ -125,8 +124,8 @@ function validateIds(acceptIds: readonly string[], rejectIds: readonly string[])
   }
 }
 
-/** The prompt rows an accept inserts; the candidate's run provenance comes along. */
-async function acceptedRows(
+/** The prompts an accept inserts; the candidate's run provenance comes along. */
+async function acceptedDrafts(
   db: Kysely<DB>,
   set: { id: string; project_id: string; workspaceId: string },
   candidates: readonly CandidateRow[],
@@ -153,8 +152,7 @@ async function acceptedRows(
     runs.map((run) => [run.id, jsonObject(run.provenance, 'prompt_generation_runs.provenance')]),
   );
   const topicNames = new Map(topics.map((topic) => [topic.id, topic.name]));
-  const now = new Date();
-  return candidates.map((candidate) => {
+  return candidates.map((candidate): PromptDraft => {
     const evidence: Record<string, unknown> = {
       ...provenance.get(candidate.run_id),
       generation_run_id: candidate.run_id,
@@ -165,11 +163,8 @@ async function acceptedRows(
     };
     if (candidate.jev_decision !== null) evidence.jev_decision = candidate.jev_decision;
     return {
-      id: randomUUID(),
-      prompt_set_id: set.id,
       topic_id: candidate.topic_id,
       text: candidate.text,
-      normalized_text_hash: candidate.normalized_text_hash,
       theme: candidate.topic_id === null ? '' : (topicNames.get(candidate.topic_id) ?? ''),
       intent: candidate.intent,
       buyer_stage: candidate.buyer_stage,
@@ -177,27 +172,23 @@ async function acceptedRows(
       persona: plannedPersona(
         Array.isArray(candidate.evidence_refs) ? candidate.evidence_refs : [],
       ),
-      cohort: candidate.cohort,
-      branded: BRANDED.has(candidate.cohort),
+      cohort: promptCohortSchema.parse(candidate.cohort),
       enabled: true,
-      status: P.status_active,
-      origin: P.origins.generated,
-      generation_evidence: JSON.stringify(evidence),
-      created_at: now,
-      updated_at: now,
+      generation_evidence: evidence,
     };
   });
 }
 
 export function reviewCandidates(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   promptSetId: string,
   input: z.infer<typeof candidateReview>,
 ): Promise<CandidateReview> {
   validateIds(input.accept_ids, input.reject_ids);
+  const { workspaceId } = scope;
   return db.transaction().execute(async (trx) => {
-    const set = await scopedPromptSet(trx, workspaceId, promptSetId);
+    const set = await scopedPromptSet(trx, workspaceId, promptSetId, scope.projectId);
     await acquireProjectLock(trx, set.project_id);
     await acquirePromptSetLock(trx, set.id);
     const now = new Date();
@@ -226,51 +217,24 @@ export function reviewCandidates(
     const toReject = found.filter((row) => !acceptSet.has(row.id));
 
     // The first candidate per text hash that is not already a prompt inserts.
-    const existing = new Set(
-      toAccept.length === 0
-        ? []
-        : (
-            await trx
-              .selectFrom('prompts')
-              .select('normalized_text_hash')
-              .where('prompt_set_id', '=', set.id)
-              .where(
-                'normalized_text_hash',
-                'in',
-                toAccept.map((row) => row.normalized_text_hash),
-              )
-              .execute()
-          ).map((row) => row.normalized_text_hash),
-    );
-    const insertable: CandidateRow[] = [];
-    const redundant: string[] = [];
-    for (const candidate of toAccept) {
-      const hash = candidate.normalized_text_hash;
-      if (!hash || existing.has(hash)) redundant.push(candidate.id);
-      else {
-        existing.add(hash);
-        insertable.push(candidate);
-      }
-    }
+    const insertable = toAccept.filter((candidate) => candidate.normalized_text_hash !== '');
+    const redundant = toAccept
+      .filter((candidate) => candidate.normalized_text_hash === '')
+      .map((candidate) => candidate.id);
     let accepted: PromptView[] = [];
     if (insertable.length > 0) {
-      const planned = await acceptedRows(trx, { ...set, workspaceId }, insertable);
-      const inserted = await trx
-        .insertInto('prompts')
-        .values(planned)
-        .onConflict((conflict) => conflict.constraint('uq_prompt_set_normalized_text').doNothing())
-        .returningAll()
-        .execute();
-      const byPlan = new Map(inserted.map((row) => [row.id, row]));
-      accepted = planned.flatMap((row, index) => {
-        const prompt = byPlan.get(row.id);
-        if (prompt === undefined) {
-          redundant.push(insertable[index]!.id);
-          return [];
-        }
-        return [promptView(prompt)];
+      const inserted = await insertPrompts(
+        trx,
+        { ...set, workspace_id: workspaceId },
+        await acceptedDrafts(trx, { ...set, workspaceId }, insertable),
+        { origin: 'generated', onDuplicate: 'skip' },
+      );
+      accepted = inserted.flatMap((prompt, index) => {
+        if (prompt !== null) return [promptView(prompt)];
+        redundant.push(insertable[index]!.id);
+        return [];
       });
-      if (inserted.length > 0) {
+      if (accepted.length > 0) {
         await trx
           .updateTable('prompt_candidates')
           .from('prompts')
@@ -279,7 +243,11 @@ export function reviewCandidates(
             prompt_id: sql.ref('prompts.id'),
             reviewed_at: now,
           })
-          .where('prompts.id', 'in', [...byPlan.keys()])
+          .where(
+            'prompts.id',
+            'in',
+            accepted.map((prompt) => prompt.id),
+          )
           .whereRef(
             sql`prompts.generation_evidence->>'candidate_id'`,
             '=',

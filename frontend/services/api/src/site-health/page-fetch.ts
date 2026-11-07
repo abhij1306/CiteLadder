@@ -4,7 +4,8 @@
  * per-call trace so each real network request becomes one attempt row. Errors
  * use the Site Health fetch-error vocabulary the read API classifies.
  */
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import {
   FetchError,
@@ -12,7 +13,7 @@ import {
   type FetchCall,
   type FetchedPage,
   type WebsiteFetcher,
-} from '../projects/safe-fetch.ts';
+} from '../safe-fetch.ts';
 import {
   acquisitionSettings,
   authorizeAcquisition,
@@ -32,7 +33,7 @@ const FETCH_ERROR_CODES: Record<string, string> = {
   out_of_scope: codes.url_admission_rejected,
 };
 
-export function siteFetchSettings(env: Record<string, string | undefined> = process.env) {
+export function siteFetchSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const value = (name: keyof typeof spec) => resolveSettingSpec(spec[name], env);
   return {

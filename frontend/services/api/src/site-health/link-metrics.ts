@@ -2,9 +2,10 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { enqueueCrawlTasks } from './admission-writes.ts';
 import { buildLinkMetrics, type LinkPage } from './link-graph.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 async function linkPages(db: Database, crawl: Crawl): Promise<LinkPage[]> {
   const observations = await db
@@ -62,39 +63,18 @@ async function enqueueArchitecture(db: Database, crawl: Crawl) {
     versions.architecture,
     versions.archetype,
   ].join(':');
-  const now = new Date();
-  await db
-    .insertInto('site_crawl_tasks')
-    .values({
-      id: randomUUID(),
-      crawl_id: crawl.id,
-      workspace_id: crawl.workspace_id,
-      site_url_id: null,
-      task_kind: 'architecture',
-      requested_url: crawl.root_url,
-      url_hash: createHash('sha256').update(`architecture:${crawl.id}:${version}`).digest('hex'),
-      idempotency_key: `${crawl.id}:architecture:${version}`,
-      status: 'queued',
-      max_attempts: Number(resolveMaxAttempts()),
-      available_at: now,
-      created_at: now,
-      updated_at: now,
-      depth: 0,
-      generation: 0,
-      priority: 0,
-      randomized_position: 0,
-      attempt_count: 0,
-      conflict_count: 0,
-      classification_expected: false,
-      error_code: '',
-      error_detail: '',
-    })
-    .onConflict((conflict) => conflict.column('idempotency_key').doNothing())
-    .execute();
-}
-// The queue default uses the Site Health admission policy.
-function resolveMaxAttempts() {
-  return resolveSettingSpec(policy.site_health.settings.max_attempts, process.env);
+  await enqueueCrawlTasks(
+    db,
+    crawl,
+    [
+      {
+        kind: 'architecture',
+        url: crawl.root_url,
+        hash: createHash('sha256').update(`architecture:${crawl.id}:${version}`).digest('hex'),
+      },
+    ],
+    'once',
+  );
 }
 export async function persistLinkMetrics(db: Database, crawl: Crawl) {
   const metrics = buildLinkMetrics(await linkPages(db, crawl), crawl.root_url);

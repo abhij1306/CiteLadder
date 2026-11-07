@@ -1,6 +1,6 @@
 import { domainToASCII } from 'node:url';
 import { getDomain } from 'tldts';
-import { websiteIdentity } from '../projects/safe-fetch.ts';
+import { websiteIdentity } from '../safe-fetch.ts';
 import type { Database } from '../db/database.ts';
 import { operatorTransaction } from '../db/operator-transaction.ts';
 import { recordSecurityEvent } from '../auth/security-events.ts';

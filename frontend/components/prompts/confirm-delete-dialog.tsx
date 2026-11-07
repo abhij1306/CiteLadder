@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
-import type { Prompt, Topic } from '@/lib/api/types';
+import type { Prompt, Topic } from '@citeladder/contracts';
 
 export type PendingDelete = { kind: 'prompt'; prompt: Prompt } | { kind: 'topic'; topic: Topic };
 

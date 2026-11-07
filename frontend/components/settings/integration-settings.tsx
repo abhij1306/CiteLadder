@@ -12,9 +12,12 @@ import { ReadError } from '@/components/ui/read-error';
 import { GRANT_FAMILY, type GrantFamily, type GrantModel } from '@/components/settings/grant-model';
 import { IntegrationCardView } from '@/components/settings/integration-card-view';
 import { IntegrationsEmptyState } from '@/components/settings/integrations-empty-state';
-import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
+import {
+  integrationsQueries,
+  refreshIntegrations,
+  type IntegrationConnection,
+} from '@/lib/api/integrations';
 import { oauthErrorMessage } from '@/components/integrations/data-sources';
-import { queryKeys } from '@/lib/api/query-keys';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 /** Display order of connection sub-rows inside a grant card (gsc before ga4). */
@@ -127,11 +130,7 @@ export function IntegrationSettings() {
   useEffect(() => {
     if (!hasCallbackParams) return;
     // A fresh connect changes the list — refetch before stripping the params.
-    if (notice.connected) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.integrations.all,
-      });
-    }
+    if (notice.connected) void refreshIntegrations(queryClient);
     // Shallow URL cleanup, NOT a redirect: the params have already been captured
     // into `notice`, so this only rewrites the address bar. A route navigation
     // would re-render every mounted settings panel for nothing.
@@ -139,8 +138,7 @@ export function IntegrationSettings() {
   }, [hasCallbackParams, notice.connected, queryClient]);
 
   const connectionsQuery = useQuery({
-    queryKey: queryKeys.integrations.connections(workspaceId),
-    queryFn: ({ signal }) => integrationsApi.list({ signal, workspaceId }),
+    ...integrationsQueries.connections(workspaceId),
     enabled: workspaceId !== null,
   });
 

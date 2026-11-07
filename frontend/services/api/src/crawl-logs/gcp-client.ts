@@ -11,12 +11,13 @@
  * response bodies and tokens are never logged or returned.
  */
 import { z } from 'zod';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { ApiError } from '../errors.ts';
 
 /** The reader service account; empty means the connector is unavailable here. */
-export function crawlLogReaderEmail(env: Record<string, string | undefined> = process.env) {
+export function crawlLogReaderEmail(env: SettingSource = process.env) {
   return String(resolveSettingSpec(policy.settings.crawl_log_reader_email, env)).trim();
 }
 

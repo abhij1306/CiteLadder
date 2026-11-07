@@ -7,7 +7,7 @@
  * times the loaded window observed that exact query string, never an estimate
  * of how often the engine ran it.
  */
-import type { VisibilityExecutionEvidence } from '@/lib/api/types';
+import type { VisibilityExecutionEvidence } from '@citeladder/contracts';
 import { groupByPrompt, queryTexts } from '@/lib/visibility/evidence';
 
 /** The `search` bound the fanout endpoint declares (`Query(max_length=512)`). */

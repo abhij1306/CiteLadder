@@ -16,6 +16,7 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
+import type { ProjectScope } from './query-keys/scope';
 import { definedQuery, withQuery } from './shared';
 import type { IssuesParams, PagesParams } from './site-health';
 
@@ -38,14 +39,16 @@ const latestCrawlApi = {
  * reads these keys: the prefetchers file each answer under its crawl's key.
  */
 export const latestCrawlQueries = {
-  pages: (workspaceId: string, projectId: string, params: PagesParams) =>
+  pages: (scope: ProjectScope, params: PagesParams) =>
     queryOptions({
-      queryKey: queryKeys.siteHealth.latestCrawlPages(workspaceId, projectId, params),
-      queryFn: ({ signal }) => latestCrawlApi.pages(projectId, params, { signal, workspaceId }),
+      queryKey: queryKeys.siteHealth.latestCrawlPages(scope, params),
+      queryFn: ({ signal }) =>
+        latestCrawlApi.pages(scope.projectId, params, { signal, workspaceId: scope.workspaceId }),
     }),
-  issues: (workspaceId: string, projectId: string, params: IssuesParams) =>
+  issues: (scope: ProjectScope, params: IssuesParams) =>
     queryOptions({
-      queryKey: queryKeys.siteHealth.latestCrawlIssues(workspaceId, projectId, params),
-      queryFn: ({ signal }) => latestCrawlApi.issues(projectId, params, { signal, workspaceId }),
+      queryKey: queryKeys.siteHealth.latestCrawlIssues(scope, params),
+      queryFn: ({ signal }) =>
+        latestCrawlApi.issues(scope.projectId, params, { signal, workspaceId: scope.workspaceId }),
     }),
 };

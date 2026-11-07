@@ -15,6 +15,7 @@ import {
   beforeEach,
 } from 'vite-plus/test';
 
+import { resolveCommandGroups } from '@/components/layout/nav-items';
 import { runsQueries } from '@/lib/api/runs';
 import { mswServer } from '@/test/msw-server';
 
@@ -75,7 +76,7 @@ function Palette() {
   return (
     <>
       <CommandPaletteTrigger />
-      <CommandPalette />
+      <CommandPalette destinations={resolveCommandGroups} />
     </>
   );
 }
@@ -110,7 +111,8 @@ describe('CommandPalette', () => {
     await waitFor(() =>
       expect(
         queryClient.getQueryData(
-          runsQueries.list('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'p1').queryKey,
+          runsQueries.list({ workspaceId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', projectId: 'p1' })
+            .queryKey,
         ),
       ).toEqual([]),
     );
@@ -240,7 +242,7 @@ describe('CommandPalette', () => {
     renderPalette(
       <>
         <input data-testid="outside" />
-        <CommandPalette />
+        <CommandPalette destinations={resolveCommandGroups} />
       </>,
     );
     const outside = screen.getByTestId('outside');

@@ -43,7 +43,8 @@ export type PerceptionAnswer = {
   logicalEngine: string;
   prompt: string;
   topic: string;
-  versions: { extractor: string; template: string; metrics: string };
+  /** The audit's frozen versions and perception model: together its comparison key. */
+  versions: { extractor: string; template: string; metrics: string; model: string };
   /** One per named tracked business. */
   mentions: Mention[];
   /** The brand's deterministic first-mention state, null when not assessed. */
@@ -59,11 +60,20 @@ export const persistedOutcomeSchema = z.discriminatedUnion('outcome', [
   z.object({ outcome: z.literal('model_error') }),
   z.object({
     outcome: z.literal('unavailable'),
-    outcome_reason: z.enum(['model_not_configured', 'platform_cap', 'task_failed']),
+    outcome_reason: z.enum([
+      'model_not_configured',
+      'platform_cap',
+      'task_failed',
+      'model_changed',
+    ]),
   }),
 ]);
 type PersistedOutcome = z.infer<typeof persistedOutcomeSchema>;
-type PersistedEntity = { label: z.infer<typeof perceptionLabelSchema>; low_confidence: boolean };
+type PersistedEntity = {
+  label: z.infer<typeof perceptionLabelSchema>;
+  low_confidence: boolean;
+  model_omitted: boolean;
+};
 
 /** One mention's status from its answer's perception row and its entity row. */
 export function mentionStatus(
@@ -74,6 +84,8 @@ export function mentionStatus(
   switch (perception.outcome) {
     case 'classified':
       if (!entity) return { kind: 'unavailable', reason: 'entity_limit' };
+      // Left out by the model is no judgement: it never joins the judged `not_assessable`.
+      if (entity.model_omitted) return { kind: 'unavailable', reason: 'model_omitted' };
       if (entity.label === 'not_assessable') return { kind: 'not_assessable' };
       if (entity.low_confidence) return { kind: 'low_confidence' };
       return { kind: 'classified', label: entity.label };
@@ -319,10 +331,10 @@ export function runPoints<A extends { auditId: string; observedAt: string }>(
     });
 }
 
-/** One point per run; a version change from the previous point breaks comparability. */
+/** One point per run; a version or model change from the previous point breaks comparability. */
 function trend(answers: readonly PerceptionAnswer[]) {
   return runPoints(answers, ({ versions }) =>
-    JSON.stringify([versions.extractor, versions.template, versions.metrics]),
+    JSON.stringify([versions.extractor, versions.template, versions.metrics, versions.model]),
   ).map(({ auditId, first, rows, completedAt, comparable }) => {
     const versions = first.versions;
     const brand = rows.flatMap((row) => row.mentions.filter((mention) => mention.isBrand));

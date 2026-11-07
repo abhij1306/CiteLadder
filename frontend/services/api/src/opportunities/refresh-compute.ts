@@ -10,9 +10,10 @@ import { sourceMixSchema as sourceMix } from '@citeladder/contracts/opportunitie
 import { randomUUID } from 'node:crypto';
 
 import { policy } from '../config.ts';
-import { round } from '../demand/projection.ts';
+import { roundScaled } from '../numbers.ts';
 import { rules } from '../analysis/opportunities/detectors.ts';
 import type { DetectorHit } from '../analysis/opportunities/evidence.ts';
+import { targetColumns, targetKey } from '../analysis/opportunities/targets.ts';
 import { priorityScore } from '../analysis/opportunities/scoring.ts';
 import { emptySourceProjection } from '../analysis/opportunities/source-mix.ts';
 import { isoUtc } from '../db/timestamps.ts';
@@ -48,7 +49,7 @@ export function siteCoverage(crawl: CoverageCrawl | null): [Json, string[]] {
     selected_url_count: selected,
     analyzed_url_count: analyzed,
     failed_url_count: integer(crawl.failed_url_count),
-    analysis_ratio: selected ? round(analyzed / selected, 4) : null,
+    analysis_ratio: selected ? roundScaled(analyzed / selected, 4) : null,
   };
   const limitations: string[] = [];
   if (crawl.status !== r.crawl_status_completed) {
@@ -76,7 +77,7 @@ export function scoreHits(hits: DetectorHit[]): Scored[] {
     if (!rule) throw new Error(`unknown opportunity rule_id: ${hit.rule_id}`);
     const score = priorityScore(rule.severity, hit.value_factor, hit.gap_factor);
     if (score < o.MIN_PRIORITY_TO_SURFACE) continue;
-    const key = JSON.stringify([hit.rule_id, hit.target_key]);
+    const key = JSON.stringify([hit.rule_id, targetKey(hit.target)]);
     const current = consolidated.get(key);
     if (current === undefined) {
       consolidated.set(key, [hit, score]);
@@ -97,7 +98,8 @@ export function scoreHits(hits: DetectorHit[]): Scored[] {
   }
   return [...consolidated.values()].sort(
     ([left], [right]) =>
-      compareText(left.rule_id, right.rule_id) || compareText(left.target_key, right.target_key),
+      compareText(left.rule_id, right.rule_id) ||
+      compareText(targetKey(left.target), targetKey(right.target)),
   );
 }
 
@@ -111,10 +113,7 @@ export function newOpportunity(hit: DetectorHit, score: number) {
     priority_score: score,
     title: rule.title,
     remediation: rule.remediation,
-    target_key: hit.target_key,
-    target_prompt_id: hit.target_prompt_id,
-    target_url: hit.target_url,
-    target_theme: hit.target_theme,
+    ...targetColumns(hit.target),
     evidence: hit.evidence,
     source_analysis_ids: [...hit.source_analysis_ids],
     source_issue_ids: [...hit.source_issue_ids],
@@ -173,7 +172,7 @@ export function buildSnapshot(
     counts_by_type: countsByType,
     counts_by_severity: countsBySeverity,
     total_count: rows.length,
-    median_priority: scores.length ? round(median(scores), 1) : null,
+    median_priority: scores.length ? roundScaled(median(scores), 1) : null,
     analyzer_version: o.ANALYZER_VERSION,
     rule_version: o.RULE_VERSION,
     formula_version: o.FORMULA_VERSION,
@@ -211,6 +210,8 @@ type CurrentSnapshot = {
  */
 export type SourceIdentity = {
   audit_id: string | null;
+  /** The latest Commerce run, read for Commerce hits apart from the brand run. */
+  commerce_audit_id: string | null;
   site_crawl_id: string | null;
   demand_snapshot_id: string | null;
   demand_source_revision: string | null;

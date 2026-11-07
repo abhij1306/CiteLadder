@@ -1,7 +1,7 @@
 import { Callout } from '@/components/ui/callout';
 import { Inline } from '@/components/ui/layout';
 import { Spinner } from '@/components/ui/spinner';
-import { auditStatusLabel } from '@/lib/runs/status';
+import { AUDIT_STATES } from '@/lib/runs/status';
 import type { ActiveRun } from '@/lib/visibility/dashboard';
 import { TextLink } from '@/components/ui/text-link';
 
@@ -17,7 +17,7 @@ export function ActiveRunBanner({ run }: Readonly<{ run: ActiveRun }>) {
       <Inline className="flex-wrap">
         <Spinner />
         <span>
-          A run is in progress ({auditStatusLabel(run.status)}). Results appear here when it
+          A run is in progress ({AUDIT_STATES[run.status].label}). Results appear here when it
           completes.
         </span>
         <TextLink text="emphasis" className="whitespace-nowrap" href={`/runs/${run.id}`}>

@@ -4,6 +4,7 @@
  * An unmapped token renders as nothing (or a neutral fallback where a label is
  * structurally required), never as the raw backend identifier.
  */
+import type { PriorityValue } from '@/components/ui/badge';
 import type { ActionStatus } from '@/lib/api/actions';
 import { ACTION_PRIORITY_BANDS } from '@/lib/config/agent';
 
@@ -15,10 +16,11 @@ export function priorityBand(score: number): PriorityBand {
   return score >= ACTION_PRIORITY_BANDS.medium ? 'Medium' : 'Low';
 }
 
-export const PRIORITY_BAND_TONE: Record<PriorityBand, 'danger' | 'warning' | 'info'> = {
-  High: 'danger',
-  Medium: 'warning',
-  Low: 'info',
+/** A band as the priority badge's value (its tint and bar glyph). */
+export const PRIORITY_BAND_VALUE: Record<PriorityBand, PriorityValue> = {
+  High: 'high',
+  Medium: 'medium',
+  Low: 'low',
 };
 
 export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {

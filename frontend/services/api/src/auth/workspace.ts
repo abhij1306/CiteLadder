@@ -74,21 +74,55 @@ export function capabilityDenied(capability: WorkspaceCapability, message?: stri
   });
 }
 
-/** The user's membership, if any; system workspaces never authorize. */
-export async function findWorkspaceMember(
-  db: Database,
-  userId: string,
-  workspaceId: string,
-): Promise<WorkspaceContext | undefined> {
-  const member = await db
+/**
+ * A row lock on the membership read, for a caller whose transaction must not
+ * race a concurrent role change or removal.
+ */
+type MemberLock = 'share' | 'update';
+
+/**
+ * The one membership predicate every authorization check reads: the user's
+ * row in a tenant (never a system) workspace, held by an active account.
+ */
+function authorizingMember(db: Database, workspaceId: string, userId: string, lock?: MemberLock) {
+  const member = db
     .selectFrom('workspace_members')
     .innerJoin('workspaces', 'workspaces.id', 'workspace_members.workspace_id')
+    .innerJoin('users', 'users.id', 'workspace_members.user_id')
     .select(['workspace_members.workspace_id', 'workspace_members.role'])
     .where('workspace_members.workspace_id', '=', workspaceId)
     .where('workspace_members.user_id', '=', userId)
     .where('workspaces.is_system', '=', false)
-    .executeTakeFirst();
+    .where('users.is_active', '=', true);
+  if (lock === 'share') return member.forShare('workspace_members');
+  if (lock === 'update') return member.forUpdate('workspace_members');
+  return member;
+}
+
+/** The user's membership, if any; system workspaces and disabled accounts never authorize. */
+export async function findWorkspaceMember(
+  db: Database,
+  userId: string,
+  workspaceId: string,
+  lock?: MemberLock,
+): Promise<WorkspaceContext | undefined> {
+  const member = await authorizingMember(db, workspaceId, userId, lock).executeTakeFirst();
   return member && new WorkspaceContext(member.workspace_id, member.role);
+}
+
+/**
+ * Whether the user's live membership permits `capability` in the workspace:
+ * the check a worker, an invitation or an operator runs for a stored actor.
+ */
+export async function memberCan(
+  db: Database,
+  workspaceId: string,
+  userId: string,
+  capability: WorkspaceCapability,
+  lock?: MemberLock,
+): Promise<boolean> {
+  const member = await findWorkspaceMember(db, userId, workspaceId, lock);
+  return member?.allows(capability) ?? false;
 }
 
 /** The caller's membership, or 404. */

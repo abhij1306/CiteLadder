@@ -2,7 +2,12 @@
  * Workspace-scoped crawl loading and the crawl projection every Site Health
  * read shares. A foreign or missing crawl is a 404; nothing here writes.
  */
-import { crawlCountersSchema } from '@citeladder/contracts/site-health';
+import {
+  crawlCountersSchema,
+  isTerminalCrawl,
+  isUsableCrawl,
+  USABLE_CRAWL_STATUSES,
+} from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
@@ -13,16 +18,15 @@ import { WorkspaceScope } from '../../db/workspace-scope.ts';
 import { notFound } from '../../errors.ts';
 import { parseUuid } from '../../http/uuid.ts';
 import { firstOf } from '../../lists.ts';
-import type { Crawl } from '../task-fence.ts';
+import { pageRerunSql } from '../page-rerun.ts';
+import type { Crawl } from '../site-task.ts';
+import { failedAs } from '../task-outcome.ts';
 
 const reads = policy.site_health.reads;
-const TERMINAL = new Set<string>(reads.terminal_crawl_statuses);
-const USABLE = ['completed', 'partially_completed', 'cancelled'] as const;
 const NOT_MEASURED = 'not_measured';
 
 export type { Crawl };
 type Counters = z.input<typeof crawlCountersSchema>;
-type ScoreSummary = ReturnType<typeof scoreSummary>;
 export type FailureSummary = {
   code: string;
   message: string;
@@ -31,7 +35,7 @@ export type FailureSummary = {
   target_url: string;
 };
 
-export const isTerminal = (crawl: Crawl) => TERMINAL.has(crawl.status);
+export const isTerminal = (crawl: Crawl) => isTerminalCrawl(crawl.status);
 
 /** The crawl in the workspace, or 404. */
 export async function loadCrawl(db: Database, workspaceId: string, crawlId: string) {
@@ -67,7 +71,8 @@ export async function dashboardCrawl(
 }
 
 /**
- * The named crawl (404 when foreign) or the project's newest usable one. A
+ * The named crawl (404 when foreign) or the project's newest usable site
+ * crawl; only a named crawl may be a page rerun. A
  * named crawl that has not reached a usable terminal state, or a project with
  * none, is `null`: the caller renders its own "nothing yet" state. The
  * caller's route has authorized the project.
@@ -85,10 +90,12 @@ export async function resolveUsableCrawl(
   if (crawlId !== null) {
     const crawl = await crawls.where('id', '=', crawlId).executeTakeFirst();
     if (crawl === undefined) throw notFound('Crawl');
-    return (USABLE as readonly string[]).includes(crawl.status) ? crawl : null;
+    return isUsableCrawl(crawl.status) ? crawl : null;
   }
+  // A page rerun re-reads one page; it is never the site crawl a default read shows.
   const latest = await crawls
-    .where('status', 'in', USABLE)
+    .where('status', 'in', USABLE_CRAWL_STATUSES)
+    .where(sql<boolean>`not ${pageRerunSql}`)
     .orderBy('created_at', 'desc')
     .orderBy('id', 'desc')
     .executeTakeFirst();
@@ -147,7 +154,8 @@ export function scoreSummary(crawl: Crawl) {
     selected_count: int(summary.selected_count),
     analyzed_count: int(summary.analyzed_count),
     issue_count: int(summary.issue_count),
-    scoring_version: text(summary.scoring_version, crawl.scoring_version || reads.scoring_version),
+    // The version the crawl was pinned to, never the current configuration.
+    scoring_version: text(summary.scoring_version, crawl.scoring_version),
     classified_page_count: int(summary.classified_page_count),
     other_page_count: int(summary.other_page_count),
     classification_error_page_count: int(summary.classification_error_page_count),
@@ -160,33 +168,6 @@ export function scoreSummary(crawl: Crawl) {
     scored_page_kind_set: strings(summary.scored_page_kind_set),
     scored_page_count_by_kind: record(summary.scored_page_count_by_kind),
     by_page_kind: Object.fromEntries(byKind),
-  };
-}
-
-/** Counters derived from the crawl row alone (list and detail reads). */
-function rowCounters(crawl: Crawl, summary: ScoreSummary): Counters {
-  const terminal = crawl.completed_at !== null;
-  return {
-    discovered: countDisclosure(crawl) ? crawl.admitted_url_count : null,
-    selected: summary?.selected_count ?? 0,
-    queued: 0,
-    running: 0,
-    analyzed: crawl.analyzed_url_count,
-    errors: crawl.failed_url_count,
-    blocked: 0,
-    failure_breakdown: { robots_denied: 0, http_4xx: 0, http_5xx: 0, timeout: 0 },
-    activity: {
-      state: terminal ? 'terminal' : 'working',
-      reason: terminal ? 'terminal' : 'active_work',
-      queue_depth: 0,
-      next_available_at: null,
-    },
-    by_page_kind: Object.fromEntries(
-      Object.entries(summary?.by_page_kind ?? {}).map(([kind, bucket]) => [
-        kind,
-        bucket.analyzed_count,
-      ]),
-    ),
   };
 }
 
@@ -215,9 +196,20 @@ function publicSiteFacts(facts: Record<string, unknown>) {
   };
 }
 
+/** The crawl contract with its chosen counters. */
+export async function crawlProjection(
+  db: Database,
+  crawl: Crawl,
+  options: { failureSummary?: FailureSummary | null } = {},
+) {
+  return projectCrawl(crawl, await crawlCounters(db, crawl), options);
+}
+
+/** The crawl contract; `counters` come from `crawlCounters`, the one chooser. */
 export function projectCrawl(
   crawl: Crawl,
-  options: { failureSummary?: FailureSummary | null; counters?: Counters } = {},
+  counters: Counters,
+  options: { failureSummary?: FailureSummary | null } = {},
 ) {
   const disclose = countDisclosure(crawl);
   const summary = scoreSummary(crawl);
@@ -240,7 +232,7 @@ export function projectCrawl(
     failed_count: crawl.failed_url_count,
     discovery_requested_count: crawl.discovery_requested_count,
     analysis_requested_count: crawl.analysis_requested_count,
-    counters: options.counters ?? rowCounters(crawl, summary),
+    counters,
     discovered_count: disclose ? inventoryTotal : null,
     total_url_count: disclose && crawl.inventory_complete ? inventoryTotal : null,
     has_more_site_urls: disclose ? !crawl.inventory_complete : null,
@@ -347,7 +339,7 @@ export async function rootFailure(db: Database, crawl: Crawl) {
  */
 export const ROW_TASK = sql`(t.task_kind = 'analyze'
   or (t.task_kind = 'discover' and t.status = 'failed'
-    and t.error_code <> all(${reads.corpus_exclusion_error_codes}::text[])))`;
+    and not ${failedAs('t', ['excluded'])}))`;
 /** Which `ROW_TASK` row wins: the analysis, then the latest generation. */
 export const ROW_TASK_ORDER = sql`t.task_kind = 'analyze' desc, t.generation desc`;
 
@@ -368,23 +360,19 @@ async function selectedCount(db: Database, crawl: Crawl) {
 }
 
 /**
- * The dashboard counters. An active crawl counts its tasks live; a terminal
- * one reads the counters its terminalization persisted
- * (`site-health/terminal-counters.ts`), and without them the row's own
- * persisted counts, never a scan of its tasks.
+ * The one counter chooser every crawl read uses, with the live selection. An
+ * active crawl counts its tasks live; a terminal one reads the counters its
+ * terminalization persisted (`site-health/terminal-counters.ts`). A terminal
+ * crawl without persisted counters is counted from its tasks rather than
+ * reported as zeros it never observed.
  */
-export async function dashboardCounters(db: Database, crawl: Crawl): Promise<Counters> {
-  if (!isTerminal(crawl)) return crawlCounters(db, crawl);
-  const selected = await selectedCount(db, crawl);
-  if (crawl.terminal_counters === null)
-    return { ...rowCounters(crawl, scoreSummary(crawl)), selected };
-  return { ...terminalCountersSchema.parse(crawl.terminal_counters), selected };
-}
-
-/** Live task counters, with the live selection. */
 export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counters> {
+  const persisted =
+    isTerminal(crawl) && crawl.terminal_counters !== null
+      ? terminalCountersSchema.parse(crawl.terminal_counters)
+      : null;
   const [counters, selected] = await Promise.all([
-    taskCounters(db, crawl),
+    persisted ?? taskCounters(db, crawl),
     selectedCount(db, crawl),
   ]);
   return { ...counters, selected };
@@ -392,16 +380,14 @@ export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counter
 
 /** Counters of the crawl's own tasks and analyses, scanned now. */
 export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCounters> {
-  const blocking = reads.policy_blocking_error_codes;
-  const nonErrors = reads.non_error_terminal_codes;
-  const exclusions = reads.corpus_exclusion_error_codes;
+  // A site or policy refusal is no page error: it counts as blocked.
+  const refused = failedAs('t', ['blocked', 'excluded']);
   const tasks = sql<{
     queued: number;
     running: number;
     analyzed: number;
     failed: number;
     blocked: number;
-    not_errors: number;
     robots_denied: number;
     http_4xx: number;
     http_5xx: number;
@@ -425,8 +411,7 @@ export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCoun
       count(*) filter (where status in ('leased','running'))::int as running,
       count(*) filter (where status = 'succeeded')::int as analyzed,
       count(*) filter (where status = 'failed')::int as failed,
-      count(*) filter (where status = 'failed' and error_code = any(${blocking}::text[]))::int as blocked,
-      count(*) filter (where status = 'failed' and error_code = any(${nonErrors}::text[]))::int as not_errors,
+      count(*) filter (where status = 'failed' and ${refused})::int as blocked,
       count(*) filter (where status = 'failed' and error_code = 'robots_denied')::int as robots_denied,
       count(*) filter (where status = 'failed' and error_code = 'http_4xx')::int as http_4xx,
       count(*) filter (where status = 'failed' and error_code = 'http_5xx')::int as http_5xx,
@@ -437,7 +422,7 @@ export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCoun
       count(*) filter (where status = 'running' and lease_expires_at > now())::int as running_live,
       count(*) filter (where status in ('leased','running') and lease_expires_at <= now())::int as expired,
       min(available_at) filter (where status in ('queued','retry_wait','capacity_wait') and available_at > now()) as next_available_at
-    from latest`.execute(db);
+    from latest t`.execute(db);
   const [counts, kinds, excluded] = await Promise.all([
     tasks,
     sql<{ page_kind: string; count: number }>`
@@ -453,7 +438,7 @@ export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCoun
       select count(distinct url_hash)::int as count from site_crawl_tasks
       where workspace_id = ${crawl.workspace_id} and crawl_id = ${crawl.id}
         and task_kind in ('discover','analyze') and status = 'failed'
-        and error_code = any(${exclusions}::text[]) and url_hash <> ''`.execute(db),
+        and ${failedAs('site_crawl_tasks', ['excluded'])} and url_hash <> ''`.execute(db),
   ]);
   const c = firstOf(counts.rows, 'the crawl task counters');
   const terminal = isTerminal(crawl);
@@ -473,7 +458,7 @@ export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCoun
     queued: c.queued,
     running: c.running,
     analyzed: c.analyzed,
-    errors: Math.max(c.failed - c.not_errors, 0),
+    errors: Math.max(c.failed - c.blocked, 0),
     blocked: c.blocked,
     failure_breakdown: {
       robots_denied: c.robots_denied,

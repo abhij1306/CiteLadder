@@ -10,7 +10,8 @@ import { numberOrNull } from '../traffic/accumulators.ts';
 import { record } from '../db/json.ts';
 import { normalizeQuery } from './classification.ts';
 import { resolveOwnedPages } from './page-equivalence.ts';
-import { stableHash, unique } from './projection.ts';
+import { unique } from './projection.ts';
+import { canonicalHash } from '../canonical-json.ts';
 import { compareText } from '../text-order.ts';
 import {
   observesZero,
@@ -126,14 +127,17 @@ async function sourceMaterial(db: Database, scope: DemandScope) {
   const selected = material
     .slice(0, p.QUERY_EVIDENCE_MAX_ROWS)
     .sort((a, b) => compareText(key(a), key(b)));
-  const sourceHash = stableHash({
-    window: [scope.windowStart, scope.windowEnd],
-    rows: selected.map((r) => [r.source.id, r.source.resync_seq]),
-    zero_artifacts: matched.map((r) => [r.id, r.payload_hash]),
-    partitions: quality,
-    analyzer_version: p.QUERY_EVIDENCE_ANALYZER_VERSION,
-    resolver_version: p.PAGE_EQUIVALENCE_RESOLVER_VERSION,
-  });
+  const sourceHash = canonicalHash(
+    {
+      window: [scope.windowStart, scope.windowEnd],
+      rows: selected.map((r) => [r.source.id, r.source.resync_seq]),
+      zero_artifacts: matched.map((r) => [r.id, r.payload_hash]),
+      partitions: quality,
+      analyzer_version: p.QUERY_EVIDENCE_ANALYZER_VERSION,
+      resolver_version: p.PAGE_EQUIVALENCE_RESOLVER_VERSION,
+    },
+    false,
+  );
   return { rows, material, selected, artifacts: matched, sourceHash, quality };
 }
 export async function queryEvidenceRevision(db: Database, scope: DemandScope) {

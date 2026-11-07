@@ -1,6 +1,6 @@
 /**
- * Performance query-key namespace — isolated by project so one project's
- * dashboard and tables never collide with another's.
+ * Performance query-key namespace, on the shared scoped-key builder, so one
+ * project's dashboard and tables never collide with another's.
  *
  * Every value the server binds a result to participates in the key: the
  * dashboard key carries the range and comparison selection, and the table key
@@ -9,16 +9,16 @@
  * placeholder during a refetch — from being relabelled for a different result
  * set when the reader switches tab, sort, or range.
  */
+import { scopedKeys, type ProjectScope } from './scope';
 import type { ListFilters } from './shared';
 
+const performance = scopedKeys('performance');
 export const performanceKeys = {
-  all: ['performance'] as const,
-  dashboard: (projectId: string, filters: ListFilters = {}) =>
-    ['performance', 'dashboard', projectId, filters] as const,
-  /** Holds the workspace too: a page turn keeps its rows only inside it. */
-  table: (projectId: string, workspaceId: string | null, filters: ListFilters = {}) =>
-    ['performance', 'table', projectId, workspaceId, filters] as const,
-  rangeTask: (projectId: string, taskId: string) =>
-    ['performance', 'range-task', projectId, taskId] as const,
-  readiness: (projectId: string) => ['performance', 'readiness', projectId] as const,
+  ...performance,
+  dashboard: (scope: ProjectScope, filters: ListFilters = {}) =>
+    performance.read('dashboard', scope, filters),
+  table: (scope: ProjectScope, filters: ListFilters = {}) =>
+    performance.read('table', scope, filters),
+  rangeTask: (scope: ProjectScope, taskId: string) => performance.read('range-task', scope, taskId),
+  readiness: (scope: ProjectScope) => performance.read('readiness', scope),
 };

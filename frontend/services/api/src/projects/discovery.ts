@@ -7,8 +7,10 @@ import {
 import type { Selectable } from 'kysely';
 import { z } from 'zod';
 
-import { dailyWorkspaceLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { activeJobRetrySeconds, policy, resolveSettingSpec } from '../config.ts';
+import { activeJobRetrySeconds, budget, spendBudget } from '../abuse/usage.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
+import promptLibrary from '../config/prompt-library.json' with { type: 'json' };
 import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
@@ -16,11 +18,12 @@ import { ApiError, notFound } from '../errors.ts';
 import type { BrandDiscoveries } from '../generated/db-schema.ts';
 import { cleanList, projectCreate } from './inputs.ts';
 import {
+  discoveryCreate,
   discoverySettings,
   type DiscoveryCompletion,
   type DiscoveryInput,
 } from './discovery-inputs.ts';
-import { websiteIdentity } from './safe-fetch.ts';
+import { websiteIdentity } from '../safe-fetch.ts';
 import { insertProject } from './service.ts';
 
 export type DiscoveryRow = Selectable<BrandDiscoveries>;
@@ -91,16 +94,12 @@ async function admitDiscovery(trx: Database, workspaceId: string) {
     .executeTakeFirstOrThrow();
   if (
     Number(active.count) >=
-    Number(resolveSettingSpec(policy.abuse.active_brand_discoveries_per_workspace))
+    Number(resolveSettingSpec(policy.abuse.active_brand_discoveries_per_workspace, process.env))
   )
     throw new ApiError(429, 'Workspace active brand discovery limit exceeded', {
       headers: { 'retry-after': String(activeJobRetrySeconds()) },
     });
-  await enforceWorkspaceRequest(
-    trx,
-    workspaceId,
-    dailyWorkspaceLimit('brand_discovery.create', 'brand_discoveries_per_workspace_daily'),
-  );
+  await spendBudget(trx, budget('brand_discovery', process.env), workspaceId);
 }
 export function createDiscovery(
   db: Database,
@@ -204,6 +203,25 @@ export function createDiscovery(
       .execute();
     return discoveryView(inserted);
   });
+}
+/**
+ * A new discovery from a finished one's input, for a failed or degraded run.
+ * The finished task is never reset: the new discovery has its own key, task
+ * and attempts, and spends a daily admission like any other.
+ */
+export async function rerunDiscovery(db: Database, workspaceId: string, id: string, key: string) {
+  const source = await discoveryRow(db, workspaceId, id);
+  // A replayed key returns its run even after the source moved on.
+  const replay = await db
+    .selectFrom('brand_discoveries')
+    .selectAll()
+    .where('workspace_id', '=', workspaceId)
+    .where('idempotency_key', '=', key)
+    .executeTakeFirst();
+  if (replay) return discoveryView(replay);
+  if (![cfg.discovery_status_ready, cfg.discovery_status_failed].includes(source.status))
+    throw new ApiError(409, 'Only a finished discovery can be run again');
+  return createDiscovery(db, workspaceId, discoveryCreate.parse(source.input_data), key);
 }
 function confirmedCompetitors(input: DiscoveryCompletion, brandName: string, owned: string[]) {
   const names = new Set([brandName.toLowerCase()]);
@@ -368,8 +386,9 @@ export async function completeDiscovery(
       .insertInto('prompt_sets')
       .values({
         id: randomUUID(),
+        workspace_id: workspaceId,
         project_id: projectId,
-        name: policy.projects.prompt_set_name,
+        name: promptLibrary.prompt_set_name,
         description: '',
         created_at: now,
         updated_at: now,

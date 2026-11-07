@@ -1,16 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQueries } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 
-import { useRefreshImportedReads } from '@/components/integrations/data-sources';
 import { humanizeApiError } from '@/lib/api/errors';
-import { integrationsApi, type IntegrationSyncRun } from '@/lib/api/integrations';
-import { performanceApi, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
-import { queryKeys } from '@/lib/api/query-keys';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
-import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
-import { isSucceededSyncRun, isSyncInFlight } from '@/lib/integrations/sync-runs';
+import {
+  integrationsQueries,
+  refreshImportedReads,
+  type IntegrationSyncRun,
+} from '@/lib/api/integrations';
+import { performanceMutations, type PerformanceSyncEnqueueResponse } from '@/lib/api/performance';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { isSyncInFlight, pollSyncRun } from '@/lib/integrations/status';
 
 /**
  * "Sync now" for the Performance surface: enqueue one integrations run per
@@ -29,8 +30,8 @@ import { isSucceededSyncRun, isSyncInFlight } from '@/lib/integrations/sync-runs
  * batch stays in flight — Sync disabled, banner up — until the reports are
  * rebuilt, and the screen refetches once at that point.
  */
-export function usePerformanceSync(projectId: string | null) {
-  const workspaceId = useActiveWorkspaceId();
+export function usePerformanceSync() {
+  const { workspaceId, projectId } = useProjectScope();
   const scopeKey = `${workspaceId}:${projectId}`;
   const [batch, setBatch] = useState<{
     scopeKey: string;
@@ -44,23 +45,21 @@ export function usePerformanceSync(projectId: string | null) {
     currentBatch && !runs.length
       ? 'Nothing to sync yet. Connect a data source and choose its property above.'
       : null;
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!workspaceId || !projectId) throw new Error('Project is not available.');
-      const runs = await performanceApi.syncNow(projectId, { workspaceId });
-      return { scopeKey, runs, startedAt: new Date().toISOString() };
-    },
-    onSuccess: setBatch,
-  });
+  const mutation = useMutation(performanceMutations.syncNow({ workspaceId, projectId }));
+  // The batch belongs to the project it was started for: a late answer for a
+  // project the reader has since left is never polled here.
+  const start = () => {
+    const requested = scopeKey;
+    mutation.mutate(undefined, {
+      onSuccess: (enqueued) =>
+        setBatch({ scopeKey: requested, runs: enqueued, startedAt: new Date().toISOString() }),
+    });
+  };
   const runQueries = useQueries({
     queries: runs.map((run) => ({
-      queryKey: queryKeys.integrations.sync(run.connection_id, run.sync_run_id),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        integrationsApi.getSync(run.connection_id, run.sync_run_id, { signal, workspaceId }),
-      refetchInterval: (query: { state: { data?: IntegrationSyncRun } }) => {
-        const result = query.state.data;
-        return !result || isSyncInFlight(result) ? SYNC_RUN_POLL_MS : false;
-      },
+      ...integrationsQueries.sync(workspaceId, run.connection_id, run.sync_run_id),
+      refetchInterval: (query: { state: { data?: IntegrationSyncRun } }) =>
+        pollSyncRun(query.state.data),
     })),
   });
   const enqueued = runs.length > 0;
@@ -71,14 +70,13 @@ export function usePerformanceSync(projectId: string | null) {
   // in it did — one failure is a failed batch.
   let outcome: 'succeeded' | 'failed' | null = null;
   if (settled) {
-    const allSucceeded = runQueries.every(
-      (query) => query.data && isSucceededSyncRun(query.data.status),
-    );
+    const allSucceeded = runQueries.every((query) => query.data?.status === 'succeeded');
     outcome = allSucceeded ? 'succeeded' : 'failed';
   }
   useRefreshWhenSettled(settled);
   return {
     mutation,
+    start,
     notice,
     outcome,
     startedAt,
@@ -89,8 +87,8 @@ export function usePerformanceSync(projectId: string | null) {
 
 /** Refetch every imported read once, when the batch's reports have been rebuilt. */
 function useRefreshWhenSettled(settled: boolean) {
-  const refresh = useRefreshImportedReads();
+  const client = useQueryClient();
   useEffect(() => {
-    if (settled) void refresh();
-  }, [settled, refresh]);
+    if (settled) void refreshImportedReads(client);
+  }, [settled, client]);
 }

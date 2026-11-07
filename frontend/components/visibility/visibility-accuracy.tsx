@@ -28,7 +28,7 @@ import {
   TOPIC_LABELS,
   VERDICT_LABELS,
 } from '@/lib/visibility/accuracy';
-import { engineLabel } from '@/lib/visibility/dashboard';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import { formatShare } from '@/lib/visibility/perception';
 import { useAccuracy } from '@/lib/visibility/use-accuracy';
 import type { SourceQueries } from '@/lib/visibility/use-source-analysis';
@@ -79,6 +79,7 @@ export function VisibilityAccuracy({
 }
 
 export function AccuracyView({ data }: Readonly<{ data: AccuracyResponse }>) {
+  const { label: engineLabel } = useEngineCatalog();
   if (data.state !== 'value')
     return <AccuracyState state={data.state} reason={data.reason} coverage={data.score.coverage} />;
   return (
@@ -180,6 +181,7 @@ function ClaimLink({ claim }: Readonly<{ claim: AccuracyClaim }>) {
 }
 
 function ContradictedClaims({ claims }: Readonly<{ claims: AccuracyClaim[] }>) {
+  const { label: engineLabel } = useEngineCatalog();
   return (
     <Card>
       <CardHeader>

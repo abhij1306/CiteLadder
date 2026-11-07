@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { record } from '../db/json.ts';
-import { canonicalJson } from './requests.ts';
+import { canonicalJson } from '../canonical-json.ts';
 import { scalarText as text } from '../text-order.ts';
 
 const numeric = (value: unknown): string | null =>

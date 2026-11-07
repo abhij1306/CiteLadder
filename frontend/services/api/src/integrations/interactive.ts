@@ -1,5 +1,5 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { configEnvironment, type ServiceConfig } from '../config.ts';
+import type { ServiceConfig } from '../config.ts';
 import { interactiveExecution } from '../config/execution.ts';
 import type { Database } from '../db/database.ts';
 import { leaseSignal } from '../queue/heartbeat.ts';
@@ -16,7 +16,7 @@ export async function executeInteractiveSyncs(
 ) {
   if (!target.runId && !target.mappingId) return;
   const signal = AbortSignal.timeout(interactiveExecution.timeoutSeconds * 1000);
-  const client = new IntegrationClient(configEnvironment(config), {
+  const client = new IntegrationClient(config.settings, {
     fetch: (url, init) => fetch(url, { ...init, signal: leaseSignal(signal, init?.signal) }),
     sleep: (ms) => sleep(ms, undefined, { signal }),
   });

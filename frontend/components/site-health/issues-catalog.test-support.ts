@@ -1,4 +1,4 @@
-import type { IssueOccurrence, SiteIssue } from '@/lib/api/types';
+import type { IssueOccurrence, SiteIssue } from '@citeladder/contracts';
 
 /** Shared fixtures for the Issues catalog tests. */
 export const CRAWL = '44444444-4444-4444-8444-444444444444';

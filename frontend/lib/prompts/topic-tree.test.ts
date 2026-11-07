@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Topic } from '@/lib/api/types';
+import type { Topic } from '@citeladder/contracts';
 
 import { orderTopicsForRail } from './topic-tree';
 

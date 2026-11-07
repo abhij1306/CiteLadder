@@ -5,8 +5,9 @@ import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { codes, integrationPolicy, integrationSettings } from './config.ts';
 import { policy } from '../config.ts';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { isoDateText } from '../db/timestamps.ts';
+import { addDays } from '../calendar-days.ts';
 
 const settings = integrationSettings();
 
@@ -24,10 +25,6 @@ function day(value: string): number {
   return Date.parse(`${value}T00:00:00Z`);
 }
 
-function dateAfter(value: string, days: number): string {
-  return new Date(day(value) + days * 86_400_000).toISOString().slice(0, 10);
-}
-
 function windowFor(start: string | undefined, end: string | undefined): [string, string] {
   if ((start === undefined) !== (end === undefined)) {
     throw new ApiError(422, 'The requested sync window is invalid', {
@@ -36,7 +33,7 @@ function windowFor(start: string | undefined, end: string | undefined): [string,
   }
   const yesterday = isoDay(new Date(Date.now() - 86_400_000));
   if (start === undefined || end === undefined) {
-    return [dateAfter(yesterday, -(settings.sync_default_window_days - 1)), yesterday];
+    return [addDays(yesterday, -(settings.sync_default_window_days - 1)), yesterday];
   }
   if (!Number.isFinite(day(start)) || !Number.isFinite(day(end)) || start > end) {
     throw new ApiError(422, 'The requested sync window is invalid', {
@@ -45,7 +42,7 @@ function windowFor(start: string | undefined, end: string | undefined): [string,
   }
   const boundedStart =
     day(end) - day(start) >= settings.sync_backfill_max_days * 86_400_000
-      ? dateAfter(end, -(settings.sync_backfill_max_days - 1))
+      ? addDays(end, -(settings.sync_backfill_max_days - 1))
       : start;
   return [boundedStart, end];
 }
@@ -171,11 +168,8 @@ async function admitOnDemandSync(
     .executeTakeFirstOrThrow();
   if (Number(count.count) >= settings.sync_on_demand_active_limit)
     throw new ApiError(429, 'Workspace sync capacity exceeded');
-  await enforceWorkspaceRequest(trx, workspaceId, {
-    operation: 'integrations.sync.on_demand',
-    limit: settings.sync_on_demand_request_limit,
-    windowSeconds: settings.sync_on_demand_request_window_seconds,
-  });
+  // The module resolves its integration settings from the process environment.
+  await spendBudget(trx, budget('integration_sync', process.env), workspaceId);
 }
 
 async function resolveSyncTarget(trx: Database, input: SyncInput) {
@@ -240,8 +234,8 @@ async function syncWindow(
       .executeTakeFirst();
     const covered = latest?.covered ?? null;
     if (covered !== null) {
-      const earliest = dateAfter(yesterday, -(settings.sync_backfill_max_days - 1));
-      windowStart = dateAfter(covered, 1 - settings.sync_late_data_revision_days);
+      const earliest = addDays(yesterday, -(settings.sync_backfill_max_days - 1));
+      windowStart = addDays(covered, 1 - settings.sync_late_data_revision_days);
       if (windowStart < earliest) windowStart = earliest;
       if (windowStart > yesterday) windowStart = yesterday;
       windowEnd = yesterday;
@@ -345,12 +339,12 @@ async function backfillWindows(
     }
   } else {
     const end = isoDay(new Date(Date.now() - 86_400_000));
-    let start = dateAfter(end, -(days - 1));
+    let start = addDays(end, -(days - 1));
     while (start <= end) {
-      const chunkEnd = dateAfter(start, settings.sync_backfill_max_days - 1);
+      const chunkEnd = addDays(start, settings.sync_backfill_max_days - 1);
       const boundedEnd = chunkEnd < end ? chunkEnd : end;
       candidates.push([start, boundedEnd]);
-      start = dateAfter(boundedEnd, 1);
+      start = addDays(boundedEnd, 1);
     }
   }
 
@@ -526,7 +520,7 @@ export async function getBackfillProgress(db: Database, workspaceId: string, con
       through = end;
       continue;
     }
-    if (start > dateAfter(through!, 1)) break;
+    if (start > addDays(through!, 1)) break;
     if (end > through!) through = end;
   }
   const state = backfillState(attempts.size, pending, failed);

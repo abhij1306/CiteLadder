@@ -5,8 +5,9 @@ import {
   providerConnectionSchema,
 } from '@citeladder/contracts/providers';
 import { providerConnectionStatesSchema } from '@citeladder/contracts/providers';
-import { policy, resolveSettingSpec } from '../config.ts';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { policy } from '../config.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
+import type { Settings } from '../config/settings.ts';
 import { readBody } from '../http/body.ts';
 import {
   createConnection,
@@ -18,7 +19,8 @@ import {
   provisionRoutes,
 } from '../providers/connections.ts';
 import { createConnectionInput, updateConnectionInput } from '../providers/inputs.ts';
-import { providerPolicy, providerSettings } from '../providers/config.ts';
+import { logicalEngines, providerPolicy, providerSettings } from '../providers/config.ts';
+import { engineLabel } from '../config/providers.ts';
 import { connectionStates } from '../providers/states.ts';
 import { probeConnection } from '../providers/probes.ts';
 import { defineGetRoute, definePostRoute, definePatchRoute, defineDeleteRoute } from './define.ts';
@@ -29,7 +31,7 @@ const params = {
   query: {},
 } as const;
 const empty = { path: {}, query: {} } as const;
-const encryptionKey = () => String(resolveSettingSpec(policy.settings.encryption_key));
+const encryptionKey = (settings: Settings) => String(settings.of(policy.settings.encryption_key));
 export const providerRoutes = [
   defineGetRoute({
     family,
@@ -45,10 +47,11 @@ export const providerRoutes = [
           | 'google'
           | 'dataforseo'
         )[],
-        engines: Object.entries(providerPolicy.routes)
-          .sort(([a], [b]) => a.localeCompare(b))
+        engines: logicalEngines
+          .map((engine) => [engine, providerPolicy.routes[engine]] as const)
           .map(([engine, route]) => ({
-            logical_engine: engine as keyof typeof providerPolicy.routes,
+            logical_engine: engine,
+            label: engineLabel(engine),
             routes: [
               {
                 transport_provider: route.transport_provider as
@@ -95,14 +98,14 @@ export const providerRoutes = [
     capability: 'manage_credentials',
     body: createConnectionInput,
     response: providerConnectionSchema,
-    async handle({ c, db }) {
+    async handle({ c, db, config }) {
       return createConnection(
         db,
         c.get('workspace').workspaceId,
         c.get('user').id,
         await readBody(c, createConnectionInput),
-        encryptionKey(),
-        providerSettings(),
+        encryptionKey(config.settings),
+        providerSettings(config.settings),
       );
     },
   }),
@@ -113,15 +116,15 @@ export const providerRoutes = [
     capability: 'manage_credentials',
     body: updateConnectionInput,
     response: providerConnectionSchema,
-    async handle({ c, db }, { path }) {
+    async handle({ c, db, config }, { path }) {
       return updateConnection(
         db,
         c.get('workspace').workspaceId,
         c.get('user').id,
         path.connection_id,
         await readBody(c, updateConnectionInput),
-        encryptionKey(),
-        providerSettings(),
+        encryptionKey(config.settings),
+        providerSettings(config.settings),
       );
     },
   }),
@@ -155,20 +158,16 @@ export const providerRoutes = [
     params,
     capability: 'manage_credentials',
     response: connectionTestResultSchema,
-    async handle({ c, db }, { path }) {
+    async handle({ c, db, config }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
       await getConnection(db, workspaceId, path.connection_id);
-      await enforceWorkspaceRequest(db, workspaceId, {
-        operation: 'provider.connection_test',
-        limit: Number(resolveSettingSpec(policy.abuse.provider_test_limit)),
-        windowSeconds: Number(resolveSettingSpec(policy.abuse.provider_test_window_seconds)),
-      });
+      await spendBudget(db, budget('provider_connection_test', config.settings), workspaceId);
       return probeConnection(
         db,
         workspaceId,
         path.connection_id,
-        encryptionKey(),
-        providerSettings(),
+        encryptionKey(config.settings),
+        providerSettings(config.settings),
       );
     },
   }),

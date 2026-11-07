@@ -239,7 +239,7 @@ function staged(
   return {
     ok: true,
     document: number,
-    text: `${documentLabel(number)}: ${done}${label}; it is saved with your reply. Now reply briefly; do not repeat the document.`,
+    text: `${documentLabel(number)}: ${done}${label}; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.`,
   };
 }
 

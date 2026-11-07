@@ -11,7 +11,7 @@
  * names the reason; this module never infers it.
  */
 import type { RunStatusValue } from '@/components/ui/badge';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 
 import { crawlDisplayStatus, endSentence } from './status';
 
@@ -116,13 +116,6 @@ export function dashboardRunNotice(
       };
     case 'partially_completed':
       return partialCrawlNotice(crawl.partial_reason);
-    case 'paused':
-      return {
-        badge: 'paused',
-        tone: 'info',
-        message:
-          'This run is paused — showing the pages analyzed so far. Run a new crawl to refresh the results.',
-      };
     case 'failed': {
       const { reason, guidance } = crawlFailureCopy(crawl);
       // With zero pages analyzed there is no "so far" to show — lead

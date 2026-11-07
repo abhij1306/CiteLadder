@@ -5,19 +5,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';
 import { CsvImportTrigger } from '@/components/ui/csv-import';
 import { Stack } from '@/components/ui/layout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { KpiRow, type StatSegment } from '@/components/ui/stat-row';
 import { textRole } from '@/components/ui/typography';
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
-import { siteHealthApi, siteHealthQueries } from '@/lib/api/site-health';
+import { commerceMutations, followCatalogAnalysis } from '@/lib/api/commerce';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
+import { siteHealthMutations, siteHealthQueries } from '@/lib/api/site-health-queries';
 import { pluralCount } from '@/lib/format';
 import { crawlPollInterval } from '@/lib/site-health/status';
 
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 import type { CommerceProjection } from '@citeladder/contracts/commerce-suite';
 
 import type { CommerceQueries } from './commerce-queries';
@@ -38,9 +38,6 @@ function analyzedLabel(crawl: SiteHealthCrawl): string | null {
   const known = crawl.total_url_count ?? crawl.visible_url_count;
   return `${crawl.analyzed_count}/${Math.max(known, crawl.analyzed_count)}`;
 }
-
-/** When the cached catalog was read, and the crawl's analyzed count it was read beside. */
-type CatalogReadCount = { readAt: number; count: number };
 
 /**
  * Pages still being turned into catalog rows, then pages of the latest crawl
@@ -126,10 +123,7 @@ export function useCatalogHeader({
   const client = useQueryClient();
   const [result, setResult] = useState('');
   const dashboard = useQuery({
-    ...siteHealthQueries.dashboard(workspaceId, projectId),
-    // The workspace can still be resolving; this used to be gated by the
-    // caller mounting the component at all, and the hook has to gate itself.
-    enabled: Boolean(workspaceId && projectId),
+    ...siteHealthQueries.dashboard({ workspaceId, projectId }),
     refetchInterval: (state) => {
       const crawl = state.state.data?.crawl;
       return crawl ? crawlPollInterval(crawl) : false;
@@ -137,64 +131,47 @@ export function useCatalogHeader({
   });
   // A running crawl enqueues projections as pages are analyzed; re-read the
   // catalog when that count has moved past the one its cached read was taken
-  // beside, so its own polling starts with the first task. The count is kept
-  // in the cache next to the catalog, so a remount over a fresh catalog still
-  // sees a count that moved meanwhile, and a catalog read just now is not read
-  // again for a count it already reflects.
+  // beside, so its own polling starts with the first task.
   const analyzed = dashboard.data?.crawl?.analyzed_count;
   const catalogReadAt = query.dataUpdatedAt;
   const hasCatalog = query.data !== undefined;
   useEffect(() => {
     if (analyzed === undefined || !hasCatalog) return;
-    const key = queryKeys.commerce.catalogReadCount(projectId);
-    const recorded = client.getQueryData<CatalogReadCount>(key);
-    if (!recorded || recorded.readAt !== catalogReadAt)
-      client.setQueryData<CatalogReadCount>(key, { readAt: catalogReadAt, count: analyzed });
-    else if (recorded.count !== analyzed)
-      void client.invalidateQueries({ queryKey: queryKeys.commerce.catalog(projectId) });
-  }, [analyzed, catalogReadAt, hasCatalog, client, projectId]);
-  const invalidateCatalog = () =>
-    client.invalidateQueries({
-      queryKey: queryKeys.commerce.catalog(projectId),
+    followCatalogAnalysis(client, { workspaceId, projectId }, { readAt: catalogReadAt, analyzed });
+  }, [analyzed, catalogReadAt, hasCatalog, client, workspaceId, projectId]);
+  const importCatalog = useMutation(commerceMutations.importCatalog({ workspaceId, projectId }));
+  const importFile = (file: File) =>
+    importCatalog.mutate(file, {
+      onSuccess: (data) =>
+        setResult(
+          `${data.created} created, ${data.updated} updated, ${data.unchanged} unchanged, ${data.rejected} rejected`,
+        ),
     });
-  const importCatalog = useMutation({
-    mutationFn: async (file: File) =>
-      commerceApi.importCatalog(projectId, await file.text(), file.name, {
-        workspaceId,
-      }),
-    onSuccess: async (data) => {
-      setResult(
-        `${data.created} created, ${data.updated} updated, ${data.unchanged} unchanged, ${data.rejected} rejected`,
-      );
-      await invalidateCatalog();
-    },
-  });
-  const discover = useMutation({
-    mutationFn: () => siteHealthApi.createCrawl({ project_id: projectId }, { workspaceId }),
-    onSuccess: async () => {
-      await Promise.all([dashboard.refetch(), query.refetch()]);
-    },
-  });
+  // The descriptor refreshes the Site Health dashboard; the catalog is this screen's own read.
+  const discover = useMutation(siteHealthMutations.createCrawl(workspaceId));
+  const startDiscovery = () =>
+    discover.mutate({ project_id: projectId }, { onSuccess: () => void query.refetch() });
   const crawl = dashboard.data?.crawl ?? null;
   const counts = query.data;
+  const refresh = () =>
+    crawl ? void Promise.all([dashboard.refetch(), query.refetch()]) : startDiscovery();
   return {
     actions: (
       <CatalogActions
         crawl={crawl}
         importing={importCatalog.isPending}
-        onImport={(file) => importCatalog.mutate(file)}
+        onImport={importFile}
         refreshing={discover.isPending || dashboard.isPending}
-        onRefresh={() =>
-          crawl ? void Promise.all([dashboard.refetch(), query.refetch()]) : discover.mutate()
-        }
+        onRefresh={refresh}
       />
     ),
     stats: <CatalogStats counts={counts} projection={projection} crawl={crawl} />,
     notices: (
       <CatalogNotices
         result={result}
-        importFailed={importCatalog.isError}
-        refreshFailed={discover.isError || dashboard.isError}
+        importError={importCatalog.error}
+        refreshError={discover.error ?? dashboard.error}
+        onRefresh={refresh}
       />
     ),
   };
@@ -231,16 +208,36 @@ function CatalogActions({
 /** Whatever the last catalog-wide action has to report, above the counts. */
 function CatalogNotices({
   result,
-  importFailed,
-  refreshFailed,
-}: Readonly<{ result: string; importFailed: boolean; refreshFailed: boolean }>) {
-  if (!result && !importFailed && !refreshFailed) return null;
+  importError,
+  refreshError,
+  onRefresh,
+}: Readonly<{
+  result: string;
+  importError: unknown;
+  refreshError: unknown;
+  /** Re-runs the refresh, the recovery for a failed one. */
+  onRefresh: () => void;
+}>) {
+  if (!result && !importError && !refreshError) return null;
   return (
     <Stack>
       {result ? <p className={textRole('body')}>{result}</p> : null}
-      {importFailed ? <Callout tone="negative">The catalog import failed.</Callout> : null}
-      {refreshFailed ? (
-        <Callout tone="negative">Site Health progress could not be refreshed.</Callout>
+      {importError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(importError, { action: 'import the catalog' })}
+        />
+      ) : null}
+      {refreshError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(refreshError, {
+            action: 'refresh Site Health progress',
+          })}
+          recovery={
+            <Button type="button" variant="secondary" onClick={onRefresh}>
+              Refresh again
+            </Button>
+          }
+        />
       ) : null}
     </Stack>
   );

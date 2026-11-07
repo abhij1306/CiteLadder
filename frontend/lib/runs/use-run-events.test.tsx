@@ -53,7 +53,13 @@ describe('useRunEvents', () => {
       );
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient();
-    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
+    const scope = { workspaceId: WORKSPACE, projectId: PROJECT };
+    const run = queryKeys.runs.detail(WORKSPACE, AUDIT);
+    const executions = queryKeys.runs.executions(WORKSPACE, AUDIT);
+    const visibility = queryKeys.visibility.selection(scope);
+    const shelf = queryKeys.commerce.shelf(scope, null);
+    const otherRun = queryKeys.runs.detail(WORKSPACE, PROJECT);
+    for (const key of [run, executions, visibility, shelf, otherRun]) client.setQueryData(key, {});
 
     const { unmount } = renderHook(() => useRunEvents(AUDIT, PROJECT, true), {
       wrapper: wrapper(client),
@@ -61,15 +67,11 @@ describe('useRunEvents', () => {
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     await vi.advanceTimersByTimeAsync(300);
 
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.runs.detail(AUDIT),
-    });
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.runs.executions(AUDIT),
-    });
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: queryKeys.visibility.all,
-    });
+    const stale = (key: readonly unknown[]) => client.getQueryState(key)?.isInvalidated;
+    // The finished run's own reads and every audit-derived read are stale;
+    // another run's row is untouched.
+    expect([run, executions, visibility, shelf].map(stale)).toEqual([true, true, true, true]);
+    expect(stale(otherRun)).toBe(false);
     unmount();
   });
 

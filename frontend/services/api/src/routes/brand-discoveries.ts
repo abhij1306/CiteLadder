@@ -6,7 +6,6 @@ import {
 
 import { readBody } from '../http/body.ts';
 import { randomUUID } from 'node:crypto';
-import { configEnvironment } from '../config.ts';
 import { DiscoveryWorker } from '../workers/discovery-worker.ts';
 import { ApiError } from '../errors.ts';
 import {
@@ -15,6 +14,7 @@ import {
   discoveryCatalog,
   discoveryRow,
   discoveryView,
+  rerunDiscovery,
 } from '../projects/discovery.ts';
 import {
   discoveryCreate,
@@ -78,13 +78,29 @@ export const brandDiscoveryRoutes = [
     async handle({ c, db, config }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
       await discoveryRow(db, workspaceId, path.discovery_id);
-      const worker = new DiscoveryWorker(db, { env: configEnvironment(config) });
+      const worker = new DiscoveryWorker(db, { env: config.settings });
       await worker.runOnce(
         `interactive-discovery:${randomUUID()}`,
         { workspaceId, discoveryId: path.discovery_id },
         AbortSignal.timeout(worker.settings.interactive_timeout_seconds * 1000),
       );
       return discoveryView(await discoveryRow(db, workspaceId, path.discovery_id));
+    },
+  }),
+  definePostRoute({
+    family,
+    path: '/api/v1/brand-discoveries/{discovery_id}/rerun',
+    status: 202,
+    params: { path: discoveryPath, query: {} },
+    headers: idempotencyHeaders,
+    response: brandDiscoverySchema,
+    async handle({ c, db }, { path }) {
+      return rerunDiscovery(
+        db,
+        c.get('workspace').workspaceId,
+        path.discovery_id,
+        key(c.req.header('idempotency-key')),
+      );
     },
   }),
   definePostRoute({

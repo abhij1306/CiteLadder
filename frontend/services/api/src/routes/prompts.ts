@@ -3,6 +3,7 @@ import {
   promptGenerateResponseSchema,
   promptCandidateSchema,
   promptSchema,
+  promptSetListSchema,
   promptSetSchema,
   seedQueriesResponseSchema,
   topicPreviewResponseSchema,
@@ -10,7 +11,8 @@ import {
 } from '@citeladder/contracts/project';
 import { z } from 'zod';
 
-import { actorOf } from '../auth/actor.ts';
+import { requestProjectOf } from '../auth/actor.ts';
+import { routeActor } from '../commands/permission.ts';
 import * as commands from '../commands/prompts.ts';
 import { generationInput } from '../prompts/generation-input.ts';
 import { policy } from '../config.ts';
@@ -20,6 +22,7 @@ import {
   createPromptSet,
   deletePromptSet,
   listPromptSets,
+  promptFormLimits,
   promptSetCreate,
   promptSetUpdate,
   readPromptSet,
@@ -45,7 +48,8 @@ const noQuery = {} as const;
 /** Public API paths nest the library under its project. */
 const publicProject = `${policy.api.machine_prefix}/projects/{project_id}`;
 const publicSet = `${publicProject}/prompt-sets/{prompt_set_id}`;
-const publicWrite = { exposure: 'both', scope: 'prompts:write' } as const;
+const write = { permission: commands.PROMPTS_WRITE } as const;
+const publicWrite = { exposure: 'both', ...write } as const;
 /** A route under the project path resolves the project in the session read (or the key's path guard). */
 const inProject = { authorize: 'active-project' } as const;
 /** A retried request with the same key replays the staged run without provider I/O. */
@@ -56,10 +60,10 @@ const generationHeaders = z.object({
 export const promptRoutes = [
   definePostRoute({
     family: 'prompt-generation',
-    ...publicWrite,
+    exposure: 'both',
+    permission: commands.PROMPTS_RUN,
     publicPath: `${publicSet}/generate`,
     path: `${setRoot}/generate`,
-    capability: 'run',
     status: 201,
     params: { path: setPath, query: noQuery },
     body: generationInput,
@@ -68,7 +72,8 @@ export const promptRoutes = [
     async handle({ c, db }, { path }) {
       return commands.startGeneration(
         db,
-        actorOf(c),
+        routeActor(c, commands.PROMPTS_RUN),
+        requestProjectOf(c),
         path.prompt_set_id,
         await readBody(c, generationInput),
         { idempotencyKey: c.req.header('Idempotency-Key') ?? null },
@@ -79,9 +84,15 @@ export const promptRoutes = [
     family,
     path: `${api}/prompt-sets`,
     params: { path: {}, query: { project_id: { scalar: { kind: 'uuid' } } } },
-    response: z.array(promptSetSchema),
-    handle: ({ c, db }, { query }) =>
-      listPromptSets(db, c.get('workspace').workspaceId, query.project_id ?? null),
+    response: promptSetListSchema,
+    handle: async ({ c, db }, { query }) => ({
+      prompt_sets: await listPromptSets(
+        db,
+        c.get('workspace').workspaceId,
+        query.project_id ?? null,
+      ),
+      limits: promptFormLimits(),
+    }),
   }),
   definePostRoute({
     family,
@@ -137,26 +148,38 @@ export const promptRoutes = [
   definePostRoute({
     family,
     path: `${setRoot}/prompts`,
-    capability: 'write',
+    ...write,
     status: 201,
     params: { path: setPath, query: noQuery },
     body: promptInput,
     response: promptSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, promptInput);
-      return commands.createPrompt(db, actorOf(c), path.prompt_set_id, input);
+      return commands.createPrompt(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.prompt_set_id,
+        input,
+      );
     },
   }),
   definePostRoute({
     family,
     path: `${setRoot}/prompts/bulk-status`,
-    capability: 'write',
+    ...write,
     params: { path: setPath, query: noQuery },
     body: promptBulkStatus,
     response: promptSetSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, promptBulkStatus);
-      return commands.setPromptStatuses(db, actorOf(c), path.prompt_set_id, input);
+      return commands.setPromptStatuses(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.prompt_set_id,
+        input,
+      );
     },
   }),
   definePostRoute({
@@ -164,16 +187,21 @@ export const promptRoutes = [
     ...publicWrite,
     publicPath: `${publicSet}/import`,
     path: `${setRoot}/import`,
-    capability: 'write',
     status: 201,
     params: { path: setPath, query: noQuery },
     body: promptImport,
     response: promptSetSchema,
     async handle({ c, db }, { path }) {
-      return commands.importPrompts(db, actorOf(c), path.prompt_set_id, {
-        bytes: Buffer.byteLength(await c.req.text(), 'utf8'),
-        read: () => readBody(c, promptImport),
-      });
+      return commands.importPrompts(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.prompt_set_id,
+        {
+          bytes: Buffer.byteLength(await c.req.text(), 'utf8'),
+          read: () => readBody(c, promptImport),
+        },
+      );
     },
   }),
   defineGetRoute({
@@ -191,13 +219,18 @@ export const promptRoutes = [
     ...publicWrite,
     publicPath: `${publicSet}/candidates/review`,
     path: `${setRoot}/candidates/review`,
-    capability: 'write',
     params: { path: setPath, query: noQuery },
     body: candidateReview,
     response: promptCandidateReviewResponseSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, candidateReview);
-      return commands.reviewCandidates(db, actorOf(c), path.prompt_set_id, input);
+      return commands.reviewCandidates(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.prompt_set_id,
+        input,
+      );
     },
   }),
   definePatchRoute({
@@ -205,13 +238,18 @@ export const promptRoutes = [
     ...publicWrite,
     publicPath: `${publicProject}/prompts/{prompt_id}`,
     path: `${api}/prompts/{prompt_id}`,
-    capability: 'write',
     params: { path: { prompt_id: uuid }, query: noQuery },
     body: promptUpdate,
     response: promptSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, promptUpdate);
-      return commands.updatePrompt(db, actorOf(c), path.prompt_id, input);
+      return commands.updatePrompt(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.prompt_id,
+        input,
+      );
     },
   }),
   defineDeleteRoute({
@@ -219,9 +257,14 @@ export const promptRoutes = [
     ...publicWrite,
     publicPath: `${publicProject}/prompts/{prompt_id}`,
     path: `${api}/prompts/{prompt_id}`,
-    capability: 'write',
     params: { path: { prompt_id: uuid }, query: noQuery },
-    handle: ({ c, db }, { path }) => commands.deletePrompt(db, actorOf(c), path.prompt_id),
+    handle: ({ c, db }, { path }) =>
+      commands.deletePrompt(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.prompt_id,
+      ),
   }),
   defineGetRoute({
     family,
@@ -237,36 +280,46 @@ export const promptRoutes = [
     ...inProject,
     ...publicWrite,
     path: `${api}/projects/{project_id}/topics`,
-    capability: 'write',
     status: 201,
     params: { path: { project_id: uuid }, query: noQuery },
     body: topicCreate,
     response: topicSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, topicCreate);
-      return commands.createTopic(db, actorOf(c), path.project_id, input);
+      return commands.createTopic(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        path.project_id,
+        input,
+      );
     },
   }),
   definePostRoute({
     family: 'prompt-generation',
     ...inProject,
     path: `${api}/projects/{project_id}/topics/preview`,
-    capability: 'run',
+    permission: commands.PROMPTS_RUN,
     params: { path: { project_id: uuid }, query: noQuery },
     response: topicPreviewResponseSchema,
-    handle: ({ c, db }, { path }) => commands.previewTopics(db, actorOf(c), path.project_id),
+    handle: ({ c, db }, { path }) =>
+      commands.previewTopics(db, routeActor(c, commands.PROMPTS_RUN), path.project_id),
   }),
   definePostRoute({
     family,
     ...inProject,
     path: `${api}/projects/{project_id}/topics/confirm`,
-    capability: 'write',
+    ...write,
     params: { path: { project_id: uuid }, query: noQuery },
     body: topicConfirm,
     response: z.array(topicSchema),
     async handle({ c, db }, { path }) {
       const input = await readBody(c, topicConfirm);
-      return commands.confirmTopics(db, actorOf(c), path.project_id, input);
+      return commands.confirmTopics(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        path.project_id,
+        input,
+      );
     },
   }),
   defineGetRoute({
@@ -283,13 +336,18 @@ export const promptRoutes = [
     ...publicWrite,
     publicPath: `${publicProject}/topics/{topic_id}`,
     path: `${api}/topics/{topic_id}`,
-    capability: 'write',
     params: { path: { topic_id: uuid }, query: noQuery },
     body: topicUpdate,
     response: topicSchema,
     async handle({ c, db }, { path }) {
       const input = await readBody(c, topicUpdate);
-      return commands.updateTopic(db, actorOf(c), path.topic_id, input);
+      return commands.updateTopic(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.topic_id,
+        input,
+      );
     },
   }),
   defineDeleteRoute({
@@ -297,8 +355,13 @@ export const promptRoutes = [
     ...publicWrite,
     publicPath: `${publicProject}/topics/{topic_id}`,
     path: `${api}/topics/{topic_id}`,
-    capability: 'write',
     params: { path: { topic_id: uuid }, query: noQuery },
-    handle: ({ c, db }, { path }) => commands.deleteTopic(db, actorOf(c), path.topic_id),
+    handle: ({ c, db }, { path }) =>
+      commands.deleteTopic(
+        db,
+        routeActor(c, commands.PROMPTS_WRITE),
+        requestProjectOf(c),
+        path.topic_id,
+      ),
   }),
 ];

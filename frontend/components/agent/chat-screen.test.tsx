@@ -14,6 +14,7 @@ import {
 } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { expectThreadFollowsLatest } from '@/test/chat-follow';
 
@@ -21,7 +22,7 @@ const mocks = vi.hoisted(() => ({ saveBlob: vi.fn() }));
 vi.mock('@/lib/download', () => ({ saveBlob: mocks.saveBlob }));
 import { ChatScreen } from './chat-screen';
 import { OutputHistory } from './output-history';
-import { queryKeys } from '@/lib/api/query-keys';
+import { refreshAgentChat } from '@/lib/api/agent';
 import {
   CHAT,
   NOW,
@@ -44,7 +45,7 @@ function renderChat() {
       initialEntries: [`/agent/chats/${CHAT}`],
       projectSelection: {
         activeProjectId: PROJECT,
-        activeProject: { id: PROJECT } as never,
+        activeProject: makeProject({ id: PROJECT }),
         status: 'ready',
       },
     },
@@ -683,7 +684,7 @@ describe('ChatScreen', () => {
         },
       ],
     };
-    await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(CHAT) }));
+    await act(() => refreshAgentChat(queryClient, CHAT));
     await screen.findByText('Here is why.');
     expect(screen.queryByRole('group', { name: 'Suggested follow-ups' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Reply to the agent')).toHaveValue('Make it shorter');
@@ -734,7 +735,7 @@ describe('ChatScreen', () => {
       user,
       newerReply: async () => {
         current = detail(revision(REV2, 2, 'agent', 'Updated body.'));
-        await act(() => queryClient.invalidateQueries({ queryKey: queryKeys.agent.chat(CHAT) }));
+        await act(() => refreshAgentChat(queryClient, CHAT));
         await screen.findByText('Updated body.');
       },
     });

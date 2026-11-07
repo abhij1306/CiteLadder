@@ -9,7 +9,7 @@ import type { Database } from '../../db/database.ts';
 export function siteHealthRuntime() {
   const cfg = policy.site_health_runtime;
   const setting = (key: keyof typeof cfg.settings) =>
-    resolveSettingSpec(cfg.settings[key]) as number;
+    resolveSettingSpec(cfg.settings[key], process.env) as number;
   const allowance = setting('monitored_url_limit');
   return {
     discovery_mode: cfg.full_mode,

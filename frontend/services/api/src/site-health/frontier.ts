@@ -10,7 +10,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { sql, type Selectable } from 'kysely';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import type { WorkspaceSiteHealthRuntime } from '../generated/db-schema.ts';
@@ -18,11 +19,12 @@ import { compareText } from '../text-order.ts';
 import { classifyUrlAdmission, type Admission, type Scope } from './url-admission.ts';
 import { canonicalIdentity, hostTwinHash } from './url-identity.ts';
 import { expectedTaskFailure } from './coverage.ts';
-import { ACTIVE_CRAWL } from './site-task.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
+import { taskOutcome } from './task-outcome.ts';
 import {
   activateMemberships,
-  enqueueSiteTasks,
+  candidateObservation,
+  enqueueCrawlTasks,
   insertObservations,
   markFrontierAdmitted,
   readAdmissionState,
@@ -31,14 +33,9 @@ import {
 } from './admission-writes.ts';
 
 const crawlPolicy = policy.site_health.crawl;
-const NOT_A_PAGE = new Set([
-  ...policy.site_health.reads.corpus_exclusion_error_codes,
-  ...policy.site_health.reads.non_page_error_codes,
-]);
-const GONE = new Set(policy.site_health.reads.corpus_exclusion_status_codes);
 type Runtime = Selectable<WorkspaceSiteHealthRuntime>;
 
-function frontierSettings(env: Record<string, string | undefined> = process.env) {
+function frontierSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (name: keyof typeof spec) => Number(resolveSettingSpec(spec[name], env));
   return {
@@ -47,7 +44,6 @@ function frontierSettings(env: Record<string, string | undefined> = process.env)
     automaticPageLimit: number('automatic_page_limit'),
     sampleCap: number('sample_discovery_url_cap'),
     maxFrontier: number('max_frontier_urls'),
-    maxAttempts: number('max_attempts'),
   };
 }
 type Settings = ReturnType<typeof frontierSettings>;
@@ -168,206 +164,26 @@ export async function addAutomaticRoot(trx: Database, crawl: Crawl, runtime: Run
     parentPosition: 0,
     linkOrdinal: 0,
   });
-  const siteUrlId = await upsertSiteUrl(trx, crawl, item);
-  await observe(
-    trx,
-    crawl,
-    siteUrlId,
-    item,
-    { analyze: true, source: 'bootstrap' },
-    frontierSettings(),
-  );
+  const siteUrlId = (await upsertSiteUrls(trx, crawl, [item])).get(item.hash)!;
+  await activateMemberships(trx, crawl, [siteUrlId], 'bootstrap');
+  await insertObservations(trx, crawl, [candidateObservation(siteUrlId, item, null)]);
+  await enqueueCrawlTasks(trx, crawl, [analyzeSeed(siteUrlId, item)], 'admit');
 }
 
-/** Conflict-safe identity upsert; a new sighting resets an earlier crawl's document or alias disposition. */
-async function upsertSiteUrl(trx: Database, crawl: Crawl, item: Candidate) {
-  const now = new Date();
-  const row = await trx
-    .insertInto('site_urls')
-    .values({
-      id: randomUUID(),
-      workspace_id: crawl.workspace_id,
-      project_id: crawl.project_id,
-      normalized_url: item.url,
-      url_hash: item.hash,
-      display_url: item.url,
-      host: new URL(item.url).hostname.slice(0, 255),
-      depth: item.depth,
-      corpus_disposition: item.disposition,
-      disposition_reason: item.dispositionReason,
-      disposition_version: crawlPolicy.disposition_version,
-      item_kind: item.itemKind,
-      discovery_status: 'running',
-      latest_source_kind: item.sourceKind,
-      latest_title: '',
-      latest_content_type: '',
-      first_seen_crawl_id: crawl.id,
-      last_seen_crawl_id: crawl.id,
-      first_seen_at: now,
-      last_seen_at: now,
-    })
-    .onConflict((conflict) =>
-      conflict
-        .columns(['project_id', 'url_hash'])
-        .doUpdateSet((eb) => ({
-          display_url: eb.ref('excluded.display_url'),
-          host: eb.ref('excluded.host'),
-          depth: eb.ref('excluded.depth'),
-          corpus_disposition: eb.ref('excluded.corpus_disposition'),
-          disposition_reason: eb.ref('excluded.disposition_reason'),
-          disposition_version: eb.ref('excluded.disposition_version'),
-          item_kind: eb.ref('excluded.item_kind'),
-          discovery_status: eb.ref('excluded.discovery_status'),
-          latest_source_kind: eb.ref('excluded.latest_source_kind'),
-          last_seen_crawl_id: eb.ref('excluded.last_seen_crawl_id'),
-          last_seen_at: eb.ref('excluded.last_seen_at'),
-        }))
-        .where('site_urls.workspace_id', '=', crawl.workspace_id),
-    )
-    .returning('id')
-    .executeTakeFirst();
-  if (!row) throw new Error(`SiteUrl ${item.hash} belongs to another workspace`);
-  return row.id;
-}
-
-/**
- * Enqueue one task of an active crawl. A conflicting queued row only ever has
- * its priority raised (and its wake-up pulled forward), so discovery's boost
- * reaches a pre-seeded analyze task. Returns the id of a newly inserted row.
- */
-async function enqueueSiteTask(
-  trx: Database,
-  crawl: Crawl,
-  task: {
-    kind: 'discover' | 'analyze';
-    siteUrlId: string | null;
-    url: string;
-    hash: string;
-    depth: number;
-    priority: number;
-    position?: number;
-    parentSiteUrlId: string | null;
-  },
-  settings: Settings,
-) {
-  const { rows } = await sql<{ id: string; inserted: boolean }>`
-    INSERT INTO site_crawl_tasks (
-      id, crawl_id, workspace_id, site_url_id, parent_site_url_id, task_kind, requested_url,
-      url_hash, depth, generation, idempotency_key, status, priority, randomized_position,
-      max_attempts, attempt_count, conflict_count, available_at, created_at,
-      updated_at, error_code, error_detail, classification_expected
-    )
-    SELECT ${randomUUID()}::uuid, c.id, c.workspace_id, ${task.siteUrlId}::uuid,
-      ${task.parentSiteUrlId}::uuid, ${task.kind}, ${task.url}, ${task.hash}, ${task.depth}, 0,
-      ${`${crawl.id}:${task.kind}:${task.hash}:0`}, 'queued', ${task.priority},
-      ${task.position ?? 0}, ${settings.maxAttempts}, 0, 0, now(), now(), now(), '', '', false
-    FROM site_crawls c
-    WHERE c.id = ${crawl.id}::uuid AND c.workspace_id = ${crawl.workspace_id}::uuid
-      AND c.status = ANY(${[...ACTIVE_CRAWL]})
-    ON CONFLICT (crawl_id, task_kind, url_hash, generation) DO UPDATE
-      SET priority = excluded.priority,
-          available_at = least(site_crawl_tasks.available_at, now())
-      WHERE site_crawl_tasks.status = 'queued' AND site_crawl_tasks.priority < excluded.priority
-    RETURNING id, (xmax = 0) AS inserted`.execute(trx);
-  return rows[0]?.inserted ? rows[0].id : null;
-}
-
-/** Insert or reactivate a system membership; the id only when it became active now. */
-async function activateMembership(trx: Database, crawl: Crawl, siteUrlId: string, source: string) {
-  const now = new Date();
-  const row = await trx
-    .insertInto('monitored_site_urls')
-    .values({
-      id: randomUUID(),
-      workspace_id: crawl.workspace_id,
-      project_id: crawl.project_id,
-      profile_id: crawl.profile_id,
-      site_url_id: siteUrlId,
-      active: true,
-      selection_source: source,
-      selected_at: now,
-      created_at: now,
-      updated_at: now,
-    })
-    .onConflict((conflict) =>
-      conflict
-        .columns(['project_id', 'site_url_id'])
-        .doUpdateSet({
-          active: true,
-          selection_source: source,
-          selected_at: now,
-          deselected_at: null,
-          updated_at: now,
-        })
-        .where('monitored_site_urls.active', '=', false),
-    )
-    .returning('id')
-    .executeTakeFirst();
-  return Boolean(row);
-}
-
-/**
- * Observe a URL in this crawl and optionally monitor and analyze it. A URL
- * about to be discovered gets its analyze task from that fetch instead, so the
- * task never wakes before its artifact exists. Returns [activated, observed].
- */
-async function observe(
-  trx: Database,
-  crawl: Crawl,
+/** An admitted page's analysis, boosted above the discovery that found it. */
+function analyzeSeed(
   siteUrlId: string,
-  item: Candidate,
-  options: {
-    analyze: boolean;
-    afterDiscovery?: boolean;
-    source: string;
-    artifactId?: string | null;
-  },
-  settings: Settings,
+  page: Pick<Candidate, 'url' | 'hash' | 'depth' | 'priority' | 'referrerId'>,
 ) {
-  const activated = options.analyze
-    ? await activateMembership(trx, crawl, siteUrlId, options.source)
-    : false;
-  const observation = await trx
-    .insertInto('site_url_observations')
-    .values({
-      id: randomUUID(),
-      workspace_id: crawl.workspace_id,
-      project_id: crawl.project_id,
-      crawl_id: crawl.id,
-      site_url_id: siteUrlId,
-      source_kind: item.sourceKind,
-      value_kind: item.valueKind,
-      value_priority: item.priority,
-      rewrite_reason: item.rewriteReason,
-      rewrite_version: item.rewriteVersion,
-      depth: item.depth,
-      observed_url: item.url,
-      final_url: item.url,
-      source_artifact_id: options.artifactId ?? null,
-      parent_site_url_id: item.referrerId,
-      content_type: '',
-      title: '',
-      created_at: new Date(),
-    })
-    .onConflict((conflict) => conflict.columns(['crawl_id', 'site_url_id']).doNothing())
-    .returning('id')
-    .executeTakeFirst();
-  if (options.analyze && !options.afterDiscovery)
-    await enqueueSiteTask(
-      trx,
-      crawl,
-      {
-        kind: 'analyze',
-        siteUrlId,
-        url: item.url,
-        hash: item.hash,
-        depth: item.depth,
-        priority: item.priority + crawlPolicy.analyze_priority_boost,
-        parentSiteUrlId: item.referrerId,
-      },
-      settings,
-    );
-  return [activated, Boolean(observation)] as const;
+  return {
+    kind: 'analyze',
+    siteUrlId,
+    url: page.url,
+    hash: page.hash,
+    depth: page.depth,
+    priority: page.priority + crawlPolicy.analyze_priority_boost,
+    parentSiteUrlId: page.referrerId,
+  };
 }
 
 async function sampleRemaining(trx: Database, crawl: Crawl, runtime: Runtime | undefined) {
@@ -701,57 +517,53 @@ async function writeAdmission(
   trx: Database,
   crawl: Crawl,
   planned: Planned[],
-  settings: Settings,
   options: { source: string; artifactId: string | null; enqueueChildren: boolean },
 ) {
   const ids = await upsertSiteUrls(
     trx,
     crawl,
     planned.map((entry) => entry.item),
-    crawlPolicy.disposition_version,
   );
-  const withId = (entry: Planned) => ({ siteUrlId: ids.get(entry.item.hash)!, item: entry.item });
+  const idOf = (entry: Planned) => ids.get(entry.item.hash)!;
   await activateMemberships(
     trx,
     crawl,
-    planned.filter((entry) => entry.selected).map((entry) => withId(entry).siteUrlId),
+    planned.filter((entry) => entry.selected).map(idOf),
     options.source,
   );
   const observedNew = await insertObservations(
     trx,
     crawl,
-    planned.filter((entry) => entry.observe).map(withId),
-    options.artifactId,
-  );
-  await enqueueSiteTasks(
-    trx,
-    crawl,
-    'analyze',
     planned
-      .filter((entry) => entry.analyze)
-      .map((entry) => ({
-        ...withId(entry),
-        priority: entry.item.priority + crawlPolicy.analyze_priority_boost,
-        position: 0,
-      })),
-    settings.maxAttempts,
+      .filter((entry) => entry.observe)
+      .map((entry) => candidateObservation(idOf(entry), entry.item, options.artifactId)),
   );
-  const discovering = await enqueueSiteTasks(
+  await enqueueCrawlTasks(
     trx,
     crawl,
-    'discover',
+    planned.filter((entry) => entry.analyze).map((entry) => analyzeSeed(idOf(entry), entry.item)),
+    'admit',
+  );
+  const discovering = await enqueueCrawlTasks(
+    trx,
+    crawl,
     planned
       .filter((entry) => entry.discover)
       .map((entry) => ({
-        ...withId(entry),
+        kind: 'discover',
+        siteUrlId: idOf(entry),
+        url: entry.item.url,
+        hash: entry.item.hash,
+        depth: entry.item.depth,
         priority: entry.item.priority,
         position: entry.position,
+        parentSiteUrlId: entry.item.referrerId,
       })),
-    settings.maxAttempts,
+    'admit',
   );
   // The crawl's observation counter already holds the pages it had observed.
   const seen = new Set(planned.flatMap((entry) => (entry.seen ? [entry.item.hash] : [])));
-  const discoverNew = discovering.filter((hash) => !seen.has(hash)).length;
+  const discoverNew = discovering.filter((row) => !seen.has(row.url_hash)).length;
   await markFrontierAdmitted(
     trx,
     crawl,
@@ -803,7 +615,7 @@ export async function admitCandidates(
   const plan = planAdmission(current, batch, known, { ceiling, remaining, enqueueChildren });
   const automatic =
     Number(record(current.configuration)[crawlPolicy.automatic_monitor_limit_key]) || 0;
-  const { ids, admitted } = await writeAdmission(trx, current, plan.planned, settings, {
+  const { ids, admitted } = await writeAdmission(trx, current, plan.planned, {
     source: current.sample_mode && automatic <= 0 ? 'free_sample' : 'bootstrap',
     artifactId: options.sourceArtifactId ?? null,
     enqueueChildren,
@@ -828,7 +640,6 @@ export async function enqueueDiscoveredAnalysis(
     priority: number;
     parentSiteUrlId: string | null;
   },
-  settings = frontierSettings(),
 ) {
   const siteUrlId =
     page.siteUrlId ??
@@ -851,20 +662,13 @@ export async function enqueueDiscoveredAnalysis(
     .where('active', '=', true)
     .executeTakeFirst();
   if (!member) return null;
-  return enqueueSiteTask(
+  const [row] = await enqueueCrawlTasks(
     trx,
     crawl,
-    {
-      kind: 'analyze',
-      siteUrlId,
-      url: page.url,
-      hash: page.hash,
-      depth: page.depth,
-      priority: page.priority + crawlPolicy.analyze_priority_boost,
-      parentSiteUrlId: page.parentSiteUrlId,
-    },
-    settings,
+    [analyzeSeed(siteUrlId, { ...page, referrerId: page.parentSiteUrlId })],
+    'admit',
   );
+  return row?.id ?? null;
 }
 
 /** A fetched document is inventory only: it frees any system-managed analysis allowance. */
@@ -903,8 +707,9 @@ export async function releaseNonPage(
   { record }: { record: boolean },
 ) {
   if (canonicalIdentity(crawl.root_url).hash === hash) return false;
+  const outcome = taskOutcome(failure);
+  if (outcome !== 'excluded' && outcome !== 'not_page' && outcome !== 'gone') return false;
   const status = failure.statusCode ?? 0;
-  if (!NOT_A_PAGE.has(failure.errorCode) && !GONE.has(status)) return false;
   const url = record
     ? await trx
         .updateTable('site_urls')

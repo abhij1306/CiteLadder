@@ -11,11 +11,12 @@
  * Every JSON response passes through `strictValidate` (fail loud on any
  * drift). All paths are relative `/api/v1` (same-origin proxy).
  */
-import { queryOptions } from '@tanstack/react-query';
+import { mutationOptions, queryOptions, skipToken, type QueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
+import type { ProjectScope } from './query-keys/scope';
 import { performanceSyncEnqueueResponseSchema } from '@citeladder/contracts/integrations';
 import {
   performanceDashboardSchema,
@@ -39,8 +40,8 @@ export type PerformanceGranularity = z.infer<typeof performanceGranularitySchema
 export type PerformanceDashboard = z.infer<typeof performanceDashboardSchema>;
 export type PerformanceWindow = PerformanceDashboard['selected'];
 export type PerformanceSeriesPoint = PerformanceWindow['series']['clicks'][number];
-export type PerformanceTablePage = z.infer<typeof performanceTablePageSchema>;
-export type PerformanceRangeTask = z.infer<typeof performanceRangeTaskSchema>;
+type PerformanceTablePage = z.infer<typeof performanceTablePageSchema>;
+type PerformanceRangeTask = z.infer<typeof performanceRangeTaskSchema>;
 export type PerformanceSyncEnqueueResponse = z.infer<typeof performanceSyncEnqueueResponseSchema>;
 export type ProjectReadiness = z.infer<typeof projectReadinessSchema>;
 export type ProjectReadinessStage = z.infer<typeof projectReadinessStageSchema>;
@@ -73,7 +74,7 @@ export type PerformanceTableParams = {
   compare_snapshot_id?: string;
 };
 
-export const performanceApi = {
+const performanceApi = {
   getDashboard: async (
     projectId: string,
     params?: PerformanceDashboardParams,
@@ -151,21 +152,67 @@ export const performanceApi = {
   },
 };
 
+const scoped = (scope: ProjectScope, signal?: AbortSignal) => ({
+  signal,
+  workspaceId: scope.workspaceId,
+});
+
 /**
- * Dashboard read options, so the screen and navigation intent request the
- * SAME key from one definition instead of each assembling its own.
+ * Performance reads, so the screen and navigation intent request the SAME key
+ * from one definition instead of each assembling its own.
  */
 export const performanceQueries = {
-  dashboard: (workspaceId: string, projectId: string, params: PerformanceDashboardParams) =>
+  dashboard: (scope: ProjectScope, params: PerformanceDashboardParams) =>
     queryOptions({
-      queryKey: queryKeys.performance.dashboard(projectId, params),
+      queryKey: queryKeys.performance.dashboard(scope, params),
       queryFn: ({ signal }) =>
-        performanceApi.getDashboard(projectId, params, { signal, workspaceId }),
+        performanceApi.getDashboard(scope.projectId, params, scoped(scope, signal)),
     }),
   /** One page of one dimension table; tab intent warms the same key the table reads. */
-  table: (workspaceId: string | null, projectId: string, params: PerformanceTableParams) =>
+  table: (scope: ProjectScope, params: PerformanceTableParams) =>
     queryOptions({
-      queryKey: queryKeys.performance.table(projectId, workspaceId, params),
-      queryFn: ({ signal }) => performanceApi.getTable(projectId, params, { signal, workspaceId }),
+      queryKey: queryKeys.performance.table(scope, params),
+      queryFn: ({ signal }) =>
+        performanceApi.getTable(scope.projectId, params, scoped(scope, signal)),
+    }),
+  /** The post-connect readiness ladder: ONE entry every surface asking "connected?" reads. */
+  readiness: (scope: ProjectScope) =>
+    queryOptions({
+      queryKey: queryKeys.performance.readiness(scope),
+      queryFn: ({ signal }) => performanceApi.getReadiness(scope.projectId, scoped(scope, signal)),
+    }),
+  /** One queued range projection; skips until a task is queued. */
+  rangeTask: (scope: ProjectScope, taskId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.performance.rangeTask(scope, taskId ?? ''),
+      queryFn: taskId
+        ? ({ signal }) =>
+            performanceApi.getRangeTask(scope.projectId, taskId, scoped(scope, signal))
+        : skipToken,
+    }),
+};
+
+/** Every Performance read of the project, after a range projection was built. */
+export const refreshPerformance = (client: QueryClient, projectId: string) =>
+  client.invalidateQueries({ queryKey: queryKeys.performance.project(projectId) });
+
+/**
+ * Performance writes. Neither persists a projection by itself: the range task
+ * and the sync runs are polled, and their terminal state refreshes the reads.
+ */
+export const performanceMutations = {
+  /** Queue the display projection for one window; idempotent on the window. */
+  enqueueRange: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: (window: { from: string; to: string }) =>
+        performanceApi.enqueueRange(scope.projectId, window, scoped(scope)),
+    }),
+  /** One integrations sync run per active mapped connection. */
+  syncNow: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: () => {
+        if (!scope.workspaceId || !scope.projectId) throw new Error('Project is not available.');
+        return performanceApi.syncNow(scope.projectId, scoped(scope));
+      },
     }),
 };

@@ -1,23 +1,26 @@
 'use client';
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { BackfillHistory } from '@/components/settings/backfill-progress';
 import { PROVIDER_META, type GrantModel } from '@/components/settings/grant-model';
-import { useRefreshImportedReads } from '@/components/integrations/data-sources';
 import { useProjectContext } from '@/lib/project/project-context';
 import { PropertyPicker, useActiveMapping } from '@/components/settings/property-picker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { integrationsApi, type IntegrationConnection } from '@/lib/api/integrations';
-import { queryKeys } from '@/lib/api/query-keys';
+import {
+  integrationsApi,
+  integrationsMutations,
+  integrationsQueries,
+  refreshImportedReads,
+  type IntegrationConnection,
+} from '@/lib/api/integrations';
 import { humanizeApiError } from '@/lib/api/errors';
 import { formatCount, formatShortDate } from '@/lib/format';
 import { DisplayTime } from '@/components/ui/display-time';
-import { SYNC_RUN_POLL_MS } from '@/lib/config/operational';
-import { isActiveSyncRun, isSyncInFlight, SYNC_RUN_BADGE } from '@/lib/integrations/sync-runs';
+import { isSyncInFlight, pollSyncRun, SYNC_RUN_STATES } from '@/lib/integrations/status';
 import { ControlRow } from '@/components/ui/control-row';
 import { FactList } from '@/components/ui/facts';
 import { IconTile } from '@/components/ui/icon';
@@ -33,15 +36,16 @@ type ConnectionMutation = {
 };
 type SyncRun = Awaited<ReturnType<typeof integrationsApi.getSync>>;
 
-const SYNC_RUN_LABEL: Record<SyncRun['status'], string> = {
-  queued: 'Queued',
-  leased: 'Starting',
-  running: 'Running',
-  retry_wait: 'Retrying',
-  succeeded: 'Succeeded',
-  failed: 'Failed',
-  cancelled: 'Cancelled',
-};
+/** A mutation's state with the one action the row runs through it. */
+const connectionAction = (
+  mutation: Omit<ConnectionMutation, 'mutate'>,
+  run: () => void,
+): ConnectionMutation => ({
+  isPending: mutation.isPending,
+  isError: mutation.isError,
+  error: mutation.error,
+  mutate: run,
+});
 
 function waitingLabel(status: SyncRun['status']): string {
   if (status === 'leased') return 'assigned to a worker';
@@ -142,8 +146,8 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
   if (runActive)
     return (
       <>
-        <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
-          {SYNC_RUN_LABEL[run.status]}
+        <Badge variant="run-status" value={SYNC_RUN_STATES[run.status].badge}>
+          {SYNC_RUN_STATES[run.status].label}
         </Badge>
         <span className="truncate">
           {run.status === 'running' ? (
@@ -169,8 +173,8 @@ function RunSummary({ run, runActive }: Readonly<{ run: SyncRun; runActive: bool
     run.status === 'succeeded' ? `${rows} imported · ${window}` : run.error_detail || window;
   return (
     <>
-      <Badge variant="run-status" value={SYNC_RUN_BADGE[run.status]}>
-        {SYNC_RUN_LABEL[run.status]}
+      <Badge variant="run-status" value={SYNC_RUN_STATES[run.status].badge}>
+        {SYNC_RUN_STATES[run.status].label}
       </Badge>
       <span className="truncate" title={result}>
         {result}
@@ -324,15 +328,16 @@ export function ConnectionRow({
 }: Readonly<{ connection: IntegrationConnection; grant: GrantModel }>) {
   const [testState, setTestState] = useState<{ ok: boolean; message: string } | null>(null);
   const { activeProject } = useProjectContext();
-  const refreshImportedReads = useRefreshImportedReads();
+  const client = useQueryClient();
   const mapping = useActiveMapping(
     connection.workspace_id,
     connection.id,
     activeProject?.id ?? null,
   );
   const [activeSyncId, setActiveSyncId] = useState<string | null>(null);
+  // The test descriptor owns no callbacks; this row's status slot is local state.
   const testMutation = useMutation({
-    mutationFn: () => integrationsApi.test(connection.id, { workspaceId: connection.workspace_id }),
+    ...integrationsMutations.test(connection.workspace_id, connection.id),
     // The newest action owns the status slot: an older failure must not mask this result.
     onMutate: () => {
       syncMutation.reset();
@@ -354,49 +359,37 @@ export function ConnectionRow({
   });
   // The terminal sync poll refreshes every imported read; enqueueing alone persists no projection.
   // react-doctor-disable-next-line
-  const syncMutation = useMutation({
-    // Name the project: a connection serving several projects needs it.
-    mutationFn: () =>
-      integrationsApi.sync(connection.id, activeProject ? { project_id: activeProject.id } : {}, {
-        workspaceId: connection.workspace_id,
-      }),
-    onSuccess: (enqueued) => {
-      setTestState(null);
-      setActiveSyncId(enqueued.sync_run_id);
-    },
-  });
+  const syncMutation = useMutation(
+    integrationsMutations.sync(connection.workspace_id, connection.id),
+  );
+  // Name the project: a connection serving several projects needs it.
+  const startSync = () =>
+    syncMutation.mutate(activeProject ? { project_id: activeProject.id } : {}, {
+      onSuccess: (enqueued) => {
+        setTestState(null);
+        setActiveSyncId(enqueued.sync_run_id);
+      },
+    });
   const syncRunQuery = useQuery({
-    queryKey: queryKeys.integrations.sync(connection.id, activeSyncId ?? ''),
-    queryFn: ({ signal }) =>
-      integrationsApi.getSync(connection.id, activeSyncId ?? '', {
-        signal,
-        workspaceId: connection.workspace_id,
-      }),
-    enabled: activeSyncId !== null,
-    refetchInterval: (query) => {
-      const run = query.state.data;
-      return !run || isSyncInFlight(run) ? SYNC_RUN_POLL_MS : false;
-    },
+    ...integrationsQueries.sync(connection.workspace_id, connection.id, activeSyncId),
+    refetchInterval: (query) => pollSyncRun(query.state.data),
   });
   const activeRun = syncRunQuery.data ?? null;
-  const runActive = activeRun !== null && isActiveSyncRun(activeRun.status);
+  const runActive = activeRun !== null && SYNC_RUN_STATES[activeRun.status].active;
   const runInFlight = activeRun !== null && isSyncInFlight(activeRun);
   // Pages read the projections, so they refresh once the reports are rebuilt.
   const runTerminal = activeRun !== null && !runInFlight;
 
   useEffect(() => {
-    if (runTerminal) void refreshImportedReads();
-  }, [refreshImportedReads, runTerminal]);
+    if (runTerminal) void refreshImportedReads(client);
+  }, [client, runTerminal]);
 
   // Stops importing this property into the project; imported data stays.
-  const removeMutation = useMutation({
-    mutationFn: async () => {
-      // Remove renders only with a mapping; a stale click after it is gone is a no-op.
-      if (mapping)
-        await integrationsApi.deleteMapping(mapping.id, { workspaceId: connection.workspace_id });
-    },
-    onSuccess: () => refreshImportedReads(),
-  });
+  const removeMutation = useMutation(integrationsMutations.deleteMapping(connection.workspace_id));
+  // Remove renders only with a mapping; a stale click after it is gone is a no-op.
+  const removeMapping = () => {
+    if (mapping) removeMutation.mutate(mapping.id);
+  };
   const busy = testMutation.isPending || syncMutation.isPending || removeMutation.isPending;
   const hasProperty = mapping !== null;
 
@@ -404,9 +397,9 @@ export function ConnectionRow({
     <ConnectionRowView
       connection={connection}
       grant={grant}
-      testMutation={testMutation}
-      syncMutation={syncMutation}
-      removeMutation={removeMutation}
+      testMutation={connectionAction(testMutation, () => testMutation.mutate())}
+      syncMutation={connectionAction(syncMutation, startSync)}
+      removeMutation={connectionAction(removeMutation, removeMapping)}
       testState={testState}
       activeRun={activeRun}
       runActive={runActive}

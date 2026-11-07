@@ -8,13 +8,19 @@
  * request, so a retried send replays the same run instead of queueing a
  * second one.
  */
-import { infiniteQueryOptions, mutationOptions, queryOptions } from '@tanstack/react-query';
+import {
+  infiniteQueryOptions,
+  mutationOptions,
+  queryOptions,
+  type QueryClient,
+} from '@tanstack/react-query';
 import type { z } from 'zod';
 
 import { AGENT_CHAT_PAGE_SIZE } from '@/lib/config/agent';
 
 import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
+import type { ProjectScope } from './query-keys/scope';
 import {
   agentChatDetailSchema,
   agentChatSummarySchema,
@@ -29,6 +35,9 @@ import {
   agentSkillSchema,
   agentTurnAcceptedSchema,
   agentWorkflowSchema,
+  type AgentChatCreateRequest,
+  type AgentMessageRequest,
+  type AgentOutputEditRequest,
 } from '@citeladder/contracts/agent';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
@@ -46,40 +55,6 @@ export type AgentChatDetail = z.infer<typeof agentChatDetailSchema>;
 export type AgentSkill = z.infer<typeof agentSkillSchema>;
 export type AgentWorkflow = z.infer<typeof agentWorkflowSchema>;
 export type AgentCatalog = z.infer<typeof agentSkillCatalogSchema>;
-
-/**
- * Typed evidence a new chat starts from. The server resolves and authorizes
- * every identifier on each run; the browser never sends evidence content.
- */
-export type AgentContextRefs = {
-  target_url?: string;
-  target_site_url_id?: string;
-  opportunity_id?: string;
-  demand_signal_id?: string;
-  site_health_reference?: {
-    project_id: string;
-    crawl_id: string;
-    site_url_id: string;
-    source_analysis_id: string;
-    dimension: string;
-    checkpoint_ids: string[];
-  };
-  search_intelligence_reference?: { dataset_id: string; row_ids: string[] };
-  issue_group_reference?: { crawl_id: string; group_id: string; site_url_id?: string };
-  site_facts_reference?: { crawl_id: string };
-  output_revision_reference?: { output_id: string; revision_id: string };
-};
-
-export type NewChatInput = {
-  message: string;
-  skill_id?: string | null;
-  /** A defined workflow pins its skill and format on the server. */
-  workflow_id?: string;
-  action_id?: string;
-  context?: AgentContextRefs;
-  /** Actions the message @-mentions; authorized server-side. */
-  mentions?: string[];
-};
 
 const withKey = (idempotencyKey: string, options?: ApiRequestOptions): ApiRequestOptions => ({
   ...options,
@@ -125,7 +100,7 @@ const agentApi = {
     ),
   createChat: async (
     projectId: string,
-    input: NewChatInput,
+    input: AgentChatCreateRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => admitTurn(`/projects/${projectId}/agent/chats`, input, idempotencyKey, options),
@@ -137,7 +112,7 @@ const agentApi = {
     ),
   sendMessage: async (
     chatId: string,
-    input: { message: string; skill_id?: string | null; mentions?: string[] },
+    input: AgentMessageRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => admitTurn(`/agent/chats/${chatId}/messages`, input, idempotencyKey, options),
@@ -155,7 +130,7 @@ const agentApi = {
     ),
   editOutput: async (
     document: { chatId: string; outputId: string },
-    input: { base_revision_id: string; title: string; body: string },
+    input: AgentOutputEditRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
@@ -195,57 +170,97 @@ const agentApi = {
     ),
 };
 
+/** Agent reads: the skill catalog, the project's chats and instructions, one chat. */
 export const agentQueries = {
-  skills: (workspaceId: string) =>
+  skills: (workspaceId: string | null) =>
     queryOptions({
-      queryKey: queryKeys.agent.skills(),
+      queryKey: queryKeys.agent.skills(workspaceId),
       queryFn: ({ signal }) => agentApi.skills({ signal, workspaceId }),
       staleTime: Infinity,
     }),
-  chats: (workspaceId: string, projectId: string, filters: { q?: string; actionId?: string }) =>
+  chats: (scope: ProjectScope, filters: { q?: string; actionId?: string }) =>
     infiniteQueryOptions({
-      queryKey: queryKeys.agent.chats(projectId, {
+      queryKey: queryKeys.agent.chats(scope, {
         q: filters.q || null,
         actionId: filters.actionId ?? null,
       }),
       initialPageParam: undefined as string | undefined,
       queryFn: ({ signal, pageParam }) =>
         agentApi.listChats(
-          projectId,
+          scope.projectId,
           {
             q: filters.q || undefined,
             action_id: filters.actionId,
             cursor: pageParam,
             limit: AGENT_CHAT_PAGE_SIZE,
           },
-          { signal, workspaceId },
+          { signal, workspaceId: scope.workspaceId },
         ),
       getNextPageParam: (page) => page.next_cursor ?? undefined,
     }),
-  chat: (workspaceId: string, chatId: string) =>
+  chat: (workspaceId: string | null, chatId: string) =>
     queryOptions({
-      queryKey: queryKeys.agent.chat(chatId),
+      queryKey: queryKeys.agent.chat(workspaceId, chatId),
       queryFn: ({ signal }) => agentApi.getChat(chatId, { signal, workspaceId }),
     }),
-  revisions: (workspaceId: string, chatId: string, outputId: string, latestRevisionId: string) =>
+  revisions: (
+    workspaceId: string | null,
+    chatId: string,
+    outputId: string,
+    latestRevisionId: string,
+  ) =>
     queryOptions({
-      queryKey: [...queryKeys.agent.revisions(chatId), outputId, latestRevisionId],
+      queryKey: queryKeys.agent.revisions(workspaceId, chatId, outputId, latestRevisionId),
       queryFn: ({ signal }) => agentApi.revisions(chatId, outputId, { signal, workspaceId }),
     }),
-  instructions: (workspaceId: string, projectId: string) =>
+  instructions: (scope: ProjectScope) =>
     queryOptions({
-      queryKey: queryKeys.agent.instructions(projectId),
-      queryFn: ({ signal }) => agentApi.instructions(projectId, { signal, workspaceId }),
+      queryKey: queryKeys.agent.instructions(scope),
+      queryFn: ({ signal }) =>
+        agentApi.instructions(scope.projectId, { signal, workspaceId: scope.workspaceId }),
     }),
 };
 
+/** One chat's persisted state, after a turn, a cancel or a stream moved it. */
+export const refreshAgentChat = (client: QueryClient, chatId: string) =>
+  client.invalidateQueries({ queryKey: queryKeys.agent.chatDetail(chatId) });
+
+/** A chat's output and its revision list, after a new revision was written. */
+const refreshAgentOutput = (client: QueryClient, chatId: string) =>
+  Promise.all([
+    refreshAgentChat(client, chatId),
+    client.invalidateQueries({ queryKey: queryKeys.agent.chatRevisions(chatId) }),
+  ]);
+
+/** Every chat list of the project: a new chat or turn reorders and relabels them. */
+const refreshAgentChatLists = (client: QueryClient, projectId: string) =>
+  client.invalidateQueries({ queryKey: queryKeys.agent.chatLists(projectId) });
+
+/** Agent writes; each success refreshes every read it changes. */
 export const agentMutations = {
-  createChat: (workspaceId: string) =>
+  /**
+   * A new chat. The chat lists refresh in the background; the saved
+   * conversation is read before success resolves so the screen keeps its
+   * composer until the chat can render (prefetchQuery contains read failures,
+   * so an accepted send stays accepted).
+   */
+  createChat: (workspaceId: string | null) =>
     mutationOptions({
-      mutationFn: (vars: { projectId: string; input: NewChatInput; idempotencyKey: string }) =>
-        agentApi.createChat(vars.projectId, vars.input, vars.idempotencyKey, { workspaceId }),
+      mutationFn: (vars: {
+        projectId: string;
+        input: AgentChatCreateRequest;
+        idempotencyKey: string;
+      }) => agentApi.createChat(vars.projectId, vars.input, vars.idempotencyKey, { workspaceId }),
+      onSuccess: async (accepted, vars, _result, { client }) => {
+        void refreshAgentChatLists(client, vars.projectId);
+        await client.prefetchQuery(agentQueries.chat(workspaceId, accepted.chat_id));
+      },
     }),
-  sendMessage: (workspaceId: string) =>
+  /**
+   * A follow-up turn. The accepted run is written into the chat at once so
+   * the thread shows it running before the refetch lands.
+   */
+  sendMessage: (scope: ProjectScope) =>
     mutationOptions({
       mutationFn: (vars: {
         chatId: string;
@@ -258,15 +273,26 @@ export const agentMutations = {
           vars.chatId,
           { message: vars.message, skill_id: vars.skillId, mentions: vars.mentions },
           vars.idempotencyKey,
-          { workspaceId },
+          { workspaceId: scope.workspaceId },
         ),
+      onSuccess: (accepted, vars, _result, { client }) => {
+        client.setQueryData<AgentChatDetail>(
+          queryKeys.agent.chat(scope.workspaceId, vars.chatId),
+          (current) => (current ? { ...current, latest_run: accepted.run } : current),
+        );
+        void Promise.all([
+          refreshAgentChat(client, vars.chatId),
+          refreshAgentChatLists(client, scope.projectId),
+        ]);
+      },
     }),
-  cancelRun: (workspaceId: string) =>
+  cancelRun: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: (vars: { chatId: string; runId: string }) =>
         agentApi.cancelRun(vars.chatId, vars.runId, { workspaceId }),
+      onSuccess: (_run, vars, _result, { client }) => void refreshAgentChat(client, vars.chatId),
     }),
-  editOutput: (workspaceId: string) =>
+  editOutput: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: (vars: {
         chatId: string;
@@ -280,15 +306,21 @@ export const agentMutations = {
           { base_revision_id: vars.baseRevisionId, title: vars.title, body: vars.body },
           { workspaceId },
         ),
+      onSuccess: (_revision, vars, _result, { client }) => refreshAgentOutput(client, vars.chatId),
     }),
-  restoreRevision: (workspaceId: string) =>
+  restoreRevision: (workspaceId: string | null) =>
     mutationOptions({
       mutationFn: (vars: { chatId: string; outputId: string; revisionId: string }) =>
         agentApi.restoreRevision(vars, vars.revisionId, { workspaceId }),
+      onSuccess: (_revision, vars, _result, { client }) => refreshAgentOutput(client, vars.chatId),
     }),
-  saveInstructions: (workspaceId: string) =>
+  /** The saved instructions become the cached read: no refetch of what was just written. */
+  saveInstructions: (scope: ProjectScope) =>
     mutationOptions({
-      mutationFn: (vars: { projectId: string; text: string }) =>
-        agentApi.saveInstructions(vars.projectId, vars.text, { workspaceId }),
+      mutationFn: (text: string) =>
+        agentApi.saveInstructions(scope.projectId, text, { workspaceId: scope.workspaceId }),
+      onSuccess: (saved, _text, _result, { client }) => {
+        client.setQueryData(queryKeys.agent.instructions(scope), saved);
+      },
     }),
 };

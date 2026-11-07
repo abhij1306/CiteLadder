@@ -7,10 +7,11 @@
  * filter that lists the detector's signals, where its status is shown; a
  * filter listing several detectors' signals shows their combined status.
  */
+import type { DemandDetector } from '@citeladder/contracts';
 import type { FilterTab } from '@/lib/demand/signals';
 
 export const DEMAND_DETECTORS: readonly {
-  key: string;
+  key: DemandDetector;
   tab: FilterTab;
   label: string;
   rule: string;

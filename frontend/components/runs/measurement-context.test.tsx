@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { ModelProvenance } from '@/lib/api/types';
+import type { ModelProvenance } from '@citeladder/contracts';
 
 import { MeasurementContext } from './measurement-context';
 

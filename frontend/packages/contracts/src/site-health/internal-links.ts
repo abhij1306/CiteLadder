@@ -103,6 +103,8 @@ export const internalLinksInputSchema = z.object({
   crawl_id: z.uuid(),
   idempotency_key: z.uuid(),
 });
+/** A new internal-link analysis of one crawl; the key makes a retried request idempotent. */
+export type InternalLinksInput = z.input<typeof internalLinksInputSchema>;
 
 export type InternalLinkPage = z.infer<typeof internalLinkPageSchema>;
 export type InternalLinkPlacement = z.infer<typeof internalLinkPlacementSchema>;

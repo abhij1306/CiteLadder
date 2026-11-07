@@ -5,7 +5,6 @@ import { Inline } from '@/components/ui/layout';
 import { ClampText, TableCell } from '@/components/ui/table';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { textRole } from '@/components/ui/typography';
-import { engineLabel } from '@/lib/providers/catalog';
 import type { SortState, SourcesData } from '@/lib/visibility/sources';
 
 /** The source's own mark and name, with the favicon a reader recognises first. */
@@ -66,10 +65,14 @@ export function RetrievedCell({ value }: Readonly<{ value: string | null }>) {
 }
 
 /** The Retrieved header's explanation, naming the engines whose reads are unknown. */
-export function retrievedHint(base: string, retrieval: SourcesData['retrieval'] | undefined) {
+export function retrievedHint(
+  base: string,
+  retrieval: SourcesData['retrieval'] | undefined,
+  engineLabel: (key: string) => string,
+) {
   const unavailable = retrieval?.unavailable_engines ?? [];
   if (!unavailable.length) return base;
-  return `${base} Not available for ${unavailable.map(engineLabel).join(', ')}, which do not expose the pages they read.`;
+  return `${base} Not available for ${unavailable.map((key) => engineLabel(key)).join(', ')}, which do not expose the pages they read.`;
 }
 
 /** One sortable column's header state, from the table's single sort. */

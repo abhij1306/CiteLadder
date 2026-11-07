@@ -6,20 +6,25 @@ import { policy } from '../config.ts';
 import { queueRecovery } from '../config/queue-recovery.ts';
 import { recoverDiscoveryLeases } from '../queue/recovery.ts';
 import { leaseSignal, maintainLease } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { getLogger } from '../logging.ts';
 import { discoveryProgress, discoveryRow } from '../projects/discovery.ts';
 import { discoveryCreate, discoverySettings } from '../projects/discovery-inputs.ts';
-import { researchBrand, type ResearchDependencies } from '../projects/research.ts';
-import { resolveSite } from '../projects/site-resolution.ts';
-import { FetchError, fetchWebsite } from '../projects/safe-fetch.ts';
-import { meterFor, type Meter } from '../models/metering.ts';
 import {
-  DiscoveryQueue,
-  type DiscoveryTask,
-  type DiscoveryTarget,
-} from '../queue/discovery-queue.ts';
+  failureFields,
+  researchBrand,
+  ResearchFailure,
+  type ResearchDependencies,
+} from '../projects/research.ts';
+import { resolveSite } from '../projects/site-resolution.ts';
+import { FetchError, fetchWebsite } from '../safe-fetch.ts';
+import { meterFor, type Meter } from '../models/metering.ts';
+import { DISCOVERY_LANE, TaskQueue, type TaskFor } from '../queue/task-queue.ts';
+
+type DiscoveryTask = TaskFor<'brand_discovery_tasks'>;
+type DiscoveryTarget = { workspaceId: string; discoveryId: string };
 
 const cfg = policy.discovery.constants;
 const logger = getLogger('app.workers.brand_discovery_worker');
@@ -35,14 +40,20 @@ function siteFailure(error: unknown): error is FetchError {
   );
 }
 function retryable(error: unknown, attempt: number, maximum: number) {
+  if (error instanceof ResearchFailure && !error.retryable) return false;
   return error != null && !siteFailure(error) && attempt < maximum;
+}
+/** The code a failed discovery settles with, so the UI can offer the right recovery. */
+function failureCode(error: unknown) {
+  if (siteFailure(error)) return error.code;
+  return error instanceof ResearchFailure ? error.code : cfg.error_brand_discovery;
 }
 function terminalStatus(retry: boolean, error: unknown) {
   if (retry) return policy.task_queue.statuses.retry_wait;
   return error != null ? policy.task_queue.statuses.failed : policy.task_queue.statuses.succeeded;
 }
 export class DiscoveryWorker {
-  readonly queue: DiscoveryQueue;
+  readonly queue: TaskQueue<'brand_discovery_tasks'>;
   readonly settings: ReturnType<typeof discoverySettings>;
   readonly db: Database;
   readonly dependencies: WorkerDependencies;
@@ -52,17 +63,43 @@ export class DiscoveryWorker {
     this.settings = discoverySettings(dependencies.env);
     if (this.settings.heartbeat_interval_seconds >= this.settings.lease_seconds)
       throw new Error('Discovery heartbeat must be shorter than the lease');
-    this.queue = new DiscoveryQueue(db, this.settings.lease_seconds);
+    this.queue = new TaskQueue(db, DISCOVERY_LANE, {
+      leaseTtlSeconds: this.settings.lease_seconds,
+    });
+  }
+  /** Claim the next brand-discovery task, or `target`'s, committed before any research. */
+  async claim(owner: string, target?: DiscoveryTarget): Promise<DiscoveryTask | null> {
+    const [task] = await this.queue.claim({
+      owner,
+      kinds: [cfg.task_kind_brand_discovery],
+      where:
+        target &&
+        ((column) =>
+          sql<boolean>`${column('workspace_id')} = ${target.workspaceId} and ${column('discovery_id')} = ${target.discoveryId}`),
+    });
+    return task ?? null;
+  }
+  /** Earliest claimable time or lease expiry, so an idle runner stays for a retry or recovery due soon. */
+  nextDue(): Promise<Date | null> {
+    return this.queue.nextDue([cfg.task_kind_brand_discovery]);
+  }
+  /** The fenced task lock every discovery write takes first. */
+  #held(trx: Database, task: DiscoveryTask, owner: string) {
+    return this.queue.fence(trx, task, owner, [policy.task_queue.statuses.running]);
   }
   async runOnce(owner: string, target?: DiscoveryTarget, signal?: AbortSignal): Promise<boolean> {
+    // One run's budget, matching the interactive deadline the request applies.
+    const started = performance.now();
+    const budgetEndsAt = started + this.settings.interactive_timeout_seconds * 1000;
     // Interactive admission touches only its authorized discovery. The runner
     // and periodic recovery retain ownership of sweeping expired leases.
     if (!target) await recoverDiscoveryLeases(this.db);
     signal?.throwIfAborted();
-    const task = await this.queue.claim(owner, target);
+    const task = await this.claim(owner, target);
     if (!task) return false;
     const heartbeat = maintainLease(
-      () => this.queue.heartbeat(task, owner),
+      // At the claimed attempt: recovery charges one, so a re-claim never renews this slot.
+      () => this.queue.heartbeat(task.id, owner, task.workspace_id, task.attempt_count),
       this.settings.heartbeat_interval_seconds * 1000,
       (error) => logger.exception('discovery_heartbeat_failed', error, { task_id: task.id }),
     );
@@ -75,6 +112,7 @@ export class DiscoveryWorker {
         signal: leaseSignal(executionSignal, options?.signal),
       });
     };
+    let phase = 'claimed';
     try {
       const row = await discoveryRow(this.db, task.workspace_id, task.discovery_id);
       if ([cfg.discovery_status_ready, cfg.discovery_status_project_created].includes(row.status)) {
@@ -82,11 +120,13 @@ export class DiscoveryWorker {
         return true;
       }
       const input = discoveryCreate.parse(row.input_data);
-      await this.progress(task, owner, 'opening_website', 0);
+      phase = 'opening_website';
+      await this.progress(task, owner, phase, 0);
       const site = await resolveSite(input.website_url, fetcher);
       checkCancelled();
       const homepageRead = site.page ? 1 : 0;
-      await this.progress(task, owner, 'understanding_business', 1, homepageRead, site);
+      phase = 'understanding_business';
+      await this.progress(task, owner, phase, 1, homepageRead, site);
       const result = await researchBrand(input, site, {
         ...this.dependencies,
         meter: (this.dependencies.meter ?? ((workspaceId) => meterFor(this.db, workspaceId)))(
@@ -94,6 +134,7 @@ export class DiscoveryWorker {
         ),
         fetcher,
         signal: executionSignal,
+        budgetEndsAt,
         checkCancelled,
         transport: async (url, options) => {
           checkCancelled();
@@ -104,17 +145,22 @@ export class DiscoveryWorker {
         },
         onCompetitors: async () => {
           checkCancelled();
-          await this.progress(task, owner, 'finding_competitors', 2, homepageRead);
+          phase = 'finding_competitors';
+          await this.progress(task, owner, phase, 2, homepageRead);
         },
       });
       checkCancelled();
       await this.finish(task, owner, result, null);
     } catch (error) {
+      // The queue owner logged the lost lease; recovery settles the task.
       if (heartbeat.signal.aborted) return true;
-      logger.warning('brand discovery task failed', {
-        task_id: task.id,
-        workspace_id: task.workspace_id,
-        error_code: error instanceof FetchError ? error.code : cfg.error_brand_discovery,
+      logLaneFailure(DISCOVERY_LANE.table, task, {
+        phase,
+        startedAt: started,
+        attempt: task.attempt_count + 1,
+        error,
+        code: error instanceof FetchError ? error.code : failureCode(error),
+        facts: failureFields(error),
       });
       await this.finish(task, owner, null, error);
     } finally {
@@ -131,9 +177,9 @@ export class DiscoveryWorker {
     site?: { url: string; domain: string },
   ) {
     await this.db.transaction().execute(async (trx) => {
-      if (!(await this.queue.lockedTask(trx, task, owner))) throw new Error('lease_lost');
+      if (!(await this.#held(trx, task, owner))) throw new Error('lease_lost');
       const row = await discoveryRow(trx, task.workspace_id, task.discovery_id, true);
-      if (!(await this.queue.lockedTask(trx, task, owner))) throw new Error('lease_lost');
+      if (!(await this.#held(trx, task, owner))) throw new Error('lease_lost');
       await trx
         .updateTable('brand_discoveries')
         .set({
@@ -158,10 +204,10 @@ export class DiscoveryWorker {
   }
   async finish(task: DiscoveryTask, owner: string, result: Result | null, error: unknown) {
     await this.db.transaction().execute(async (trx) => {
-      const held = await this.queue.lockedTask(trx, task, owner);
+      const held = await this.#held(trx, task, owner);
       if (!held) return;
       const row = await discoveryRow(trx, task.workspace_id, task.discovery_id, true);
-      if (!(await this.queue.lockedTask(trx, task, owner))) return;
+      if (!(await this.#held(trx, task, owner))) return;
       const now = new Date();
       const attempt = held.attempt_count + 1;
       const retry = retryable(error, attempt, held.max_attempts);
@@ -217,7 +263,7 @@ export class DiscoveryWorker {
           .set({
             status: cfg.discovery_status_failed,
             stage: 'failed',
-            error_code: siteFailure(error) ? error.code : cfg.error_brand_discovery,
+            error_code: failureCode(error),
             error_detail: 'Brand research could not complete',
             warnings: JSON.stringify(['research_degraded']),
             updated_at: now,
@@ -237,7 +283,7 @@ export class DiscoveryWorker {
             : now,
           lease_owner: null,
           lease_expires_at: null,
-          error_code: error != null ? cfg.error_brand_discovery : '',
+          error_code: error != null ? failureCode(error) : '',
           error_detail: error != null ? 'Brand research could not complete' : '',
           updated_at: now,
         })

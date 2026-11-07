@@ -9,7 +9,8 @@ import type {
   PromptGenerateResponse,
   SeedQueries,
   Topic,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
+import { makeFormLimits } from '@/test/fixtures/prompts';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 
@@ -77,11 +78,16 @@ beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
-function serve(sent: { profile?: unknown; confirm?: unknown }) {
+type Sent = { profile?: unknown; confirm?: unknown; seedReads?: number };
+
+function serve(sent: Sent) {
   mswServer.use(
     http.get(`/api/v1/projects/${projectId}/brand-profile`, () => HttpResponse.json(profile)),
     http.get(`/api/v1/projects/${projectId}/business-map`, () => HttpResponse.json(map)),
-    http.get(`/api/v1/projects/${projectId}/seed-queries`, () => HttpResponse.json(seeds)),
+    http.get(`/api/v1/projects/${projectId}/seed-queries`, () => {
+      sent.seedReads = (sent.seedReads ?? 0) + 1;
+      return HttpResponse.json(seeds);
+    }),
     http.put(`/api/v1/projects/${projectId}/brand-profile`, async ({ request }) => {
       sent.profile = await request.json();
       return HttpResponse.json({
@@ -107,7 +113,6 @@ function renderBuilder(
   initialStep: 'business' | 'topics' | 'distribution',
   generate = vi.fn(async () => result),
 ) {
-  const onTopicsChanged = vi.fn(async () => {});
   renderWithProviders(
     <PromptBuilder
       open
@@ -119,11 +124,11 @@ function renderBuilder(
       hasCompetitors={false}
       generate={generate}
       isGenerating={false}
-      onTopicsChanged={onTopicsChanged}
       review={<p>Review list</p>}
+      limits={makeFormLimits()}
     />,
   );
-  return { generate, onTopicsChanged };
+  return { generate };
 }
 
 describe('PromptBuilder', () => {
@@ -149,9 +154,10 @@ describe('PromptBuilder', () => {
 
   it('confirms reviewed topics as one plan, writing nothing before', async () => {
     const user = userEvent.setup({ delay: null });
-    const sent: { profile?: unknown; confirm?: unknown } = {};
+    const sent: Sent = {};
     serve(sent);
-    const { onTopicsChanged } = renderBuilder('topics');
+    renderBuilder('topics');
+    await waitFor(() => expect(sent.seedReads).toBe(1));
 
     // Proposals sit beside the existing topic; nothing is written until confirmed.
     await user.click(await screen.findByRole('button', { name: 'Suggest topics' }));
@@ -172,7 +178,8 @@ describe('PromptBuilder', () => {
         delete: [],
       }),
     );
-    await waitFor(() => expect(onTopicsChanged).toHaveBeenCalledOnce());
+    // The seed queries bound to topics are read again once the plan is applied.
+    await waitFor(() => expect(sent.seedReads).toBe(2));
     expect(await screen.findByRole('button', { name: 'Generate' })).toBeVisible();
   });
 

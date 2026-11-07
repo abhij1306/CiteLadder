@@ -18,9 +18,18 @@
    width at which a component's own internals (a form's two columns, a
    table's secondary columns, a list beside its detail) stop stacking.
    `sm:`/`md:`/`lg:`/`xl:` (640, 768, 1024, 1280) and `2xl:` (1440) are the
-   website's. */
+   website's.
+
+   The shell's navigation has two more states (owner, 2026-11-06): from
+   `rail:` (900px) the sidebar column shows, as the icon rail below `shell:`;
+   below it a menu button opens the same sidebar in a left drawer. `labelled:`
+   is where the sidebar shows its labels: from `shell:`, and always inside
+   that drawer (`data-nav-drawer`). `rail:` is declared first so a `shell:`
+   rule for the same property follows it in the stylesheet and wins. */
+@custom-variant rail (@media (min-width: 900px));
 @custom-variant shell (@media (min-width: 1280px));
 @custom-variant desktop (@media (min-width: 981px));
+@custom-variant labelled (@media (min-width: 1280px), &:where([data-nav-drawer] *));
 
 @theme {
   /* Faces. Cal Sans (display) sets headings and big numbers at weight 400
@@ -72,7 +81,8 @@
 
   /* Type. Each role owns size, leading, weight and tracking; on the website
      and docs the display roles (display-*, title, title-sm, stat) pair with
-     `font-display`. In the app only the page title is Cal Sans (D7): its other
+     `font-display`. In the app only the page title and the auth card titles
+     are Cal Sans (D7, D37): its other
      titles and figures set these sizes in Geist 500. The mono roles (eyebrow,
      data, code) pair with `font-mono`, the rest are Geist, never above 500. */
   --text-*: initial;
@@ -137,7 +147,9 @@
   --text-caption: 12px;
   --text-caption--line-height: 16px;
   --text-caption--font-weight: 400;
-  --text-eyebrow: 11px;
+  /* 12px: the 0.75rem floor for any text (owner audit, 2026-11-06); the mono
+     face, caps and tracking set it apart from the caption. */
+  --text-eyebrow: 12px;
   --text-eyebrow--line-height: 16px;
   --text-eyebrow--font-weight: 500;
   --text-eyebrow--letter-spacing: 0.08em;
@@ -219,9 +231,11 @@
   --shadow-pop:
     0 0 0 1px rgb(17 17 17 / 8%), 0 2px 6px rgb(17 17 17 / 6%),
     0 16px 40px -8px rgb(17 17 17 / 14%);
+  /* press (D29): a top highlight, a bottom inner shade, a tight drop and a
+     soft lift, so the primary button reads as a raised key. */
   --shadow-press:
-    inset 0 1px 0 rgb(255 255 255 / 16%), 0 0 0 1px var(--color-ink),
-    0 1px 2px rgb(17 17 17 / 24%);
+    inset 0 1px 0 rgb(255 255 255 / 35%), inset 0 -2px 0 rgb(0 0 0 / 20%),
+    0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -6px rgb(17 17 17 / 35%);
 
   /* Controls. Every interactive row in one view uses one height: 32 (D11),
      28 compact, 48 for website calls to action. `row-app` is the app's
@@ -333,7 +347,9 @@
   --shadow-xs: 0 0 0 1px rgb(255 255 255 / 8%), 0 1px 2px rgb(0 0 0 / 50%);
   --shadow-card: 0 0 0 1px rgb(255 255 255 / 7%), 0 1px 2px rgb(0 0 0 / 60%);
   --shadow-pop: 0 0 0 1px rgb(255 255 255 / 10%), 0 16px 40px rgb(0 0 0 / 60%);
-  --shadow-press: inset 0 1px 0 rgb(255 255 255 / 60%), 0 1px 2px rgb(0 0 0 / 60%);
+  --shadow-press:
+    inset 0 1px 0 rgb(255 255 255 / 60%), inset 0 -2px 0 rgb(0 0 0 / 20%),
+    0 1px 2px rgb(0 0 0 / 60%), 0 8px 24px -6px rgb(0 0 0 / 60%);
 }
 
 /* Tailwind folds a theme shadow into its own variable at build time, which
@@ -475,8 +491,9 @@ body {
     letter-spacing: var(--text-display-sm--letter-spacing);
     color: var(--color-ink);
   }
-  /* In the app Cal Sans is the page title's alone (decision D7): every other
-     title and number is Geist, never above 500 (D6). */
+  /* In the app Cal Sans is the page title's and the auth card title's alone
+     (decisions D7, D37): every other title and number is Geist, never above
+     500 (D6). */
   .type-section-title {
     font-family: var(--font-sans);
     font-size: var(--text-heading-lg);
@@ -789,7 +806,9 @@ a.focus-ring:active .type-caption {
 }
 
 /* Keyboard focus is a solid 2px `focus` ring (ink) with a 2px offset. A field
-   instead turns its border `focus` and adds a 3px `line` halo. */
+   instead thickens its edge to a 2px `focus` line (its border plus a 1px
+   ring, `negative` when invalid) inside a 3px `line` halo, so focus reads
+   apart from the 1px `line` rest and the `line-strong` hover. */
 :focus-visible,
 .focus-ring:focus-visible {
   outline: 2px solid var(--color-focus);
@@ -805,9 +824,11 @@ a.focus-ring:active .type-caption {
 
 .focus-input:focus-visible,
 .focus-frame:has(:where(input:focus-visible, textarea:focus-visible, select:focus-visible)) {
-  border-color: var(--color-focus);
+  border-color: var(--field-focus-edge, var(--color-focus));
   outline: none;
-  box-shadow: 0 0 0 3px var(--color-line);
+  box-shadow:
+    0 0 0 1px var(--field-focus-edge, var(--color-focus)),
+    0 0 0 4px var(--color-line);
 }
 
 /* A bare table's boundary: the `line` ring. A table inside a card or dialog
@@ -902,6 +923,7 @@ input:-webkit-autofill:focus {
 .focus-input[aria-invalid='true'],
 .focus-ring[aria-invalid='true'],
 .focus-frame:has([aria-invalid='true']) {
+  --field-focus-edge: var(--color-negative);
   border: 1px solid var(--color-negative);
   outline-color: var(--color-negative);
 }
@@ -1184,4 +1206,10 @@ label {
     background: white !important;
     color: black !important;
   }
+}
+
+/* The primary button is a raised key (D29): a faint light-to-shade sheen over
+   its ink fill, under the press shadow; pressed, it drops to the edge shadow. */
+.button-key {
+  background-image: linear-gradient(rgb(255 255 255 / 14%), rgb(0 0 0 / 8%));
 }

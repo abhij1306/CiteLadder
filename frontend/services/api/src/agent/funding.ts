@@ -7,7 +7,7 @@
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import { ApiError } from '../errors.ts';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { spendBudget } from '../abuse/usage.ts';
 import { agentSettings } from './config.ts';
 import { AgentError, type Run } from './contracts.ts';
 import type { Admission } from './store.ts';
@@ -35,11 +35,7 @@ export function agentAdmission(settings: Settings, gateway: GatewaySettings): Ad
       throw new ApiError(429, 'Workspace active Agent limit exceeded', {
         headers: { 'retry-after': String(settings.retryAfterSeconds) },
       });
-    await enforceWorkspaceRequest(db, scope.workspaceId, {
-      operation: 'agent.runs',
-      limit: settings.dailyLimit,
-      windowSeconds: settings.dailyWindowSeconds,
-    });
+    await spendBudget(db, settings.dailyRuns, scope.workspaceId);
     return { funding_source: SELF_HOSTED, requested_model: gateway.model };
   };
 }

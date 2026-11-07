@@ -9,9 +9,10 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { analyzeExecution } from '../src/analysis/execution.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
 import { createApp } from '../src/app.ts';
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { admittedFactCheck, admittedPerceptionVersions } from '../src/perception/admission.ts';
 import { answerPerception } from '../src/perception/executor.ts';
@@ -71,7 +72,8 @@ async function pilotConfiguration(owner: Tenant) {
     brand_aliases: [],
     competitors: [{ name: 'Rival', domains: [], aliases: [] }],
     language_code: 'en',
-    perception: admittedPerceptionVersions('brand', factCheck),
+    // Frozen with the fake gateway's model, as admission freezes the deployment's.
+    perception: admittedPerceptionVersions({ auditScope: 'brand', factCheck, model: 'test' }),
     fact_check: factCheck,
   };
 }
@@ -110,11 +112,11 @@ async function analysed(owner: Tenant, auditId: string, answerText = ANSWER) {
     .selectAll()
     .where('id', '=', taskId)
     .executeTakeFirstOrThrow();
-  await db.transaction().execute((trx) => analyzeExecution(trx, task, audit, artifactId));
+  await db.transaction().execute((trx) => deriveExecution(trx, task, audit, artifactId));
   return taskId;
 }
 
-function fakeGateway(contents: string[]) {
+function fakeGateway(contents: string[], model = 'test') {
   const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
     Response.json({
       model: 'returned-model',
@@ -126,7 +128,7 @@ function fakeGateway(contents: string[]) {
     {
       ...gatewaySettings({}),
       apiKey: 'test-only',
-      model: 'test',
+      model,
       baseUrl: 'https://model.test/v1',
     },
     { fetch, sleep: async () => {} },
@@ -502,6 +504,31 @@ describe('claim extraction and verification', () => {
         coverage: { not_covered: 1, unavailable: [{ reason: 'model_not_configured', count: 1 }] },
       },
     });
+  });
+
+  it('never verifies claims with a model other than the one the audit froze', async () => {
+    await confirmedFact(tenant, 'pricing', 'Pro costs $59 per month.');
+    const auditId = await fixtures.audit(tenant, {
+      configuration: await pilotConfiguration(tenant),
+    });
+    await analysed(tenant, auditId);
+    await drain(
+      tenant,
+      'answer_perception',
+      answerPerception(fakeGateway([perceptionOutput]).factory),
+    );
+    const verify = fakeGateway([], 'redeployed-model');
+    await drain(tenant, 'fact_verification', factVerification(verify.factory));
+
+    const read = await call(tenant, 'GET', `/visibility/accuracy?audit_id=${auditId}`);
+    expect(read.body).toMatchObject({
+      state: 'value',
+      score: {
+        accuracy: null,
+        coverage: { not_covered: 1, unavailable: [{ reason: 'model_changed', count: 1 }] },
+      },
+    });
+    expect(verify.fetch).not.toHaveBeenCalled();
   });
 
   it('never reads or writes another workspace through a forged payload', async () => {

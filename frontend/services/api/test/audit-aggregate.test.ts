@@ -10,6 +10,7 @@ function execution(
   answerText: string,
   citations: Record<string, unknown>[] = [],
   queryTextAvailable = true,
+  queries: string[] = [],
 ): AggregateExecution {
   return {
     prompt_index: 0,
@@ -22,7 +23,7 @@ function execution(
       answerText,
       promptText: 'Which shoes?',
       citations,
-      searchEvents: [],
+      searchEvents: queries.map((query) => ({ query })),
       searchUsed: true,
       queryTextAvailable,
     }),
@@ -71,6 +72,21 @@ describe('versioned audit aggregates', () => {
       avg_position: null,
       cost: { provider_reported_cost_usd: null },
     });
+  });
+  it('averages search queries over the answers that exposed them, unknown when none did', () => {
+    const metrics = aggregateRun(
+      [
+        execution('Acme', [], true, ['best shoes', 'acme shoes review', 'shoe sale']),
+        execution('Acme', [], true, ['best shoes']),
+        // Its queries were hidden: unknown, not zero queries.
+        execution('Acme', [], false),
+      ],
+      config,
+    );
+    expect(metrics.avg_queries_per_execution).toBe(2);
+    expect(aggregateRun([execution('Acme', [], false)], config).avg_queries_per_execution).toBe(
+      null,
+    );
   });
   it('treats nobody named as not applicable for the competitive component, not a zero share', () => {
     const silent = aggregateRun([execution('Nothing tracked')], config).per_prompt[0]!;

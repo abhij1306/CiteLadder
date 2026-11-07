@@ -16,18 +16,15 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { isoDateText } from '../db/timestamps.ts';
-import { payloadWindow, requireProject, type Executor } from '../workers/executor.ts';
-import {
-  addDays,
-  bucketStart,
-  buildAiReferralsProjection,
-  type ReferralFact,
-} from './projection.ts';
+import { payloadWindow, requireProject, type Executor } from '../queue/executor.ts';
+import { addDays } from '../calendar-days.ts';
+import { bucketStart, buildAiReferralsProjection, type ReferralFact } from './projection.ts';
 import { compareText, textSpan } from '../text-order.ts';
 import { isNonEmpty } from '../lists.ts';
 import { selectedPartition, partitionAnchor, partitionEpoch } from '../integrations/partitions.ts';
 import { referralEvidence, referralExtras, replaceReferralLandings } from './landing.ts';
-import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
+import { enqueueCoalesced } from '../queue/enqueue.ts';
 
 const { analytics, referrals } = policy;
 const BATCH_SIZE = 1000;
@@ -239,6 +236,10 @@ export const refreshAiReferralsSnapshot: Executor = async (task, { db, checkCanc
         )
         .execute();
     }
-    await enqueueTrafficInsights(trx, { workspaceId: task.workspace_id, projectId });
+    await enqueueCoalesced(trx, {
+      ...insightsRefresh,
+      workspaceId: task.workspace_id,
+      projectId,
+    });
   });
 };

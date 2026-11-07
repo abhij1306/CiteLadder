@@ -15,7 +15,6 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from './menu';
-import { Popover } from './popover';
 import { Tooltip, TooltipProvider } from './tooltip';
 import { ToastProvider, useToast } from './toast';
 
@@ -191,34 +190,6 @@ describe('Menu', () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onRename).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
-  });
-});
-
-describe('Popover', () => {
-  it('opens from its trigger and closes on Escape and on a press outside', async () => {
-    const user = userEvent.setup();
-    render(
-      <>
-        <Popover trigger={<button type="button">Filters</button>} title="Filters">
-          <p>Only cited answers</p>
-        </Popover>
-        <p>Outside</p>
-      </>,
-    );
-    const trigger = screen.getByRole('button', { name: 'Filters' });
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-
-    await user.click(trigger);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByText('Only cited answers')).toBeInTheDocument();
-
-    await user.keyboard('{Escape}');
-    expect(screen.queryByText('Only cited answers')).not.toBeInTheDocument();
-
-    await user.click(trigger);
-    await user.click(screen.getByText('Outside'));
-    expect(screen.queryByText('Only cited answers')).not.toBeInTheDocument();
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 });
 

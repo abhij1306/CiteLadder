@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
 import { Inbox } from 'lucide-react';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
@@ -13,7 +12,6 @@ import { Delta } from './delta';
 import { FilterBar, FilterTrigger } from './filter-bar';
 import { DataTable } from './data-table';
 import { Meter } from './meter';
-import { NoProjectState } from './no-project-state';
 import { Pager, pageNumberControls } from './pager';
 import { QueryState } from './query-state';
 import { StatRow } from './stat-row';
@@ -396,29 +394,6 @@ describe('QueryState', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'No issues yet' })).toBeVisible();
     expect(screen.getByText('Run a crawl to find issues.')).toBeVisible();
     expect(screen.getByRole('button', { name: 'Run crawl' })).toBeVisible();
-  });
-});
-
-describe('NoProjectState', () => {
-  it('offers project creation only when the caller allows it', () => {
-    const { rerender } = render(
-      <MemoryRouter>
-        <NoProjectState createProjectHref="/onboarding?new=1" />
-      </MemoryRouter>,
-    );
-    expect(screen.getByRole('heading', { name: 'No project selected' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Create project' })).toHaveAttribute(
-      'href',
-      '/onboarding?new=1',
-    );
-
-    rerender(
-      <MemoryRouter>
-        <NoProjectState createProjectHref={null} />
-      </MemoryRouter>,
-    );
-    expect(screen.queryByRole('link')).toBeNull();
-    expect(screen.getByText('Select a project first.')).toBeInTheDocument();
   });
 });
 

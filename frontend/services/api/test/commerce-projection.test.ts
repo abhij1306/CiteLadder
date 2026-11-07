@@ -10,11 +10,13 @@ import {
   productCategories,
   productFacts,
   readFacts,
+  shelfLinks,
 } from '../src/commerce/projection-facts.ts';
 import { catalog } from '../src/commerce/reads.ts';
 import { record } from '../src/db/json.ts';
 import { drainWorkspace } from './analytics-drain.ts';
 import { commerceFixture } from './commerce-support.ts';
+import { storedFacts } from './site-health-fixtures.ts';
 import { freezeCommerceContext } from '../src/commerce/audit-context.ts';
 import { enqueue } from './referral-fixtures.ts';
 import { testDatabase } from './support.ts';
@@ -283,7 +285,9 @@ describe('catalog projection outcomes', () => {
     await db
       .updateTable('site_fetch_artifacts')
       .set({
-        normalized_facts: sql`jsonb_set(normalized_facts, '{structured_data}', '{}'::jsonb)`,
+        normalized_facts: sql`jsonb_set(normalized_facts, '{structured_data}', ${JSON.stringify(
+          storedFacts().structured_data,
+        )}::jsonb)`,
       })
       .where('id', '=', artifact.artifact_id)
       .execute();
@@ -351,33 +355,53 @@ describe('catalog projection outcomes', () => {
   }, 20_000);
 });
 
+/** Stored page facts as the extractor writes them, read the way Commerce reads them. */
+const stored = (override: Record<string, unknown>) => readFacts(storedFacts(override));
+
 describe('projection decisions over stored facts', () => {
   it('trusts canonical declarations only on the delivered site and resolves relative declarations after redirects', () => {
     const base = 'https://shop.example.com/collections/all/products/widget?variant=1';
-    expect(pageIdentity(readFacts({ canonical_url: '/products/widget' }), base)).toBe(
+    expect(pageIdentity(stored({ canonical_url: '/products/widget' }), base)).toBe(
       'https://shop.example.com/products/widget',
     );
-    expect(pageIdentity(readFacts({ canonical_url: 'https://attacker.example.net/p' }), base)).toBe(
+    expect(pageIdentity(stored({ canonical_url: 'https://attacker.example.net/p' }), base)).toBe(
       'https://shop.example.com/collections/all/products/widget',
     );
     expect(
       pageIdentity(
-        readFacts({ canonical_url: 'https://other.myshopify.com/products/widget' }),
+        stored({ canonical_url: 'https://other.myshopify.com/products/widget' }),
         'https://mine.myshopify.com/products/widget',
       ),
     ).toBe('https://mine.myshopify.com/products/widget');
     expect(
-      pageIdentity(
-        readFacts({ canonical_url: './widget' }),
-        'https://shop.example.com/products/old',
-      ),
+      pageIdentity(stored({ canonical_url: './widget' }), 'https://shop.example.com/products/old'),
     ).toBe('https://shop.example.com/products/widget');
+  });
+  it("links shelves and products in Site Health's URL identity across escapes and repeated keys", () => {
+    const base = 'https://shop.example.com/collections/tools';
+    const facts = stored({
+      commerce: {
+        product_cards: [
+          { title: 'Widget', url: '/products/%7ewidget?b=2&a=1&a=0' },
+          {
+            title: 'Widget',
+            url: 'https://shop.example.com/products/~widget?a=0&b=2&a=1&utm_source=x',
+          },
+        ],
+      },
+    });
+    expect(shelfLinks(facts, base)).toEqual([
+      'https://shop.example.com/products/~widget?a=0&a=1&b=2',
+    ]);
+    expect(pageIdentity(stored({ canonical_url: '/products/%7Ewidget?a=1&a=0' }), base)).toBe(
+      'https://shop.example.com/products/~widget?a=0&a=1',
+    );
   });
   it.each(['from $29.99', 'up to $40', '$40 $20', 'Save 20%', '$1,23,4'])(
     'does not invent product identity from an ambiguous price: %s',
     (visible) => {
       const projected = productFacts(
-        readFacts({ title: 'Collection', commerce: { visible_price: visible } }),
+        stored({ title: 'Collection', commerce: { visible_price: visible } }),
         'https://shop.example.com/c',
       );
       expect(projected.identified).toBe(false);
@@ -386,7 +410,7 @@ describe('projection decisions over stored facts', () => {
   );
   it('uses structured prices before visible prices and rejects invalid stored facts', () => {
     const projected = productFacts(
-      readFacts({
+      stored({
         title: 'Widget',
         structured_data: { product: { price: ['12.50'], price_currency: ['USD'] } },
         commerce: { visible_price: '$99.99' },
@@ -396,13 +420,13 @@ describe('projection decisions over stored facts', () => {
     expect(projected.values).toMatchObject({ price: 12.5, currency: 'USD', attributes: {} });
     expect(
       productFacts(
-        readFacts({ title: 'Widget', commerce: { visible_price: '€1.299,50' } }),
+        stored({ title: 'Widget', commerce: { visible_price: '€1.299,50' } }),
         'https://shop.example.com/p',
       ).values.price,
     ).toBe(1299.5);
     expect(
       productFacts(
-        readFacts({
+        stored({
           title: 'Collection',
           commerce: { visible_price: '$50', visible_price_context: 'free shipping over $50' },
         }),
@@ -411,8 +435,16 @@ describe('projection decisions over stored facts', () => {
     ).toBe(false);
     expect(() => readFacts({ commerce: [] })).toThrow();
   });
+  it.each([
+    ['a misshapen price', { commerce: { visible_price: 12.5 } }],
+    ['a missing product property', { structured_data: { product: { sku: undefined } } }],
+    ['a card without a title', { commerce: { product_cards: [{ url: '/products/w' }] } }],
+  ])('rejects stored facts with %s instead of defaulting it', (_label, override) => {
+    const facts = JSON.parse(JSON.stringify(storedFacts(override)));
+    expect(() => readFacts(facts)).toThrow();
+  });
   it('takes meaningful category names and keeps a linked ancestor leaf but drops product and index crumbs', () => {
-    const facts = readFacts({
+    const facts = stored({
       title: 'Dresses | Brand',
       commerce: {
         breadcrumbs: ['Home', '/', 'Categories', '/', 'Dresses'],
@@ -425,21 +457,21 @@ describe('projection decisions over stored facts', () => {
     ]);
     expect(
       productCategories(
-        readFacts({ commerce: { breadcrumbs: ['Home', '/', 'Dresses', '/', 'Linen dress'] } }),
+        stored({ commerce: { breadcrumbs: ['Home', '/', 'Dresses', '/', 'Linen dress'] } }),
         'https://shop.example.com/products/dress',
         [],
       ),
     ).toEqual(['Dresses']);
     expect(
       categoryTitle(
-        readFacts({ commerce: { breadcrumbs: ['/', '»'] }, headings: { h1_texts: ['Tools'] } }),
+        stored({ commerce: { breadcrumbs: ['/', '»'] }, headings: { h1_texts: ['Tools'] } }),
         '',
       ),
     ).toBe('Tools');
     // An index crumb or the platform default names no shelf.
     expect(
       categoryTitle(
-        readFacts({
+        stored({
           commerce: { breadcrumbs: ['Tools', 'Shop all', 'Uncategorized'] },
           headings: { h1_texts: ['Shop all'] },
         }),

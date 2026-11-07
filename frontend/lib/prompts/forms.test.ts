@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Prompt } from '@/lib/api/types';
+import type { Prompt } from '@citeladder/contracts';
 import {
   emptyPromptForm,
   formValuesToPromptInput,
@@ -12,9 +12,17 @@ import {
 const TOPIC_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('promptFormSchema', () => {
+  const schema = promptFormSchema({ persona_max_chars: 12 });
+
   it('requires non-empty text', () => {
-    expect(promptFormSchema.safeParse(emptyPromptForm()).success).toBe(false);
-    expect(promptFormSchema.safeParse({ ...emptyPromptForm(), text: 'Hello' }).success).toBe(true);
+    expect(schema.safeParse(emptyPromptForm()).success).toBe(false);
+    expect(schema.safeParse({ ...emptyPromptForm(), text: 'Hello' }).success).toBe(true);
+  });
+
+  it('holds the persona to the bound the server listed', () => {
+    const form = { ...emptyPromptForm(), text: 'Hello' };
+    expect(schema.safeParse({ ...form, persona: 'Club coaches' }).success).toBe(true);
+    expect(schema.safeParse({ ...form, persona: 'Club coaches!' }).success).toBe(false);
   });
 });
 

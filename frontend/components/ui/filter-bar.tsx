@@ -48,7 +48,8 @@ export type FilterBarProps = Readonly<{
  * 360px.
  *
  * Below 1280px it takes two rows: search and the action, then the filters
- * sharing the second row in equal widths.
+ * sharing the second row in equal widths. On a phone the search keeps at
+ * least 12rem and wraps below the view rather than collapsing.
  */
 export function FilterBar({ view, search, filters, status, actions }: FilterBarProps) {
   return (
@@ -58,8 +59,12 @@ export function FilterBar({ view, search, filters, status, actions }: FilterBarP
       className="shell:gap-y-2 flex min-h-[var(--control-md)] w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
     >
       {view ? <div className="flex min-w-0">{view}</div> : null}
+      {/* The search never shrinks below 12rem: where the view leaves less
+          room on its row (a phone) it wraps to a row of its own. */}
       {search ? (
-        <div className="shell:max-w-[360px] shell:flex-[1_1_240px] min-w-0 flex-1">{search}</div>
+        <div className="shell:max-w-[360px] shell:flex-[1_1_240px] min-w-0 flex-[1_1_12rem]">
+          {search}
+        </div>
       ) : null}
       {actions ? (
         <div className="shell:order-last ms-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2">

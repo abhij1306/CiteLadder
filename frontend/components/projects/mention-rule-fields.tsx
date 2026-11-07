@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
 import { Switch } from '@/components/ui/switch';
 import { textRole } from '@/components/ui/typography';
-import type { EntityMatching } from '@/lib/api/types';
+import type { EntityMatching } from '@citeladder/contracts';
 
 /** An editable mention rule; `touched` rules are the only ones saved. */
 export type MentionRuleDraft = {

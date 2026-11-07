@@ -9,8 +9,8 @@
  * capability (403) and the parameters (422). Authorization precedes parameter validation.
  * The acting user's membership is one statement kept on the request context.
  * A route under `/projects/{project_id}` declares `authorize: 'active-project'`
- * (or `'project'` when a link or an `<img>` must open it from any workspace);
- * its handler never re-checks the project.
+ * (or, for a read with no capability, `'project'` when a link or an `<img>` must
+ * open it from any workspace); its handler never re-checks the project.
  */
 import type { ApiKeyScope } from '@citeladder/contracts/api-keys';
 import type { Context, Hono, MiddlewareHandler } from 'hono';
@@ -18,6 +18,7 @@ import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { z } from 'zod';
 
 import { sessionUser } from '../auth/session.ts';
+import type { Permission } from '../commands/permission.ts';
 import {
   activeProjectMembership,
   activeWorkspaceMembership,
@@ -74,7 +75,12 @@ type RouteSpec<Path extends ParamSpecs, Query extends ParamSpecs, Response exten
   alsoStatus?: ContentfulStatusCode;
   body?: z.ZodType;
   headers?: z.ZodObject;
-  capability?: WorkspaceCapability;
+  /**
+   * The handler authenticates and spends attempt quota, then reads its body
+   * through its own bound (compressed or not), so the app's ordinary body
+   * limit must not pre-read it.
+   */
+  streamsBody?: true;
   /**
    * `project`: resolve the workspace from the path's `project_id` alone (links,
    * `<img>`). `active-project`: the active workspace, as a flat route resolves
@@ -92,13 +98,26 @@ type RouteSpec<Path extends ParamSpecs, Query extends ParamSpecs, Response exten
   /**
    * The public path of a `both` route whose browser path is not below
    * `/api/v1/projects/{project_id}`: it nests the route under
-   * `/v1/projects/{project_id}`, and the key middleware proves each owned path
-   * ID belongs to that project (`public-api/ownership.ts`).
+   * `/v1/projects/{project_id}`: a write's command finds its record only in
+   * that project, and the key middleware proves a read's owned path IDs belong
+   * to it (`public-api/ownership.ts`).
    */
   publicPath?: string;
+} & PermissionDeclaration &
+  RouteBody<Path, Query, Response>;
+
+/**
+ * A route serving a command declares the command's `permission`, from which
+ * its capability gate and API key scope derive; its handler takes the checked
+ * actor with `routeActor`. Any other route declares its own capability and,
+ * when public, its scope; a route never declares both.
+ */
+type PermissionDeclaration = {
+  permission?: Permission;
+  capability?: WorkspaceCapability;
   /** The API key scope a public call needs; reads default to `read`. */
   scope?: ApiKeyScope;
-} & RouteBody<Path, Query, Response>;
+};
 
 export type ProductRoute = {
   contract: RouteContract;
@@ -106,6 +125,8 @@ export type ProductRoute = {
   publicContract?: RouteContract;
   /** The declared parameters, as `validateParams` reads them. */
   params: { path: ParamSpecs; query: ParamSpecs };
+  /** The route bounds its own body (`streamsBody`). */
+  streamsBody: boolean;
   register: (app: Hono<AppEnv>, config: ServiceConfig, db: Database) => void;
 };
 
@@ -165,6 +186,29 @@ function methodNotAllowed(method: string): never {
   throw new ApiError(405, 'Method Not Allowed', { headers: { allow: method } });
 }
 
+/**
+ * The capability gate and API key scope a route declares, from its command's
+ * permission or its own. Writes default to `run`; the gate precedes parameter
+ * validation.
+ */
+function routeGate(
+  route: PermissionDeclaration & { path: string; authorize?: string },
+  method: string,
+  scoped: boolean,
+): { capability: WorkspaceCapability | undefined; scope: ApiKeyScope | undefined } {
+  const { permission } = route;
+  if (permission && (!scoped || route.capability || route.scope))
+    throw new Error(
+      `A command's route resolves a workspace and declares only its permission: ${route.path}`,
+    );
+  const capability =
+    permission?.capability ?? route.capability ?? (method === 'get' ? undefined : 'run');
+  // A link or an `<img>` reads through the path project; a gated route never does.
+  if (route.authorize === 'project' && capability !== undefined)
+    throw new Error(`A gated route resolves the active workspace (active-project): ${route.path}`);
+  return { capability, scope: permission?.scope ?? route.scope };
+}
+
 export function defineRoute<
   const Path extends ParamSpecs,
   const Query extends ParamSpecs,
@@ -181,8 +225,7 @@ export function defineRoute<
       ? ACTIVE_WORKSPACE_HEADERS
       : z.object({});
   const exposure = route.exposure ?? 'browser';
-  // Writes default to `run`; the capability gate precedes parameter validation.
-  const capability = route.capability ?? (method === 'get' ? undefined : 'run');
+  const { capability, scope } = routeGate(route, method, scoped);
   const responses = {
     [status]: route.response,
     ...(route.alsoStatus ? { [route.alsoStatus]: route.response } : {}),
@@ -204,15 +247,19 @@ export function defineRoute<
           headers: route.headers ? workspaceHeaders.extend(route.headers.shape) : workspaceHeaders,
           cookies: z.object({}),
         };
-  const publicSide = exposure === 'browser' ? null : publicOperation(route, shared, capability);
+  const publicSide =
+    exposure === 'browser' ? null : publicOperation({ ...route, scope }, shared, capability);
   const register = (app: Hono<AppEnv>, config: ServiceConfig, db: Database) => {
     const respond = async (c: Context<AppEnv>) => {
+      // The session read named the path project only if the active workspace
+      // holds it; a foreign project is 404 before its parameters are judged.
+      if (activeProject && c.get('workspace').projectId === null) throw notFound('Project');
+      // The gate checked this permission; the handler takes its actor with `routeActor`.
+      if (route.permission) c.set('permission', route.permission);
       const params = validateParams(route.params, {
         path: c.req.param() as Record<string, string>,
         search: new URL(c.req.url).search,
       });
-      // The session read named the path project only if the active workspace holds it.
-      if (activeProject && c.get('workspace').projectId === null) throw notFound('Project');
       if (route.raw) return route.handle({ c, db, config }, params);
       return c.json(await route.handle({ c, db, config }, params), status as ContentfulStatusCode);
     };
@@ -230,7 +277,6 @@ export function defineRoute<
       ...(method === 'get' ? [] : [sameSiteWrite]),
       ...(publicRoute ? [] : [sessionUser(config, db, membership)]),
       async (c) => {
-        if (byProject && capability !== undefined) c.get('workspace').require(capability);
         return respond(c);
       },
     );
@@ -241,6 +287,7 @@ export function defineRoute<
     contract,
     ...(browser && publicSide ? { publicContract: publicSide.contract } : {}),
     params: route.params,
+    streamsBody: route.streamsBody === true,
     register,
   };
 }
@@ -394,6 +441,34 @@ export function defineDeleteRoute<const Path extends ParamSpecs, const Query ext
 }
 
 /** Register once before handlers: a path may support several methods. */
+/**
+ * Whether a request reaches a route that bounds its own body
+ * (`streamsBody`); the app skips its ordinary body limit for exactly these.
+ */
+export function selfBoundedBodies(
+  routes: readonly ProductRoute[],
+): (method: string, path: string) => boolean {
+  const templates = routes
+    .filter((route) => route.streamsBody)
+    .flatMap(({ contract, publicContract }) =>
+      (publicContract ? [contract, publicContract] : [contract]).map((served) => ({
+        method: served.method.toUpperCase(),
+        segments: served.path.split('/'),
+      })),
+    );
+  return (method, path) => {
+    const segments = path.split('/');
+    return templates.some(
+      (template) =>
+        template.method === method &&
+        template.segments.length === segments.length &&
+        template.segments.every((part, index) =>
+          part.startsWith('{') ? segments[index] !== '' : part === segments[index],
+        ),
+    );
+  };
+}
+
 export function registerMethodGuards(app: Hono<AppEnv>, routes: readonly ProductRoute[]): void {
   const methods = new Map<string, Set<string>>();
   const contracts = routes.flatMap(({ contract, publicContract }) =>

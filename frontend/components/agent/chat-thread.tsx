@@ -6,9 +6,10 @@ import { Composer } from '@/components/agent/composer';
 import { Conversation } from '@/components/agent/conversation';
 import { SkillPicker } from '@/components/agent/skill-picker';
 import { useCancelRun, useFollowUp, type FollowUp } from '@/components/agent/use-chat-turns';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { latestOutput } from '@/lib/agent/documents';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { isRunActive } from '@/lib/agent/run-state';
@@ -26,7 +27,7 @@ export function useChatThread(workspaceId: string, detail: AgentChatDetail) {
   const access = useAgentAccess();
   const runActive = isRunActive(detail.latest_run);
   const turn = useFollowUp(workspaceId, detail);
-  const cancel = useCancelRun(workspaceId, chatId);
+  const cancel = useCancelRun(workspaceId);
   // Capture the run: a closure does not keep the narrowing of `detail.latest_run`.
   const activeRun = runActive ? detail.latest_run : null;
   const stop = activeRun ? () => cancel.mutate({ chatId, runId: activeRun.id }) : undefined;
@@ -120,24 +121,26 @@ function FollowUpFailure({
 }: Readonly<{ turn: FollowUp; actionId: string | null; canSend: boolean }>) {
   if (!turn.failure) return null;
   return (
-    <Callout tone="negative">
-      {turn.failure.message}{' '}
-      {turn.failure.startNewChat ? (
-        <ProjectLink
-          href={agentHandoffHref({ actionId, prompt: turn.lastMessage })}
-          className="underline"
-        >
-          Start a new chat
-        </ProjectLink>
-      ) : (
-        <Button
-          variant="secondary"
-          onClick={turn.retrySubmission}
-          disabled={turn.pending || !canSend}
-        >
-          Retry send
-        </Button>
-      )}
-    </Callout>
+    <MutationNotice
+      notice={turn.failure}
+      recovery={
+        turn.failure.startNewChat ? (
+          <ProjectLink
+            href={agentHandoffHref({ actionId, prompt: turn.lastMessage })}
+            className="underline"
+          >
+            Start a new chat
+          </ProjectLink>
+        ) : (
+          <Button
+            variant="secondary"
+            onClick={turn.retrySubmission}
+            disabled={turn.pending || !canSend}
+          >
+            Retry send
+          </Button>
+        )
+      }
+    />
   );
 }

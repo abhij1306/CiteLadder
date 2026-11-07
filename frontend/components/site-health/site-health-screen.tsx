@@ -3,7 +3,6 @@
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
@@ -22,35 +21,25 @@ import { ReadError } from '@/components/ui/read-error';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { httpErrorStatus } from '@/lib/api/errors';
 import { warmQuery } from '@/lib/api/query-client';
-import { siteHealthQueries } from '@/lib/api/site-health';
-import { internalLinksQuery } from '@/lib/api/site-health-internal-links';
-import { useProjectContext } from '@/lib/project/project-context';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
+import { internalLinksQueries } from '@/lib/api/site-health-internal-links';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useSiteHealthScreen } from '@/lib/site-health/use-site-health-screen';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 
 export function SiteHealthScreen() {
-  const { activeProject, activeWorkspaceId, isLoading } = useProjectContext();
-  const projectId = activeProject?.id ?? null;
-  const screen = useSiteHealthScreen(projectId);
-  return (
-    <SiteHealthContent
-      projectId={projectId}
-      workspaceId={activeWorkspaceId}
-      projectLoading={isLoading}
-      screen={screen}
-    />
-  );
+  const { workspaceId, projectId } = useProjectScope();
+  const screen = useSiteHealthScreen();
+  return <SiteHealthContent projectId={projectId} workspaceId={workspaceId} screen={screen} />;
 }
 
 function SiteHealthContent({
   projectId,
   workspaceId,
-  projectLoading,
   screen,
 }: Readonly<{
-  projectId: string | null;
-  workspaceId: string | null;
-  projectLoading: boolean;
+  projectId: string;
+  workspaceId: string;
   screen: ReturnType<typeof useSiteHealthScreen>;
 }>) {
   const {
@@ -67,7 +56,7 @@ function SiteHealthContent({
   const [tab, selectTab] = useUrlState('tab', TAB_CODEC, {
     clearKeys: ['cursor', 'sort'],
   });
-  const blocking = projectBlockingState(projectId, projectLoading, screen);
+  const blocking = projectBlockingState(screen);
   const refreshFailures = !blocking ? <SiteHealthRefreshFailures screen={screen} /> : null;
   const headerActions = crawl ? (
     <CrawlActions
@@ -109,8 +98,8 @@ function SiteHealthContent({
             <AnalysisPanel
               tab={tab}
               crawlId={crawl?.id}
-              projectId={projectId!}
-              workspaceId={workspaceId!}
+              projectId={projectId}
+              workspaceId={workspaceId}
               screen={screen}
             />
           </Stack>
@@ -126,12 +115,8 @@ type BlockingState =
   | Readonly<{ kind: 'state'; node: ReactNode }>;
 
 function projectBlockingState(
-  projectId: string | null,
-  projectLoading: boolean,
   screen: ReturnType<typeof useSiteHealthScreen>,
 ): BlockingState | null {
-  if (projectLoading) return { kind: 'loading', label: 'Loading your Site Health project…' };
-  if (!projectId) return { kind: 'state', node: <ProjectRequiredState /> };
   return screenBlockingState({ dashboard: screen.dashboardQuery, phase: screen.phase });
 }
 
@@ -168,25 +153,24 @@ function SiteHealthRefreshFailures({
  * an error, so those stay warm at any point in the run.
  */
 function useSiteHealthTabPrefetch(
-  workspaceId: string | null,
-  projectId: string | null,
+  workspaceId: string,
+  projectId: string,
   crawlId: string | undefined,
   terminal: boolean,
 ) {
   const queryClient = useQueryClient();
   return (nextTab: AnalysisTab) => {
-    if (!projectId || !workspaceId) return;
+    const scope = { workspaceId, projectId };
     if (nextTab === 'overview') {
-      if (terminal)
-        warmQuery(queryClient, siteHealthQueries.overview(workspaceId, projectId, crawlId));
+      if (terminal) warmQuery(queryClient, siteHealthQueries.overview(scope, crawlId));
     } else if (nextTab === 'architecture') {
-      warmQuery(queryClient, siteHealthQueries.architecture(workspaceId, projectId, crawlId));
+      warmQuery(queryClient, siteHealthQueries.architecture(scope, crawlId));
     } else if (nextTab === 'aeo-readiness') {
-      warmQuery(queryClient, siteHealthQueries.aeoReadiness(workspaceId, projectId, crawlId));
+      warmQuery(queryClient, siteHealthQueries.aeoReadiness(scope, crawlId));
     } else if (nextTab === 'internal-links') {
-      warmQuery(queryClient, internalLinksQuery(workspaceId, projectId));
+      warmQuery(queryClient, internalLinksQueries.analysis(scope));
     } else if (nextTab === 'changes') {
-      warmQuery(queryClient, siteHealthQueries.changesSummary(workspaceId, projectId));
+      warmQuery(queryClient, siteHealthQueries.changesSummary(scope));
     }
   };
 }

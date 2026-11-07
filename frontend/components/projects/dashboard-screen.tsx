@@ -7,14 +7,13 @@ import type { OverviewWidget } from '@citeladder/contracts/overview';
 import { ListScreen } from '@/components/layout/page-shell';
 import { Callout } from '@/components/ui/callout';
 import { Stack } from '@/components/ui/layout';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { projectQueries } from '@/lib/api/projects';
-import type { CommandCenter, Project } from '@/lib/api/types';
+import type { CommandCenter, Project } from '@citeladder/contracts';
 import { useOverviewLayout } from '@/lib/overview/use-overview-layout';
 import { warmOverviewWidgets } from '@/lib/overview/widget-queries';
-import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
-import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';
+import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 import { DashboardActions, DashboardHeader } from './dashboard-sections';
 import { OverviewGrid } from './overview-grid';
@@ -26,29 +25,15 @@ import { useCommandCenterActions } from './use-command-center-actions';
 export function DashboardScreen({
   onEditProject,
 }: Readonly<{ onEditProject?: (project: Project) => void }> = {}) {
-  const context = useProjectContext();
-  const scope = resolveActiveProjectRequestScope(context.activeProject);
-  const commandCenter = useQuery({
-    ...projectQueries.commandCenter(scope.workspaceId, scope.projectId),
-    enabled: scope.enabled,
-  });
+  const { workspaceId, projectId, project } = useProjectScope();
+  const scope = { workspaceId, projectId };
+  const commandCenter = useQuery(projectQueries.commandCenter(scope));
   // The layout does not depend on the command center, so it is asked for
   // beside it rather than once the command center has rendered.
-  const layout = useQuery({
-    ...projectQueries.overviewLayout(scope.workspaceId, scope.projectId),
-    enabled: scope.enabled,
-  });
-  useWarmWidgets(context.activeProject, layout.data?.widgets);
+  const layout = useQuery(projectQueries.overviewLayout(scope));
+  useWarmWidgets(project, layout.data?.widgets);
 
-  if (context.isLoading || (context.activeProject && commandCenter.isLoading)) {
-    return <DashboardLoading />;
-  }
-  if (!context.activeProject)
-    return (
-      <ListScreen>
-        <ProjectRequiredState />
-      </ListScreen>
-    );
+  if (commandCenter.isLoading) return <DashboardLoading />;
   if (commandCenter.isError || !commandCenter.data)
     return (
       <ListScreen>
@@ -64,9 +49,9 @@ export function DashboardScreen({
 
   return (
     <DashboardData
-      key={context.activeProject.id}
+      key={projectId}
       data={commandCenter.data}
-      activeProject={context.activeProject}
+      activeProject={project}
       onEditProject={onEditProject}
     />
   );
@@ -77,10 +62,10 @@ export function DashboardScreen({
  * they mount behind the command center. Best-effort: a widget still asks for
  * its own read and reports its own failure.
  */
-function useWarmWidgets(project: Project | null, widgets: readonly OverviewWidget[] | undefined) {
+function useWarmWidgets(project: Project, widgets: readonly OverviewWidget[] | undefined) {
   const client = useQueryClient();
   useEffect(() => {
-    if (project && widgets) void warmOverviewWidgets(client, project, widgets).catch(() => {});
+    if (widgets) void warmOverviewWidgets(client, project, widgets).catch(() => {});
   }, [client, project, widgets]);
 }
 

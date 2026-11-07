@@ -7,7 +7,7 @@ import { CandidateReviewPanel } from './candidate-review';
 
 const review: ComponentProps<typeof CandidateReviewPanel>['review'] = {
   candidates: [],
-  refresh: vi.fn(async () => {}),
+  retry: vi.fn(),
   accept: vi.fn(),
   reject: vi.fn(),
   isReviewing: false,
@@ -32,5 +32,5 @@ it('offers retry rather than showing an empty batch when the read fails', async 
   render(<CandidateReviewPanel review={{ ...review, loadError: 'Connection lost' }} topics={[]} />);
   expect(screen.getByRole('alert')).toHaveTextContent('Connection lost');
   await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
-  expect(review.refresh).toHaveBeenCalledOnce();
+  expect(review.retry).toHaveBeenCalledOnce();
 });

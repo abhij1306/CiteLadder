@@ -154,6 +154,8 @@ export class VisibilityFixtures extends Fixtures {
       .insertInto('brands')
       .values({
         id: randomUUID(),
+        workspace_id: (eb) =>
+          eb.selectFrom('projects').select('workspace_id').where('projects.id', '=', projectId),
         project_id: projectId,
         name,
         logo_asset_id: logo ? await this.logoAsset() : null,
@@ -178,6 +180,8 @@ export class VisibilityFixtures extends Fixtures {
       .insertInto('competitors')
       .values({
         id,
+        workspace_id: (eb) =>
+          eb.selectFrom('projects').select('workspace_id').where('projects.id', '=', projectId),
         project_id: projectId,
         name: input.name,
         aliases: JSON.stringify(input.aliases ?? []),

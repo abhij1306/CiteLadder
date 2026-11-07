@@ -1,4 +1,4 @@
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 
 /**
  * One typed `Project` for every frontend test that needs one.

@@ -10,16 +10,15 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Select } from '@/components/ui/select';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
-import type { LogicalEngine, Prompt, PromptSet } from '@/lib/api/types';
+import type { LogicalEngine, Prompt, PromptSet } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
-import { ENGINE_LABELS, ENGINE_ORDER, isConsumerEngine } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import {
   batchLabel,
   clampRepetitions,
-  MAX_REPETITIONS,
-  MIN_REPETITIONS,
   toggleEngine,
   toggleMarket,
+  type RepetitionLimits,
 } from '@/lib/runs/launch';
 import { textRole } from '@/components/ui/typography';
 import { panelClasses } from '@/components/ui/panel';
@@ -221,6 +220,7 @@ export function LaunchDialogView({
   setEngines,
   repetitions,
   setRepetitions,
+  repetitionLimits,
   markets,
   marketIds,
   setMarketIds,
@@ -249,6 +249,8 @@ export function LaunchDialogView({
   setEngines: React.Dispatch<React.SetStateAction<LogicalEngine[]>>;
   repetitions: number;
   setRepetitions: React.Dispatch<React.SetStateAction<number>>;
+  /** The range the API accepts, from the prompt-set list; null until it loads. */
+  repetitionLimits: RepetitionLimits | null;
   markets: readonly ProjectMarket[];
   marketIds: (string | null)[];
   setMarketIds: React.Dispatch<React.SetStateAction<(string | null)[]>>;
@@ -262,6 +264,7 @@ export function LaunchDialogView({
   promptSelectionLabel?: string;
   selectionReady: boolean;
 }>) {
+  const catalog = useEngineCatalog();
   const noEngines = !configuredEngines.length;
   const selected = new Set(engines);
   return (
@@ -300,7 +303,7 @@ export function LaunchDialogView({
             <Stack gap="item">
               <p className="type-body">
                 {unverifiedEngines.length
-                  ? `A key is stored for ${unverifiedEngines.map((engine) => ENGINE_LABELS[engine]).join(', ')}, but it has not passed a connection test yet. Test it to launch an audit with it.`
+                  ? `A key is stored for ${unverifiedEngines.map(catalog.label).join(', ')}, but it has not passed a connection test yet. Test it to launch an audit with it.`
                   : 'No configured engines. Connect a provider to launch an audit.'}
               </p>
               <div>
@@ -317,8 +320,9 @@ export function LaunchDialogView({
             <Stack key={String(consumer)} gap="item">
               <p className={textRole('label')}>{consumer ? 'Consumer experiences' : 'APIs'}</p>
               <Inline className="flex-wrap">
-                {ENGINE_ORDER.filter((engine) => isConsumerEngine(engine) === consumer).map(
-                  (engine) => (
+                {catalog.order
+                  .filter((engine) => catalog.isObserved(engine) === consumer)
+                  .map((engine) => (
                     <Button
                       key={engine}
                       variant="secondary"
@@ -330,13 +334,12 @@ export function LaunchDialogView({
                       }
                     >
                       {configuredEngines.includes(engine) ? null : <Icon icon={Plus} />}
-                      {ENGINE_LABELS[engine]}
+                      {catalog.label(engine)}
                       {configuredEngines.includes(engine) ? null : (
                         <span className="sr-only">, not connected</span>
                       )}
                     </Button>
-                  ),
-                )}
+                  ))}
               </Inline>
             </Stack>
           ))}
@@ -347,17 +350,24 @@ export function LaunchDialogView({
         <MarketsField markets={markets} marketIds={marketIds} setMarketIds={setMarketIds} />
         <Field
           label="Repetitions"
-          hint={`How many times to run each prompt per engine (${MIN_REPETITIONS}–${MAX_REPETITIONS}).`}
+          hint={
+            repetitionLimits
+              ? `How many times to run each prompt per engine (${repetitionLimits.audit_repetitions_min}–${repetitionLimits.audit_repetitions_max}).`
+              : 'How many times to run each prompt per engine.'
+          }
         >
           {(props) => (
             <Input
               {...props}
               type="number"
-              min={MIN_REPETITIONS}
-              max={MAX_REPETITIONS}
+              min={repetitionLimits?.audit_repetitions_min}
+              max={repetitionLimits?.audit_repetitions_max}
               value={repetitions}
               onChange={(event) => setRepetitions(Number(event.target.value))}
-              onBlur={() => setRepetitions((current) => clampRepetitions(current))}
+              onBlur={() => {
+                if (repetitionLimits)
+                  setRepetitions((current) => clampRepetitions(current, repetitionLimits));
+              }}
             />
           )}
         </Field>

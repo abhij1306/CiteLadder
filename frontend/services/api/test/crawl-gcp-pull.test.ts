@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { testConfig, testDatabase } from './support.ts';
+import { setLogSink } from '../src/logging.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 import { crawlLogs } from '../src/config/crawl-logs.ts';
 import { confirmSinkFilter, createSource, createSourceSchema } from '../src/crawl-logs/sources.ts';
@@ -10,8 +11,8 @@ import { gcpLogFilter } from '../src/crawl-logs/gcp-filter.ts';
 import { GcpError, pubSubReader } from '../src/crawl-logs/gcp-client.ts';
 import { crawlLogPull, enqueueDuePulls } from '../src/crawl-logs/pull.ts';
 import { refreshCrawlLogs } from '../src/crawl-logs/rollup.ts';
-import { TaskQueue } from '../src/queue/task-queue.ts';
-import { enqueueTask } from '../src/referrals/enqueue.ts';
+import { ANALYTICS_LANE, TaskQueue } from '../src/queue/task-queue.ts';
+import { enqueueTask } from '../src/queue/enqueue.ts';
 
 /** An in-memory Google: metadata, IAM Credentials and one Pub/Sub subscription. */
 function fakeGoogle(
@@ -466,8 +467,22 @@ describe('pull task', () => {
     google.state.messages.push(message(lbEntry('/a')), message(lbEntry('/b')));
     google.state.failing = ':acknowledge';
     google.state.status = 503;
-    await runPull(tenant, executor);
+    const records: Record<string, unknown>[] = [];
+    const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+    try {
+      await runPull(tenant, executor);
+    } finally {
+      setLogSink(restore);
+    }
     expect(google.state.acked).toEqual([]);
+    expect(records.filter((entry) => entry.event === 'crawl_log_pull_ack_failed')).toEqual([
+      expect.objectContaining({
+        source_id: id,
+        phase: 'acknowledge',
+        error_class: 'GcpError',
+        failure: 'unavailable',
+      }),
+    ]);
     // Redelivered alongside a new message, the batch has a new key; request IDs dedupe it.
     google.state.messages.push(message(lbEntry('/c')));
     google.state.status = 200;
@@ -534,7 +549,7 @@ describe('pull task', () => {
   });
   it('leases a pull for its own longer TTL', async () => {
     const tenant = await fixtures.tenant();
-    const queue = new TaskQueue(db, {
+    const queue = new TaskQueue(db, ANALYTICS_LANE, {
       leaseTtlSeconds: 120,
       leaseTtlSecondsByKind: { crawl_log_pull: 300 },
     });

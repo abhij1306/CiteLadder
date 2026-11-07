@@ -9,16 +9,15 @@
  * (branded / non-branded) breakdown in `VisibilityResponse` yet, so no such
  * control is offered.
  */
-import { ENGINE_ORDER } from '@/lib/providers/catalog';
 import { availabilityLabel, formatDisplayTimestamp } from '@/lib/format';
-import { shouldPollAudit } from '@/lib/runs/status';
+import { AUDIT_STATES } from '@/lib/runs/status';
 import type {
   AuditStatus,
   LogicalEngine,
   RankingRow,
   Visibility,
   VisibilityEngine,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 
 /** Audit statuses that carry a dashboard-ready metric snapshot. */
 const DASHBOARD_STATUSES: ReadonlySet<AuditStatus> = new Set<AuditStatus>([
@@ -136,40 +135,32 @@ export function findActiveRun(
   audits: ReadonlyArray<{ id: string; status: AuditStatus; created_at: string }>,
 ): ActiveRun | null {
   const active = audits
-    .filter((audit) => shouldPollAudit(audit.status))
+    .filter((audit) => AUDIT_STATES[audit.status].active)
     .slice()
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const newest = active[0];
   return newest ? { id: newest.id, status: newest.status, createdAt: newest.created_at } : null;
 }
 
-export { engineLabel } from '@/lib/providers/catalog';
-
 /**
  * Per-engine comparison rows for display: apply the engine filter, then order
- * by the canonical engine order so cards are stable across runs.
+ * by the catalogue's engine order so cards are stable across runs.
  */
 export function visibleEngines(
   visibility: Visibility,
   filter: VisibilityFilters['engine'],
+  engineOrder: readonly string[],
 ): VisibilityEngine[] {
   const rows =
     filter === 'all'
       ? visibility.per_engine
       : visibility.per_engine.filter((engine) => engine.logical_engine === filter);
-  const order = new Map(ENGINE_ORDER.map((engine, index) => [engine as string, index]));
+  const order = new Map(engineOrder.map((engine, index) => [engine, index]));
   return rows.slice().sort((a, b) => {
     const ai = order.get(a.logical_engine) ?? Number.MAX_SAFE_INTEGER;
     const bi = order.get(b.logical_engine) ?? Number.MAX_SAFE_INTEGER;
     return ai - bi || a.logical_engine.localeCompare(b.logical_engine);
   });
-}
-
-/** Engines actually present in a projection (for the engine-filter options). */
-export function presentEngines(visibility: Visibility | undefined): LogicalEngine[] {
-  if (!visibility) return [];
-  const present = new Set(visibility.per_engine.map((engine) => engine.logical_engine));
-  return ENGINE_ORDER.filter((engine) => present.has(engine));
 }
 
 /** Format a 0–1 rate as a whole-percent string, or the placeholder. */

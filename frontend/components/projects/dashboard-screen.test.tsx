@@ -121,9 +121,15 @@ const commandCenter = {
   stale: false,
 };
 
+// The Launch audit dialog has its own suite; here only whether it opens matters.
+vi.mock('@/components/runs/launch-dialog', () => ({
+  LaunchDialog: ({ open }: { open: boolean }) =>
+    open ? <dialog open aria-label="Launch audit" /> : null,
+}));
 vi.mock('@tanstack/react-query', () => ({
   queryOptions: <T,>(options: T) => options,
   useQuery: (options: { queryKey: readonly unknown[] }) => {
+    if (options.queryKey[0] === 'providers') return { data: providerCatalogFixture };
     if (options.queryKey[1] === 'overview-layout') return layoutResult;
     return options.queryKey[0] === 'visibility' ? promptsResult : queryResult;
   },
@@ -151,22 +157,39 @@ vi.mock('@/lib/project/project-context', () => {
 vi.mock('@/lib/api/projects', () => ({
   projectsApi: { getCommandCenter: vi.fn(), downloadOverviewReport },
   projectQueries: {
-    commandCenter: (_workspaceId: string, projectId: string) => ({
+    commandCenter: ({ projectId }: { projectId: string }) => ({
       queryKey: ['projects', 'command-center', projectId],
     }),
-    overviewLayout: (_workspaceId: string, projectId: string) => ({
+    overviewLayout: ({ projectId }: { projectId: string }) => ({
       queryKey: ['projects', 'overview-layout', projectId],
     }),
   },
+  projectMutations: { reorderActions: () => ({}), saveOverviewLayout: () => ({}) },
 }));
 vi.mock('@/lib/api/opportunities', () => ({
   opportunitiesApi: { updateOrder: vi.fn() },
 }));
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
+import { providerCatalogFixture } from '@/test/provider-catalog-fixture';
 import { DashboardScreen } from './dashboard-screen';
 
+// `/projects` is a project route: the gate hands the screen this project.
+const scopeProject = makeProject({
+  id: project.id,
+  workspace_id: project.workspace_id,
+  name: project.name,
+  brand_name: project.brand_name,
+  website_url: project.website_url,
+});
+
 function RouterTestWrapper({ children }: Readonly<{ children: ReactNode }>) {
-  return <MemoryRouter initialEntries={['/projects']}>{children}</MemoryRouter>;
+  return (
+    <MemoryRouter initialEntries={['/projects']}>
+      <ActiveProjectScopeProvider project={scopeProject}>{children}</ActiveProjectScopeProvider>
+    </MemoryRouter>
+  );
 }
 
 function renderDashboard(ui: ReactElement) {
@@ -273,15 +296,23 @@ describe('DashboardScreen', () => {
     expect(ranked.queryByText('7.5')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'No open actions' })).not.toBeInTheDocument();
   });
-  it('shows an empty state instead of a movement card before a comparable run', () => {
+  it('shows an empty state instead of a movement card before a comparable run', async () => {
+    const user = userEvent.setup();
     queryResult.data = { ...commandCenter, movements: [] };
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
-    expect(screen.getByRole('heading', { name: 'No comparable measurement yet' })).toBeVisible();
+    // At the card-title rung, beside the H3 card titles.
+    expect(
+      screen.getByRole('heading', { level: 3, name: 'No comparable measurement yet' }),
+    ).toBeVisible();
     expect(screen.queryByRole('region', { name: 'Movement' })).not.toBeInTheDocument();
+    // Its action opens the Launch audit dialog, where the run is confirmed.
+    expect(screen.queryByRole('dialog', { name: 'Launch audit' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Launch audit' }));
+    expect(screen.getByRole('dialog', { name: 'Launch audit' })).toBeInTheDocument();
   });
   it("lists prompts where answers named a competitor but not the brand, with each prompt's Action", () => {
     const outcome = (engine: string, gaps: Record<string, number>) => ({
@@ -489,6 +520,13 @@ describe('DashboardScreen', () => {
     // arrives on the projection but no longer has a station-tile surface.
     expect(screen.queryByRole('heading', { name: 'Product loop' })).not.toBeInTheDocument();
     expect(screen.getByText('Run the first visibility audit')).toBeVisible();
+    // The next step's button says where it goes, never a bare "Continue".
+    expect(
+      within(screen.getByRole('region', { name: 'Run the first visibility audit' })).getByRole(
+        'link',
+        { name: 'Open Runs' },
+      ),
+    ).toHaveAttribute('href', '/runs?project=00000000-0000-4000-8000-000000000001');
     expect(
       within(screen.getByRole('region', { name: 'Citation share' })).getByText('Not run'),
     ).toBeVisible();

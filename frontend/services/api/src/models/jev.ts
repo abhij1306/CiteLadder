@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { getLogger } from '../logging.ts';
 import { assertMetered } from './meter-scope.ts';
 import {
@@ -14,7 +15,7 @@ import {
   type Transport,
 } from './http.ts';
 
-export function jevSettings(env: Record<string, string | undefined> = process.env) {
+export function jevSettings(env: SettingSource = process.env) {
   const spec = policy.models.jev;
   const setting = (name: keyof typeof spec) => resolveSettingSpec(spec[name], env);
   return {

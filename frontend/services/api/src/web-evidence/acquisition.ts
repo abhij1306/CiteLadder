@@ -2,14 +2,13 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import robotsModule from 'robots-parser';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
-import {
-  FetchError,
-  fetchWebsite,
-  type FetchOptions,
-  type WebsiteFetcher,
-} from '../projects/safe-fetch.ts';
+import { FetchError, fetchWebsite, type FetchOptions, type WebsiteFetcher } from '../safe-fetch.ts';
+import { failureFacts, getLogger } from '../logging.ts';
+
+const logger = getLogger('web_evidence.acquisition');
 
 // The package is CommonJS; its declaration describes the exported function as ESM.
 const robotsParser = robotsModule as unknown as (
@@ -22,7 +21,7 @@ const robotsParser = robotsModule as unknown as (
   _rules: Record<string, unknown>;
 };
 
-export function acquisitionSettings(env: Record<string, string | undefined> = process.env) {
+export function acquisitionSettings(env: SettingSource = process.env) {
   const spec = policy.site_health.settings;
   const number = (key: keyof typeof spec) => Number(resolveSettingSpec(spec[key], env));
   return {
@@ -42,18 +41,21 @@ export async function authorizeAcquisition(db: Database, url: URL) {
     '*',
     ...labels.slice(0, -1).map((_label, index) => labels.slice(index).join('.')),
   ];
+  let blocked;
   try {
-    const blocked = await db
+    blocked = await db
       .selectFrom('web_acquisition_controls')
       .select('domain')
       .where('domain', 'in', scopes)
       .where('blocked', '=', true)
       .limit(1)
       .executeTakeFirst();
-    if (blocked) throw new FetchError('acquisition_unavailable');
-  } catch {
+  } catch (error) {
+    // Fail closed: an unreadable operator stop list never admits a request.
+    logger.warning('web_acquisition_control_unreadable', failureFacts(error));
     throw new FetchError('acquisition_unavailable');
   }
+  if (blocked) throw new FetchError('acquisition_unavailable');
 }
 type HostState = { chain: Promise<void>; last: number; active: number; waiting: (() => void)[] };
 
@@ -225,6 +227,7 @@ export class PageAcquirer {
     return result;
   }
   async #robots(origin: string) {
+    const startedAt = performance.now();
     try {
       const result = await this.fetcher(`${origin}/robots.txt`, {
         maxBytes: this.settings.robotsBytes,
@@ -235,7 +238,12 @@ export class PageAcquirer {
         gate: (url, send, signal) => this.#pacer.slot(url.origin, this.floor, send, signal),
       });
       return robotsPolicy(origin, result.status, result.body.toString('utf8'), this.settings);
-    } catch {
+    } catch (error) {
+      // Status 0 reads as unreachable robots, rechecked sooner than a fetched file.
+      logger.info('robots_fetch_failed', {
+        ...failureFacts(error),
+        elapsed_ms: Math.round(performance.now() - startedAt),
+      });
       return robotsPolicy(origin, 0, '', this.settings);
     }
   }

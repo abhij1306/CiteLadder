@@ -220,3 +220,10 @@ export const rerunPageResponseSchema = responseObject({
   created_new_crawl: z.boolean(),
   analysis_status: pageAnalysisStatusSchema,
 });
+
+export type RootError = z.infer<typeof rootErrorSchema>;
+export type DeliveryFacts = z.infer<typeof deliveryFactsSchema>;
+export type PageSummary = z.infer<typeof pageSummarySchema>;
+export type PagesPage = z.infer<typeof pagesPageSchema>;
+export type PageDetail = z.infer<typeof pageDetailSchema>;
+export type RerunPageResponse = z.infer<typeof rerunPageResponseSchema>;

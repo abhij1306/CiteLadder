@@ -1,18 +1,15 @@
 import { createHash, randomUUID, randomBytes } from 'node:crypto';
-import { z } from 'zod';
+import { auditRepairRequestSchema } from '@citeladder/contracts/audit-requests';
+import type { z } from 'zod';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { ApiError, notFound } from '../errors.ts';
-import { auditPolicy } from './config.ts';
+import { auditPolicy, type AuditRuntime } from './config.ts';
+import { lockAuditEnqueue, reserveAuditCapacity } from './admission.ts';
 import { auditEvent, transitionAudit } from './state.ts';
 import { compareText } from '../text-order.ts';
 
-export const repairInput = z.object({
-  provider: z.string().nullish(),
-  engine: z.string().nullish(),
-  prompt_id: z.uuid().nullish(),
-  task_ids: z.array(z.uuid()).nullish(),
-});
+export const repairInput = auditRepairRequestSchema;
 const denied = (message: string) => new ApiError(409, message);
 /** A repair is an immutable child audit of selected failed frozen slots. */
 export function createRepairAudit(
@@ -20,9 +17,12 @@ export function createRepairAudit(
   workspaceId: string,
   auditId: string,
   request: z.output<typeof repairInput>,
+  runtime: AuditRuntime,
   at = new Date(),
 ) {
   return db.transaction().execute(async (trx) => {
+    // The same enqueue lock as a launch, taken before any audit row lock.
+    await lockAuditEnqueue(trx, workspaceId);
     const parent = await trx
       .selectFrom('audits')
       .selectAll()
@@ -78,6 +78,22 @@ export function createRepairAudit(
       .where('repair_key', '=', key)
       .executeTakeFirst();
     if (existing) return { auditId: existing.id, created: false };
+    const overlapping = await trx
+      .selectFrom('audit_tasks as t')
+      .innerJoin('audits as a', 'a.id', 't.audit_id')
+      .select('t.id')
+      .where('a.workspace_id', '=', workspaceId)
+      .where('a.parent_audit_id', '=', auditId)
+      .where('a.status', 'not in', auditPolicy.constants.audit_terminal_statuses)
+      .where(
+        't.source_task_id',
+        'in',
+        tasks.map((task) => task.id),
+      )
+      .executeTakeFirst();
+    if (overlapping) throw denied('A running repair already covers a selected task');
+    // Abuse controls only (active launches, daily task budget); a repair is not a manual run.
+    await reserveAuditCapacity(trx, workspaceId, tasks.length, null, runtime, at);
     const id = randomUUID();
     await trx
       .insertInto('audits')

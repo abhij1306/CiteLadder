@@ -24,7 +24,7 @@ import { TargetDetail } from './target-detail';
 import { textRole } from '@/components/ui/typography';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ListScreen } from '@/components/layout/page-shell';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /** Selection-only bulk actions, including stale keys that still need a clear path. */
 export function BulkActions({
@@ -80,7 +80,7 @@ export function BulkActions({
 }
 
 export function CommerceWorkspace({ projectId }: Readonly<{ projectId: string }>) {
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const { target, selectTarget } = useCommerceTarget();
   const queries = useCommerceQueries(projectId, target);
   const discovery = useCompetitorDiscovery(projectId);
@@ -89,7 +89,7 @@ export function CommerceWorkspace({ projectId }: Readonly<{ projectId: string }>
   // width mid-drag stays inside the split pane until the separator settles.
   const pane = useResizablePane();
   const header = useCatalogHeader({
-    workspaceId: workspaceId ?? '',
+    workspaceId,
     projectId,
     query: queries.catalog,
     projection: queries.projection,

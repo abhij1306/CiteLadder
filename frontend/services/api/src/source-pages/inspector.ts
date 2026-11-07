@@ -4,20 +4,17 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { parseUuid } from '../http/uuid.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
-import {
-  enqueueImplementationVerification,
-  enqueueOpportunityRefresh,
-} from '../opportunities/enqueue.ts';
+import { announceEvidence } from '../opportunities/evidence-announcement.ts';
 import {
   TaskCancelledError,
   taskProject,
   payloadString,
   type Executor,
-} from '../workers/executor.ts';
-import { getLogger } from '../logging.ts';
-import { FetchError, type FetchedPage, type WebsiteFetcher } from '../projects/safe-fetch.ts';
+} from '../queue/executor.ts';
+import { failureFacts, getLogger } from '../logging.ts';
+import { FetchError, type FetchedPage, type WebsiteFetcher } from '../safe-fetch.ts';
 import { PageAcquirer, authorizeAcquisition } from '../web-evidence/acquisition.ts';
-import { citationIdentity } from '../site-health/url-identity.ts';
+import { pageIdentity } from './identity.ts';
 import { claimPages, spendRedirect, type SourceScope } from './admission.ts';
 import { assessPage } from './assessment.ts';
 import { extractSourcePage } from './extract.ts';
@@ -55,9 +52,7 @@ async function handoff(
 ) {
   await db.transaction().execute(async (trx) => {
     await fenceInspectionTask(trx, task);
-    const trigger = { ...scope, triggerKind: 'audit', triggerId: audit, maxAttempts };
-    await enqueueOpportunityRefresh(trx, trigger);
-    await enqueueImplementationVerification(trx, trigger);
+    await announceEvidence(trx, scope, { kind: 'audit', id: audit }, { maxAttempts });
   });
 }
 export async function compensateInspection(db: Database, task: QueueTask) {
@@ -122,12 +117,19 @@ export function sourcePageInspector(fetcher?: WebsiteFetcher): Executor {
       if (spent === 'exhausted') break;
       if (spent === 'duplicate') continue;
       let result: FetchedPage;
+      const startedAt = performance.now();
       try {
-        result = await acquirer.fetch(token, options);
-      } catch {
+        result = await acquirer.fetch(token, options); // NOSONAR -- Each redirect fetch spends budget first and stops when it is exhausted.
+      } catch (error) {
+        // The citation stays unresolved; its spent redirect budget is kept.
+        logger.info('source_page_redirect_fetch_failed', {
+          task_id: task.id,
+          ...failureFacts(error),
+          elapsed_ms: Math.round(performance.now() - startedAt),
+        });
         continue;
       }
-      const identity = citationIdentity(result.url);
+      const identity = pageIdentity(result.url);
       if (!identity) continue;
       await checkCancelled('citation resolution');
       await resolveCitation(db, scope, audit.id, token, result.url, task);

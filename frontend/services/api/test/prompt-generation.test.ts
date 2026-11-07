@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { enforceWorkspaceRequest, agentCallLimit } from '../src/abuse/usage.ts';
+import { budget, spendBudget } from '../src/abuse/usage.ts';
 import { policy } from '../src/config.ts';
 import { createApp } from '../src/app.ts';
 import { record } from '../src/db/json.ts';
@@ -210,11 +210,11 @@ describe('prompt generation at the PostgreSQL boundary', () => {
     );
   });
   it('reserves the shared agent budget before provider I/O and refuses excess on an empty window', async () => {
-    const limit = agentCallLimit(1);
+    const calls = budget('agent_provider_call', {});
     await expect(
-      enforceWorkspaceRequest(db, tenant.workspaceId, { ...limit, amount: limit.limit + 1 }),
+      spendBudget(db, calls, tenant.workspaceId, { amount: calls.limit + 1 }),
     ).rejects.toMatchObject({ status: 429 });
-    await enforceWorkspaceRequest(db, tenant.workspaceId, { ...limit, amount: limit.limit });
+    await spendBudget(db, calls, tenant.workspaceId, { amount: calls.limit });
     const deps = dependencies();
     await expect(generate(deps)).rejects.toMatchObject({ status: 429 });
     expect(deps.io.fetch).not.toHaveBeenCalled();

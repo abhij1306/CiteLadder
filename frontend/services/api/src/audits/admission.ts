@@ -1,11 +1,18 @@
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
+import { subjectXactLock } from '../db/advisory-lock.ts';
+import { spendBudget } from '../abuse/usage.ts';
 import { ApiError } from '../errors.ts';
 import type { prepareAudit } from './freeze.ts';
 import { auditPolicy, type AuditRuntime } from './config.ts';
 
 export type FrozenAudit = Awaited<ReturnType<typeof prepareAudit>>;
+
+/** The workspace enqueue lock every audit launch and repair takes before admission. */
+export function lockAuditEnqueue(db: Database, workspaceId: string) {
+  return subjectXactLock(db, `audit-enqueue:${workspaceId}`);
+}
+
 /** Called under the workspace enqueue lock: the active-run and daily provider-task limits. */
 export async function reserveAuditCapacity(
   db: Database,
@@ -27,15 +34,5 @@ export async function reserveAuditCapacity(
     throw new ApiError(429, 'Workspace active audit limit exceeded', {
       headers: { 'retry-after': String(runtime.retrySeconds) },
     });
-  await enforceWorkspaceRequest(
-    db,
-    workspaceId,
-    {
-      operation: 'audit.provider_tasks',
-      limit: runtime.dailyTasks,
-      windowSeconds: 86400,
-      amount: slots,
-    },
-    at,
-  );
+  await spendBudget(db, runtime.dailyTasks, workspaceId, { amount: slots, at });
 }

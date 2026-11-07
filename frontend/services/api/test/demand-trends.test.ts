@@ -3,7 +3,7 @@ import { policy } from '../src/config.ts';
 import { detectCannibalization, detectTrends } from '../src/demand/detectors.ts';
 import { aggregate, detectSearchSignals, type QueryInput } from '../src/demand/projection.ts';
 import type { QueryClassification } from '../src/demand/classification.ts';
-import { addDays } from '../src/referrals/projection.ts';
+import { addDays } from '../src/calendar-days.ts';
 
 const p = policy.demand;
 const windowEnd = '2026-09-28';

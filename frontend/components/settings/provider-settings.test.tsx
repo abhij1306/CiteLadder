@@ -35,26 +35,9 @@ async function row(name: string) {
   return within(heading.closest('li')!);
 }
 
-/** The catalog with DataForSEO's consumer-app surfaces published too. */
+/** The served catalog, which publishes DataForSEO's consumer-app surfaces too. */
 function consumerCatalogHandler() {
-  const scraped = (['chatgpt_search', 'gemini_consumer'] as const).map((logical_engine) => ({
-    logical_engine,
-    routes: [
-      {
-        transport_provider: 'dataforseo',
-        transport_model: `${logical_engine}-scraper`,
-        retrieval_enabled: null,
-        reasoning_effort: null,
-        surface_kind: 'llm_scraper',
-      },
-    ],
-  }));
-  return http.get('/api/v1/provider-catalog', () =>
-    HttpResponse.json({
-      ...providerCatalogFixture,
-      engines: [...providerCatalogFixture.engines, ...scraped],
-    }),
-  );
+  return http.get('/api/v1/provider-catalog', () => HttpResponse.json(providerCatalogFixture));
 }
 
 describe('ProviderSettings', () => {

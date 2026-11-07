@@ -1,7 +1,13 @@
+import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
+import { queryKeys } from './query-keys';
 import { ONBOARDING_RESEARCH_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
+import type {
+  BrandDiscoveryCompleteRequest,
+  BrandDiscoveryCreateRequest,
+} from '@citeladder/contracts/brand-discovery-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import {
   brandDiscoveryCatalogSchema,
@@ -10,14 +16,6 @@ import {
 } from '@citeladder/contracts/visibility';
 
 export type BrandDiscovery = z.infer<typeof brandDiscoverySchema>;
-export type BrandDiscoveryInput = {
-  brand_name: string;
-  website_url: string;
-  industry?: string;
-  subindustry?: string;
-  primary_market: string;
-  language_code?: string;
-};
 
 /**
  * The resolved business context. `category` and `category_terms` are open
@@ -25,14 +23,6 @@ export type BrandDiscoveryInput = {
  * closed facets that select which kinds of question apply.
  */
 export type DiscoveryProfile = BrandDiscovery['profile'];
-
-type DiscoveryCompetitor = { name: string; aliases: string[]; domains: string[] };
-export type BrandDiscoveryCompletion = {
-  name: string;
-  profile: DiscoveryProfile;
-  domains: string[];
-  competitors: DiscoveryCompetitor[];
-};
 
 export const brandDiscoveriesApi = {
   catalog: async (options?: ApiRequestOptions) => {
@@ -43,7 +33,7 @@ export const brandDiscoveriesApi = {
   // every call names the workspace it is for rather than inheriting whichever
   // one happened to be selected when the request was retried.
   create: async (
-    input: BrandDiscoveryInput,
+    input: BrandDiscoveryCreateRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => {
@@ -65,9 +55,18 @@ export const brandDiscoveriesApi = {
     });
     return strictValidate(brandDiscoverySchema, value, 'brandDiscovery.run');
   },
+  /** A new discovery from a finished one's input; the finished one is left as it is. */
+  rerun: async (id: string, idempotencyKey: string, options?: ApiRequestOptions) => {
+    const value = await apiClient.post(`/brand-discoveries/${id}/rerun`, undefined, {
+      ...options,
+      idempotencyKey,
+      retryNetworkFailures: true,
+    });
+    return strictValidate(brandDiscoverySchema, value, 'brandDiscovery.rerun');
+  },
   complete: async (
     id: string,
-    input: BrandDiscoveryCompletion,
+    input: BrandDiscoveryCompleteRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => {
@@ -78,4 +77,43 @@ export const brandDiscoveriesApi = {
     });
     return strictValidate(brandDiscoveryCompleteSchema, value, 'brandDiscovery.complete');
   },
+};
+
+export const brandDiscoveryQueries = {
+  /** Discovery limits (the competitor cap); they change only with a deployment. */
+  catalog: (workspaceId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.brandDiscovery.catalog(workspaceId),
+      queryFn: ({ signal }) => brandDiscoveriesApi.catalog({ signal, workspaceId }),
+      staleTime: Number.POSITIVE_INFINITY,
+    }),
+  detail: (workspaceId: string | null, discoveryId: string) =>
+    queryOptions({
+      queryKey: queryKeys.brandDiscovery.detail(workspaceId, discoveryId),
+      queryFn: ({ signal }) => brandDiscoveriesApi.get(discoveryId, { signal, workspaceId }),
+    }),
+};
+
+/**
+ * Re-read one discovery, after a run settles or a completion whose outcome is
+ * unknown: a request the browser abandoned may still have committed.
+ */
+export const refreshBrandDiscovery = (
+  client: QueryClient,
+  workspaceId: string | null,
+  discoveryId: string,
+) =>
+  client.invalidateQueries({
+    queryKey: queryKeys.brandDiscovery.detail(workspaceId, discoveryId),
+  });
+
+export const brandDiscoveryMutations = {
+  /** Execute a queued discovery; its progress is re-read however the request ends. */
+  run: () =>
+    mutationOptions({
+      mutationFn: ({ id, workspace }: { id: string; workspace: string | null }) =>
+        brandDiscoveriesApi.run(id, { workspaceId: workspace }),
+      onSettled: (_data, _error, { id, workspace }, _result, { client }) =>
+        refreshBrandDiscovery(client, workspace, id),
+    }),
 };

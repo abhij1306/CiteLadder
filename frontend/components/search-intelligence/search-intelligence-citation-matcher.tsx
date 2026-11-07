@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 
 import { Button } from '@/components/ui/button';
-import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
@@ -15,13 +16,12 @@ import { useToast } from '@/components/ui/toast';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayTimestamp, pluralCount } from '@/lib/format';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi } from '@/lib/api/runs';
+import { runsQueries } from '@/lib/api/runs';
 import {
-  searchIntelligenceApi,
+  searchIntelligenceMutations,
   type SearchIntelligenceDataset,
 } from '@/lib/api/search-intelligence';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { referringLists } from './search-intelligence-format';
 
 export function SearchIntelligenceCitationMatcher({
@@ -32,9 +32,11 @@ export function SearchIntelligenceCitationMatcher({
   datasets: SearchIntelligenceDataset[];
   /** The website the Backlinks tab shows; its list is the one matched first. */
   targetOrigin?: string;
-  onDerived: () => Promise<unknown>;
+  /** The matches are saved and the readiness is refreshed. */
+  onDerived: () => void;
 }>) {
-  const { activeProject } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
+  const scope = { workspaceId, projectId };
   const timeZone = useDisplayTimeZone();
   const { notify } = useToast();
   const [selectedAudits, setSelectedAudits] = useState<string[]>([]);
@@ -46,32 +48,25 @@ export function SearchIntelligenceCitationMatcher({
     lists.find((dataset) => dataset.id === listId) ??
     lists.find((dataset) => dataset.target_origin === targetOrigin);
   const audits = useQuery({
-    queryKey: queryKeys.runs.list({ project_id: activeProject?.id }),
-    queryFn: ({ signal }) =>
-      runsApi.listAudits(
-        { project_id: activeProject!.id },
-        { signal, workspaceId: activeProject!.workspace_id },
-      ),
-    enabled: Boolean(activeProject && referring),
+    ...runsQueries.list(scope),
+    enabled: Boolean(referring),
   });
-  const derive = useMutation({
-    mutationFn: () =>
-      searchIntelligenceApi.deriveCitationMatches(
-        activeProject!.id,
-        referring!.id,
-        selectedAudits,
-        { workspaceId: activeProject!.workspace_id },
-      ),
-    onSuccess: async (dataset) => {
-      setSelectedAudits([]);
-      notify(
-        'Citation matches saved',
-        `${pluralCount(dataset.unique_rows_saved, 'citation')} came from sites that link to you. Open Citation matches in Backlinks.`,
-        { tone: 'positive' },
-      );
-      await onDerived();
-    },
-  });
+  const derive = useMutation(searchIntelligenceMutations.deriveCitationMatches(scope));
+  const deriveMatches = () =>
+    derive.mutate(
+      { backlink_dataset_id: referring!.id, audit_ids: selectedAudits },
+      {
+        onSuccess: (dataset) => {
+          setSelectedAudits([]);
+          notify(
+            'Citation matches saved',
+            `${pluralCount(dataset.unique_rows_saved, 'citation')} came from sites that link to you. Open Citation matches in Backlinks.`,
+            { tone: 'positive' },
+          );
+          onDerived();
+        },
+      },
+    );
   if (!referring) return null;
   if (audits.isError)
     return (
@@ -100,7 +95,11 @@ export function SearchIntelligenceCitationMatcher({
         Choose the Visibility audits whose cited sources to compare with the domains that link to
         you.
       </p>
-      {derive.isError ? <Callout tone="negative">{derive.error.message}</Callout> : null}
+      {derive.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(derive.error, { action: 'compare the cited sources' })}
+        />
+      ) : null}
       {lists.length > 1 ? (
         <Select
           ariaLabel="Website"
@@ -130,7 +129,7 @@ export function SearchIntelligenceCitationMatcher({
         <Button
           variant="primary"
           disabled={!selectedAudits.length || derive.isPending}
-          onClick={() => derive.mutate()}
+          onClick={deriveMatches}
         >
           Match citations
         </Button>

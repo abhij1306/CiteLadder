@@ -4,7 +4,9 @@ import { AppGrid } from '@/components/ui/app-grid';
 import { Callout } from '@/components/ui/callout';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { errorMessage, type useProviderConnection } from '@/lib/providers/use-provider-connection';
+import { MutationNotice } from '@/components/ui/mutation-notice';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
+import type { useProviderConnection } from '@/lib/providers/use-provider-connection';
 
 type ConnectionState = ReturnType<typeof useProviderConnection>;
 
@@ -93,7 +95,9 @@ export function ProviderConnectionFields({
       )}
 
       {saveMutation.isError ? (
-        <Callout tone="negative">{errorMessage(saveMutation.error)}</Callout>
+        <MutationNotice
+          notice={mutationNoticeForError(saveMutation.error, { action: 'save the connection' })}
+        />
       ) : null}
 
       {testResult ? (

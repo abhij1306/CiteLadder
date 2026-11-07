@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { QueryState } from '@/components/ui/query-state';
 import { ListScreen } from '@/components/layout/page-shell';
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 import { useProjectCreation } from '@/components/layout/use-project-creation';
 import { useProjectContext } from '@/lib/project/project-context';
 import { finishOnboardingNavigationHandoff } from '@/lib/onboarding/timing';

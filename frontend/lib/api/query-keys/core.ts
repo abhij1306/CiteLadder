@@ -1,4 +1,5 @@
 /** Auth + workspaces + projects + prompts + providers + content query-key namespaces. */
+import { scopedKeys, type ProjectScope } from './scope';
 
 export const authKeys = {
   all: ['auth'] as const,
@@ -10,8 +11,27 @@ export const workspaceKeys = {
   list: () => ['workspaces', 'list'] as const,
 };
 
+/**
+ * Reads that serve access recovery: the session, the memberships and each
+ * workspace's access. A workspace without access keeps these and drops the rest.
+ */
+export function isAccessRecoveryKey(key: readonly unknown[]): boolean {
+  const [domain, resource] = key;
+  return (
+    domain === 'auth' || (domain === 'workspaces' && (resource === 'list' || resource === 'access'))
+  );
+}
+
+const projects = scopedKeys('projects');
+/**
+ * The project shell's own reads (`list`, `detail`) are keyed outside the
+ * scoped shape: the list is one workspace's, and the detail is authorized
+ * from its path before any workspace is known. A project's resources use the
+ * scoped shape, so `project(projectId)` refreshes them all (but not the list
+ * or the detail), and `all` covers every one.
+ */
 export const projectKeys = {
-  all: ['projects'] as const,
+  ...projects,
   /**
    * Prefix over every workspace's project list. Use it to INVALIDATE from a
    * caller that has no workspace in hand; never as a query key.
@@ -28,31 +48,32 @@ export const projectKeys = {
    */
   list: (workspaceId: string) => ['projects', 'list', workspaceId] as const,
   detail: (projectId: string) => ['projects', 'detail', projectId] as const,
-  commandCenter: (projectId: string) => ['projects', 'command-center', projectId] as const,
-  overviewLayout: (projectId: string) => ['projects', 'overview-layout', projectId] as const,
-  brandProfile: (projectId: string) => ['projects', 'brand-profile', projectId] as const,
-  businessMap: (projectId: string) => ['projects', 'business-map', projectId] as const,
-  brandFacts: (projectId: string) => ['projects', 'brand-facts', projectId] as const,
-  markets: (projectId: string) => ['projects', 'markets', projectId] as const,
+  /** Whether a key is a project's detail read (the read that resolves the project itself). */
+  isDetail: (key: readonly unknown[]) => key[0] === 'projects' && key[1] === 'detail',
+  commandCenter: (scope: ProjectScope) => projects.read('command-center', scope),
+  overviewLayout: (scope: ProjectScope) => projects.read('overview-layout', scope),
+  brandProfile: (scope: ProjectScope) => projects.read('brand-profile', scope),
+  businessMap: (scope: ProjectScope) => projects.read('business-map', scope),
+  brandFacts: (scope: ProjectScope) => projects.read('brand-facts', scope),
+  markets: (scope: ProjectScope) => projects.read('markets', scope),
 };
 
+const prompts = scopedKeys('prompts');
 export const promptKeys = {
-  all: ['prompts'] as const,
-  /** One workspace's read of a project's prompt sets. */
-  sets: (workspaceId: string | null, projectId: string) =>
-    ['prompts', 'sets', projectId, workspaceId] as const,
-  /** Every cached read of a project's prompt sets, for invalidation. */
-  projectSets: (projectId: string) => ['prompts', 'sets', projectId] as const,
-  set: (promptSetId: string) => ['prompts', 'set', promptSetId] as const,
-  list: (promptSetId: string) => ['prompts', 'list', promptSetId] as const,
-  candidates: (promptSetId: string) => ['prompts', 'candidates', promptSetId] as const,
+  ...prompts,
+  /** The project's prompt sets, with their prompts. */
+  sets: (scope: ProjectScope) => prompts.read('sets', scope),
+  /** One set's pending generated candidates; `null` before the project has a set. */
+  candidates: (scope: ProjectScope, promptSetId: string | null) =>
+    prompts.read('candidates', scope, promptSetId),
 };
 
+const topics = scopedKeys('topics');
 export const topicKeys = {
-  all: ['topics'] as const,
-  list: (projectId: string) => ['topics', 'list', projectId] as const,
-  // Seed queries bind to topics, so a topic change refreshes them under `all`.
-  seedQueries: (projectId: string) => ['topics', 'seed-queries', projectId] as const,
+  ...topics,
+  list: (scope: ProjectScope) => topics.read('list', scope),
+  // Seed queries bind to topics, so a topic change refreshes them under `project`.
+  seedQueries: (scope: ProjectScope) => topics.read('seed-queries', scope),
 };
 
 export const providerKeys = {

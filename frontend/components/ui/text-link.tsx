@@ -1,7 +1,7 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 import { Slot, Slottable } from '@radix-ui/react-slot';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { ExternalHttpLink } from '@/components/ui/external-http-link';
 import { textRole, type TextRole } from '@/components/ui/typography';
 import { parseAbsoluteHttpUrl } from '@/lib/safe-http-url';

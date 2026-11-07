@@ -66,3 +66,8 @@ export const architectureSchema = responseObject({
   limitations: z.array(z.string()),
   coverage_reasons: z.array(z.string()).default([]),
 });
+
+export type CoverageState = z.infer<typeof coverageStateSchema>;
+export type ArchitecturePageKind = z.infer<typeof architecturePageKindSchema>;
+export type ArchitectureNode = z.infer<typeof architectureNodeSchema>;
+export type SiteArchitecture = z.infer<typeof architectureSchema>;

@@ -1,27 +1,18 @@
 import { z } from 'zod';
 import { auditEstimateSchema } from '@citeladder/contracts/audits';
-import { logicalEngineSchema } from '@citeladder/contracts/providers';
+import { auditEstimateRequestSchema } from '@citeladder/contracts/audit-requests';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
-import { auditPolicy, auditRuntime, type AuditRuntime } from './config.ts';
-import { providerPolicy } from '../providers/config.ts';
+import { auditRuntime, type AuditRuntime } from './config.ts';
+import { providerPolicy, surfaceKindOf } from '../providers/config.ts';
 import { resolveMarkets } from '../projects/markets.ts';
 import { searchContext } from '../search-surfaces/locations.ts';
 import { marketEngines } from './freeze.ts';
-import { marketIdsInput } from './inputs.ts';
+import { marketIdsInput, repetitionsInput } from './inputs.ts';
 import { costPolicy, estimateTokens, knownTotal, previewCost } from './costs.ts';
 
-export const estimateInput = z.object({
-  project_id: z.uuid(),
-  prompt_set_id: z.uuid().nullish(),
-  prompt_ids: z.array(z.uuid()).default([]),
-  engines: z.array(logicalEngineSchema).min(1),
-  repetitions: z
-    .number()
-    .int()
-    .min(auditPolicy.min_repetitions)
-    .max(auditPolicy.max_repetitions)
-    .nullish(),
+export const estimateInput = auditEstimateRequestSchema.extend({
+  repetitions: repetitionsInput,
   market_ids: marketIdsInput,
 });
 function aggregateCostStatus(statuses: ReadonlySet<string>) {
@@ -100,7 +91,8 @@ export async function estimateAudit(
         execution_count: executions,
         pricing_version: costPolicy.pricing_version,
       };
-      if (route.transport_provider === 'dataforseo')
+      // An observed surface has no tokens or search calls to estimate.
+      if (surfaceKindOf(engine) !== 'llm')
         return {
           ...common,
           retrieval_enabled: null,
@@ -144,7 +136,7 @@ export async function estimateAudit(
     execution_count: engines.reduce((sum, engine) => sum + engine.execution_count, 0),
     maximum_attempt_count: attempts,
     maximum_wall_clock_seconds: Math.ceil(
-      input.engines.some((engine) => ['chatgpt_search', 'gemini_consumer'].includes(engine))
+      input.engines.some((engine) => surfaceKindOf(engine) === 'llm_scraper')
         ? runtime.search.recoveryDeadlineHours * 3600
         : (attempts * settings.audit_timeout_seconds) / Math.max(1, settings.worker_concurrency),
     ),

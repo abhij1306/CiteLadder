@@ -1,6 +1,6 @@
 /**
- * The analytics worker: claims the kinds the analytics catalog
- * (`config/connected-data.ts`) owns and runs each through its executor.
+ * The analytics worker: claims the kinds the analytics kind registry
+ * (`workers/analytics-kinds.ts`) holds and runs each through its executor.
  *
  * Owns the analytics queue lifecycle: the claim
  * commits before any work, a row already terminal at claim time is never
@@ -11,88 +11,64 @@
  * terminal compensation run before every claim, including an empty drain.
  */
 import { randomBytes } from 'node:crypto';
-import { crawlLogRollupRefresh } from '../crawl-logs/rollup.ts';
-import { refreshTrafficInsights } from '../crawl-logs/insights.ts';
-import { crawlLogPull } from '../crawl-logs/pull.ts';
-import {
-  botIpRangeRefresh,
-  botRequestRetentionSweep,
-  crawlLogUploadAbandonSweep,
-} from '../crawl-logs/maintenance.ts';
-import { sql } from 'kysely';
-import { recoverAnalyticsLeases } from '../queue/analytics-recovery.ts';
-import { maintainLease } from '../queue/heartbeat.ts';
-import { competitorDiscovery } from '../commerce/discovery.ts';
-import { compensateTerminalTasks } from './terminal-compensation.ts';
 
-import { policy, type WorkerSettings } from '../config.ts';
+import { ConfigError } from '../config/config-error.ts';
+import { policy } from '../config.ts';
+import type { WorkerSettings } from '../config/analytics.ts';
 import type { Database } from '../db/database.ts';
 import { getLogger } from '../logging.ts';
-import { TaskQueue, type QueueTask, type ClaimScope } from '../queue/task-queue.ts';
-import { classifyReferrals } from '../referrals/classify.ts';
-import { ingestReferrals } from '../referrals/ingest.ts';
-import { referralRetentionSweep } from '../referrals/retention.ts';
-import { refreshAiReferralsSnapshot } from '../referrals/snapshot.ts';
+import { recoverAnalyticsLeases } from '../queue/analytics-recovery.ts';
 import {
   TaskCancelledError,
   TerminalExecutorError,
   type Executor,
   type TaskSettlement,
-} from './executor.ts';
-import { projectPerformanceRange, refreshTrafficSnapshot } from '../traffic/snapshot.ts';
-import { recomputeDemand } from '../demand/snapshot.ts';
-import { refreshOpportunities } from '../opportunities/refresh.ts';
-import { verifyImplementationEvents } from '../opportunities/verification.ts';
-import { projectCatalog } from '../commerce/projection.ts';
-import { publishInternalLinks } from '../site-health/internal-link-publish.ts';
-import { acquireResearch } from '../search-intelligence/executor.ts';
-import { internalLinkJudge } from '../site-health/internal-link-judgments.ts';
-import { sourcePageInspector } from '../source-pages/inspector.ts';
-import { answerPerception } from '../perception/executor.ts';
-import { factVerification } from '../perception/fact-verification.ts';
+} from '../queue/executor.ts';
+import { maintainLease } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
+import { ANALYTICS_LANE, TaskQueue, type ClaimScope, type QueueTask } from '../queue/task-queue.ts';
+import {
+  ANALYTICS_KIND_NAMES,
+  ANALYTICS_KINDS,
+  ANALYTICS_LEASE_TTL_SECONDS,
+} from './analytics-kinds.ts';
+import { compensateTerminalTasks } from './terminal-compensation.ts';
 
 const logger = getLogger('workers.analytics');
-const { statuses, terminal } = policy.task_queue;
+const { statuses } = policy.task_queue;
 const ERROR_DETAIL_LIMIT = 2000;
 
-/** Kind dispatch: exactly the kinds TypeScript owns. */
-export const EXECUTORS: Readonly<Record<string, Executor>> = {
-  ai_traffic_insights_refresh: refreshTrafficInsights,
-  crawl_log_rollup_refresh: crawlLogRollupRefresh,
-  crawl_log_pull: crawlLogPull(),
-  bot_ip_range_refresh: botIpRangeRefresh(),
-  bot_request_retention_sweep: botRequestRetentionSweep,
-  crawl_log_upload_abandon_sweep: crawlLogUploadAbandonSweep,
-  commerce_competitor_discovery: competitorDiscovery(),
-  search_intelligence_acquisition: acquireResearch,
-  source_page_inspection: sourcePageInspector(),
-  internal_link_judgment: internalLinkJudge(),
-  internal_link_publish: publishInternalLinks,
-  ingest_referrals: ingestReferrals,
-  classify_referrals: classifyReferrals,
-  ai_referrals_snapshot_refresh: refreshAiReferralsSnapshot,
-  referral_retention_sweep: referralRetentionSweep,
-  traffic_snapshot_refresh: refreshTrafficSnapshot,
-  performance_range_projection: projectPerformanceRange,
-  demand_snapshot_refresh: recomputeDemand,
-  opportunity_refresh: refreshOpportunities,
-  opportunity_verification: verifyImplementationEvents,
-  commerce_catalog_projection: projectCatalog,
-  answer_perception: answerPerception(),
-  fact_verification: factVerification(),
-};
+/** Kind dispatch: each registered kind's executor. */
+export const EXECUTORS: Readonly<Record<string, Executor>> = Object.fromEntries(
+  Object.entries(ANALYTICS_KINDS).map(([kind, { run }]) => [kind, run]),
+);
 
 /** A claimed kind with no executor: a deploy bug, failed without retries. */
 class ExecutorNotWiredError extends Error {}
 
 const detail = (error: Error) => [...String(error.message)].slice(0, ERROR_DETAIL_LIMIT).join('');
 
+/**
+ * The wait before retry `attempt` (1-based): the base delay doubled per
+ * failed attempt, capped, then jittered into its upper half so retries of a
+ * shared outage spread out instead of returning together.
+ */
+export function retryDelayMs(
+  attempt: number,
+  settings: Pick<WorkerSettings, 'retryDelaySeconds' | 'retryMaxDelaySeconds'>,
+  random: () => number = Math.random,
+): number {
+  const exponential = settings.retryDelaySeconds * 2 ** Math.max(0, attempt - 1);
+  const capped = Math.min(settings.retryMaxDelaySeconds, exponential);
+  return Math.round(capped * 1000 * (0.5 + random() / 2));
+}
+
 function taskOutcome(
   error: Error | null,
   attempt: number,
   maxAttempts: number,
   now: Date,
-  retryDelaySeconds: number,
+  settings: WorkerSettings,
 ) {
   if (error === null)
     return { status: statuses.succeeded, completed_at: now, error_code: '', error_detail: '' };
@@ -109,7 +85,7 @@ function taskOutcome(
   if (attempt < maxAttempts)
     return {
       status: statuses.retry_wait,
-      available_at: new Date(now.getTime() + retryDelaySeconds * 1000),
+      available_at: new Date(now.getTime() + retryDelayMs(attempt, settings)),
       error_code: policy.analytics.retry_error,
       error_detail: detail(error),
     };
@@ -140,11 +116,19 @@ export class AnalyticsWorker {
       signal?: AbortSignal;
     } = {},
   ) {
+    // A heartbeat slower than a kind's lease guarantees expiry during healthy work.
+    if (
+      Object.values(ANALYTICS_LEASE_TTL_SECONDS).some(
+        (lease) => settings.heartbeatIntervalSeconds >= lease,
+      )
+    ) {
+      throw new ConfigError('heartbeat_interval_seconds must be shorter than every lease TTL');
+    }
     this.#db = db;
     this.#settings = settings;
-    this.#queue = new TaskQueue(db, {
+    this.#queue = new TaskQueue(db, ANALYTICS_LANE, {
       leaseTtlSeconds: settings.leaseTtlSeconds,
-      leaseTtlSecondsByKind: settings.leaseTtlSecondsByKind,
+      leaseTtlSecondsByKind: ANALYTICS_LEASE_TTL_SECONDS,
     });
     this.#executors = options.executors ?? EXECUTORS;
     this.#scope = options.taskScope;
@@ -176,7 +160,7 @@ export class AnalyticsWorker {
   }
 
   #kinds(): readonly string[] {
-    return this.#scope ? Object.keys(this.#executors) : policy.analytics.ts_owned_task_kinds;
+    return this.#scope ? Object.keys(this.#executors) : ANALYTICS_KIND_NAMES;
   }
 
   /** Drain until a claim returns nothing (tests and one-shot runs). */
@@ -193,19 +177,23 @@ export class AnalyticsWorker {
   }
 
   async #execute(claimed: QueueTask): Promise<void> {
+    const startedAt = performance.now();
     let started = false;
     try {
       // Cooperative cancel at the boundary: a row that turned terminal between
       // enqueue and claim is never dispatched.
-      if (await this.#queue.isTerminal(claimed.id)) return;
+      if (await this.#queue.isTerminal(claimed.id, claimed.workspace_id)) return;
       if (!(await this.#queue.markRunning(claimed.id, this.owner, claimed.attempt_count))) return;
       started = true;
-      await this.#finalize(claimed, await this.#run(claimed));
+      await this.#finalize(claimed, await this.#run(claimed), startedAt);
     } catch (error) {
       logger.exception('analytics_task_crashed', error, { task_id: claimed.id });
       // A failed transition leaves a leased claim for recovery; no executor
       // attempt or partial publication occurred.
-      if (started) await this.#finalize(claimed, error as Error).catch(() => undefined);
+      if (started)
+        await this.#finalize(claimed, error as Error, startedAt).catch((settleError: unknown) =>
+          logger.exception('analytics_task_settle_failed', settleError, { task_id: claimed.id }),
+        );
     }
   }
 
@@ -231,7 +219,10 @@ export class AnalyticsWorker {
         db: this.#db,
         maxAttempts: this.#settings.taskMaxAttempts,
         checkCancelled: async (boundary) => {
-          if (heartbeat.signal.aborted || (await this.#queue.isTerminal(claimed.id))) {
+          if (
+            heartbeat.signal.aborted ||
+            (await this.#queue.isTerminal(claimed.id, claimed.workspace_id))
+          ) {
             throw new TaskCancelledError(
               `analytics task ${claimed.id} reached a terminal status; stopping at the ${boundary} boundary`,
             );
@@ -248,33 +239,20 @@ export class AnalyticsWorker {
   }
 
   /** The one locked terminal write per dispatch. */
-  #finalize(claimed: QueueTask, result: Error | TaskSettlement | null): Promise<boolean> {
+  async #finalize(
+    claimed: QueueTask,
+    result: Error | TaskSettlement | null,
+    startedAt: number,
+  ): Promise<boolean> {
     const taskId = claimed.id;
-    return this.#db.transaction().execute(async (trx) => {
-      const row = await trx
-        .selectFrom('analytics_tasks')
-        .select(['lease_owner', 'status', 'attempt_count', 'max_attempts'])
-        .where('id', '=', taskId)
-        .where('workspace_id', '=', claimed.workspace_id)
-        .where('project_id', claimed.project_id === null ? 'is' : '=', claimed.project_id)
-        .where('attempt_count', '=', claimed.attempt_count)
-        .where('lease_expires_at', '>', sql<Date>`clock_timestamp()`)
-        .forUpdate()
-        .executeTakeFirst();
-      if (row === undefined || row.lease_owner !== this.owner || terminal.includes(row.status)) {
-        return false;
-      }
+    const settled = await this.#db.transaction().execute(async (trx) => {
+      const row = await this.#queue.fence(trx, claimed, this.owner);
+      if (row === undefined) return null;
       const now = new Date();
       const error = result === null || result instanceof Error ? result : result.error;
       if (result !== null && !(result instanceof Error)) await result.persist(trx);
       const attempt = row.attempt_count + 1;
-      const outcome = taskOutcome(
-        error,
-        attempt,
-        row.max_attempts,
-        now,
-        this.#settings.retryDelaySeconds,
-      );
+      const outcome = taskOutcome(error, attempt, row.max_attempts, now, this.#settings);
       await trx
         .updateTable('analytics_tasks')
         .set({
@@ -286,7 +264,18 @@ export class AnalyticsWorker {
         })
         .where('id', '=', taskId)
         .execute();
-      return true;
+      return { error, attempt, outcome };
     });
+    if (settled === null) return false;
+    if (settled.error !== null)
+      logLaneFailure(ANALYTICS_LANE.table, claimed, {
+        phase: claimed.task_kind,
+        startedAt,
+        attempt: settled.attempt,
+        outcome: settled.outcome.status === statuses.failed ? 'failed' : 'retry',
+        error: settled.error,
+        code: settled.outcome.error_code,
+      });
+    return true;
   }
 }

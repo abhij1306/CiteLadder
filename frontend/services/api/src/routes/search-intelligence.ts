@@ -16,7 +16,8 @@ import { z } from 'zod';
 
 import type { AppEnv } from '../context.ts';
 import { readBody } from '../http/body.ts';
-import { configEnvironment, policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { ApiError } from '../errors.ts';
 import { createReview } from '../search-intelligence/reviews.ts';
 import { deriveCitationMatches } from '../search-intelligence/citations.ts';
@@ -29,9 +30,11 @@ import {
 } from '../search-intelligence/reads.ts';
 import { cancelRun, confirmRun, savePreferences } from '../search-intelligence/runs.ts';
 import { defineGetRoute, definePostRoute, definePutRoute } from './define.ts';
-import { citationMatchBody, preferencesBody, reviewBody } from './search-intelligence-contracts.ts';
+import { preferencesBody, reviewBody } from './search-intelligence-contracts.ts';
+import { searchCitationMatchRequestSchema } from '@citeladder/contracts/search-intelligence-requests';
 
 const family = 'search-intelligence';
+/** Reads open through the path project; writes resolve it in the active workspace. */
 const authorize = 'project';
 const root = '/api/v1/projects/{project_id}/search-intelligence';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
@@ -53,7 +56,7 @@ const scopeOf = (c: Context<AppEnv>, projectId: string): Scope => ({
 export const searchIntelligenceRoutes = [
   definePostRoute({
     family: 'search-intelligence-reviews',
-    authorize,
+    authorize: 'active-project',
     path: `${root}/reviews`,
     capability: 'run',
     status: 201,
@@ -71,7 +74,7 @@ export const searchIntelligenceRoutes = [
         c.get('user').id,
         key,
         await readBody(c, reviewBody),
-        String(resolveSettingSpec(policy.settings.encryption_key, configEnvironment(config))),
+        String(resolveSettingSpec(policy.settings.encryption_key, config.settings)),
       );
     },
   }),
@@ -87,7 +90,7 @@ export const searchIntelligenceRoutes = [
   }),
   definePutRoute({
     family,
-    authorize,
+    authorize: 'active-project',
     path: `${root}/preferences`,
     capability: 'write',
     params: { path: projectPath, query: {} },
@@ -100,7 +103,7 @@ export const searchIntelligenceRoutes = [
   }),
   definePostRoute({
     family,
-    authorize,
+    authorize: 'active-project',
     path: `${root}/runs/{run_id}/confirm`,
     capability: 'run',
     status: 202,
@@ -112,7 +115,7 @@ export const searchIntelligenceRoutes = [
   }),
   definePostRoute({
     family,
-    authorize,
+    authorize: 'active-project',
     path: `${root}/runs/{run_id}/cancel`,
     capability: 'run',
     params: { path: runPath, query: {} },
@@ -180,15 +183,15 @@ export const searchIntelligenceRoutes = [
   }),
   definePostRoute({
     family,
-    authorize,
+    authorize: 'active-project',
     path: `${root}/citation-matches`,
     capability: 'write',
     status: 201,
     params: { path: projectPath, query: {} },
-    body: citationMatchBody,
+    body: searchCitationMatchRequestSchema,
     response: searchDatasetSchema,
     async handle({ c, db }, { path }) {
-      const body = await readBody(c, citationMatchBody);
+      const body = await readBody(c, searchCitationMatchRequestSchema);
       return deriveCitationMatches(
         db,
         scopeOf(c, path.project_id),

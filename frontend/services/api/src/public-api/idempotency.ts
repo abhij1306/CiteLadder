@@ -5,9 +5,12 @@
  * while the first is still running) is 409 `idempotency_conflict`.
  *
  * The claim commits before the work runs. A refused attempt (a coded 4xx)
- * releases it, so a corrected retry runs again; a server failure keeps it, since
- * its write may have committed, so a retry gets a retryable 409 instead of a
- * second write. Only successful responses are stored, for
+ * releases it, so a corrected retry runs again. A server failure keeps it, since
+ * its write may have committed, and records the outcome as unknown: a retry gets
+ * a non-retryable 409 `idempotency_outcome_unknown` instead of a second write. A
+ * claim still without an outcome after `idempotency.in_progress_max_seconds`
+ * (the process died before recording one) answers the same. Successful
+ * responses are stored and replayed; every record is kept for
  * `idempotency.retention_hours` (purged by the runner).
  */
 import { createHash, randomUUID } from 'node:crypto';
@@ -21,6 +24,9 @@ import { ApiError } from '../errors.ts';
 
 const P = policy.public_api;
 const CONFLICT = 'idempotency_conflict';
+const OUTCOME_UNKNOWN = 'idempotency_outcome_unknown';
+/** The status a failed attempt records: its write may or may not have committed. */
+const FAILED_STATUS = 500;
 const REPLAYED_HEADER = 'idempotent-replayed';
 
 export async function withIdempotency(
@@ -57,26 +63,39 @@ export async function withIdempotency(
     .executeTakeFirst();
   if (claimed === undefined) return replay(db, apiKey.id, key, requestHash);
   const release = () => db.deleteFrom('api_idempotency').where('id', '=', claimed.id).execute();
+  const record = (statusCode: number, body: string | null) =>
+    db
+      .updateTable('api_idempotency')
+      .set({ status_code: statusCode, response_body: body })
+      .where('id', '=', claimed.id)
+      .execute();
   let response: Response;
   try {
     response = await run();
   } catch (error) {
     // A coded 4xx is a refusal before any write; anything else may follow a
-    // commit, so the claim stays and a retry cannot repeat the write.
+    // commit, so the claim stays, marked failed, and a retry cannot repeat
+    // the write.
     if (error instanceof ApiError && error.status < 500) await release();
+    else await record(FAILED_STATUS, null);
     throw error;
   }
   if (response.status < 200 || response.status >= 300) {
     if (response.status < 500) await release();
+    else await record(FAILED_STATUS, null);
     return response;
   }
   const text = await response.clone().text();
-  await db
-    .updateTable('api_idempotency')
-    .set({ status_code: response.status, response_body: text || null })
-    .where('id', '=', claimed.id)
-    .execute();
+  await record(response.status, text || null);
   return response;
+}
+
+function outcomeUnknown(): ApiError {
+  return new ApiError(
+    409,
+    'The earlier request with this Idempotency-Key failed and may have taken effect; check the resource before sending it again with a new key',
+    { code: OUTCOME_UNKNOWN, retryable: false },
+  );
 }
 
 async function replay(
@@ -87,7 +106,7 @@ async function replay(
 ): Promise<Response> {
   const prior = await db
     .selectFrom('api_idempotency')
-    .select(['request_hash', 'status_code', 'response_body'])
+    .select(['request_hash', 'status_code', 'response_body', 'created_at'])
     .where('api_key_id', '=', apiKeyId)
     .where('idempotency_key', '=', key)
     .executeTakeFirst();
@@ -100,11 +119,15 @@ async function replay(
     throw new ApiError(409, 'This Idempotency-Key was used with a different request', {
       code: CONFLICT,
     });
-  if (prior.status_code === null)
+  if (prior.status_code === null) {
+    const ageMs = Date.now() - prior.created_at.getTime();
+    if (ageMs > P.idempotency.in_progress_max_seconds * 1000) throw outcomeUnknown();
     throw new ApiError(409, 'A request with this Idempotency-Key is still in progress', {
       code: CONFLICT,
       retryable: true,
     });
+  }
+  if (prior.status_code >= FAILED_STATUS) throw outcomeUnknown();
   const headers = { [REPLAYED_HEADER]: 'true' };
   if (prior.response_body === null)
     return new Response(null, { status: prior.status_code, headers });

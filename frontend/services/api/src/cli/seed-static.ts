@@ -90,7 +90,7 @@ async function project(db: Database, workspaceId: string, userId: string, agency
     if (present) continue;
     const prompt = await createPrompt(
       db,
-      workspaceId,
+      { workspaceId, projectId: null },
       setId,
       promptInput.parse({
         text,
@@ -99,8 +99,8 @@ async function project(db: Database, workspaceId: string, userId: string, agency
         enabled: status !== 'archived',
       }),
     );
-    // Proposed/archived/imported rows are explicit fixtures; activation is never inferred.
-    await db
+    // Archived/generated/imported rows are explicit fixtures; activation is never inferred.
+    await db // NOSONAR -- Status applies to the prompt just created.
       .updateTable('prompts')
       .set({ status, origin })
       .where('id', '=', prompt.id)

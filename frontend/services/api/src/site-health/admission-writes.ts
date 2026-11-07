@@ -1,14 +1,18 @@
 /**
- * Multi-row writes for one admission batch. The frontier decides which URLs
- * to admit, in order, from state it reads once; these statements then apply
- * those decisions in a fixed number of round trips, whatever the batch size.
+ * The single writer of Site Health crawl tasks, URL identities, observations
+ * and system memberships. The frontier decides which URLs to admit, in order,
+ * from state it reads once; these statements then apply those decisions in a
+ * fixed number of round trips, whatever the batch size. The planner, the
+ * executors and the crawl's successors write the same rows through here.
  */
 import { randomUUID } from 'node:crypto';
+import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import type { Database } from '../db/database.ts';
 import type { Candidate } from './frontier.ts';
-import { ACTIVE_CRAWL } from './site-task.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 /** What admission already finds for a batch, keyed by URL hash or site URL id. */
 export type AdmissionState = {
@@ -75,13 +79,13 @@ export async function readAdmissionState(
   return state;
 }
 
-/** Conflict-safe identity upserts; a new sighting resets an earlier crawl's disposition. */
-export async function upsertSiteUrls(
-  trx: Database,
-  crawl: Crawl,
-  items: Candidate[],
-  dispositionVersion: string,
-) {
+/**
+ * The only writer of URL identities. Every sighting, an admission or a planner
+ * seed's own discover, records the URL as this crawl saw it: a new identity, or
+ * an existing one refreshed, which resets an earlier crawl's depth, source and
+ * disposition so this crawl re-decides them. Returns the id per URL hash.
+ */
+export async function upsertSiteUrls(trx: Database, crawl: Crawl, items: Candidate[]) {
   if (!items.length) return new Map<string, string>();
   const now = new Date();
   const rows = await trx
@@ -98,9 +102,8 @@ export async function upsertSiteUrls(
         depth: item.depth,
         corpus_disposition: item.disposition,
         disposition_reason: item.dispositionReason,
-        disposition_version: dispositionVersion,
+        disposition_version: policy.site_health.crawl.disposition_version,
         item_kind: item.itemKind,
-        discovery_status: 'running',
         latest_source_kind: item.sourceKind,
         latest_title: '',
         latest_content_type: '',
@@ -121,7 +124,6 @@ export async function upsertSiteUrls(
           disposition_reason: eb.ref('excluded.disposition_reason'),
           disposition_version: eb.ref('excluded.disposition_version'),
           item_kind: eb.ref('excluded.item_kind'),
-          discovery_status: eb.ref('excluded.discovery_status'),
           latest_source_kind: eb.ref('excluded.latest_source_kind'),
           last_seen_crawl_id: eb.ref('excluded.last_seen_crawl_id'),
           last_seen_at: eb.ref('excluded.last_seen_at'),
@@ -178,97 +180,169 @@ export async function activateMemberships(
   return rows.length;
 }
 
-/** Record this crawl's sightings; returns how many were new. */
-export async function insertObservations(
-  trx: Database,
-  crawl: Crawl,
-  observed: { siteUrlId: string; item: Candidate }[],
+/** One sighting of a URL in a crawl, as `site_url_observations` keeps it. */
+export type Observation = {
+  siteUrlId: string;
+  sourceKind: string;
+  valueKind: string;
+  valuePriority: number;
+  rewriteReason: string;
+  rewriteVersion: string;
+  depth: number;
+  observedUrl: string;
+  finalUrl: string;
+  artifactId: string | null;
+  parentSiteUrlId: string | null;
+  statusCode: number | null;
+  contentType: string;
+  title: string;
+};
+
+/** An admitted candidate's sighting, before any fetch of its own. */
+export function candidateObservation(
+  siteUrlId: string,
+  item: Candidate,
   artifactId: string | null,
-) {
-  if (!observed.length) return 0;
-  const now = new Date();
-  const rows = await trx
-    .insertInto('site_url_observations')
-    .values(
-      observed.map(({ siteUrlId, item }) => ({
-        id: randomUUID(),
-        workspace_id: crawl.workspace_id,
-        project_id: crawl.project_id,
-        crawl_id: crawl.id,
-        site_url_id: siteUrlId,
-        source_kind: item.sourceKind,
-        value_kind: item.valueKind,
-        value_priority: item.priority,
-        rewrite_reason: item.rewriteReason,
-        rewrite_version: item.rewriteVersion,
-        depth: item.depth,
-        observed_url: item.url,
-        final_url: item.url,
-        source_artifact_id: artifactId,
-        parent_site_url_id: item.referrerId,
-        content_type: '',
-        title: '',
-        created_at: now,
-      })),
-    )
-    .onConflict((conflict) => conflict.columns(['crawl_id', 'site_url_id']).doNothing())
-    .returning('id')
-    .execute();
-  return rows.length;
+): Observation {
+  return {
+    siteUrlId,
+    sourceKind: item.sourceKind,
+    valueKind: item.valueKind,
+    valuePriority: item.priority,
+    rewriteReason: item.rewriteReason,
+    rewriteVersion: item.rewriteVersion,
+    depth: item.depth,
+    observedUrl: item.url,
+    finalUrl: item.url,
+    artifactId,
+    parentSiteUrlId: item.referrerId,
+    statusCode: null,
+    contentType: '',
+    title: '',
+  };
 }
 
-export type TaskSeed = {
-  siteUrlId: string;
-  item: Candidate;
-  priority: number;
-  position: number;
+/** Rows per insert, so a large sitemap stays under PostgreSQL's bind-parameter limit. */
+const OBSERVATIONS_PER_INSERT = 1000;
+
+/**
+ * The only writer of observations. A crawl keeps its first sighting of each
+ * URL: a later one, however rich, is dropped. Returns how many were new.
+ */
+export async function insertObservations(trx: Database, crawl: Crawl, observed: Observation[]) {
+  const now = new Date();
+  let inserted = 0;
+  for (let offset = 0; offset < observed.length; offset += OBSERVATIONS_PER_INSERT) {
+    const rows = await trx // NOSONAR: chunks bound each insert's bind parameters, in order in one transaction.
+      .insertInto('site_url_observations')
+      .values(
+        observed.slice(offset, offset + OBSERVATIONS_PER_INSERT).map((row) => ({
+          id: randomUUID(),
+          workspace_id: crawl.workspace_id,
+          project_id: crawl.project_id,
+          crawl_id: crawl.id,
+          site_url_id: row.siteUrlId,
+          source_kind: row.sourceKind,
+          value_kind: row.valueKind,
+          value_priority: row.valuePriority,
+          rewrite_reason: row.rewriteReason,
+          rewrite_version: row.rewriteVersion,
+          depth: row.depth,
+          observed_url: row.observedUrl,
+          final_url: row.finalUrl,
+          source_artifact_id: row.artifactId,
+          parent_site_url_id: row.parentSiteUrlId,
+          status_code: row.statusCode,
+          content_type: row.contentType.slice(0, 128),
+          title: row.title,
+          created_at: now,
+        })),
+      )
+      .onConflict((conflict) => conflict.columns(['crawl_id', 'site_url_id']).doNothing())
+      .returning('id')
+      .execute();
+    inserted += rows.length;
+  }
+  return inserted;
+}
+
+/** One `site_crawl_tasks` row to enqueue; unset fields are a root-level first-generation task. */
+export type CrawlTaskSeed = {
+  kind: string;
+  url: string;
+  hash: string;
+  siteUrlId?: string | null;
+  parentSiteUrlId?: string | null;
+  depth?: number;
+  generation?: number;
+  priority?: number;
+  position?: number;
+  delaySeconds?: number;
 };
 
 /**
- * Enqueue tasks of one kind for an active crawl. A conflicting queued row only
- * has its priority raised (and its wake-up pulled forward), so discovery's
- * boost reaches a pre-seeded analyze task. Returns the URL hashes of the new rows.
+ * How an enqueue meets an existing row for the same task:
+ * - `admit`, the crawl's URL admission: lands only in an active crawl, and a
+ *   conflicting queued row has its priority raised (its wake-up pulled
+ *   forward), so discovery's boost reaches a pre-seeded analyze task.
+ * - `once`, planner seeds and crawl successors: the existing row is kept as is.
  */
-export async function enqueueSiteTasks(
+export type EnqueueMode = 'admit' | 'once';
+
+/**
+ * The only writer of `site_crawl_tasks`: one idempotency key format, the Site
+ * Health attempt budget, and the two conflict modes. Returns the new rows.
+ */
+export async function enqueueCrawlTasks(
   trx: Database,
   crawl: Crawl,
-  kind: 'discover' | 'analyze',
-  seeds: TaskSeed[],
-  maxAttempts: number,
-): Promise<string[]> {
+  seeds: CrawlTaskSeed[],
+  mode: EnqueueMode,
+): Promise<{ id: string; url_hash: string }[]> {
   if (!seeds.length) return [];
-  const column = <T>(pick: (seed: TaskSeed) => T) => seeds.map(pick);
-  const { rows } = await sql<{ inserted: boolean; url_hash: string }>`
+  const column = <T>(pick: (seed: CrawlTaskSeed) => T) => seeds.map(pick);
+  const maxAttempts = Number(
+    resolveSettingSpec(policy.site_health.settings.max_attempts, process.env),
+  );
+  const active =
+    mode === 'admit' ? sql`AND c.status = ANY(${[...ACTIVE_CRAWL_STATUSES]}::text[])` : sql``;
+  const conflict =
+    mode === 'admit'
+      ? sql`ON CONFLICT (crawl_id, task_kind, url_hash, generation) DO UPDATE
+      SET priority = excluded.priority,
+          available_at = least(site_crawl_tasks.available_at, now())
+      WHERE site_crawl_tasks.status = 'queued' AND site_crawl_tasks.priority < excluded.priority`
+      : sql`ON CONFLICT DO NOTHING`;
+  const { rows } = await sql<{ id: string; url_hash: string; inserted: boolean }>`
     INSERT INTO site_crawl_tasks (
       id, crawl_id, workspace_id, site_url_id, parent_site_url_id, task_kind, requested_url,
       url_hash, depth, generation, idempotency_key, status, priority, randomized_position,
       max_attempts, attempt_count, conflict_count, available_at, created_at,
       updated_at, error_code, error_detail, classification_expected
     )
-    SELECT v.id, c.id, c.workspace_id, v.site_url_id, v.parent_site_url_id, ${kind}, v.url,
-      v.hash, v.depth, 0, v.idempotency_key, 'queued', v.priority, v.position, ${maxAttempts},
-      0, 0, now(), now(), now(), '', '', false
+    SELECT v.id, c.id, c.workspace_id, v.site_url_id, v.parent_site_url_id, v.kind, v.url,
+      v.hash, v.depth, v.generation, ${crawl.id}::text || ':' || v.kind || ':' || v.hash || ':'
+        || v.generation::text, 'queued', v.priority, v.position, ${maxAttempts},
+      0, 0, now() + make_interval(secs => v.delay), now(), now(), '', '', false
     FROM unnest(
       ${column(() => randomUUID())}::uuid[],
-      ${column((seed) => seed.siteUrlId)}::uuid[],
-      ${column((seed) => seed.item.referrerId)}::uuid[],
-      ${column((seed) => seed.item.url)}::text[],
-      ${column((seed) => seed.item.hash)}::text[],
-      ${column((seed) => seed.item.depth)}::int[],
-      ${column((seed) => seed.priority)}::int[],
-      ${column((seed) => seed.position)}::int[],
-      ${column((seed) => `${crawl.id}:${kind}:${seed.item.hash}:0`)}::text[]
-    ) AS v(id, site_url_id, parent_site_url_id, url, hash, depth, priority, position,
-      idempotency_key)
+      ${column((seed) => seed.siteUrlId ?? null)}::uuid[],
+      ${column((seed) => seed.parentSiteUrlId ?? null)}::uuid[],
+      ${column((seed) => seed.kind)}::text[],
+      ${column((seed) => seed.url)}::text[],
+      ${column((seed) => seed.hash)}::text[],
+      ${column((seed) => seed.depth ?? 0)}::int[],
+      ${column((seed) => seed.generation ?? 0)}::int[],
+      ${column((seed) => seed.priority ?? 0)}::int[],
+      ${column((seed) => seed.position ?? 0)}::int[],
+      ${column((seed) => seed.delaySeconds ?? 0)}::float8[]
+    ) AS v(id, site_url_id, parent_site_url_id, kind, url, hash, depth, generation, priority,
+      position, delay)
     CROSS JOIN site_crawls c
-    WHERE c.id = ${crawl.id}::uuid AND c.workspace_id = ${crawl.workspace_id}::uuid
-      AND c.status = ANY(${[...ACTIVE_CRAWL]})
-    ON CONFLICT (crawl_id, task_kind, url_hash, generation) DO UPDATE
-      SET priority = excluded.priority,
-          available_at = least(site_crawl_tasks.available_at, now())
-      WHERE site_crawl_tasks.status = 'queued' AND site_crawl_tasks.priority < excluded.priority
-    RETURNING (xmax = 0) AS inserted, url_hash`.execute(trx);
-  return rows.flatMap((row) => (row.inserted ? [row.url_hash] : []));
+    WHERE c.id = ${crawl.id}::uuid AND c.workspace_id = ${crawl.workspace_id}::uuid ${active}
+    ${conflict}
+    RETURNING id, url_hash, (xmax = 0) AS inserted`.execute(trx);
+  return rows.flatMap((row) => (row.inserted ? [{ id: row.id, url_hash: row.url_hash }] : []));
 }
 
 export async function markFrontierAdmitted(

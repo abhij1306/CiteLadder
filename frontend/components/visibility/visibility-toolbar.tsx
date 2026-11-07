@@ -16,11 +16,10 @@ import {
   MenuTrigger,
 } from '@/components/ui/menu';
 import { Tooltip } from '@/components/ui/tooltip';
-import type { LogicalEngine } from '@/lib/api/types';
+import type { LogicalEngine } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
-import { isSearchSurfaceEngine } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 import {
-  engineLabel,
   isEvidenceTab,
   type PromptOption,
   type RunOption,
@@ -31,7 +30,6 @@ import { PROMPT_COHORTS, type PromptCohort } from '@/lib/visibility/prompt-cohor
 import {
   GRANULARITY_OPTIONS,
   RANGE_OPTIONS,
-  TREND_ENGINES,
   type TrendGranularity,
   type TrendRange,
 } from '@/lib/visibility/trends';
@@ -229,8 +227,10 @@ function MeasurementFilter({
  * quietly misdescribed the fourth.
  */
 function EngineFilterControl({ engine, onChangeEngine }: ToolbarProps) {
-  const asked = TREND_ENGINES.filter((key) => !isSearchSurfaceEngine(key));
-  const observed = TREND_ENGINES.filter((key) => isSearchSurfaceEngine(key));
+  const catalog = useEngineCatalog();
+  const engineLabel = catalog.label;
+  const asked = catalog.order.filter((key) => !catalog.isSearchSurface(key));
+  const observed = catalog.order.filter((key) => catalog.isSearchSurface(key));
   return (
     <Menu>
       <MenuTrigger asChild>

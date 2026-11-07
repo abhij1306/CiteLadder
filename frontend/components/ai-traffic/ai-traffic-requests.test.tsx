@@ -96,7 +96,7 @@ describe('AI Traffic opening requests', () => {
         return HttpResponse.json(insights);
       }),
     );
-    renderWithProviders(<AiTrafficScreen />);
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
 
     await waitFor(() =>
       expect(asked.sort()).toEqual(['insights ?range=30d', 'overview ?range=30d']),

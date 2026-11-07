@@ -16,6 +16,15 @@ import { sql, type SelectQueryBuilder, type SqlBool } from 'kysely';
 import type { Database } from './database.ts';
 import type { DB } from '../generated/db-schema.ts';
 
+/**
+ * The scope a command names its record in: the workspace, and the project
+ * when the caller named one (a public API path, an MCP call or a browser route
+ * under `/projects/{project_id}`). Owners then find the record only in that
+ * project. A browser flat route (`/prompts/{id}`) names none: a session's
+ * authority is the whole workspace.
+ */
+export type RecordScope = { workspaceId: string; projectId: string | null };
+
 export type WorkspaceTable = {
   [Table in keyof DB]: 'workspace_id' extends keyof DB[Table] ? Table : never;
 }[keyof DB];

@@ -8,7 +8,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { treeBranchClasses } from '@/components/ui/workspace';
-import type { ArchitectureNode } from '@/lib/api/types';
+import type { ArchitectureNode } from '@citeladder/contracts';
 
 const PARENT_SOURCE_LABELS: Record<ArchitectureNode['parent_source'], string> = {
   breadcrumb: 'Breadcrumb',

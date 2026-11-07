@@ -6,6 +6,7 @@ import trafficRuntime from '../src/config/traffic.json' with { type: 'json' };
 import { ConfigError, loadConfig, policy, resolveSettingSpec } from '../src/config.ts';
 import { poolOptions } from '../src/db/database.ts';
 import { productionEnv } from './production-config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 
 it('lets the brand profile edit every business model discovery can resolve', () => {
   expect(businessModelSchema.options).toEqual(policy.discovery.constants.business_models);
@@ -75,6 +76,18 @@ describe('loadConfig', () => {
   it('uses native config defaults when the environment is silent', () => {
     const config = loadConfig({});
     expect(config.database.poolSize).toBe(policy.settings.db_pool_size.default);
+  });
+
+  it('validates every owner setting at startup and hands owners the startup values', () => {
+    // Settings no startup field reads still refuse a bad value before any work.
+    expect(() => loadConfig({ INTEGRATION_LEASE_TTL_SECONDS: '0' })).toThrow(ConfigError);
+    expect(() => loadConfig({ RUNNER_DB_POOL_SIZE: '5' })).toThrow(ConfigError);
+    expect(() => loadConfig({ ANALYTICS_HEARTBEAT_INTERVAL_SECONDS: '100000' })).toThrow(
+      'heartbeat_interval_seconds',
+    );
+    const config = loadConfig({ ANALYTICS_TASK_MAX_ATTEMPTS: '7', RUNNER_BUDGET_SECONDS: '90' });
+    expect(loadWorkerSettings(config.settings).taskMaxAttempts).toBe(7);
+    expect(config.execution.budgetSeconds).toBe(90);
   });
 
   it('matches environment names case-insensitively.', () => {

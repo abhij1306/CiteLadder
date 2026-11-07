@@ -10,8 +10,9 @@ import type { Database } from '../db/database.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { record, strings } from '../db/json.ts';
 import { lockCrawlState, type CrawlScope } from './state.ts';
-import type { Executor } from '../workers/executor.ts';
-import { enqueueTrafficInsights } from './insights-enqueue.ts';
+import type { Executor } from '../queue/executor.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
+import { enqueueCoalesced } from '../queue/enqueue.ts';
 import { gapMinutes, pullCoverage } from './pull-coverage.ts';
 import { isLiveKind } from './sources.ts';
 
@@ -146,7 +147,7 @@ export async function refreshCrawlLogs(
       .where('workspace_id', '=', scope.workspaceId)
       .where('project_id', '=', scope.projectId)
       .execute();
-    await enqueueTrafficInsights(trx, scope, now);
+    await enqueueCoalesced(trx, { ...insightsRefresh, ...scope, now });
   });
 }
 export const crawlLogRollupRefresh: Executor = async (task, { db, checkCancelled }) => {

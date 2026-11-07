@@ -10,9 +10,12 @@ import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
 import type {
-  DatasetSelection,
+  SearchDatasetSelectionRequest,
+  SearchReviewAction,
+  SearchReviewRequest,
+} from '@citeladder/contracts/search-intelligence-requests';
+import type {
   ResearchScope,
-  ReviewPayload,
   SearchIntelligenceReadiness,
   SearchIntelligenceRun,
 } from '@/lib/api/search-intelligence';
@@ -35,19 +38,19 @@ import {
 
 /** Typed depths keep a draft per dataset, so a field can be cleared while typing. */
 function useDatasetSelections(readiness: SearchIntelligenceReadiness, action: string) {
-  const [selections, setSelections] = useState<DatasetSelection[]>(() =>
+  const [selections, setSelections] = useState<SearchDatasetSelectionRequest[]>(() =>
     defaultSelections(readiness, action),
   );
   const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const isSelected = (candidate: DatasetSelection) =>
+  const isSelected = (candidate: SearchDatasetSelectionRequest) =>
     selections.some((item) => selectionKey(item) === selectionKey(candidate));
-  const toggle = (candidate: DatasetSelection) =>
+  const toggle = (candidate: SearchDatasetSelectionRequest) =>
     setSelections((current) =>
       isSelected(candidate)
         ? current.filter((item) => selectionKey(item) !== selectionKey(candidate))
         : [...current, candidate],
     );
-  const setDepth = (candidate: DatasetSelection, text: string) => {
+  const setDepth = (candidate: SearchDatasetSelectionRequest, text: string) => {
     setDrafts((current) => ({ ...current, [selectionKey(candidate)]: text }));
     const depth = Number(text);
     if (!Number.isInteger(depth) || depth < 1 || depth > SEARCH_MAX_DEPTH) return;
@@ -57,7 +60,7 @@ function useDatasetSelections(readiness: SearchIntelligenceReadiness, action: st
       ),
     );
   };
-  const depthOf = (option: DatasetSelection) => {
+  const depthOf = (option: SearchDatasetSelectionRequest) => {
     const current = selections.find((item) => selectionKey(item) === selectionKey(option));
     return drafts[selectionKey(option)] ?? String(current?.depth ?? option.depth);
   };
@@ -79,10 +82,10 @@ export function SearchIntelligenceReviewDrawer({
   busy,
 }: Readonly<{
   open: boolean;
-  action: string;
+  action: SearchReviewAction;
   readiness: SearchIntelligenceReadiness;
   onOpenChange: (open: boolean) => void;
-  onReview: (payload: ReviewPayload) => Promise<SearchIntelligenceRun>;
+  onReview: (payload: SearchReviewRequest) => Promise<SearchIntelligenceRun>;
   onConfirm: (runId: string) => Promise<void>;
   busy: boolean;
 }>) {
@@ -94,7 +97,8 @@ export function SearchIntelligenceReviewDrawer({
     () => readiness.preferences.research_scope ?? 'domain_subdomains',
   );
   const [grouping, setGrouping] = useState<'as_is' | 'one_per_domain'>('as_is');
-  const [rankingOrder, setRankingOrder] = useState<DatasetSelection['order']>('volume');
+  const [rankingOrder, setRankingOrder] =
+    useState<SearchDatasetSelectionRequest['order']>('volume');
   const [acquisitionVolume, setAcquisitionVolume] = useState('');
   const [ownedTarget, setOwnedTarget] = useState(
     () => reviewOwnedTarget(readiness)?.identity ?? '',

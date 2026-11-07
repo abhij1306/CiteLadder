@@ -6,8 +6,8 @@ import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.ts';
 import { completeDiscovery, createDiscovery, discoveryRow } from '../src/projects/discovery.ts';
 import { discoveryComplete, discoveryCreate } from '../src/projects/discovery-inputs.ts';
-import { FetchError, type WebsiteFetcher } from '../src/projects/safe-fetch.ts';
-import { DiscoveryQueue } from '../src/queue/discovery-queue.ts';
+import { FetchError, type WebsiteFetcher } from '../src/safe-fetch.ts';
+import { DISCOVERY_LANE, TaskQueue } from '../src/queue/task-queue.ts';
 import { recoverDiscoveryLeases } from '../src/queue/recovery.ts';
 import { DiscoveryWorker } from '../src/workers/discovery-worker.ts';
 import {
@@ -17,6 +17,9 @@ import {
   testConfig,
   testDatabase,
 } from './support.ts';
+import { gatewayCalls } from '../src/models/gateway.ts';
+import { ModelError } from '../src/models/http.ts';
+import { recordingMeter } from './meter-fixtures.ts';
 
 const input = discoveryCreate.parse({
   brand_name: 'Acme',
@@ -101,20 +104,18 @@ describe('durable onboarding', () => {
     const selected = await createDiscovery(db, a.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
     const target = { workspaceId: a.workspaceId, discoveryId: selected.id };
-    expect(
-      await worker.queue.claim('foreign', { ...target, workspaceId: b.workspaceId }),
-    ).toBeNull();
+    expect(await worker.claim('foreign', { ...target, workspaceId: b.workspaceId })).toBeNull();
     // Keep the other row leased so the background claimant competes for the
     // exact interactive task rather than legitimately taking unrelated work.
-    const held = await worker.queue.claim('other-workspace', {
+    const held = await worker.claim('other-workspace', {
       workspaceId: b.workspaceId,
       discoveryId: older.id,
     });
     expect(held?.discovery_id).toBe(older.id);
     const claims = await Promise.all([
-      worker.queue.claim('interactive', target),
-      worker.queue.claim('second-tab', target),
-      worker.queue.claim('background'),
+      worker.claim('interactive', target),
+      worker.claim('second-tab', target),
+      worker.claim('background'),
     ]);
     expect(claims.filter(Boolean)).toHaveLength(1);
     const claimed = claims.find((task) => task !== null)!;
@@ -162,7 +163,7 @@ describe('durable onboarding', () => {
       .where('discovery_id', '=', selected.id)
       .executeTakeFirstOrThrow();
     expect(task).toMatchObject({ status: 'retry_wait', attempt_count: 1, lease_owner: null });
-    expect(await worker.queue.claim('too-early', target)).toBeNull();
+    expect(await worker.claim('too-early', target)).toBeNull();
     await db
       .updateTable('brand_discovery_tasks')
       .set({ available_at: new Date(0) })
@@ -300,9 +301,12 @@ describe('durable onboarding', () => {
     expect(await discoveryRow(db, second.workspaceId, completed.id)).toMatchObject({
       status: 'ready',
     });
-    const queue = new DiscoveryQueue(db, 30, () => new Date(Date.now() - 86400000));
-    expect(await queue.heartbeat(stale, 'dead-worker')).toBe(false);
-    expect(await queue.lockedTask(db, stale, 'dead-worker')).toBeUndefined();
+    const queue = new TaskQueue(db, DISCOVERY_LANE, {
+      leaseTtlSeconds: 30,
+      now: () => new Date(Date.now() - 86400000),
+    });
+    expect(await queue.heartbeat(stale.id, 'dead-worker', stale.workspace_id)).toBe(false);
+    expect(await queue.fence(db, stale, 'dead-worker')).toBeUndefined();
   });
   it('rejects completion without persisted research and overlapping competitor domains', async () => {
     const t = await tenant();
@@ -390,6 +394,63 @@ describe('durable onboarding', () => {
     ).toBe(422);
     expect((await complete(queued.id, a.userId, completion)).status).toBe(409);
     expect((await discoveryRow(db, a.workspaceId, reviewed.id)).project_id).toBeNull();
+  });
+  it('runs a finished discovery again as a new workspace-scoped discovery without resetting the old task', async () => {
+    const a = await tenant(),
+      b = await tenant();
+    const app = createApp(testConfig(), db);
+    const rerun = async (id: string, userId: string, key = randomUUID()) =>
+      app.request(`/api/v1/brand-discoveries/${id}/rerun`, {
+        method: 'POST',
+        headers: {
+          cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: userId, ver: 0 })}`,
+          'idempotency-key': key,
+        },
+      });
+    const failed = await createDiscovery(db, a.workspaceId, input, randomUUID());
+    await db
+      .updateTable('brand_discoveries')
+      .set({ status: 'failed', error_code: 'brand_identity_unavailable' })
+      .where('id', '=', failed.id)
+      .execute();
+    await db
+      .updateTable('brand_discovery_tasks')
+      .set({ status: 'failed', attempt_count: 3, completed_at: new Date() })
+      .where('discovery_id', '=', failed.id)
+      .execute();
+    expect((await rerun(failed.id, b.userId)).status).toBe(404);
+    const key = randomUUID();
+    const response = await rerun(failed.id, a.userId, key);
+    expect(response.status).toBe(202);
+    const started = (await response.json()) as { id: string; status: string };
+    expect(started.status).toBe('queued');
+    expect(started.id).not.toBe(failed.id);
+    // A replayed key returns the same run even once the source can no longer be rerun.
+    await db
+      .updateTable('brand_discoveries')
+      .set({ status: 'project_created' })
+      .where('id', '=', failed.id)
+      .execute();
+    expect(((await (await rerun(failed.id, a.userId, key)).json()) as { id: string }).id).toBe(
+      started.id,
+    );
+    expect((await discoveryRow(db, a.workspaceId, started.id)).input_data).toMatchObject({
+      brand_name: 'Acme',
+      website_url: 'https://acme.com/',
+      primary_market: 'US',
+    });
+    expect(
+      await db
+        .selectFrom('brand_discovery_tasks')
+        .select(['discovery_id', 'status', 'attempt_count'])
+        .where('discovery_id', 'in', [failed.id, started.id])
+        .orderBy('created_at')
+        .execute(),
+    ).toEqual([
+      { discovery_id: failed.id, status: 'failed', attempt_count: 3 },
+      { discovery_id: started.id, status: 'queued', attempt_count: 0 },
+    ]);
+    expect((await rerun(started.id, a.userId)).status).toBe(409);
   });
   it('completes once atomically without prompts or a crawl and freezes reviewed input', async () => {
     const t = await tenant();
@@ -479,29 +540,114 @@ describe('durable onboarding', () => {
     });
     expect(await worker.runOnce('test-worker')).toBe(false);
   });
+  it('retries a timed-out identity and then fails with its own code, never an empty ready review', async () => {
+    const t = await tenant();
+    const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
+    const complete = vi.fn(async () => {
+      throw new ModelError('timeout');
+    });
+    const gateway = {
+      model: 'test-model',
+      maxOutputTokens: 100,
+      baseUrlHost: 'model.example',
+      adapter: 'openai_compatible' as const,
+      converse: vi.fn(),
+      ...gatewayCalls(complete),
+    };
+    const worker = new DiscoveryWorker(db, {
+      fetcher,
+      gateway,
+      env: {},
+      meter: () => recordingMeter().meter,
+    });
+    const target = { workspaceId: t.workspaceId, discoveryId: row.id };
+    await worker.runOnce('identity-timeout', target);
+    const task = await db
+      .selectFrom('brand_discovery_tasks')
+      .selectAll()
+      .where('discovery_id', '=', row.id)
+      .executeTakeFirstOrThrow();
+    expect(task).toMatchObject({
+      status: 'retry_wait',
+      attempt_count: 1,
+      error_code: 'brand_identity_unavailable',
+    });
+    expect((await discoveryRow(db, t.workspaceId, row.id)).status).toBe('running');
+    await db
+      .updateTable('brand_discovery_tasks')
+      .set({ available_at: new Date(0), max_attempts: 2 })
+      .where('id', '=', task.id)
+      .execute();
+    await worker.runOnce('identity-timeout-final', target);
+    expect(await discoveryRow(db, t.workspaceId, row.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'brand_identity_unavailable',
+      competitors: [],
+    });
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(
+      await db
+        .selectFrom('brand_research_snapshots')
+        .select('id')
+        .where('discovery_id', '=', row.id)
+        .execute(),
+    ).toEqual([]);
+  });
   it('claimers do not share a task and expired owners cannot write terminal results', async () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
-    const queue = new DiscoveryQueue(db, 30);
-    const claimed = await Promise.all([queue.claim('one'), queue.claim('two')]);
+    const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
+    const claimed = await Promise.all([worker.claim('one'), worker.claim('two')]);
     const task = claimed.find((item) => item?.discovery_id === row.id)!;
     expect(claimed.filter((item) => item?.id === task.id)).toHaveLength(1);
-    expect(await queue.heartbeat(task, task.lease_owner!)).toBe(true);
+    expect(await worker.queue.heartbeat(task.id, task.lease_owner!, task.workspace_id)).toBe(true);
     await db
       .updateTable('brand_discovery_tasks')
       .set({ lease_expires_at: new Date(Date.now() - 1) })
       .where('id', '=', task.id)
       .execute();
-    expect(await queue.heartbeat(task, task.lease_owner!)).toBe(false);
-    const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
+    expect(await worker.queue.heartbeat(task.id, task.lease_owner!, task.workspace_id)).toBe(false);
     await worker.finish(task, task.lease_owner!, null, new FetchError('site_not_found'));
     expect((await discoveryRow(db, t.workspaceId, row.id)).status).toBe('queued');
+  });
+  it('stops renewing a lease that recovery reclaimed and the same owner claimed again', async () => {
+    const t = await tenant();
+    const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
+    const reclaimed = {
+      attempt_count: 1,
+      heartbeat_at: new Date('2026-01-01T00:00:00Z'),
+      lease_expires_at: new Date(Date.now() + 60_000),
+    };
+    const network: WebsiteFetcher = async (url, options) => {
+      // The stalled slot's lease was reclaimed (one attempt) and re-claimed by the same owner.
+      await db
+        .updateTable('brand_discovery_tasks')
+        .set(reclaimed)
+        .where('discovery_id', '=', row.id)
+        .execute();
+      await sleep(400);
+      options.signal!.throwIfAborted();
+      return fetcher(url, options);
+    };
+    const worker = new DiscoveryWorker(db, {
+      fetcher: network,
+      gateway: null,
+      env: { BRAND_DISCOVERY_HEARTBEAT_INTERVAL_SECONDS: '0.05' },
+    });
+    await worker.runOnce('same-owner', { workspaceId: t.workspaceId, discoveryId: row.id });
+    expect(
+      await db
+        .selectFrom('brand_discovery_tasks')
+        .select(['status', 'lease_owner', 'attempt_count', 'heartbeat_at', 'lease_expires_at'])
+        .where('discovery_id', '=', row.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ status: 'running', lease_owner: 'same-owner', ...reclaimed });
   });
   it('loses write permission when the lease expires while waiting for a discovery lock', async () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
-    const task = (await worker.queue.claim('blocked-worker'))!;
+    const task = (await worker.claim('blocked-worker'))!;
     await db
       .updateTable('brand_discovery_tasks')
       .set({ lease_expires_at: new Date(Date.now() + 400) })
@@ -529,7 +675,7 @@ describe('durable onboarding', () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
-    const task = (await worker.queue.claim('retry-worker', {
+    const task = (await worker.claim('retry-worker', {
       workspaceId: t.workspaceId,
       discoveryId: row.id,
     }))!;
@@ -541,14 +687,14 @@ describe('durable onboarding', () => {
       .executeTakeFirstOrThrow();
     expect(retry).toMatchObject({ status: 'retry_wait', attempt_count: 1, lease_owner: null });
     // The runner lane waits for a retry due soon instead of idling until the tick.
-    const due = await worker.queue.nextDue();
+    const due = await worker.nextDue();
     expect(due!.getTime()).toBeLessThanOrEqual(retry.available_at.getTime());
     await db
       .updateTable('brand_discovery_tasks')
       .set({ available_at: new Date(), max_attempts: 2 })
       .where('id', '=', task.id)
       .execute();
-    const final = (await worker.queue.claim('final-worker', {
+    const final = (await worker.claim('final-worker', {
       workspaceId: t.workspaceId,
       discoveryId: row.id,
     }))!;

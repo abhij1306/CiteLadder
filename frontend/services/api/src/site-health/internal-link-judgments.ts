@@ -4,16 +4,18 @@ import { sql } from 'kysely';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
-import { roleAllows } from '../auth/workspace.ts';
+import { memberCan } from '../auth/workspace.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import { createJevClient, type JevClient } from '../models/jev.ts';
 import { meterFor } from '../models/metering.ts';
 import { ModelError, providerErrorCode } from '../models/http.ts';
-import { enqueueTask } from '../referrals/enqueue.ts';
+import { enqueueTask } from '../queue/enqueue.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
-import { payloadString, taskProject, type Executor } from '../workers/executor.ts';
+import { payloadString, taskProject, type Executor } from '../queue/executor.ts';
 
+const logger = getLogger('site_health.internal_links');
 const requestSchema = z.object({
   id: z.uuid(),
   candidates: z.array(z.object({ id: z.uuid(), key: z.string() })),
@@ -97,14 +99,9 @@ function prepare(db: Database, task: QueueTask, client: JevClient | null) {
     const run = await lockedRun(trx, task);
     if (!run || run.state === 'cancelled') return [];
     const requests = requestSchema.array().parse(record(run.manifest).requests);
-    const membership = await trx
-      .selectFrom('workspace_members')
-      .select('role')
-      .where('workspace_id', '=', run.workspace_id)
-      .where('user_id', '=', run.actor_id)
-      .executeTakeFirst();
+    const permitted = await memberCan(trx, run.workspace_id, run.actor_id, 'run');
     let reason = client ? '' : 'provider_unconfigured';
-    if (!membership || !roleAllows(membership.role, 'run')) reason = 'permission_unavailable';
+    if (!permitted) reason = 'permission_unavailable';
     const events = await trx
       .selectFrom('site_internal_link_events')
       .select(['candidate_id', 'kind'])
@@ -193,6 +190,12 @@ async function judge(
       if (!(error instanceof ModelError)) throw error;
       reason = error.status ? providerErrorCode(error.status) : error.code;
     }
+    logger.warning('internal_link_judgment_uncertain', {
+      request_id: request.id,
+      reason,
+      ...failureFacts(error),
+      elapsed_ms: Math.round(performance.now() - started),
+    });
     return request.candidates.map(({ id }) => ({ id, evidence: { state: 'uncertain', reason } }));
   }
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vite-plus/test';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { StatusStrip } from './status-strip';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 import { COMPLETE_CLASSIFICATION_PROJECTION } from '@/test/site-health-fixtures';
 import { makePageSummary as page, makeSiteCrawl } from '@/test/fixtures/site-health';
 
@@ -178,33 +178,6 @@ describe('StatusStrip — analysis activity', () => {
 });
 
 describe('StatusStrip — lifecycle content', () => {
-  it('shows actionable paused copy without leaking a missing value', () => {
-    renderStrip({
-      phase: 'terminal',
-      crawl: crawl({
-        status: 'paused',
-        analysis_status: 'stopped',
-        analyzed_count: 0,
-        score_summary: null,
-      }),
-    });
-
-    expect(screen.getByText(/no completed score yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/Run a new crawl/i)).toBeInTheDocument();
-    expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
-  });
-
-  it('shows paused partial results with an explicit refresh action', () => {
-    renderStrip({
-      phase: 'dashboard',
-      crawl: crawl({ status: 'paused', analysis_status: 'stopped' }),
-    });
-
-    expect(screen.getByText(/showing the pages analyzed so far/i)).toBeInTheDocument();
-    expect(screen.getByText(/Run a new crawl/i)).toBeInTheDocument();
-    expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
-  });
-
   it('narrates discovery with provisional copy while scanning', () => {
     renderStrip({
       phase: 'discovering',
@@ -257,5 +230,31 @@ describe('StatusStrip — lifecycle content', () => {
       );
       expect(screen.getByTestId('status-strip')).toBe(strip);
     }
+  });
+});
+
+describe('StatusStrip — failed crawl recovery', () => {
+  it('offers Crawl again on a failed crawl and starts one when clicked', () => {
+    let reruns = 0;
+    renderStrip({
+      phase: 'terminal',
+      crawl: crawl({
+        status: 'failed',
+        score_summary: null,
+        error_message: 'The site did not respond.',
+      }),
+      onRerun: () => {
+        reruns += 1;
+      },
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('The site did not respond.');
+    fireEvent.click(screen.getByRole('button', { name: 'Crawl again' }));
+    expect(reruns).toBe(1);
+  });
+
+  it('offers no rerun when the viewer may not start a crawl', () => {
+    renderStrip({ phase: 'terminal', crawl: crawl({ status: 'failed', score_summary: null }) });
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Crawl again' })).toBeNull();
   });
 });

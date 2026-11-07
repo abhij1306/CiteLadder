@@ -2,8 +2,16 @@ import { z } from 'zod';
 import {
   analyticsResultSchema,
   analyticsSelectionSchema,
+  mcpActionsSchema,
+  mcpFetchedRecordSchema,
+  mcpProjectsSchema,
+  mcpSitePagesSchema,
+  mcpVisibilityResultsSchema,
   type AnalyticsResult,
   type AnalyticsSelection,
+  type McpActions,
+  type McpSitePage,
+  type McpVisibilityResult,
 } from '@citeladder/contracts/mcp-app';
 import { appPolicy } from './config';
 
@@ -14,28 +22,17 @@ export type Host = {
     evidence?: Record<string, unknown>,
   ) => Promise<unknown>;
 };
-const projectsSchema = z.object({
-  projects: z.array(z.object({ id: z.uuid(), name: z.string(), workspace_name: z.string() })),
-  pagination: z.object({ next_cursor: z.string().nullable() }),
-});
-const findingsSchema = z.discriminatedUnion('state', [
-  z.object({ state: z.literal('available'), items: z.array(z.record(z.string(), z.json())) }),
-  z.object({ state: z.literal('unavailable'), reason: z.string() }),
-]);
-/**
- * A result as displayed. The server supplies the application links; before any
- * server result has arrived there is none, and the links are hidden rather
- * than guessed.
- */
 export type AppResult = Omit<AnalyticsResult, 'links'> & { links: AnalyticsResult['links'] | null };
+/** One listed answer; `answer_text` once its retained record was fetched. */
+type Answer = McpVisibilityResult & { answer_text?: string };
 export type AppState = {
   result: AppResult | null;
   selection: AnalyticsSelection | null;
-  projects: z.infer<typeof projectsSchema>['projects'];
+  projects: z.infer<typeof mcpProjectsSchema>['projects'];
   projectCursor: string | null;
   busy: boolean;
   error: string | null;
-  answers: Record<string, unknown>[];
+  answers: Answer[];
 };
 
 class ResultSizeError extends Error {
@@ -223,7 +220,7 @@ export function createController(host: Host) {
     const epoch = generation;
     const request = ++projectRequest;
     try {
-      const page = projectsSchema.parse(
+      const page = mcpProjectsSchema.parse(
         bounded(await host.call('list_projects', { limit: appPolicy.pageSize, cursor })),
       );
       if (epoch !== generation || request !== projectRequest) return;
@@ -252,18 +249,19 @@ export function createController(host: Host) {
     const epoch = ++generation;
     set({ answers: [], busy: true, error: null });
     try {
-      const data = evidence(
-        await host.call('read_visibility_results', {
-          project_id: selection.project_id,
-          audit_id: selection.audit_id,
-          engine: selection.engine,
-          cohort: selection.cohort,
-          [selection.level === 'url' ? 'url' : 'domain']: source,
-          limit: appPolicy.pageSize,
-        }),
+      const data = mcpVisibilityResultsSchema.parse(
+        bounded(
+          await host.call('read_visibility_results', {
+            project_id: selection.project_id,
+            audit_id: selection.audit_id,
+            engine: selection.engine,
+            cohort: selection.cohort,
+            [selection.level === 'url' ? 'url' : 'domain']: source,
+            limit: appPolicy.pageSize,
+          }),
+        ),
       );
-      if (epoch === generation)
-        set({ busy: false, answers: Array.isArray(data.items) ? data.items.map(evidence) : [] });
+      if (epoch === generation) set({ busy: false, answers: data.items });
     } catch {
       if (epoch === generation) {
         set({
@@ -324,7 +322,7 @@ export function createController(host: Host) {
       if (!/^citeladder:\/\/visibility_result\/[0-9a-f-]{36}$/u.test(id)) return;
       const epoch = generation;
       try {
-        const data = evidence(await host.call('fetch', { id }));
+        const data = mcpFetchedRecordSchema.parse(bounded(await host.call('fetch', { id })));
         if (epoch !== generation) return;
         set({
           answers: state.answers.map((answer) =>
@@ -347,9 +345,9 @@ export function createController(host: Host) {
       const epoch = generation;
       const selected = state.selection;
       if (!selected) return null;
-      let result: z.infer<typeof findingsSchema>;
+      let result: McpActions;
       try {
-        result = findingsSchema.parse(
+        result = mcpActionsSchema.parse(
           bounded(
             await host.call('read_actions', {
               project_id: selected.project_id,
@@ -372,19 +370,20 @@ export function createController(host: Host) {
       }
       return epoch === generation ? result : null;
     },
-    sitePages: async () => {
+    sitePages: async (crawlId: string): Promise<McpSitePage[]> => {
       const epoch = generation;
       const selected = state.selection;
-      const crawlId = state.result?.evidence.crawl_id;
-      if (!selected || typeof crawlId !== 'string') return [];
-      let result: Record<string, unknown>;
+      if (!selected) return [];
+      let result: z.infer<typeof mcpSitePagesSchema>;
       try {
-        result = evidence(
-          await host.call('read_site_pages', {
-            project_id: selected.project_id,
-            crawl_id: crawlId,
-            limit: appPolicy.pageSize,
-          }),
+        result = mcpSitePagesSchema.parse(
+          bounded(
+            await host.call('read_site_pages', {
+              project_id: selected.project_id,
+              crawl_id: crawlId,
+              limit: appPolicy.pageSize,
+            }),
+          ),
         );
       } catch (error) {
         if (epoch === generation) {
@@ -399,8 +398,7 @@ export function createController(host: Host) {
         }
         throw error;
       }
-      if (epoch !== generation) return [];
-      return Array.isArray(result.items) ? result.items.map(evidence) : [];
+      return epoch === generation ? result.items : [];
     },
     disconnect: () => {
       ++generation;

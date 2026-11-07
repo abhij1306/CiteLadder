@@ -15,6 +15,7 @@ import {
   testConfig,
   testDatabase,
 } from './support.ts';
+import { PRODUCT_ROUTES } from '../src/routes/index.ts';
 
 const config = testConfig();
 const db = testDatabase(config);
@@ -200,16 +201,17 @@ describe('per-request access', () => {
 });
 
 describe('routes that authorize the path project or chat', () => {
-  const PROJECT_READS = [
-    '/api/v1/projects/{project}/agent/chats',
-    '/api/v1/projects/{project}/agent/instructions',
-    '/api/v1/projects/{project}/overview/layout',
-    '/api/v1/projects/{project}/overview/report.pdf',
-    '/api/v1/projects/{project}/opportunities',
-    '/api/v1/projects/{project}/topics',
-    '/api/v1/projects/{project}/seed-queries',
-  ];
-  const PROJECT_WRITES: [string, string][] = [
+  /** Every browser route below a project path, from the route registry. */
+  const PROJECT_ROUTES = PRODUCT_ROUTES.flatMap(({ contract }) =>
+    contract.path.startsWith('/api/v1/projects/{project_id}')
+      ? [[contract.method.toUpperCase(), contract.path] as const]
+      : [],
+  );
+  /** The template with the project filled in and every other ID made up. */
+  const concrete = (template: string, project: string) =>
+    template.replace('{project_id}', project).replaceAll(/\{[a-z_]+\}/gu, () => randomUUID());
+  /** Writes that need more than a viewer's `read` capability. */
+  const VIEWER_REFUSED_WRITES: [string, string][] = [
     ['POST', '/api/v1/projects/{project}/agent/chats'],
     ['PUT', '/api/v1/projects/{project}/agent/instructions'],
     ['PUT', '/api/v1/projects/{project}/overview/layout'],
@@ -229,27 +231,20 @@ describe('routes that authorize the path project or chat', () => {
     return sessionFor(member);
   }
 
-  it('hides another workspace project, and a missing one, on every read and write', async () => {
+  it('hides another workspace project, and a missing one, on every registered project route', async () => {
     const session = await stranger();
     const missing = randomUUID();
     const answers = [];
-    for (const [method, template] of [
-      ...PROJECT_READS.map((path) => ['GET', path] as const),
-      ...PROJECT_WRITES,
-    ]) {
-      const foreign = await call(
-        template.replace('{project}', projectId),
-        { cookie: session },
-        method,
-      );
-      const absent = await call(template.replace('{project}', missing), { cookie }, method);
+    for (const [method, template] of PROJECT_ROUTES) {
+      const foreign = await call(concrete(template, projectId), { cookie: session }, method);
+      const absent = await call(concrete(template, missing), { cookie }, method);
       answers.push([method, template, foreign.status, foreign.body.error, absent.status]);
     }
     const notFound = expect.objectContaining({ message: 'Project not found' });
+    // The registry, not a hand list: a route added below a project path is covered.
+    expect(PROJECT_ROUTES).toContainEqual(['GET', '/api/v1/projects/{project_id}/topics']);
     expect(answers).toEqual(
-      [...PROJECT_READS.map((path) => ['GET', path] as const), ...PROJECT_WRITES].map(
-        ([method, template]) => [method, template, 404, notFound, 404],
-      ),
+      PROJECT_ROUTES.map(([method, template]) => [method, template, 404, notFound, 404]),
     );
   });
 
@@ -280,9 +275,9 @@ describe('routes that authorize the path project or chat', () => {
           .status,
       );
     const writes = [];
-    for (const [method, template] of PROJECT_WRITES)
+    for (const [method, template] of VIEWER_REFUSED_WRITES)
       writes.push((await call(template.replace('{project}', projectId), headers, method)).status);
-    expect([reads, writes]).toEqual([[200, 200, 200], PROJECT_WRITES.map(() => 403)]);
+    expect([reads, writes]).toEqual([[200, 200, 200], VIEWER_REFUSED_WRITES.map(() => 403)]);
   });
 });
 

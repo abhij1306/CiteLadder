@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
 import { projectsApi } from '@/lib/api/projects';
@@ -7,6 +8,9 @@ import { promptsApi } from '@/lib/api/prompts';
 import { providersApi } from '@/lib/api/providers';
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi } from '@/lib/api/runs';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
+import { makeFormLimits } from '@/test/fixtures/prompts';
 import { providerCatalogFixture } from '@/test/provider-catalog-fixture';
 import { renderWithProviders } from '@/test/render';
 
@@ -14,6 +18,7 @@ import { LaunchDialog } from './launch-dialog';
 
 const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
 const WORKSPACE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const SCOPE_PROJECT = makeProject({ id: PROJECT_ID, workspace_id: WORKSPACE_ID });
 const PROMPT_SET_ID = '22222222-2222-4222-8222-222222222222';
 const PROMPT_IDS = ['33333333-3333-4333-8333-333333333333', '44444444-4444-4444-8444-444444444444'];
 
@@ -34,9 +39,14 @@ const GERMANY = {
   created_at: '2026-10-10T00:00:00Z',
 };
 
-vi.mock('@/lib/project/project-context', () => ({
-  useActiveWorkspaceId: () => WORKSPACE_ID,
-}));
+/** The dialog as a project route opens it, under the gate's project. */
+function RoutedLaunchDialog(props: ComponentProps<typeof LaunchDialog>) {
+  return (
+    <ActiveProjectScopeProvider project={SCOPE_PROJECT}>
+      <LaunchDialog {...props} />
+    </ActiveProjectScopeProvider>
+  );
+}
 
 /** The `/estimate` projection the dialog summarises. The dialog reads only
  * these five fields; the per-engine breakdown is the API layer's contract. */
@@ -48,10 +58,15 @@ const ESTIMATE = {
   estimated_total_cost_microusd: 123_400,
 };
 
+/** The prompt-set list read: the sets plus the launch's repetition range. */
+function listed(sets: unknown[], limits = makeFormLimits()) {
+  return { prompt_sets: sets, limits };
+}
+
 function stubApis(estimate: unknown = undefined) {
-  vi.spyOn(promptsApi, 'listPromptSets').mockResolvedValue([
-    { id: PROMPT_SET_ID, name: 'Brand portfolio', prompt_count: 7 },
-  ] as never);
+  vi.spyOn(promptsApi, 'listPromptSets').mockResolvedValue(
+    listed([{ id: PROMPT_SET_ID, name: 'Brand portfolio', prompt_count: 7 }]) as never,
+  );
   vi.spyOn(providersApi, 'listConnections').mockResolvedValue([
     {
       api_key_set: true,
@@ -70,6 +85,37 @@ async function selectEngineAndLaunch() {
   fireEvent.click(await screen.findByRole('button', { name: 'ChatGPT API' }));
   fireEvent.click(screen.getByRole('button', { name: 'Launch audit' }));
 }
+
+describe('Repetitions', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('states and enforces the repetition range the prompt-set list carries', async () => {
+    const launch = stubApis();
+    vi.mocked(promptsApi.listPromptSets).mockResolvedValue(
+      listed(
+        [{ id: PROMPT_SET_ID, name: 'Brand portfolio', prompt_count: 7 }],
+        makeFormLimits({ audit_repetitions_min: 2, audit_repetitions_max: 4 }),
+      ) as never,
+    );
+    renderWithProviders(
+      <RoutedLaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
+    );
+
+    expect(
+      await screen.findByText('How many times to run each prompt per engine (2–4).'),
+    ).toBeInTheDocument();
+    const field = screen.getByRole('spinbutton', { name: 'Repetitions' });
+    fireEvent.change(field, { target: { value: '9' } });
+    fireEvent.blur(field);
+    expect(field).toHaveValue(4);
+    await selectEngineAndLaunch();
+    await waitFor(() =>
+      expect(launch).toHaveBeenCalledWith(expect.objectContaining({ repetitions: 4 }), {
+        workspaceId: WORKSPACE_ID,
+      }),
+    );
+  });
+});
 
 describe('Consumer engine selection', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -93,7 +139,7 @@ describe('Consumer engine selection', () => {
       },
     ] as never);
     const { queryClient } = renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -135,7 +181,7 @@ describe('Market selection', () => {
   it('launches the default market alone unless more are picked', async () => {
     const launch = stubApis(ESTIMATE);
     renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -152,7 +198,7 @@ describe('Market selection', () => {
     const launch = stubApis(ESTIMATE);
     vi.mocked(projectsApi.listMarkets).mockResolvedValue([DEFAULT_MARKET, GERMANY]);
     renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -182,7 +228,7 @@ describe('Inline provider setup', () => {
       providers: [],
     } as never);
     const dialog = (open: boolean) => (
-      <LaunchDialog
+      <RoutedLaunchDialog
         open={open}
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -234,7 +280,7 @@ describe('Engine availability changes', () => {
     ];
     vi.mocked(providersApi.listConnections).mockResolvedValue(connection(true) as never);
     const { queryClient } = renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -268,7 +314,7 @@ describe('LaunchDialog fixed prompt selection', () => {
     stubApis(ESTIMATE);
 
     renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -294,7 +340,7 @@ describe('LaunchDialog fixed prompt selection', () => {
     });
 
     renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -317,7 +363,7 @@ describe('LaunchDialog fixed prompt selection', () => {
     const launch = stubApis();
 
     renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -349,7 +395,7 @@ describe('LaunchDialog fixed prompt selection', () => {
     const launch = stubApis();
 
     renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -373,7 +419,7 @@ describe('LaunchDialog fixed prompt selection', () => {
     const launch = stubApis();
 
     renderWithProviders(
-      <LaunchDialog
+      <RoutedLaunchDialog
         open
         onOpenChange={() => undefined}
         projectId={PROJECT_ID}
@@ -403,7 +449,7 @@ describe('LaunchDialog prompt batching', () => {
 
   /** A set of `count` audit-eligible prompts, in creation order. */
   function setWithPrompts(count: number) {
-    return [
+    return listed([
       {
         id: PROMPT_SET_ID,
         name: 'Brand portfolio',
@@ -416,7 +462,7 @@ describe('LaunchDialog prompt batching', () => {
           created_at: `2026-01-${String(index + 1).padStart(2, '0')}T00:00:00Z`,
         })),
       },
-    ];
+    ]);
   }
 
   it('runs a chosen batch of ten as an explicit prompt id list', async () => {
@@ -427,7 +473,7 @@ describe('LaunchDialog prompt batching', () => {
     vi.spyOn(promptsApi, 'listPromptSets').mockResolvedValue(setWithPrompts(23) as never);
 
     renderWithProviders(
-      <LaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
+      <RoutedLaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
     );
 
     const batchSelect = await screen.findByLabelText(/Prompts to run/);
@@ -453,7 +499,7 @@ describe('LaunchDialog prompt batching', () => {
     vi.spyOn(promptsApi, 'listPromptSets').mockResolvedValue(setWithPrompts(7) as never);
 
     renderWithProviders(
-      <LaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
+      <RoutedLaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
     );
 
     await screen.findByRole('button', { name: 'ChatGPT API' });
@@ -475,7 +521,7 @@ describe('LaunchDialog prompt batching', () => {
     vi.spyOn(promptsApi, 'listPromptSets').mockResolvedValue(setWithPrompts(23) as never);
 
     const { queryClient } = renderWithProviders(
-      <LaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
+      <RoutedLaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
     );
 
     await user.click(await screen.findByLabelText(/Prompts to run/));
@@ -484,7 +530,10 @@ describe('LaunchDialog prompt batching', () => {
     expect(screen.getByRole('button', { name: 'Launch audit' })).toBeEnabled();
 
     act(() => {
-      queryClient.setQueryData(queryKeys.prompts.sets(WORKSPACE_ID, PROJECT_ID), setWithPrompts(7));
+      queryClient.setQueryData(
+        queryKeys.prompts.sets({ workspaceId: WORKSPACE_ID, projectId: PROJECT_ID }),
+        setWithPrompts(7),
+      );
     });
 
     await waitFor(() =>

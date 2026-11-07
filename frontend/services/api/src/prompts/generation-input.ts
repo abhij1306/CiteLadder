@@ -1,56 +1,42 @@
+import {
+  DISTRIBUTION_EXCEEDS_RUN,
+  distributionWithinRun,
+  promptGenerateRequestSchema,
+  promptGenerationCohortSchema,
+  promptGenerationDistributionRequestSchema,
+} from '@citeladder/contracts/prompt-requests';
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { ApiError } from '../errors.ts';
 import { compareText } from '../text-order.ts';
 
 const G = policy.prompts.generation;
 export const generationSetting = (name: keyof typeof policy.prompts.generation_settings) =>
-  Number(resolveSettingSpec(policy.prompts.generation_settings[name]));
+  Number(resolveSettingSpec(policy.prompts.generation_settings[name], process.env));
 
-const share = z.number().min(0).max(1);
-const weight = z.number().min(0).max(100);
-/**
- * How a run's cells divide: branded (`brand_diagnostic`) and competitor
- * (`comparison`) shares, the rest core; an intent mix that weights the stage
- * labels; and personas that become the run's audience facets.
- */
-const generationDistribution = z
-  .object({
-    branded_share: share.default(0),
-    comparison_share: share.default(0),
-    intent_mix: z
-      .object({ informational: weight, commercial: weight, transactional: weight })
-      .refine((mix) => mix.informational + mix.commercial + mix.transactional > 0, {
-        message: 'Intent mix needs at least one positive share',
-      })
-      .nullish(),
+/** Personas become the run's audience facets, bounded by policy. */
+const generationDistribution = promptGenerationDistributionRequestSchema
+  .extend({
     personas: z
       .array(z.string().trim().min(1).max(policy.prompts.persona_max_chars))
       .max(G.distribution_personas_max)
       .default([]),
   })
-  .refine((value) => value.branded_share + value.comparison_share <= 1, {
-    message: 'Branded and comparison shares cannot exceed the whole run',
-  });
-/** Which persisted searches may steer wording; omitted reads every source. */
-const seedSources = ['search_console', 'search_intelligence', 'none'] as const;
+  .refine(distributionWithinRun, { message: DISTRIBUTION_EXCEEDS_RUN });
 /** Prompt cohorts a run can plan, core first so it wins ties. */
-export const generationCohorts = ['core', 'brand_diagnostic', 'comparison'] as const;
+export const generationCohorts = promptGenerationCohortSchema.options;
 
-export const generationInput = z.object({
+export const generationInput = promptGenerateRequestSchema.extend({
   count: z
     .number()
     .int()
     .min(1)
     .default(() => generationSetting('default_count')),
-  topic_ids: z.array(z.uuid()).default([]),
-  topic_id: z.uuid().nullish(),
-  cohort: z.enum(generationCohorts).default('core'),
   /** A short note for this run only; reference data for drafting, never a business fact. */
   run_context: z.string().trim().max(G.run_context_max_chars).nullish(),
   distribution: generationDistribution.nullish(),
-  seed_source: z.enum(seedSources).nullish(),
   seed_query_ids: z.array(z.uuid()).max(G.seed_query_ids_max).default([]),
 });
 export type GenerationInput = z.infer<typeof generationInput>;

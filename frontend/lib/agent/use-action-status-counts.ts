@@ -18,7 +18,7 @@ export function queueCount(counts: StatusCounts): number {
 export function useActionStatusCounts(): StatusCounts | undefined {
   const { activeProjectId, activeWorkspaceId } = useProjectContext();
   return useQuery({
-    ...actionsQueries.list(activeWorkspaceId ?? '', activeProjectId ?? ''),
+    ...actionsQueries.list({ workspaceId: activeWorkspaceId, projectId: activeProjectId ?? '' }),
     enabled: Boolean(activeWorkspaceId && activeProjectId),
   }).data?.status_counts;
 }

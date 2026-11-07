@@ -122,6 +122,7 @@ function onboardingStage(
         brandName={flow.brand?.brand_name}
         discovery={flow.discovery}
         onEdit={() => flow.setStep(0)}
+        onRerun={flow.rerunDiscovery}
         actions={actions}
       />
     );

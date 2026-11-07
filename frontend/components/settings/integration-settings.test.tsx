@@ -396,7 +396,9 @@ describe('IntegrationSettings — sync polling', () => {
     // Sync now stays disabled so a second click cannot queue a duplicate.
     runStatus = 'succeeded';
     processing = true;
-    await queryClient.invalidateQueries({ queryKey: queryKeys.integrations.sync(CONN_GSC, SYNC) });
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.integrations.sync(WS, CONN_GSC, SYNC),
+    });
     expect(await within(row).findByText('Processing')).toBeInTheDocument();
     expect(within(row).getByText('2,148 rows imported · updating reports')).toBeInTheDocument();
     expect(within(row).getByRole('button', { name: syncName })).toBeDisabled();
@@ -404,7 +406,9 @@ describe('IntegrationSettings — sync polling', () => {
     // Reports rebuilt: the result stays visible, the connections list
     // refreshes (last_synced_at), and Sync now is available again.
     processing = false;
-    await queryClient.invalidateQueries({ queryKey: queryKeys.integrations.sync(CONN_GSC, SYNC) });
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.integrations.sync(WS, CONN_GSC, SYNC),
+    });
     expect(await within(row).findByText('Succeeded')).toBeInTheDocument();
     expect(within(row).getByText('2,148 rows imported · window Jul 16–Jul 22')).toBeInTheDocument();
     await waitFor(() => expect(listCalls).toBeGreaterThan(1));

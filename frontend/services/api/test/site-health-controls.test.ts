@@ -15,6 +15,7 @@ import { createCrawl } from '../src/site-health/planner.ts';
 import { controls, normalizedSeed } from '../src/site-health/planner-policy.ts';
 import { replaceMonitoredSet, rerunPage } from '../src/site-health/selection.ts';
 import { publishCancelledCrawls } from '../src/site-health/lifecycle.ts';
+import { lockSiteTask } from '../src/site-health/site-task.ts';
 import { record } from '../src/db/json.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { SiteFixtures, type SiteSeed } from './site-health-fixtures.ts';
@@ -31,8 +32,8 @@ afterAll(async () => {
   await db.destroy();
 });
 
-async function request(tenant: Tenant, path: string, method = 'GET', body?: unknown) {
-  return app.request(`/api/v1${path}`, {
+async function request(tenant: Tenant, path: string, method = 'GET', body?: unknown, server = app) {
+  return server.request(`/api/v1${path}`, {
     method,
     headers: {
       cookie: `${TEST_SESSION_COOKIE}=${await sessionToken({ sub: tenant.userId, ver: 0 })}`,
@@ -389,12 +390,12 @@ describe('crawl-control HTTP contracts', () => {
     expect((await request(reader, `/site-crawls/${seed.crawlId}/recrawl`, 'POST')).status).toBe(
       403,
     );
-    vi.stubEnv('ABUSE_CRAWL_CREATE_LIMIT', '1');
-    const first = await request(seed, '/site-crawls', 'POST', { project_id: randomUUID() });
-    expect(first.status).toBe(404);
-    expect(
-      (await request(seed, '/site-crawls', 'POST', { project_id: seed.projectId })).status,
-    ).toBe(429);
+    // Settings resolve once at startup, so the lower limit is a separately started app.
+    const limited = createApp(testConfig({ ABUSE_CRAWL_CREATE_LIMIT: '1' }), db);
+    const create = (projectId: string) =>
+      request(seed, '/site-crawls', 'POST', { project_id: projectId }, limited);
+    expect((await create(randomUUID())).status).toBe(404);
+    expect((await create(seed.projectId)).status).toBe(429);
   });
 
   it('previews CSV/JSON duplicates and scope rejections without creating runtime or crawl rows', async () => {
@@ -631,6 +632,35 @@ describe('crawl-control HTTP contracts', () => {
     ).toBe(404);
   });
 
+  it('cancels a leased older generation when a rerun queues the next, so its commit is fenced out', async () => {
+    const seed = await fixtures.crawl();
+    allow(1);
+    const page = await fixtures.page(seed, '/a', {}, { observed: true });
+    await db
+      .transaction()
+      .execute((trx) => replaceMonitoredSet(trx, seed.workspaceId, seed.projectId, [page.id], 1));
+    const rerun = () =>
+      db.transaction().execute((trx) => rerunPage(trx, seed.workspaceId, seed.projectId, page.id));
+    const first = await rerun();
+    const active = { ...seed, crawlId: first.crawl_id };
+    const worker = fixtures.worker(active);
+    const leased = await fixtures.claim(worker, active, 'analyze', first.task_id);
+    const second = await rerun();
+    expect(second).toMatchObject({ crawl_id: first.crawl_id, created_new_crawl: false });
+    const generations = await db
+      .selectFrom('site_crawl_tasks')
+      .select(['id', 'generation', 'status', 'lease_owner'])
+      .where('crawl_id', '=', first.crawl_id)
+      .orderBy('generation')
+      .execute();
+    expect(generations).toEqual([
+      { id: first.task_id, generation: 0, status: 'cancelled', lease_owner: null },
+      { id: second.task_id, generation: 1, status: 'queued', lease_owner: null },
+    ]);
+    const held = await db.transaction().execute((trx) => lockSiteTask(trx, worker, leased));
+    expect(held).toBeNull();
+  });
+
   it('keeps Stop short and lets the worker publish retained analysis evidence exactly once', async () => {
     const seed = await fixtures.crawl('running');
     allow(1);
@@ -708,6 +738,38 @@ describe('crawl-control HTTP contracts', () => {
     });
     const outsider = await fixtures.crawl();
     expect((await counters(outsider)).status).toBe(404);
+  });
+
+  it('lists a crawl with the same counters its dashboard reads, live or persisted', async () => {
+    const seed = await fixtures.crawl('running');
+    await fixtures.page(seed, '/a', {});
+    await fixtures.page(seed, '/b', {});
+    const listed = async () => {
+      const response = await request(seed, `/site-crawls?project_id=${seed.projectId}`);
+      const items = record(await response.json()).items as unknown[];
+      return record(record(items.find((item) => record(item).id === seed.crawlId)).counters);
+    };
+    expect(await listed()).toMatchObject({ analyzed: 2, by_page_kind: { product: 2 } });
+    // A terminal crawl with no persisted counters is counted, never reported as zero.
+    await db
+      .updateTable('site_crawls')
+      .set({ status: 'completed', completed_at: new Date() })
+      .where('id', '=', seed.crawlId)
+      .execute();
+    expect(await listed()).toMatchObject({ analyzed: 2, by_page_kind: { product: 2 } });
+    // Once persisted, the stored counters win over later task rows.
+    await db
+      .updateTable('site_crawls')
+      .set({
+        terminal_counters: JSON.stringify({
+          ...(await listed()),
+          analyzed: 5,
+        }),
+      })
+      .where('id', '=', seed.crawlId)
+      .execute();
+    await fixtures.page(seed, '/late', {});
+    expect(await listed()).toMatchObject({ analyzed: 5 });
   });
 
   it('retries an actual PostgreSQL crawl lock timeout before cancelling', async () => {

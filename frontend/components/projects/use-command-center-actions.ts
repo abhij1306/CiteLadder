@@ -1,45 +1,31 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { opportunitiesApi } from '@/lib/api/opportunities';
-import { projectsApi } from '@/lib/api/projects';
-import { queryKeys } from '@/lib/api/query-keys';
-import type { CommandCenter, Opportunity, Project } from '@/lib/api/types';
+import { projectMutations, projectsApi } from '@/lib/api/projects';
+import type { CommandCenter, Opportunity, Project } from '@citeladder/contracts';
 import { saveBlob } from '@/lib/download';
 
 export function useCommandCenterActions(data: CommandCenter, project: Project) {
-  const queryClient = useQueryClient();
   const [downloadError, setDownloadError] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const orderVersion = useRef(data.action_order_version);
-  const queryKey = queryKeys.projects.commandCenter(project.id);
-  const reorder = useMutation({
-    mutationFn: (ordered: Opportunity[]) =>
-      opportunitiesApi.updateOrder(
-        project.id,
-        {
-          ordered_opportunity_ids: ordered.map((row) => row.id),
-          expected_version: orderVersion.current,
+  const reorder = useMutation(
+    projectMutations.reorderActions({ workspaceId: project.workspace_id, projectId: project.id }),
+  );
+  // The version the next reorder names: the one a reorder returned, or, after
+  // a refusal, the one the command center was read with.
+  const reorderTo = (ordered: Opportunity[]) =>
+    reorder.mutate(
+      { ordered, expectedVersion: orderVersion.current },
+      {
+        onSuccess: (result) => {
+          orderVersion.current = result.version;
         },
-        { workspaceId: project.workspace_id },
-      ),
-    onMutate: async (ordered) => {
-      await queryClient.cancelQueries({ queryKey });
-      const previous = queryClient.getQueryData<CommandCenter>(queryKey);
-      queryClient.setQueryData<CommandCenter>(queryKey, (current) =>
-        current ? { ...current, actions: ordered } : current,
-      );
-      return { previous };
-    },
-    onSuccess: (result) => {
-      orderVersion.current = result.version;
-    },
-    onError: (_error, _ordered, context) => {
-      orderVersion.current = data.action_order_version;
-      if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey }),
-  });
+        onError: () => {
+          orderVersion.current = data.action_order_version;
+        },
+      },
+    );
   useEffect(() => {
     orderVersion.current = data.action_order_version;
   }, [data.action_order_version]);
@@ -50,7 +36,7 @@ export function useCommandCenterActions(data: CommandCenter, project: Project) {
     reorderError: reorder.isError,
     reorderPending: reorder.isPending,
     move: (from: number, to: number) =>
-      moveActions(from, to, data.actions, reorder.isPending, reorder),
+      moveActions(from, to, data.actions, reorder.isPending, reorderTo),
     download: () => downloadReport(project, setDownloading, setDownloadError),
   };
 }
@@ -60,7 +46,7 @@ function moveActions(
   to: number,
   actions: Opportunity[],
   pending: boolean,
-  reorder: { mutate: (actions: Opportunity[]) => void },
+  reorder: (actions: Opportunity[]) => void,
 ) {
   if (
     pending ||
@@ -75,7 +61,7 @@ function moveActions(
   const [item] = next.splice(from, 1);
   if (!item) return;
   next.splice(to, 0, item);
-  reorder.mutate(next);
+  reorder(next);
 }
 
 async function downloadReport(

@@ -7,6 +7,12 @@
  * person confirms them, here, under the same lock.
  */
 import { businessMapSchema, offeringMapSchema } from '@citeladder/contracts/project';
+import {
+  businessMapEntryRequestSchema,
+  businessMapExclusionRequestSchema,
+  businessMapOfferingRequestSchema,
+  businessMapUpdateRequestSchema,
+} from '@citeladder/contracts/project-requests';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
@@ -29,19 +35,17 @@ const {
 } = policy.brand_identity;
 
 const mapValue = z.string().trim().min(1).max(VALUE_MAX);
-const entryInput = z.object({
-  value: mapValue,
-  // Keeping a suggestion unconfirmed is allowed; a new entry is always a
-  // confirmed manual fact, whatever the request says.
-  review_state: z.enum(['suggested', 'confirmed']).default('confirmed'),
-});
+const entryInput = businessMapEntryRequestSchema.extend({ value: mapValue });
 const dimensionInput = z.array(entryInput).max(ENTRIES_MAX).default([]);
-const exclusionInput = z.object({ first: mapValue, second: mapValue });
+const exclusionInput = businessMapExclusionRequestSchema.extend({
+  first: mapValue,
+  second: mapValue,
+});
 
-export const businessMapUpdate = z.object({
+export const businessMapUpdate = businessMapUpdateRequestSchema.extend({
   offerings: z
     .array(
-      z.object({
+      businessMapOfferingRequestSchema.extend({
         offering: mapValue,
         attributes: dimensionInput,
         situations: dimensionInput,

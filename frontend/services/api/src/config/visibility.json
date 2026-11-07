@@ -12,15 +12,6 @@
   "trend_default_granularity": "run",
   "trend_max_points": 100,
   "trend_max_runs": 400,
-  "logical_engines": [
-    "chatgpt",
-    "claude",
-    "gemini",
-    "google_ai_overview",
-    "chatgpt_search",
-    "gemini_consumer"
-  ],
-  "search_surface_engines": ["google_ai_overview"],
   "brand_audit_scope": "brand",
   "succeeded_task_status": "succeeded"
 }

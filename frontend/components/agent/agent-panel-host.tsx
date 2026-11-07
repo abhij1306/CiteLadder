@@ -3,7 +3,7 @@
 import { lazy, Suspense, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { navigationMode } from '@/components/layout/nav-items';
+import { navigationMode } from '@/lib/navigation/app-routes';
 import { IconButton } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import { useAgentPanel } from '@/lib/agent/panel-context';

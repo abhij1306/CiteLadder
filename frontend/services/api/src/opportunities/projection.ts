@@ -232,7 +232,7 @@ export function projectDetail(row: OpportunityRow) {
   return {
     ...projectItem(row),
     remediation: row.remediation || '',
-    evidence: record(row.evidence),
+    evidence: opportunityDetailSchema.shape.evidence.parse(row.evidence),
     source_analysis_ids: ids(row.source_analysis_ids),
     source_issue_ids: ids(row.source_issue_ids),
     source_metric_ids: ids(row.source_metric_ids),

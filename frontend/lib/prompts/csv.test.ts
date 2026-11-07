@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vite-plus/test';
 
 import { toCsvForTest } from '@/lib/csv/download';
-import { PROMPT_IMPORT_MAX_ROWS } from '@/lib/config/prompts';
 
 import {
   PROMPT_CSV_COLUMNS,
   PROMPT_CSV_SAMPLE_ROWS,
-  parsePromptCsv,
+  parsePromptCsv as parseWithLimits,
   tokenizeCsv,
   validRows,
+  type PromptCsvLimits,
 } from './csv';
+
+/** The bounds the prompt-set list carries, as the import dialog passes them. */
+const LIMITS: PromptCsvLimits = { import_rows_max: 500, persona_max_chars: 120 };
+const parsePromptCsv = (raw: string, limits = LIMITS) => parseWithLimits(raw, limits);
 
 describe('tokenizeCsv', () => {
   it('handles quoted fields, escaped quotes, and embedded newlines', () => {
@@ -96,12 +100,21 @@ describe('parsePromptCsv', () => {
     expect(parsePromptCsv('').errors.length).toBeGreaterThan(0);
   });
 
-  it('rejects a file over the import row limit as a file-level error, and accepts one at it', () => {
+  it('rejects a file over the listed import row limit as a file-level error, and accepts one at it', () => {
+    const limits = { ...LIMITS, import_rows_max: 3 };
     const file = (count: number) =>
       ['prompt', ...Array.from({ length: count }, (_, i) => `Prompt number ${i}`)].join('\n');
-    expect(parsePromptCsv(file(PROMPT_IMPORT_MAX_ROWS)).errors).toEqual([]);
-    const over = parsePromptCsv(file(PROMPT_IMPORT_MAX_ROWS + 1));
-    expect(over.errors).toHaveLength(1);
-    expect(over.errors[0]).toContain(String(PROMPT_IMPORT_MAX_ROWS + 1));
+    expect(parsePromptCsv(file(3), limits).errors).toEqual([]);
+    expect(parsePromptCsv(file(4), limits).errors).toEqual([
+      'The file has 4 rows; import up to 3 at a time by splitting it.',
+    ]);
+  });
+
+  it('cuts a persona tag to the listed length', () => {
+    const parsed = parsePromptCsv('prompt,persona\nBest shoes?,Marathon runners', {
+      ...LIMITS,
+      persona_max_chars: 8,
+    });
+    expect(parsed.rows[0]!.input.persona).toBe('Marathon');
   });
 });

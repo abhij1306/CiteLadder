@@ -37,6 +37,8 @@ import { readAgentContext } from '../src/agent/context-adapter.ts';
 import { runAgentOnce } from '../src/agent/worker.ts';
 import { loadSkillCatalog } from '../src/agent/skills.ts';
 import { agentSettings } from '../src/agent/config.ts';
+import { createAgentBindings } from '../src/agent/bindings.ts';
+import { AgentWorker } from '../src/workers/agent-worker.ts';
 
 /** The tool results a request returned to the model, in call order. */
 function toolResults(sent: ModelRequest) {
@@ -497,7 +499,7 @@ describe('Agent runtime on PostgreSQL', () => {
       {
         error: false,
         content:
-          'Document 1: staged as a new document; it is saved with your reply. Now reply briefly; do not repeat the document.',
+          'Document 1: staged as a new document; it is saved with your reply, and the app tells the person so. Now reply briefly; do not repeat the document or announce the save.',
       },
       {
         error: true,
@@ -736,6 +738,91 @@ describe('Agent runtime on PostgreSQL', () => {
       error_code: 'interrupted',
     });
   });
+  it('ends a turn whose heartbeat gives up as interrupted at once, refunding its calls', async () => {
+    const scope = await fixtures.scope();
+    const queued = await fixtures
+      .store()
+      .enqueue(scope, { key: randomUUID(), message: 'Question' });
+    const queue = new AgentQueue(db, 60);
+    const refunded: string[] = [];
+    const models = new ModelCalls(db, {
+      ...zeroFunding,
+      refund: async (_trx, run) => {
+        refunded.push(run.id);
+      },
+    });
+    let calling!: () => void;
+    const called = new Promise<void>((resolve) => {
+      calling = resolve;
+    });
+    const model = {
+      ...scripted([]),
+      converse: (_request: ModelRequest, signal?: AbortSignal) =>
+        new Promise<never>((_resolve, reject) => {
+          calling();
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    };
+    // The database stays reachable for the turn; only its lease renewals fail.
+    const heartbeat = vi.spyOn(queue, 'heartbeat').mockRejectedValue(new Error('renewal failed'));
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const turn = runAgentOnce(queue, fixtures.runtime(scope, model, { models }), 'stalled', [
+        scope.workspaceId,
+      ]);
+      await called;
+      await vi.advanceTimersByTimeAsync(agentPolicy.heartbeat_seconds * 1000 * 2);
+      expect(await turn).toBe(true);
+    } finally {
+      vi.useRealTimers();
+      heartbeat.mockRestore();
+    }
+    expect(await fixtures.run(queued.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'interrupted',
+      lease_owner: null,
+    });
+    expect(refunded).toEqual([queued.id]);
+    expect((await readChat(db, scope, queued.chat_id)).messages.at(-1)?.content).toBe(
+      recoveryReply('interrupted'),
+    );
+  });
+  it('lets the lane end a turn whose process died once its minute-long lease lapses', async () => {
+    const scope = await fixtures.scope();
+    const bindings = await createAgentBindings(db, {});
+    const refunded: string[] = [];
+    bindings.models = new ModelCalls(db, {
+      ...zeroFunding,
+      refund: async (_trx, run) => {
+        refunded.push(run.id);
+      },
+    });
+    const worker = new AgentWorker(db, bindings, scope.workspaceId);
+    const queued = await fixtures
+      .store()
+      .enqueue(scope, { key: randomUUID(), message: 'Question' });
+    const before = Date.now();
+    const claimed = await bindings.queue.claim('crashed', [scope.workspaceId]);
+    await bindings.queue.start(claimed!, 'crashed');
+    // The instance stops here: no heartbeat, no terminal write.
+    const { lease_expires_at } = await fixtures.run(queued.id);
+    const due = await worker.nextDue();
+    expect(due?.getTime()).toBe(new Date(lease_expires_at!).getTime());
+    expect(due!.getTime() - before).toBeLessThanOrEqual(61_000);
+    expect(await worker.runOnce()).toBe(0);
+    await db
+      .updateTable('agent_runs')
+      .set({ lease_expires_at: new Date(Date.now() - 1000) })
+      .where('id', '=', queued.id)
+      .execute();
+    expect(await worker.runOnce()).toBe(1);
+    expect(await fixtures.run(queued.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'interrupted',
+    });
+    expect(refunded).toEqual([queued.id]);
+    expect(await worker.nextDue()).toBeNull();
+  });
   it('contains start failure without dispatching the runtime', async () => {
     const scope = await fixtures.scope();
     await fixtures.store().enqueue(scope, { key: randomUUID(), message: 'Question' });
@@ -921,6 +1008,36 @@ describe('Agent runtime on PostgreSQL', () => {
     await fixtures.runtime(scope, model).execute(second.lease);
     expect((await fixtures.run(second.run.id)).error_code).toBe('access_revoked');
     expect(calls).toBe(0);
+  });
+  it('settles, refunds and ends an interrupted turn whose member was removed, with no reply', async () => {
+    const scope = await fixtures.scope();
+    const refunded: string[] = [];
+    const models = new ModelCalls(db, {
+      ...zeroFunding,
+      refund: async (_trx, run) => {
+        refunded.push(run.id);
+      },
+    });
+    const { run, lease } = await fixtures.claimed(scope);
+    await db
+      .deleteFrom('workspace_members')
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('user_id', '=', scope.userId)
+      .execute();
+    await fixtures.runtime(scope, scripted([]), { models }).fail(lease, 'interrupted');
+    expect(await fixtures.run(run.id)).toMatchObject({
+      status: 'failed',
+      error_code: 'interrupted',
+      lease_owner: null,
+    });
+    expect(refunded).toEqual([run.id]);
+    const messages = await db
+      .selectFrom('agent_messages')
+      .select('role')
+      .where('chat_id', '=', run.chat_id)
+      .orderBy('sequence')
+      .execute();
+    expect(messages.map((message) => message.role)).toEqual(['user']);
   });
   it('asks a cut-off call once more at low effort, then saves its document', async () => {
     const scope = await fixtures.scope();
@@ -1258,6 +1375,56 @@ describe('Agent runtime on PostgreSQL', () => {
     expect(JSON.stringify(transcript!.messages)).toContain(
       JSON.stringify(found('srvtoolu_2', 'https://b.test/')),
     );
+  });
+  it('saves no search a paused last call left waiting, so the next turn replays paired tool uses', async () => {
+    const scope = await fixtures.scope();
+    const first = await fixtures.claimed(scope);
+    await budget(first.run, { max_model_calls: 2 });
+    const call = (id: string) => ({
+      type: 'server_tool_use',
+      id,
+      name: 'web_search',
+      input: { query: 'uniform prices' },
+    });
+    const found = (id: string) => ({
+      type: 'web_search_tool_result',
+      tool_use_id: id,
+      content: [
+        { type: 'web_search_result', url: 'https://a.test/', title: 'A', encrypted_content: 'e' },
+      ],
+    });
+    const usage = { input_tokens: 20, output_tokens: 10, web_search_requests: 1 };
+    await fixtures
+      .runtime(scope, {
+        ...scripted([
+          result([call('srvtoolu_1'), found('srvtoolu_1')], { stop: 'pause_turn', usage }),
+          // The last call pauses with a search it can never continue.
+          result([text('Prices start at $10.'), call('srvtoolu_2')], { stop: 'pause_turn', usage }),
+        ]),
+        adapter: 'anthropic',
+      })
+      .execute(first.lease);
+    expect((await fixtures.run(first.run.id)).status).toBe('succeeded');
+    const second = await fixtures.claimed(scope, { chatId: first.run.chat_id });
+    const sent: ModelRequest[] = [];
+    await fixtures
+      .runtime(scope, {
+        ...scripted([reply('Done.')], async (request) => {
+          sent.push(request);
+        }),
+        adapter: 'anthropic',
+      })
+      .execute(second.lease);
+    const blocks = sent[0]!.messages.flatMap((message) => message.content);
+    expect(
+      blocks.filter((block) => block.type === 'server_tool_use').map((block) => block.id),
+    ).toEqual(['srvtoolu_1']);
+    expect(
+      blocks
+        .filter((block) => block.type === 'web_search_tool_result')
+        .map((block) => block.tool_use_id),
+    ).toEqual(['srvtoolu_1']);
+    expect(blocks).toContainEqual({ type: 'text', text: 'Prices start at $10.' });
   });
   it('offers each call at most its per-call searches and none once the turn’s are spent', async () => {
     const scope = await fixtures.scope();

@@ -11,8 +11,7 @@ import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { textRole } from '@/components/ui/typography';
-import type { SeedQueries, Topic } from '@/lib/api/types';
-import { MAX_GENERATION_COUNT, PROMPT_BUILDER } from '@/lib/config/prompts';
+import type { PromptFormLimits, SeedQueries, Topic } from '@citeladder/contracts';
 import {
   INTENT_KEYS,
   seedSourceOf,
@@ -77,10 +76,12 @@ function PercentField({
 function PersonaChoices({
   choices,
   selected,
+  max,
   onChange,
 }: Readonly<{
   choices: readonly string[];
   selected: readonly string[];
+  max: number;
   onChange: (personas: string[]) => void;
 }>) {
   if (!choices.length)
@@ -92,7 +93,7 @@ function PersonaChoices({
         message="Add buyer roles or audiences in step 1 to balance across personas."
       />
     );
-  const full = selected.length >= PROMPT_BUILDER.personasMax;
+  const full = selected.length >= max;
   return (
     <Stack gap="tight">
       {choices.map((persona) => {
@@ -112,8 +113,7 @@ function PersonaChoices({
         );
       })}
       <span className="type-caption">
-        None chosen balances across the audiences each topic&apos;s offerings name. Up to{' '}
-        {PROMPT_BUILDER.personasMax}.
+        None chosen balances across the audiences each topic&apos;s offerings name. Up to {max}.
       </span>
     </Stack>
   );
@@ -185,7 +185,10 @@ export function BuilderDistributionStep({
   seeds,
   topics,
   notices,
+  limits,
 }: Readonly<{
+  /** The run bounds the API enforces, from the prompt-set list. */
+  limits: Pick<PromptFormLimits, 'generation_count_max' | 'distribution_personas_max'>;
   settings: RunSettings;
   onChange: (settings: RunSettings) => void;
   hasCompetitors: boolean;
@@ -201,14 +204,14 @@ export function BuilderDistributionStep({
   return (
     <Stack gap="section">
       {notices}
-      <Field label="Number of prompts" hint={`From 1 to ${MAX_GENERATION_COUNT}.`}>
+      <Field label="Number of prompts" hint={`From 1 to ${limits.generation_count_max}.`}>
         {(field) => (
           <Input
             {...field}
             type="number"
             inputMode="numeric"
             min={1}
-            max={MAX_GENERATION_COUNT}
+            max={limits.generation_count_max}
             width="quantity"
             value={settings.count}
             onChange={(event) => onChange({ ...settings, count: event.target.value })}
@@ -257,6 +260,7 @@ export function BuilderDistributionStep({
         <PersonaChoices
           choices={personaChoices}
           selected={settings.personas}
+          max={limits.distribution_personas_max}
           onChange={(personas) => onChange({ ...settings, personas })}
         />
       </Section>

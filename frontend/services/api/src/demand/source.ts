@@ -4,11 +4,12 @@ import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { isoDateText } from '../db/timestamps.ts';
 import { policy } from '../config.ts';
-import { addDays } from '../referrals/projection.ts';
+import { addDays } from '../calendar-days.ts';
 import { numberOrNull } from '../traffic/accumulators.ts';
 import { record, strings } from '../db/json.ts';
 import { classifyProjectQueries } from './classification.ts';
-import { stableHash, unique, type QueryInput, type SearchInput } from './projection.ts';
+import { unique, type QueryInput, type SearchInput } from './projection.ts';
+import { canonicalHash } from '../canonical-json.ts';
 import { latestQuerySnapshot, queryEvidenceRevision, type DemandScope } from './query-evidence.ts';
 import { compareText, scalarText } from '../text-order.ts';
 
@@ -193,5 +194,8 @@ export async function demandSourceRevision(db: Database, scope: DemandScope) {
   const queryRevision = await queryEvidenceRevision(db, scope);
   const snapshot = await latestQuerySnapshot(db, scope);
   const inputs = snapshot ? await queryDetectorInputs(db, scope, snapshot.id) : [];
-  return stableHash(await sourceMaterial(db, scope, traffic, inputs, queryRevision)).slice(0, 24);
+  return canonicalHash(
+    await sourceMaterial(db, scope, traffic, inputs, queryRevision),
+    false,
+  ).slice(0, 24);
 }

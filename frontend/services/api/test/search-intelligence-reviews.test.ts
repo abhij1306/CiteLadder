@@ -153,6 +153,7 @@ describe('atomic Search Intelligence reviews', () => {
       .insertInto('competitors')
       .values({
         id: competitorId,
+        workspace_id: t.workspaceId,
         project_id: t.projectId,
         name: 'Competitor',
         aliases: JSON.stringify([]),

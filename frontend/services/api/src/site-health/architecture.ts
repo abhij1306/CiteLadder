@@ -8,7 +8,7 @@ import { buildArchitecture, type ArchitecturePage } from './architecture-model.t
 import { architectureRules } from './architecture-rules.ts';
 import { persistIssueCatalog } from './issue-catalog.ts';
 import { addArchitectureIssues } from './snapshot.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 function string(value: unknown) {
   return typeof value === 'string' ? value : '';

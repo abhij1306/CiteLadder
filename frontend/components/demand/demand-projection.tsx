@@ -11,19 +11,25 @@ import {
 import { Calendar, RefreshCw, Search, Sparkles } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { ListScreen } from '@/components/layout/page-shell';
 import { QueryState } from '@/components/ui/query-state';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { ReadError, readErrorProps } from '@/components/ui/read-error';
 import { SearchField } from '@/components/ui/search-field';
 import { DemandEvidenceDrawer } from '@/components/demand/demand-evidence-drawer';
 import { DemandLatentDemand } from '@/components/demand/demand-latent-demand';
 import { DemandDataCaveats, DemandSignalFilters } from '@/components/demand/demand-signal-filters';
 import { DemandSignalTable, SignalLegend } from '@/components/demand/demand-signal-table';
-import { demandApi, type DemandSignal, type DemandSnapshot } from '@/lib/api/demand';
+import {
+  demandMutations,
+  demandQueries,
+  refreshDemandSnapshot,
+  type demandApi,
+  type DemandSignal,
+  type DemandSnapshot,
+} from '@/lib/api/demand';
+import type { DemandRecomputeRequest } from '@citeladder/contracts/demand';
 import { isTransientMutationError, mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { queryKeys } from '@/lib/api/query-keys';
-import { latestDemandSnapshotQuery } from '@/lib/demand/latest-snapshot';
 import {
   countByTab,
   FILTER_TABS,
@@ -34,7 +40,7 @@ import {
 } from '@/lib/demand/signals';
 import { formatCount, formatWindowDate } from '@/lib/format';
 import { InlineFigure } from '@/components/ui/typography';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { optionalStringUrlCodec, stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -48,7 +54,7 @@ const DEMAND_TAB_CODEC = stringUrlCodec(
 type RecomputeMutation = UseMutationResult<
   Awaited<ReturnType<typeof demandApi.recompute>>,
   Error,
-  void
+  DemandRecomputeRequest
 >;
 
 /**
@@ -58,8 +64,9 @@ type RecomputeMutation = UseMutationResult<
  */
 function RecomputeAction({
   mutation,
+  onRecompute,
   onCheck,
-}: Readonly<{ mutation: RecomputeMutation; onCheck: () => void }>) {
+}: Readonly<{ mutation: RecomputeMutation; onRecompute: () => void; onCheck: () => void }>) {
   if (mutation.isSuccess)
     return (
       <Button variant="secondary" onClick={onCheck}>
@@ -71,7 +78,7 @@ function RecomputeAction({
   return (
     <Button
       variant="secondary"
-      onClick={() => mutation.mutate()}
+      onClick={onRecompute}
       pending={mutation.isPending}
       pendingLabel="Queueing…"
     >
@@ -91,18 +98,19 @@ function RecomputeStatus({ mutation }: Readonly<{ mutation: RecomputeMutation }>
           : 'Recompute queued. Signals refresh once the job finishes.'}
       </span>
     );
-  if (mutation.isError) {
-    const notice = mutationNoticeForError(mutation.error, {
-      action: 'queue the search demand recompute',
-    });
-    const support = [notice.code, notice.requestId].filter(Boolean).join(' · ');
-    return (
-      <span role="alert" className="type-caption text-negative" title={support || undefined}>
-        {notice.message}
-      </span>
-    );
-  }
   return null;
+}
+
+/** A failed recompute as the shared notice; the header button is its retry. */
+function RecomputeFailure({ mutation }: Readonly<{ mutation: RecomputeMutation }>) {
+  if (!mutation.isError) return null;
+  return (
+    <MutationNotice
+      notice={mutationNoticeForError(mutation.error, {
+        action: 'queue the search demand recompute',
+      })}
+    />
+  );
 }
 
 function SearchDemandView({
@@ -116,7 +124,7 @@ function SearchDemandView({
   onRetry?: () => void;
   retrying?: boolean;
 }>) {
-  const { activeProject } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useUrlState('view', DEMAND_TAB_CODEC, {
@@ -126,24 +134,10 @@ function SearchDemandView({
   const [selectedSignalId, setSelectedSignalId] = useUrlState('signal', optionalStringUrlCodec);
   const selectedSignal = snapshot.signals.find((signal) => signal.id === selectedSignalId) ?? null;
 
-  /**
-   * Recompute is a QUEUED job, not a synchronous rebuild: the endpoint returns
-   * 202 with `status: queued` and a worker produces the new snapshot later.
-   * Refetching on success would therefore just re-read the current snapshot
-   * and look like a no-op, so we report that the work was queued and let the
-   * user refresh once it lands.
-   */
-  const recomputeMutation = useMutation({
-    mutationFn: () =>
-      demandApi.recompute(
-        activeProject!.id,
-        { window_start: snapshot.window_start, window_end: snapshot.window_end },
-        { workspaceId: activeProject!.workspace_id },
-      ),
-  });
-
-  const refreshSnapshot = () =>
-    queryClient.invalidateQueries({ queryKey: queryKeys.demand.latest(activeProject?.id) });
+  // Recompute is queued: the screen reports that the work was queued and lets
+  // the reader check for the new snapshot once it lands.
+  const recomputeMutation = useMutation(demandMutations.recompute({ workspaceId, projectId }));
+  const refreshSnapshot = () => refreshDemandSnapshot(queryClient, projectId);
 
   const handleInspect = (signal: DemandSignal) => {
     setSelectedSignalId(signal.id);
@@ -231,6 +225,12 @@ function SearchDemandView({
       actions={
         <RecomputeAction
           mutation={recomputeMutation}
+          onRecompute={() =>
+            recomputeMutation.mutate({
+              window_start: snapshot.window_start,
+              window_end: snapshot.window_end,
+            })
+          }
           onCheck={() => {
             recomputeMutation.reset();
             void refreshSnapshot();
@@ -265,9 +265,9 @@ function SearchDemandView({
             pending={Boolean(retrying)}
           />
         ) : null}
+        <RecomputeFailure mutation={recomputeMutation} />
         {/* The summary line, then the table the top strip's filters narrow.
-            Recompute's outcome rides the summary line and the header button
-            rather than a banner above it, so the table never moves. */}
+            A queued recompute rides the summary line and the header button. */}
         <Stack>
           <Inline as="p" gap="meta">
             <span className="type-caption">
@@ -298,10 +298,9 @@ function SearchDemandView({
 }
 
 export function DemandProjection() {
-  const { activeProject, isLoading: projectLoading } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const latest = useQuery({
-    ...latestDemandSnapshotQuery(activeProject?.id ?? '', activeProject?.workspace_id ?? null),
-    enabled: Boolean(activeProject),
+    ...demandQueries.latest({ workspaceId, projectId }),
     // Deliberately NO `keepPreviousData`: the key's only variable is the
     // project, so keeping previous data would render the PREVIOUS project's
     // snapshot as a success (placeholder data is not `isLoading`) while
@@ -312,7 +311,7 @@ export function DemandProjection() {
   // with an empty content region, so it keeps its identity band rather than
   // losing the heading and the rule above the work.
   const snapshot = latest.data;
-  if (activeProject && snapshot?.coverage.search === 'observed') {
+  if (snapshot?.coverage.search === 'observed') {
     // The route already wraps this subtree in a TooltipProvider.
     //
     // A refresh that fails over evidence we already hold keeps the evidence and
@@ -327,30 +326,12 @@ export function DemandProjection() {
       />
     );
   }
-  return (
-    <ListScreen>
-      {demandFallback({
-        projectLoading,
-        hasProject: Boolean(activeProject),
-        latest,
-      })}
-    </ListScreen>
-  );
+  return <ListScreen>{demandFallback(latest)}</ListScreen>;
 }
 
 /** Every non-loaded state of `/demand`, in the order it is decided. */
-function demandFallback({
-  projectLoading,
-  hasProject,
-  latest,
-}: Readonly<{
-  projectLoading: boolean;
-  hasProject: boolean;
-  latest: UseQueryResult<DemandSnapshot | null, Error>;
-}>) {
-  if (projectLoading || latest.isLoading)
-    return <QueryState kind="loading" label="Loading search demand…" />;
-  if (!hasProject) return <ProjectRequiredState />;
+function demandFallback(latest: UseQueryResult<DemandSnapshot | null, Error>) {
+  if (latest.isLoading) return <QueryState kind="loading" label="Loading search demand…" />;
   if (latest.data === null) return <SearchConsoleSetup />;
   if (latest.isError)
     return (

@@ -9,7 +9,7 @@ import { parseUuid } from '../http/uuid.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import { record } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
-import { taskProject, type Executor } from '../workers/executor.ts';
+import { taskProject, type Executor } from '../queue/executor.ts';
 import {
   MAX_WINDOW_DAYS,
   mergeOutcomes,
@@ -17,57 +17,24 @@ import {
   storedOutcomes,
   worthRecording,
 } from './verification-decisions.ts';
-import { evidenceFor, SOURCE_CHECK_KINDS, type Source } from './verification-evidence.ts';
+import { evidenceFor } from './verification-evidence.ts';
+import { SOURCE_CHECK_KINDS } from './checks/registry.ts';
+import type { Source } from './checks/read-context.ts';
+import { evidenceObservedAt, isEvidenceKind } from './evidence-announcement.ts';
 import { buildVerificationResult, type Declaration } from './verification-result.ts';
 import { refreshActionStatus } from './action-status.ts';
 const p = policy.opportunity.opportunities;
+/** The announced evidence this task re-checks declarations against. */
 async function verificationSource(db: Database, task: QueueTask, project: string): Promise<Source> {
   const payload = record(task.payload);
   const kind = scalarText(payload.trigger_kind || '');
   const id = parseUuid(payload.trigger_id);
   if (!id) throw new Error('Implementation verification trigger is invalid');
-  const scope = new WorkspaceScope(task.workspace_id);
-  let observed: string | null | undefined;
-  if (kind === 'site_crawl')
-    observed = (
-      await scope
-        .selectFrom(db, 'site_crawls')
-        .select(utcText(sql.ref('completed_at')).as('time'))
-        .where('project_id', '=', project)
-        .where('id', '=', id)
-        .executeTakeFirst()
-    )?.time;
-  else if (kind === 'audit')
-    observed = (
-      await scope
-        .selectFrom(db, 'audits')
-        .select(utcText(sql.ref('completed_at')).as('time'))
-        .where('project_id', '=', project)
-        .where('id', '=', id)
-        .executeTakeFirst()
-    )?.time;
-  else if (kind === 'traffic_snapshot')
-    observed = (
-      await scope
-        .selectFrom(db, 'traffic_snapshots')
-        .select(utcText(sql.ref('created_at')).as('time'))
-        .where('project_id', '=', project)
-        .where('id', '=', id)
-        .executeTakeFirst()
-    )?.time;
-  else if (kind === 'search_intelligence_dataset')
-    observed = (
-      await scope
-        .selectFrom(db, 'search_intelligence_datasets')
-        .select(utcText(sql.ref('published_at')).as('time'))
-        .where('project_id', '=', project)
-        .where('id', '=', id)
-        .where('status', '=', 'published')
-        .executeTakeFirst()
-    )?.time;
-  else throw new Error('Implementation verification trigger kind is invalid');
+  if (!isEvidenceKind(kind)) throw new Error('Implementation verification trigger kind is invalid');
+  const scope = { workspaceId: task.workspace_id, projectId: project };
+  const observed = await evidenceObservedAt(db, scope, { kind, id });
   if (!observed) throw new Error('Implementation verification source is not terminal');
-  return { kind, id, observed_at: `${observed}Z` };
+  return { kind, id, observed_at: observed };
 }
 /** Exact source timestamp used by verification idempotency. */
 function sourceRevision(text: string): string {
@@ -88,7 +55,7 @@ async function declarations(
   source: Source,
   after: Declaration | undefined,
 ): Promise<Declaration[]> {
-  const kinds = SOURCE_CHECK_KINDS[source.kind] ?? [];
+  const kinds = SOURCE_CHECK_KINDS[source.kind];
   if (!kinds.length) return [];
   let query = new WorkspaceScope(task.workspace_id)
     .selectFrom(db, 'opportunity_implementation_events')

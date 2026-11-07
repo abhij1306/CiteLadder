@@ -9,22 +9,27 @@
  */
 import { z } from 'zod';
 
-import type { PromptInput, PromptUpdateInput } from '@/lib/api/prompts';
-import { PERSONA_MAX_CHARS } from '@/lib/config/prompts';
+import type {
+  PromptCreateRequest,
+  PromptUpdateRequest,
+} from '@citeladder/contracts/prompt-requests';
 import { buyerStageSchema, promptIntentSchema } from '@citeladder/contracts/project';
-import type { BuyerStage, Prompt, PromptIntent } from '@/lib/api/types';
+import type { BuyerStage, Prompt, PromptFormLimits, PromptIntent } from '@citeladder/contracts';
 
-export const promptFormSchema = z.object({
-  text: z.string().trim().min(1, 'Prompt text is required.'),
-  /** A topic id of the project, or '' for no topic. */
-  topicId: z.string(),
-  intent: promptIntentSchema,
-  buyerStage: buyerStageSchema,
-  /** The buyer the prompt is asked as; '' for none. */
-  persona: z.string().trim().max(PERSONA_MAX_CHARS, 'Persona is too long.'),
-});
+/** The form's schema under the persona bound the API enforces (from the prompt-set list). */
+export function promptFormSchema(limits: Pick<PromptFormLimits, 'persona_max_chars'>) {
+  return z.object({
+    text: z.string().trim().min(1, 'Prompt text is required.'),
+    /** A topic id of the project, or '' for no topic. */
+    topicId: z.string(),
+    intent: promptIntentSchema,
+    buyerStage: buyerStageSchema,
+    /** The buyer the prompt is asked as; '' for none. */
+    persona: z.string().trim().max(limits.persona_max_chars, 'Persona is too long.'),
+  });
+}
 
-export type PromptFormValues = z.infer<typeof promptFormSchema>;
+export type PromptFormValues = z.infer<ReturnType<typeof promptFormSchema>>;
 
 /** Ordered intent options for the filter menu; '' renders as "Unspecified". */
 export const intentValues: PromptIntent[] = promptIntentSchema.options;
@@ -67,7 +72,7 @@ export function promptToFormValues(prompt: Prompt): PromptFormValues {
 }
 
 /** Create payload: everything the form does not ask for takes its default. */
-export function formValuesToPromptInput(values: PromptFormValues): PromptInput {
+export function formValuesToPromptInput(values: PromptFormValues): PromptCreateRequest {
   const text = values.text.trim();
   return values.topicId ? { text, topic_id: values.topicId } : { text };
 }
@@ -77,7 +82,7 @@ export function formValuesToPromptInput(values: PromptFormValues): PromptInput {
  * its theme, cohort and enabled state. An empty topic sends an explicit null,
  * which detaches the prompt from its topic.
  */
-export function formValuesToPromptUpdate(values: PromptFormValues): PromptUpdateInput {
+export function formValuesToPromptUpdate(values: PromptFormValues): PromptUpdateRequest {
   return {
     text: values.text.trim(),
     topic_id: values.topicId || null,

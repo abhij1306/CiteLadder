@@ -2,11 +2,15 @@ import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
-import type { ExecutionEvidence } from '@/lib/api/types';
+import type { ExecutionEvidence } from '@citeladder/contracts';
+import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 
 import { ExecutionEvidenceDrawer } from './execution-evidence-drawer';
+
+/** The drawer opens on a run page, under the gate's project. */
+const runRoute = { projectSelection: { activeProject: makeProject() } };
 
 const ID = '11111111-1111-4111-8111-111111111111';
 const evidence: ExecutionEvidence = {
@@ -66,6 +70,7 @@ describe('Execution evidence drawer', () => {
         open
         onOpenChange={() => {}}
       />,
+      runRoute,
     );
 
     const drawer = await screen.findByRole('dialog', { name: 'Execution evidence' });
@@ -97,6 +102,7 @@ describe('Execution evidence drawer', () => {
         open
         onOpenChange={() => {}}
       />,
+      runRoute,
     );
 
     const drawer = await screen.findByRole('dialog', { name: 'Execution evidence' });

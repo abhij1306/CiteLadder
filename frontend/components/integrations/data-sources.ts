@@ -1,16 +1,14 @@
 'use client';
 
-import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useQueries, useQuery } from '@tanstack/react-query';
 
 import {
-  integrationsApi,
+  integrationsQueries,
   type IntegrationConnection,
   type IntegrationProperty,
   type IntegrationPropertyMapping,
   type IntegrationProvider,
 } from '@/lib/api/integrations';
-import { queryKeys } from '@/lib/api/query-keys';
 import { isGrantGone } from '@/components/settings/grant-model';
 
 /**
@@ -41,16 +39,6 @@ function sourceStep(
   return mapping ? { kind: 'ready', connection, mapping } : { kind: 'choose', connection };
 }
 
-/** A connection's mappings; one cache entry shared by Settings and the setup panel. */
-export function mappingsQuery(connectionId: string, workspaceId: string | null) {
-  return {
-    queryKey: queryKeys.integrations.mappings(connectionId),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      integrationsApi.listMappings(connectionId, { signal, workspaceId }),
-    staleTime: 60 * 1000,
-  };
-}
-
 /** A connection can serve several projects; only this project's active mapping counts. */
 export function activeMappingFor(
   mappings: readonly IntegrationPropertyMapping[] | undefined,
@@ -75,8 +63,7 @@ export function useDataSources(
   providers: readonly IntegrationProvider[],
 ) {
   const connections = useQuery({
-    queryKey: queryKeys.integrations.connections(workspaceId),
-    queryFn: ({ signal }) => integrationsApi.list({ signal, workspaceId }),
+    ...integrationsQueries.connections(workspaceId),
     enabled: Boolean(workspaceId),
   });
   // Only the connection each step reads, and only while its grant is connected.
@@ -85,7 +72,7 @@ export function useDataSources(
     return connection?.grant_status === 'connected' ? [connection] : [];
   });
   const mappingQueries = useQueries({
-    queries: relevant.map((connection) => mappingsQuery(connection.id, workspaceId)),
+    queries: relevant.map((connection) => integrationsQueries.mappings(workspaceId, connection.id)),
   });
   const mappings = new Map(
     relevant.map((connection, index) => [connection.id, mappingQueries[index]?.data ?? []]),
@@ -108,35 +95,14 @@ export function useDataSources(
   };
 }
 
-/**
- * Everything a property mapping or a settled import changes: mappings,
- * readiness and every projection fed by imported rows. Refreshed at once
- * rather than after the stale time, so a page shows the import starting, or
- * its rebuilt reports, instead of the old state.
- */
-export function useRefreshImportedReads() {
-  const queryClient = useQueryClient();
-  return useCallback(
-    () =>
-      Promise.all(
-        [
-          queryKeys.integrations.all,
-          queryKeys.performance.all,
-          queryKeys.demand.all,
-          queryKeys.aiTraffic.all,
-          queryKeys.searchIntelligence.all,
-        ].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
-      ),
-    [queryClient],
-  );
-}
-
 /** Messages for the OAuth callback's `error=` codes; never the raw code. */
 const OAUTH_ERRORS: Record<string, string> = {
   oauth_exchange_failed: 'The consent screen was cancelled or did not finish. Try again.',
   oauth_state_invalid:
     'The connect link expired or was opened in a different browser. Start again from here.',
   oauth_not_configured: 'This connection is not available right now. Contact support.',
+  oauth_revocation_in_progress:
+    'The previous connection is still being disconnected. Wait a minute, then connect again.',
 };
 
 export function oauthErrorMessage(code: string): string {

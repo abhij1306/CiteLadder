@@ -1,20 +1,15 @@
 import { z } from 'zod';
 import type { Database } from '../db/database.ts';
-import { record } from '../db/json.ts';
 import { approvedEndpoint } from '../providers/connections.ts';
-import { providerPolicy, type Engine } from '../providers/config.ts';
-import { dataforseoAccountIdentity } from '../providers/dataforseo-identity.ts';
-import type { CapacityRequest } from '../providers/capacity.ts';
 import { createSecretCipher } from '../integrations/fernet.ts';
-import { ProviderError, answerRequestSchema } from '../answer-engines/contracts.ts';
+import { providerPolicy, type Engine } from '../providers/config.ts';
+import { dataforseoSecretIdentity } from '../providers/dataforseo-identity.ts';
+import type { CapacityRequest } from '../providers/capacity.ts';
+import { ProviderError } from '../providers/errors.ts';
 import { ownedAuditTask, type AuditTask } from '../queue/audit-queue.ts';
-import {
-  searchPolicy,
-  searchPayload,
-  type SearchEngine,
-  type SearchRequest,
-} from '../search-surfaces/dataforseo.ts';
+import { searchPolicy } from '../search-surfaces/dataforseo.ts';
 import { auditPolicy, type AuditRuntime } from './config.ts';
+import { readFrozenConfiguration } from './frozen-configuration.ts';
 
 const routeSchema = z.object({
   connection_id: z.uuid(),
@@ -90,8 +85,11 @@ export async function loadExecutionContext(
       throw unavailable();
     }
     const endpoint = approvedEndpoint(route.transport_provider, route.base_url, runtime.providers);
-    const config = record(audit.configuration),
-      measurement = record(config.measurement_policy);
+    const config = readFrozenConfiguration(audit.configuration),
+      measurement = config.measurement_policy;
+    // The run cap bounds every execution; an audit without one cannot run.
+    if (config.max_run_seconds === undefined) throw new ProviderError('parse_error');
+    const maxRunSeconds = config.max_run_seconds;
     const capacity: CapacityRequest = {
       taskId: task.id,
       attempt: task.attempt_count + 1,
@@ -100,7 +98,7 @@ export async function loadExecutionContext(
       connectionId: connection.id,
       accountPoolIdentity:
         task.transport_provider === 'dataforseo'
-          ? dataforseoAccountIdentity(connection.api_key_encrypted, encryptionKey)
+          ? dataforseoSecretIdentity(secret, encryptionKey)
           : '',
     };
     return {
@@ -114,54 +112,12 @@ export async function loadExecutionContext(
       endpoint,
       config,
       measurement,
+      maxRunSeconds,
       capacity,
     };
   });
 }
 export type ExecutionContext = NonNullable<Awaited<ReturnType<typeof loadExecutionContext>>>;
-export function directRequest(context: ExecutionContext) {
-  const { task, audit, config, measurement } = context;
-  const parsed = answerRequestSchema.safeParse({
-    logical_engine: task.logical_engine,
-    transport_provider: task.transport_provider,
-    transport_model: task.transport_model,
-    prompt: task.prompt_text,
-    system_instruction: audit.system_instruction,
-    timeout_seconds: measurement.timeout_seconds,
-    max_output_tokens: measurement.max_output_tokens,
-    retrieval_enabled: measurement.retrieval_enabled,
-    reasoning_effort: record(context.route).reasoning_effort,
-    anthropic_thinking: context.route.anthropic_thinking ?? null,
-    country_code: config.country_code ?? '',
-    anthropic_max_uses: config.anthropic_max_uses ?? 0,
-    openai_max_tool_calls: config.openai_max_tool_calls ?? 0,
-  });
-  if (!parsed.success) throw new ProviderError('parse_error');
-  return parsed.data;
-}
-export function frozenSurfaceRequest(
-  context: ExecutionContext,
-  submissionRef: string,
-  runtime: AuditRuntime,
-): SearchRequest {
-  const snapshot = record(context.task.request_snapshot);
-  const request: SearchRequest = {
-    query: context.task.prompt_text,
-    location_code: z.number().int().positive().parse(snapshot.location_code),
-    language_code: z.string().min(1).parse(snapshot.language_code),
-    device: z.enum(['desktop', 'mobile']).parse(snapshot.device),
-    depth: searchPolicy.constants.default_depth,
-    load_async_ai_overview: searchPolicy.constants.load_async_ai_overview,
-    timeout_seconds: z
-      .number()
-      .positive()
-      .parse(snapshot.timeout_seconds ?? runtime.search.timeoutSeconds),
-    provider_submission_ref: submissionRef,
-    request_settings: record(snapshot.request_settings),
-  };
-  searchPayload(context.task.logical_engine as SearchEngine, request);
-  return request;
-}
 /** An authenticated provider failure pauses this concrete revision; a concurrent rotation wins. */
 export function pauseExecutionCredential(
   db: Database,

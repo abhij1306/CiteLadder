@@ -1,6 +1,6 @@
 import type { Database } from '../db/database.ts';
 import { sql } from 'kysely';
-import { loadWorkerSettings } from '../config.ts';
+import { loadWorkerSettings } from '../config/analytics.ts';
 import { devSeed } from '../config/dev-seed.ts';
 import { seedAudit } from '../audits/seed.ts';
 import { seedAnswer, seedWebsiteFetcher } from './seed-transports.ts';

@@ -4,8 +4,10 @@
  * catalog/shelf gaps.
  */
 import { policy } from '../config.ts';
+import { siteHealth } from '../config/site-health.ts';
 import { rules } from '../analysis/opportunities/detectors.ts';
 import type { DetectorHit } from '../analysis/opportunities/evidence.ts';
+import { targetKey, type TargetRef } from '../analysis/opportunities/targets.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { record } from '../db/json.ts';
@@ -13,15 +15,15 @@ import type { DemandSource, Scope } from './sources.ts';
 import { compareText } from '../text-order.ts';
 
 const o = policy.opportunity.opportunities;
-const r = policy.opportunity.refresh;
+const r = siteHealth.change_intel;
 type Json = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
 // Change Intelligence
 // ---------------------------------------------------------------------------
 const RULE_BY_CLASS: Readonly<Record<string, string>> = {
-  [r.change_class_regression]: 'site_change_potential_regression',
-  [r.change_class_critical]: 'site_change_critical_regression',
+  [r.class_regression]: 'site_change_potential_regression',
+  [r.class_critical]: 'site_change_critical_regression',
 };
 
 /** The rule an unexpected change promotes to, or null when it promotes nothing. */
@@ -33,7 +35,7 @@ export function changeRule(row: {
   if (Object.hasOwn(RULE_BY_CLASS, row.change_class)) return RULE_BY_CLASS[row.change_class]!;
   const after = row.after;
   if (
-    row.field !== r.content_change_field ||
+    row.field !== r.change_field ||
     after === null ||
     typeof after !== 'object' ||
     Array.isArray(after)
@@ -73,8 +75,8 @@ export async function changeHits(
     .select(['id', 'crawl_a_id', 'crawl_b_id', 'complete_pair', 'coverage'])
     .where('project_id', '=', crawl.project_id)
     .where('crawl_b_id', '=', crawl.id)
-    .where('state', '=', r.change_state_available)
-    .where('analyzer_version', '=', r.change_analyzer_version)
+    .where('state', '=', r.state_available)
+    .where('analyzer_version', '=', r.analyzer_version)
     .where('page_analyzer_version', '=', crawl.analyzer_version)
     .where('extractor_version', '=', crawl.extractor_version)
     .orderBy('created_at', 'desc')
@@ -91,13 +93,13 @@ export async function changeHits(
     .where((eb) =>
       eb.or([
         eb('change_class', 'in', Object.keys(RULE_BY_CLASS)),
-        eb('field', '=', r.content_change_field),
+        eb('field', '=', r.change_field),
       ]),
     )
     .orderBy('normalized_url')
     .orderBy('field')
     .orderBy('id')
-    .limit(r.change_max_observations)
+    .limit(r.max_observations)
     .execute();
   return rows.flatMap((row) => changeHit(snapshot, row) ?? []);
 }
@@ -131,10 +133,12 @@ function changeHit(pair: ChangePair, row: ChangeRow): DetectorHit | null {
   if (rule === null) return null;
   return {
     rule_id: rule,
-    target_key: `site-change:${row.site_url_id}:${row.field}`,
-    target_prompt_id: null,
-    target_url: row.normalized_url,
-    target_theme: null,
+    target: {
+      kind: 'site_change',
+      site_url_id: row.site_url_id,
+      field: row.field,
+      url: row.normalized_url,
+    },
     evidence: {
       change_snapshot_id: pair.id,
       change_observation_id: row.id,
@@ -160,9 +164,6 @@ function changeHit(pair: ChangePair, row: ChangeRow): DetectorHit | null {
 // ---------------------------------------------------------------------------
 // Demand
 // ---------------------------------------------------------------------------
-/** The Opportunity target key of a promoted signal, stable across snapshots. */
-const demandTargetKey = (identityHash: string) => `demand:${identityHash}`;
-
 type DemandSignal = {
   id: string;
   signal_type: string;
@@ -190,7 +191,7 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
   const text = (value: unknown) => (typeof value === 'string' ? value : '');
   const target = text(evidence.target);
   if (!target) return null;
-  const [targetUrl, targetTheme] = demandTargets(
+  const [url, query] = demandTargets(
     text(evidence.target_kind),
     target,
     text(evidence.resolved_page_url),
@@ -199,10 +200,8 @@ function demandHit(snapshotId: string, signal: DemandSignal): DetectorHit | null
   const metricIds = evidence.source_metric_row_ids;
   return {
     rule_id: ruleIds[signal.signal_type]!,
-    target_key: demandTargetKey(signal.identity_hash),
-    target_prompt_id: null,
-    target_url: targetUrl,
-    target_theme: targetTheme,
+    // The signal's identity is stable across snapshots.
+    target: { kind: 'demand', identity_hash: signal.identity_hash, url, query },
     evidence: {
       demand_snapshot_id: snapshotId,
       demand_signal_id: signal.id,
@@ -246,17 +245,14 @@ export async function demandHits(
 // ---------------------------------------------------------------------------
 function commerceHit(
   rule: string,
-  targetKey: string,
+  target: Extract<TargetRef, { kind: 'product' | 'category' }>,
   evidence: Json,
   metricIds: string[],
   analysisIds: string[] = [],
 ): DetectorHit {
   return {
     rule_id: rule,
-    target_key: targetKey,
-    target_prompt_id: null,
-    target_url: null,
-    target_theme: null,
+    target,
     evidence,
     source_analysis_ids: analysisIds,
     source_issue_ids: [],
@@ -281,7 +277,7 @@ function unmentionedHits(snapshots: ShelfSnapshot[], auditId: string): DetectorH
     .map((row) =>
       commerceHit(
         rule.rule_id,
-        `product:${row.target_id}`,
+        { kind: 'product', product_id: row.target_id },
         { product_id: row.target_id, product_visibility: 0, audit_id: auditId },
         [row.id],
       ),
@@ -299,7 +295,7 @@ function missingFieldHit(product: CatalogProduct, observationIds: string[]): Det
   if (!missing.length || !observationIds.length) return null;
   return commerceHit(
     o.RULE_CATALOG_FIELDS_MISSING,
-    `product:${product.id}`,
+    { kind: 'product', product_id: product.id },
     { product_id: product.id, product_name: product.name, missing_fields: missing },
     observationIds,
   );
@@ -368,7 +364,7 @@ async function alternativeHits(
     results.push(
       commerceHit(
         rule.rule_id,
-        `category:${snapshot.target_id}`,
+        { kind: 'category', category_id: snapshot.target_id },
         {
           category_id: snapshot.target_id,
           third_party_citation_count: citations.length,
@@ -404,6 +400,7 @@ export async function commerceHits(
     ...(await alternativeHits(db, scope.workspaceId, snapshots, auditId)),
   ];
   return hits.sort(
-    (a, b) => compareText(a.rule_id, b.rule_id) || compareText(a.target_key, b.target_key),
+    (a, b) =>
+      compareText(a.rule_id, b.rule_id) || compareText(targetKey(a.target), targetKey(b.target)),
   );
 }

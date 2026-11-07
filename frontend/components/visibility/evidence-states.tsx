@@ -3,13 +3,13 @@
 import { Info, Inbox, RefreshCw, SearchX } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { QueryState } from '@/components/ui/query-state';
 import { Inline } from '@/components/ui/layout';
 import { ICONS } from '@/lib/icons';
-import type { VisibilityEvidenceResponse } from '@/lib/api/types';
+import type { VisibilityEvidenceResponse } from '@citeladder/contracts';
 
 /**
  * Shared data-state presentations for the evidence tabs (design.md states

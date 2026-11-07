@@ -12,6 +12,10 @@ const bootstrap = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/project/bootstrap-loader', () => ({
   bootstrapPrivateRoutes: () => null,
 }));
+vi.mock('@/components/auth/auth-routes', () => ({
+  LoginRoute: () => <h1>Sign in</h1>,
+  RegisterRoute: () => <h1>Register</h1>,
+}));
 vi.mock('./private-routes', () => ({
   PrivateRouteLayout: () => {
     const [ready, setReady] = useState(false);
@@ -53,12 +57,12 @@ describe('application route recovery', () => {
   });
 
   it('downloads the route alongside session bootstrap and keeps the shell through the content wait', async () => {
-    let finish!: (module: { IssuesRoute: () => React.JSX.Element }) => void;
-    const downloaded = new Promise<{ IssuesRoute: () => React.JSX.Element }>((resolve) => {
+    let finish!: (module: { IssuesScreen: () => React.JSX.Element }) => void;
+    const downloaded = new Promise<{ IssuesScreen: () => React.JSX.Element }>((resolve) => {
       finish = resolve;
     });
     const download = vi.fn(() => downloaded);
-    vi.doMock('./product-routes-site-issues', download);
+    vi.doMock('@/components/site-health/issues-screen', download);
     const router = await privateRouter();
     render(<RouterProvider router={router} />);
 
@@ -73,7 +77,7 @@ describe('application route recovery', () => {
     // The wait is the route's own frame: its titled identity band and one box.
     expect(await screen.findByRole('status', { name: 'Loading…' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Issues' })).toBeInTheDocument();
-    await act(async () => finish({ IssuesRoute: () => <p>Issue catalog</p> }));
+    await act(async () => finish({ IssuesScreen: () => <p>Issue catalog</p> }));
     expect(await screen.findByText('Issue catalog')).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Application shell' })).toBe(shell);
@@ -90,7 +94,7 @@ describe('application route recovery', () => {
   });
 
   it('offers a reload inside the shell when a route chunk fails instead of exposing a stack trace', async () => {
-    vi.doMock('./product-routes-site-issues', () =>
+    vi.doMock('@/components/site-health/issues-screen', () =>
       Promise.reject(new Error('private chunk URL failed')),
     );
     const router = await privateRouter();

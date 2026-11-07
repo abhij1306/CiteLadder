@@ -61,10 +61,3 @@ export const queryKeys = {
   agent: agentKeys,
   commerce: commerceKeys,
 } as const;
-
-/**
- * Reads derived from finished audits: a completed or cancelled run
- * invalidates each of them (Visibility, and Commerce's AI Shelf and target
- * Actions).
- */
-export const AUDIT_RESULT_QUERY_ROOTS = [queryKeys.visibility.all, queryKeys.commerce.all] as const;

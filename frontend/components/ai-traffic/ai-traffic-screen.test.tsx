@@ -6,7 +6,6 @@ import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { AiTrafficScreen } from './ai-traffic-screen';
-import { CrawlSignalPanel } from './overview-signals';
 import { InsightStrip } from './insight-strip';
 import { CrawlLogConnections } from './crawl-log-connections';
 const project = makeProject({
@@ -538,28 +537,6 @@ describe('AI Traffic state and navigation', () => {
       pattern: 'key_event_concentration',
     });
   });
-  it('keeps unavailable, missing, awaiting, incomplete and measured zero distinct', () => {
-    const view = renderWithProviders(
-      <CrawlSignalPanel available={false} data={{ ...crawl, connection: 'not_connected' }} />,
-    );
-    expect(screen.getByText(/not available for this workspace yet/)).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Connect crawl logs' })).not.toBeInTheDocument();
-    view.rerender(<CrawlSignalPanel available data={{ ...crawl, connection: 'not_connected' }} />);
-    expect(screen.getByRole('button', { name: 'Connect crawl logs' })).toBeEnabled();
-    view.rerender(<CrawlSignalPanel available data={{ ...crawl, connection: 'awaiting_data' }} />);
-    expect(screen.getByText(/Awaiting the first accepted batch/)).toBeVisible();
-    view.rerender(<CrawlSignalPanel available data={crawl} />);
-    expect(screen.getByText(/No matching requests were observed/)).toBeVisible();
-    expect(screen.queryByText('0')).not.toBeInTheDocument();
-    view.rerender(
-      <CrawlSignalPanel
-        available
-        data={{ ...crawl, coverage: 'complete', requests: 0, pages: 0, active_bots: 0 }}
-      />,
-    );
-    expect(screen.getByText('0')).toBeVisible();
-    expect(screen.queryByText(/No matching requests were observed/)).not.toBeInTheDocument();
-  });
   it('persists tab selection, renders accessible activity and exports the selected filters', async () => {
     let exportStatus: string | null = null;
     const exportedPages = { value: null as URLSearchParams | null };
@@ -672,7 +649,9 @@ describe('AI Traffic state and navigation', () => {
         return new HttpResponse('path\n/page', { headers: { 'content-type': 'text/csv' } });
       }),
     );
-    const view = renderWithProviders(<AiTrafficScreen />);
+    const view = renderWithProviders(<AiTrafficScreen />, {
+      projectSelection: { activeProject: project },
+    });
     await screen.findByText(/No matching requests were observed/);
     expect(await screen.findByText(/Absence-based insights are unavailable/)).toBeVisible();
     const user = userEvent.setup();
@@ -768,7 +747,7 @@ describe('AI Traffic state and navigation', () => {
     );
     // A shared link to a crawl-only view still lands somewhere useful, keeping its range.
     window.history.replaceState(null, '', '/ai-traffic?tab=activity&range=90d');
-    renderWithProviders(<AiTrafficScreen />);
+    renderWithProviders(<AiTrafficScreen />, { projectSelection: { activeProject: project } });
     expect(await screen.findByText(/covers last 90 days/)).toBeVisible();
     expect(screen.getByRole('tab', { name: 'Referrals' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText(/Collection is paused on this server/)).toBeVisible();

@@ -115,13 +115,21 @@ export const RELEASE_META_NAME = 'citeladder-release';
 export const EVIDENCE_LIMIT = 100;
 export const FANOUT_SEARCH_DEBOUNCE_MS = 300;
 
-// Audit launch bounds.
-export const MIN_REPETITIONS = 1;
-export const MAX_REPETITIONS = 10;
+// Audit launch default; the accepted range arrives in the prompt-set list's `limits`.
 export const DEFAULT_REPETITIONS = 1;
 
 // Polling cadences and retry ceilings.
 export const ACTIVE_RUN_POLL_MS = 3_000;
 export const SYNC_RUN_POLL_MS = 3_000;
+/** Onboarding's website research: the reader is watching its steps advance. */
+export const BRAND_DISCOVERY_POLL_MS = 1_000;
+/** A Search Intelligence acquisition runs for minutes; its progress line need not tick faster. */
+export const SEARCH_INTELLIGENCE_RUN_POLL_MS = 5_000;
+/** A display-only performance range projection is short work the reader is waiting on. */
+export const RANGE_TASK_POLL_MS = 1_500;
+/** The post-connect readiness ladder: a year's import and its analysis take minutes. */
+export const READINESS_POLL_MS = 15_000;
+/** A young Site Health crawl's cadence; `crawlPollInterval` backs off from it as the crawl ages. */
+export const CRAWL_POLL_MS = 4_000;
 /** How often the Perception tab rechecks while answers are still being classified. */
 export const PERCEPTION_PENDING_POLL_MS = 15_000;

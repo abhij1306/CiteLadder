@@ -203,6 +203,7 @@ export async function insertProject(
     .insertInto('brands')
     .values({
       id: brandId,
+      workspace_id: workspaceId,
       project_id: id,
       name: brand_name,
       logo_asset_id: null,
@@ -210,7 +211,7 @@ export async function insertProject(
       updated_at: now,
     })
     .execute();
-  await replaceCollections(db, id, brandId, input, now);
+  await replaceCollections(db, { workspaceId, projectId: id }, brandId, input, now);
   const fields = {
     description: input.description,
     positioning: input.positioning,
@@ -255,7 +256,7 @@ export async function insertProject(
 
 async function replaceCollections(
   db: Database,
-  projectId: string,
+  { workspaceId, projectId }: { workspaceId: string; projectId: string },
   brandId: string,
   input: ProjectUpdate,
   now: Date,
@@ -276,9 +277,14 @@ async function replaceCollections(
     ['unintended_domains', input.unintended_domains],
   ] as const) {
     if (values === undefined) continue;
-    await db.deleteFrom(table).where('project_id', '=', projectId).execute();
+    await db
+      .deleteFrom(table)
+      .where('workspace_id', '=', workspaceId)
+      .where('project_id', '=', projectId)
+      .execute(); // NOSONAR -- One transaction: delete before its replacement rows.
     const rows = cleanList(values).map((domain) => ({
       id: randomUUID(),
+      workspace_id: workspaceId,
       project_id: projectId,
       domain,
       created_at: now,
@@ -286,9 +292,14 @@ async function replaceCollections(
     if (rows.length) await db.insertInto(table).values(rows).execute();
   }
   if (input.competitors !== undefined) {
-    await db.deleteFrom('competitors').where('project_id', '=', projectId).execute();
+    await db
+      .deleteFrom('competitors')
+      .where('workspace_id', '=', workspaceId)
+      .where('project_id', '=', projectId)
+      .execute();
     const values = input.competitors.map((item) => ({
       id: randomUUID(),
+      workspace_id: workspaceId,
       project_id: projectId,
       name: item.name,
       aliases: JSON.stringify(cleanList(item.aliases)),
@@ -409,7 +420,7 @@ export async function updateProject(db: Database, scope: ProjectScope, input: Pr
         .execute();
     await replaceCollections(
       trx,
-      row.id,
+      { workspaceId: scope.workspaceId, projectId: row.id },
       brand.id,
       { brand: brandInput, competitors, owned_domains, unintended_domains },
       new Date(),
@@ -431,8 +442,8 @@ export async function deleteProject(db: Database, scope: ProjectScope) {
 }
 
 /**
- * The deletion itself, for a caller holding the project lock and its authority
- * that has checked no metered work still holds reserved units.
+ * The deletion itself, for a caller holding the project lock and its
+ * authority.
  */
 export async function removeProject(trx: Database, scope: ProjectScope) {
   await trx

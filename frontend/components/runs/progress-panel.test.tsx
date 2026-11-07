@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
+
+import { renderWithProviders as render } from '@/test/render';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
-import type { Audit } from '@/lib/api/types';
+import type { Audit } from '@citeladder/contracts';
 
 import { ProgressPanel, RunActions } from './progress-panel';
 

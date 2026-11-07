@@ -240,6 +240,7 @@
     "audit_status_failed": "failed",
     "audit_status_cancelled": "cancelled",
     "audit_lease_sweep_batch_size": 500,
+    "capacity_lease_retention_seconds": 86400,
     "audit_terminal_statuses": ["cancelled", "completed", "failed", "partially_completed"],
     "audit_active_statuses": ["analyzing", "draft", "queued", "running", "validating"],
     "audit_trigger_manual": "manual",
@@ -288,7 +289,6 @@
     "error_no_connection": "provider_connection_missing",
     "localized_instruction": "Answer for a shopper in the market identified by ISO country code {country_code}, using language {language_code}. Prioritize retailers that serve that market and sources relevant to that market.",
     "forced_grounded_instruction": "Answer the shopping question using current web information. Cite the sources supporting your recommendations.",
-    "measurement_policy_key": "measurement_policy",
     "audit_scope_brand": "brand",
     "audit_status_draft": "draft"
   },
@@ -313,6 +313,7 @@
     "template_version": "commerce-buyer-prompts-1",
     "parser_version": "commerce-recommendation-parser-1",
     "matcher_version": "commerce-recommendation-matcher-1",
-    "formula_version": "commerce-shelf-formulas-1"
+    "formula_version": "commerce-shelf-formulas-1",
+    "resolver_template_version": "commerce-shelf-resolver-1"
   }
 }

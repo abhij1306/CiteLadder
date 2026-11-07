@@ -437,7 +437,18 @@ async function changeSnapshot(
     if (crawls.some((crawl) => crawl.project_id !== projectId)) throw notFound('Crawl');
     query = query.where('crawl_a_id', '=', pair.a).where('crawl_b_id', '=', pair.b);
   }
-  return query.orderBy('created_at', 'desc').orderBy('id', 'desc').executeTakeFirst();
+  // The newest crawl's comparison is current even when an older crawl's
+  // `change_intel` committed later; the newest snapshot of a crawl wins.
+  const crawlOrder = (column: 'created_at' | 'id') =>
+    sql`(select c.${sql.ref(column)} from site_crawls c
+      where c.id = site_change_snapshots.crawl_b_id
+        and c.workspace_id = site_change_snapshots.workspace_id)`;
+  return query
+    .orderBy(crawlOrder('created_at'), 'desc')
+    .orderBy(crawlOrder('id'), 'desc')
+    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
+    .executeTakeFirst();
 }
 
 function changeSummary(snapshot: ChangeSnapshot | undefined) {

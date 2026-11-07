@@ -172,12 +172,14 @@ describe('perception validation', () => {
     );
   });
 
-  it('gives an omitted entity a not-assessable row and counts it', () => {
+  it('keeps a row for an entity the model left out, marked omitted, and counts it', () => {
     const result = validateOutput(pkg, { entities: [] }, policy.perception);
     expect(result.drops).toEqual({ missing_entity: 2 });
-    expect(result.entities.map((e) => [e.entity_id, e.label, e.confidence])).toEqual([
-      ['brand:acme', 'not_assessable', null],
-      ['competitor:rival', 'not_assessable', null],
+    expect(
+      result.entities.map((e) => [e.entity_id, e.label, e.confidence, e.model_omitted]),
+    ).toEqual([
+      ['brand:acme', 'not_assessable', null, true],
+      ['competitor:rival', 'not_assessable', null, true],
     ]);
   });
 });
@@ -246,22 +248,45 @@ describe('perception metrics', () => {
   });
 
   it('reads each persisted outcome into a mention status', () => {
-    const entity = { label: 'positive' as const, low_confidence: false };
+    const entity = { label: 'positive' as const, low_confidence: false, model_omitted: false };
+    const unjudged = { ...entity, label: 'not_assessable' as const };
     expect([
       mentionStatus(undefined, undefined),
       mentionStatus({ outcome: 'classified' }, entity),
       mentionStatus({ outcome: 'classified' }, { ...entity, low_confidence: true }),
       mentionStatus({ outcome: 'classified' }, undefined),
+      mentionStatus({ outcome: 'classified' }, unjudged),
+      mentionStatus({ outcome: 'classified' }, { ...unjudged, model_omitted: true }),
       mentionStatus({ outcome: 'unavailable', outcome_reason: 'platform_cap' }, undefined),
+      mentionStatus({ outcome: 'unavailable', outcome_reason: 'model_changed' }, undefined),
       mentionStatus({ outcome: 'invalid_output' }, undefined),
     ]).toEqual([
       { kind: 'pending' },
       { kind: 'classified', label: 'positive' },
       { kind: 'low_confidence' },
       { kind: 'unavailable', reason: 'entity_limit' },
+      { kind: 'not_assessable' },
+      { kind: 'unavailable', reason: 'model_omitted' },
       { kind: 'unavailable', reason: 'platform_cap' },
+      { kind: 'unavailable', reason: 'model_changed' },
       { kind: 'unavailable', reason: 'invalid_output' },
     ]);
+  });
+
+  it('counts an entity the model left out apart from the judged not-assessable ones', () => {
+    const mentions: Mention[] = [
+      classified('positive'),
+      { ...classified('positive'), status: { kind: 'not_assessable' } },
+      { ...classified('positive'), status: { kind: 'unavailable', reason: 'model_omitted' } },
+    ];
+    expect(coverage(mentions)).toEqual({
+      mentions: 3,
+      classified: 1,
+      pending: 0,
+      not_assessable: 1,
+      low_confidence: 0,
+      unavailable: [{ reason: 'model_omitted', count: 1 }],
+    });
   });
 
   it('marks a trend point after a version change as not comparable and links quotes to the run', () => {
@@ -270,6 +295,7 @@ describe('perception metrics', () => {
       at: string,
       template: string,
       label: 'positive' | 'negative',
+      model = 'model-a',
     ): PerceptionAnswer => ({
       auditId,
       executionId: `${auditId}-e`,
@@ -277,7 +303,7 @@ describe('perception metrics', () => {
       logicalEngine: 'chatgpt',
       prompt: 'best tools?',
       topic: 'tools',
-      versions: { extractor: 'x1', template, metrics: 'm1' },
+      versions: { extractor: 'x1', template, metrics: 'm1', model },
       mentions: [
         {
           ...classified(label),
@@ -303,6 +329,18 @@ describe('perception metrics', () => {
       ['run-a', 100, true],
       ['run-b', -100, true],
       ['run-c', -100, false],
+    ]);
+    // Same versions under another frozen model is not like for like either.
+    const remodelled = perceptionSummary(
+      [
+        answer('run-a', '2026-10-01T00:00:00Z', 't1', 'positive'),
+        answer('run-b', '2026-10-02T00:00:00Z', 't1', 'negative', 'model-b'),
+      ],
+      { max_quotes_per_theme: 3, max_negative_quotes: 10, max_drivers: 10 },
+    );
+    expect(remodelled.trend.map((point) => [point.audit_id, point.comparable])).toEqual([
+      ['run-a', true],
+      ['run-b', false],
     ]);
     expect(summary.themes).toEqual([
       expect.objectContaining({ theme: 'support', positive: 1, negative: 2 }),

@@ -9,12 +9,11 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { ledgerItemClasses } from '@/components/ui/workspace';
 import { textRole } from '@/components/ui/typography';
-import type { ProviderConnection } from '@/lib/api/types';
+import type { ProviderConnection } from '@citeladder/contracts';
 import {
   ENGINE_LOGOS,
   TRANSPORT_DOMAINS,
   isConfigured,
-  productModelLabel,
   type EngineCardModel,
   type ProviderGroup,
 } from '@/lib/providers/catalog';
@@ -56,7 +55,8 @@ function StatusBadge({
 
 /** "ChatGPT API · gpt-6.1-terra" for an API; the bare surface name for a consumer app. */
 function engineSummary(engine: EngineCardModel): string {
-  const model = productModelLabel(engine.logical_engine, engine.route?.model);
+  // An observed surface's model is the vendor's endpoint name, not provenance.
+  const model = engine.route?.surface_kind === 'llm' ? engine.route.model : null;
   return model ? `${engine.label} · ${model}` : engine.label;
 }
 

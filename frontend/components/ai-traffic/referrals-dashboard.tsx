@@ -95,7 +95,7 @@ function TrendCard({
           label={title}
           name={unit}
           data={points}
-          height={160}
+          height="sm"
           yMax={domainMax}
           yFormat={formatTick}
         />

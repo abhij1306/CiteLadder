@@ -4,63 +4,40 @@
  * is **never** present on any response. Every response passes
  * through `strictValidate`.
  */
+import { queryOptions, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
-import { providerConnectionStatesSchema } from '@citeladder/contracts/providers';
+import { queryKeys } from './query-keys';
 import {
   connectionTestResultSchema,
+  providerConnectionStatesSchema,
   providerCatalogSchema,
   providerConnectionSchema,
 } from '@citeladder/contracts/providers';
-import { strictValidate } from '@citeladder/contracts/validation';
 import type {
-  LogicalEngine,
-  ProviderCatalog,
-  ProviderConnection,
-  TransportProvider,
-} from './types';
+  ProviderConnectionCreateRequest,
+  ProviderConnectionUpdateRequest,
+} from '@citeladder/contracts/provider-requests';
+import { strictValidate } from '@citeladder/contracts/validation';
+import type { ProviderCatalog, ProviderConnection } from '@citeladder/contracts';
 
 const connectionListSchema = z.array(providerConnectionSchema);
 
 type ConnectionTestResult = z.infer<typeof connectionTestResultSchema>;
-
-/** A route entry sent on create/update (`ProviderRouteInput`). */
-type ProviderRouteInput = {
-  logical_engine: LogicalEngine;
-  is_default?: boolean;
-};
-
-/**
- * A connection write. The credential is supplied in exactly ONE shape: a
- * bearer `api_key`, or an HTTP Basic `api_login` + `api_password` pair. The
- * backend rejects the wrong shape for a transport, and rejects half a pair,
- * so a mismatch fails at the edge rather than at the first paid task.
- */
-type ProviderConnectionInput = {
-  transport_provider: TransportProvider;
-  api_key?: string;
-  api_login?: string;
-  api_password?: string;
-  base_url?: string;
-  label?: string;
-  active?: boolean;
-  routes?: ProviderRouteInput[];
-  confirm_destination_change?: boolean;
-};
 
 export const providersApi = {
   listConnections: async (options?: ApiRequestOptions) => {
     const res = await apiClient.get<ProviderConnection[]>('/provider-connections', options);
     return strictValidate(connectionListSchema, res, 'providers.listConnections');
   },
-  createConnection: async (input: ProviderConnectionInput, options?: ApiRequestOptions) => {
+  createConnection: async (input: ProviderConnectionCreateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<ProviderConnection>('/provider-connections', input, options);
     return strictValidate(providerConnectionSchema, res, 'providers.createConnection');
   },
   updateConnection: async (
     connectionId: string,
-    input: Partial<ProviderConnectionInput> & { active?: boolean },
+    input: ProviderConnectionUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.patch<ProviderConnection>(
@@ -95,5 +72,42 @@ export const providersApi = {
   },
 };
 
-// Re-export so the logical-engine literal union is importable without
-// reaching into `schemas`.
+/**
+ * Provider reads. A workspace owns its provider connections, so those reads
+ * are keyed and sent for one; without that, switching workspace showed the
+ * previous workspace's engines as configured. Callers hold them disabled
+ * until the workspace is known.
+ */
+export const providerQueries = {
+  /** The public catalog: which transports exist and the engines each measures. */
+  catalog: () =>
+    queryOptions({
+      queryKey: queryKeys.providers.catalog(),
+      queryFn: ({ signal }) => providersApi.getCatalog({ signal, workspaceId: null }),
+    }),
+  connections: (workspaceId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.providers.connections(workspaceId ?? 'unresolved'),
+      queryFn: ({ signal }) => providersApi.listConnections({ signal, workspaceId }),
+    }),
+  /**
+   * The AUTHENTICATED state projection. A failure leaves every engine at its
+   * fail-closed default rather than implying `connected`.
+   */
+  states: (workspaceId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.providers.states(workspaceId ?? 'unresolved'),
+      queryFn: ({ signal }) => providersApi.getConnectionStates({ signal, workspaceId }),
+    }),
+};
+
+/**
+ * Every workspace's connections and states, after a save or a probe: the
+ * probe denormalizes its outcome onto the connection, and that outcome gates
+ * launching and the status badge.
+ */
+export const refreshProviderReads = (client: QueryClient) =>
+  Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.providers.allConnections() }),
+    client.invalidateQueries({ queryKey: queryKeys.providers.allStates() }),
+  ]);

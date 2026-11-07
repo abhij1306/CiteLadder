@@ -6,21 +6,36 @@
  * the detail screen knows whether to keep polling. Pure functions — no
  * transport, no React — so they are trivially unit-testable.
  */
-import type { AuditStatus, CitationClassification, ExecutionStatus } from '@/lib/api/types';
-import type { ClassificationValue, RunStatusValue } from '@/components/ui/badge';
+import type { AuditStatus, CitationClassification, ExecutionStatus } from '@citeladder/contracts';
+import type { ClassificationValue, RunStatusValue, StatusValue } from '@/components/ui/badge';
+import { ACTIVE_RUN_POLL_MS } from '@/lib/config/operational';
+import { pollWhileActive, type JobStates } from '@/lib/jobs/poll';
 import { availabilityLabel, formatDisplayTimestamp } from '@/lib/format';
-import { titleCaseStatus } from '@/lib/utils';
 
 /**
- * Audit statuses that are terminal — the run has stopped and needs no further
- * polling. Every other status means the run is still progressing.
+ * Every audit status: its label, its run-status badge, and whether the run is
+ * still progressing on its own (so the run views keep polling). The badge
+ * family has fewer values than the lifecycle; the extra statuses fold onto the
+ * nearest visual (validating→queued, reporting→analyzing,
+ * partially_completed→partial). `reporting` stays active: it still
+ * transitions on its own.
  */
-const TERMINAL_AUDIT_STATUSES: ReadonlySet<AuditStatus> = new Set<AuditStatus>([
-  'completed',
-  'partially_completed',
-  'failed',
-  'cancelled',
-]);
+export const AUDIT_STATES = {
+  draft: { label: 'Draft', badge: 'draft', active: true },
+  validating: { label: 'Validating', badge: 'queued', active: true },
+  queued: { label: 'Queued', badge: 'queued', active: true },
+  running: { label: 'Running', badge: 'running', active: true },
+  analyzing: { label: 'Analyzing', badge: 'analyzing', active: true },
+  reporting: { label: 'Reporting', badge: 'analyzing', active: true },
+  completed: { label: 'Completed', badge: 'completed', active: false },
+  partially_completed: { label: 'Partially Completed', badge: 'partial', active: false },
+  failed: { label: 'Failed', badge: 'failed', active: false },
+  cancelled: { label: 'Cancelled', badge: 'cancelled', active: false },
+} as const satisfies JobStates<AuditStatus, RunStatusValue>;
+
+/** The run views' poll cadence: while any of `statuses` is still progressing. */
+export const pollAudits = (statuses: AuditStatus | readonly AuditStatus[] | undefined) =>
+  pollWhileActive(AUDIT_STATES, ACTIVE_RUN_POLL_MS, statuses);
 
 /**
  * Audit statuses at which a cooperative cancel is still meaningful. Mirrors the
@@ -37,14 +52,6 @@ const CANCELABLE_AUDIT_STATUSES: ReadonlySet<AuditStatus> = new Set<AuditStatus>
 ]);
 
 /**
- * True while `/runs/[runId]` should keep polling `GET /audits/{id}`: the run is
- * not yet terminal (including `reporting`, which still transitions on its own).
- */
-export function shouldPollAudit(status: AuditStatus): boolean {
-  return !TERMINAL_AUDIT_STATUSES.has(status);
-}
-
-/**
  * True when the run can still be cancelled cooperatively. `reporting` and every
  * terminal status return false — the backend would reject the cancel.
  */
@@ -53,78 +60,41 @@ export function isAuditCancelable(status: AuditStatus): boolean {
 }
 
 /**
- * Map an audit lifecycle status onto a run-status badge value. The badge family
- * has eight values; the extra backend statuses fold onto the
- * nearest visual: validating→queued, reporting→analyzing,
- * partially_completed→partial.
+ * Every execution/queue status. Succeeded is success; failed/cancelled are
+ * danger; the wait states are warning; everything in flight is info.
+ * Executions are never polled on their own (the run's progress re-reads
+ * them), so `active` only says whether the row can still change.
  */
-export function auditBadgeValue(status: AuditStatus): RunStatusValue {
-  switch (status) {
-    case 'validating':
-      return 'queued';
-    case 'reporting':
-      return 'analyzing';
-    case 'partially_completed':
-      return 'partial';
-    default:
-      return status;
-  }
-}
-
-/** Human-readable label for an audit status. */
-export function auditStatusLabel(status: AuditStatus): string {
-  return titleCaseStatus(status);
-}
+export const EXECUTION_STATES = {
+  pending_reservation: { label: 'Pending Reservation', badge: 'info', active: true },
+  queued: { label: 'Queued', badge: 'info', active: true },
+  leased: { label: 'Leased', badge: 'info', active: true },
+  running: { label: 'Running', badge: 'info', active: true },
+  succeeded: { label: 'Succeeded', badge: 'success', active: false },
+  retry_wait: { label: 'Retry Wait', badge: 'warning', active: true },
+  // Parked on a full provider pool: nothing is wrong, but the row is not
+  // progressing either, so it reads like a retry wait rather than in-flight.
+  capacity_wait: { label: 'Capacity Wait', badge: 'warning', active: true },
+  // Waiting on a task the provider is genuinely working on. This IS in-flight
+  // work, just not in this process, so it must not read as a problem. The
+  // label names the engine when there is one (`executionStatusLabel`).
+  awaiting_provider_result: { label: 'Waiting for the provider', badge: 'info', active: true },
+  // A submission whose fate is unknown. Warning rather than info: it needs
+  // reconciling before it can progress, and presenting it as ordinary
+  // in-flight work would hide that.
+  submission_uncertain: { label: 'Reconciling', badge: 'warning', active: true },
+  failed: { label: 'Failed', badge: 'danger', active: false },
+  cancelled: { label: 'Cancelled', badge: 'danger', active: false },
+} as const satisfies JobStates<ExecutionStatus, StatusValue>;
 
 /**
- * Map an execution/queue status onto a status badge value (success/warning/
- * danger/info). Succeeded is success; failed/cancelled are danger; the two wait
- * states are warning; everything in flight is info.
- */
-export function executionBadgeValue(
-  status: ExecutionStatus,
-): 'success' | 'warning' | 'danger' | 'info' {
-  switch (status) {
-    case 'succeeded':
-      return 'success';
-    case 'failed':
-    case 'cancelled':
-      return 'danger';
-    case 'retry_wait':
-    // Parked on a full provider pool: nothing is wrong, but the row is not
-    // progressing either, so it reads like a retry wait rather than in-flight.
-    case 'capacity_wait':
-    // A submission whose fate is unknown. Warning rather than info: it needs
-    // reconciling before it can progress, and presenting it as ordinary
-    // in-flight work would hide that.
-    case 'submission_uncertain':
-      return 'warning';
-    // Waiting on a task the provider is genuinely working on. This IS
-    // in-flight work, just not in this process, so it must not read as a
-    // problem — the run is progressing normally.
-    case 'awaiting_provider_result':
-      return 'info';
-    default:
-      return 'info';
-  }
-}
-
-/**
- * Human-readable label for an execution status.
- *
- * The provider-wait state names the engine being waited on ("Waiting for
- * ChatGPT search"), not our plumbing; someone watching a run needs to know
- * what is actually happening.
+ * Human-readable label for an execution status. The provider-wait state names
+ * the engine being waited on ("Waiting for ChatGPT search"), not our plumbing;
+ * someone watching a run needs to know what is actually happening.
  */
 export function executionStatusLabel(status: ExecutionStatus, engine?: string): string {
-  switch (status) {
-    case 'awaiting_provider_result':
-      return engine ? `Waiting for ${engine}` : 'Waiting for the provider';
-    case 'submission_uncertain':
-      return 'Reconciling';
-    default:
-      return titleCaseStatus(status);
-  }
+  if (status === 'awaiting_provider_result' && engine) return `Waiting for ${engine}`;
+  return EXECUTION_STATES[status].label;
 }
 
 /**

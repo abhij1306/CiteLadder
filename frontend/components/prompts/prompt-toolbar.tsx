@@ -1,6 +1,7 @@
 'use client';
 
 import { ChevronDown, Plus, Sparkles, Upload } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,7 @@ import {
 } from '@/components/ui/menu';
 import { SearchField } from '@/components/ui/search-field';
 import { SegmentedControl } from '@/components/ui/tabs';
-import type { PromptStatus } from '@/lib/api/types';
+import type { PromptStatus } from '@citeladder/contracts';
 import {
   buyerStageLabels,
   buyerStageValues,
@@ -33,8 +34,8 @@ const PROMPT_STATUSES: readonly { value: PromptStatus; label: string }[] = [
 
 /**
  * The prompt library's narrowing controls, on one row: the Active / Archived
- * status, a search box and the intent / enabled / branded filter menu. For
- * the `ListScreen` control band.
+ * status, a search box, the Topic filter and the intent / enabled / branded
+ * filter menu. For the `ListScreen` control band.
  *
  * The bulk-upload, generate and add buttons used to sit on this same row.
  * They are not filters — they act on the library rather than narrowing it — so
@@ -61,6 +62,7 @@ export function promptFilterControls({
   filters,
   onFiltersChange,
   personas = [],
+  topic,
 }: Readonly<{
   /** Active / Archived, with the number of prompts in each. */
   status: Readonly<{
@@ -74,6 +76,8 @@ export function promptFilterControls({
   onFiltersChange: (filters: PromptFilters) => void;
   /** The personas the library uses; the menu lists them when there are any. */
   personas?: readonly string[];
+  /** The Topic filter (`TopicFilter`), first of the filters. */
+  topic?: ReactNode;
 }>): FilterBarProps {
   const activeFilterCount =
     filters.intents.length +
@@ -124,86 +128,89 @@ export function promptFilterControls({
       />
     ),
     filters: (
-      <Menu>
-        <MenuTrigger asChild>
-          <FilterTrigger label="Filter" count={activeFilterCount} />
-        </MenuTrigger>
-        <MenuContent align="end">
-          <MenuLabel>Intent</MenuLabel>
-          {intentValues.map((value) => (
-            <MenuCheckboxItem
-              key={value || 'unspecified'}
-              checked={selectedIntents.has(value)}
-              onSelect={(event) => {
-                event.preventDefault();
-                toggleIntent(value);
-              }}
-            >
-              {intentLabels[value]}
-            </MenuCheckboxItem>
-          ))}
-          <MenuSeparator />
-          <MenuLabel>Buyer stage</MenuLabel>
-          {buyerStageValues.map((value) => (
-            <MenuCheckboxItem
-              key={value || 'unspecified'}
-              checked={selectedStages.has(value)}
-              onSelect={(event) => {
-                event.preventDefault();
-                toggleStage(value);
-              }}
-            >
-              {buyerStageLabels[value]}
-            </MenuCheckboxItem>
-          ))}
-          <MenuSeparator />
-          {personas.length ? (
-            <>
-              <MenuLabel>Persona</MenuLabel>
-              {personas.map((value) => (
-                <MenuCheckboxItem
-                  key={value}
-                  checked={selectedPersonas.has(value)}
-                  onSelect={(event) => {
-                    event.preventDefault();
-                    toggle('personas', value);
-                  }}
-                >
-                  {value}
-                </MenuCheckboxItem>
-              ))}
-              <MenuSeparator />
-            </>
-          ) : null}
-          <MenuLabel>Enabled</MenuLabel>
-          {(['all', 'enabled', 'disabled'] as const).map((value) => (
-            <MenuCheckboxItem
-              key={value}
-              checked={filters.enabled === value}
-              onSelect={(event) => {
-                event.preventDefault();
-                setEnabled(value);
-              }}
-            >
-              {ENABLED_FILTER_LABEL[value]}
-            </MenuCheckboxItem>
-          ))}
-          <MenuSeparator />
-          <MenuLabel>Branded</MenuLabel>
-          {(['all', 'enabled', 'disabled'] as const).map((value) => (
-            <MenuCheckboxItem
-              key={value}
-              checked={filters.branded === value}
-              onSelect={(event) => {
-                event.preventDefault();
-                setBranded(value);
-              }}
-            >
-              {BRANDED_FILTER_LABEL[value]}
-            </MenuCheckboxItem>
-          ))}
-        </MenuContent>
-      </Menu>
+      <>
+        {topic}
+        <Menu>
+          <MenuTrigger asChild>
+            <FilterTrigger label="Filter" count={activeFilterCount} />
+          </MenuTrigger>
+          <MenuContent align="end">
+            <MenuLabel>Intent</MenuLabel>
+            {intentValues.map((value) => (
+              <MenuCheckboxItem
+                key={value || 'unspecified'}
+                checked={selectedIntents.has(value)}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  toggleIntent(value);
+                }}
+              >
+                {intentLabels[value]}
+              </MenuCheckboxItem>
+            ))}
+            <MenuSeparator />
+            <MenuLabel>Buyer stage</MenuLabel>
+            {buyerStageValues.map((value) => (
+              <MenuCheckboxItem
+                key={value || 'unspecified'}
+                checked={selectedStages.has(value)}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  toggleStage(value);
+                }}
+              >
+                {buyerStageLabels[value]}
+              </MenuCheckboxItem>
+            ))}
+            <MenuSeparator />
+            {personas.length ? (
+              <>
+                <MenuLabel>Persona</MenuLabel>
+                {personas.map((value) => (
+                  <MenuCheckboxItem
+                    key={value}
+                    checked={selectedPersonas.has(value)}
+                    onSelect={(event) => {
+                      event.preventDefault();
+                      toggle('personas', value);
+                    }}
+                  >
+                    {value}
+                  </MenuCheckboxItem>
+                ))}
+                <MenuSeparator />
+              </>
+            ) : null}
+            <MenuLabel>Enabled</MenuLabel>
+            {(['all', 'enabled', 'disabled'] as const).map((value) => (
+              <MenuCheckboxItem
+                key={value}
+                checked={filters.enabled === value}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setEnabled(value);
+                }}
+              >
+                {ENABLED_FILTER_LABEL[value]}
+              </MenuCheckboxItem>
+            ))}
+            <MenuSeparator />
+            <MenuLabel>Branded</MenuLabel>
+            {(['all', 'enabled', 'disabled'] as const).map((value) => (
+              <MenuCheckboxItem
+                key={value}
+                checked={filters.branded === value}
+                onSelect={(event) => {
+                  event.preventDefault();
+                  setBranded(value);
+                }}
+              >
+                {BRANDED_FILTER_LABEL[value]}
+              </MenuCheckboxItem>
+            ))}
+          </MenuContent>
+        </Menu>
+      </>
     ),
   };
 }

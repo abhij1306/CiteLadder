@@ -23,7 +23,9 @@ export const orderedRank = (row: Pick<Observation, 'order_observable' | 'rank'>)
 
 /**
  * The product or competitor an observation recommends, or null when it names
- * neither: unresolved, or any classification the shelf does not recognize.
+ * neither: unresolved, a rejected candidate, or any classification the shelf
+ * does not recognize. A pending AI-observed competitor has an identity but
+ * holds no slot (`shelfMetrics`).
  */
 export function holderIdentity(
   row: Pick<Observation, 'classification' | 'product_id' | 'competitor_candidate_id'>,
@@ -56,7 +58,11 @@ function shelfSlots(observations: Observation[]) {
 }
 
 export function shelfMetrics(taskIds: string[], observations: Observation[]) {
-  const recognized = shelfSlots(observations);
+  // Only the owned products and approved competitors share the shelf; a
+  // pending AI-observed competitor is shown apart until someone approves it.
+  const recognized = shelfSlots(observations).filter(
+    (row) => row.classification !== 'ai_observed_competitor',
+  );
   const owned = recognized.filter((row) => row.classification === 'owned');
   const ownedTasks = new Set(owned.map((row) => row.task_id));
   const rankedOwned = owned.filter((row) => orderedRank(row) !== null);

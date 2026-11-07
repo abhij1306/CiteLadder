@@ -1,8 +1,9 @@
 /** One atomic declaration per Action. Replays never resolve evidence again. */
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
-import { loadWorkerSettings, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import { inTransaction, type Database } from '../db/database.ts';
+import type { RecordScope } from '../db/workspace-scope.ts';
 import { resolveOwnedPages } from '../demand/page-equivalence.ts';
 import { ApiError } from '../errors.ts';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
@@ -11,7 +12,9 @@ import { parseUuid } from '../http/uuid.ts';
 import { record } from '../db/json.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import { actionMembers, recordStatus, requireAction, type ActionRow } from './actions.ts';
+import { rules } from '../analysis/opportunities/detectors.ts';
 import { declarationChecks } from './declaration-checks.ts';
+import { ruleCheckKind } from './checks/registry.ts';
 import { enqueueImplementationVerification } from './enqueue.ts';
 import { DASHBOARD_AUDIT_STATUSES } from './sources.ts';
 import type { OpportunityRow } from './projection.ts';
@@ -93,7 +96,10 @@ async function targets(
 ) {
   if (
     action.target_kind === a.TARGET_EARNED_PAGE ||
-    members.some((member) => o.EARNED_RULE_IDS.includes(member.rule_id))
+    members.some(
+      (member) =>
+        rules[member.rule_id]?.action_path === policy.opportunity.earned_actions.ACTION_PATH_EARNED,
+    )
   ) {
     if (!action.target_url) throw declarationConflict('Implementation target is unresolved');
     return { target_site_url_ids: [], target_external_url: action.target_url };
@@ -208,7 +214,6 @@ async function verifyExistingEvidence(
             triggerKind,
             triggerId: source.id,
             revision: `declaration-${row.id}`,
-            maxAttempts: loadWorkerSettings().taskMaxAttempts,
           },
         ]
       : [],
@@ -219,7 +224,7 @@ async function verifyExistingEvidence(
 
 export function declareAction(
   db: Database,
-  workspaceId: string,
+  scope: RecordScope,
   actionId: string,
   userId: string,
   key: string,
@@ -237,12 +242,13 @@ export function declareAction(
       ]),
     )
     .digest('hex');
+  const { workspaceId } = scope;
   return inTransaction(db, async (trx) => {
     // Refresh takes the project lock before updating Action rows. A declaration
     // needs the same order so members, snapshot and workflow form one revision.
-    const authorized = await requireAction(trx, workspaceId, actionId);
+    const authorized = await requireAction(trx, scope, actionId);
     await acquireProjectLock(trx, authorized.project_id);
-    const action = await requireAction(trx, workspaceId, actionId, true);
+    const action = await requireAction(trx, scope, actionId, true);
     const existing = await replay(trx, action, key, input, declaredAt);
     if (existing) return { row: existing, created: false };
     boundDeclaredAt(declaredAt, now);
@@ -267,10 +273,9 @@ export function declareAction(
       .where('workspace_id', '=', workspaceId)
       .where('id', '=', action.project_id)
       .executeTakeFirstOrThrow();
-    const scope = { workspaceId, projectId: action.project_id };
     const checks = await declarationChecks(
       trx,
-      scope,
+      { workspaceId, projectId: action.project_id },
       members,
       {
         auditId: snapshot.audit_id,
@@ -281,7 +286,7 @@ export function declareAction(
     // Every finding is declared; contextual links only as far as selected.
     const linked = new Set(checks.map(({ member }) => member.id));
     const declaredMembers = members.filter(
-      (member) => member.rule_id !== 'site_contextual_links' || linked.has(member.id),
+      (member) => ruleCheckKind(member.rule_id) !== 'contextual_link' || linked.has(member.id),
     );
     const resolved = await targets(trx, action, declaredMembers, project.website_url);
     const row = await trx

@@ -1,6 +1,7 @@
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { DemandDetectorState } from '@citeladder/contracts';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
@@ -8,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ApiError } from '@/lib/api/errors';
 import { createAppQueryClient } from '@/lib/api/query-client';
+import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
+import { makeProject } from '@/test/fixtures/project';
 
 import { DemandProjection } from './demand-projection';
 
@@ -61,6 +64,21 @@ vi.mock('@/lib/project/project-context', () => {
   };
 });
 
+/** `/demand` as the project route's gate hands it the currently selected project. */
+function DemandRoute() {
+  return (
+    <ActiveProjectScopeProvider
+      project={makeProject({ id: project.id, workspace_id: project.workspace_id })}
+    >
+      <DemandProjection />
+    </ActiveProjectScopeProvider>
+  );
+}
+
+function detector(state: DemandDetectorState, limitations: string[] = []) {
+  return { state, counts_by_classification: {}, limitations };
+}
+
 const snapshot = {
   id: '22222222-2222-4222-8222-222222222222',
   project_id: '11111111-1111-4111-8111-111111111111',
@@ -83,11 +101,13 @@ const snapshot = {
   },
   summary: {
     signal_count: 2,
+    counts_by_type: { striking_distance: 1, high_impression_low_ctr: 1 },
     detectors: {
-      striking_distance: { state: 'available' },
-      property_relative_ctr_gap: { state: 'unavailable' },
-      high_impression_low_ctr: { state: 'available' },
-      query_trends: { state: 'insufficient_history' },
+      striking_distance: detector('available'),
+      cannibalization: detector('unavailable'),
+      property_relative_ctr_gap: detector('unavailable'),
+      high_impression_low_ctr: detector('available'),
+      query_trends: detector('insufficient_history'),
     },
   },
   comparison: null,
@@ -143,18 +163,18 @@ const snapshot = {
   ],
 };
 
-vi.mock('@/lib/api/demand', () => ({
-  demandApi: {
-    getLatest: vi.fn(async () => snapshot),
-    // Recompute is a queued job: 202 + `queued`, never a finished snapshot.
-    recompute: vi.fn(async () => ({
-      task_id: '55555555-5555-4555-8555-555555555555',
-      status: 'queued',
-    })),
-  },
-}));
-
 import { demandApi } from '@/lib/api/demand';
+
+// The transport stands in for the API; the screen's reads and writes go
+// through the real query and mutation descriptors that call it.
+beforeEach(() => {
+  vi.spyOn(demandApi, 'getLatest').mockResolvedValue(snapshot);
+  // Recompute is a queued job: 202 + `queued`, never a finished snapshot.
+  vi.spyOn(demandApi, 'recompute').mockResolvedValue({
+    task_id: '55555555-5555-4555-8555-555555555555',
+    status: 'queued',
+  });
+});
 
 /** The summary line's count, whose figure is its own element inside the line. */
 const findSignalCount = (text: string) =>
@@ -177,7 +197,7 @@ describe('DemandProjection', () => {
     return render(
       <QueryClientProvider client={client}>
         <TooltipProvider>
-          <DemandProjection />
+          <DemandRoute />
         </TooltipProvider>
       </QueryClientProvider>,
       { wrapper: RouterTestWrapper },
@@ -194,15 +214,15 @@ describe('DemandProjection', () => {
     expect(screen.queryByRole('heading', { name: 'Signals' })).not.toBeInTheDocument();
 
     // Each filter carries its count once, and its detectors' status when they
-    // did not run in full, including one the snapshot never reported. CTR gaps
-    // counts the low-CTR signal, whose detector ran, beside an unavailable one.
+    // did not run in full. CTR gaps counts the low-CTR signal, whose detector
+    // ran, beside an unavailable one.
     const filters = within(screen.getByRole('radiogroup', { name: 'Signal type' }))
       .getAllByRole('radio')
       .map((chip) => chip.textContent);
     expect(filters).toEqual([
       'All signals (2)',
       'Striking distance (1)',
-      'Cannibalization · Not reported (0)',
+      'Cannibalization · Unavailable (0)',
       'CTR gaps · Partial (1)',
       'Trends · Needs more history (0)',
     ]);
@@ -364,10 +384,9 @@ describe('DemandProjection', () => {
         ...snapshot.summary,
         detectors: {
           ...snapshot.summary.detectors,
-          query_trends: {
-            state: 'insufficient_history',
-            limitations: ['At least 28 days of coverage are required.'],
-          },
+          query_trends: detector('insufficient_history', [
+            'At least 28 days of coverage are required.',
+          ]),
         },
       },
     });
@@ -389,10 +408,7 @@ describe('DemandProjection', () => {
         ...snapshot.summary,
         detectors: {
           ...snapshot.summary.detectors,
-          property_relative_ctr_gap: {
-            state: 'available',
-            limitations: ['No cohort reached 20 queries.'],
-          },
+          property_relative_ctr_gap: detector('available', ['No cohort reached 20 queries.']),
         },
       },
     });
@@ -483,7 +499,7 @@ describe('DemandProjection', () => {
     render(
       <QueryClientProvider client={client}>
         <TooltipProvider>
-          <DemandProjection />
+          <DemandRoute />
         </TooltipProvider>
       </QueryClientProvider>,
       { wrapper: RouterTestWrapper },
@@ -588,7 +604,7 @@ describe('DemandProjection', () => {
     rerender(
       <QueryClientProvider client={client}>
         <TooltipProvider>
-          <DemandProjection />
+          <DemandRoute />
         </TooltipProvider>
       </QueryClientProvider>,
     );

@@ -5,6 +5,7 @@ import { Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 
 import { ActionDetailScreen } from './action-detail-screen';
@@ -35,7 +36,7 @@ const action = {
 
 const selection = {
   activeProjectId: PROJECT,
-  activeProject: { id: PROJECT } as never,
+  activeProject: makeProject({ id: PROJECT }),
   status: 'ready' as const,
 };
 
@@ -69,7 +70,10 @@ describe('Actions', () => {
     const row = await screen.findByRole('link', { name: 'https://acme.test/pricing' });
     expect(row).toHaveAttribute('href', `/agent/actions/${ACTION}?project=${PROJECT}`);
     // The score ranks the queue; the reader sees its band, never the raw number.
-    expect(within(row.closest('tr')!).getByText('High')).toBeVisible();
+    const priority = within(row.closest('tr')!).getByText('High');
+    expect(priority).toBeVisible();
+    // Priority is an order, never the error red (owner, 2026-11-06).
+    expect(priority).toHaveAttribute('data-badge-tone', 'accent');
     expect(screen.queryByText('82.5')).not.toBeInTheDocument();
 
     // The counts sit in the menu beside each status; the trigger names the

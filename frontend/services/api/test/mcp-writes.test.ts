@@ -306,7 +306,7 @@ it('runs a direct change at once and keeps named records inside the project', as
         name: 'Road running',
       }),
     ),
-  ).toBe('The topic was not found in this project');
+  ).toBe('Topic not found');
 });
 
 it('stops tracking a competitor and deletes a topic by name, keeping its prompts', async () => {
@@ -513,6 +513,41 @@ it('launches an audit only on confirmation, within the frozen estimate', async (
     audits: [{ status: 'queued', market: { id: null } }],
   });
   expect(await audits()).toEqual([{ status: 'queued' }]);
+});
+
+it('creates a prepared schedule in its project only on confirmation, recording the change', async () => {
+  const tenant = await auditTenant(db, fixtures);
+  const principal = await connection(tenant);
+  const prepared = await call(principal, 'prepare_schedule', {
+    project_id: tenant.projectId,
+    cadence: 'weekly',
+    engines: ['chatgpt'],
+    timezone: 'Europe/London',
+    next_run_at: '2030-01-07T09:00:00+00:00',
+  });
+  const schedules = () =>
+    db
+      .selectFrom('audit_schedules')
+      .select(['project_id', 'cadence', 'timezone'])
+      .where('workspace_id', '=', tenant.workspaceId)
+      .execute();
+  const receipts = () =>
+    db
+      .selectFrom('security_events')
+      .select(['event', 'target_id'])
+      .where('workspace_id', '=', tenant.workspaceId)
+      .where('event', 'like', 'mcp.write.%')
+      .execute();
+  expect(await schedules()).toEqual([]);
+  expect(
+    await call(principal, 'confirm_change', {
+      confirmation_token: String(prepared.confirmation_token),
+    }),
+  ).toMatchObject({ state: 'changed', change: 'schedule' });
+  expect(await schedules()).toEqual([
+    { project_id: tenant.projectId, cadence: 'weekly', timezone: 'Europe/London' },
+  ]);
+  expect(await receipts()).toEqual([{ event: 'mcp.write.schedule', target_id: tenant.projectId }]);
 });
 
 it('spends a narrower per-connection budget on changes', async () => {

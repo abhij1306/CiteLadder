@@ -1,6 +1,86 @@
-import { expect, it } from 'vite-plus/test';
+import { renderHook } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vite-plus/test';
 
-import { applyTurnEvent, liveTurn, type TurnEvent } from './live-turns';
+import { applyTurnEvent, liveTurn, startLiveTurn, useLiveTurn, type TurnEvent } from './live-turns';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+const CHAT = '11111111-1111-4111-8111-111111111111';
+
+/** A stream that sends `chunks` and then stays open until the request aborts. */
+function openStream(chunks: string[], signal: AbortSignal | null | undefined): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      signal?.addEventListener('abort', () => controller.error(signal.reason));
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
+it('re-posts the run after a 429 once Retry-After passes and shows the streamed reply', async () => {
+  vi.useFakeTimers();
+  const run = '22222222-2222-4222-8222-222222222201';
+  const posts: number[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init?: RequestInit) => {
+      posts.push(Date.now());
+      if (posts.length === 1)
+        return Promise.resolve(
+          new Response('{"detail":"busy"}', { status: 429, headers: { 'retry-after': '1' } }),
+        );
+      return Promise.resolve(
+        openStream(['data: {"type":"reply_delta","ordinal":1,"text":"Hello"}\n\n'], init?.signal),
+      );
+    }),
+  );
+  const start = Date.now();
+  startLiveTurn(CHAT, run, null);
+  const { result } = renderHook(() => useLiveTurn(run));
+
+  await vi.advanceTimersByTimeAsync(999);
+  expect(posts).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(1);
+  await vi.waitFor(() => expect(result.current?.reply).toEqual({ ordinal: 1, text: 'Hello' }));
+  expect(posts.map((at) => at - start)).toEqual([0, 1000]);
+  expect(result.current?.connected).toBe(true);
+});
+
+it('closes a stream that sends no frame for twice the server heartbeat', async () => {
+  vi.useFakeTimers();
+  const run = '22222222-2222-4222-8222-222222222202';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, init?: RequestInit) => Promise.resolve(openStream([], init?.signal))),
+  );
+  startLiveTurn(CHAT, run, null);
+  const { result } = renderHook(() => useLiveTurn(run));
+
+  await vi.advanceTimersByTimeAsync(29_999);
+  expect(result.current?.connected).toBe(true);
+  await vi.advanceTimersByTimeAsync(1);
+  await vi.waitFor(() => expect(result.current?.connected).toBe(false));
+});
+
+it('ends the live turn on a refusal other than 429 without re-posting', async () => {
+  vi.useFakeTimers();
+  const run = '22222222-2222-4222-8222-222222222203';
+  const fetchMock = vi.fn(() =>
+    Promise.resolve(new Response('{"detail":"gone"}', { status: 404 })),
+  );
+  vi.stubGlobal('fetch', fetchMock);
+  startLiveTurn(CHAT, run, null);
+  const { result } = renderHook(() => useLiveTurn(run));
+
+  await vi.waitFor(() => expect(result.current?.connected).toBe(false));
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(fetchMock.mock.calls).toHaveLength(1);
+});
 
 const fold = (events: TurnEvent[]) => events.reduce(applyTurnEvent, liveTurn(0));
 

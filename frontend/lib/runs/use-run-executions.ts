@@ -3,10 +3,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi } from '@/lib/api/runs';
-import type { Audit } from '@/lib/api/types';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { refreshAuditExecutions, runsQueries } from '@/lib/api/runs';
+import type { Audit } from '@citeladder/contracts';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 
 /** The audit fields that move whenever one of its executions settles. */
 type RunProgress = Pick<Audit, 'status' | 'completed_count' | 'failed_count' | 'updated_at'>;
@@ -22,16 +21,12 @@ type RunProgress = Pick<Audit, 'status' | 'completed_count' | 'failed_count' | '
  * invalidates the list directly for the task-level changes it reports.
  */
 export function useRunExecutions(runId: string, audit: RunProgress | undefined) {
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const client = useQueryClient();
-  const query = useQuery({
-    // The workspace is part of the cache identity, so a switch never shows a
-    // list read under another workspace; invalidating the run's key prefix
-    // still reaches every workspace's copy.
-    queryKey: [...queryKeys.runs.executions(runId), workspaceId],
-    queryFn: ({ signal }) => runsApi.listExecutions(runId, { signal, workspaceId }),
-    enabled: workspaceId !== null,
-  });
+  // The workspace is part of the cache identity, so a switch never shows a
+  // list read under another workspace; refreshing the run's executions
+  // still reaches every workspace's copy.
+  const query = useQuery(runsQueries.executions(workspaceId, runId));
   const progress = audit
     ? `${audit.status}:${audit.completed_count}:${audit.failed_count}:${audit.updated_at}`
     : null;
@@ -41,7 +36,7 @@ export function useRunExecutions(runId: string, audit: RunProgress | undefined) 
     const previous = seen.current;
     seen.current = { runId, progress };
     if (previous?.runId === runId && previous.progress !== progress)
-      void client.invalidateQueries({ queryKey: queryKeys.runs.executions(runId) });
+      void refreshAuditExecutions(client, runId);
   }, [client, progress, runId]);
   return query;
 }

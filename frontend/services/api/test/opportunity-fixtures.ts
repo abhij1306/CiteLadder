@@ -161,6 +161,7 @@ export function seedOpportunityScenario(
       .insertInto('owned_domains')
       .values({
         id: randomUUID(),
+        workspace_id: seed.workspaceId,
         project_id: seed.projectId,
         domain: 'acme.com',
         created_at: new Date(),

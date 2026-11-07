@@ -1,4 +1,4 @@
-import type { SiteHealthOverview, SiteScoreSummary } from '@/lib/api/types';
+import type { SiteHealthOverview, SiteScoreSummary } from '@citeladder/contracts';
 
 export const EMPTY_WEB_FUNDAMENTALS: SiteHealthOverview['web_fundamentals'] = {
   state: 'not_measured',

@@ -15,6 +15,15 @@ describe('groupEvidence', () => {
     ]);
   });
 
+  it('falls back to the screen when a page needs more than the id', () => {
+    expect(
+      groupEvidence([`citeladder://visibility_result/${A}`, `citeladder://audit/${B}`]),
+    ).toEqual([
+      { label: 'Visibility answer', count: 1, href: '/visibility' },
+      { label: 'Visibility run', count: 1, href: `/runs/${B}` },
+    ]);
+  });
+
   it('counts repeated references once and never links an unknown kind', () => {
     expect(
       groupEvidence([

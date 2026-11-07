@@ -1,9 +1,16 @@
 import type { z } from 'zod';
 
-import { promptSchema, promptSetSchema } from '@citeladder/contracts/project';
+import {
+  promptFormLimitsSchema,
+  promptSchema,
+  promptSetListSchema,
+  promptSetSchema,
+} from '@citeladder/contracts/project';
 
 type Prompt = z.infer<typeof promptSchema>;
 type PromptSet = z.infer<typeof promptSetSchema>;
+type PromptFormLimits = z.infer<typeof promptFormLimitsSchema>;
+type PromptSetList = z.infer<typeof promptSetListSchema>;
 
 const SET_ID = '22222222-2222-4222-8222-222222222222';
 
@@ -37,4 +44,28 @@ export function makeSet(prompts: Prompt[]): PromptSet {
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
   };
+}
+
+/** Form bounds as the API lists them; tests override the one they exercise. */
+export function makeFormLimits(overrides: Partial<PromptFormLimits> = {}): PromptFormLimits {
+  return {
+    generation_count_max: 50,
+    import_rows_max: 500,
+    persona_max_chars: 120,
+    run_context_max_chars: 280,
+    distribution_personas_max: 8,
+    seed_query_ids_max: 200,
+    context_list_max_entries: 20,
+    audit_repetitions_min: 1,
+    audit_repetitions_max: 10,
+    ...overrides,
+  };
+}
+
+/** The prompt-set list read: the sets plus the form bounds. */
+export function makeSetList(
+  sets: PromptSet[],
+  limits: PromptFormLimits = makeFormLimits(),
+): PromptSetList {
+  return { prompt_sets: sets, limits };
 }

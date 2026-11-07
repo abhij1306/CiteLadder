@@ -6,6 +6,7 @@ import { ModelError } from '../models/http.ts';
 import {
   hasPendingServerTool,
   webSearchBlocks,
+  withoutPendingServerTools,
   type ServerToolEvent,
   type ConversationBlock,
   type ConversationMessage,
@@ -36,7 +37,13 @@ import {
   type SkillCatalog,
 } from './contracts.ts';
 import { contextCitations, manifestSchema, suppliedManifest } from './context.ts';
-import { ModelCalls, RefusedDispatch, type AgentModel, type ModelRequest } from './model-calls.ts';
+import {
+  ModelCalls,
+  RefusedDispatch,
+  type AgentModel,
+  type ModelRequest,
+  type ModelResult,
+} from './model-calls.ts';
 import {
   chatDocuments,
   latestDocument,
@@ -58,6 +65,8 @@ import {
   systemPrefix,
 } from './transcript.ts';
 import { leaseSignal } from '../queue/heartbeat.ts';
+import { logLaneFailure } from '../queue/lane-log.ts';
+import { AGENT_LANE } from '../queue/task-queue.ts';
 import { refused, ToolRegistry, type ToolOutcome } from './tools.ts';
 
 function failureCode(error: unknown) {
@@ -85,6 +94,8 @@ type TurnState = DocumentState & {
   web: Map<string, string>;
   /** Each web search's query by call id, until its result arrives. */
   queries: Map<string, string>;
+  /** The last response left a provider-hosted search for the next call to continue. */
+  waiting: boolean;
   /** Web searches the provider ran this turn, discarded responses included. */
   searches: number;
   steps: StepRecord[];
@@ -115,6 +126,27 @@ function withSummary(summary: PromptSummary) {
   return {
     context_manifest: sql<Json>`context_manifest || jsonb_build_object('prompt_summary', ${JSON.stringify(summary)}::jsonb)`,
   };
+}
+/** Whether the member may still write to the chat; a refusal answers false, a database error still throws. */
+async function stillAuthorized(db: Database, scope: Parameters<typeof authorize>[1]) {
+  try {
+    await authorize(db, scope);
+    return true;
+  } catch (error) {
+    if (error instanceof ApiError || error instanceof AgentError) return false;
+    throw error;
+  }
+}
+/**
+ * The transcript as saved: no later call continues the turn's last response,
+ * so a provider-hosted call it left waiting (a paused or read-beside search on
+ * the last call) is dropped, and every later replay pairs each tool use.
+ */
+function savedTranscript(messages: readonly ConversationMessage[]): ConversationMessage[] {
+  const last = messages.findLastIndex((message) => message.role === 'assistant');
+  return messages.map((message, index) =>
+    index === last ? { ...message, content: withoutPendingServerTools(message.content) } : message,
+  );
 }
 function savedNotice(number: number, formatLabel: string | null) {
   const format = formatLabel ? ` in ${formatLabel} format` : '';
@@ -150,7 +182,23 @@ function noReply(reads: number) {
     : 'I reached this turn’s limit before writing an answer. Nothing was saved. Narrow the request and ask again.';
 }
 const UNFUNDED_REPLY = 'The Agent model connection changed before I could write a summary.';
+const CLOSED_REPLY = 'The chat was closed before I wrote a summary.';
 const unfunded = (error: unknown) => error instanceof RefusedDispatch;
+/**
+ * Whether the turn can end on the documents it staged: there is one, and the
+ * transcript ends on a user message with no search waiting, so a closing reply
+ * keeps every later replay well formed (B60, B69).
+ */
+function closable(state: TurnState) {
+  return state.staged.size > 0 && !state.waiting && state.messages.at(-1)?.role === 'user';
+}
+/** What the turn had built when it stopped. */
+type Progress = {
+  summary?: PromptSummary;
+  open?: { turn: Turn; model: AgentModel; state: TurnState };
+};
+/** A turn stopped after it staged a document, which it can still save (B69). */
+export type StoppedTurn = { saveDocuments: () => Promise<void> };
 /** Appended after a step's tool results, never deleted, so the cached history stays exact. */
 function reminder(
   budget: Budget,
@@ -170,6 +218,39 @@ function reminder(
       : '',
   ].filter(Boolean);
   return notes.join(' ');
+}
+/**
+ * The searches call `ordinal` may run; the turn's last call starts none.
+ * Provider-hosted search exists only on the Messages API.
+ */
+function nextSearches(model: AgentModel, budget: Budget, state: TurnState, ordinal: number) {
+  if (model.adapter !== 'anthropic') return 0;
+  return searchAllowance(budget, state.searches, state.waiting, ordinal === budget.max_model_calls);
+}
+/**
+ * A call refused for funding after the turn staged a document answers null,
+ * so the turn saves that document with a fixed reply (B60); anything else throws.
+ */
+function unlessClosable(state: TurnState) {
+  return (error: unknown) => {
+    if (unfunded(error) && closable(state)) return null;
+    throw error;
+  };
+}
+/** The web searches a response ran: as the provider reported them, else as its blocks show. */
+function reportedSearches(response: ModelResult) {
+  const reported = response.usage.web_search_requests;
+  return typeof reported === 'number' ? reported : webSearchBlocks(response.blocks).calls.length;
+}
+/** One step's tool results, with the step's reminder unless a search waits on them. */
+function resultsMessage(
+  budget: Budget,
+  state: TurnState,
+  { ordinal, last, results }: { ordinal: number; last: boolean; results: ConversationBlock[] },
+): ConversationMessage {
+  // A search waiting on these results needs a message of results only.
+  const note = last || state.waiting ? '' : reminder(budget, ordinal, state);
+  return { role: 'user', content: [...results, ...(note ? [{ type: 'text', text: note }] : [])] };
 }
 const ok = (outcome: ToolOutcome) =>
   outcome.status === 'completed' || outcome.status === 'unavailable';
@@ -234,31 +315,58 @@ export class AgentRuntime {
       };
     });
   }
-  /** `events` listens to this execution only; persisted state never depends on it. */
-  async execute(lease: Lease, signal?: AbortSignal, events?: TurnEvents) {
-    const latest: { summary?: PromptSummary } = {};
+  /**
+   * `events` listens to this execution only; persisted state never depends on it.
+   * A stopped turn is left for its caller to end, with the documents it staged
+   * when it can still save them.
+   */
+  async execute(
+    lease: Lease,
+    signal?: AbortSignal,
+    events?: TurnEvents,
+  ): Promise<StoppedTurn | undefined> {
+    const latest: Progress = {};
+    const startedAt = performance.now();
     try {
       await this.turn(lease, latest, signal, events);
     } catch (error) {
       // A stopped turn is ended by its caller; a lost lease by recovery.
-      if (signal?.aborted) return;
-      if (error instanceof AgentError && error.code === 'lease') return;
+      if (signal?.aborted) return this.stopped(lease, latest);
+      if (error instanceof AgentError && error.code === 'lease') return undefined;
       // Provider failures were already retried within the call; the turn ends with its reply.
-      await this.fail(lease, failureCode(error), latest.summary);
+      const code = failureCode(error);
+      logLaneFailure(
+        AGENT_LANE.table,
+        { id: lease.runId, workspace_id: lease.workspaceId, attempt_count: lease.attempt },
+        { phase: 'turn', startedAt, outcome: 'failed', error, code },
+      );
+      await this.fail(lease, code, latest.summary);
     }
+    return undefined;
   }
-  private async turn(
-    lease: Lease,
-    latest: { summary?: PromptSummary },
-    signal?: AbortSignal,
-    events?: TurnEvents,
-  ) {
-    signal?.throwIfAborted();
-    const turn = await this.load(lease);
+  /**
+   * A stopped turn that staged a document saves it with a fixed reply and is
+   * completed (B69); without one, or when it cannot be saved, it ends interrupted.
+   */
+  private stopped(lease: Lease, { open, summary }: Progress): StoppedTurn | undefined {
+    if (!open || !closable(open.state)) return undefined;
+    return {
+      saveDocuments: async () => {
+        try {
+          await this.finish(lease, open.turn, open.model, open.state, CLOSED_REPLY, summary, true);
+        } catch (error) {
+          if (error instanceof AgentError && error.code === 'lease') return;
+          await this.fail(lease, 'interrupted', summary);
+        }
+      },
+    };
+  }
+  /** The turn's state with its opening message, and the earlier turns it replays. */
+  private opened(turn: Turn, model: AgentModel, latest: Progress) {
     const { budget } = turn;
-    const model = await this.deps.modelFor(turn.run);
     const { kept, dropped } = replayed(turn.transcripts, model.adapter, budget);
     const state = this.initialState(turn);
+    latest.open = { turn, model, state };
     const opening = openingMessage({
       kept,
       context: turn.context.text,
@@ -284,18 +392,25 @@ export class AgentRuntime {
       replayed_turns: kept.length,
       dropped_turns: dropped,
     };
+    return { state, kept };
+  }
+  /** The last replayed turn's final response, which the first call continues. */
+  private async replayedResponseId(turn: Turn, kept: ReturnType<typeof replayed>['kept']) {
+    const lastKept = kept.at(-1);
+    return lastKept ? lastResponseId(this.db, turn.scope, lastKept.runId) : null;
+  }
+  private async turn(lease: Lease, latest: Progress, signal?: AbortSignal, events?: TurnEvents) {
+    signal?.throwIfAborted();
+    const turn = await this.load(lease);
+    const { budget } = turn;
+    const model = await this.deps.modelFor(turn.run);
+    const { state, kept } = this.opened(turn, model, latest);
     const history = kept.flatMap((item) => item.messages);
     // The cached prefix: built once per turn from the catalog and the run's frozen bounds.
     const system = systemPrefix(this.deps.catalog);
     const tools = agentToolList(this.deps.tools, this.deps.catalog, budget);
     let effort = budget.reasoning_effort;
-    const lastKept = kept.at(-1);
-    let previousResponseId = lastKept
-      ? await lastResponseId(this.db, turn.scope, lastKept.runId)
-      : null;
-    // Provider-hosted search exists only on the Messages API.
-    const searchable = model.adapter === 'anthropic';
-    let waiting = false;
+    let previousResponseId = await this.replayedResponseId(turn, kept);
     for (let ordinal = 1; ordinal <= budget.max_model_calls; ordinal++) {
       signal?.throwIfAborted();
       const request: ModelRequest = {
@@ -305,39 +420,24 @@ export class AgentRuntime {
         effort,
         compactAtTokens: budget.compaction_trigger_tokens,
         previousResponseId,
-        webSearches: searchable
-          ? searchAllowance(budget, state.searches, waiting, ordinal === budget.max_model_calls)
-          : 0,
+        webSearches: nextSearches(model, budget, state, ordinal),
       };
-      let response;
-      try {
-        response = await this.callModel(lease, ordinal, model, request, signal, events);
-      } catch (error) {
-        // Finished work is kept: a document already staged commits with a fixed reply.
-        if (unfunded(error) && state.staged.size && !waiting)
-          return this.finish(lease, turn, model, state, UNFUNDED_REPLY, latest.summary, true);
-        throw error;
-      }
+      const response = await this.callModel(lease, ordinal, model, request, signal, events).catch(
+        unlessClosable(state),
+      );
+      // Finished work is kept: a document already staged commits with a fixed reply (B60).
+      if (!response)
+        return this.finish(lease, turn, model, state, UNFUNDED_REPLY, latest.summary, true);
       previousResponseId = response.response_id || previousResponseId;
       // A discarded response's searches were still run and billed.
-      const reported = response.usage.web_search_requests;
-      state.searches +=
-        typeof reported === 'number' ? reported : webSearchBlocks(response.blocks).calls.length;
+      state.searches += reportedSearches(response);
       if (response.stop === 'max_tokens') {
         effort = retryEffort(effort, ordinal, budget);
         continue;
       }
       effort = budget.reasoning_effort;
-      // An empty assistant message would make every later replay of this chat invalid.
-      const blocks = response.blocks.length
-        ? response.blocks
-        : [{ type: 'text', text: '(no answer)' }];
-      state.messages.push({ role: 'assistant', content: blocks });
-      state.steps.push({ kind: 'model', ordinal });
-      this.searched(state, ordinal, blocks);
+      this.accepted(state, ordinal, response);
       const last = ordinal === budget.max_model_calls;
-      // A paused search loop continues from the unchanged response in the next call.
-      waiting = response.stop === 'pause_turn' || hasPendingServerTool(blocks);
       if (response.stop === 'pause_turn') {
         if (last) return this.finish(lease, turn, model, state, response.text, latest.summary);
         continue;
@@ -352,16 +452,23 @@ export class AgentRuntime {
         signal,
         events,
       );
-      // A search waiting on these results needs a message of results only.
-      const note = last || waiting ? '' : reminder(budget, ordinal, state);
-      state.messages.push({
-        role: 'user',
-        content: [...results, ...(note ? [{ type: 'text', text: note }] : [])],
-      });
+      state.messages.push(resultsMessage(budget, state, { ordinal, last, results }));
       // At the cap the final call's tool calls were refused; its text is the reply.
       if (last) return this.finish(lease, turn, model, state, response.text, latest.summary);
     }
     throw new AgentError('stopped_at_limit');
+  }
+  /** Appends a kept response as the assistant's message and records its step and searches. */
+  private accepted(state: TurnState, ordinal: number, response: ModelResult) {
+    // An empty assistant message would make every later replay of this chat invalid.
+    const blocks = response.blocks.length
+      ? response.blocks
+      : [{ type: 'text', text: '(no answer)' }];
+    state.messages.push({ role: 'assistant', content: blocks });
+    state.steps.push({ kind: 'model', ordinal });
+    this.searched(state, ordinal, blocks);
+    // A paused search loop continues from the unchanged response in the next call.
+    state.waiting = response.stop === 'pause_turn' || hasPendingServerTool(blocks);
   }
   /** One model call, after rechecking that the workspace may still run the Agent. */
   private async callModel(
@@ -416,6 +523,7 @@ export class AgentRuntime {
       read: [],
       web: new Map(),
       queries: new Map(),
+      waiting: false,
       searches: 0,
       steps: [],
       toolsUsed: 0,
@@ -673,7 +781,7 @@ export class AgentRuntime {
         model: model.model,
         skillId: skill?.id ?? null,
         contextHash: state.contextHash,
-        messages: state.messages,
+        messages: savedTranscript(state.messages),
       });
       await trx
         .updateTable('agent_runs')
@@ -692,19 +800,23 @@ export class AgentRuntime {
   }
   /**
    * Ends the turn with its code-specific reply. A failed turn saves nothing,
-   * so its model calls are settled and then refunded.
+   * so its model calls are settled through the funding seam. A member who lost
+   * access gets no summary or reply, but the turn still settles and ends.
    */
   async fail(lease: Lease, code: string, summary?: PromptSummary) {
     try {
       await this.db.transaction().execute(async (trx) => {
         const run = await lockRun(trx, lease);
         await this.deps.models.settleFailed(trx, run);
-        if (run.user_id && code !== 'access_revoked') {
-          await authorize(trx, {
+        if (
+          run.user_id &&
+          code !== 'access_revoked' &&
+          (await stillAuthorized(trx, {
             workspaceId: run.workspace_id,
             projectId: run.project_id,
             userId: run.user_id,
-          });
+          }))
+        ) {
           if (summary)
             await trx
               .updateTable('agent_runs')

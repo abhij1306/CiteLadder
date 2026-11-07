@@ -172,3 +172,27 @@ export function formatCount(value: number): string {
 export function pluralCount(count: number, noun: string): string {
   return `${formatCount(count)} ${noun}${count === 1 ? '' : 's'}`;
 }
+
+/** Percent-encoding layers a crawled URL can carry (`%2527` is `'` encoded twice). */
+const MAX_URL_DECODE_PASSES = 3;
+
+/**
+ * A URL or path as a reader reads it: percent-escapes decoded, layer by
+ * layer, so `/Women%2527s-Clothing` shows as `/Women's-Clothing`. Display
+ * only; the stored value is never changed. A layer with a malformed escape
+ * is shown as it is.
+ */
+export function readableUrl(value: string): string {
+  let current = value;
+  for (let pass = 0; pass < MAX_URL_DECODE_PASSES; pass += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return current;
+    }
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
+}

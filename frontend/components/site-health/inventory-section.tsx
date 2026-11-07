@@ -14,11 +14,17 @@ import { PageKindSelect } from '@/components/site-health/page-kind-select';
 import { PagesTable } from '@/components/site-health/pages-table';
 import { RootErrorsBlock } from '@/components/site-health/root-errors-block';
 import { warmQuery } from '@/lib/api/query-client';
-import { siteHealthQueries, type PagesParams, type PagesSort } from '@/lib/api/site-health';
-import type { SiteCrawl } from '@/lib/api/types';
+import { type PagesParams, type PagesSort } from '@/lib/api/site-health';
+import { siteHealthQueries } from '@/lib/api/site-health-queries';
+import type { SiteCrawl } from '@citeladder/contracts';
 import { Tabs } from '@/components/ui/tabs';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
-import { DEFAULT_PAGES_SORT, statusLabel, type InventoryMode } from '@/lib/site-health/status';
+import {
+  CRAWL_STATES,
+  DEFAULT_PAGES_SORT,
+  statusLabel,
+  type InventoryMode,
+} from '@/lib/site-health/status';
 
 /**
  * Always-mounted inventory section of the canonical Site Health screen.
@@ -75,7 +81,7 @@ export function InventorySection({
  */
 function DiscoveringInventory({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
   // No timer here: the screen polls the crawl once and invalidates this query's
-  // FIRST page when the crawl actually moved (`invalidateCrawlViews`). Deeper
+  // FIRST page when the crawl actually moved (`refreshCrawlViews`). Deeper
   // cursor pages stay static either way, so the rows under review don't shift
   // as new URLs are discovered. No exact total: `visible_url_count` counts
   // what THIS crawl admitted, which a recrawl inheriting monitored URLs need
@@ -103,9 +109,7 @@ function DiscoveringInventory({ crawl }: Readonly<{ crawl: SiteCrawl }>) {
       columns={DISCOVERED_COLUMNS}
       {...table}
       footer={
-        crawl.status === 'running' || crawl.status === 'queued'
-          ? 'More URLs appear as discovery continues.'
-          : undefined
+        CRAWL_STATES[crawl.status].active ? 'More URLs appear as discovery continues.' : undefined
       }
     >
       {page?.items.map((row) => (

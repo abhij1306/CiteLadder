@@ -1,4 +1,5 @@
-import { loadConfig, policy, resolveSettingSpec } from '../config.ts';
+import { loadConfig, policy } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { createDatabase } from '../db/database.ts';
 import { seedAudit } from '../audits/seed.ts';
 
@@ -13,7 +14,7 @@ try {
   const id = await seedAudit(
     db,
     request,
-    String(resolveSettingSpec(policy.settings.encryption_key)),
+    String(resolveSettingSpec(policy.settings.encryption_key, config.settings)),
     process.env,
   );
   process.stdout.write(`${JSON.stringify({ audit_id: id })}\n`);

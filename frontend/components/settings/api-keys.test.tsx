@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, expect, it, vi } from 'vite-plus/test';
 
+import { apiKeysApi } from '@/lib/api/api-keys';
 import { createAppQueryClient } from '@/lib/api/query-client';
 import type {
   ApiKey,
@@ -24,7 +25,9 @@ const { list, create, revoke } = vi.hoisted(() => ({
   create: vi.fn<(workspaceId: string, input: ApiKeyCreate) => Promise<ApiKeyCreated>>(),
   revoke: vi.fn<(workspaceId: string, keyId: string) => Promise<ApiKey>>(),
 }));
-vi.mock('@/lib/api/api-keys', () => ({ apiKeysApi: { list, create, revoke } }));
+// The transport is replaced on the module's own client object, so the real
+// query and mutation descriptors run against it.
+Object.assign(apiKeysApi, { list, create, revoke });
 vi.mock('@/lib/project/project-context', () => ({
   useProjectContext: () => ({
     activeWorkspaceId: WORKSPACE,

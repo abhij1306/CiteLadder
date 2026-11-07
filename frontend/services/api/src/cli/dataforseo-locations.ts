@@ -13,15 +13,16 @@
 import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
-import { resolveSettingSpec } from '../config.ts';
+import { resolveSettingSpec } from '../config/settings.ts';
 import { providerPolicy } from '../providers/config.ts';
 import { searchPolicy } from '../search-surfaces/dataforseo.ts';
 import {
   buildLocationsFile,
   serializeLocationsFile,
   surfaceLists,
+  type SurfaceLists,
 } from '../search-surfaces/locations-file.ts';
-import type { SearchSurface } from '../search-surfaces/locations.ts';
+import { searchSurfaces, type SearchSurface } from '../search-surfaces/locations.ts';
 
 const OUTPUT = new URL('../config/dataforseo-locations.json', import.meta.url);
 const { values } = parseArgs({ options: { 'dry-run': { type: 'boolean', default: false } } });
@@ -31,7 +32,7 @@ const login = (process.env.DATAFORSEO_API_LOGIN ?? '').trim();
 const password = process.env.DATAFORSEO_API_PASSWORD ?? '';
 if (!login || !password)
   throw new Error('Set DATAFORSEO_API_LOGIN and DATAFORSEO_API_PASSWORD to fetch the lists');
-const base = String(resolveSettingSpec(providerPolicy.dataforseo.base_url));
+const base = String(resolveSettingSpec(providerPolicy.dataforseo.base_url, process.env));
 const credentials = Buffer.from(`${login}:${password}`).toString('base64');
 const authorization = `Basic ${credentials}`;
 
@@ -45,11 +46,10 @@ async function fetchSurface(surface: SearchSurface) {
   const paths = searchPolicy.constants.locations_paths[surface];
   return surfaceLists(await fetchList(paths.locations), await fetchList(paths.languages));
 }
-const lists = {
-  google_ai_overview: await fetchSurface('google_ai_overview'),
-  chatgpt_search: await fetchSurface('chatgpt_search'),
-  gemini_consumer: await fetchSurface('gemini_consumer'),
-};
+const fetched = new Map<SearchSurface, SurfaceLists>();
+for (const surface of searchSurfaces) fetched.set(surface, await fetchSurface(surface));
+// `searchSurfaces` is every key of the locations paths, so each surface was fetched above.
+const lists = Object.fromEntries(fetched) as Record<SearchSurface, SurfaceLists>;
 const text = serializeLocationsFile(
   buildLocationsFile(lists, new Date().toISOString().slice(0, 10)),
 );

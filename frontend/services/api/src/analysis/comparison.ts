@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { policy } from '../config.ts';
+import { readFrozenConfiguration } from '../audits/frozen-configuration.ts';
 import { record } from '../db/json.ts';
 
 /** Code-point order keeps frozen measurement hashes stable. */
@@ -39,7 +39,7 @@ export function frozenComparisonKey(
   includeEngines = true,
 ): string | null {
   const config = record(configuration);
-  const policyKey = policy.opportunity.measurement_policy_key;
+  const policyKey = 'measurement_policy';
   const required = [
     'brand_name',
     'brand_aliases',
@@ -60,13 +60,9 @@ export function frozenComparisonKey(
     Object.values(chosen).some((v) => !Object.keys(record(v)).length)
   )
     return null;
-  const measurement = record(config[policyKey]);
-  const fields = ['retrieval_enabled', 'max_output_tokens', 'answer_instruction'];
-  if (
-    fields.some((k) => !Object.hasOwn(measurement, k)) ||
-    typeof measurement.retrieval_enabled !== 'boolean'
-  )
-    return null;
+  const measurement = readFrozenConfiguration(configuration).measurement_policy;
+  const fields = ['retrieval_enabled', 'max_output_tokens', 'answer_instruction'] as const;
+  if (fields.some((k) => measurement[k] === undefined)) return null;
   if (
     Object.values(chosen).some((v) => !record(v).transport_provider || !record(v).transport_model)
   )

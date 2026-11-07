@@ -1,12 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Archive, Check, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { IconButton } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
-import { Inline } from '@/components/ui/layout';
 import { Delta } from '@/components/ui/delta';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/menu';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -14,9 +12,8 @@ import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/compone
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { Switch } from '@/components/ui/switch';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { Prompt, PromptStatus, Topic } from '@/lib/api/types';
+import type { Prompt, PromptStatus } from '@citeladder/contracts';
 import { ICONS } from '@/lib/icons';
-import { buyerStageLabels, intentLabels } from '@/lib/prompts/forms';
 import { promptHistoryHref } from '@/lib/prompts/history';
 import { formatPosition, formatPositionExact, formatRate } from '@/lib/visibility/dashboard';
 
@@ -33,8 +30,8 @@ export type PromptMeasurement = {
 const PAGE_SIZE = 10;
 
 /**
- * Prompt table. Questions, topics, measured visibility and enabled state;
- * classification is secondary detail, with per-row actions (edit, delete,
+ * Prompt table (F7). Questions, measured visibility and enabled state, with
+ * per-row actions (edit, delete,
  * enable/disable toggle, and — when `onSetStatus` is wired — archive or restore
  * transitions).
  *
@@ -54,11 +51,8 @@ export function PromptTable({
   onSetStatus,
   busyId,
   measurements,
-  topics,
 }: Readonly<{
   prompts: Prompt[];
-  /** The project's topics, to name each row's topic (users' vocabulary, not theme). */
-  topics: readonly Topic[];
   onEdit: (prompt: Prompt) => void;
   onDelete: (prompt: Prompt) => void;
   onToggleEnabled: (prompt: Prompt) => void;
@@ -72,19 +66,18 @@ export function PromptTable({
   const measured = Boolean(measurements?.size);
   const { page, setPage, pageCount, from, to } = useTablePage(prompts.length, PAGE_SIZE);
   const pagedPrompts = prompts.slice(from - 1, to);
-  const topicNames = useMemo(
-    () => new Map(topics.map((topic) => [topic.id, topic.name])),
-    [topics],
-  );
 
   return (
     <DataTable
       label="Prompts"
-      minWidth={measured ? 'xl' : 'md'}
+      // Every column fits the page from the owner's 982px desktop up; below
+      // that the table scrolls with the prompt pinned.
+      minWidth={measured ? 'md' : 'sm'}
+      pinFirstColumn
       columns={promptColumns(measured)}
       pageSize={PAGE_SIZE}
       rowCount={pagedPrompts.length}
-      rowLines={2}
+      rowLines={3}
       state={
         prompts.length === 0
           ? {
@@ -103,10 +96,10 @@ export function PromptTable({
       {pagedPrompts.map((prompt) => (
         <TableRow key={prompt.id}>
           <TableCell>
-            {/* The question opens its history: the prompt is the object. Its
-                topic and classification are the caption under it, so the
-                question keeps the table's width (each line is cut with the
-                whole text in a tooltip). */}
+            {/* The question opens its history: the prompt is the object. It
+                wraps to two lines. Topic and classification are filters in
+                the control strip, not tags on every row (owner, 2026-11-06);
+                the caption only says when audits skip the prompt. */}
             <TableCellLines
               title
               primary={
@@ -117,19 +110,16 @@ export function PromptTable({
                   {prompt.text}
                 </ProjectLink>
               }
-              secondary={promptCaption(prompt, topicNames)}
             />
           </TableCell>
           {measured ? <MeasuredCells measurement={measurements?.get(prompt.id)} /> : null}
           <TableCell>
-            <Inline as="span">
-              <Switch
-                checked={prompt.enabled}
-                label={`${prompt.enabled ? 'Disable' : 'Enable'} prompt`}
-                disabled={busyId === prompt.id}
-                onCheckedChange={() => onToggleEnabled(prompt)}
-              />
-            </Inline>
+            <Switch
+              checked={prompt.enabled}
+              label={`${prompt.enabled ? 'Disable' : 'Enable'} prompt`}
+              disabled={busyId === prompt.id}
+              onCheckedChange={() => onToggleEnabled(prompt)}
+            />
           </TableCell>
           <TableActionsCell>
             <Menu>
@@ -178,9 +168,8 @@ function promptColumns(measured: boolean): DataTableColumn[] {
   return [
     { key: 'prompt', label: 'Prompt' },
     ...(measured ? MEASURED_COLUMNS : []),
-    // A switch, and the "Not measured" badge beside it after a downgrade.
-    { key: 'enabled', label: 'Enabled', width: 'category' },
-    { key: 'actions', label: 'Actions', width: 'action', trailing: true },
+    { key: 'enabled', label: 'Enabled', width: 'control' },
+    { key: 'actions', label: 'Actions', width: 'control', trailing: true },
   ];
 }
 
@@ -195,27 +184,6 @@ const MEASURED_COLUMNS: readonly DataTableColumn[] = [
   },
   { key: 'change', label: 'Change', width: 'figure', numeric: true },
 ];
-
-/**
- * The prompt's topic, whether it names a brand, then its intent, buyer stage
- * and persona when set: one caption line. A prompt filed under a topic the
- * list cannot name (not loaded, or since deleted) says the topic is
- * unavailable, apart from a prompt filed under none.
- */
-function promptCaption(prompt: Prompt, topicNames: ReadonlyMap<string, string>): string {
-  const topic = prompt.topic_id
-    ? (topicNames.get(prompt.topic_id) ?? 'Topic unavailable')
-    : 'No topic';
-  return [
-    topic,
-    prompt.branded ? 'Branded' : 'Unbranded',
-    prompt.intent ? intentLabels[prompt.intent] : null,
-    prompt.buyer_stage ? buyerStageLabels[prompt.buyer_stage] : null,
-    prompt.persona,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
 
 /** A prompt's measured visibility, and its movement since the last run. */
 function MeasuredCells({ measurement }: Readonly<{ measurement?: PromptMeasurement }>) {

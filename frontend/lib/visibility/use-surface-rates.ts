@@ -3,10 +3,9 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
-import { isSearchSurfaceEngine } from '@/lib/providers/catalog';
-import type { ProjectRequestScope } from '@/lib/project/request-scope';
+import { visibilityQueries } from '@/lib/api/visibility-queries';
+import { useEngineCatalog } from '@/lib/providers/engines';
+import type { ActiveProjectScope } from '@/lib/project/active-project-scope';
 
 /**
  * The observed-surface rates, scoped to the same resolved run selection the
@@ -23,22 +22,21 @@ import type { ProjectRequestScope } from '@/lib/project/request-scope';
  */
 export function useSurfaceRates({
   requestScope,
-  projectId,
   engine,
   cohort,
   onTrendsTab,
   activeRunId,
   selectedRunIds,
 }: {
-  requestScope: ProjectRequestScope;
-  projectId: string | null;
+  requestScope: Pick<ActiveProjectScope, 'workspaceId' | 'projectId'>;
   engine: string | undefined;
   cohort: string;
   onTrendsTab: boolean;
   activeRunId: string | null;
   selectedRunIds: string[] | undefined;
 }) {
-  const surfaceEngine = engine && isSearchSurfaceEngine(engine) ? engine : null;
+  const catalog = useEngineCatalog();
+  const surfaceEngine = engine && catalog.isSearchSurface(engine) ? engine : null;
   const params = {
     engine: surfaceEngine ?? '',
     audit_id: selectedRunIds ? undefined : (activeRunId ?? undefined),
@@ -46,19 +44,11 @@ export function useSurfaceRates({
     cohort,
   };
   const surfaceRatesQuery = useQuery({
-    queryKey: queryKeys.visibility.surfaceRates(projectId ?? '', params),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      visibilityApi.getSurfaceRates(requestScope.projectId, params, {
-        signal,
-        workspaceId: requestScope.workspaceId,
-      }),
+    ...visibilityQueries.surfaceRates(requestScope, params),
     enabled:
-      requestScope.enabled &&
-      onTrendsTab &&
-      surfaceEngine !== null &&
-      Boolean(activeRunId) &&
-      selectedRunIds?.length !== 0,
-    placeholderData: (data, query) => retainPreviousDataForScope(projectId!, data, query),
+      onTrendsTab && surfaceEngine !== null && Boolean(activeRunId) && selectedRunIds?.length !== 0,
+    placeholderData: (data, query) =>
+      retainPreviousDataForScope(requestScope.projectId, data, query),
   });
   return { surfaceEngine, surfaceRatesQuery };
 }

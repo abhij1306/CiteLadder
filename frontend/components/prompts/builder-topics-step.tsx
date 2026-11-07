@@ -5,13 +5,14 @@ import { useState } from 'react';
 
 import { Button, IconButton } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
+import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { Tag } from '@/components/ui/tag';
 import { textRole } from '@/components/ui/typography';
-import { humanizeApiError } from '@/lib/api/errors';
+import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import type { TopicRow } from '@/lib/prompts/builder-topics';
 
 import { GenerateErrorAlert } from './generation-alerts';
@@ -114,13 +115,12 @@ export function BuilderTopicsStep({ topics }: Readonly<{ topics: BuilderTopics }
         </Button>
       </Inline>
       {topics.preview.error ? (
-        <GenerateErrorAlert
-          error={topics.preview.error}
-          fallback="Topics could not be proposed. Try again."
-        />
+        <GenerateErrorAlert error={topics.preview.error} action="propose topics" />
       ) : null}
       {topics.confirm.error ? (
-        <Callout tone="negative">{humanizeApiError(topics.confirm.error).message}</Callout>
+        <MutationNotice
+          notice={mutationNoticeForError(topics.confirm.error, { action: 'confirm the topics' })}
+        />
       ) : null}
       {topics.problem ? <Callout tone="warning">{topics.problem}</Callout> : null}
       {topics.rows.length ? (

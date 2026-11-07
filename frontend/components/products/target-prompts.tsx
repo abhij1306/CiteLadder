@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 
 import { Callout } from '@/components/ui/callout';
@@ -12,11 +12,10 @@ import { Disclosure } from '@/components/ui/disclosure';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Inline, Stack } from '@/components/ui/layout';
-import { commerceApi } from '@/lib/api/commerce';
-import { queryKeys } from '@/lib/api/query-keys';
+import { commerceMutations } from '@/lib/api/commerce';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import { LaunchDialog } from '@/components/runs/launch-dialog';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { useRunEvents } from '@/lib/runs/use-run-events';
 import { sameTarget } from '@/lib/products/use-commerce-target';
 
@@ -44,7 +43,6 @@ export function TargetPrompts({
   targetLabel: string;
   query: CommerceQueries['buyerPrompts'];
 }>) {
-  const client = useQueryClient();
   const workspaceId = useActiveWorkspaceId();
   const [text, setText] = useState('');
   const [launchOpen, setLaunchOpen] = useState(false);
@@ -52,28 +50,19 @@ export function TargetPrompts({
   const [shortfall, setShortfall] = useState<number | null>(null);
   // The audit stream refreshes AI Shelf and Actions here when the run finishes.
   useRunEvents(launchedAuditId, projectId, Boolean(launchedAuditId));
-  const refresh = () =>
-    client.invalidateQueries({ queryKey: queryKeys.commerce.buyerPrompts(projectId) });
-  const generate = useMutation({
-    mutationFn: () =>
-      commerceApi.generateBuyerPrompts(projectId, [target], GENERATED_COUNT, { workspaceId }),
-    onSuccess: async (created) => {
-      setShortfall(created.length < GENERATED_COUNT ? created.length : null);
-      await refresh();
-    },
-  });
-  const manual = useMutation({
-    mutationFn: () => commerceApi.addBuyerPrompt(projectId, target, text, { workspaceId }),
-    onSuccess: async () => {
-      setText('');
-      await refresh();
-    },
-  });
-  const decide = useMutation({
-    mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
-      commerceApi.decideBuyerPrompt(projectId, id, approved, { workspaceId }),
-    onSuccess: refresh,
-  });
+  const scope = { workspaceId, projectId };
+  const generate = useMutation(commerceMutations.generateBuyerPrompts(scope));
+  const generatePrompts = () =>
+    generate.mutate(
+      { targets: [target], count: GENERATED_COUNT },
+      {
+        onSuccess: (created) =>
+          setShortfall(created.length < GENERATED_COUNT ? created.length : null),
+      },
+    );
+  const manual = useMutation(commerceMutations.addBuyerPrompt(scope));
+  const addPrompt = () => manual.mutate({ target, text }, { onSuccess: () => setText('') });
+  const decide = useMutation(commerceMutations.decideBuyerPrompt(scope));
   const rows = query.data ? forTarget(query.data, target) : [];
   const approvedIds = rows.reduce<string[]>((ids, row) => {
     if (row.enabled) ids.push(row.id);
@@ -86,7 +75,7 @@ export function TargetPrompts({
       <CardHeader
         actions={
           <>
-            <Button variant="secondary" disabled={busy} onClick={() => generate.mutate()}>
+            <Button variant="secondary" disabled={busy} onClick={generatePrompts}>
               {generate.isPending ? 'Generating…' : `Generate ${GENERATED_COUNT}`}
             </Button>
             <Button
@@ -148,11 +137,7 @@ export function TargetPrompts({
               placeholder="best instant read thermometer for grilling under $50"
             />
             <div>
-              <Button
-                variant="primary"
-                disabled={!text.trim() || busy}
-                onClick={() => manual.mutate()}
-              >
+              <Button variant="primary" disabled={!text.trim() || busy} onClick={addPrompt}>
                 Add prompt
               </Button>
             </div>

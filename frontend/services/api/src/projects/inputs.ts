@@ -1,4 +1,10 @@
-import { benchmarkModeSchema, entityMatchingModeSchema } from '@citeladder/contracts/project';
+import { benchmarkModeSchema } from '@citeladder/contracts/project';
+import {
+  competitorRequestSchema,
+  entityMatchingRequestSchema,
+  projectCreateRequestSchema,
+  projectUpdateRequestSchema,
+} from '@citeladder/contracts/project-requests';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
@@ -11,7 +17,7 @@ const list = z.array(text(1024));
 const aliasList = z.array(text(profile.alias_max_chars)).max(profile.max_entity_aliases);
 /** The confirmed category buyers would search for. */
 export const categoryInput = z.string().trim().min(1).max(profile.category_max_chars);
-export const competitorInput = z.object({
+export const competitorInput = competitorRequestSchema.extend({
   name: text(255).min(1),
   aliases: aliasList.default([]),
   domains: list.default([]),
@@ -36,8 +42,8 @@ const scalars = {
   ),
   default_repetitions: z
     .int()
-    .min(cfg.min_repetitions)
-    .max(cfg.max_repetitions)
+    .min(policy.audits.min_repetitions)
+    .max(policy.audits.max_repetitions)
     .default(cfg.default_repetitions),
 };
 const collections = {
@@ -46,7 +52,7 @@ const collections = {
   unintended_domains: list.default([]),
   competitors: z.array(competitorInput).max(profile.max_project_competitors).default([]),
 };
-export const projectCreate = z.object({
+export const projectCreate = projectCreateRequestSchema.extend({
   ...scalars,
   ...collections,
   description: text(profile.profile_text_max_chars).default(''),
@@ -64,7 +70,7 @@ export const projectCreate = z.object({
     )
     .default({}),
 });
-export const projectUpdate = z.object({
+export const projectUpdate = projectUpdateRequestSchema.extend({
   name: scalars.name.optional(),
   brand_name: scalars.brand_name.unwrap().optional(),
   website_url: scalars.website_url.unwrap().optional(),
@@ -83,9 +89,8 @@ export const projectUpdate = z.object({
   // project no longer tracks are dropped on save.
   entity_matching: z
     .array(
-      z.object({
+      entityMatchingRequestSchema.extend({
         name: text(255).min(1),
-        mode: entityMatchingModeSchema,
         context_terms: z
           .array(text(80).min(1))
           .max(policy.audits.analysis.entity_terms_max)

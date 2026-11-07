@@ -1,15 +1,13 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { promptsQueries } from '@/lib/api/prompts';
-import { queryKeys } from '@/lib/api/query-keys';
-import { runsApi, runsQueries } from '@/lib/api/runs';
-import type { Audit, LogicalEngine, PromptSet } from '@/lib/api/types';
-import { isConsumerEngine } from '@/lib/providers/catalog';
-import { useActiveWorkspaceId } from '@/lib/project/project-context';
+import { runsMutations, runsQueries } from '@/lib/api/runs';
+import type { Audit, LogicalEngine, PromptSet } from '@citeladder/contracts';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';
 import {
   auditablePrompts,
@@ -77,13 +75,12 @@ export function LaunchDialog({
   promptSelectionLabel?: string;
   auditScope?: 'brand' | 'commerce';
 }>) {
-  const queryClient = useQueryClient();
-  const workspaceId = useActiveWorkspaceId();
+  const { workspaceId } = useProjectScope();
   const promptSetsQuery = useQuery({
-    ...promptsQueries.sets(workspaceId, projectId),
-    enabled: open && workspaceId !== null,
+    ...promptsQueries.sets({ workspaceId, projectId }),
+    enabled: open,
   });
-  const { configuredEngines, unverifiedEngines, enginesReady } = useConfiguredEngines(
+  const { configuredEngines, unverifiedEngines, enginesReady, catalog } = useConfiguredEngines(
     open,
     workspaceId,
   );
@@ -107,9 +104,9 @@ export function LaunchDialog({
     }
     if (!initialized.current && enginesReady) {
       initialized.current = true;
-      setEngines(configuredEngines.filter(isConsumerEngine));
+      setEngines(configuredEngines.filter(catalog.isObserved));
     }
-  }, [open, enginesReady, configuredEngines]);
+  }, [open, enginesReady, configuredEngines, catalog]);
   const [repetitions, setRepetitions] = useState(DEFAULT_REPETITIONS);
   const markets = useProjectMarkets(projectId, workspaceId, open);
   // The default market alone until the reader picks more.
@@ -130,7 +127,7 @@ export function LaunchDialog({
   const promptSelection = useMemo(
     () =>
       batchSelection(
-        promptSetsQuery.data,
+        promptSetsQuery.data?.prompt_sets,
         promptSetId,
         fixedPromptSetId,
         fixedPromptIds,
@@ -161,9 +158,14 @@ export function LaunchDialog({
     repetitions,
     auditScope,
   };
-  const ready = workspaceId !== null && canLaunch(selection);
+  // The accepted repetition range arrives with the prompt-set list; no payload is built before it.
+  const limits = promptSetsQuery.data?.limits ?? null;
+  const ready = limits !== null && canLaunch(selection);
   const estimateQuery = useQuery({
-    ...runsQueries.estimate(workspaceId, ready ? buildLaunchPayload(selection) : null),
+    ...runsQueries.estimate(
+      workspaceId,
+      ready && limits ? buildLaunchPayload(selection, limits) : null,
+    ),
     enabled: open,
   });
   const reset = () => {
@@ -173,19 +175,17 @@ export function LaunchDialog({
     setMarketIds([null]);
     setBatchIndex(null);
   };
-  const launchMutation = useMutation({
-    mutationFn: () => {
-      if (!workspaceId) throw new Error('Workspace is not available.');
-      return runsApi.launchAudit(buildLaunchPayload(selection), { workspaceId });
-    },
-    onSuccess: async (audits) => {
-      for (const audit of audits) queryClient.setQueryData(queryKeys.runs.detail(audit.id), audit);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.runs.all });
-      onOpenChange(false);
-      reset();
-      if (audits[0]) onLaunched?.(audits[0]);
-    },
-  });
+  const launchMutation = useMutation(runsMutations.launch(workspaceId));
+  const launch = () => {
+    if (!limits) return;
+    launchMutation.mutate(buildLaunchPayload(selection, limits), {
+      onSuccess: (audits) => {
+        onOpenChange(false);
+        reset();
+        if (audits[0]) onLaunched?.(audits[0]);
+      },
+    });
+  };
   const launchNotice = launchMutation.isError
     ? mutationNoticeForError(launchMutation.error, { action: 'launch the audit' })
     : null;
@@ -194,7 +194,8 @@ export function LaunchDialog({
     <LaunchDialogView
       open={open}
       onOpenChange={onOpenChange}
-      promptSets={promptSetsQuery.data ?? []}
+      promptSets={promptSetsQuery.data?.prompt_sets ?? []}
+      repetitionLimits={limits}
       promptSetsLoading={promptSetsQuery.isLoading}
       configuredEngines={configuredEngines}
       unverifiedEngines={unverifiedEngines}
@@ -219,7 +220,7 @@ export function LaunchDialog({
       estimate={estimateQuery.data}
       launchPending={launchMutation.isPending}
       launchNotice={launchNotice}
-      onLaunch={() => launchMutation.mutate()}
+      onLaunch={launch}
       connecting={connecting}
       setConnecting={setConnecting}
       promptSetLocked={fixedSelection.locked}

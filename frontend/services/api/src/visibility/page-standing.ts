@@ -10,9 +10,7 @@ import type { pageStandingSchema } from '@citeladder/contracts/visibility-eviden
 import { sql } from 'kysely';
 import type { z } from 'zod';
 
-import { earnedTargetKey } from '../analysis/opportunities/earned-pages.ts';
 import { policy } from '../config.ts';
-import type { Database } from '../db/database.ts';
 import type { Reading, ReadingPresence } from '../source-pages/reading.ts';
 import type { RunSelection } from './selection.ts';
 
@@ -22,7 +20,7 @@ const s = policy.opportunity.source_pages;
 const classes = policy.opportunity.source_patterns;
 // Pages that belong to the business or a competitor can never list the business.
 const OWN_PAGE_CLASSES = policy.opportunity.earned_actions.EARNED_EXCLUDED_SOURCE_CLASSES;
-const INSPECTED = policy.opportunity.refresh.source_page_outcome_inspected;
+const INSPECTED = s.INSPECTION_INSPECTED;
 
 /**
  * One page's standing. A page that belongs to the business or to a
@@ -84,40 +82,4 @@ export function gapPageHashes(selection: RunSelection) {
           and rival.entity_kind <> ${s.ENTITY_KIND_BRAND}
           and rival.presence = ${s.PRESENCE_PRESENT}
       )`;
-}
-
-/**
- * The Action to get listed on each page, by url hash: the one grouping the
- * page's live earned Opportunity, highest priority first should there be two.
- */
-export async function earnedPageActions(
-  db: Database,
-  selection: RunSelection,
-  urlHashes: readonly string[],
-): Promise<Map<string, string>> {
-  const actions = new Map<string, string>();
-  if (!urlHashes.length) return actions;
-  const targets = new Map(urlHashes.map((hash) => [earnedTargetKey(hash), hash]));
-  const rows = await db
-    .selectFrom('opportunities as opportunity')
-    .innerJoin('actions as action', (join) =>
-      join
-        .onRef('action.project_id', '=', 'opportunity.project_id')
-        .on(sql<boolean>`action.member_opportunity_ids @> jsonb_build_array(opportunity.id::text)`),
-    )
-    .distinctOn('opportunity.target_key')
-    .select(['opportunity.target_key', 'action.id'])
-    .where('opportunity.workspace_id', '=', selection.workspaceId)
-    .where('opportunity.project_id', '=', selection.projectId)
-    .where('opportunity.target_key', 'in', [...targets.keys()])
-    .where('opportunity.superseded_at', 'is', null)
-    .where('action.workspace_id', '=', selection.workspaceId)
-    .orderBy('opportunity.target_key')
-    .orderBy(sql`opportunity.priority_score desc nulls last`)
-    .execute();
-  for (const row of rows) {
-    const hash = targets.get(row.target_key);
-    if (hash) actions.set(hash, row.id);
-  }
-  return actions;
 }

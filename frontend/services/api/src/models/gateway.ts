@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { policy, resolveSettingSpec } from '../config.ts';
+import { policy } from '../config.ts';
+import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { getLogger } from '../logging.ts';
 import {
   callDeadline,
@@ -32,9 +33,7 @@ export type GatewaySettings = {
   maxDelaySeconds: number;
 };
 
-export function gatewaySettings(
-  env: Record<string, string | undefined> = process.env,
-): GatewaySettings {
+export function gatewaySettings(env: SettingSource = process.env): GatewaySettings {
   const spec = policy.models.gateway;
   const setting = (name: keyof typeof spec) => resolveSettingSpec(spec[name], env);
   return {

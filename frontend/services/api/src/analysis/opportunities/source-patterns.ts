@@ -1,3 +1,4 @@
+import type { SourceClass, SourcePattern } from '@citeladder/contracts/opportunities';
 import { policy } from '../../config.ts';
 import { domainMatches, normalizeDomain } from '../domains.ts';
 import type { CitationEvidence } from './evidence.ts';
@@ -24,28 +25,24 @@ export function classifySourceOrigin(domain: string): string {
     ? p.SOURCE_ORIGIN_GOOGLE_OWNED
     : p.SOURCE_ORIGIN_EXTERNAL;
 }
-/** `SOURCE_CLASS_ORDER.index`, which raises for a class outside the taxonomy. */
-function classRank(kind: string): number {
-  const rank = p.SOURCE_CLASS_ORDER.indexOf(kind);
-  if (rank < 0) throw new Error(`${kind} is not in SOURCE_CLASS_ORDER`);
-  return rank;
-}
 export function classifySourceDomain(
   domain: string,
   owned: boolean,
   competitor: string | null,
-): string {
+): SourceClass {
   if (owned) return p.SOURCE_CLASS_BRAND_OWNED;
   if (competitor) return p.SOURCE_CLASS_COMPETITOR_OWNED;
   const normalized = normalizeDomain(domain);
   if (isGoogleSearchSurface(normalized)) return p.SOURCE_CLASS_SEARCH_SURFACE;
-  for (const [kind, domains] of p.SOURCE_CLASS_DOMAIN_TABLES as [string, string[]][]) {
+  for (const [kind, domains] of p.SOURCE_CLASS_DOMAIN_TABLES) {
     if (domains.some((d) => domainMatches(normalized, d))) return kind;
   }
   return p.SOURCE_CLASS_OTHER_THIRD_PARTY;
 }
-export function byDomain(citations: CitationEvidence[]): Map<string, [string, CitationEvidence]> {
-  const found = new Map<string, [string, CitationEvidence]>();
+export function byDomain(
+  citations: CitationEvidence[],
+): Map<string, [SourceClass, CitationEvidence]> {
+  const found = new Map<string, [SourceClass, CitationEvidence]>();
   for (const citation of citations) {
     const domain = normalizeDomain(citation.domain) || normalizeDomain(citation.url);
     if (domain && !found.has(domain))
@@ -56,9 +53,9 @@ export function byDomain(citations: CitationEvidence[]): Map<string, [string, Ci
   }
   return found;
 }
-export function summarizeSourcePattern(citations: CitationEvidence[]) {
+export function summarizeSourcePattern(citations: CitationEvidence[]): SourcePattern {
   const domains = byDomain(citations);
-  const counts = new Map<string, number>();
+  const counts = new Map<SourceClass, number>();
   const competitors = new Map<string, string[]>();
   const independent = new Set<string>();
   const independentClasses = new Set<string>([
@@ -91,8 +88,9 @@ export function summarizeSourcePattern(citations: CitationEvidence[]) {
   if (counts.has(p.SOURCE_CLASS_VIDEO)) patterns.push(p.PATTERN_VIDEO_EVIDENCE);
   if (independent.size >= p.MULTIPLE_INDEPENDENT_DOMAIN_MIN)
     patterns.push(p.PATTERN_MULTIPLE_INDEPENDENT_DOMAINS);
+  const rank = (kind: SourceClass) => p.SOURCE_CLASS_ORDER.indexOf(kind);
   const ordered = [...domains].sort(
-    ([a, [ak]], [b, [bk]]) => classRank(ak) - classRank(bk) || compareText(a, b),
+    ([a, [ak]], [b, [bk]]) => rank(ak) - rank(bk) || compareText(a, b),
   );
   return {
     taxonomy_version: p.SOURCE_TAXONOMY_VERSION,

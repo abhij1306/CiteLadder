@@ -119,7 +119,7 @@ export function TrafficCrawlers({ workspaceId, projectId, filters }: TrafficTabl
     scopeId: projectId,
     scope: filters,
     query: (request) =>
-      aiTrafficQueries.crawlers(workspaceId, projectId, { ...filters, ...request }),
+      aiTrafficQueries.crawlers({ workspaceId, projectId }, { ...filters, ...request }),
     noun: 'crawlers',
     loading: 'Loading crawlers…',
     error: 'Could not read crawlers',
@@ -203,13 +203,13 @@ function catalogState(
 }
 export function TrafficActivity({ workspaceId, projectId, filters }: TrafficTableScope) {
   // The screen's controls read the same entry, so this adds no request.
-  const catalog = useQuery(aiTrafficQueries.catalog(workspaceId, projectId));
+  const catalog = useQuery(aiTrafficQueries.catalog({ workspaceId, projectId }));
   const { page, table } = useCursorTableQuery({
     workspaceId,
     scopeId: projectId,
     scope: filters,
     query: (request) =>
-      aiTrafficQueries.activity(workspaceId, projectId, { ...filters, ...request }),
+      aiTrafficQueries.activity({ workspaceId, projectId }, { ...filters, ...request }),
     noun: 'requests',
     loading: 'Loading request activity…',
     error: 'Could not read request activity',
@@ -303,7 +303,8 @@ function CoverageTable({
     workspaceId,
     scopeId: projectId,
     scope: range,
-    query: (request) => aiTrafficQueries.coverage(workspaceId, projectId, { range, ...request }),
+    query: (request) =>
+      aiTrafficQueries.coverage({ workspaceId, projectId }, { range, ...request }),
     noun: 'reporting days',
     loading: 'Loading coverage…',
     error: 'Could not read coverage',

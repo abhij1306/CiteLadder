@@ -13,9 +13,9 @@ import { isoDateText } from '../db/timestamps.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { ApiError } from '../errors.ts';
 import { parseUuid } from '../http/uuid.ts';
-import { addDays } from '../referrals/projection.ts';
+import { addDays, inclusiveDays } from '../calendar-days.ts';
 import { numberOrNull } from './accumulators.ts';
-import { hash } from './normalization.ts';
+import { hash } from '../crypto-text.ts';
 import { record } from '../db/json.ts';
 import { compareText } from '../text-order.ts';
 
@@ -24,15 +24,13 @@ const integer = (value: unknown) => {
   const n = numberOrNull(value);
   return n === null ? null : Math.trunc(n);
 };
-export const windowDays = (start: string, end: string) =>
-  (Date.parse(end) - Date.parse(start)) / 86_400_000 + 1;
 export type Window = readonly [string, string];
 type Scope = { workspaceId: string; projectId: string };
 function customWindow(start?: string | null, end?: string | null): Window | null {
   if (start == null && end == null) return null;
   if (!start || !end) throw new ApiError(422, "'from' and 'to' must be supplied together");
   if (end < start) throw new ApiError(422, "'to' must not be before 'from'");
-  if (windowDays(start, end) > p.PERFORMANCE_CUSTOM_RANGE_MAX_DAYS)
+  if (inclusiveDays(start, end) > p.PERFORMANCE_CUSTOM_RANGE_MAX_DAYS)
     throw new ApiError(422, `window exceeds ${p.PERFORMANCE_CUSTOM_RANGE_MAX_DAYS} days`);
   return [start, end];
 }
@@ -196,7 +194,7 @@ export async function getPerformance(
   if (window && compare !== p.PERFORMANCE_COMPARE_NONE) {
     let peer: Window | null;
     if (compare === p.PERFORMANCE_COMPARE_PREVIOUS)
-      peer = [addDays(window[0], -windowDays(...window)), addDays(window[0], -1)];
+      peer = [addDays(window[0], -inclusiveDays(...window)), addDays(window[0], -1)];
     else if (compare === p.PERFORMANCE_COMPARE_YEAR_OVER_YEAR)
       peer = window.map((day) =>
         addDays(day, -p.PERFORMANCE_YEAR_OVER_YEAR_SHIFT_DAYS),

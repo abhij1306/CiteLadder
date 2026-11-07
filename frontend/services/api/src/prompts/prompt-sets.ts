@@ -8,38 +8,48 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import {
+  promptSetCreateRequestSchema,
+  promptSetUpdateRequestSchema,
+} from '@citeladder/contracts/prompt-requests';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
+import type { PromptFormLimits } from '@citeladder/contracts/project';
+
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { promptSetView, type PromptSetRow, type PromptSetView } from './views.ts';
+import { generationSetting } from './generation-input.ts';
 
-export const promptSetCreate = z.object({
-  project_id: z.uuid(),
+export const promptSetCreate = promptSetCreateRequestSchema.extend({
   name: z.string().max(255).default(''),
   description: z.string().max(1024).default(''),
 });
-export const promptSetUpdate = z.object({
+export const promptSetUpdate = promptSetUpdateRequestSchema.extend({
   name: z.string().max(255).nullish(),
   description: z.string().max(1024).nullish(),
 });
 
-/** A set in the caller's workspace, or `Prompt set not found`. */
+/** A set in the caller's workspace (and named project), or `Prompt set not found`. */
 export async function scopedPromptSet(
   db: Kysely<DB>,
   workspaceId: string,
   promptSetId: string,
+  projectId: string | null = null,
 ): Promise<PromptSetRow> {
-  const row = await db
+  const query = db
     .selectFrom('prompt_sets')
     .innerJoin('projects', 'projects.id', 'prompt_sets.project_id')
     .selectAll('prompt_sets')
     .where('prompt_sets.id', '=', promptSetId)
-    .where('projects.workspace_id', '=', workspaceId)
-    .executeTakeFirst();
+    .where('projects.workspace_id', '=', workspaceId);
+  const row = await (
+    projectId === null ? query : query.where('projects.id', '=', projectId)
+  ).executeTakeFirst();
   if (row === undefined) throw notFound('Prompt set');
   return row;
 }
@@ -89,6 +99,25 @@ export async function listPromptSets(
   return views(db, sets);
 }
 
+/**
+ * The bounds the request schemas enforce on the forms a prompt-set list opens,
+ * read from the same policy values so the browser never restates them.
+ */
+export function promptFormLimits(): PromptFormLimits {
+  const generation = policy.prompts.generation;
+  return {
+    generation_count_max: generationSetting('max_count'),
+    import_rows_max: policy.prompts.import_max_rows,
+    persona_max_chars: policy.prompts.persona_max_chars,
+    run_context_max_chars: generation.run_context_max_chars,
+    distribution_personas_max: generation.distribution_personas_max,
+    seed_query_ids_max: generation.seed_query_ids_max,
+    context_list_max_entries: policy.brand_identity.context_list_max_entries,
+    audit_repetitions_min: policy.audits.min_repetitions,
+    audit_repetitions_max: policy.audits.max_repetitions,
+  };
+}
+
 export async function createPromptSet(
   db: Database,
   workspaceId: string,
@@ -106,6 +135,7 @@ export async function createPromptSet(
     .insertInto('prompt_sets')
     .values({
       id: randomUUID(),
+      workspace_id: workspaceId,
       project_id: project.id,
       name: input.name,
       description: input.description,

@@ -6,10 +6,14 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
+import { setLogSink } from '../src/logging.ts';
 import { TaskQueue, type QueueTask } from '../src/queue/task-queue.ts';
-import { AnalyticsWorker, EXECUTORS } from '../src/workers/analytics-worker.ts';
-import type { Executor } from '../src/workers/executor.ts';
+import { AnalyticsWorker, EXECUTORS, retryDelayMs } from '../src/workers/analytics-worker.ts';
+import { enqueueTask } from '../src/queue/enqueue.ts';
+import type { Executor } from '../src/queue/executor.ts';
+import { ANALYTICS_KIND_NAMES } from '../src/workers/analytics-kinds.ts';
 import {
   enqueue,
   REFERRER_DAILY,
@@ -553,10 +557,117 @@ describe('finalize', () => {
         .where('id', '=', task.id)
         .execute();
     };
-    expect(await runOne({ ingest_referrals: stolen })).toMatchObject({
+    const { records, result } = await capturingLogs(() => runOne({ ingest_referrals: stolen }));
+    expect(result).toMatchObject({
       status: 'running',
       lease_owner: 'sweeper-reclaimed',
       attempt_count: 0,
     });
+    expect(records.filter((record) => record.task_id === result.id)).toEqual([
+      expect.objectContaining({
+        event: 'lane_lease_lost',
+        lane: 'analytics_tasks',
+        workspace_id: workspaceId,
+        attempt: 0,
+        phase: 'fence',
+      }),
+    ]);
+  });
+
+  it('logs a failed attempt by class, code, phase, attempt and elapsed time, never its message', async () => {
+    class ProviderTimeout extends Error {
+      readonly code = 'provider_timeout';
+    }
+    const timingOut: Executor = async () => {
+      throw new ProviderTimeout('upstream said: secret-body');
+    };
+    const { records, result } = await capturingLogs(() => runOne({ ingest_referrals: timingOut }));
+    expect(result).toMatchObject({ status: 'retry_wait', attempt_count: 1 });
+    const logged = records.filter((record) => record.task_id === result.id);
+    expect(logged).toEqual([
+      expect.objectContaining({
+        event: 'lane_task_failed',
+        level: 'warning',
+        lane: 'analytics_tasks',
+        workspace_id: workspaceId,
+        attempt: 1,
+        phase: 'ingest_referrals',
+        outcome: 'retry',
+        error_class: 'ProviderTimeout',
+        error_code: 'provider_timeout',
+        elapsed_ms: expect.any(Number),
+      }),
+    ]);
+    expect(JSON.stringify(logged)).not.toContain('secret-body');
+  });
+});
+
+async function capturingLogs<T>(run: () => Promise<T>) {
+  const records: Record<string, unknown>[] = [];
+  const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+  try {
+    return { records, result: await run() };
+  } finally {
+    setLogSink(restore);
+  }
+}
+
+describe('retry backoff', () => {
+  const backoff = { retryDelaySeconds: 30, retryMaxDelaySeconds: 900 };
+  it('doubles the wait per failed attempt up to the cap, jittered into its upper half', () => {
+    expect([1, 2, 3, 10].map((attempt) => retryDelayMs(attempt, backoff, () => 1))).toEqual([
+      30_000, 60_000, 120_000, 900_000,
+    ]);
+    expect([1, 2, 3, 10].map((attempt) => retryDelayMs(attempt, backoff, () => 0))).toEqual([
+      15_000, 30_000, 60_000, 450_000,
+    ]);
+  });
+  it('refuses a retry cap below the base delay', () => {
+    expect(() => loadWorkerSettings({ ANALYTICS_RETRY_MAX_DELAY_SECONDS: '10' })).toThrow(
+      'retry_max_delay_seconds must not be below retry_delay_seconds',
+    );
+    expect(
+      loadWorkerSettings({ ANALYTICS_RETRY_MAX_DELAY_SECONDS: '30' }).retryMaxDelaySeconds,
+    ).toBe(30);
+  });
+});
+
+describe('analytics kind registry', () => {
+  it('enqueues every registered kind into analytics_tasks with the default attempt budget', async () => {
+    for (const kind of ANALYTICS_KIND_NAMES)
+      await enqueueTask(db, { workspaceId, projectId, kind, payload: {}, keyParts: [projectId] });
+    const rows = await db
+      .selectFrom('analytics_tasks')
+      .select(['task_kind', 'max_attempts'])
+      .where('workspace_id', '=', workspaceId)
+      .orderBy('task_kind')
+      .execute();
+    expect(rows).toEqual(
+      [
+        'ai_referrals_snapshot_refresh',
+        'ai_traffic_insights_refresh',
+        'answer_perception',
+        'bot_ip_range_refresh',
+        'bot_request_retention_sweep',
+        'classify_referrals',
+        'commerce_catalog_projection',
+        'commerce_competitor_discovery',
+        'crawl_log_pull',
+        'crawl_log_rollup_refresh',
+        'crawl_log_upload_abandon_sweep',
+        'demand_snapshot_refresh',
+        'fact_verification',
+        'ingest_referrals',
+        'internal_link_judgment',
+        'internal_link_publish',
+        'opportunity_refresh',
+        'opportunity_verification',
+        'performance_range_projection',
+        'referral_retention_sweep',
+        'search_intelligence_acquisition',
+        'source_page_inspection',
+        'traffic_snapshot_refresh',
+      ].map((task_kind) => ({ task_kind, max_attempts: 3 })),
+    );
   });
 });

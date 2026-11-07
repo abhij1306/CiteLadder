@@ -1,9 +1,9 @@
 'use client';
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { VerificationObservations } from '@/components/opportunities/verification-observations';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,9 +21,8 @@ import {
 } from '@/lib/agent/vocabulary';
 import type { ActionDeclaration, MeasurementLeg } from '@/lib/api/actions';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
+import { siteHealthMutations } from '@/lib/api/site-health-queries';
 import { promptHistoryHref } from '@/lib/prompts/history';
-import { queryKeys } from '@/lib/api/query-keys';
-import { siteHealthMutations } from '@/lib/api/site-health';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 
 /**
@@ -213,14 +212,7 @@ function LegRow({
 function RunCrawl({ workspaceId }: Readonly<{ workspaceId: string }>) {
   const { activeProjectId } = useProjectContext();
   const mayWrite = useWorkspaceCapability('write');
-  const queryClient = useQueryClient();
-  const start = useMutation({
-    ...siteHealthMutations.createCrawl(workspaceId),
-    onSuccess: () =>
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.siteHealth.all,
-      }),
-  });
+  const start = useMutation(siteHealthMutations.createCrawl(workspaceId));
   if (!mayWrite || !activeProjectId) return null;
   if (start.isSuccess)
     return (

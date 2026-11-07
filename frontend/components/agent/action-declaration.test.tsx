@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import type { ActionDeclaration } from '@/lib/api/actions';
 import { localDay } from '@/lib/opportunities/declaration-date';
@@ -18,7 +19,7 @@ const MEMBER = '33333333-3333-4333-8333-333333333333';
 const NOW = '2026-09-25T10:00:00Z';
 const selection = {
   activeProjectId: PROJECT,
-  activeProject: { id: PROJECT } as never,
+  activeProject: makeProject({ id: PROJECT }),
   status: 'ready' as const,
 };
 
@@ -48,6 +49,7 @@ describe('Mark implemented', () => {
         revision={null}
         action={{
           id: ACTION,
+          project_id: PROJECT,
           members: [{ id: MEMBER, title: 'Missing structured data' } as never],
           member_measurement: { [MEMBER]: null },
           declarable_since: daysAgo(30).toISOString(),

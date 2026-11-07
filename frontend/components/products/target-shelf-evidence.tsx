@@ -3,7 +3,7 @@
 import type { Shelf } from '@citeladder/contracts/commerce-suite';
 
 import { ActionStatusBadge } from '@/components/agent/action-status-badge';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Badge, type StatusValue } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Inline, Stack } from '@/components/ui/layout';

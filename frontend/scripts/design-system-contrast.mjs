@@ -41,7 +41,7 @@ const CONTRAST_PAIRS = [
   // Labels on fills: the primary button (and its hover) and the own-brand number.
   { inks: [color('on-ink')], surfaces: [color('ink'), color('ink-hover')], minimum: 4.5 },
   { inks: [color('on-accent')], surfaces: [color('accent')], minimum: 4.5 },
-  // Marks: Flare, the named chart series, control borders and the focus ring.
+  // Marks: Flare, the named chart series, control marks and the focus ring.
   {
     inks: [color('accent'), ...SERIES, color('line-control'), color('focus')],
     surfaces: GROUNDS,

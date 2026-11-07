@@ -13,7 +13,7 @@ import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
 import { deactivateSystemMemberships } from './frontier.ts';
 import { refreshIssueCurrency } from './issue-currency.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 import { inScope } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
 

@@ -1,4 +1,5 @@
 /** Live authorization for persisted MCP evidence. */
+import type { RecordKindName } from '@citeladder/contracts/record-kinds';
 import { sql, type RawBuilder } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -13,7 +14,7 @@ import {
   type McpPrincipal,
 } from './types.ts';
 import { holdsWrite, mcpPolicy } from './config.ts';
-import { rolesWith } from '../auth/workspace.ts';
+import { findWorkspaceMember, memberCan, rolesWith } from '../auth/workspace.ts';
 import { appLink, recordPath } from './links.ts';
 import { containsPattern } from '../db/like.ts';
 
@@ -46,18 +47,8 @@ async function liveWorkspaceIds(db: Database, principal: EvidencePrincipal): Pro
     .executeTakeFirst();
   if (!identity?.is_active) return [];
   if ('kind' in principal) {
-    const member = await db
-      .selectFrom('workspace_members as m')
-      .innerJoin('workspaces as w', 'w.id', 'm.workspace_id')
-      .innerJoin('users as u', 'u.id', 'm.user_id')
-      .select('m.workspace_id')
-      .where('m.user_id', '=', principal.userId)
-      .where('m.workspace_id', '=', principal.workspaceId)
-      .where('m.role', 'in', rolesWith('read'))
-      .where('w.is_system', '=', false)
-      .where('u.is_active', '=', true)
-      .executeTakeFirst();
-    return member ? [member.workspace_id] : [];
+    const readable = await memberCan(db, principal.workspaceId, principal.userId, 'read');
+    return readable ? [principal.workspaceId] : [];
   }
   const rows = await db
     .selectFrom('workspace_members as member')
@@ -128,13 +119,7 @@ export async function writeActor(
     throw new McpInputError(
       'This connection can only read. Reconnect CiteLadder and tick Allow changes to make changes.',
     );
-  const member = await db
-    .selectFrom('workspace_members')
-    .select('role')
-    .where('user_id', '=', principal.userId)
-    .where('workspace_id', '=', project.workspace_id)
-    .forShare()
-    .executeTakeFirst();
+  const member = await findWorkspaceMember(db, principal.userId, project.workspace_id, 'share');
   if (!member) throw new McpInputError('Project was not found in this account');
   return {
     kind: 'mcp',
@@ -161,7 +146,7 @@ export function decodeCursor(value: string, size: number): string[] {
   }
 }
 /** A record a later `fetch` can resolve; the Agent derives a turn's sources from these. */
-export const reference = (kind: string, id: string) => ({
+export const reference = (kind: RecordKindName, id: string) => ({
   kind,
   id,
   record_uri: `citeladder://${kind}/${id}`,
@@ -237,7 +222,13 @@ type SearchContext = {
   limit: number;
   results: Record<string, string>[];
   like: (column: string) => RawBuilder<boolean>;
-  append: (kind: string, id: string, project: string, title: string, text: string) => unknown;
+  append: (
+    kind: RecordKindName,
+    id: string,
+    project: string,
+    title: string,
+    text: string,
+  ) => unknown;
 };
 async function searchProjects({ db, workspaces, projectId, limit, like, append }: SearchContext) {
   let projects = db

@@ -5,7 +5,8 @@
  * route snapshot, then the audit's frozen measurement policy. Live
  * configuration is never consulted.
  */
-import { policy } from '../config.ts';
+import { readFrozenConfiguration } from '../audits/frozen-configuration.ts';
+import { logicalEngines } from '../config/providers.ts';
 import { compareText } from '../text-order.ts';
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -25,10 +26,7 @@ function frozenRetrievalEnabled(...snapshots: unknown[]): boolean | null {
 
 /** The retrieval state frozen in an audit's measurement-policy block. */
 export function auditFrozenRetrievalEnabled(configuration: unknown): boolean | null {
-  const frozen = (isObject(configuration) ? configuration : {})[
-    policy.visibility.measurement_policy_key
-  ];
-  return isObject(frozen) ? frozenRetrievalEnabled(frozen) : null;
+  return readFrozenConfiguration(configuration).measurement_policy.retrieval_enabled ?? null;
 }
 
 export function executionFrozenProvenance(input: {
@@ -49,8 +47,8 @@ export type ModelProvenance = {
 };
 
 // Catalog order is the sorted engine catalog; unknown engines sort after it.
-const ENGINE_ORDER = new Map(
-  policy.visibility.logical_engines.toSorted(compareText).map((engine, index) => [engine, index]),
+const ENGINE_ORDER = new Map<string, number>(
+  logicalEngines.toSorted(compareText).map((engine, index) => [engine, index]),
 );
 
 function engineRank(engine: string): number {

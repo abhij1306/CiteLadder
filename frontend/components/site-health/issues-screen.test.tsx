@@ -7,20 +7,15 @@ import { makeProject } from '@/test/fixtures/project';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
-import { queryKeys } from '@/lib/api/query-keys';
+import { refreshSiteHealthDashboard } from '@/lib/api/site-health-queries';
 
 const WORKSPACE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const PROJECT = '11111111-1111-4111-8111-111111111111';
 const CRAWL = '22222222-2222-4222-8222-222222222222';
 const activeProject = makeProject({ id: PROJECT, workspace_id: WORKSPACE });
 
-vi.mock('@/lib/project/project-context', () => ({
-  useProjectContext: () => ({
-    activeProject,
-    activeWorkspaceId: WORKSPACE,
-    isLoading: false,
-  }),
-}));
+/** `/issues` under the gate, which hands the screen the active project. */
+const projectRoute = { projectSelection: { activeProject } };
 
 vi.mock('@/components/site-health/issues-catalog', () => ({
   // The catalog now carries a refresh failure itself, so the stub has to render
@@ -78,7 +73,7 @@ describe('IssuesScreen read recovery', () => {
       }),
     );
 
-    renderWithProviders(<IssuesScreen />);
+    renderWithProviders(<IssuesScreen />, projectRoute);
 
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeVisible();
     expect(screen.queryByTestId('issues-catalog')).not.toBeInTheDocument();
@@ -99,13 +94,11 @@ describe('IssuesScreen read recovery', () => {
       ),
     );
 
-    const { queryClient } = renderWithProviders(<IssuesScreen />);
+    const { queryClient } = renderWithProviders(<IssuesScreen />, projectRoute);
     expect(await screen.findByTestId('issues-catalog')).toHaveTextContent(`${WORKSPACE}:${CRAWL}`);
 
     available = false;
-    void queryClient.invalidateQueries({
-      queryKey: queryKeys.siteHealth.dashboard(PROJECT),
-    });
+    void refreshSiteHealthDashboard(queryClient, PROJECT);
 
     expect(await screen.findByText('Refresh failed')).toBeVisible();
     expect(screen.getByTestId('issues-catalog')).toHaveTextContent(`${WORKSPACE}:${CRAWL}`);

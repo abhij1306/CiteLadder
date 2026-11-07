@@ -55,6 +55,7 @@ import {
 import {
   AnalysisNotFoundError,
   authorizedSelection,
+  latestBrandRunId,
   TrendQueryError,
   validateCohort,
   validateEngineAndRange,
@@ -138,19 +139,12 @@ const brandRuns = (db: Database, scope: RunScope) =>
     .where('project_id', '=', scope.projectId)
     .where('audit_scope', '=', visibility.brand_audit_scope);
 
-/** The latest dashboard-ready brand run: what "Latest" means on every visibility read. */
+/** The latest dashboard-ready brand run (`latestBrandRunId`), or not measured. */
 async function latestDashboardRunId(db: Database, scope: RunScope): Promise<string> {
-  const latest = await brandRuns(db, scope)
-    .select('id')
-    .where('market_id', 'is not distinct from', marketOf(scope))
-    .where('status', 'in', visibility.dashboard_audit_statuses)
-    .orderBy(sql`completed_at desc nulls last`)
-    .orderBy('created_at', 'desc')
-    .limit(1)
-    .executeTakeFirst();
-  if (latest === undefined)
+  const latest = await latestBrandRunId(db, { ...scope, marketId: marketOf(scope) });
+  if (latest === null)
     throw new AnalysisNotFoundError('No completed audit for project', 'not_measured');
-  return latest.id;
+  return latest;
 }
 
 /** The runs an evidence summary covers: the selection, or the latest dashboard-ready run. */

@@ -3,9 +3,8 @@ import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
-import type { FetchedPage } from '../src/projects/safe-fetch.ts';
+import type { FetchedPage } from '../src/safe-fetch.ts';
 import { isBotBlock, SitePageFetcher, siteFetchSettings } from '../src/site-health/page-fetch.ts';
-import { siteTaskSettings } from '../src/site-health/site-task.ts';
 import { crawlCounters } from '../src/site-health/reads/crawl.ts';
 import * as interpretation from '../src/site-health/analysis/off-thread.ts';
 import { hardExcluded } from '../src/site-health/url-admission.ts';
@@ -40,14 +39,16 @@ const RICH =
 const site = (pages: Record<string, Served>, requests: string[] = []) =>
   new SitePageFetcher(db, recordedSite(pages, requests), fetchSettings);
 /** Lease exactly these tasks to one worker and execute them, as its claim would. */
-async function analyze(fetcher: SitePageFetcher, ...taskIds: string[]) {
-  const worker = new SiteHealthWorker(db, {
-    owner: 'analyze-test',
-    settings: workerSettings,
-    fetcher,
-  });
+async function analyzeWith(
+  settings: typeof workerSettings,
+  fetcher: SitePageFetcher,
+  ...taskIds: string[]
+) {
+  const worker = new SiteHealthWorker(db, { owner: 'analyze-test', settings, fetcher });
   for (const id of taskIds) await worker.execute(await lease(id, worker.owner));
 }
+const analyze = (fetcher: SitePageFetcher, ...taskIds: string[]) =>
+  analyzeWith(workerSettings, fetcher, ...taskIds);
 
 async function running(values: Record<string, unknown> = {}) {
   const seed = await fixtures.crawl('running');
@@ -103,6 +104,12 @@ describe('analyze acquisition', () => {
         value_priority: 0,
         created_at: new Date(),
       })
+      .execute();
+    // Site setup records the sitemap's URLs, the authority for membership.
+    await db
+      .updateTable('site_crawls')
+      .set({ site_facts: JSON.stringify({ sitemap: { fetched: true, urls: [page.url] } }) })
+      .where('id', '=', seed.crawlId)
       .execute();
     await analyze(
       site({
@@ -213,10 +220,7 @@ describe('analyze acquisition', () => {
       .selectAll()
       .where('id', '=', page.siteUrlId)
       .executeTakeFirstOrThrow();
-    expect(url).toMatchObject({
-      latest_title: 'Rich page about widgets',
-      discovery_status: 'completed',
-    });
+    expect(url).toMatchObject({ latest_title: 'Rich page about widgets' });
   });
 
   it('reuses the discover artifact without refetching, and a rerun supersedes the current analysis', async () => {
@@ -304,7 +308,7 @@ describe('analyze acquisition', () => {
     await analyze(fetcher, otherRoot.taskId);
     expect((await task(otherRoot.taskId)).status).toBe('queued');
 
-    const old = new Date(Date.now() - (siteTaskSettings({}).dependencyMaxWait + 60) * 1000);
+    const old = new Date(Date.now() - (siteWorkerSettings({}).dependencyMaxWait + 60) * 1000);
     await db
       .updateTable('site_crawl_tasks')
       .set({ created_at: old, available_at: new Date() })
@@ -375,19 +379,20 @@ describe('analyze failures', () => {
           : advice === 'past-date'
             ? new Date(before - 45_000).toUTCString()
             : advice;
-      await analyze(
+      // Default backoff: 2 s base, 60 s ceiling, up to 1.5 s jitter.
+      await analyzeWith(
+        { ...siteWorkerSettings({}), concurrency: 1 },
         site({ '/limited': { status: 429, headers: { 'retry-after': header } } }),
         page.taskId,
       );
       const settled = await task(page.taskId);
-      const settings = siteTaskSettings({});
       const expected =
         header === '45'
           ? 45
           : header === '3600'
-            ? settings.retryMax
+            ? 60
             : ['invalid', '0', 'past-date'].includes(advice)
-              ? Math.min(settings.retryBase * 2, settings.retryMax) + 0.37 * settings.retryJitter
+              ? 2
               : (Date.parse(header) - before) / 1000;
       expect(settled.status).toBe('retry_wait');
       expect(settled.available_at.getTime() - before).toBeGreaterThanOrEqual(

@@ -51,7 +51,7 @@
           "light": "#e5e5e5",
           "dark": "#2a2a2a"
         },
-        "usage": "Every soft edge: card and frame borders on the website, table rules, dividers, and (owner decision D5, 5 Nov 2026) the 1px edge of inputs, textareas, search fields, selects, chip inputs, checkbox and radio boxes and the Agent composer, always with shadow-edge under it. A divider inside a dialog or the search palette is line, never darker."
+        "usage": "Every soft edge: card and frame borders, table rules, dividers and the resting edge of every form control (inputs, selects, textareas, chip inputs, the Agent composer, the CSV file input, checkbox and radio boxes; D5, D46), with shadow-edge under a field. A divider inside a dialog or the search palette is line, never darker, and line is the 3px halo around a focused field."
       },
       {
         "name": "line-strong",
@@ -59,7 +59,7 @@
           "light": "#d4d4d4",
           "dark": "#3a3a3a"
         },
-        "usage": "One soft step darker than line: the hover edge of fields, checkbox boxes and linked website cards, and the dashed edge of reserved slots (Turnstile, the new-workspace tile). Never a resting control edge."
+        "usage": "One soft step darker than line: a form control's hover edge (D46) and the dashed edge of reserved slots (the new-workspace tile)."
       },
       {
         "name": "line-control",
@@ -67,7 +67,7 @@
           "light": "#858585",
           "dark": "#747474"
         },
-        "usage": "Marks that need 3:1 but are not borders: the chart crosshair, the Switch's off track, the ink TextLink underline, the StepList pending ring and a not-cited engine mark. Never the edge of a control, card or box (D5, 5 Nov 2026)."
+        "usage": "Marks that need 3:1 but are not borders: the chart crosshair, the Switch's off track, the ink TextLink underline, the StepList pending ring and a not-cited engine mark. Never the edge of a control (that is line), card or box."
       },
       {
         "name": "ink",
@@ -300,7 +300,7 @@
             "fontWeight": 400,
             "letterSpacing": "-0.01em",
             "sample": "Every answer, every engine",
-            "usage": "Docs page titles and the website's CTA band heading. 26/32 below 768px. The website's pricing plan price sets this size in Geist 500 (D28)."
+            "usage": "The setup and onboarding card titles (AuthHead). 26/32 below 768px."
           },
           {
             "name": "display-md",
@@ -326,7 +326,7 @@
             "lineHeight": "28px",
             "fontWeight": 400,
             "sample": "Cited sources this week",
-            "usage": "Docs h2, reference titles and an article's Sources heading. Website card, step and form titles and article h3 are heading-lg in Geist 500 (D28). Never in the app: there Cal Sans is the PageHeader title only (D7)."
+            "usage": "Not used by the app's screens; kept as a rung of the type ladder. Never in the app: there Cal Sans is the PageHeader title only (D7)."
           },
           {
             "name": "title-sm",
@@ -432,7 +432,7 @@
         "styles": [
           {
             "name": "eyebrow",
-            "fontSize": "11px",
+            "fontSize": "12px",
             "lineHeight": "16px",
             "fontWeight": 500,
             "letterSpacing": "0.08em",
@@ -571,7 +571,7 @@
           "light": "0 1px 2px rgba(17,17,17,0.05)",
           "dark": "0 1px 2px rgba(0,0,0,0.40)"
         },
-        "usage": "The faint smudge under a soft line edge (D5): inputs, textareas, search fields, select triggers, chip inputs, checkbox and radio boxes, the Agent composer. No ring of its own, so the 1px line border stays the only edge; shadow-xs would double it."
+        "usage": "The faint smudge under a form control's soft line edge (D5, D46): inputs, textareas, search fields, select triggers, chip inputs, checkbox and radio boxes, the Agent composer. No ring of its own, so the 1px border stays the only edge; shadow-xs would double it."
       },
       {
         "name": "shadow-xs",
@@ -600,10 +600,10 @@
       {
         "name": "shadow-press",
         "value": {
-          "light": "inset 0 1px 0 rgba(255,255,255,0.16), 0 0 0 1px #111111, 0 1px 2px rgba(17,17,17,0.24)",
-          "dark": "inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(0,0,0,0.6)"
+          "light": "inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 0 rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -6px rgba(17,17,17,0.35)",
+          "dark": "inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -2px 0 rgba(0,0,0,0.2), 0 1px 2px rgba(0,0,0,0.6), 0 8px 24px -6px rgba(0,0,0,0.6)"
         },
-        "usage": "The primary (ink) button: a faint top highlight, an ink edge and a tight drop."
+        "usage": "The primary (ink) button, a raised key (D29): a top highlight, a bottom inner shade, a tight drop and a soft lift."
       }
     ]
   },

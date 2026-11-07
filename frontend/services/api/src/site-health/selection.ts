@@ -1,5 +1,6 @@
 /** Versioned monitored-set replacement, serialized across the entire workspace. */
 import { randomUUID } from 'node:crypto';
+import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { notFound } from '../errors.ts';
 import type { Database } from '../db/database.ts';
@@ -8,7 +9,8 @@ import { admissionRuntime, createPageRerunCrawl, enqueueCrawlTask } from './plan
 import { crawlError } from './planner-policy.ts';
 import { inventoryCrawlIds } from './reads/crawl.ts';
 import { monitoredQuota } from './reads/runtime.ts';
-import { ACTIVE_CRAWL } from './site-task.ts';
+import type { Crawl } from './site-task.ts';
+import { policy } from '../config.ts';
 
 /** The project's monitored set; its route authorizes the path project. */
 export async function monitoredSet(db: Database, workspaceId: string, projectId: string) {
@@ -73,7 +75,7 @@ export async function lockControlScope(db: Database, workspaceId: string, projec
     .selectAll()
     .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
-    .where('status', 'in', [...ACTIVE_CRAWL])
+    .where('status', 'in', ACTIVE_CRAWL_STATUSES)
     .orderBy('created_at', 'desc')
     .forUpdate()
     .executeTakeFirst();
@@ -225,25 +227,54 @@ export async function replaceMonitoredSet(
     .where('site_url_id', '=', sql<string>`any(${removed}::uuid[])`)
     .where('status', 'in', ['queued', 'retry_wait'])
     .execute();
-  await Promise.all(
-    added.map(async (url, position) => {
-      const previous = await db
-        .selectFrom('site_crawl_tasks')
-        .select((eb) => eb.fn.max<number>('generation').as('generation'))
-        .where('workspace_id', '=', workspaceId)
-        .where('crawl_id', '=', crawl.id)
-        .where('task_kind', '=', 'analyze')
-        .where('url_hash', '=', url.url_hash)
-        .executeTakeFirstOrThrow();
-      await enqueueCrawlTask(db, crawl, {
-        kind: 'analyze',
-        url: url.normalized_url,
-        siteUrlId: url.id,
-        position,
-        generation: (previous.generation ?? -1) + 1,
-      });
-    }),
-  );
+  await Promise.all(added.map((url, position) => enqueueNextGeneration(db, crawl, url, position)));
+}
+
+/**
+ * Queue a page's next analyze generation in the active crawl the caller holds
+ * locked. An older generation still open is cancelled in the same transaction
+ * with its lease cleared, so its late commit fails the lease fence and never
+ * becomes the page's current analysis.
+ */
+async function enqueueNextGeneration(
+  db: Database,
+  crawl: Crawl,
+  url: { id: string; url_hash: string; normalized_url: string },
+  position?: number,
+) {
+  const previous = await db
+    .selectFrom('site_crawl_tasks')
+    .select((eb) => eb.fn.max<number>('generation').as('generation'))
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('crawl_id', '=', crawl.id)
+    .where('task_kind', '=', 'analyze')
+    .where('url_hash', '=', url.url_hash)
+    .executeTakeFirstOrThrow();
+  const now = new Date();
+  await db
+    .updateTable('site_crawl_tasks')
+    .set({
+      status: 'cancelled',
+      completed_at: now,
+      updated_at: now,
+      lease_owner: null,
+      lease_expires_at: null,
+      heartbeat_at: null,
+      error_code: 'cancelled',
+    })
+    .where('workspace_id', '=', crawl.workspace_id)
+    .where('crawl_id', '=', crawl.id)
+    .where('task_kind', '=', 'analyze')
+    .where('url_hash', '=', url.url_hash)
+    .where('status', 'not in', policy.task_queue.terminal)
+    .execute();
+  return enqueueCrawlTask(db, crawl, {
+    kind: 'analyze',
+    url: url.normalized_url,
+    siteUrlId: url.id,
+    position,
+    generation: (previous.generation ?? -1) + 1,
+  });
 }
 
 export async function bulkMonitoredSet(
@@ -373,20 +404,7 @@ export async function rerunPage(
   let crawl = scope.crawl;
   let taskId: string | null;
   if (crawl) {
-    const previous = await db
-      .selectFrom('site_crawl_tasks')
-      .select((eb) => eb.fn.max<number>('generation').as('generation'))
-      .where('workspace_id', '=', workspaceId)
-      .where('crawl_id', '=', crawl.id)
-      .where('task_kind', '=', 'analyze')
-      .where('url_hash', '=', url.url_hash)
-      .executeTakeFirstOrThrow();
-    taskId = await enqueueCrawlTask(db, crawl, {
-      kind: 'analyze',
-      url: url.normalized_url,
-      siteUrlId,
-      generation: (previous.generation ?? -1) + 1,
-    });
+    taskId = await enqueueNextGeneration(db, crawl, url);
   } else {
     crawl = await createPageRerunCrawl(
       db,

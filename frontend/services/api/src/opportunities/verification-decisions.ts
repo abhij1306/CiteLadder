@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ExpectedCheck } from '@citeladder/contracts/opportunities';
 import { policy } from '../config.ts';
-import { round } from '../demand/projection.ts';
+import { roundScaled } from '../numbers.ts';
 import { record } from '../db/json.ts';
 import { epochMicros, parseDatetime } from '../http/datetimes.ts';
 import { compareText } from '../text-order.ts';
@@ -197,7 +197,7 @@ export function leg(
     post_source_ids: postId ? [postId] : [],
     baseline_value: baseline,
     post_value: post,
-    delta: baseline !== null && post !== null ? round(post - baseline, 4) : null,
+    delta: baseline !== null && post !== null ? roundScaled(post - baseline, 4) : null,
     versions,
     limitations,
   };

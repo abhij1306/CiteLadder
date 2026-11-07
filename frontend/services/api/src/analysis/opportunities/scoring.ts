@@ -1,5 +1,5 @@
 import { policy } from '../../config.ts';
-import { round } from '../../demand/projection.ts';
+import { roundScaled } from '../../numbers.ts';
 const p = policy.opportunity.opportunities;
 const e = policy.opportunity.earned_actions;
 const normalized = (value: string | null) => (value ?? '').trim().toLowerCase();
@@ -54,7 +54,7 @@ export function pageRecurrenceFactor(count: number, eligible: number): number {
     : Math.min(e.EARNED_PAGE_USAGE_FACTOR_MAX, 1 + Math.max(count, 0) / eligible);
 }
 export function priorityScore(severity: string, value: number, gap: number): number {
-  return round(
+  return roundScaled(
     weight(p.SEVERITY_WEIGHTS, severity, p.SEVERITY_WEIGHT_DEFAULT) *
       value *
       gap *

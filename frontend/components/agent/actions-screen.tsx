@@ -2,9 +2,7 @@
 
 import { ActionPriorityBadge, ActionStatusBadge } from '@/components/agent/action-status-badge';
 import { ListScreen } from '@/components/layout/page-shell';
-import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
-import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { TextLink } from '@/components/ui/text-link';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
@@ -18,10 +16,10 @@ import {
 import { actionsQueries, type actionsApi, type Action, type ActionStatus } from '@/lib/api/actions';
 import { actionStatusSchema } from '@citeladder/contracts/actions';
 import { queueCount, useActionStatusCounts } from '@/lib/agent/use-action-status-counts';
-import { formatCount } from '@/lib/format';
+import { formatCount, readableUrl } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 
 const QUEUE = 'queue';
@@ -60,7 +58,7 @@ const TARGET_OPTIONS = [
  * state; the cursor stack is local and resets whenever a filter changes.
  */
 export function ActionsScreen() {
-  const { activeProjectId, activeWorkspaceId, isLoading } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const [status, setStatus] = useUrlState('status', STATUS_CODEC);
   const [target, setTarget] = useUrlState('target', TARGET_CODEC);
   const counts = useActionStatusCounts();
@@ -85,23 +83,14 @@ export function ActionsScreen() {
         ),
       }}
     >
-      {activeProjectId && activeWorkspaceId ? (
-        <ActionsList
-          workspaceId={activeWorkspaceId}
-          projectId={activeProjectId}
-          status={status === QUEUE ? undefined : status}
-          targetKind={target === ALL_TARGETS ? undefined : target}
-        />
-      ) : (
-        <ProjectRequired loading={isLoading} />
-      )}
+      <ActionsList
+        workspaceId={workspaceId}
+        projectId={projectId}
+        status={status === QUEUE ? undefined : status}
+        targetKind={target === ALL_TARGETS ? undefined : target}
+      />
     </ListScreen>
   );
-}
-
-function ProjectRequired({ loading }: Readonly<{ loading: boolean }>) {
-  if (loading) return <QueryState kind="loading" />;
-  return <ProjectRequiredState />;
 }
 
 function ActionsList({
@@ -120,7 +109,10 @@ function ActionsList({
     scopeId: projectId,
     scope: [status, targetKind],
     query: (request) =>
-      actionsQueries.list(workspaceId, projectId, { status, target_kind: targetKind, ...request }),
+      actionsQueries.list(
+        { workspaceId, projectId },
+        { status, target_kind: targetKind, ...request },
+      ),
     noun: 'Actions',
     loading: 'Loading Actions…',
     error: 'Actions could not be loaded.',
@@ -170,9 +162,9 @@ function ActionRow({ action }: Readonly<{ action: Action }>) {
     <TableRow>
       <TableCell>
         <div className="grid min-w-0">
-          <ClampText lines={1} tooltip={action.target_label}>
+          <ClampText lines={1} tooltip={readableUrl(action.target_label)}>
             <TextLink href={`/agent/actions/${action.id}`} text="itemTitle">
-              {action.target_label}
+              {readableUrl(action.target_label)}
             </TextLink>
           </ClampText>
           <ClampText lines={1} className={textRole('caption')}>

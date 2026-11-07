@@ -1,3 +1,4 @@
+import { demandSnapshotSummarySchema } from '@citeladder/contracts/demand';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
@@ -92,7 +93,7 @@ export async function latestDemand(db: Database, workspaceId: string, projectId:
     source_artifact_ids: strings(snapshot.source_artifact_ids),
     source_metric_row_ids: strings(snapshot.source_metric_row_ids),
     coverage: record(snapshot.coverage),
-    summary: record(snapshot.summary),
+    summary: demandSnapshotSummarySchema.parse(snapshot.summary),
     comparison: snapshot.comparison === null ? null : record(snapshot.comparison),
     formula_version: snapshot.formula_version,
     analyzer_version: snapshot.analyzer_version,

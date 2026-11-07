@@ -3,10 +3,10 @@ import type { Database } from '../db/database.ts';
 import type { AuditTasks } from '../generated/db-schema.ts';
 import { record } from '../db/json.ts';
 import { executionFrozenProvenance, modelProvenanceFor } from '../analysis/provenance.ts';
-import { rowsToCsv } from '../analysis/opportunities/exports.ts';
+import { tableCsv } from '../http/table-export.ts';
 import { engineSnapshots } from '../visibility/runs.ts';
 import { authorizedAudit } from './reads.ts';
-import { round } from '../analysis/round.ts';
+import { round } from '../numbers.ts';
 import { compareText, scalarText } from '../text-order.ts';
 import { onlyOf } from '../lists.ts';
 
@@ -74,7 +74,8 @@ const md = (value: unknown) =>
 type ExportTask = Selectable<AuditTasks>;
 type ExportAudit = Awaited<ReturnType<typeof authorizedAudit>>;
 function csvExport(tasks: ExportTask[], audit: ExportAudit) {
-  return rowsToCsv(
+  return tableCsv(
+    columns,
     tasks.map((task) => {
       const score = record(task.score);
       return {
@@ -119,7 +120,6 @@ function csvExport(tasks: ExportTask[], audit: ExportAudit) {
         error_code: task.error_code,
       };
     }),
-    columns,
   );
 }
 function competitorComparison(
@@ -196,7 +196,7 @@ async function markdownExport(db: Database, tasks: ExportTask[], audit: ExportAu
   ])
     lines.push(`| ${label} | ${pct(summary[key!])} |`);
   lines.push(
-    `| Avg. search queries / answer | ${scalarText(summary.avg_queries_per_execution ?? 0)} |`,
+    `| Avg. search queries / answer | ${typeof summary.avg_queries_per_execution === 'number' ? scalarText(summary.avg_queries_per_execution) : '—'} |`,
     `| Paid-list token cost estimate | ${usd(cost.paid_list_token_estimate_usd)} |`,
     `| Grounding cost if outside free allowance | ${usd(cost.grounding_cost_if_billable_usd)} |`,
   );

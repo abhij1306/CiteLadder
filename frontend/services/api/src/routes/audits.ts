@@ -7,10 +7,17 @@ import {
   executionSchema,
 } from '@citeladder/contracts/audits';
 import { auditEventSchema } from '@citeladder/contracts/audit-events';
-import { configEnvironment, policy } from '../config.ts';
+import { policy } from '../config.ts';
 import { readBody } from '../http/body.ts';
-import { actorOf } from '../auth/actor.ts';
-import { cancelAudit, createQueuedAudit, runAudit } from '../commands/audits.ts';
+import { requestProjectOf } from '../auth/actor.ts';
+import {
+  AUDITS_CANCEL,
+  AUDITS_RUN,
+  cancelAudit,
+  createQueuedAudit,
+  runAudit,
+} from '../commands/audits.ts';
+import { routeActor } from '../commands/permission.ts';
 import { auditInput } from '../audits/inputs.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { estimateAudit, estimateInput } from '../audits/estimate.ts';
@@ -58,20 +65,21 @@ export const auditRoutes = [
     family,
     path: `${root}/{audit_id}/run`,
     params,
-    capability: 'run',
+    permission: AUDITS_RUN,
     response: auditSchema,
-    handle: ({ c, db, config }, { path }) => runAudit(db, config, actorOf(c), path.audit_id),
+    handle: ({ c, db, config }, { path }) =>
+      runAudit(db, config, routeActor(c, AUDITS_RUN), path.audit_id),
   }),
   definePostRoute({
     family,
     path: root,
     params: empty,
     status: 201,
-    capability: 'run',
+    permission: AUDITS_RUN,
     body: auditInput,
     response: auditSchema.array(),
     handle: async ({ c, db, config }) =>
-      createQueuedAudit(db, config, actorOf(c), await readBody(c, auditInput)),
+      createQueuedAudit(db, config, routeActor(c, AUDITS_RUN), await readBody(c, auditInput)),
   }),
   definePostRoute({
     family,
@@ -85,7 +93,7 @@ export const auditRoutes = [
         db,
         c.get('workspace').workspaceId,
         await readBody(c, estimateInput),
-        auditRuntime(configEnvironment(config)),
+        auditRuntime(config.settings),
       );
     },
   }),
@@ -132,13 +140,13 @@ export const auditRoutes = [
   definePostRoute({
     family,
     exposure: 'both',
-    scope: 'audits:run',
+    permission: AUDITS_CANCEL,
     publicPath: `${publicRoot}/{audit_id}/cancel`,
     path: `${root}/{audit_id}/cancel`,
     params,
-    capability: 'write',
     response: auditSchema,
-    handle: ({ c, db }, { path }) => cancelAudit(db, actorOf(c), path.audit_id),
+    handle: ({ c, db }, { path }) =>
+      cancelAudit(db, routeActor(c, AUDITS_CANCEL), requestProjectOf(c), path.audit_id),
   }),
   definePostRoute({
     family,
@@ -150,13 +158,14 @@ export const auditRoutes = [
     body: repairInput,
     response: auditSchema,
     raw: true,
-    async handle({ c, db }, { path }) {
+    async handle({ c, db, config }, { path }) {
       const workspace = c.get('workspace').workspaceId,
         result = await createRepairAudit(
           db,
           workspace,
           path.audit_id,
           await readBody(c, repairInput),
+          auditRuntime(config.settings),
         );
       return c.json(await readAudit(db, workspace, result.auditId), result.created ? 201 : 200);
     },
@@ -190,7 +199,7 @@ export const auditRoutes = [
     raw: true,
     async handle({ c, db, config }, { path, query }) {
       const workspace = c.get('workspace').workspaceId,
-        runtime = auditRuntime(configEnvironment(config));
+        runtime = auditRuntime(config.settings);
       const after = resumeCursor(c.req.header('last-event-id'));
       const events = await auditEvents(
         db,

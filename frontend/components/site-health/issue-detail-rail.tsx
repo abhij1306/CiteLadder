@@ -1,6 +1,6 @@
 'use client';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 
 import { Badge } from '@/components/ui/badge';
 import { IssueEvidence } from '@/components/site-health/issue-evidence';
@@ -20,7 +20,7 @@ import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';
-import type { SiteIssue, SiteIssueDetail } from '@/lib/api/types';
+import type { SiteIssue, SiteIssueDetail } from '@citeladder/contracts';
 import { originOf, sitePath } from '@/lib/site-health/evidence-values';
 import {
   linkOutcomeLabel,
@@ -276,11 +276,9 @@ function SiteLevelList({
             className={ledgerItemClasses('flex-wrap justify-between')}
           >
             <span className={textRole('itemTitle')}>{pageKindLabel(row.pageKind)}</span>
-            {row.pageCount === null ? null : (
-              <span className="type-caption tabular-nums">
-                {row.pageCount} {row.pageCount === 1 ? 'page' : 'pages'}
-              </span>
-            )}
+            <span className="type-caption tabular-nums">
+              {row.pageCount} {row.pageCount === 1 ? 'page' : 'pages'}
+            </span>
           </Inline>
         ))}
       </ul>

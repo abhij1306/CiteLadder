@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useMutation, type UseQueryResult } from '@tanstack/react-query';
 
 import { Callout } from '@/components/ui/callout';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,10 +9,9 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import type { ObservedCompetitor } from '@/lib/api/types';
+import type { ObservedCompetitor } from '@citeladder/contracts';
 import { Button } from '@/components/ui/button';
-import { queryKeys } from '@/lib/api/query-keys';
-import { visibilityApi } from '@/lib/api/visibility';
+import { visibilityMutations } from '@/lib/api/visibility-queries';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 /**
@@ -30,22 +29,10 @@ export function CompetitorSuggestions({
   projectId: string;
   suggestionsQuery: UseQueryResult<ObservedCompetitor[], unknown>;
 }>) {
-  const queryClient = useQueryClient();
   const workspaceId = useActiveWorkspaceId();
-  const acceptMutation = useMutation({
-    mutationFn: (candidateId: string) =>
-      visibilityApi.acceptCompetitorSuggestion(projectId, candidateId, { workspaceId }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.visibility.competitorSuggestions(projectId),
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.projects.commandCenter(projectId),
-      });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.visibility.all });
-    },
-  });
+  const acceptMutation = useMutation(
+    visibilityMutations.acceptCompetitorSuggestion({ workspaceId, projectId }),
+  );
 
   return (
     <Card aria-labelledby="competitor-suggestions">

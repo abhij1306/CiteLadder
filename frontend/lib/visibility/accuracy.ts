@@ -46,6 +46,8 @@ const REASON_SHORT: Record<Reason, string> = {
   invalid_output: 'unusable checker output',
   model_error: 'checker unreachable',
   task_failed: 'check stopped',
+  model_omitted: 'left out by the checker',
+  model_changed: 'checker model changed',
 };
 
 const REASON_COPY: Record<Reason, string> = {
@@ -54,6 +56,8 @@ const REASON_COPY: Record<Reason, string> = {
   invalid_output: 'The checker returned nothing usable for these answers.',
   model_error: 'The checker could not be reached for these answers.',
   task_failed: 'Checking stopped before it finished for these answers.',
+  model_omitted: 'The checker left these claims out of its answer.',
+  model_changed: 'The checker model changed after these runs started, so they were not checked.',
 };
 
 /** The heading and sentence for a read that has no value to show. */

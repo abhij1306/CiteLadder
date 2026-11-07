@@ -48,13 +48,17 @@ export const claimVerdictSchema = z.enum([
   'not_covered',
 ]);
 
-// Why a claim has no verdict.
+// Why a claim has no verdict. `model_omitted` is a claim the checker was sent
+// but left out of its answer; `model_changed` is a deployment model other than
+// the one the audit froze, so the answer was not read.
 export const claimUnavailableReasonSchema = z.enum([
   'model_not_configured',
   'platform_cap',
   'invalid_output',
   'model_error',
   'task_failed',
+  'model_omitted',
+  'model_changed',
 ]);
 
 // `value`: at least one verdict. `not_enabled`: the workspace is outside the

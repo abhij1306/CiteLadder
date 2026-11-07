@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { analyzeExecution } from '../src/analysis/execution.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
 import adsEnvelope from './fixtures/chatgpt-ads/envelope.json' with { type: 'json' };
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
@@ -57,7 +57,7 @@ async function derive(tenant: Tenant, auditId: string, engine: string, rawRespon
     .selectAll()
     .where('id', '=', auditId)
     .executeTakeFirstOrThrow();
-  await db.transaction().execute((trx) => analyzeExecution(trx, task, audit, artifactId));
+  await db.transaction().execute((trx) => deriveExecution(trx, task, audit, artifactId));
   return taskId;
 }
 

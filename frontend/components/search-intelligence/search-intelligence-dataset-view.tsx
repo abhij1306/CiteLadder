@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable } from '@/components/ui/data-table';
@@ -20,16 +20,13 @@ import {
   type SearchIntelligenceDataset,
   type SearchIntelligenceRow,
 } from '@/lib/api/search-intelligence';
-import { useProjectContext } from '@/lib/project/project-context';
+import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { evidenceFields, searchNumber } from './search-intelligence-format';
-import {
-  KEYWORD_DATASET_KINDS,
-  SEARCH_COLUMNS_BY_KIND,
-  searchScopeLabel,
-} from '@/lib/config/search-intelligence';
+import { searchDatasetTraits } from '@citeladder/contracts/search-intelligence';
+import { SEARCH_COLUMNS_BY_KIND, searchScopeLabel } from '@/lib/config/search-intelligence';
 import { FilterField } from '@/components/ui/filter-bar';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -44,7 +41,7 @@ export function SearchIntelligenceDatasetView({
   title = 'Ranking keywords',
   onExpand,
 }: Readonly<{ dataset: SearchIntelligenceDataset; title?: string; onExpand?: () => void }>) {
-  const { activeProject } = useProjectContext();
+  const { workspaceId, projectId } = useProjectScope();
   const [selected, setSelected] = useState<SearchIntelligenceRow | null>(null);
   const [filter, setFilter] = useState('');
   const [minVolume, setMinVolume] = useState('');
@@ -59,23 +56,20 @@ export function SearchIntelligenceDatasetView({
     intent,
     min_volume: minVolume === '' ? undefined : Number(minVolume),
   };
-  const projectId = activeProject?.id ?? null;
   const hasRows = dataset.unique_rows_saved > 0;
   // A sort or filter edit restarts from the first page: the server binds the
   // cursor to them. A page turn or a filter edit keeps the rows and the pager
   // on screen until the next rows land; the first load, a failed read and an
   // empty view draw inside the table at its full height.
   const { query, page, table } = useCursorTableQuery({
-    workspaceId: activeProject?.workspace_id ?? null,
+    workspaceId,
     scopeId: dataset.id,
     scope: filters,
     query: (request) =>
-      searchIntelligenceQueries.datasetRows(
-        activeProject?.workspace_id ?? '',
-        projectId ?? '',
-        dataset.id,
-        { ...filters, ...request },
-      ),
+      searchIntelligenceQueries.datasetRows({ workspaceId, projectId }, dataset.id, {
+        ...filters,
+        ...request,
+      }),
     noun: 'evidence rows',
     loading: 'Loading saved rows…',
     error: 'Saved rows could not be loaded.',
@@ -91,7 +85,7 @@ export function SearchIntelligenceDatasetView({
   });
   const rows = page?.items ?? [];
   useRowsPanelSeed(dataset.id, selected, page?.items, title);
-  const keywordDataset = KEYWORD_DATASET_KINDS.includes(dataset.dataset_kind);
+  const keywordDataset = Boolean(searchDatasetTraits(dataset.dataset_kind)?.keyword);
   if (!hasRows) return <EmptyDataset dataset={dataset} title={title} />;
   return (
     <>

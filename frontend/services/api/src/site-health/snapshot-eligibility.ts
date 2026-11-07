@@ -3,12 +3,11 @@ import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import type { MeasurementProjection } from './score-summary.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
+import { taskOutcome } from './task-outcome.ts';
 import { compareText } from '../text-order.ts';
 
 const CRITICAL = policy.site_health.reads.eligibility_critical_checkpoints;
-const EXCLUSIONS = policy.site_health.reads.corpus_exclusion_error_codes;
-const GONE = policy.site_health.reads.corpus_exclusion_status_codes;
 type EligibilityTask =
   | { status: string; error_code: string; status_code?: number | null }
   | undefined;
@@ -19,12 +18,14 @@ type EligibilityTask =
  * excluded, and an unresolved failure is an error, not a blocker.
  */
 export function eligibilityState(outcomes: Record<string, string>, task: EligibilityTask) {
+  const failure =
+    task?.status === 'failed'
+      ? taskOutcome({ errorCode: task.error_code, statusCode: task.status_code })
+      : null;
   // The site's own robots.txt exclusion is its choice, not a blocker to fix.
-  if (task?.status === 'failed' && EXCLUSIONS.includes(task.error_code))
-    return { state: 'excluded', status: 'excluded' } as const;
+  if (failure === 'excluded') return { state: 'excluded', status: 'excluded' } as const;
   // A removed page cannot be indexed; the broken-link check reports whoever links to it.
-  if (task?.status === 'failed' && GONE.includes(task.status_code ?? 0))
-    return { state: 'excluded', status: 'error' } as const;
+  if (failure === 'gone') return { state: 'excluded', status: 'error' } as const;
   // So is the page's own noindex, unless the owner said the page should be indexed.
   if (outcomes['search.indexability'] === 'not_applicable')
     return { state: 'excluded', status: 'audited' } as const;

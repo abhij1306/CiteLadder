@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { aiTrafficApi, aiTrafficQueries } from '@/lib/api/ai-traffic';
-import { queryKeys } from '@/lib/api/query-keys';
+import {
+  aiTrafficApi,
+  aiTrafficMutations,
+  aiTrafficQueries,
+  refreshAiTraffic,
+  refreshCrawlSources,
+} from '@/lib/api/ai-traffic';
 import {
   CRAWL_LOG_SETUPS,
   FIREHOSE_BUFFER_INTERVAL,
@@ -10,6 +15,11 @@ import {
 import { uploadCrawlFile } from './upload';
 import type { z } from 'zod';
 import type { crawlSourceListSchema } from '@citeladder/contracts/ai-traffic';
+import type { CrawlSourceCreateRequest } from '@citeladder/contracts/crawl-log-requests';
+
+/** The log format and collection point a custom sender declares. */
+type LogFormat = NonNullable<CrawlSourceCreateRequest['format']>;
+type CollectionPoint = NonNullable<CrawlSourceCreateRequest['collection_point']>;
 export type CrawlConnectionInput = Readonly<{
   projectId: string;
   workspaceId: string;
@@ -25,7 +35,7 @@ export function useCrawlSources(
   awaiting: Awaiting | null = null,
 ) {
   return useQuery({
-    ...aiTrafficQueries.sources(workspaceId, projectId),
+    ...aiTrafficQueries.sources({ workspaceId, projectId }),
     enabled: !!projectId && !!workspaceId,
     refetchInterval: (query) =>
       awaiting && !uploadProcessed(query.state.data, awaiting) ? UPLOAD_PROCESSING_POLL_MS : false,
@@ -57,8 +67,8 @@ function declaredSampling(sampling: string, rate: string, filter: string) {
 function declaredFields(
   setup: (typeof CRAWL_LOG_SETUPS)[number]['value'],
   fields: Readonly<{
-    format: string;
-    point: string;
+    format: LogFormat;
+    point: CollectionPoint;
     sampling: string;
     rate: string;
     filter: string;
@@ -93,15 +103,15 @@ export function useCrawlConnections({
   onOpenChange,
 }: CrawlConnectionInput) {
   const client = useQueryClient(),
-    options = { workspaceId };
+    options = { workspaceId },
+    scope = { workspaceId, projectId };
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const sources = useCrawlSources(projectId, workspaceId, awaiting);
   const processing = awaiting !== null && !uploadProcessed(sources.data, awaiting);
   // Processing finished: refresh the reads that show the new rows.
   useEffect(() => {
-    if (awaiting && !processing)
-      void client.invalidateQueries({ queryKey: queryKeys.aiTraffic.all });
-  }, [awaiting, processing, client]);
+    if (awaiting && !processing) void refreshAiTraffic(client, projectId);
+  }, [awaiting, processing, client, projectId]);
   const [localOpen, setLocalOpen] = useState(false),
     [setup, setSetup] = useState<(typeof CRAWL_LOG_SETUPS)[number]['value']>('cloudflare_worker');
   const open = controlledOpen ?? localOpen;
@@ -116,11 +126,11 @@ export function useCrawlConnections({
       return '';
     }
   });
-  const [format, setFormat] = useState('ndjson'),
+  const [format, setFormat] = useState<LogFormat>('ndjson'),
     [sampling, setSampling] = useState('filtered'),
     [rate, setRate] = useState('1'),
     [filter, setFilter] = useState('Best-effort recognized automated requests');
-  const [point, setPoint] = useState('cdn_edge');
+  const [point, setPoint] = useState<CollectionPoint>('cdn_edge');
   const [bufferInterval, setBufferInterval] = useState(String(FIREHOSE_BUFFER_INTERVAL.default)),
     [declaredFiltered, setDeclaredFiltered] = useState(false);
   const [subscription, setSubscription] = useState(''),
@@ -138,42 +148,49 @@ export function useCrawlConnections({
     scanned: number;
     matched: number;
   } | null>(null);
-  const refresh = () => client.invalidateQueries({ queryKey: queryKeys.aiTraffic.all });
-  const mutation = useMutation({
-    mutationFn: async (action: { kind: 'create' } | { kind: 'rotate' | 'revoke'; id: string }) => {
-      if (action.kind !== 'create')
-        return aiTrafficApi.mutateSource(projectId, action.id, action.kind, options);
-      return aiTrafficApi.createSource(
-        projectId,
-        {
-          setup,
-          origin,
-          ...declaredFields(setup, {
-            format,
-            point,
-            sampling,
-            rate,
-            filter,
-            bufferInterval,
-            declaredFiltered,
-            subscription,
-            sampleRate,
-          }),
+  const mutation = useMutation(aiTrafficMutations.source(scope));
+  /**
+   * Issue a source from the dialog's fields, or rotate or revoke one. The
+   * descriptor refreshes the project's reads; the issued token is shown here.
+   */
+  const issueSource = (
+    action: { kind: 'create' } | { kind: 'rotate' | 'revoke'; id: string },
+    onSettled?: () => void,
+  ) =>
+    mutation.mutate(
+      action.kind === 'create'
+        ? {
+            kind: 'create',
+            input: {
+              setup,
+              origin,
+              ...declaredFields(setup, {
+                format,
+                point,
+                sampling,
+                rate,
+                filter,
+                bufferInterval,
+                declaredFiltered,
+                subscription,
+                sampleRate,
+              }),
+            },
+          }
+        : action,
+      {
+        onSuccess: (result) => {
+          const issuedSetup =
+            action.kind === 'create'
+              ? setup
+              : sources.data?.items.find((source) => source.id === action.id)?.setup;
+          setIssued({ ...result, setup: issuedSetup });
+          if (action.kind === 'create' && setup === 'upload') setSourceId(result.id);
+          if (action.kind === 'revoke' && sourceId === action.id) setSourceId('');
         },
-        options,
-      );
-    },
-    onSuccess: async (result, action) => {
-      const issuedSetup =
-        action.kind === 'create'
-          ? setup
-          : sources.data?.items.find((source) => source.id === action.id)?.setup;
-      setIssued({ ...result, setup: issuedSetup });
-      if (action.kind === 'create' && setup === 'upload') setSourceId(result.id);
-      if (action.kind === 'revoke' && sourceId === action.id) setSourceId('');
-      await refresh();
-    },
-  });
+        onSettled,
+      },
+    );
   const upload = useMutation({
     mutationFn: async (resumeId?: string) => {
       setProgress(null);
@@ -196,9 +213,7 @@ export function useCrawlConnections({
       });
       setAwaiting({ sourceId, since: new Date().toISOString() });
       // The rows appear after processing; the effect above refreshes every read then.
-      await client.invalidateQueries({
-        queryKey: queryKeys.aiTraffic.view(workspaceId, projectId, 'sources'),
-      });
+      await refreshCrawlSources(client, projectId);
       return result;
     },
   });
@@ -243,6 +258,7 @@ export function useCrawlConnections({
     progress,
     processing,
     mutation,
+    issueSource,
     upload,
   };
 }

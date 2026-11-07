@@ -1,6 +1,6 @@
 'use client';
 
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Stack } from '@/components/ui/layout';
@@ -11,11 +11,11 @@ import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { agentHandoffHref } from '@/lib/agent/handoff';
-import type { PromptMetricItem } from '@/lib/api/types';
+import type { PromptMetricItem } from '@citeladder/contracts';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate, pluralCount } from '@/lib/format';
 import { ANSWER_STATES, competitorGaps, type CompetitorGap } from '@/lib/prompts/history';
-import { engineLabel } from '@/lib/providers/catalog';
+import { useEngineCatalog } from '@/lib/providers/engines';
 
 /**
  * Mentions and citations for one prompt in the latest run that measured it:
@@ -115,6 +115,7 @@ const GAP_COLUMNS: readonly DataTableColumn[] = [
 
 /** Competitors named where the brand was not, most answers first. */
 function CompetitorGapTable({ gaps }: Readonly<{ gaps: readonly CompetitorGap[] }>) {
+  const engines = useEngineCatalog();
   return (
     <DataTable title="Competitors named without you" columns={GAP_COLUMNS}>
       {gaps.map((gap) => (
@@ -123,7 +124,7 @@ function CompetitorGapTable({ gaps }: Readonly<{ gaps: readonly CompetitorGap[] 
             <ClampText lines={1}>{gap.name}</ClampText>
           </TableCell>
           <TableCell numeric>{gap.answers}</TableCell>
-          <TableCell>{gap.engines.map(engineLabel).join(', ')}</TableCell>
+          <TableCell>{gap.engines.map(engines.label).join(', ')}</TableCell>
         </TableRow>
       ))}
     </DataTable>
@@ -146,11 +147,12 @@ const ENGINE_COLUMNS: readonly DataTableColumn[] = [
 ];
 
 function EngineTable({ outcomes }: Readonly<{ outcomes: readonly Outcome[] }>) {
+  const engines = useEngineCatalog();
   return (
     <DataTable title="Engine coverage" columns={ENGINE_COLUMNS}>
       {outcomes.map((outcome) => (
         <TableRow key={`${outcome.logical_engine}:${outcome.transport_model}`}>
-          <TableCell>{engineLabel(outcome.logical_engine)}</TableCell>
+          <TableCell>{engines.label(outcome.logical_engine)}</TableCell>
           <TableCell numeric>{outcome.counts.responses}</TableCell>
           {ANSWER_STATES.map((state) => (
             <TableCell key={state.key} numeric>

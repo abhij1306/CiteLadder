@@ -1,11 +1,11 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { DeclarationStatus } from '@/components/agent/declaration-status';
-import { ProjectLink } from '@/components/layout/scoped-link';
+import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { DateField } from '@/components/ui/date-field';
@@ -20,7 +20,6 @@ import { measurementLegLabel } from '@/lib/agent/vocabulary';
 import { actionsMutations, actionsQueries, type ActionDetail } from '@/lib/api/actions';
 import type { AgentOutput } from '@/lib/api/agent';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
-import { queryKeys } from '@/lib/api/query-keys';
 import {
   declarationDays,
   declaredInstant,
@@ -29,7 +28,10 @@ import {
 } from '@/lib/opportunities/declaration-date';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
-type Declarable = Pick<ActionDetail, 'id' | 'members' | 'member_measurement' | 'declarable_since'>;
+type Declarable = Pick<
+  ActionDetail,
+  'id' | 'project_id' | 'members' | 'member_measurement' | 'declarable_since'
+>;
 
 /**
  * "Mark implemented": the user's explicit declaration. The server freezes the
@@ -59,31 +61,28 @@ export function MarkImplementedButton({
   // failure replays the identical declaration instead of sending a request the
   // server would refuse as a reused key with changed input.
   const [attempt, setAttempt] = useState(newAttempt);
-  const queryClient = useQueryClient();
-  const declare = useMutation({
-    ...actionsMutations.declare(workspaceId),
-    onSuccess: () => {
-      setOpen(false);
-      onDeclared?.();
-      void queryClient.invalidateQueries({ queryKey: queryKeys.actions.all });
-      if (recommendationIds)
-        void queryClient.invalidateQueries({
-          queryKey: ['site-health', 'internal-links', workspaceId],
-        });
-    },
-  });
+  const declare = useMutation(actionsMutations.declare(workspaceId));
   const range = declarationDays(action.declarable_since, attempt.openedAt);
   const valid = isDeclarableDay(attempt.day, range);
   const submit = () =>
-    declare.mutate({
-      actionId: action.id,
-      idempotencyKey: attempt.idempotencyKey,
-      input: {
-        output_revision_id: revision?.id ?? null,
-        declared_implemented_at: declaredInstant(attempt.day, attempt.openedAt),
-        ...(recommendationIds ? { recommendation_ids: recommendationIds } : {}),
+    declare.mutate(
+      {
+        actionId: action.id,
+        projectId: action.project_id,
+        idempotencyKey: attempt.idempotencyKey,
+        input: {
+          output_revision_id: revision?.id ?? null,
+          declared_implemented_at: declaredInstant(attempt.day, attempt.openedAt),
+          ...(recommendationIds ? { recommendation_ids: recommendationIds } : {}),
+        },
       },
-    });
+      {
+        onSuccess: () => {
+          setOpen(false);
+          onDeclared?.();
+        },
+      },
+    );
   return (
     <>
       <Button

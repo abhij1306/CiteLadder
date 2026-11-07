@@ -1,6 +1,7 @@
 /** Stateless Streamable HTTP delivery over persisted MCP owners. */
 import type { Context, Hono } from 'hono';
 import type { ServiceConfig } from '../config.ts';
+import api from '../config/api.json' with { type: 'json' };
 import type { AppEnv } from '../context.ts';
 import type { Database } from '../db/database.ts';
 import { loadMcpConfig, mcpPolicy } from './config.ts';
@@ -97,7 +98,7 @@ function declaredBodyTooLarge(c: McpContext) {
   const declared = c.req.header('content-length');
   return (
     declared !== undefined &&
-    (!/^\d+$/u.test(declared) || Number(declared) > mcpPolicy.api_request_body_max_bytes)
+    (!/^\d+$/u.test(declared) || Number(declared) > api.request_body_max_bytes)
   );
 }
 /** Reads the clone to its end, stopping as soon as it passes the body limit. */
@@ -108,7 +109,7 @@ async function exceedsBodyLimit(reader: ReadableStreamDefaultReader<Uint8Array>)
       const part = await reader.read();
       if (part.done) return false;
       bytes += part.value.byteLength;
-      if (bytes > mcpPolicy.api_request_body_max_bytes) {
+      if (bytes > api.request_body_max_bytes) {
         void reader.cancel();
         return true;
       }

@@ -34,12 +34,7 @@ import {
   withoutQuery,
   type Evidence,
 } from './evidence-values';
-import {
-  architecturePageFacts,
-  linkTargetFacts,
-  linkTargetRules,
-  pageListRules,
-} from './site-level-evidence';
+import { pageListRules, siteLevelFacts, siteLevelRules } from './site-level-evidence';
 
 /** More than this and the reader is scanning, not reading. */
 const MAX_FACTS = 8;
@@ -263,12 +258,6 @@ function missingAlt(evidence: Evidence): string[] {
   return [`alt ×${String(missing)}`];
 }
 
-function duplicateMetadataKinds(evidence: Evidence): string[] {
-  return records(evidence.page_kinds)
-    .map((kind) => text(kind.page_kind))
-    .filter((kind) => kind.length > 0);
-}
-
 function offerFreshness(evidence: Evidence): string[] {
   if (evidence.offer === false || evidence.reason === 'offer_not_structured') return ['Offer'];
   if (evidence.reason === 'offer_currency_missing') return ['priceCurrency'];
@@ -360,10 +349,9 @@ const FACTS_BY_RULE: Readonly<
   'web.security_mixed_content': (evidence) => textList(evidence.assets),
   'technical.broken_internal_link': brokenLinks,
   'technical.sitemap_url_unreachable': failingLinkTargets,
-  'architecture.duplicate_metadata_in_page_kind': duplicateMetadataKinds,
-  'architecture.unhubbed_page_kind': duplicateMetadataKinds,
-  ...Object.fromEntries(pageListRules.map((rule) => [rule, architecturePageFacts(rule)])),
-  ...Object.fromEntries(linkTargetRules.map((rule) => [rule, linkTargetFacts])),
+  ...Object.fromEntries(
+    siteLevelRules.map((rule) => [rule, (evidence: Evidence) => siteLevelFacts(rule, evidence)]),
+  ),
 };
 
 /**

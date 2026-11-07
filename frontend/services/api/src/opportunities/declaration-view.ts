@@ -7,41 +7,35 @@ import { wireUtc, utcTextOf } from '../db/timestamps.ts';
 import { record, strings } from '../db/json.ts';
 import { measurementLegs } from './measurement-legs.ts';
 import { declarationCheckSchema, measurementLegSchema } from '@citeladder/contracts/actions';
-import { expectedCheckSchema } from '@citeladder/contracts/opportunities';
+import { expectedCheckSchema, type ExpectedCheck } from '@citeladder/contracts/opportunities';
 import { z } from 'zod';
 import { checkWindowDays, storedOutcomes } from './verification-decisions.ts';
-import { scalarText } from '../text-order.ts';
-import { ruleTitle } from '../site-health/reads/rules.ts';
+import { CHECKS } from './checks/registry.ts';
+import type { CheckKind, CheckModule } from './checks/kind.ts';
 
 const observationKind = z.enum(['observed', 'verified', 'contradicted']);
 const o = policy.opportunity.opportunities;
-const legOf: Record<string, string> = policy.opportunity.actions.CHECK_KIND_MEASUREMENT_LEG;
 
 /**
  * What a check names, for a reader: its rule, prompt text, page or query, link
- * or publisher page. A prompt deleted since names nothing.
+ * or search. A prompt deleted since names nothing.
  */
-function subject(check: Record<string, unknown>, prompts: ReadonlyMap<string, string>) {
-  const text = (value: unknown) => scalarText(value) || null;
-  if (check.kind === 'site_rule') return ruleTitle(scalarText(check.rule_id));
-  if (check.kind === 'visibility_metric')
-    return prompts.get(scalarText(check.target_prompt_id)) ?? null;
-  if (check.kind === 'traffic_metric') return text(check.scope_key);
-  if (check.kind === 'keyword_presence') return text(check.keyword);
-  return text(check.target_url);
+function subject(check: ExpectedCheck, prompts: ReadonlyMap<string, string>) {
+  const module: CheckModule<CheckKind> = CHECKS[check.kind];
+  return module.subject(check, prompts);
 }
 
 /** The project's tracked prompts that visibility checks measure, by id. */
 async function checkPrompts(
   db: Database,
   row: Selectable<OpportunityImplementationEvents>,
-  checks: Record<string, unknown>[],
+  checks: ExpectedCheck[],
 ): Promise<Map<string, string>> {
   const ids = [
     ...new Set(
       checks.flatMap((check) =>
-        check.kind === 'visibility_metric' && scalarText(check.target_prompt_id)
-          ? [scalarText(check.target_prompt_id)]
+        check.kind === 'visibility_metric' && check.target_prompt_id
+          ? [check.target_prompt_id]
           : [],
       ),
     ),
@@ -59,19 +53,18 @@ async function checkPrompts(
 
 /** Each expected check with the state the latest observation folded for it. */
 function checkStates(
-  checks: Record<string, unknown>[],
+  checks: ExpectedCheck[],
   result: unknown,
   prompts: ReadonlyMap<string, string>,
 ) {
   const outcomes = storedOutcomes(result);
   return checks.map((check, index) => {
-    const promptId =
-      check.kind === 'visibility_metric' ? scalarText(check.target_prompt_id) || null : null;
+    const promptId = check.kind === 'visibility_metric' ? check.target_prompt_id || null : null;
     const found = outcomes.get(index);
     return {
       index,
-      kind: String(check.kind),
-      leg: legOf[String(check.kind)],
+      kind: check.kind,
+      leg: CHECKS[check.kind].leg,
       state: found?.state ?? ('waiting' as const),
       reason: found?.reason ?? null,
       observed_at: found?.observed_at ?? null,

@@ -23,7 +23,7 @@ import { latestQuerySnapshot } from '../demand/query-evidence.ts';
 import { preferencesBody } from '../routes/search-intelligence-contracts.ts';
 import { competitorTarget, ownedTargets, searchMarket } from '../search-intelligence/targets.ts';
 import { normalizeQuery as trafficQueryKey } from '../traffic/normalization.ts';
-import { canonicalJson } from '../search-intelligence/requests.ts';
+import { canonicalJson } from '../canonical-json.ts';
 import { compareText } from '../text-order.ts';
 import { OWNED_RANK, searchTerms } from './keyword-verification.ts';
 import type { CrawlSource, DemandSource, Scope } from './sources.ts';
@@ -387,10 +387,7 @@ function gapHit({
   const sources = rows.map(({ dataset }) => dataset);
   return {
     rule_id: g.RULE_ID,
-    target_key: `search-gap:${terms}`,
-    target_prompt_id: null,
-    target_url: page?.url ?? null,
-    target_theme: lead.keyword,
+    target: { kind: 'search_gap', terms, keyword: lead.keyword, url: page?.url ?? null },
     evidence: {
       keyword: lead.keyword,
       normalized_keyword: normalized,

@@ -1,92 +1,51 @@
 /**
  * Prompts domain endpoints: prompt-set CRUD, individual prompt edits,
  * import of browser-parsed CSV rows, AI generation via the
- * app-level default agent, and bulk review-status transitions. Every response
- * passes through `strictValidate`.
+ * app-level default agent, and bulk review-status transitions, with their
+ * query and mutation descriptors. Every response passes through
+ * `strictValidate`.
  */
 import { z } from 'zod';
-import { queryOptions } from '@tanstack/react-query';
+import { mutationOptions, queryOptions, skipToken, type QueryClient } from '@tanstack/react-query';
 
 import { PROMPT_GENERATION_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 
 import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
+import type { ProjectScope } from './query-keys/scope';
 import {
   promptCandidateReviewResponseSchema,
   promptCandidateSchema,
   promptGenerateResponseSchema,
   promptSchema,
+  promptSetListSchema,
   promptSetSchema,
-  topicSchema,
 } from '@citeladder/contracts/project';
+import type {
+  PromptBulkStatusRequest,
+  PromptCandidateReviewRequest,
+  PromptCreateRequest,
+  PromptGenerateRequest,
+  PromptImportRowRequest,
+  PromptSetCreateRequest,
+  PromptUpdateRequest,
+} from '@citeladder/contracts/prompt-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import type {
-  BuyerStage,
   Prompt,
   PromptCandidate,
   PromptCandidateReviewResponse,
   PromptGenerateResponse,
   PromptSet,
-  PromptStatus,
-  Topic,
-} from './types';
+  PromptSetList,
+} from '@citeladder/contracts';
 
-const promptSetListSchema = z.array(promptSetSchema);
 const promptCandidateListSchema = z.array(promptCandidateSchema);
 
-export type PromptInput = {
-  text: string;
-  // Theme, intent and cohort are internal vocabulary: users are never asked
-  // for them, and omitting them takes the backend's defaults. An omitted
-  // cohort is filed by the backend: branded when the text names the brand.
-  // Backend `PromptInput.theme` is a non-null `str = ""` — create/import 422 on null.
-  theme?: string;
-  intent?: Prompt['intent'];
-  cohort?: Prompt['cohort'];
-  enabled?: boolean;
-  // Files the prompt under an existing topic at creation time. Onboarding
-  // creates its topics first and passes this, rather than creating every
-  // prompt and then PATCHing every prompt. Must name a topic of the prompt's
-  // own project — the backend answers 404 otherwise.
-  topic_id?: string;
-};
-
-/** One CSV import row: the user's topic NAME (created when new, '' = none). */
-export type PromptImportRow = PromptInput & {
-  topic: string;
-  buyer_stage?: BuyerStage;
-  persona?: string;
-};
-
-export type PromptUpdateInput = Partial<Omit<PromptInput, 'topic_id'>> & {
-  status?: PromptStatus;
-  buyer_stage?: BuyerStage;
-  persona?: string;
-  // Explicit null detaches the prompt from its topic.
-  topic_id?: string | null;
-};
-
-export type PromptGenerateInput = {
-  count?: number;
-  // Scope generation to existing topics; omitted or empty = every topic.
-  topic_ids?: string[];
-  // A short note for this run only; never saved as a business fact.
-  run_context?: string;
-  // Omitted = a core-only run with stages balanced; shares are 0–1.
-  distribution?: {
-    branded_share?: number;
-    comparison_share?: number;
-    intent_mix?: { informational: number; commercial: number; transactional: number };
-    personas?: string[];
-  };
-  // Which persisted searches may steer wording; omitted = every source.
-  seed_source?: 'search_console' | 'search_intelligence' | 'none';
-  seed_query_ids?: string[];
-};
-
 export const promptsApi = {
+  /** The project's sets and the server-enforced bounds of the forms they open. */
   listPromptSets: async (projectId: string, options?: ApiRequestOptions) => {
-    const res = await apiClient.get<PromptSet[]>(
+    const res = await apiClient.get<PromptSetList>(
       `/prompt-sets?project_id=${encodeURIComponent(projectId)}`,
       options,
     );
@@ -96,39 +55,23 @@ export const promptsApi = {
     const res = await apiClient.get<PromptSet>(`/prompt-sets/${promptSetId}`, options);
     return strictValidate(promptSetSchema, res, 'prompts.getPromptSet');
   },
-  createPromptSet: async (
-    input: { project_id: string; name?: string; description?: string },
-    options?: ApiRequestOptions,
-  ) => {
+  createPromptSet: async (input: PromptSetCreateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<PromptSet>('/prompt-sets', input, options);
     return strictValidate(promptSetSchema, res, 'prompts.createPromptSet');
   },
-  /**
-   * Create a topic on a project. Onboarding calls this once per topic the
-   * agent proposed, then files each prompt under the returned id — mirroring
-   * what `/generate` does server-side, so an onboarded prompt set has the same
-   * topic structure as a generated one.
-   *
-   * Answers 409 when a topic of that name already exists on the project
-   * (uniqueness is case-insensitive).
-   */
-  createTopic: async (
-    projectId: string,
-    input: { name: string; description?: string; parent_id?: string },
+  createPrompt: async (
+    promptSetId: string,
+    input: PromptCreateRequest,
     options?: ApiRequestOptions,
   ) => {
-    const res = await apiClient.post<Topic>(
-      `/projects/${encodeURIComponent(projectId)}/topics`,
-      input,
-      options,
-    );
-    return strictValidate(topicSchema, res, 'prompts.createTopic');
-  },
-  createPrompt: async (promptSetId: string, input: PromptInput, options?: ApiRequestOptions) => {
     const res = await apiClient.post<Prompt>(`/prompt-sets/${promptSetId}/prompts`, input, options);
     return strictValidate(promptSchema, res, 'prompts.createPrompt');
   },
-  updatePrompt: async (promptId: string, input: PromptUpdateInput, options?: ApiRequestOptions) => {
+  updatePrompt: async (
+    promptId: string,
+    input: PromptUpdateRequest,
+    options?: ApiRequestOptions,
+  ) => {
     const res = await apiClient.patch<Prompt>(`/prompts/${promptId}`, input, options);
     return strictValidate(promptSchema, res, 'prompts.updatePrompt');
   },
@@ -139,7 +82,11 @@ export const promptsApi = {
    * `{ prompts: [...] }` (rows already parsed and previewed in the browser),
    * bulk-created with `origin='imported'`.
    */
-  importRows: async (promptSetId: string, rows: PromptImportRow[], options?: ApiRequestOptions) => {
+  importRows: async (
+    promptSetId: string,
+    rows: PromptImportRowRequest[],
+    options?: ApiRequestOptions,
+  ) => {
     const res = await apiClient.post<PromptSet>(
       `/prompt-sets/${promptSetId}/import`,
       { prompts: rows },
@@ -156,7 +103,7 @@ export const promptsApi = {
    */
   generate: async (
     promptSetId: string,
-    input: PromptGenerateInput,
+    input: PromptGenerateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<PromptGenerateResponse>(
@@ -181,7 +128,7 @@ export const promptsApi = {
    */
   reviewCandidates: async (
     promptSetId: string,
-    input: { accept_ids?: string[]; reject_ids?: string[] },
+    input: PromptCandidateReviewRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<PromptCandidateReviewResponse>(
@@ -194,7 +141,7 @@ export const promptsApi = {
   /** Bulk review transition (accept-all / archive-selected). */
   bulkStatus: async (
     promptSetId: string,
-    input: { prompt_ids: string[]; status: PromptStatus },
+    input: PromptBulkStatusRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<PromptSet>(
@@ -206,11 +153,135 @@ export const promptsApi = {
   },
 };
 
+const scoped = (scope: ProjectScope) => ({ workspaceId: scope.workspaceId });
+
 export const promptsQueries = {
   /** The project's prompt sets: the Prompts screen, its create guard and the launch dialog. */
-  sets: (workspaceId: string | null, projectId: string) =>
+  sets: (scope: ProjectScope) =>
     queryOptions({
-      queryKey: queryKeys.prompts.sets(workspaceId, projectId),
-      queryFn: ({ signal }) => promptsApi.listPromptSets(projectId, { signal, workspaceId }),
+      queryKey: queryKeys.prompts.sets(scope),
+      queryFn: ({ signal }) =>
+        promptsApi.listPromptSets(scope.projectId, { signal, ...scoped(scope) }),
+    }),
+  /** A set's pending generated candidates; skipped until the set exists. */
+  candidates: (scope: ProjectScope, promptSetId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.prompts.candidates(scope, promptSetId),
+      queryFn: promptSetId
+        ? ({ signal }) => promptsApi.listCandidates(promptSetId, { signal, ...scoped(scope) })
+        : skipToken,
+    }),
+};
+
+/**
+ * Every read a prompt-library write changes: the project's prompt sets and
+ * candidates, its topics and the seed queries bound to them (generation and
+ * import create topics), and the project list, whose embedded prompt sets
+ * mark onboarding's "Add prompts" step done.
+ */
+export async function refreshPromptLibrary(client: QueryClient, projectId: string) {
+  await Promise.all([
+    client.invalidateQueries({ queryKey: queryKeys.prompts.project(projectId) }),
+    client.invalidateQueries({ queryKey: queryKeys.topics.project(projectId) }),
+    client.invalidateQueries({ queryKey: queryKeys.projects.all }),
+  ]);
+}
+
+/** Resolves the set a write lands in, creating the project's default set when it has none. */
+type SetResolver = () => Promise<PromptSet>;
+const refreshed = (scope: ProjectScope) => ({
+  onSuccess: (
+    _data: unknown,
+    _vars: unknown,
+    _result: unknown,
+    { client }: { client: QueryClient },
+  ) => refreshPromptLibrary(client, scope.projectId),
+});
+
+/** Prompt-library writes; each success refreshes every read it changes. */
+export const promptsMutations = {
+  /**
+   * The project's prompt set, created as the default set when the project has
+   * none. The list is re-read first (joining a read already in flight), so an
+   * empty cache is never taken for an empty project; a created set is written
+   * into the list at once.
+   */
+  ensureSet: (scope: ProjectScope) =>
+    mutationOptions({
+      scope: { id: `ensure-prompt-set:${scope.workspaceId}:${scope.projectId}` },
+      mutationFn: async (_vars: void, { client }) => {
+        const available = await client.fetchQuery({
+          ...promptsQueries.sets(scope),
+          staleTime: 0,
+        });
+        const [first] = available.prompt_sets;
+        if (first) return first;
+        return promptsApi.createPromptSet(
+          { project_id: scope.projectId, name: 'Default prompt set' },
+          scoped(scope),
+        );
+      },
+      onSuccess: async (created, _vars, _result, { client }) => {
+        client.setQueryData<PromptSetList>(queryKeys.prompts.sets(scope), (prev) =>
+          prev && !prev.prompt_sets.length ? { ...prev, prompt_sets: [created] } : prev,
+        );
+        await client.invalidateQueries({ queryKey: queryKeys.prompts.project(scope.projectId) });
+      },
+    }),
+  create: (scope: ProjectScope, resolveSet: SetResolver) =>
+    mutationOptions({
+      mutationFn: async (input: PromptCreateRequest) =>
+        promptsApi.createPrompt((await resolveSet()).id, input, scoped(scope)),
+      ...refreshed(scope),
+    }),
+  update: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: ({ promptId, input }: { promptId: string; input: PromptUpdateRequest }) =>
+        promptsApi.updatePrompt(promptId, input, scoped(scope)),
+      ...refreshed(scope),
+    }),
+  remove: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: (promptId: string) => promptsApi.deletePrompt(promptId, scoped(scope)),
+      ...refreshed(scope),
+    }),
+  import: (scope: ProjectScope, resolveSet: SetResolver) =>
+    mutationOptions({
+      mutationFn: async (rows: PromptImportRowRequest[]) =>
+        promptsApi.importRows((await resolveSet()).id, rows, scoped(scope)),
+      ...refreshed(scope),
+    }),
+  /**
+   * A generation run. The caller owns the idempotency key so a retry of the
+   * same request replays the staged run. A failed response can still follow a
+   * completed run, so the library is re-read either way.
+   */
+  generate: (scope: ProjectScope, resolveSet: SetResolver) =>
+    mutationOptions({
+      mutationFn: async ({
+        input,
+        idempotencyKey,
+      }: {
+        input: PromptGenerateRequest;
+        idempotencyKey: string;
+      }) =>
+        promptsApi.generate((await resolveSet()).id, input, {
+          ...scoped(scope),
+          idempotencyKey,
+        }),
+      onSettled: (_data, _error, _vars, _result, { client }) =>
+        refreshPromptLibrary(client, scope.projectId),
+    }),
+  /** Accept or reject candidates; accepting adds tracked prompts. */
+  reviewCandidates: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: ({
+        promptSetId,
+        input,
+      }: {
+        promptSetId: string;
+        input: PromptCandidateReviewRequest;
+      }) => promptsApi.reviewCandidates(promptSetId, input, scoped(scope)),
+      ...refreshed(scope),
     }),
 };

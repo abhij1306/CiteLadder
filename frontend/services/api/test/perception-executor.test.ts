@@ -7,8 +7,9 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { analyzeExecution } from '../src/analysis/execution.ts';
-import { loadWorkerSettings, policy } from '../src/config.ts';
+import { deriveExecution } from '../src/audits/derivation.ts';
+import { policy } from '../src/config.ts';
+import { loadWorkerSettings } from '../src/config/analytics.ts';
 import { createModelGateway, gatewaySettings } from '../src/models/gateway.ts';
 import { answerPerception } from '../src/perception/executor.ts';
 import { AnalyticsWorker } from '../src/workers/analytics-worker.ts';
@@ -27,6 +28,8 @@ const configuration = {
     extractor_version: 'perception-extract-test',
     template_version: 'perception-template-test',
     metrics_version: 'perception-metrics-test',
+    // The fake gateway's model.
+    model: 'test',
   },
 };
 const ANSWER = '😀 Acme is the best value pick. Rival support is slow.';
@@ -77,7 +80,7 @@ async function analysed(owner: Tenant, auditId: string, answerText: string) {
       .selectAll()
       .where('id', '=', taskId)
       .executeTakeFirstOrThrow();
-    await db.transaction().execute((trx) => analyzeExecution(trx, task, audit, artifactId));
+    await db.transaction().execute((trx) => deriveExecution(trx, task, audit, artifactId));
   };
   await derive();
   const analysis = await db
@@ -253,6 +256,22 @@ describe('perception executor', () => {
       (await perceptions(tenant.workspaceId)).map((row) => [row.outcome, row.outcome_reason]),
     ).toEqual([['unavailable', 'model_not_configured']]);
     expect((await queued(tenant.workspaceId)).map((row) => row.status)).toEqual(['succeeded']);
+  });
+
+  it('never classifies an audit with a model other than the one it froze', async () => {
+    const auditId = await fixtures.audit(tenant, {
+      configuration: {
+        ...configuration,
+        perception: { ...configuration.perception, model: 'frozen-model' },
+      },
+    });
+    await analysed(tenant, auditId, ANSWER);
+    const gateway = fakeGateway([goodOutput]);
+    await drain(tenant, gateway.factory);
+    expect(
+      (await perceptions(tenant.workspaceId)).map((row) => [row.outcome, row.outcome_reason]),
+    ).toEqual([['unavailable', 'model_changed']]);
+    expect(gateway.fetch).not.toHaveBeenCalled();
   });
 
   it('ends over the per-audit cap as platform_cap without failing the task or the audit', async () => {

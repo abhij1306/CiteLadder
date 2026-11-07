@@ -3,20 +3,26 @@ import {
   integrationConnectionListSchema,
   performanceSyncEnqueueResponseSchema,
   integrationPropertyListSchema,
+  integrationPropertyDiscoveryRequestSchema,
   integrationPropertyMappingListSchema,
+  integrationPropertyMappingRequestSchema,
   integrationSyncEnqueueSchema,
+  integrationSyncRequestSchema,
   integrationSyncRunSchema,
   integrationTestResultSchema,
 } from '@citeladder/contracts/integrations';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
 import { z } from 'zod';
-import { enqueueTrafficInsights } from '../crawl-logs/insights-enqueue.ts';
+import { insightsRefresh } from '../config/ai-traffic.ts';
+import { enqueueCoalesced } from '../queue/enqueue.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
 import { readBody, readOptionalBody } from '../http/body.ts';
 import { executeInteractiveSyncs } from '../integrations/interactive.ts';
 import { IntegrationClient, IntegrationError } from '../integrations/client.ts';
 import { integrationPolicy } from '../integrations/config.ts';
+import { recordIntegrationEvents } from '../integrations/events.ts';
+import { disconnectConnection } from '../integrations/grants.ts';
 import {
   completeOAuth,
   oauthCookieOptions,
@@ -40,25 +46,16 @@ import {
 } from '../integrations/sync.ts';
 import { freshAccessToken } from '../integrations/tokens.ts';
 import { getLogger } from '../logging.ts';
-import { enforceWorkspaceRequest } from '../abuse/usage.ts';
-import { policy, resolveSettingSpec } from '../config.ts';
+import { budget, spendBudget } from '../abuse/usage.ts';
 import { defineDeleteRoute, defineGetRoute, definePostRoute } from './define.ts';
 
 const family = 'integrations';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const connectionPath = { connection_id: uuid } as const;
 const syncPath = { ...connectionPath, sync_run_id: uuid } as const;
-const windowRequest = z.strictObject({
-  project_id: z.uuid().optional(),
-  window_start: z.iso.date().optional(),
-  window_end: z.iso.date().optional(),
-});
-const discoveryRequest = z.strictObject({ project_id: z.uuid().optional() });
-const mappingRequest = z.strictObject({
-  provider: z.enum(['gsc', 'ga4', 'bing']),
-  property_ref: z.string().min(1).max(512),
-  project_id: z.uuid(),
-});
+const windowRequest = integrationSyncRequestSchema;
+const discoveryRequest = integrationPropertyDiscoveryRequestSchema;
+const mappingRequest = integrationPropertyMappingRequestSchema;
 const providerPath = { provider: { scalar: { kind: 'str' }, required: true } } as const;
 const oauthCookie = integrationPolicy.transport.INTEGRATION_OAUTH_TRANSACTION_COOKIE;
 const logger = getLogger('api.integrations');
@@ -161,7 +158,7 @@ export const integrationRoutes = [
     path: '/api/v1/projects/{project_id}/performance/sync',
     status: 202,
     capability: 'run',
-    authorize: 'project',
+    authorize: 'active-project',
     params: { path: { project_id: uuid }, query: {} },
     response: performanceSyncEnqueueResponseSchema,
     async handle({ c, db }, { path }) {
@@ -369,7 +366,7 @@ export const integrationRoutes = [
     params: { path: connectionPath, query: {} },
     body: discoveryRequest.nullable().optional(),
     response: integrationPropertyListSchema,
-    async handle({ c, db }, { path }) {
+    async handle({ c, db, config }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
       const body = await readOptionalBody(c, discoveryRequest);
       const row = await db
@@ -384,11 +381,8 @@ export const integrationRoutes = [
         .where('connection.workspace_id', '=', workspaceId)
         .executeTakeFirst();
       if (!row) throw notFound('Integration connection');
-      await enforceWorkspaceRequest(db, `${workspaceId}:${path.connection_id}`, {
-        operation: 'integrations.properties',
-        limit: resolveSettingSpec(policy.abuse.property_discovery_limit) as number,
-        windowSeconds: resolveSettingSpec(policy.abuse.property_discovery_window_seconds) as number,
-      });
+      // The connection was just proven to belong to this workspace.
+      await spendBudget(db, budget('integration_properties', config.settings), path.connection_id);
       // Resolve the project before provider I/O; an unknown project is a 404,
       // and any other failure keeps its own error.
       let sites: Set<string> | null = null;
@@ -455,71 +449,9 @@ export const integrationRoutes = [
      * (raw evidence is append-only), so a reconnect resumes the same history.
      */
     async handle({ c, db }, { path }) {
-      const workspaceId = c.get('workspace').workspaceId;
-      await db.transaction().execute(async (trx) => {
-        const connection = await trx
-          .selectFrom('integration_connections')
-          .selectAll()
-          .where('id', '=', path.connection_id)
-          .where('workspace_id', '=', workspaceId)
-          .forUpdate()
-          .executeTakeFirst();
-        if (!connection) throw notFound('Integration connection');
-        const grant = await trx
-          .selectFrom('integration_oauth_grants')
-          .selectAll()
-          .where('id', '=', connection.grant_id)
-          .where('workspace_id', '=', workspaceId)
-          .forUpdate()
-          .executeTakeFirst();
-        if (!grant) throw notFound('Integration connection');
-        const now = new Date();
-        if (grant.status !== 'pending_revocation' && grant.status !== 'revoked') {
-          await trx
-            .updateTable('integration_oauth_grants')
-            .set({
-              status: 'pending_revocation',
-              token_revision: grant.token_revision + 1,
-              refresh_claim_id: null,
-              refresh_claim_expires_at: null,
-              updated_at: now,
-            })
-            .where('id', '=', grant.id)
-            .where('workspace_id', '=', workspaceId)
-            .execute();
-        }
-        const retired = await trx
-          .updateTable('integration_property_mappings')
-          .set({ status: 'disabled', updated_at: now })
-          .where('workspace_id', '=', workspaceId)
-          .where('status', '=', 'active')
-          .where('connection_id', 'in', (eb) =>
-            eb
-              .selectFrom('integration_connections')
-              .select('id')
-              .where('workspace_id', '=', workspaceId)
-              .where('grant_id', '=', grant.id),
-          )
-          .returning('project_id')
-          .execute();
-        for (const projectId of new Set(retired.map((row) => row.project_id)))
-          await enqueueTrafficInsights(trx, { workspaceId, projectId }); // NOSONAR -- One transaction runs one statement at a time.
-        await trx
-          .insertInto('integration_events')
-          .values({
-            id: crypto.randomUUID(),
-            workspace_id: workspaceId,
-            connection_id: connection.id,
-            grant_id: grant.id,
-            event_type: 'integration.disconnected',
-            message: 'Integration disconnected',
-            payload: JSON.stringify({
-              provider: connection.provider,
-              retired_mappings: retired.length,
-            }),
-            created_at: now,
-          })
-          .execute();
+      await disconnectConnection(db, {
+        workspaceId: c.get('workspace').workspaceId,
+        connectionId: path.connection_id,
       });
     },
   }),
@@ -543,7 +475,8 @@ export const integrationRoutes = [
           .where('id', '=', path.mapping_id)
           .where('workspace_id', '=', c.get('workspace').workspaceId)
           .execute();
-        await enqueueTrafficInsights(trx, {
+        await enqueueCoalesced(trx, {
+          ...insightsRefresh,
           workspaceId: c.get('workspace').workspaceId,
           projectId: mapping.project_id,
         });
@@ -613,7 +546,7 @@ export const integrationRoutes = [
           .where('status', '=', 'active')
           .forUpdate()
           .executeTakeFirst();
-        await enqueueTrafficInsights(trx, { workspaceId, projectId: project.id });
+        await enqueueCoalesced(trx, { ...insightsRefresh, workspaceId, projectId: project.id });
         if (existing)
           return {
             ...existing,
@@ -736,19 +669,17 @@ export const integrationRoutes = [
             ? error.message.slice(0, 512)
             : 'Integration provider request failed';
       }
-      await db
-        .insertInto('integration_events')
-        .values({
-          id: crypto.randomUUID(),
-          workspace_id: workspaceId,
-          connection_id: path.connection_id,
-          grant_id: row.grant_id,
-          event_type: 'integration.tested',
+      await recordIntegrationEvents(db, [
+        {
+          workspaceId,
+          connectionId: path.connection_id,
+          grantId: row.grant_id,
+          type: 'integration.tested',
           message: 'Integration connection tested',
-          payload: JSON.stringify({ status, error_code: errorCode }),
-          created_at: testedAt,
-        })
-        .execute();
+          payload: { status, error_code: errorCode },
+          at: testedAt,
+        },
+      ]);
       return {
         connection_id: path.connection_id,
         status,

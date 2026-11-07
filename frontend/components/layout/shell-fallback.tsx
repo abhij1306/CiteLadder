@@ -6,7 +6,7 @@ import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 
 import { RouteLoadingScreen } from './page-shell';
-import { hasPageTitle } from './page-titles';
+import { hasPageTitle } from '@/lib/navigation/app-routes';
 
 /**
  * The placeholder shown while the SESSION and the shell's opening decision are

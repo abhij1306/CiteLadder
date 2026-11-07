@@ -17,7 +17,7 @@
 import type { RawSseFrame } from '@/lib/sse/frames';
 
 import { auditEventSchema } from '@citeladder/contracts/audit-events';
-import type { AuditEvent } from './types';
+import type { AuditEvent } from '@citeladder/contracts';
 
 export type { RawSseFrame };
 

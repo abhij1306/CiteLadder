@@ -26,6 +26,8 @@ export type EntitySentiment = {
   /** Null when the model returned nothing for an entity it was sent. */
   confidence: number | null;
   low_confidence: boolean;
+  /** The model was sent this entity and left it out: no judgement, not `not_assessable`. */
+  model_omitted: boolean;
   passage_spans: Span[];
   aspects: VerifiedAspect[];
 };
@@ -132,12 +134,14 @@ export function validateOutput(
       label: row.label,
       confidence: row.confidence,
       low_confidence: row.confidence < policy.min_confidence,
+      model_omitted: false,
       passage_spans: entity.spans,
       aspects,
     });
   }
-  // Every entity sent gets a row, so coverage never silently shrinks.
-  const entities = pkg.entities.map((entity) => {
+  // Every entity sent gets a row, so coverage never silently shrinks; one the
+  // model left out is marked omitted, never read as its `not_assessable` judgement.
+  const entities = pkg.entities.map((entity): EntitySentiment => {
     const result = results.get(entity.entity_id);
     if (result) return result;
     drop('missing_entity');
@@ -145,9 +149,10 @@ export function validateOutput(
       entity_id: entity.entity_id,
       entity_name: entity.name,
       entity_kind: entity.kind,
-      label: 'not_assessable' as const,
+      label: 'not_assessable',
       confidence: null,
       low_confidence: false,
+      model_omitted: true,
       passage_spans: entity.spans,
       aspects: [],
     };

@@ -76,3 +76,7 @@ export const monitoredUrlsResponseSchema = responseObject({
   monitored_urls: z.array(monitoredUrlSchema),
   quota: monitoredQuotaSchema,
 });
+
+export type InventoryPage = z.infer<typeof inventoryPageSchema>;
+export type SiteCrawlListPage = z.infer<typeof siteCrawlListPageSchema>;
+export type MonitoredUrlsResponse = z.infer<typeof monitoredUrlsResponseSchema>;

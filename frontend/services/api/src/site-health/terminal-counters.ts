@@ -12,7 +12,7 @@
  */
 import type { Database } from '../db/database.ts';
 import { isTerminal, taskCounters } from './reads/crawl.ts';
-import type { Crawl } from './task-fence.ts';
+import type { Crawl } from './site-task.ts';
 
 /** Persist the counters of a crawl whose in-memory status is already terminal. */
 export async function persistTerminalCounters(db: Database, crawl: Crawl): Promise<void> {

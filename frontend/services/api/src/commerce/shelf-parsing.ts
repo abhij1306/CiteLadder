@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { auditPolicy } from '../audits/config.ts';
-import { searchPolicy } from '../search-surfaces/dataforseo.ts';
-import { canonicalPage } from '../traffic/normalization.ts';
+import { casefold } from '../casefold.ts';
+import { canonicalPage } from '../page-identity.ts';
 import { localizedPrice } from './projection-facts.ts';
 import { onlyOf } from '../lists.ts';
 import { domainMatches } from '../analysis/domains.ts';
 import { stripTrailing } from '../text-order.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 
 export const shelfPolicy = auditPolicy.commerce_shelf;
 export const boundedText = (text: string, limit: number) => [...text].slice(0, limit).join('');
@@ -46,14 +47,7 @@ function recommendationSpans(answer: string): RecommendationSpan[] {
 
 /** Shelf matching applies its own casefold and punctuation rules, independently of brand aliases. */
 function normalize(value: string) {
-  return value
-    .replaceAll(
-      /./gsu,
-      (character) =>
-        searchPolicy.casefold_overrides[
-          character as keyof typeof searchPolicy.casefold_overrides
-        ] ?? character.toLowerCase(),
-    )
+  return casefold(value)
     .replaceAll(/[^\p{L}\p{N}_]+/gu, ' ')
     .trim()
     .replaceAll(/\s+/gu, ' ');
@@ -174,10 +168,20 @@ export const resolvedBatchSchema = z.object({
 type ResolvedRecommendation = z.output<typeof resolvedRecommendationSchema>;
 /** One bounded model call per answer, over the numbered spans it is given. */
 export type ShelfResolver = { model: string; resolve(spans: string[]): Promise<unknown> };
+/**
+ * What the optional resolver did for one span, each a distinct state:
+ * `not_needed` (matched deterministically or no product signal, never sent),
+ * `unavailable` (needed, but no resolver is configured), `failed` (the call
+ * threw or returned malformed output), `omitted` (the call answered without
+ * this span) and `resolved`.
+ */
+type ResolverOutcome = 'resolved' | 'omitted' | 'not_needed' | 'failed' | 'unavailable';
 export type PreparedRecommendation = {
   span: RecommendationSpan;
   resolved: ResolvedRecommendation | null;
+  /** The resolver model that was called for this span; empty when none was. */
   model: string;
+  outcome: ResolverOutcome;
 };
 
 /** A span worth a resolver call: a list item, or prose carrying a link or a price. */
@@ -203,7 +207,9 @@ export async function prepareRecommendations(
     return !match.product && !match.competitor && hasProductSignal(span);
   });
   const resolved = new Map<RecommendationSpan, ResolvedRecommendation[]>();
+  let failed = false;
   if (resolver && pending.length) {
+    const startedAt = performance.now();
     try {
       const batch = resolvedBatchSchema.parse(
         await resolver.resolve(
@@ -214,16 +220,33 @@ export async function prepareRecommendations(
         const span = pending[item.span];
         if (span) resolved.set(span, [...(resolved.get(span) ?? []), item]);
       }
-    } catch {
-      /* Optional classification cannot erase unresolved evidence. */
+    } catch (error) {
+      // Optional classification cannot erase unresolved evidence; the failure is recorded.
+      getLogger('commerce.shelf').warning('commerce_shelf_resolution_failed', {
+        model: resolver.model,
+        spans: pending.length,
+        ...failureFacts(error),
+        elapsed_ms: Math.round(performance.now() - startedAt),
+      });
+      failed = true;
     }
   }
+  const unresolved = (span: RecommendationSpan): PreparedRecommendation => {
+    if (!pending.includes(span)) return { span, resolved: null, model: '', outcome: 'not_needed' };
+    if (!resolver) return { span, resolved: null, model: '', outcome: 'unavailable' };
+    return { span, resolved: null, model: resolver.model, outcome: failed ? 'failed' : 'omitted' };
+  };
   return spans.flatMap((span): PreparedRecommendation[] => {
     const items = resolved.get(span);
-    if (!resolver || !items?.length) return [{ span, resolved: null, model: '' }];
+    if (!resolver || !items?.length) return [unresolved(span)];
     // A span resolved into several products keeps no single rank.
     const shown = items.length > 1 ? { ...span, rank: null, orderObservable: false } : span;
-    return items.map((item) => ({ span: shown, resolved: item, model: resolver.model }));
+    return items.map((item): PreparedRecommendation => ({
+      span: shown,
+      resolved: item,
+      model: resolver.model,
+      outcome: 'resolved',
+    }));
   });
 }
 

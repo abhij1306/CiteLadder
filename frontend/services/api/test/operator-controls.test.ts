@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { setAcquisitionControl, acquisitionDomain } from '../src/web-evidence/control.ts';
 import { authorizeAcquisition } from '../src/web-evidence/acquisition.ts';
+import { sql } from 'kysely';
+import { setLogSink } from '../src/logging.ts';
 import { Fixtures, testDatabase } from './support.ts';
 
 const db = testDatabase(),
@@ -81,4 +83,23 @@ it('previews and authorizes stop/resume, propagating parent, IDNA and global sto
     'admin user is required',
   );
   await db.updateTable('users').set({ is_active: true }).where('id', '=', admin).execute();
+});
+
+it('fails closed and logs why when the operator stop list cannot be read', async () => {
+  const unreadable = db.withPlugin({
+    transformQuery: () => sql`select domain from missing_acquisition_controls`.toOperationNode(),
+    transformResult: async (args) => args.result,
+  });
+  const records: Record<string, unknown>[] = [];
+  const restore = setLogSink((line) => records.push(JSON.parse(line) as Record<string, unknown>));
+  try {
+    await expect(
+      authorizeAcquisition(unreadable, new URL('https://other.test')),
+    ).rejects.toMatchObject({ code: 'acquisition_unavailable' });
+  } finally {
+    setLogSink(restore);
+  }
+  expect(records.filter((entry) => entry.event === 'web_acquisition_control_unreadable')).toEqual([
+    expect.objectContaining({ level: 'warning', error_class: expect.any(String) }),
+  ]);
 });

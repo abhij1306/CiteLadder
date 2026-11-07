@@ -15,8 +15,8 @@
  *   - severity summary tiles read the API-owned `severity_counts` map with a
  *     stable order (high → medium → low), never a client re-count.
  */
-import type { IssueSeverity, IssueDimension } from '@/lib/api/types';
-import type { StatusValue } from '@/components/ui/badge';
+import type { IssueSeverity, IssueDimension } from '@citeladder/contracts';
+import type { PriorityValue, StatusValue } from '@/components/ui/badge';
 
 /** Map an issue severity onto a status-badge value (shared palette). */
 export function severityBadgeValue(severity: IssueSeverity): StatusValue {
@@ -29,6 +29,23 @@ export function severityBadgeValue(severity: IssueSeverity): StatusValue {
     default:
       // low / info
       return 'info';
+  }
+}
+
+/**
+ * A ranked action's severity read as its priority (High, Medium, Low): the
+ * priority badge's accent-or-neutral scale, never the error red, which stays
+ * with Site Health's own issue severities (owner, 2026-11-06).
+ */
+export function severityPriority(severity: IssueSeverity): PriorityValue {
+  switch (severity) {
+    case 'critical':
+    case 'high':
+      return 'high';
+    case 'medium':
+      return 'medium';
+    default:
+      return 'low';
   }
 }
 

@@ -38,8 +38,8 @@ describe('audit queue leases against PostgreSQL', () => {
     const [task] = await queue.claim('skewed', 1, t);
     at = new Date(Date.now() - 86400000);
     const skewed = new AuditQueue(db, 120, () => at);
-    expect(await skewed.heartbeat(task!, 'skewed')).toBe(true);
-    expect(await skewed.markRunning(task!, 'skewed')).not.toBeNull();
+    expect(await skewed.heartbeat(task!, task!.lease_owner)).toBe(true);
+    expect(await skewed.markRunning(task!, task!.lease_owner)).not.toBeNull();
   });
   it('refuses lifecycle jumps and terminal revival without writing an event', async () => {
     const t = await seed();
@@ -86,7 +86,7 @@ describe('audit queue leases against PostgreSQL', () => {
     const [task] = await queue.claim('worker', 1, t);
     expect(await queue.markRunning(task!, 'other')).toBeNull();
     expect(await queue.heartbeat(task!, 'other')).toBe(false);
-    const running = await queue.markRunning(task!, 'worker');
+    const running = await queue.markRunning(task!, task!.lease_owner);
     expect(running?.audit.status).toBe('running');
     // Expiry belongs to PostgreSQL, independent of the injected application clock.
     await db
@@ -94,22 +94,22 @@ describe('audit queue leases against PostgreSQL', () => {
       .set({ lease_expires_at: new Date(0) })
       .where('id', '=', task!.id)
       .execute();
-    expect(await queue.heartbeat(task!, 'worker')).toBe(false);
-    expect(await queue.markRunning(task!, 'worker')).toBeNull();
+    expect(await queue.heartbeat(task!, task!.lease_owner)).toBe(false);
+    expect(await queue.markRunning(task!, task!.lease_owner)).toBeNull();
     const [another] = await queue.claim('worker', 1, t);
     await db
       .updateTable('audits')
       .set({ status: 'cancelled' })
       .where('id', '=', t.auditId)
       .execute();
-    expect(await queue.markRunning(another!, 'worker')).toBeNull();
+    expect(await queue.markRunning(another!, another!.lease_owner)).toBeNull();
   });
   it('parks a committed external submission and reclaims its due poll without spending an attempt', async () => {
     const t = await seed();
     const [task] = await queue.claim('worker', 1, t);
     const ready = new Date(at.getTime() + 30000);
     await db.transaction().execute(async (trx) => {
-      const locked = await ownedAuditTask(trx, task!, 'worker');
+      const locked = await ownedAuditTask(trx, task!, task!.lease_owner);
       expect(locked).not.toBeNull();
       await trx
         .updateTable('audit_tasks')

@@ -10,8 +10,9 @@ import type { BotRequests, CrawlLogSources, BotIpRangeSnapshots } from '../gener
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { crawlers, matchesCrawlerUserAgent } from '../config/crawlers.ts';
 import { strings } from '../db/json.ts';
-import { hash } from '../traffic/normalization.ts';
-import { pathIdentity, verifyBot } from './identity.ts';
+import { hash } from '../crypto-text.ts';
+import { verifyBot } from './identity.ts';
+import { pathIdentity } from '../page-identity.ts';
 
 type Input = {
   source: Selectable<CrawlLogSources>;

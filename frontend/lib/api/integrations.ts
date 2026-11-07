@@ -9,11 +9,13 @@
  * on the backend grant and are NEVER present on any response — the
  * integration response schemas throw on any leaked token-shaped key.
  */
+import { mutationOptions, queryOptions, skipToken, type QueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
 
 import { API_BASE_URL } from '@/lib/config/operational';
 import { apiClient, type ApiRequestOptions } from './client';
 import { startInteractiveWork } from './interactive-work';
+import { queryKeys } from './query-keys';
 import {
   integrationBackfillProgressSchema,
   integrationConnectionListSchema,
@@ -26,6 +28,9 @@ import {
   type integrationConnectionSchema,
   type integrationPropertySchema,
   type integrationProviderSchema,
+  type IntegrationPropertyDiscoveryRequest,
+  type IntegrationPropertyMappingRequest,
+  type IntegrationSyncRequest,
 } from '@citeladder/contracts/integrations';
 import { strictValidate } from '@citeladder/contracts/validation';
 
@@ -37,20 +42,6 @@ export type IntegrationSyncRun = z.infer<typeof integrationSyncRunSchema>;
 export type IntegrationBackfillProgress = z.infer<typeof integrationBackfillProgressSchema>;
 export type IntegrationProperty = z.infer<typeof integrationPropertySchema>;
 export type IntegrationPropertyMapping = z.infer<typeof integrationPropertyMappingSchema>;
-
-/** Body for `POST /integrations/{id}/mappings`. */
-export type PropertyMappingInput = {
-  provider: IntegrationProvider;
-  property_ref: string;
-  project_id: string;
-};
-
-/** Optional body for `POST /integrations/{id}/sync`: the project and window (ISO dates). */
-export type SyncWindowInput = {
-  project_id?: string;
-  window_start?: string;
-  window_end?: string;
-};
 
 export const integrationsApi = {
   list: async (options?: ApiRequestOptions) => {
@@ -65,7 +56,11 @@ export const integrationsApi = {
     );
     return strictValidate(integrationTestResultSchema, res, 'integrations.test');
   },
-  sync: async (connectionId: string, input?: SyncWindowInput, options?: ApiRequestOptions) => {
+  sync: async (
+    connectionId: string,
+    input?: IntegrationSyncRequest,
+    options?: ApiRequestOptions,
+  ) => {
     const res = await apiClient.post<IntegrationSyncEnqueue>(
       `/integrations/${connectionId}/sync`,
       input,
@@ -115,7 +110,9 @@ export const integrationsApi = {
     // Naming the project marks the properties that belong to its site.
     const res = await apiClient.post<IntegrationProperty[]>(
       `/integrations/${connectionId}/properties`,
-      projectId ? { project_id: projectId } : undefined,
+      projectId
+        ? ({ project_id: projectId } satisfies IntegrationPropertyDiscoveryRequest)
+        : undefined,
       options,
     );
     return strictValidate(integrationPropertyListSchema, res, 'integrations.discoverProperties');
@@ -129,7 +126,7 @@ export const integrationsApi = {
   },
   createMapping: async (
     connectionId: string,
-    input: PropertyMappingInput,
+    input: IntegrationPropertyMappingRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<IntegrationPropertyMapping>(
@@ -158,4 +155,112 @@ export const integrationsApi = {
     // The callback lands back on `returnTo` (an allowed app path) instead of Settings.
     return returnTo ? `${start}?${new URLSearchParams({ return_to: returnTo })}` : start;
   },
+};
+
+/**
+ * Integration reads. Connections are workspace-wide; a connection's mappings,
+ * import progress and sync runs are read by the connection, in the workspace
+ * that owns it.
+ */
+export const integrationsQueries = {
+  connections: (workspaceId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.integrations.connections(workspaceId),
+      queryFn: ({ signal }) => integrationsApi.list({ signal, workspaceId }),
+    }),
+  /** A connection's mappings; one cache entry shared by Settings and the setup panel. */
+  mappings: (workspaceId: string | null, connectionId: string) =>
+    queryOptions({
+      queryKey: queryKeys.integrations.mappings(workspaceId, connectionId),
+      queryFn: ({ signal }) => integrationsApi.listMappings(connectionId, { signal, workspaceId }),
+      staleTime: 60 * 1000,
+    }),
+  backfillProgress: (workspaceId: string | null, connectionId: string) =>
+    queryOptions({
+      queryKey: queryKeys.integrations.backfillProgress(workspaceId, connectionId),
+      queryFn: ({ signal }) =>
+        integrationsApi.getBackfillProgress(connectionId, { signal, workspaceId }),
+    }),
+  /** One sync run; skips until a run has been enqueued. */
+  sync: (workspaceId: string | null, connectionId: string, syncId: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.integrations.sync(workspaceId, connectionId, syncId ?? ''),
+      queryFn: syncId
+        ? ({ signal }) => integrationsApi.getSync(connectionId, syncId, { signal, workspaceId })
+        : skipToken,
+    }),
+};
+
+/** The workspace's connections and everything read per connection. */
+export const refreshIntegrations = (client: QueryClient) =>
+  client.invalidateQueries({ queryKey: queryKeys.integrations.all });
+
+/**
+ * Everything a property mapping, a disconnect or a settled import changes:
+ * mappings, readiness and every projection fed by imported rows. Refreshed
+ * at once rather than after the stale time, so a page shows the import
+ * starting, or its rebuilt reports, instead of the old state. This is the one
+ * place that says which domains imported rows feed.
+ */
+export function refreshImportedReads(client: QueryClient) {
+  return Promise.all(
+    [
+      queryKeys.integrations.all,
+      queryKeys.performance.all,
+      queryKeys.demand.all,
+      queryKeys.aiTraffic.all,
+      queryKeys.searchIntelligence.all,
+    ].map((queryKey) => client.invalidateQueries({ queryKey })),
+  );
+}
+
+/** Integration writes; each success refreshes every read it changes. */
+export const integrationsMutations = {
+  /**
+   * The provider properties a connection's grant can read. A live provider
+   * call, so a failure is shown at once rather than retried.
+   */
+  discoverProperties: (workspaceId: string | null, connectionId: string) =>
+    mutationOptions({
+      mutationFn: (projectId: string | undefined) =>
+        integrationsApi.discoverProperties(connectionId, projectId, { workspaceId }),
+      retry: false,
+    }),
+  /** Import a property into a project; the import starts at once. */
+  createMapping: (workspaceId: string | null, connectionId: string) =>
+    mutationOptions({
+      mutationFn: (input: IntegrationPropertyMappingRequest) =>
+        integrationsApi.createMapping(connectionId, input, { workspaceId }),
+      onSuccess: (_mapping, _input, _result, { client }) => refreshImportedReads(client),
+    }),
+  /** Stop importing a property into its project; imported data stays. */
+  deleteMapping: (workspaceId: string | null) =>
+    mutationOptions({
+      mutationFn: (mappingId: string) => integrationsApi.deleteMapping(mappingId, { workspaceId }),
+      onSuccess: (_data, _mappingId, _result, { client }) => refreshImportedReads(client),
+    }),
+  /**
+   * Disconnect a grant: every property it serves stops importing into the
+   * projections a new property feeds. Imported data is kept. The grant is
+   * gone once the delete answers, so the mutation settles there and the reads
+   * refresh behind it: the caller's confirmation closes without waiting on them.
+   */
+  disconnect: (workspaceId: string | null) =>
+    mutationOptions({
+      mutationFn: (connectionId: string) => integrationsApi.delete(connectionId, { workspaceId }),
+      onSuccess: (_data, _connectionId, _result, { client }) => {
+        void refreshImportedReads(client);
+      },
+    }),
+  test: (workspaceId: string | null, connectionId: string) =>
+    mutationOptions({ mutationFn: () => integrationsApi.test(connectionId, { workspaceId }) }),
+  /**
+   * Enqueue a sync. Enqueueing alone persists no projection: the run's
+   * terminal poll refreshes the imported reads.
+   */
+  sync: (workspaceId: string | null, connectionId: string) =>
+    mutationOptions({
+      mutationFn: (input: IntegrationSyncRequest) =>
+        integrationsApi.sync(connectionId, input, { workspaceId }),
+    }),
 };

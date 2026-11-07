@@ -12,7 +12,7 @@ import { claimVerdictSchema } from '@citeladder/contracts/fact-checking';
 import { z } from 'zod';
 
 import type { FactCheckPolicy } from '../config/perception.ts';
-import { canonicalJson } from '../search-intelligence/requests.ts';
+import { canonicalJson } from '../canonical-json.ts';
 
 export type VerifyFact = { revisionId: string; topic: FactTopic; statement: string };
 export type VerifyClaim = { claimId: string; topic: FactTopic; claim: string; quote: string };
@@ -126,6 +126,8 @@ export type VerifiedVerdict = {
   factRevisionIds: string[];
   confidence: number | null;
   lowConfidence: boolean;
+  /** The model was sent this claim and left it out: no verdict, not `not_covered`. */
+  modelOmitted: boolean;
 };
 
 export type VerifyDropReason =
@@ -180,12 +182,14 @@ export function validateVerdicts(
       factRevisionIds,
       confidence: row.confidence,
       lowConfidence,
+      modelOmitted: false,
     });
   }
   const verdicts = [...ids.claimIds.values()].map((claimId): VerifiedVerdict => {
     const found = results.get(claimId);
     if (found) return found;
     drop('missing_claim');
+    // The stored verdict is a placeholder the read never shows: `modelOmitted` decides.
     return {
       claimId,
       verdict: 'not_covered',
@@ -193,6 +197,7 @@ export function validateVerdicts(
       factRevisionIds: [],
       confidence: null,
       lowConfidence: false,
+      modelOmitted: true,
     };
   });
   return { verdicts, drops };

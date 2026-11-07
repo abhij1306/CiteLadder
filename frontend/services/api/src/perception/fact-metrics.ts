@@ -78,7 +78,7 @@ export function claimStatus(input: {
   lowConfidenceClaim: boolean;
   topicHasFact: boolean;
   verification: { outcome: string; outcome_reason: string | null } | undefined;
-  verdict: { verdict: ClaimVerdict; low_confidence: boolean } | undefined;
+  verdict: { verdict: ClaimVerdict; low_confidence: boolean; model_omitted: boolean } | undefined;
 }): ClaimStatus {
   if (input.lowConfidenceClaim) return { kind: 'low_confidence' };
   if (!input.topicHasFact) return { kind: 'verdict', verdict: 'not_covered' };
@@ -86,6 +86,8 @@ export function claimStatus(input: {
   const reason = unavailableReason(input.verification);
   if (reason) return { kind: 'unavailable', reason };
   if (!input.verdict) return { kind: 'verdict', verdict: 'not_covered' };
+  // A claim the model left out has no verdict; it never counts as "no fact covers it".
+  if (input.verdict.model_omitted) return { kind: 'unavailable', reason: 'model_omitted' };
   if (input.verdict.low_confidence) return { kind: 'low_confidence' };
   return { kind: 'verdict', verdict: input.verdict.verdict };
 }

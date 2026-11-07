@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { parse, type DefaultTreeAdapterTypes } from 'parse5';
 
 import { policy } from '../config.ts';
-import { publicUrl } from './safe-fetch.ts';
+import { publicUrl } from '../safe-fetch.ts';
 
 type Node = DefaultTreeAdapterTypes.Node;
 type Element = DefaultTreeAdapterTypes.Element;

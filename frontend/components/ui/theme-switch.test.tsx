@@ -19,35 +19,19 @@ describe('ThemeSwitch', () => {
     delete document.documentElement.dataset.theme;
   });
 
-  it('starts on System and remembers an explicit pick in the shared cookie', async () => {
+  it('follows the device until clicked, then flips light and dark in the shared cookie', async () => {
     const user = userEvent.setup();
     render(<ThemeSwitch />);
 
-    expect(screen.getByRole('radio', { name: 'System' })).toHaveAttribute('aria-checked', 'true');
-
-    await user.click(screen.getByRole('radio', { name: 'Dark' }));
+    // No stored choice: the device's (light) theme shows and nothing is saved.
+    expect(themeCookie()).toBeUndefined();
+    await user.click(screen.getByRole('button', { name: 'Switch to dark theme' }));
     expect(document.documentElement).toHaveAttribute('data-theme', 'dark');
     expect(themeCookie()).toBe('dark');
-    expect(screen.getByRole('radio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true');
 
-    await user.click(screen.getByRole('radio', { name: 'System' }));
-    expect(themeCookie()).toBeUndefined();
-  });
-
-  it('moves and applies the choice with the arrow keys from one tab stop', async () => {
-    const user = userEvent.setup();
-    render(<ThemeSwitch />);
-
-    await user.tab();
-    expect(screen.getByRole('radio', { name: 'System' })).toHaveFocus();
-
-    await user.keyboard('{ArrowRight}');
-    expect(screen.getByRole('radio', { name: 'Light' })).toHaveFocus();
+    await user.click(screen.getByRole('button', { name: 'Switch to light theme' }));
     expect(document.documentElement).toHaveAttribute('data-theme', 'light');
     expect(themeCookie()).toBe('light');
-
-    await user.keyboard('{ArrowLeft}');
-    expect(screen.getByRole('radio', { name: 'System' })).toHaveFocus();
   });
 });
 

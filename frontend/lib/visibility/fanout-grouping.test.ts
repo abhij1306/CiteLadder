@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { VisibilityExecutionEvidence } from '@/lib/api/types';
+import type { VisibilityExecutionEvidence } from '@citeladder/contracts';
 import {
   normalizeSearch,
   SEARCH_MAX_LENGTH,
