@@ -36,10 +36,10 @@ describe('ThemeSwitch', () => {
 });
 
 describe('themeCookieDomain', () => {
-  it('shares the choice across the app, docs and website hosts', () => {
-    expect(themeCookieDomain('app.citeladder.com')).toBe('citeladder.com');
-    expect(themeCookieDomain('docs.citeladder.com')).toBe('citeladder.com');
-    expect(themeCookieDomain('citeladder.com')).toBe('citeladder.com');
+  it('shares the choice across sibling subdomains', () => {
+    expect(themeCookieDomain('app.example.com')).toBe('example.com');
+    expect(themeCookieDomain('docs.example.com')).toBe('example.com');
+    expect(themeCookieDomain('example.com')).toBe('example.com');
   });
 
   it('keeps the cookie host-only where a Domain attribute is rejected', () => {

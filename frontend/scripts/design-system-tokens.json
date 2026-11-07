@@ -387,8 +387,8 @@
             "fontSize": "16px",
             "lineHeight": "24px",
             "fontWeight": 500,
-            "sample": "Start free trial",
-            "usage": "Large (control-lg) buttons and the website navbar links."
+            "sample": "Launch audit",
+            "usage": "Large (control-lg) buttons."
           },
           {
             "name": "heading",
@@ -405,7 +405,7 @@
             "fontWeight": 500,
             "letterSpacing": "-0.01em",
             "sample": "Remove Northwind from tracking",
-            "usage": "Dialog and drawer titles and the billing plan name: the app's larger heading, in Geist because Cal Sans in the app is the PageHeader title only (D7). On the website, card, step, form and tool titles and article h3 (D28)."
+            "usage": "Dialog and drawer titles: the app's larger heading, in Geist because Cal Sans in the app is the PageHeader title only (D7)."
           },
           {
             "name": "stat",
@@ -452,8 +452,8 @@
             "fontSize": "13px",
             "lineHeight": "22px",
             "fontWeight": 400,
-            "sample": "curl https://api.citeladder.com/v1/prompts",
-            "usage": "Code blocks in docs, blog and product frames."
+            "sample": "curl http://localhost:8100/v1/prompts",
+            "usage": "Code blocks in product frames."
           }
         ]
       }
