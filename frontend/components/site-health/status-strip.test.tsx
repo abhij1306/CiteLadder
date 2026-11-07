@@ -178,33 +178,6 @@ describe('StatusStrip — analysis activity', () => {
 });
 
 describe('StatusStrip — lifecycle content', () => {
-  it('shows actionable paused copy without leaking a missing value', () => {
-    renderStrip({
-      phase: 'terminal',
-      crawl: crawl({
-        status: 'paused',
-        analysis_status: 'stopped',
-        analyzed_count: 0,
-        score_summary: null,
-      }),
-    });
-
-    expect(screen.getByText(/no completed score yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/Run a new crawl/i)).toBeInTheDocument();
-    expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
-  });
-
-  it('shows paused partial results with an explicit refresh action', () => {
-    renderStrip({
-      phase: 'dashboard',
-      crawl: crawl({ status: 'paused', analysis_status: 'stopped' }),
-    });
-
-    expect(screen.getByText(/showing the pages analyzed so far/i)).toBeInTheDocument();
-    expect(screen.getByText(/Run a new crawl/i)).toBeInTheDocument();
-    expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
-  });
-
   it('narrates discovery with provisional copy while scanning', () => {
     renderStrip({
       phase: 'discovering',

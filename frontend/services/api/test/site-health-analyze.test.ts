@@ -104,6 +104,12 @@ describe('analyze acquisition', () => {
         created_at: new Date(),
       })
       .execute();
+    // Site setup records the sitemap's URLs, the authority for membership.
+    await db
+      .updateTable('site_crawls')
+      .set({ site_facts: JSON.stringify({ sitemap: { fetched: true, urls: [page.url] } }) })
+      .where('id', '=', seed.crawlId)
+      .execute();
     await analyze(
       site({
         '/sitemap-page': {

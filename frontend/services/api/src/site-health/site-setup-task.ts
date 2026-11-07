@@ -6,7 +6,7 @@
  * walk and its admission land in a second commit under the same lease. A
  * reclaimed task whose facts are published but still pending resumes at the walk.
  */
-import { randomUUID } from 'node:crypto';
+import { isActiveCrawl } from '@citeladder/contracts/site-health';
 
 import { policy, resolveSettingSpec } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -15,11 +15,11 @@ import type { SiteTask } from '../queue/task-queue.ts';
 import { SitemapCollector, SitemapParseError, sitemapRef } from '../web-evidence/sitemaps.ts';
 import { robotsPolicy } from '../web-evidence/acquisition.ts';
 import { crawlerRootFacts, crawlerSamplePolicy } from './crawler-policy.ts';
+import { insertObservations } from './admission-writes.ts';
 import { insertRobotsSnapshot } from './robots-snapshots.ts';
 import { admitCandidates, candidate, crawlScope, lockRuntime, type Candidate } from './frontier.ts';
 import {
   Abandoned,
-  ACTIVE_CRAWL,
   loadScope,
   lockRunningTask,
   markRunning,
@@ -267,40 +267,34 @@ async function observeSitemapUrls(
   crawl: Crawl,
   candidates: Candidate[],
   siteUrlIds: Map<string, string>,
-  settings: Settings,
 ) {
-  const now = new Date();
-  const rows = candidates.flatMap((item) => {
-    const siteUrlId = siteUrlIds.get(item.hash);
-    return siteUrlId
-      ? [
-          {
-            id: randomUUID(),
-            workspace_id: crawl.workspace_id,
-            project_id: crawl.project_id,
-            crawl_id: crawl.id,
-            site_url_id: siteUrlId,
-            source_kind: 'sitemap',
-            value_kind: 'other',
-            value_priority: 0,
-            rewrite_reason: '',
-            rewrite_version: '',
-            depth: item.depth,
-            observed_url: item.url,
-            final_url: item.url,
-            content_type: '',
-            title: '',
-            created_at: now,
-          },
-        ]
-      : [];
-  });
-  for (let offset = 0; offset < rows.length; offset += settings.batch)
-    await trx // NOSONAR: batches bound each insert's bind parameters, in order in one transaction.
-      .insertInto('site_url_observations')
-      .values(rows.slice(offset, offset + settings.batch))
-      .onConflict((conflict) => conflict.columns(['crawl_id', 'site_url_id']).doNothing())
-      .execute();
+  await insertObservations(
+    trx,
+    crawl,
+    candidates.flatMap((item) => {
+      const siteUrlId = siteUrlIds.get(item.hash);
+      return siteUrlId
+        ? [
+            {
+              siteUrlId,
+              sourceKind: 'sitemap',
+              valueKind: 'other',
+              valuePriority: 0,
+              rewriteReason: '',
+              rewriteVersion: '',
+              depth: item.depth,
+              observedUrl: item.url,
+              finalUrl: item.url,
+              artifactId: null,
+              parentSiteUrlId: null,
+              statusCode: null,
+              contentType: '',
+              title: '',
+            },
+          ]
+        : [];
+    }),
+  );
 }
 
 /** Run `body` inside a transaction that holds crawl and task; false when the lease or crawl was lost. */
@@ -314,7 +308,7 @@ function underLease(
     .execute(async (trx) => {
       ctx.signal?.throwIfAborted();
       const locked = await lockRunningTask(trx, claimed, ctx.owner);
-      if (!locked || !ACTIVE_CRAWL.has(locked.crawl.status)) throw new Abandoned();
+      if (!locked || !isActiveCrawl(locked.crawl.status)) throw new Abandoned();
       await body(trx, locked.crawl, locked.task);
       ctx.signal?.throwIfAborted();
       return true;
@@ -376,11 +370,11 @@ async function persist(
         const runtime = await lockRuntime(trx, crawl.workspace_id);
         const candidates = sitemapCandidates(urls);
         const admission = await admitCandidates(trx, crawl, candidates, runtime);
-        await observeSitemapUrls(trx, crawl, candidates, admission.siteUrlIds, settings);
+        await observeSitemapUrls(trx, crawl, candidates, admission.siteUrlIds);
         admitted = admission.admitted;
       }
       const locked = await lockRunningTask(trx, claimed, ctx.owner);
-      if (!locked || !ACTIVE_CRAWL.has(locked.crawl.status)) throw new Abandoned();
+      if (!locked || !isActiveCrawl(locked.crawl.status)) throw new Abandoned();
       const { pending: _pending, ...sitemap } = record(facts.sitemap);
       const robots = record(facts.robots);
       const snapshot = crawl.robots_snapshot_id

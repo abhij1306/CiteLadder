@@ -139,7 +139,7 @@ describe('polling / cancel / terminal predicates', () => {
 
   it('is cancelable only before terminal', () => {
     expect(isCrawlCancelable('running')).toBe(true);
-    expect(isCrawlCancelable('draft')).toBe(true);
+    expect(isCrawlCancelable('queued')).toBe(true);
     expect(isCrawlCancelable('completed')).toBe(false);
     expect(isCrawlCancelable('failed')).toBe(false);
   });
@@ -290,15 +290,6 @@ describe('dashboardRunNotice', () => {
       message:
         'Some pages could not be analyzed — showing partial results. Re-crawl to retry the remaining pages.',
     });
-  });
-
-  it('labels a paused dashboard with actionable partial-results copy', () => {
-    const notice = dashboardRunNotice({ ...noticeBase, status: 'paused' });
-    expect(notice?.badge).toBe('paused');
-    expect(notice?.tone).toBe('info');
-    expect(notice?.message).toMatch(/showing the pages analyzed so far/i);
-    expect(notice?.message).toMatch(/run a new crawl/i);
-    expect(notice?.message).not.toMatch(/undefined/i);
   });
 
   it('labels a failed-with-data dashboard with a Failed badge', () => {

@@ -44,8 +44,7 @@ function linkedTargets(facts: Record<string, unknown>, url: string) {
     if (!target) continue;
     if (!['nav', 'header', 'footer', 'aside'].includes(text(anchor.region))) targets.add(target);
   }
-  // Captures before the truncation flag existed were bounded by the same cap.
-  return { contextual_targets: [...targets], links_complete: links.anchors_truncated !== true };
+  return { contextual_targets: [...targets], links_complete: links.anchors_truncated === false };
 }
 
 async function contextualInbound(db: Database, scope: LinkScope, crawlId: string) {

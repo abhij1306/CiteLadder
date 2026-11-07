@@ -141,9 +141,6 @@ function terminalMessage(
   failure: ReturnType<typeof crawlFailureCopy> | null,
 ): string {
   if (status === 'cancelled') return 'This crawl was cancelled before it produced results.';
-  if (status === 'paused') {
-    return 'This crawl is paused and has no completed score yet. Run a new crawl to try again.';
-  }
   if (failure) return [endSentence(failure.reason), failure.guidance].filter(Boolean).join(' ');
   return 'This crawl ended before it produced results. Run a new crawl to try again.';
 }

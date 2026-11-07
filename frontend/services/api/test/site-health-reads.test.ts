@@ -272,6 +272,7 @@ describe('page projections', () => {
         .execute();
     };
     await fail('/robots', 'robots_denied');
+    await fail('/rejected', 'url_admission_rejected');
     await fail('/broken', 'http_5xx');
     // No analyze task at all: monitored waits; unmonitored was never selected.
     for (const path of ['/waiting', '/ignored']) {
@@ -292,6 +293,11 @@ describe('page projections', () => {
       analysis_status: 'blocked',
       error_code: 'robots_denied',
     });
+    // A redirect the crawl's own admission refused is a policy refusal, not a page error.
+    expect(pages['/rejected']).toMatchObject({
+      analysis_status: 'blocked',
+      error_code: 'url_admission_rejected',
+    });
     expect(pages['/broken']).toMatchObject({ analysis_status: 'error', error_code: 'http_5xx' });
     expect(pages['/waiting']!.analysis_status).toBe('pending');
     expect(pages['/ignored']!.analysis_status).toBe('not_selected');
@@ -308,7 +314,7 @@ describe('page projections', () => {
       failures.push(new URL(body.items[0]!.normalized_url).pathname);
       cursor = body.next_cursor ? `&cursor=${body.next_cursor}` : '';
     } while (cursor);
-    expect(failures.sort()).toEqual(['/broken', '/robots']);
+    expect(failures.sort()).toEqual(['/broken', '/rejected', '/robots']);
 
     await db
       .updateTable('site_crawls')

@@ -39,8 +39,7 @@ export function resolvePhase(
     (summary.web_fundamentals_state !== 'not_measured' ||
       summary.aeo_measurement_state !== 'not_measured');
   if (scored) return 'dashboard';
-  if (crawl.status === 'failed' || crawl.status === 'cancelled' || crawl.status === 'paused')
-    return 'terminal';
+  if (crawl.status === 'failed' || crawl.status === 'cancelled') return 'terminal';
   // A committed monitored set seeds analysis at creation; `analysis_status`
   // only lags until the first reconcile.
   if (hasMonitoredSelection) return 'analyzing';

@@ -1,5 +1,6 @@
 /** The terminal snapshot and matching crawl summary publish in one transaction. */
 import { randomUUID } from 'node:crypto';
+import { isTerminalCrawl } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -257,7 +258,7 @@ export async function refreshLiveScoreSummary(db: Database, crawl: Crawl) {
     projection.evaluations.map((row) => row.id),
   );
   const payload = scoreSummary(projection, issues.issue_count);
-  if (!reads.terminal_crawl_statuses.includes(crawl.status)) {
+  if (!isTerminalCrawl(crawl.status)) {
     for (const row of [payload, ...Object.values(payload.by_page_kind)]) {
       row.web_fundamentals_state = 'limited_evidence';
       row.aeo_measurement_state = 'limited_evidence';

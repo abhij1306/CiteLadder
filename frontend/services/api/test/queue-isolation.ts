@@ -7,19 +7,18 @@
  * Only fixture workspaces are settled: the same database serves the local app,
  * whose crawls and tasks a test run must never end.
  */
+import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import pg from 'pg';
 import { beforeAll } from 'vitest';
 import { policy } from '../src/config.ts';
 import { FIXTURE_WORKSPACE_ROW } from './fixture-workspace.ts';
-
-const ACTIVE_CRAWL = ['draft', 'validating', 'queued', 'running'];
 
 export async function quiesceFixtureQueues(client: pg.ClientBase) {
   const active = policy.task_queue.active;
   await client.query(
     `update site_crawls set status = 'failed', completed_at = coalesce(completed_at, now())
      where status = any($1::text[]) and ${FIXTURE_WORKSPACE_ROW}`,
-    [ACTIVE_CRAWL],
+    [ACTIVE_CRAWL_STATUSES],
   );
   // One client runs these in order; there is nothing to gain from awaiting each.
   await Promise.all(

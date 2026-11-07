@@ -309,6 +309,70 @@ describe('discover', () => {
     expect(statuses).toEqual(['completed', 'failed', 'failed']);
   });
 
+  it('records a seed an earlier crawl knew as this crawl’s sighting when it is discovered again', async () => {
+    const seed = await crawl();
+    const earlier = await fixtures.sibling(seed);
+    const identity = canonicalIdentity('/seeded', seed.root);
+    const then = new Date(Date.now() - 86_400_000);
+    // The earlier crawl left the URL excluded, deeper, and sighted from a sitemap.
+    await db
+      .insertInto('site_urls')
+      .values({
+        id: randomUUID(),
+        workspace_id: seed.workspaceId,
+        project_id: seed.projectId,
+        normalized_url: identity.url,
+        url_hash: identity.hash,
+        display_url: identity.url,
+        host: 'example.test',
+        depth: 3,
+        corpus_disposition: 'exclude',
+        disposition_reason: 'http_404',
+        disposition_version: 'fixture',
+        item_kind: 'page',
+        discovery_status: 'failed',
+        latest_source_kind: 'sitemap',
+        latest_title: '',
+        latest_content_type: '',
+        first_seen_crawl_id: earlier,
+        last_seen_crawl_id: earlier,
+        first_seen_at: then,
+        last_seen_at: then,
+      })
+      .execute();
+    const before = await urlRow(seed, '/seeded');
+    const seeded = await queued(seed, 'discover', '/seeded', 1);
+
+    await run(worker({ '/seeded': { body: links() } }), seeded);
+
+    const after = await urlRow(seed, '/seeded');
+    expect({
+      id: after.id,
+      depth: after.depth,
+      disposition: after.corpus_disposition,
+      source: after.latest_source_kind,
+      first_seen: after.first_seen_crawl_id,
+      last_seen: after.last_seen_crawl_id,
+      discovery: after.discovery_status,
+    }).toEqual({
+      id: before.id,
+      depth: 1,
+      disposition: 'analyze',
+      source: 'link',
+      first_seen: earlier,
+      last_seen: seed.crawlId,
+      discovery: 'completed',
+    });
+    const observations = await db
+      .selectFrom('site_url_observations')
+      .select(['crawl_id', 'source_kind', 'status_code'])
+      .where('site_url_id', '=', before.id)
+      .execute();
+    expect(observations).toEqual([
+      { crawl_id: seed.crawlId, source_kind: 'link', status_code: 200 },
+    ]);
+  });
+
   it('settles a robots-excluded link failed rather than leaving it running', async () => {
     const seed = await crawl();
     const root = await queued(seed, 'discover');

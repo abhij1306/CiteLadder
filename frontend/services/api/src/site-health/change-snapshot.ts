@@ -5,6 +5,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import { TERMINAL_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -81,7 +82,7 @@ async function previousComparableCrawl(db: Database, crawlB: Crawl) {
     .where('workspace_id', '=', crawlB.workspace_id)
     .where('project_id', '=', crawlB.project_id)
     .where('id', '!=', crawlB.id)
-    .where('status', 'in', policy.site_health.reads.terminal_crawl_statuses)
+    .where('status', 'in', TERMINAL_CRAWL_STATUSES)
     .where('analyzed_url_count', '>', 0)
     .where(sql<boolean>`not ${pageRerunSql}`)
     .where('created_at', '<', crawlB.created_at)

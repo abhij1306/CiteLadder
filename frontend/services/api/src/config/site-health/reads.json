@@ -43,24 +43,17 @@
       "freshness": "Whether the page says when it was written or last updated.",
       "crawlability": "Whether an answer engine can reach and read the page at all — the checks that make every other dimension moot when they fail."
     },
-    "policy_blocking_error_codes": [
-      "access_blocked",
-      "bot_blocked",
-      "robots_denied",
-      "robots_unavailable",
-      "ssrf_blocked"
-    ],
-    "corpus_exclusion_error_codes": ["robots_denied", "url_admission_rejected"],
-    "corpus_exclusion_status_codes": [404, 410],
-    "non_page_error_codes": ["unsupported_content_type"],
-    "non_error_terminal_codes": [
-      "access_blocked",
-      "bot_blocked",
-      "robots_denied",
-      "robots_unavailable",
-      "ssrf_blocked",
-      "url_admission_rejected"
-    ],
+    "task_outcomes": {
+      "excluded_error_codes": ["robots_denied", "url_admission_rejected"],
+      "not_page_error_codes": ["unsupported_content_type"],
+      "blocked_error_codes": [
+        "access_blocked",
+        "bot_blocked",
+        "robots_unavailable",
+        "ssrf_blocked"
+      ],
+      "gone_status_codes": [404, 410]
+    },
     "fetch_attempt_error_outcome": "error",
     "defect_impact_bands": {
       "critical": 4,
@@ -121,7 +114,6 @@
       "profile": "sh-profiles-1",
       "schema_contract": "sh-schema-1",
       "presentation": "sh-presentation-1"
-    },
-    "terminal_crawl_statuses": ["cancelled", "completed", "failed", "partially_completed"]
+    }
   }
 }

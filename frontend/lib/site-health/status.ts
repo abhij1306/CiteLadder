@@ -22,7 +22,11 @@ import type {
 } from '@/lib/api/types';
 import type { PagesSort } from '@/lib/api/site-health';
 import type { RunStatusValue, StatusValue } from '@/components/ui/badge';
-import type { InternalLinkAnalysis } from '@citeladder/contracts/site-health';
+import {
+  isActiveCrawl,
+  isTerminalCrawl,
+  type InternalLinkAnalysis,
+} from '@citeladder/contracts/site-health';
 import { availabilityLabel, formatCount, formatDisplayTimestamp } from '@/lib/format';
 import { titleCaseStatus } from '@/lib/utils';
 
@@ -65,23 +69,6 @@ export const DEFAULT_PAGES_SORT: PagesSort = 'status';
 /** Poll cadence for the Site Health screen's active-crawl queries. */
 export const POLL_INTERVAL_MS = 4_000;
 
-/** Overall crawl statuses that are terminal (stop polling). */
-const TERMINAL_OVERALL: ReadonlySet<CrawlOverallStatus> = new Set<CrawlOverallStatus>([
-  'completed',
-  'partially_completed',
-  'failed',
-  'cancelled',
-  'paused',
-]);
-
-/** Overall statuses at which a cooperative cancel is still meaningful. */
-const CANCELABLE_OVERALL: ReadonlySet<CrawlOverallStatus> = new Set<CrawlOverallStatus>([
-  'draft',
-  'validating',
-  'queued',
-  'running',
-]);
-
 /** Discovery sub-states that are terminal. */
 const TERMINAL_DISCOVERY: ReadonlySet<CrawlDiscoveryStatus> = new Set<CrawlDiscoveryStatus>([
   'completed',
@@ -100,7 +87,7 @@ const TERMINAL_ANALYSIS: ReadonlySet<CrawlAnalysisStatus> = new Set<CrawlAnalysi
 
 /** True while the crawl page should keep polling `GET /site-crawls/{id}`. */
 export function shouldPollCrawl(crawl: Pick<SiteCrawl, 'status'>): boolean {
-  return !TERMINAL_OVERALL.has(crawl.status);
+  return !isTerminalCrawl(crawl.status);
 }
 
 /**
@@ -150,7 +137,7 @@ export function isCrawlStalled(
 
 /** True when the crawl can still be cancelled cooperatively. */
 export function isCrawlCancelable(status: CrawlOverallStatus): boolean {
-  return CANCELABLE_OVERALL.has(status);
+  return isActiveCrawl(status);
 }
 
 export function isDiscoveryTerminal(status: CrawlDiscoveryStatus): boolean {
@@ -322,14 +309,7 @@ export function crawlDisplayStatus(
 
 /** Map an overall crawl status onto a run-status badge value. */
 export function crawlBadgeValue(status: CrawlOverallStatus): RunStatusValue {
-  switch (status) {
-    case 'validating':
-      return 'queued';
-    case 'partially_completed':
-      return 'partial';
-    default:
-      return status;
-  }
+  return status === 'partially_completed' ? 'partial' : status;
 }
 
 /** Map a per-page analysis status onto a status-badge value. */

@@ -7,7 +7,7 @@
  * lock before the crawl and task, and writes nothing if the lease or crawl
  * was lost meanwhile.
  */
-import { randomUUID } from 'node:crypto';
+import { isActiveCrawl } from '@citeladder/contracts/site-health';
 
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
@@ -17,6 +17,7 @@ import type { SiteTask } from '../queue/task-queue.ts';
 import { factSettings, type PageFacts } from './analysis/facts.ts';
 import { discoverAsync } from './analysis/off-thread.ts';
 import type { DiscoveredLink } from './discovery-links.ts';
+import { insertObservations, upsertSiteUrls } from './admission-writes.ts';
 import { writeArtifact, writeAttempts, type AttemptOutcome } from './analysis-rows.ts';
 import { duplicateOf, markDuplicates } from './canonical-alias.ts';
 import {
@@ -32,7 +33,6 @@ import {
 import { isBotBlock } from './page-fetch.ts';
 import {
   Abandoned,
-  ACTIVE_CRAWL,
   finalFailure,
   httpError,
   loadScope,
@@ -44,13 +44,13 @@ import {
   type SiteTaskContext,
 } from './site-task.ts';
 import type { Crawl } from './task-fence.ts';
+import { taskOutcome } from './task-outcome.ts';
 import { classifyUrlAdmission, hardExcluded } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
 const crawlPolicy = policy.site_health.crawl;
 const acquisition = policy.site_health.page_analysis.acquisition;
 const DOCUMENT_TYPES = new Set(crawlPolicy.document_media_types);
-const EXCLUDED = new Set(policy.site_health.reads.corpus_exclusion_error_codes);
 
 type Discovery = { title: string; links: DiscoveredLink[] };
 type Outcome = AttemptOutcome & {
@@ -162,7 +162,6 @@ async function writeObservation(
   artifactId: string,
 ) {
   const siteUrlId = await siteUrlFor(trx, crawl, task);
-  if (!siteUrlId) return null;
   await insertObservation(trx, crawl, task, siteUrlId, {
     artifactId,
     finalUrl: page.url,
@@ -173,46 +172,24 @@ async function writeObservation(
   return siteUrlId;
 }
 
-/** The task URL's identity, created on first sight (a planner seed has none yet). */
+/**
+ * The task URL's identity. An admitted task names the one its admission wrote
+ * in this crawl. A planner seed names none: its discover is the crawl's
+ * sighting of the URL, recorded like any admission's (a seed seen again in a
+ * later crawl has its identity refreshed for this crawl).
+ */
 async function siteUrlFor(trx: Database, crawl: Crawl, task: SiteTask) {
+  if (task.site_url_id) return task.site_url_id;
   const identity = canonicalIdentity(task.requested_url);
-  const admission = classifyUrlAdmission(task.requested_url);
-  const sourceKind = task.depth === 0 ? 'root' : 'link';
-  const now = new Date();
-  await trx
-    .insertInto('site_urls')
-    .values({
-      id: randomUUID(),
-      workspace_id: crawl.workspace_id,
-      project_id: crawl.project_id,
-      normalized_url: identity.url,
-      url_hash: identity.hash,
-      display_url: identity.url,
-      host: new URL(identity.url).hostname.slice(0, 255),
-      depth: task.depth,
-      corpus_disposition: admission.disposition,
-      disposition_reason: admission.dispositionReason,
-      disposition_version: crawlPolicy.disposition_version,
-      item_kind: admission.itemKind,
-      discovery_status: 'running',
-      latest_source_kind: sourceKind,
-      latest_title: '',
-      latest_content_type: '',
-      first_seen_crawl_id: crawl.id,
-      last_seen_crawl_id: crawl.id,
-      first_seen_at: now,
-      last_seen_at: now,
-    })
-    .onConflict((conflict) => conflict.columns(['project_id', 'url_hash']).doNothing())
-    .execute();
-  const url = await trx
-    .selectFrom('site_urls')
-    .select('id')
-    .where('workspace_id', '=', crawl.workspace_id)
-    .where('project_id', '=', crawl.project_id)
-    .where('url_hash', '=', identity.hash)
-    .executeTakeFirst();
-  return url?.id ?? null;
+  const item = candidate(classifyUrlAdmission(task.requested_url), {
+    url: identity.url,
+    hash: identity.hash,
+    depth: task.depth,
+    sourceKind: task.depth === 0 ? 'root' : 'link',
+    parentPosition: 0,
+    linkOrdinal: 0,
+  });
+  return (await upsertSiteUrls(trx, crawl, [item])).get(identity.hash)!;
 }
 
 /** The task's observation of its URL in this crawl, with the frontier's rewrite provenance. */
@@ -237,31 +214,24 @@ async function insertObservation(
     .where('crawl_id', '=', crawl.id)
     .where('url_hash', '=', task.url_hash)
     .executeTakeFirst();
-  await trx
-    .insertInto('site_url_observations')
-    .values({
-      id: randomUUID(),
-      workspace_id: crawl.workspace_id,
-      project_id: crawl.project_id,
-      crawl_id: crawl.id,
-      site_url_id: siteUrlId,
-      source_kind: task.depth === 0 ? 'root' : 'link',
-      parent_site_url_id: task.parent_site_url_id,
-      source_artifact_id: fetched.artifactId,
-      value_kind: admission.valueKind,
-      value_priority: admission.priority,
-      rewrite_reason: rewrite?.rewrite_reason ?? '',
-      rewrite_version: rewrite?.rewrite_version ?? '',
+  await insertObservations(trx, crawl, [
+    {
+      siteUrlId,
+      sourceKind: task.depth === 0 ? 'root' : 'link',
+      valueKind: admission.valueKind,
+      valuePriority: admission.priority,
+      rewriteReason: rewrite?.rewrite_reason ?? '',
+      rewriteVersion: rewrite?.rewrite_version ?? '',
       depth: task.depth,
-      observed_url: task.requested_url,
-      final_url: fetched.finalUrl,
-      status_code: fetched.statusCode,
-      content_type: fetched.contentType.slice(0, 128),
+      observedUrl: task.requested_url,
+      finalUrl: fetched.finalUrl,
+      artifactId: fetched.artifactId,
+      parentSiteUrlId: task.parent_site_url_id,
+      statusCode: fetched.statusCode,
+      contentType: fetched.contentType,
       title: fetched.title,
-      created_at: new Date(),
-    })
-    .onConflict((conflict) => conflict.columns(['crawl_id', 'site_url_id']).doNothing())
-    .execute();
+    },
+  ]);
 }
 
 /**
@@ -273,7 +243,8 @@ async function insertObservation(
  */
 async function observeFailure(trx: Database, crawl: Crawl, task: SiteTask, outcome: Outcome) {
   const root = canonicalIdentity(crawl.root_url).hash === task.url_hash;
-  if (!root && !EXCLUDED.has(outcome.errorCode)) await observeFailedUrl(trx, crawl, task, outcome);
+  if (!root && taskOutcome(outcome) !== 'excluded')
+    await observeFailedUrl(trx, crawl, task, outcome);
   await trx
     .updateTable('site_urls')
     .set({ discovery_status: 'failed' })
@@ -283,10 +254,8 @@ async function observeFailure(trx: Database, crawl: Crawl, task: SiteTask, outco
     .execute();
 }
 async function observeFailedUrl(trx: Database, crawl: Crawl, task: SiteTask, outcome: Outcome) {
-  let siteUrlId = task.site_url_id;
-  if (!siteUrlId) {
-    siteUrlId = await siteUrlFor(trx, crawl, task);
-    if (!siteUrlId) return;
+  const siteUrlId = await siteUrlFor(trx, crawl, task);
+  if (!task.site_url_id) {
     // The failed task is the row's status, so it must name the identity it failed for.
     await trx
       .updateTable('site_crawl_tasks')
@@ -416,7 +385,7 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
           }));
       }
       const locked = await lockRunningTask(trx, claimed, ctx.owner);
-      if (!locked || !ACTIVE_CRAWL.has(locked.crawl.status)) throw new Abandoned();
+      if (!locked || !isActiveCrawl(locked.crawl.status)) throw new Abandoned();
       if (!artifactId && finalFailure(locked.task, outcome.retryable))
         await observeFailure(trx, locked.crawl, locked.task, outcome);
       if (artifactId || admitted) {

@@ -2,6 +2,7 @@
 import type { Database } from '../db/database.ts';
 import { policy } from '../config.ts';
 import type { Crawl } from './task-fence.ts';
+import { taskOutcome } from './task-outcome.ts';
 import { canonicalUrl } from './url-identity.ts';
 import {
   canonicalIntegrity,
@@ -45,9 +46,8 @@ const ACCESS_RESTRICTED = new Set([401, 403]);
  * of staying unchecked: unchecked, one robots-denied footer link made every
  * page's link checks unknown.
  */
-const EXCLUDED_ERRORS = new Set<string>(policy.site_health.reads.corpus_exclusion_error_codes);
 const isExcludedTarget = (resolution: Resolution) =>
-  resolution.status === null && EXCLUDED_ERRORS.has(resolution.errorCode);
+  resolution.status === null && taskOutcome({ errorCode: resolution.errorCode }) === 'excluded';
 /** Excluded targets stay named in the evidence, distinct from the ones that answered. */
 const excludedTargets = (urls: string[], resolutions: Map<string, Resolution>) =>
   urls.slice(0, limit).map((url) => ({ url, reason: resolutions.get(url)!.errorCode }));

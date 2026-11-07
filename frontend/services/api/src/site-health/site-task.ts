@@ -5,6 +5,7 @@
  * acquires outside any transaction and settles its task with its evidence.
  */
 import { randomUUID } from 'node:crypto';
+import { isActiveCrawl } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 
 import { policy, resolveSettingSpec } from '../config.ts';
@@ -17,7 +18,6 @@ import type { Crawl } from './task-fence.ts';
 export const statuses = policy.task_queue.statuses;
 /** Thrown inside a transaction to roll back work staged before the lease was re-checked. */
 export class Abandoned extends Error {}
-export const ACTIVE_CRAWL = new Set(['draft', 'validating', 'queued', 'running', 'paused']);
 const COUNT_BEARING = new Set<string>(policy.site_health.reads.event_count_bearing_keys);
 
 export function siteTaskSettings(env: Record<string, string | undefined> = process.env) {
@@ -99,9 +99,9 @@ export async function loadScope(db: Database, claimed: SiteTask) {
   return task && crawl ? { task, crawl } : null;
 }
 
-/** The first task to run moves a queued (or resumed) crawl to running. */
+/** The first task to run moves a queued crawl to running. */
 export async function startCrawl(db: Database, crawl: Crawl) {
-  if (crawl.status === 'running' || !['queued', 'paused'].includes(crawl.status)) return;
+  if (crawl.status !== 'queued') return;
   const now = new Date();
   await db
     .updateTable('site_crawls')
@@ -112,7 +112,7 @@ export async function startCrawl(db: Database, crawl: Crawl) {
     }))
     .where('id', '=', crawl.id)
     .where('workspace_id', '=', crawl.workspace_id)
-    .where('status', 'in', ['queued', 'paused'])
+    .where('status', '=', 'queued')
     .execute();
 }
 
@@ -123,7 +123,7 @@ export async function startCrawl(db: Database, crawl: Crawl) {
 export async function prepareTask(ctx: SiteTaskContext, claimed: SiteTask) {
   ctx.signal?.throwIfAborted();
   const scope = await loadScope(ctx.db, claimed);
-  if (!scope || !ACTIVE_CRAWL.has(scope.crawl.status)) {
+  if (!scope || !isActiveCrawl(scope.crawl.status)) {
     await cancelTask(ctx.db, claimed, ctx.owner);
     return null;
   }

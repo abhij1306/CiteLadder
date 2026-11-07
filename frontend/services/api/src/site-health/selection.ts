@@ -1,5 +1,6 @@
 /** Versioned monitored-set replacement, serialized across the entire workspace. */
 import { randomUUID } from 'node:crypto';
+import { ACTIVE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { notFound } from '../errors.ts';
 import type { Database } from '../db/database.ts';
@@ -8,7 +9,6 @@ import { admissionRuntime, createPageRerunCrawl, enqueueCrawlTask } from './plan
 import { crawlError } from './planner-policy.ts';
 import { inventoryCrawlIds } from './reads/crawl.ts';
 import { monitoredQuota } from './reads/runtime.ts';
-import { ACTIVE_CRAWL } from './site-task.ts';
 
 /** The project's monitored set; its route authorizes the path project. */
 export async function monitoredSet(db: Database, workspaceId: string, projectId: string) {
@@ -73,7 +73,7 @@ export async function lockControlScope(db: Database, workspaceId: string, projec
     .selectAll()
     .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
-    .where('status', 'in', [...ACTIVE_CRAWL])
+    .where('status', 'in', ACTIVE_CRAWL_STATUSES)
     .orderBy('created_at', 'desc')
     .forUpdate()
     .executeTakeFirst();

@@ -164,18 +164,15 @@ function duplicateComparisons(rows: { final_url: string; normalized_facts: unkno
 }
 
 async function sitemapObservations(db: Database, crawl: Crawl) {
-  const manifest = record(record(crawl.site_facts).sitemap);
-  // Older saved crawls have only source observations, not a setup manifest.
-  const urls = Array.isArray(manifest.urls) ? strings(manifest.urls) : null;
+  const urls = strings(record(record(crawl.site_facts).sitemap).urls);
+  if (!urls.length) return [];
   const rows = await db
     .selectFrom('site_url_observations')
     .select('observed_url')
     .where('workspace_id', '=', crawl.workspace_id)
     .where('project_id', '=', crawl.project_id)
     .where('crawl_id', '=', crawl.id)
-    .where((eb) =>
-      urls ? eb('observed_url', '=', eb.fn.any(eb.val(urls))) : eb('source_kind', '=', 'sitemap'),
-    )
+    .where((eb) => eb('observed_url', '=', eb.fn.any(eb.val(urls))))
     .execute();
   return rows.map((row) => row.observed_url);
 }

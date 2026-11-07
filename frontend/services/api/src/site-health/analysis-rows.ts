@@ -8,7 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
-import { record } from '../db/json.ts';
+import { record, strings } from '../db/json.ts';
 import { scalarText } from '../text-order.ts';
 import type { FetchCall, FetchedPage } from '../projects/safe-fetch.ts';
 import type { SiteTask } from '../queue/task-queue.ts';
@@ -167,13 +167,10 @@ export async function writeAttempts(
   await db.insertInto('site_fetch_attempts').values(rows).execute();
 }
 
-/** The observation supporting membership in the current or an older stored sitemap manifest. */
+/** The observation supporting membership in the crawl's stored sitemap manifest. */
 async function sitemapObservation(db: Database, crawl: Crawl, siteUrlId: string) {
-  const sitemap = record(record(crawl.site_facts).sitemap);
-  const urls = Array.isArray(sitemap.urls)
-    ? sitemap.urls.filter((url) => typeof url === 'string')
-    : null;
-  if (urls && !urls.length) return null;
+  const urls = strings(record(record(crawl.site_facts).sitemap).urls);
+  if (!urls.length) return null;
   const row = await db
     .selectFrom('site_url_observations')
     .select(['id', 'observed_url'])
@@ -181,9 +178,7 @@ async function sitemapObservation(db: Database, crawl: Crawl, siteUrlId: string)
     .where('project_id', '=', crawl.project_id)
     .where('crawl_id', '=', crawl.id)
     .where('site_url_id', '=', siteUrlId)
-    .where((eb) =>
-      urls ? eb('observed_url', '=', eb.fn.any(eb.val(urls))) : eb('source_kind', '=', 'sitemap'),
-    )
+    .where((eb) => eb('observed_url', '=', eb.fn.any(eb.val(urls))))
     .limit(1)
     .executeTakeFirst();
   return row ?? null;
