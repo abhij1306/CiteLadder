@@ -1,11 +1,10 @@
 /**
  * Model token pricing, used only to record what each provider call cost the
- * operator (`platform_calls.cost_microusd`). Nothing is charged or gated on it.
+ * operator (`model_calls.cost_microusd`). Nothing is charged or gated on it.
  */
 import usage from '../config/ai-usage.json' with { type: 'json' };
 import { gatewaySettings } from './gateway.ts';
 
-export const PRICING_REVISION = usage.revision;
 export type ModelPrice = (typeof usage.models)[keyof typeof usage.models];
 export type MeteredFeature =
   | 'agent'

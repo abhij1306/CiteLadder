@@ -151,18 +151,17 @@ describe('prompt generation at the PostgreSQL boundary', () => {
     const deps = dependencies();
     const result = await generate(deps);
     expect(result.candidates).toHaveLength(2);
-    // Every model call is recorded, never charged.
-    const charged = await db
-      .selectFrom('platform_calls')
-      .select(['feature', 'charge', 'credits'])
+    // Every model call is recorded.
+    const recorded = await db
+      .selectFrom('model_calls')
+      .select(['feature', 'status'])
       .where('workspace_id', '=', tenant.workspaceId)
       .where('created_at', '>=', since)
       .execute();
-    expect(charged).toEqual(
+    expect(recorded).toEqual(
       Array.from({ length: deps.io.fetch.mock.calls.length }, () => ({
         feature: 'prompt_generation',
-        charge: 'not_charged',
-        credits: 0,
+        status: 'settled',
       })),
     );
     expect(
@@ -179,21 +178,18 @@ describe('prompt generation at the PostgreSQL boundary', () => {
       distribution: { selected: { total: 2, located: 0 } },
     });
   });
-  it('keeps strong JEV failures only as text-free outcomes, recording the judge uncharged', async () => {
+  it('keeps strong JEV failures only as text-free outcomes, recording the judge calls', async () => {
     const since = new Date();
     const result = await generate(dependencies(0.01));
     const judged = await db
-      .selectFrom('platform_calls')
-      .select(['charge', 'credits'])
+      .selectFrom('model_calls')
+      .select(['status'])
       .where('workspace_id', '=', tenant.workspaceId)
       .where('feature', '=', 'prompt_quality_judge')
       .where('created_at', '>=', since)
       .execute();
     // One judge call per draft.
-    expect(judged).toEqual([
-      { charge: 'not_charged', credits: 0 },
-      { charge: 'not_charged', credits: 0 },
-    ]);
+    expect(judged).toEqual([{ status: 'settled' }, { status: 'settled' }]);
     expect(result.candidates).toEqual([]);
     expect(result.quality_rejected).toBe(2);
     const rows = await db
