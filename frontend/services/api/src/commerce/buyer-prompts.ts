@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
-import { commerceTargetsSchema } from '@citeladder/contracts/commerce-suite';
+import {
+  buyerPromptGenerateRequestSchema,
+  buyerPromptManualRequestSchema,
+} from '@citeladder/contracts/commerce-requests';
 import { sql } from 'kysely';
 import { z } from 'zod';
 
@@ -23,12 +26,10 @@ const COMMERCE_SET_NAME = 'Commerce Buyer Prompts';
 const stringField = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 const targetSchema = z.object({ kind: z.enum(['product', 'category']), id: z.uuid() });
 type Target = z.infer<typeof targetSchema>;
-export const buyerGenerateInput = z.object({
-  targets: commerceTargetsSchema,
+export const buyerGenerateInput = buyerPromptGenerateRequestSchema.extend({
   count: z.number().int().min(P.min).max(P.max).default(P.default),
 });
-export const buyerManualInput = z.object({
-  target: targetSchema,
+export const buyerManualInput = buyerPromptManualRequestSchema.extend({
   text: z.string().trim().min(1).max(policy.prompts.text_max_chars),
 });
 const unavailable = () =>

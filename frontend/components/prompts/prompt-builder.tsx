@@ -12,10 +12,10 @@ import { Inline } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
-import type { PromptGenerateInput } from '@/lib/api/prompts';
+import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
 import { queryKeys } from '@/lib/api/query-keys';
 import { topicsApi } from '@/lib/api/topics';
-import type { PromptGenerateResponse, SeedQueries, Topic } from '@/lib/api/types';
+import type { PromptGenerateResponse, SeedQueries, Topic } from '@citeladder/contracts';
 import { personaChoices } from '@/lib/prompts/builder-business';
 import { defaultRunSettings, runRequest, type RunSettings } from '@/lib/prompts/builder-run';
 
@@ -46,7 +46,7 @@ type PromptBuilderProps = {
   topics: Topic[];
   hasCompetitors: boolean;
   /** Runs one generate request; null when it failed (the error arrives as `generateError`). */
-  generate: (input: PromptGenerateInput) => Promise<PromptGenerateResponse | null>;
+  generate: (input: PromptGenerateRequest) => Promise<PromptGenerateResponse | null>;
   isGenerating: boolean;
   generateError?: unknown;
   /** The pending-candidate review list. */
@@ -56,7 +56,7 @@ type PromptBuilderProps = {
 };
 
 /** What this open of the builder generated: its request and every run it made. */
-type Session = { request: PromptGenerateInput; results: PromptGenerateResponse[] };
+type Session = { request: PromptGenerateRequest; results: PromptGenerateResponse[] };
 
 /**
  * The Prompt Builder: a right-hand sheet on the Prompts screen that steers
@@ -104,7 +104,7 @@ function BuilderSheet(props: Readonly<PromptBuilderProps>) {
   });
   const [run, setRun] = useState<Session | null>(null);
 
-  const generate = async (request: PromptGenerateInput, more: boolean) => {
+  const generate = async (request: PromptGenerateRequest, more: boolean) => {
     const result = await props.generate(request);
     if (!result) return;
     setRun((current) =>

@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { providersApi } from '@/lib/api/providers';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { LogicalEngine } from '@/lib/api/types';
+import type { LogicalEngine } from '@citeladder/contracts';
 import { ENGINE_ORDER, isConfigured, isVerified } from '@/lib/providers/catalog';
 
 /**

@@ -1,4 +1,9 @@
-import { demandSignalSchema, demandSnapshotSchema } from '@citeladder/contracts/demand';
+import {
+  demandClassificationOverrideRequestSchema,
+  demandRecomputeRequestSchema,
+  demandSignalSchema,
+  demandSnapshotSchema,
+} from '@citeladder/contracts/demand';
 import { z } from 'zod';
 
 const json = z.record(z.string(), z.unknown());
@@ -17,16 +22,13 @@ export const demandSnapshot = demandSnapshotSchema.extend({
     .optional(),
 });
 export { demandRecomputeResponseSchema as recomputeResponse } from '@citeladder/contracts/demand';
-const recomputeDates = z.strictObject({ window_start: z.iso.date(), window_end: z.iso.date() });
+const recomputeDates = demandRecomputeRequestSchema;
 export const recomputeBody = recomputeDates.refine((r) => r.window_end >= r.window_start, {
   path: ['window_end'],
   message: 'window_end must not be before window_start',
   when: (payload) => recomputeDates.safeParse(payload.value).success,
 });
-export const overrideBody = z.strictObject({
-  query: z.string().min(1).max(512),
-  classification: z.enum(['branded', 'non_branded', 'ambiguous']),
-});
+export const overrideBody = demandClassificationOverrideRequestSchema;
 export const classificationResponse = z.object({
   normalized_query: z.string(),
   classification: overrideBody.shape.classification,

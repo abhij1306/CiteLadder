@@ -236,6 +236,13 @@ export const opportunityOrderResponseSchema = responseObject({
   ordered_opportunity_ids: z.array(uuid()),
 });
 
+/** The shared queue order to save, against the version the editor read; a stale version is a 409. */
+export const opportunityOrderUpdateRequestSchema = z.strictObject({
+  ordered_opportunity_ids: z.array(z.uuid()),
+  expected_version: z.int().min(0),
+});
+export type OpportunityOrderUpdateRequest = z.input<typeof opportunityOrderUpdateRequestSchema>;
+
 // Full evidence bundle + provenance for one opportunity. Superseded rows stay
 // readable.
 export const opportunityDetailSchema = opportunitySchema.extend({
@@ -373,3 +380,9 @@ export const verificationEventSchema = responseObject({
   limitations: z.array(z.string()),
   created_at: z.string(),
 });
+
+export type CommandCenter = z.infer<typeof commandCenterSchema>;
+export type OpportunityType = z.infer<typeof opportunityTypeSchema>;
+export type Opportunity = z.infer<typeof opportunitySchema>;
+export type OpportunityDetail = z.infer<typeof opportunityDetailSchema>;
+export type OpportunitiesPage = z.infer<typeof opportunitiesPageSchema>;

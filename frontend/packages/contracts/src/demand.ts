@@ -42,3 +42,22 @@ export const demandRecomputeResponseSchema = responseObject({
   task_id: z.uuid().nullable(),
   status: z.string(),
 });
+
+/**
+ * A manual recompute of one date window. The API refines it so `window_end`
+ * is not before `window_start`.
+ */
+export const demandRecomputeRequestSchema = z.strictObject({
+  window_start: z.iso.date(),
+  window_end: z.iso.date(),
+});
+export type DemandRecomputeRequest = z.input<typeof demandRecomputeRequestSchema>;
+
+/** An owner's branded/non-branded call for one search query. */
+export const demandClassificationOverrideRequestSchema = z.strictObject({
+  query: z.string().min(1).max(512),
+  classification: z.enum(['branded', 'non_branded', 'ambiguous']),
+});
+export type DemandClassificationOverrideRequest = z.input<
+  typeof demandClassificationOverrideRequestSchema
+>;

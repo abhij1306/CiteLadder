@@ -13,6 +13,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { commerceApi } from '@/lib/api/commerce';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
+import type { CompetitorDecisionRequest } from '@citeladder/contracts/commerce-requests';
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
 import type { useCompetitorDiscovery } from '@/lib/products/competitor-discovery';
 
@@ -47,9 +48,9 @@ export function TargetCompetitors({
   const client = useQueryClient();
   const workspaceId = useActiveWorkspaceId();
   const decide = useMutation({
-    mutationFn: ({ id, decision }: { id: string; decision: 'approved' | 'rejected' }) => {
+    mutationFn: ({ id, decision }: { id: string } & CompetitorDecisionRequest) => {
       if (!workspaceId) throw new Error('Workspace is not available.');
-      return commerceApi.decideCompetitor(projectId, id, decision, { workspaceId });
+      return commerceApi.decideCompetitor(projectId, id, { decision }, { workspaceId });
     },
     onSuccess: () =>
       client.invalidateQueries({ queryKey: queryKeys.commerce.competitors(projectId) }),

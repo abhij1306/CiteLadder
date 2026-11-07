@@ -11,7 +11,7 @@ import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { RadioGroup } from '@/components/ui/radio-group';
 import { textRole } from '@/components/ui/typography';
-import type { SeedQueries, Topic } from '@/lib/api/types';
+import type { SeedQueries, Topic } from '@citeladder/contracts';
 import { MAX_GENERATION_COUNT, PROMPT_BUILDER } from '@/lib/config/prompts';
 import {
   INTENT_KEYS,

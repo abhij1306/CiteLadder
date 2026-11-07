@@ -2,7 +2,7 @@
  * Prompt search + filter model. Pure functions so the toolbar stays
  * presentational and filtering is unit-testable.
  */
-import type { Prompt } from '@/lib/api/types';
+import type { Prompt } from '@citeladder/contracts';
 
 /** Tri-state for the enabled / branded filters. */
 export type EnabledFilter = 'all' | 'enabled' | 'disabled';

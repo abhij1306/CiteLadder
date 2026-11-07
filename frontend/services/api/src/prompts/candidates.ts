@@ -11,6 +11,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { promptCandidateReviewRequestSchema } from '@citeladder/contracts/prompt-requests';
 import { sql, type Kysely } from 'kysely';
 import { z } from 'zod';
 
@@ -44,10 +45,7 @@ function plannedPersona(refs: unknown[]): string {
 const setting = (name: keyof typeof P.generation_settings) =>
   resolveSettingSpec(P.generation_settings[name]) as number;
 
-export const candidateReview = z.object({
-  accept_ids: z.array(z.uuid()).default([]),
-  reject_ids: z.array(z.uuid()).default([]),
-});
+export const candidateReview = promptCandidateReviewRequestSchema;
 
 export type CandidateReview = {
   accepted: PromptView[];

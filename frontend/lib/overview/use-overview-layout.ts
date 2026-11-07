@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { OverviewLayout, OverviewWidget } from '@citeladder/contracts/overview';
 import { projectQueries, projectsApi } from '@/lib/api/projects';
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 
 /**
  * The project's shared Overview layout. A save names the version it edited, so

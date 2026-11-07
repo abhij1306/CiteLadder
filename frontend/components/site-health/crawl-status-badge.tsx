@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { crawlBadgeValue, crawlDisplayStatus, statusLabel } from '@/lib/site-health/status';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 
 /** A crawl's status as a reader sees it: one badge, one display rule. */
 export function CrawlStatusBadge({

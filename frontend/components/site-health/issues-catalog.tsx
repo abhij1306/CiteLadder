@@ -19,7 +19,7 @@ import { SegmentedControl } from '@/components/ui/tabs';
 import { siteHealthQueries } from '@/lib/api/site-health';
 import { ICONS } from '@/lib/icons';
 import { ISSUE_OCCURRENCE_LIMIT } from '@/lib/config/site-health';
-import type { IssuesSummary, SiteIssue } from '@/lib/api/types';
+import type { IssuesSummary, SiteIssue } from '@citeladder/contracts';
 import {
   findingClassChange,
   issueFilterClass,

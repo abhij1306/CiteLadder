@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { Topic } from '@/lib/api/types';
+import type { Topic } from '@citeladder/contracts';
 
 import { AddTopicDialog, ManageTopicsDialog, TopicFilter } from './topic-controls';
 

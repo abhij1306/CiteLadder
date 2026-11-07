@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import { render, screen, within } from '@testing-library/react';
 
 import { RootErrorsBlock } from './root-errors-block';
-import type { RootError } from '@/lib/api/types';
+import type { RootError } from '@citeladder/contracts';
 
 const errors: RootError[] = [
   {

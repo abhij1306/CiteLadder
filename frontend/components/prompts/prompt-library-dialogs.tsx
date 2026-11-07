@@ -1,7 +1,10 @@
 import type { Dispatch, SetStateAction } from 'react';
 
-import type { PromptGenerateInput, PromptImportRow } from '@/lib/api/prompts';
-import type { Prompt, PromptGenerateResponse, Topic } from '@/lib/api/types';
+import type {
+  PromptGenerateRequest,
+  PromptImportRowRequest,
+} from '@citeladder/contracts/prompt-requests';
+import type { Prompt, PromptGenerateResponse, Topic } from '@citeladder/contracts';
 import type { PromptFormValues } from '@/lib/prompts/forms';
 import type { usePromptCandidates } from '@/lib/prompts/use-prompt-candidates';
 
@@ -23,7 +26,7 @@ type PromptLibraryDialogsProps = {
   formError?: string;
   importOpen: boolean;
   setImportOpen: Dispatch<SetStateAction<boolean>>;
-  importPrompts: (rows: PromptImportRow[]) => Promise<void>;
+  importPrompts: (rows: PromptImportRowRequest[]) => Promise<void>;
   isImporting: boolean;
   importError?: string;
   builderOpen: boolean;
@@ -32,7 +35,7 @@ type PromptLibraryDialogsProps = {
   hasCompetitors: boolean;
   topics: Topic[];
   selectedTopicId: string | null;
-  generatePrompts: (input: PromptGenerateInput) => Promise<PromptGenerateResponse | null>;
+  generatePrompts: (input: PromptGenerateRequest) => Promise<PromptGenerateResponse | null>;
   isGenerating: boolean;
   generateError?: unknown;
   onTopicsChanged: () => Promise<void>;

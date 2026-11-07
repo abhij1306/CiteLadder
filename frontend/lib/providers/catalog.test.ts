@@ -4,7 +4,7 @@
 // default costs a full environment per file and buys nothing here.
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { ProviderConnection } from '@/lib/api/types';
+import type { ProviderConnection } from '@citeladder/contracts';
 
 import {
   ENGINE_LABELS,

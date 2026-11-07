@@ -7,7 +7,7 @@ import { panelClasses } from '@/components/ui/panel';
 import { TextLink } from '@/components/ui/text-link';
 import { Limitations } from '@/components/ui/passage';
 import { Label, textRole } from '@/components/ui/typography';
-import type { OpportunityDetail } from '@/lib/api/types';
+import type { OpportunityDetail } from '@citeladder/contracts';
 import { promptHistoryHref } from '@/lib/prompts/history';
 import { BrandOnPage } from '@/components/visibility/brand-on-page';
 import { brandVerdict, onPageCompetitors, readingSentence } from '@/lib/visibility/source-pages';

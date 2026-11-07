@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import type { OpportunityType } from '@/lib/api/types';
+import type { OpportunityType } from '@citeladder/contracts';
 
 const TYPE_LABEL: Record<OpportunityType, string> = {
   visibility: 'Visibility',

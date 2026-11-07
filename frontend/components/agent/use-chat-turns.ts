@@ -12,9 +12,9 @@ import {
   agentMutations,
   agentQueries,
   type AgentChatDetail,
-  type AgentContextRefs,
   type AgentMessage,
 } from '@/lib/api/agent';
+import type { AgentContextRefs } from '@citeladder/contracts/agent';
 import { queryKeys } from '@/lib/api/query-keys';
 
 /**

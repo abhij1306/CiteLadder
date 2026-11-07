@@ -12,7 +12,7 @@ import { InfoHint } from '@/components/ui/info-hint';
 import { Inline, Stack } from '@/components/ui/layout';
 import { TableCell, TableCellLines, TableRow, TableSelectCell } from '@/components/ui/table';
 import { Tag } from '@/components/ui/tag';
-import type { PromptCandidate, Topic } from '@/lib/api/types';
+import type { PromptCandidate, Topic } from '@citeladder/contracts';
 import { qualityFlagLabel, qualityStatusLabel } from '@/lib/prompts/candidate-quality';
 import type { usePromptCandidates } from '@/lib/prompts/use-prompt-candidates';
 

@@ -9,7 +9,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import type { ObservedCompetitor } from '@/lib/api/types';
+import type { ObservedCompetitor } from '@citeladder/contracts';
 import { Button } from '@/components/ui/button';
 import { queryKeys } from '@/lib/api/query-keys';
 import { visibilityApi } from '@/lib/api/visibility';

@@ -1,5 +1,6 @@
 /** Mirrors the Search Intelligence request bounds. */
 import { MARKET_COUNTRIES } from '@citeladder/contracts/markets';
+import type { SearchDatasetKind } from '@citeladder/contracts/search-intelligence';
 
 export const SEARCH_MAX_DEPTH = 1_000_000;
 export type SearchColumn = {
@@ -96,54 +97,10 @@ export const SEARCH_DATASET_LABELS: Readonly<Record<string, string>> = {
   backlink_history: 'Backlink history (past year)',
   citation_matches: 'Citation matches',
 };
-export const OWNED_DATASET_KINDS = [
-  'footprint',
-  'ranking_keywords',
-  'keyword_suggestions',
-  'backlink_summary',
-  'referring_domains',
-  'destination_pages',
-  'organic_pages',
-  'backlinks',
-  'backlink_history',
-] as const;
-export const COMPETITOR_DATASET_KINDS = [
-  'footprint',
-  'missing_keywords',
-  'shared_keywords',
-  'backlink_summary',
-  'backlinks',
-  'referring_domains',
-  'destination_pages',
-  'organic_pages',
-  'backlink_history',
-] as const;
-/** Backlink datasets need no search market. */
-export const BACKLINK_DATASET_KINDS: readonly string[] = [
-  'backlink_summary',
-  'referring_domains',
-  'destination_pages',
-  'backlinks',
-  'backlink_history',
-];
-/** One provider observation each; their depth is not a choice. */
-export const FIXED_DEPTH_KINDS: readonly string[] = [
-  'footprint',
-  'backlink_summary',
-  'backlink_history',
-];
-export const KEYWORD_DATASET_KINDS: readonly string[] = [
-  'ranking_keywords',
-  'keyword_suggestions',
-  'missing_keywords',
-  'shared_keywords',
-];
-/** Keyword comparisons: read for the owned site against one competitor's domain. */
-export const COMPARISON_DATASET_KINDS: readonly string[] = ['missing_keywords', 'shared_keywords'];
 /** A first analysis starts small: the owned site plus one competitor's keyword comparisons. */
-export const PRESET_OWNED_KINDS: readonly string[] = ['footprint', 'ranking_keywords'];
+export const PRESET_OWNED_KINDS: readonly SearchDatasetKind[] = ['footprint', 'ranking_keywords'];
 
-export const SEARCH_DEFAULT_DEPTHS = {
+export const SEARCH_DEFAULT_DEPTHS: Readonly<Record<SearchDatasetKind, number>> = {
   footprint: 1,
   ranking_keywords: 200,
   keyword_suggestions: 150,
@@ -155,7 +112,7 @@ export const SEARCH_DEFAULT_DEPTHS = {
   organic_pages: 100,
   backlinks: 100,
   backlink_history: 13,
-} as const;
+};
 
 export function searchScopeLabel(scope?: string): string {
   return scope === 'domain_subdomains' ? 'Domain + subdomains' : 'Exact host';

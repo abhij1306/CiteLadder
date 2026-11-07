@@ -16,7 +16,7 @@ import { StatRow } from '@/components/ui/stat-row';
 import { humanizeApiError } from '@/lib/api/errors';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import { runsApi } from '@/lib/api/runs';
-import type { Audit } from '@/lib/api/types';
+import type { Audit } from '@citeladder/contracts';
 import { saveBlob } from '@/lib/download';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate, formatDisplayTime } from '@/lib/format';

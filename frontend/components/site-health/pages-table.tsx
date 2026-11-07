@@ -11,7 +11,7 @@ import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { TextLink } from '@/components/ui/text-link';
 import { cn } from '@/lib/utils';
 import type { PagesSort } from '@/lib/api/site-health';
-import type { PageSummary } from '@/lib/api/types';
+import type { PageSummary } from '@citeladder/contracts';
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
 import {
   PLACEHOLDER,

@@ -74,3 +74,5 @@ export const auditEventSchema = z.discriminatedUnion('event_type', [
     }),
   ),
 ]);
+
+export type AuditEvent = z.infer<typeof auditEventSchema>;

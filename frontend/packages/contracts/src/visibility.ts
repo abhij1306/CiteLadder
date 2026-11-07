@@ -359,3 +359,9 @@ export const visibilityMarketsSchema = responseObject({
   markets: z.array(visibilityMarketRowSchema),
 });
 export type VisibilityMarkets = z.infer<typeof visibilityMarketsSchema>;
+export type PromptMetricItem = z.infer<typeof promptMetricItemSchema>;
+export type PromptHistory = z.infer<typeof promptHistorySchema>;
+export type ObservedCompetitor = z.infer<typeof observedCompetitorSchema>;
+export type VisibilityEngine = z.infer<typeof visibilityEngineSchema>;
+export type RankingRow = z.infer<typeof rankingRowSchema>;
+export type Visibility = z.infer<typeof visibilitySchema>;

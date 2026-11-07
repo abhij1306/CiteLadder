@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import type { Prompt, Topic } from '@/lib/api/types';
+import type { Prompt, Topic } from '@citeladder/contracts';
 import {
   buyerStageLabels,
   buyerStageValues,

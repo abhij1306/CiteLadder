@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { OpportunityDetail } from '@/lib/api/types';
+import type { OpportunityDetail } from '@citeladder/contracts';
 import { renderWithProviders as render } from '@/test/render';
 
 import { EarnedPageHandoff } from './earned-page-handoff';

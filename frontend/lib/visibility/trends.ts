@@ -9,7 +9,7 @@
  * the not-measured placeholder when no ranked answer exists.
  */
 import type { TrendPoint, TrendSeries } from '@/components/ui/trend-chart';
-import type { LogicalEngine, VisibilityTrendPoint } from '@/lib/api/types';
+import type { LogicalEngine, VisibilityTrendPoint } from '@citeladder/contracts';
 import { ENGINE_ORDER } from '@/lib/providers/catalog';
 import { formatDisplayDate, formatDisplayShortDate } from '@/lib/format';
 

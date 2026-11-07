@@ -4,7 +4,7 @@ import { http, HttpResponse, type RequestHandler } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/test';
 
 import { queryKeys } from '@/lib/api/query-keys';
-import type { BrandProfile } from '@/lib/api/types';
+import type { BrandProfile } from '@citeladder/contracts';
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders, testProjectSelection } from '@/test/render';

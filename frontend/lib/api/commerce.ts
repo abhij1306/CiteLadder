@@ -5,6 +5,14 @@ import { apiClient, type ApiRequestOptions } from './client';
 import { startInteractiveWork } from './interactive-work';
 import { COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
 import { strictValidate } from '@citeladder/contracts/validation';
+import type {
+  BuyerPromptDecisionRequest,
+  BuyerPromptGenerateRequest,
+  BuyerPromptManualRequest,
+  CatalogImportRequest,
+  CompetitorDecisionRequest,
+  CompetitorDiscoveryRequest,
+} from '@citeladder/contracts/commerce-requests';
 import {
   buyerPromptSchema,
   catalogImportSchema,
@@ -34,21 +42,12 @@ export const commerceApi = {
     ),
   importCatalog: async (
     projectId: string,
-    content: string,
-    filename = 'catalog.csv',
+    input: CatalogImportRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
       catalogImportSchema,
-      await apiClient.post(
-        path(projectId, 'catalog/import'),
-        {
-          filename,
-          content_type: 'text/csv',
-          content,
-        },
-        options,
-      ),
+      await apiClient.post(path(projectId, 'catalog/import'), input, options),
       'commerce.importCatalog',
     ),
   competitors: async (projectId: string, options?: ApiRequestOptions) =>
@@ -59,12 +58,12 @@ export const commerceApi = {
     ),
   discoverCompetitors: async (
     projectId: string,
-    targets: CommerceTarget[],
+    input: CompetitorDiscoveryRequest,
     options?: ApiRequestOptions,
   ) => {
     const discovery = strictValidate(
       competitorDiscoverySchema,
-      await apiClient.post(path(projectId, 'competitors/discover'), { targets }, options),
+      await apiClient.post(path(projectId, 'competitors/discover'), input, options),
       'commerce.discoverCompetitors',
     );
     startInteractiveWork(path(projectId, 'competitors/discoveries/run'), options, discovery);
@@ -91,12 +90,12 @@ export const commerceApi = {
   decideCompetitor: async (
     projectId: string,
     candidateId: string,
-    decision: 'approved' | 'rejected',
+    input: CompetitorDecisionRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
       competitorCandidateSchema,
-      await apiClient.patch(path(projectId, `competitors/${candidateId}`), { decision }, options),
+      await apiClient.patch(path(projectId, `competitors/${candidateId}`), input, options),
       'commerce.decideCompetitor',
     ),
   buyerPrompts: async (projectId: string, options?: ApiRequestOptions) =>
@@ -107,39 +106,36 @@ export const commerceApi = {
     ),
   generateBuyerPrompts: async (
     projectId: string,
-    targets: CommerceTarget[],
-    count: number,
+    input: BuyerPromptGenerateRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
       z.array(buyerPromptSchema),
-      await apiClient.post(
-        path(projectId, 'buyer-prompts/generate'),
-        { targets, count },
-        { ...options, timeoutMs: COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS },
-      ),
+      await apiClient.post(path(projectId, 'buyer-prompts/generate'), input, {
+        ...options,
+        timeoutMs: COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS,
+      }),
       'commerce.generateBuyerPrompts',
     ),
   addBuyerPrompt: async (
     projectId: string,
-    target: CommerceTarget,
-    text: string,
+    input: BuyerPromptManualRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
       buyerPromptSchema,
-      await apiClient.post(path(projectId, 'buyer-prompts/manual'), { target, text }, options),
+      await apiClient.post(path(projectId, 'buyer-prompts/manual'), input, options),
       'commerce.addBuyerPrompt',
     ),
   decideBuyerPrompt: async (
     projectId: string,
     promptId: string,
-    approved: boolean,
+    input: BuyerPromptDecisionRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
       buyerPromptSchema,
-      await apiClient.patch(path(projectId, `buyer-prompts/${promptId}`), { approved }, options),
+      await apiClient.patch(path(projectId, `buyer-prompts/${promptId}`), input, options),
       'commerce.decideBuyerPrompt',
     ),
   shelf: async (projectId: string, target: CommerceTarget, options?: ApiRequestOptions) =>

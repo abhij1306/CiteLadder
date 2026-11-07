@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { providersApi } from '@/lib/api/providers';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { ProviderConnection } from '@/lib/api/types';
+import type { ProviderConnection } from '@citeladder/contracts';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import {
   connectionForTransport,

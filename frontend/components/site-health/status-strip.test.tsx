@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import { render, screen } from '@testing-library/react';
 
 import { StatusStrip } from './status-strip';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 import { COMPLETE_CLASSIFICATION_PROJECTION } from '@/test/site-health-fixtures';
 import { makePageSummary as page, makeSiteCrawl } from '@/test/fixtures/site-health';
 

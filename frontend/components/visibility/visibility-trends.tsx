@@ -19,7 +19,7 @@ import { textRole } from '@/components/ui/typography';
 import { RankingRowsTable } from '@/components/visibility/ranking-rows';
 import { EngineComparison } from '@/components/visibility/engine-comparison';
 import { SurfaceRatesPanel } from '@/components/visibility/surface-rates';
-import type { SurfaceRates, Visibility, VisibilityTrendPoint } from '@/lib/api/types';
+import type { SurfaceRates, Visibility, VisibilityTrendPoint } from '@citeladder/contracts';
 import { isMetricsPending } from '@/lib/api/visibility-queries';
 import {
   formatPosition,

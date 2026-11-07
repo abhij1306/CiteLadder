@@ -1,7 +1,7 @@
 import type { AnswerStates } from '@citeladder/contracts/visibility';
 
 import type { TrendEvent, TrendPoint } from '@/components/ui/trend-chart';
-import type { PromptHistory, PromptMetricItem } from '@/lib/api/types';
+import type { PromptHistory, PromptMetricItem } from '@citeladder/contracts';
 import { formatDisplayDate, formatDisplayShortDate } from '@/lib/format';
 import { formatWholePercent } from '@/lib/visibility/dashboard';
 

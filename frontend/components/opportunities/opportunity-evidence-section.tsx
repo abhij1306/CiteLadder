@@ -4,7 +4,7 @@ import { panelClasses } from '@/components/ui/panel';
 import { OpportunitySourcePattern } from '@/components/opportunities/opportunity-source-pattern';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/typography';
-import type { OpportunityDetail } from '@/lib/api/types';
+import type { OpportunityDetail } from '@citeladder/contracts';
 import { parseSourcePattern } from '@/lib/opportunities/source-pattern';
 import { formatCount } from '@/lib/format';
 import { keywordGapEvidenceSchema } from '@citeladder/contracts';

@@ -6,7 +6,7 @@ import { ExecutionsTable } from '@/components/runs/executions-table';
 import { ProgressPanel } from '@/components/runs/progress-panel';
 import { ICONS } from '@/lib/icons';
 import type { MutationNotice } from '@/lib/api/mutation-notice';
-import type { Audit, Execution } from '@/lib/api/types';
+import type { Audit, Execution } from '@citeladder/contracts';
 
 type RunDetailViewProps = {
   audit: Audit | undefined;

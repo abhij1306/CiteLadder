@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 
 import { promptsApi, promptsQueries } from '@/lib/api/prompts';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { PromptSet } from '@/lib/api/types';
+import type { PromptSet } from '@citeladder/contracts';
 import { useActiveProject, useActiveWorkspaceId } from '@/lib/project/project-context';
 
 /**

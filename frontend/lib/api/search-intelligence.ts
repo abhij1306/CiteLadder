@@ -12,6 +12,11 @@ import {
   searchRowSchema,
   searchRunSchema,
 } from '@citeladder/contracts';
+import type {
+  SearchCitationMatchRequest,
+  SearchPreferencesRequest,
+  SearchReviewRequest,
+} from '@citeladder/contracts/search-intelligence-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 
 export type SearchIntelligenceReadiness = z.infer<typeof searchReadinessSchema>;
@@ -19,27 +24,6 @@ export type SearchIntelligenceRun = z.infer<typeof searchRunSchema>;
 export type SearchIntelligenceDataset = z.infer<typeof searchDatasetSchema>;
 export type SearchIntelligenceRow = z.infer<typeof searchRowSchema>;
 export type ResearchScope = z.infer<typeof researchScopeSchema>;
-export type DatasetSelection = {
-  kind: string;
-  competitor_id?: string | null;
-  depth: number;
-  seed?: string;
-  grouping?: 'as_is' | 'one_per_domain';
-  order?: 'volume' | 'traffic' | 'position' | 'difficulty' | 'cpc';
-  min_volume?: number;
-};
-export type ReviewPayload = {
-  research_scope?: ResearchScope;
-  action: string;
-  owned_target_id?: string | null;
-  connection_id?: string | null;
-  location_code?: number | null;
-  language_code?: string;
-  reuse_recent: boolean;
-  save_as_defaults?: boolean;
-  datasets: DatasetSelection[];
-  previous_run_id?: string | null;
-};
 
 /** One page of a saved dataset's rows: its order, filters and cursor. */
 export type DatasetRowsParams = Readonly<{
@@ -60,7 +44,7 @@ export const searchIntelligenceApi = {
       await apiClient.get<unknown>(root(projectId), options),
       'searchIntelligence.readiness',
     ),
-  review: async (projectId: string, payload: ReviewPayload, options?: ApiRequestOptions) =>
+  review: async (projectId: string, payload: SearchReviewRequest, options?: ApiRequestOptions) =>
     strictValidate(
       searchRunSchema,
       await apiClient.post<unknown>(`${root(projectId)}/reviews`, payload, {
@@ -111,22 +95,17 @@ export const searchIntelligenceApi = {
   },
   deriveCitationMatches: async (
     projectId: string,
-    backlinkDatasetId: string,
-    auditIds: string[],
+    input: SearchCitationMatchRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
       searchDatasetSchema,
-      await apiClient.post<unknown>(
-        `${root(projectId)}/citation-matches`,
-        { backlink_dataset_id: backlinkDatasetId, audit_ids: auditIds },
-        options,
-      ),
+      await apiClient.post<unknown>(`${root(projectId)}/citation-matches`, input, options),
       'searchIntelligence.deriveCitationMatches',
     ),
   savePreferences: async (
     projectId: string,
-    payload: z.infer<typeof searchPreferencesSchema>,
+    payload: SearchPreferencesRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(

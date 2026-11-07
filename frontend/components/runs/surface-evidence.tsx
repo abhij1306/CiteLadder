@@ -19,7 +19,7 @@ import {
   MetaFooter,
   SubsectionHeader,
 } from '@/components/ui/workspace';
-import type { SearchSurfaceEvidence, SurfaceEntity } from '@/lib/api/types';
+import type { SearchSurfaceEvidence, SurfaceEntity } from '@citeladder/contracts';
 import { cn } from '@/lib/utils';
 
 /**

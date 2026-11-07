@@ -10,11 +10,14 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import type { promptCohortSchema } from '@citeladder/contracts/project';
 import {
-  buyerStageSchema,
-  promptCohortSchema,
-  promptStatusSchema,
-} from '@citeladder/contracts/project';
+  promptBulkStatusRequestSchema,
+  promptCreateRequestSchema,
+  promptImportRequestSchema,
+  promptImportRowRequestSchema,
+  promptUpdateRequestSchema,
+} from '@citeladder/contracts/prompt-requests';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
@@ -50,45 +53,30 @@ const intent = z.string().max(P.intent_max_chars);
 const persona = z.string().trim().max(P.persona_max_chars);
 
 /** An omitted cohort is filed by whether the text names the brand (`brand-filing.ts`). */
-export const promptInput = z.strictObject({
+export const promptInput = promptCreateRequestSchema.extend({
   text,
   theme: theme.default(''),
   intent: intent.default(''),
-  buyer_stage: buyerStageSchema.default(''),
   persona: persona.default(''),
-  cohort: promptCohortSchema.optional(),
-  enabled: z.boolean().default(true),
-  topic_id: z.uuid().nullish(),
 });
 export const promptBatch = z.strictObject({
   prompts: z.array(promptInput).min(1).max(P.create_batch_max),
 });
-export const promptUpdate = z.strictObject({
+export const promptUpdate = promptUpdateRequestSchema.extend({
   text: text.nullish(),
   theme: theme.nullish(),
   intent: intent.nullish(),
-  buyer_stage: buyerStageSchema.nullish(),
   persona: persona.nullish(),
-  cohort: promptCohortSchema.nullish(),
-  enabled: z.boolean().nullish(),
-  status: promptStatusSchema.nullish(),
-  topic_id: z.uuid().nullish(),
 });
-export const promptBulkStatus = z.strictObject({
-  prompt_ids: z.array(z.uuid()).min(1),
-  status: promptStatusSchema,
-});
-const importRow = z.strictObject({
+export const promptBulkStatus = promptBulkStatusRequestSchema;
+const importRow = promptImportRowRequestSchema.extend({
   text: z.string().trim().max(P.text_max_chars),
   theme: theme.default(''),
   intent: intent.default(''),
-  buyer_stage: buyerStageSchema.default(''),
   persona: persona.default(''),
-  cohort: promptCohortSchema.optional(),
-  enabled: z.boolean().default(true),
   topic: z.string().trim().max(P.topic_name_max_chars).default(''),
 });
-export const promptImport = z.strictObject({
+export const promptImport = promptImportRequestSchema.extend({
   prompts: z.array(importRow).max(P.import_max_rows),
 });
 

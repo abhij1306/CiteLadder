@@ -7,12 +7,13 @@ import { readBody } from '../http/body.ts';
 import { getAction, listActions } from '../opportunities/actions.ts';
 import { defineGetRoute, definePatchRoute, definePostRoute } from './define.ts';
 import {
+  actionDeclarationRequestSchema,
   actionDeclarationSchema,
   actionDetailSchema,
   actionItemSchema,
   actionsPageSchema,
 } from '@citeladder/contracts/actions';
-import { declarationCreate, statusPatch } from './action-contracts.ts';
+import { statusPatch } from './action-contracts.ts';
 
 const family = 'actions';
 const a = policy.opportunity.actions;
@@ -79,7 +80,7 @@ export const actionRoutes = [
     path: '/api/v1/actions/{action_id}/declaration',
     capability: 'write',
     params: { path: actionPath, query: {} },
-    body: declarationCreate,
+    body: actionDeclarationRequestSchema,
     response: actionDeclarationSchema,
     status: 201,
     alsoStatus: 200,
@@ -96,7 +97,7 @@ export const actionRoutes = [
         db,
         actorOf(c),
         path.action_id,
-        await readBody(c, declarationCreate),
+        await readBody(c, actionDeclarationRequestSchema),
         { idempotencyKey: c.req.header('Idempotency-Key') ?? null },
       );
       return c.json(result.declaration, result.created ? 201 : 200);

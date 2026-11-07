@@ -7,7 +7,7 @@ import { ReadError } from '@/components/ui/read-error';
 import { ledgerClasses } from '@/components/ui/workspace';
 import { providersApi } from '@/lib/api/providers';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { LogicalEngine } from '@/lib/api/types';
+import type { LogicalEngine } from '@citeladder/contracts';
 import { buildEngineCards, buildProviderGroups, transportForEngine } from '@/lib/providers/catalog';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 

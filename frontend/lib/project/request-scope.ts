@@ -1,4 +1,4 @@
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 
 export type ProjectRequestScope = Readonly<{
   workspaceId: string;

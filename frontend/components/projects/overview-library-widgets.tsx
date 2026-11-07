@@ -18,7 +18,7 @@ import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ValueLedger } from '@/components/ui/facts';
 import { Icon } from '@/components/ui/icon';
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 import { isMetricsPending } from '@/lib/api/visibility-queries';
 import { formatCount, formatPercent } from '@/lib/format';
 import {

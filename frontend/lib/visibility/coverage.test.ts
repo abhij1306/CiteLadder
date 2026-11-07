@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Visibility } from '@/lib/api/types';
+import type { Visibility } from '@citeladder/contracts';
 import { coverageSummary } from './coverage';
 
 const date = (iso: string) => `D(${iso.slice(0, 10)})`;

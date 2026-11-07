@@ -15,7 +15,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Label, textRole } from '@/components/ui/typography';
 import { opportunitiesQueries } from '@/lib/api/opportunities';
-import type { OpportunityDetail } from '@/lib/api/types';
+import type { OpportunityDetail } from '@citeladder/contracts';
 import { severityLabel, severityPriority } from '@/lib/site-health/issues';
 import { panelClasses } from '@/components/ui/panel';
 import { Limitations } from '@/components/ui/passage';

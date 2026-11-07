@@ -1,27 +1,18 @@
 import { z } from 'zod';
 import { auditEstimateSchema } from '@citeladder/contracts/audits';
-import { logicalEngineSchema } from '@citeladder/contracts/providers';
+import { auditEstimateRequestSchema } from '@citeladder/contracts/audit-requests';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
-import { auditPolicy, auditRuntime, type AuditRuntime } from './config.ts';
+import { auditRuntime, type AuditRuntime } from './config.ts';
 import { providerPolicy } from '../providers/config.ts';
 import { resolveMarkets } from '../projects/markets.ts';
 import { searchContext } from '../search-surfaces/locations.ts';
 import { marketEngines } from './freeze.ts';
-import { marketIdsInput } from './inputs.ts';
+import { marketIdsInput, repetitionsInput } from './inputs.ts';
 import { costPolicy, estimateTokens, knownTotal, previewCost } from './costs.ts';
 
-export const estimateInput = z.object({
-  project_id: z.uuid(),
-  prompt_set_id: z.uuid().nullish(),
-  prompt_ids: z.array(z.uuid()).default([]),
-  engines: z.array(logicalEngineSchema).min(1),
-  repetitions: z
-    .number()
-    .int()
-    .min(auditPolicy.min_repetitions)
-    .max(auditPolicy.max_repetitions)
-    .nullish(),
+export const estimateInput = auditEstimateRequestSchema.extend({
+  repetitions: repetitionsInput,
   market_ids: marketIdsInput,
 });
 function aggregateCostStatus(statuses: ReadonlySet<string>) {

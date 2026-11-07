@@ -7,7 +7,7 @@ import { brandProfileDraftSchema } from '@citeladder/contracts';
 
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { BrandProfile, BrandProfileDraft } from '@/lib/api/types';
+import type { BrandProfile, BrandProfileDraft } from '@citeladder/contracts';
 import { identityFacets, type IdentityFacets } from '@/lib/project/identity-facets';
 
 function profileDraft(profile: BrandProfile | null | undefined): BrandProfileDraft {

@@ -2,7 +2,7 @@ import { screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
 import { renderWithProviders as render } from '@/test/render';
-import type { SearchSurfaceEvidence, SurfaceEntity } from '@/lib/api/types';
+import type { SearchSurfaceEvidence, SurfaceEntity } from '@citeladder/contracts';
 
 import { SurfaceEvidence } from './surface-evidence';
 

@@ -2,6 +2,10 @@ import { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
 import { ONBOARDING_RESEARCH_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
+import type {
+  BrandDiscoveryCompleteRequest,
+  BrandDiscoveryCreateRequest,
+} from '@citeladder/contracts/brand-discovery-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import {
   brandDiscoveryCatalogSchema,
@@ -10,14 +14,6 @@ import {
 } from '@citeladder/contracts/visibility';
 
 export type BrandDiscovery = z.infer<typeof brandDiscoverySchema>;
-export type BrandDiscoveryInput = {
-  brand_name: string;
-  website_url: string;
-  industry?: string;
-  subindustry?: string;
-  primary_market: string;
-  language_code?: string;
-};
 
 /**
  * The resolved business context. `category` and `category_terms` are open
@@ -25,14 +21,6 @@ export type BrandDiscoveryInput = {
  * closed facets that select which kinds of question apply.
  */
 export type DiscoveryProfile = BrandDiscovery['profile'];
-
-type DiscoveryCompetitor = { name: string; aliases: string[]; domains: string[] };
-export type BrandDiscoveryCompletion = {
-  name: string;
-  profile: DiscoveryProfile;
-  domains: string[];
-  competitors: DiscoveryCompetitor[];
-};
 
 export const brandDiscoveriesApi = {
   catalog: async (options?: ApiRequestOptions) => {
@@ -43,7 +31,7 @@ export const brandDiscoveriesApi = {
   // every call names the workspace it is for rather than inheriting whichever
   // one happened to be selected when the request was retried.
   create: async (
-    input: BrandDiscoveryInput,
+    input: BrandDiscoveryCreateRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => {
@@ -76,7 +64,7 @@ export const brandDiscoveriesApi = {
   },
   complete: async (
     id: string,
-    input: BrandDiscoveryCompletion,
+    input: BrandDiscoveryCompleteRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => {

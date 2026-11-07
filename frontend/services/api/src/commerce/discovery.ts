@@ -1,6 +1,7 @@
 /** Discovery admission freezes targets; publication fences the claim after bounded network work. */
 import { randomUUID } from 'node:crypto';
-import { commerceTargetSchema, commerceTargetsSchema } from '@citeladder/contracts/commerce-suite';
+import { competitorDiscoveryRequestSchema } from '@citeladder/contracts/commerce-requests';
+import { commerceTargetSchema } from '@citeladder/contracts/commerce-suite';
 import { z } from 'zod';
 import { dailyWorkspaceLimit, enforceWorkspaceRequest } from '../abuse/usage.ts';
 import { policy, resolveSettingSpec } from '../config.ts';
@@ -30,9 +31,7 @@ import {
 } from './discovery-validation.ts';
 
 const p = policy.commerce.discovery;
-export const discoveryInput = z.object({
-  targets: commerceTargetsSchema,
-});
+export const discoveryInput = competitorDiscoveryRequestSchema;
 const payloadSchema = z.object({
   target: commerceTargetSchema,
   target_context: z.record(z.string(), z.unknown()),

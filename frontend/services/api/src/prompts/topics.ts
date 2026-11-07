@@ -11,6 +11,11 @@ import { randomUUID } from 'node:crypto';
 
 import type { Kysely } from 'kysely';
 import { sql } from 'kysely';
+import {
+  topicConfirmRequestSchema,
+  topicCreateRequestSchema,
+  topicUpdateRequestSchema,
+} from '@citeladder/contracts/prompt-requests';
 import { z } from 'zod';
 
 import { policy } from '../config.ts';
@@ -31,15 +36,13 @@ const DUPLICATE = 'A topic with this name already exists in the project';
 const name = z.string().trim().min(1).max(P.topic_name_max_chars);
 const description = z.string().max(1024);
 
-export const topicCreate = z.object({
+export const topicCreate = topicCreateRequestSchema.extend({
   name,
   description: description.default(''),
-  parent_id: z.uuid().nullish(),
 });
-export const topicUpdate = z.object({
+export const topicUpdate = topicUpdateRequestSchema.extend({
   name: name.nullish(),
   description: description.nullish(),
-  parent_id: z.uuid().nullish(),
 });
 const offeringName = z.string().trim().min(1).max(policy.brand_identity.profile_product_max_chars);
 /**
@@ -47,10 +50,11 @@ const offeringName = z.string().trim().min(1).max(policy.brand_identity.profile_
  * topics to create (a proposal names the saved offerings it covers), existing
  * topics to rename and existing topics to delete.
  */
-export const topicConfirm = z.object({
+const confirmShape = topicConfirmRequestSchema.shape;
+export const topicConfirm = topicConfirmRequestSchema.extend({
   create: z
     .array(
-      z.object({
+      confirmShape.create.unwrap().element.extend({
         name,
         offerings: z.array(offeringName).max(P.create_batch_max).default([]),
       }),
@@ -58,7 +62,7 @@ export const topicConfirm = z.object({
     .max(P.create_batch_max)
     .default([]),
   rename: z
-    .array(z.object({ id: z.uuid(), name }))
+    .array(confirmShape.rename.unwrap().element.extend({ name }))
     .max(P.create_batch_max)
     // One final name per topic: a repeated id would apply only its first name.
     .refine((items) => new Set(items.map((item) => item.id)).size === items.length, {

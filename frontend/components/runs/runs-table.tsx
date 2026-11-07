@@ -8,7 +8,7 @@ import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
-import type { Audit } from '@/lib/api/types';
+import type { Audit } from '@citeladder/contracts';
 import { marketLabel } from '@citeladder/contracts/markets';
 import { auditBadgeValue, auditStatusLabel, formatDateTime } from '@/lib/runs/status';
 import { useDisplayTimeZone } from '@/lib/display-timezone';

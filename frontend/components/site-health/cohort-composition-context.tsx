@@ -1,4 +1,4 @@
-import type { SiteHealthOverview } from '@/lib/api/types';
+import type { SiteHealthOverview } from '@citeladder/contracts';
 import { pageKindLabel } from '@/lib/site-health/page-kinds';
 import { textRole } from '@/components/ui/typography';
 import { panelClasses } from '@/components/ui/panel';

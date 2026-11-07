@@ -1,5 +1,10 @@
 import {
-  COMMERCE_TARGETS_MAX,
+  buyerPromptDecisionRequestSchema,
+  catalogImportRequestSchema,
+  competitorDecisionRequestSchema,
+  competitorDiscoveryExecuteRequestSchema,
+} from '@citeladder/contracts/commerce-requests';
+import {
   buyerPromptSchema,
   catalogImportSchema,
   commerceCatalogSchema,
@@ -42,23 +47,17 @@ const family = { family: 'commerce', authorize: 'active-project' } as const;
 const root = '/api/v1/projects/{project_id}/commerce';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid } as const;
-const importBody = z.object({
+const importBody = catalogImportRequestSchema.extend({
   content: z
     .string()
     .refine(
       (value) => Buffer.byteLength(value, 'utf8') <= policy.commerce.import_max_bytes,
       'CSV exceeds the byte limit',
     ),
-  filename: z.string().max(255).default('catalog.csv'),
-  content_type: z.string().max(128).default('text/csv'),
 });
-const candidateBody = z.object({
-  decision: competitorCandidateSchema.shape.state.extract(['approved', 'rejected']),
-});
-const promptBody = z.object({ approved: z.boolean() });
-const executeDiscoveriesBody = z.strictObject({
-  task_ids: z.array(z.uuid()).min(1).max(COMMERCE_TARGETS_MAX),
-});
+const candidateBody = competitorDecisionRequestSchema;
+const promptBody = buyerPromptDecisionRequestSchema;
+const executeDiscoveriesBody = competitorDiscoveryExecuteRequestSchema;
 
 function scopeOf(c: Context<AppEnv>, projectId: string) {
   return { workspaceId: c.get('workspace').workspaceId, projectId };

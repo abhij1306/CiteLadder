@@ -6,7 +6,7 @@
 import { apiClient, type ApiRequestOptions } from './client';
 import { authResponseSchema } from '@citeladder/contracts/auth';
 import { strictValidate } from '@citeladder/contracts/validation';
-import type { AuthResponse } from './types';
+import type { AuthResponse } from '@citeladder/contracts';
 
 export const authApi = {
   me: async (options?: ApiRequestOptions) => {

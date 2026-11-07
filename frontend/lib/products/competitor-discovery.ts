@@ -70,7 +70,7 @@ export function useCompetitorDiscovery(projectId: string) {
   });
   const discover = useMutation({
     mutationFn: (targets: CommerceTarget[]) =>
-      commerceApi.discoverCompetitors(projectId, targets, { workspaceId }),
+      commerceApi.discoverCompetitors(projectId, { targets }, { workspaceId }),
     onSuccess: (data) =>
       setTracked((current) => ({
         projectId,

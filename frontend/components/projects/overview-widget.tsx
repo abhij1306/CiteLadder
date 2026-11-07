@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 
 import type { OverviewWidgetKey } from '@citeladder/contracts/overview';
-import type { CommandCenter, Project } from '@/lib/api/types';
+import type { CommandCenter, Project } from '@citeladder/contracts';
 
 import {
   CompanyFacts,

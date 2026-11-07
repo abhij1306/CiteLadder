@@ -10,7 +10,7 @@ import {
   siteHealthQueries,
   type StartCrawlInput,
 } from '@/lib/api/site-health';
-import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import {
   downloadCrawlExport,
   type ExportFormat,

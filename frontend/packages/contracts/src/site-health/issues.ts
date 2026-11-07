@@ -105,3 +105,11 @@ export const siteIssuesPageSchema = cursorPageSchema(siteIssueSchema).extend({
 // The same page for the project's newest crawl, named so a reader that did not
 // yet know the crawl can file the answer under it.
 export const latestCrawlIssuesPageSchema = siteIssuesPageSchema.extend({ crawl_id: uuid() });
+
+export type IssueSeverity = z.infer<typeof issueSeveritySchema>;
+export type IssueDimension = z.infer<typeof issueDimensionSchema>;
+export type IssueOccurrence = z.infer<typeof issueOccurrenceSchema>;
+export type SiteIssue = z.infer<typeof siteIssueSchema>;
+export type SiteIssueDetail = z.infer<typeof siteIssueDetailSchema>;
+export type SiteIssuesPage = z.infer<typeof siteIssuesPageSchema>;
+export type IssuesSummary = z.infer<typeof issuesSummarySchema>;

@@ -9,8 +9,8 @@ import { FactList } from '@/components/ui/facts';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
-import type { PromptGenerateInput } from '@/lib/api/prompts';
-import type { PromptCandidate, Topic } from '@/lib/api/types';
+import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
+import type { PromptCandidate, Topic } from '@citeladder/contracts';
 import {
   moreForSegment,
   moreForTopic,
@@ -69,18 +69,18 @@ export function RunCoverage({
   disabled,
   onGenerate,
 }: Readonly<{
-  request: PromptGenerateInput;
+  request: PromptGenerateRequest;
   topics: readonly Topic[];
   /** Every suggestion this builder session drafted, reviewed or not. */
   drafted: readonly PromptCandidate[];
   disabled: boolean;
-  onGenerate: (request: PromptGenerateInput) => void;
+  onGenerate: (request: PromptGenerateRequest) => void;
 }>) {
   const byTopic = topicCoverage(request, topics, drafted);
   const bySegment = segmentCoverage(request, drafted);
   const facts = <Row extends CoverageRow>(
     rows: readonly Row[],
-    more: (row: Row) => PromptGenerateInput,
+    more: (row: Row) => PromptGenerateRequest,
   ) =>
     rows.map((row) => ({
       key: row.key,

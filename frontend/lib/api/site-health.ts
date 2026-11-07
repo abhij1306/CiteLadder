@@ -37,6 +37,10 @@ import {
   urlPreviewResponseSchema,
   robotsHistoryPageSchema,
 } from '@citeladder/contracts/site-health';
+import type {
+  SiteCrawlCreateRequest,
+  UrlPreviewRequest,
+} from '@citeladder/contracts/site-health-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
 import type {
@@ -57,34 +61,13 @@ import type {
   SiteIssueDetail,
   SiteIssuesPage,
   UrlPreviewResponse,
-} from './types';
+} from '@citeladder/contracts';
 
-/** `POST /site-crawls` body. Workspace is resolved from `X-Workspace-Id`. */
-type CreateCrawlInput = {
-  project_id: string;
-  include_globs?: string[];
-  exclude_globs?: string[];
-  /**
-   * Optional deterministic 64-bit seed as a decimal string. The backend
-   * create contract names this `seed` (it aliases the model's `random_seed`),
-   * so the wire field must be `seed`.
-   */
-  seed?: string;
-  input_mode?: 'auto' | 'exact_urls' | 'discovery_seeds';
-  requested_page_limit?: number;
-  discovery_count?: number;
-  seed_urls?: string[];
-  page_kinds?: string[];
-};
-/** A new crawl, or with `recrawl_of` a rerun of that crawl's frozen scope and settings. */
-export type StartCrawlInput = CreateCrawlInput & { recrawl_of?: string };
-export type UrlPreviewInput = Pick<
-  CreateCrawlInput,
-  'project_id' | 'include_globs' | 'exclude_globs'
-> & {
-  content: string | string[] | Record<string, unknown>;
-  input_format?: 'text' | 'csv' | 'json';
-};
+/**
+ * A new crawl, or with `recrawl_of` a rerun of that crawl's frozen scope and
+ * settings. `recrawl_of` picks the route; it is never part of the body.
+ */
+export type StartCrawlInput = SiteCrawlCreateRequest & { recrawl_of?: string };
 
 /** Keyset inventory query params. `limit<=200`, ordering is URL-only. */
 export type InventoryParams = {
@@ -148,7 +131,7 @@ export const siteHealthApi = {
     });
     return crawl;
   },
-  previewUrls: async (input: UrlPreviewInput, options?: ApiRequestOptions) => {
+  previewUrls: async (input: UrlPreviewRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<UrlPreviewResponse>(
       '/site-crawls/url-preview',
       input,

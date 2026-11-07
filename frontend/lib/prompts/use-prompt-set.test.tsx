@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from 'vite-plus/test';
 
 import { promptsApi } from '@/lib/api/prompts';
 import { ApiError } from '@/lib/api/errors';
-import type { PromptSet } from '@/lib/api/types';
+import type { PromptSet } from '@citeladder/contracts';
 import { makeProject } from '@/test/fixtures/project';
 import { makeSet } from '@/test/fixtures/prompts';
 import { renderWithProviders } from '@/test/render';

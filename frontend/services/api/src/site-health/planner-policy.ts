@@ -4,6 +4,10 @@ import { parse } from 'csv-parse/sync';
 import { getDomain } from 'tldts';
 import { z } from 'zod';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
+import {
+  siteCrawlCreateRequestSchema,
+  urlPreviewRequestSchema,
+} from '@citeladder/contracts/site-health-requests';
 import { policy, resolveSettingSpec } from '../config.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { Database } from '../db/database.ts';
@@ -24,25 +28,9 @@ export function crawlError(
     details,
   });
 }
-const optionalList = z.array(z.string()).nullable().optional();
-export const createCrawlRequest = z.strictObject({
-  project_id: z.uuid(),
-  include_globs: optionalList,
-  exclude_globs: optionalList,
-  seed: z.string().nullable().optional(),
-  input_mode: z.enum(['auto', 'exact_urls', 'discovery_seeds']).nullable().optional(),
-  requested_page_limit: z.int().min(1).nullable().optional(),
-  discovery_count: z.int().min(1).nullable().optional(),
-  seed_urls: optionalList,
-  page_kinds: optionalList,
-});
-export const previewRequest = z.strictObject({
-  project_id: z.uuid(),
-  content: z.union([z.string(), z.array(z.string()), z.record(z.string(), z.unknown())]),
-  input_format: z.enum(['text', 'csv', 'json']).default('text'),
-  include_globs: optionalList,
-  exclude_globs: optionalList,
-});
+// Seed, glob and page-kind bounds are configured, so `controls`/`normalizeGlobs` check them.
+export const createCrawlRequest = siteCrawlCreateRequestSchema;
+export const previewRequest = urlPreviewRequestSchema;
 export type CreateCrawlRequest = z.infer<typeof createCrawlRequest>;
 
 export function normalizeGlobs(values: string[] | null | undefined) {

@@ -9,7 +9,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { panelClasses } from '@/components/ui/panel';
 import { ledgerItemClasses } from '@/components/ui/workspace';
 import { textRole } from '@/components/ui/typography';
-import type { ProviderConnection } from '@/lib/api/types';
+import type { ProviderConnection } from '@citeladder/contracts';
 import {
   ENGINE_LOGOS,
   TRANSPORT_DOMAINS,

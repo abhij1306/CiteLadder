@@ -9,7 +9,7 @@ import { Icon } from '@/components/ui/icon';
 import { QueryState } from '@/components/ui/query-state';
 import { Inline } from '@/components/ui/layout';
 import { ICONS } from '@/lib/icons';
-import type { VisibilityEvidenceResponse } from '@/lib/api/types';
+import type { VisibilityEvidenceResponse } from '@citeladder/contracts';
 
 /**
  * Shared data-state presentations for the evidence tabs (design.md states

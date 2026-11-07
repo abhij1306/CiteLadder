@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
-import type { ExecutionEvidence } from '@/lib/api/types';
+import type { ExecutionEvidence } from '@citeladder/contracts';
 import { EvidenceCard } from './evidence-card';
 
 const ID = '11111111-1111-4111-8111-111111111111';

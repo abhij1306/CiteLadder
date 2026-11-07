@@ -15,7 +15,7 @@ import { PagesTable } from '@/components/site-health/pages-table';
 import { RootErrorsBlock } from '@/components/site-health/root-errors-block';
 import { warmQuery } from '@/lib/api/query-client';
 import { siteHealthQueries, type PagesParams, type PagesSort } from '@/lib/api/site-health';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 import { Tabs } from '@/components/ui/tabs';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { DEFAULT_PAGES_SORT, statusLabel, type InventoryMode } from '@/lib/site-health/status';

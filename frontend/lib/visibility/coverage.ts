@@ -1,4 +1,4 @@
-import type { Visibility } from '@/lib/api/types';
+import type { Visibility } from '@citeladder/contracts';
 import { formatCount, pluralCount as plural } from '@/lib/format';
 
 /**

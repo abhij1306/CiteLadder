@@ -7,7 +7,7 @@ import { MeterRow } from '@/components/ui/meter';
 import type { ReorderItem } from '@/components/ui/reorder-list';
 import { TextLink } from '@/components/ui/text-link';
 import { MissingValue } from '@/components/ui/unavailable-value';
-import type { CommandCenter, Opportunity } from '@/lib/api/types';
+import type { CommandCenter, Opportunity } from '@citeladder/contracts';
 import { availabilityLabel, readableUrl } from '@/lib/format';
 import { severityLabel, severityPriority } from '@/lib/site-health/issues';
 import { textRole } from '@/components/ui/typography';

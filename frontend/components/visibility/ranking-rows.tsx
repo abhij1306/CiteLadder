@@ -8,7 +8,7 @@ import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Pressable } from '@/components/ui/pressable';
 import { MissingValue } from '@/components/ui/unavailable-value';
-import type { RankingRow } from '@/lib/api/types';
+import type { RankingRow } from '@citeladder/contracts';
 import { SHARE_OF_VOICE_HINT } from '@/lib/config/visibility';
 import {
   formatPosition,

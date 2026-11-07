@@ -9,10 +9,13 @@
  */
 import { z } from 'zod';
 
-import type { PromptInput, PromptUpdateInput } from '@/lib/api/prompts';
+import type {
+  PromptCreateRequest,
+  PromptUpdateRequest,
+} from '@citeladder/contracts/prompt-requests';
 import { PERSONA_MAX_CHARS } from '@/lib/config/prompts';
 import { buyerStageSchema, promptIntentSchema } from '@citeladder/contracts/project';
-import type { BuyerStage, Prompt, PromptIntent } from '@/lib/api/types';
+import type { BuyerStage, Prompt, PromptIntent } from '@citeladder/contracts';
 
 export const promptFormSchema = z.object({
   text: z.string().trim().min(1, 'Prompt text is required.'),
@@ -67,7 +70,7 @@ export function promptToFormValues(prompt: Prompt): PromptFormValues {
 }
 
 /** Create payload: everything the form does not ask for takes its default. */
-export function formValuesToPromptInput(values: PromptFormValues): PromptInput {
+export function formValuesToPromptInput(values: PromptFormValues): PromptCreateRequest {
   const text = values.text.trim();
   return values.topicId ? { text, topic_id: values.topicId } : { text };
 }
@@ -77,7 +80,7 @@ export function formValuesToPromptInput(values: PromptFormValues): PromptInput {
  * its theme, cohort and enabled state. An empty topic sends an explicit null,
  * which detaches the prompt from its topic.
  */
-export function formValuesToPromptUpdate(values: PromptFormValues): PromptUpdateInput {
+export function formValuesToPromptUpdate(values: PromptFormValues): PromptUpdateRequest {
   return {
     text: values.text.trim(),
     topic_id: values.topicId || null,

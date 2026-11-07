@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import type { ApiRequestOptions } from '@/lib/api/client';
 import { humanizeApiError } from '@/lib/api/errors';
 import { topicsApi } from '@/lib/api/topics';
-import type { Topic } from '@/lib/api/types';
+import type { Topic } from '@citeladder/contracts';
 
 /**
  * The topic rail's writes: create (optionally under a parent), rename and

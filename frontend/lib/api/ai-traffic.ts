@@ -23,6 +23,12 @@ import {
   aiTrafficInsightsSchema,
 } from '@citeladder/contracts/ai-traffic';
 import { type snapshotGranularitySchema } from '@citeladder/contracts/analytics';
+import type {
+  CrawlSourceCreateRequest,
+  CrawlUploadBatchRequest,
+  CrawlUploadCompleteRequest,
+  CrawlUploadCreateRequest,
+} from '@citeladder/contracts/crawl-log-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
 
@@ -70,7 +76,7 @@ export const aiTrafficApi = {
     read(projectId, 'crawl-logs/sources', crawlSourceListSchema, {}, options),
   catalog: (projectId: string, options?: ApiRequestOptions) =>
     read(projectId, 'crawl-logs/catalog', crawlCatalogSchema, {}, options),
-  createSource: (projectId: string, input: Record<string, unknown>, options?: ApiRequestOptions) =>
+  createSource: (projectId: string, input: CrawlSourceCreateRequest, options?: ApiRequestOptions) =>
     write(projectId, 'crawl-logs/sources', input, crawlTokenSchema, options),
   mutateSource: (
     projectId: string,
@@ -113,7 +119,7 @@ export const aiTrafficApi = {
     write(
       projectId,
       'crawl-logs/sources/' + sourceId + '/uploads',
-      { filename, size_bytes: size },
+      { filename, size_bytes: size } satisfies CrawlUploadCreateRequest,
       crawlUploadSchema,
       options,
     ),
@@ -141,7 +147,7 @@ export const aiTrafficApi = {
     write(
       projectId,
       'crawl-logs/sources/' + sourceId + '/uploads/' + uploadId + '/batches',
-      { seq, lines },
+      { seq, lines } satisfies CrawlUploadBatchRequest,
       crawlReceiptSchema,
       options,
     ),
@@ -149,7 +155,7 @@ export const aiTrafficApi = {
     projectId: string,
     sourceId: string,
     uploadId: string,
-    input: Record<string, unknown>,
+    input: CrawlUploadCompleteRequest,
     options?: ApiRequestOptions,
   ) =>
     write(

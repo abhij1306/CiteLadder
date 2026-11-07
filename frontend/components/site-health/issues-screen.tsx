@@ -11,7 +11,7 @@ import { ReadError } from '@/components/ui/read-error';
 import { IssuesCatalog } from '@/components/site-health/issues-catalog';
 import { ICONS } from '@/lib/icons';
 import { siteHealthQueries } from '@/lib/api/site-health';
-import type { SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteHealthDashboard } from '@citeladder/contracts';
 import { httpErrorStatus } from '@/lib/api/errors';
 import { useProjectContext } from '@/lib/project/project-context';
 import { resolveProjectRequestScope } from '@/lib/project/request-scope';

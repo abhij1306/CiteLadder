@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 import { toChartPoints } from '@/lib/visibility/trends';
-import type { VisibilityTrendPoint } from '@/lib/api/types';
+import type { VisibilityTrendPoint } from '@citeladder/contracts';
 
 function point(
   rate: number | null,

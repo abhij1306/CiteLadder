@@ -18,7 +18,10 @@ import { textRole } from '@/components/ui/typography';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { TruncationNotice } from '@/components/visibility/evidence-states';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { VisibilityEvidenceResponse, VisibilityExecutionEvidence } from '@/lib/api/types';
+import type {
+  VisibilityEvidenceResponse,
+  VisibilityExecutionEvidence,
+} from '@citeladder/contracts';
 import { visibilityApi } from '@/lib/api/visibility';
 import { engineLabel, productModelLabel } from '@/lib/providers/catalog';
 import type { SourceFilters } from '@/components/visibility/source-rows';

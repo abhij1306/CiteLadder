@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { act, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
-import type { VisibilityEvidenceResponse } from '@/lib/api/types';
+import type { VisibilityEvidenceResponse } from '@citeladder/contracts';
 import { ApiError } from '@/lib/api/errors';
 import { visibilityApi } from '@/lib/api/visibility';
 import { renderWithProviders } from '@/test/render';

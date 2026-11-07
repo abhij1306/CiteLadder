@@ -16,7 +16,7 @@ import {
   MenuTrigger,
 } from '@/components/ui/menu';
 import { Tooltip } from '@/components/ui/tooltip';
-import type { LogicalEngine } from '@/lib/api/types';
+import type { LogicalEngine } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
 import { isSearchSurfaceEngine } from '@/lib/providers/catalog';
 import {

@@ -17,7 +17,7 @@ import { siteHealthApi, siteHealthQueries } from '@/lib/api/site-health';
 import { pluralCount } from '@/lib/format';
 import { crawlPollInterval } from '@/lib/site-health/status';
 
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 import type { CommerceProjection } from '@citeladder/contracts/commerce-suite';
 
 import type { CommerceQueries } from './commerce-queries';
@@ -159,9 +159,11 @@ export function useCatalogHeader({
     });
   const importCatalog = useMutation({
     mutationFn: async (file: File) =>
-      commerceApi.importCatalog(projectId, await file.text(), file.name, {
-        workspaceId,
-      }),
+      commerceApi.importCatalog(
+        projectId,
+        { content: await file.text(), filename: file.name },
+        { workspaceId },
+      ),
     onSuccess: async (data) => {
       setResult(
         `${data.created} created, ${data.updated} updated, ${data.unchanged} unchanged, ${data.rejected} rejected`,

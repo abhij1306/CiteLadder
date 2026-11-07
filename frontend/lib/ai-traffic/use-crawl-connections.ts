@@ -10,6 +10,11 @@ import {
 import { uploadCrawlFile } from './upload';
 import type { z } from 'zod';
 import type { crawlSourceListSchema } from '@citeladder/contracts/ai-traffic';
+import type { CrawlSourceCreateRequest } from '@citeladder/contracts/crawl-log-requests';
+
+/** The log format and collection point a custom sender declares. */
+type LogFormat = NonNullable<CrawlSourceCreateRequest['format']>;
+type CollectionPoint = NonNullable<CrawlSourceCreateRequest['collection_point']>;
 export type CrawlConnectionInput = Readonly<{
   projectId: string;
   workspaceId: string;
@@ -57,8 +62,8 @@ function declaredSampling(sampling: string, rate: string, filter: string) {
 function declaredFields(
   setup: (typeof CRAWL_LOG_SETUPS)[number]['value'],
   fields: Readonly<{
-    format: string;
-    point: string;
+    format: LogFormat;
+    point: CollectionPoint;
     sampling: string;
     rate: string;
     filter: string;
@@ -116,11 +121,11 @@ export function useCrawlConnections({
       return '';
     }
   });
-  const [format, setFormat] = useState('ndjson'),
+  const [format, setFormat] = useState<LogFormat>('ndjson'),
     [sampling, setSampling] = useState('filtered'),
     [rate, setRate] = useState('1'),
     [filter, setFilter] = useState('Best-effort recognized automated requests');
-  const [point, setPoint] = useState('cdn_edge');
+  const [point, setPoint] = useState<CollectionPoint>('cdn_edge');
   const [bufferInterval, setBufferInterval] = useState(String(FIREHOSE_BUFFER_INTERVAL.default)),
     [declaredFiltered, setDeclaredFiltered] = useState(false);
   const [subscription, setSubscription] = useState(''),

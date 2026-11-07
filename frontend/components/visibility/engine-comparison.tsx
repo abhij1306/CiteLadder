@@ -5,7 +5,7 @@ import { Bot } from 'lucide-react';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import type { Visibility } from '@/lib/api/types';
+import type { Visibility } from '@citeladder/contracts';
 import {
   engineLabel,
   formatRate,

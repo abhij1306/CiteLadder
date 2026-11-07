@@ -6,8 +6,8 @@
  * (`AuditCreate`). Pure + transport-free so the payload shape is unit-testable
  * independent of the dialog component.
  */
-import type { LaunchAuditInput } from '@/lib/api/runs';
-import type { LogicalEngine, Prompt, PromptSet } from '@/lib/api/types';
+import type { AuditLaunchRequest } from '@citeladder/contracts/audit-requests';
+import type { LogicalEngine, Prompt, PromptSet } from '@citeladder/contracts';
 import { DEFAULT_REPETITIONS, MAX_REPETITIONS, MIN_REPETITIONS } from '@/lib/config/operational';
 
 export { DEFAULT_REPETITIONS, MAX_REPETITIONS, MIN_REPETITIONS } from '@/lib/config/operational';
@@ -90,7 +90,7 @@ export function canLaunch(selection: LaunchSelection): boolean {
  * Build the `POST /audits` payload from a launchable selection. Throws if the
  * selection is not launchable — callers gate on `canLaunch` first.
  */
-export function buildLaunchPayload(selection: LaunchSelection): LaunchAuditInput {
+export function buildLaunchPayload(selection: LaunchSelection): AuditLaunchRequest {
   if (!canLaunch(selection)) {
     throw new Error('Cannot build a launch payload from an incomplete selection.');
   }

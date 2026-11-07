@@ -13,8 +13,8 @@ import {
   opportunitiesPageSchema,
   opportunityDetailSchema,
   opportunityOrderResponseSchema,
+  opportunityOrderUpdateRequestSchema,
 } from '@citeladder/contracts/opportunities';
-import { orderUpdate } from './opportunity-contracts.ts';
 
 const family = 'opportunities';
 // Routes under the project path resolve the project in the session read.
@@ -87,10 +87,10 @@ export const opportunityRoutes = [
     path: `${root}/order`,
     capability: 'write',
     params: { path: projectPath, query: {} },
-    body: orderUpdate,
+    body: opportunityOrderUpdateRequestSchema,
     response: opportunityOrderResponseSchema,
     async handle({ c, db }, { path }) {
-      const body = await readBody(c, orderUpdate);
+      const body = await readBody(c, opportunityOrderUpdateRequestSchema);
       return updateOrder(
         db,
         { workspaceId: c.get('workspace').workspaceId, projectId: path.project_id },

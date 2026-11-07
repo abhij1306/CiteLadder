@@ -1,4 +1,4 @@
-import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ICONS } from '@/lib/icons';
 import { AuditScores } from './overview-metrics';

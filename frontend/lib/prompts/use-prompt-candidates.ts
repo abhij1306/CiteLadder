@@ -6,7 +6,11 @@ import { useState } from 'react';
 import { humanizeApiError } from '@/lib/api/errors';
 import { promptsApi } from '@/lib/api/prompts';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { PromptCandidate, PromptCandidateReviewResponse, PromptSet } from '@/lib/api/types';
+import type {
+  PromptCandidate,
+  PromptCandidateReviewResponse,
+  PromptSet,
+} from '@citeladder/contracts';
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 

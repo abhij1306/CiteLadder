@@ -357,3 +357,22 @@ export const projectSchema = responseObject({
   created_at: z.string(),
   updated_at: z.string(),
 });
+
+export type BrandProfileDraft = z.infer<typeof brandProfileDraftSchema>;
+export type BrandProfile = z.infer<typeof brandProfileSchema>;
+export type PromptIntent = z.infer<typeof promptIntentSchema>;
+export type BuyerStage = z.infer<typeof buyerStageSchema>;
+export type Prompt = z.infer<typeof promptSchema>;
+export type PromptStatus = z.infer<typeof promptStatusSchema>;
+export type PromptSet = z.infer<typeof promptSetSchema>;
+export type Topic = z.infer<typeof topicSchema>;
+export type TopicPreview = z.infer<typeof topicPreviewResponseSchema>;
+export type SeedQueries = z.infer<typeof seedQueriesResponseSchema>;
+export type PromptGenerateResponse = z.infer<typeof promptGenerateResponseSchema>;
+export type PromptCandidate = z.infer<typeof promptCandidateSchema>;
+export type PromptCandidateReviewResponse = z.infer<typeof promptCandidateReviewResponseSchema>;
+export type BusinessMap = z.infer<typeof businessMapSchema>;
+export type BusinessMapEntry = z.infer<typeof businessMapEntrySchema>;
+export type Project = z.infer<typeof projectSchema>;
+export type Competitor = z.infer<typeof competitorSchema>;
+export type EntityMatching = z.infer<typeof entityMatchingSchema>;

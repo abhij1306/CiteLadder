@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { sql } from 'kysely';
+import {
+  crawlUploadBatchRequestSchema,
+  crawlUploadCompleteRequestSchema,
+  crawlUploadCreateRequestSchema,
+} from '@citeladder/contracts/crawl-log-requests';
 import type { Database } from '../db/database.ts';
 import { crawlLogs } from '../config/crawl-logs.ts';
 import { ApiError, notFound } from '../errors.ts';
@@ -8,18 +13,11 @@ import { lockCrawlState, enqueueRollup, type CrawlScope } from './state.ts';
 import { requireCrawlLogs } from './sources.ts';
 import { lockAuthorizedWorkspace } from '../workspaces/service.ts';
 
-export const uploadCreateSchema = z.strictObject({
-  filename: z.string().trim().min(1).max(255),
-  size_bytes: z.int().nonnegative(),
-});
-export const uploadBatchSchema = z.strictObject({
-  seq: z.int().nonnegative(),
+export const uploadCreateSchema = crawlUploadCreateRequestSchema;
+export const uploadBatchSchema = crawlUploadBatchRequestSchema.extend({
   lines: z.array(z.string().max(crawlLogs.max_line_bytes)).max(crawlLogs.max_lines_per_batch),
 });
-export const uploadCompleteSchema = z.strictObject({
-  scanned_lines: z.int().nonnegative(),
-  first_line_at: z.iso.datetime({ offset: true }).nullable(),
-  last_line_at: z.iso.datetime({ offset: true }).nullable(),
+export const uploadCompleteSchema = crawlUploadCompleteRequestSchema.extend({
   scanned_dates: z.array(z.iso.date()).max(crawlLogs.max_backdate_days + 1),
 });
 export async function sourceForUpload(db: Database, scope: CrawlScope, id: string) {

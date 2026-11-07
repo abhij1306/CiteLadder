@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { PageKindScoreSummary } from '@/lib/api/types';
+import type { PageKindScoreSummary } from '@citeladder/contracts';
 import {
   PAGE_KINDS,
   byPageKindRows,

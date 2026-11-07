@@ -56,14 +56,18 @@ export function TargetPrompts({
     client.invalidateQueries({ queryKey: queryKeys.commerce.buyerPrompts(projectId) });
   const generate = useMutation({
     mutationFn: () =>
-      commerceApi.generateBuyerPrompts(projectId, [target], GENERATED_COUNT, { workspaceId }),
+      commerceApi.generateBuyerPrompts(
+        projectId,
+        { targets: [target], count: GENERATED_COUNT },
+        { workspaceId },
+      ),
     onSuccess: async (created) => {
       setShortfall(created.length < GENERATED_COUNT ? created.length : null);
       await refresh();
     },
   });
   const manual = useMutation({
-    mutationFn: () => commerceApi.addBuyerPrompt(projectId, target, text, { workspaceId }),
+    mutationFn: () => commerceApi.addBuyerPrompt(projectId, { target, text }, { workspaceId }),
     onSuccess: async () => {
       setText('');
       await refresh();
@@ -71,7 +75,7 @@ export function TargetPrompts({
   });
   const decide = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
-      commerceApi.decideBuyerPrompt(projectId, id, approved, { workspaceId }),
+      commerceApi.decideBuyerPrompt(projectId, id, { approved }, { workspaceId }),
     onSuccess: refresh,
   });
   const rows = query.data ? forTarget(query.data, target) : [];

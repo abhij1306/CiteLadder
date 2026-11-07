@@ -11,7 +11,7 @@ import {
 } from '@/test/site-health-fixtures';
 import { makeSiteCrawl } from '@/test/fixtures/site-health';
 import { ProjectProvider } from '@/lib/project/project-context';
-import type { SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteHealthDashboard } from '@citeladder/contracts';
 import { SiteHealthScreen } from './site-health-screen';
 
 function setSearch(value: string) {

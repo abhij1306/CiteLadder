@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/menu';
 import { useProjectCreation } from '@/components/layout/use-project-creation';
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 import { newProjectDestination } from '@/lib/navigation/project-destination';
 
 export function ProjectControls({

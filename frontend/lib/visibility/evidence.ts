@@ -6,7 +6,7 @@
  * truth: nothing here recomputes a metric, infers a mention/query, or claims a
  * global total the bounded newest-window cannot support.
  */
-import type { VisibilityExecutionEvidence } from '@/lib/api/types';
+import type { VisibilityExecutionEvidence } from '@citeladder/contracts';
 
 /** A group of executions that share one frozen prompt, for presentation only. */
 export type PromptGroup = {

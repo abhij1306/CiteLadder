@@ -16,7 +16,7 @@ import { SegmentedControl } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { textRole } from '@/components/ui/typography';
 import { humanizeApiError } from '@/lib/api/errors';
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 import { BUYER_TYPE_CHOICES, MARKET_SCOPE_CHOICES } from '@/lib/project/identity-facets';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 

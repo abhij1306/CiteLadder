@@ -45,7 +45,7 @@ import type {
   Visibility,
   VisibilityEvidenceResponse,
   VisibilityTrendPoint,
-} from './types';
+} from '@citeladder/contracts';
 
 const promptMetricListSchema = z.array(promptMetricItemSchema);
 const observedCompetitorListSchema = z.array(observedCompetitorSchema);

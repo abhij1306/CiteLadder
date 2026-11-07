@@ -29,6 +29,9 @@ import {
   agentSkillSchema,
   agentTurnAcceptedSchema,
   agentWorkflowSchema,
+  type AgentChatCreateRequest,
+  type AgentMessageRequest,
+  type AgentOutputEditRequest,
 } from '@citeladder/contracts/agent';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
@@ -46,40 +49,6 @@ export type AgentChatDetail = z.infer<typeof agentChatDetailSchema>;
 export type AgentSkill = z.infer<typeof agentSkillSchema>;
 export type AgentWorkflow = z.infer<typeof agentWorkflowSchema>;
 export type AgentCatalog = z.infer<typeof agentSkillCatalogSchema>;
-
-/**
- * Typed evidence a new chat starts from. The server resolves and authorizes
- * every identifier on each run; the browser never sends evidence content.
- */
-export type AgentContextRefs = {
-  target_url?: string;
-  target_site_url_id?: string;
-  opportunity_id?: string;
-  demand_signal_id?: string;
-  site_health_reference?: {
-    project_id: string;
-    crawl_id: string;
-    site_url_id: string;
-    source_analysis_id: string;
-    dimension: string;
-    checkpoint_ids: string[];
-  };
-  search_intelligence_reference?: { dataset_id: string; row_ids: string[] };
-  issue_group_reference?: { crawl_id: string; group_id: string; site_url_id?: string };
-  site_facts_reference?: { crawl_id: string };
-  output_revision_reference?: { output_id: string; revision_id: string };
-};
-
-export type NewChatInput = {
-  message: string;
-  skill_id?: string | null;
-  /** A defined workflow pins its skill and format on the server. */
-  workflow_id?: string;
-  action_id?: string;
-  context?: AgentContextRefs;
-  /** Actions the message @-mentions; authorized server-side. */
-  mentions?: string[];
-};
 
 const withKey = (idempotencyKey: string, options?: ApiRequestOptions): ApiRequestOptions => ({
   ...options,
@@ -125,7 +94,7 @@ const agentApi = {
     ),
   createChat: async (
     projectId: string,
-    input: NewChatInput,
+    input: AgentChatCreateRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => admitTurn(`/projects/${projectId}/agent/chats`, input, idempotencyKey, options),
@@ -137,7 +106,7 @@ const agentApi = {
     ),
   sendMessage: async (
     chatId: string,
-    input: { message: string; skill_id?: string | null; mentions?: string[] },
+    input: AgentMessageRequest,
     idempotencyKey: string,
     options?: ApiRequestOptions,
   ) => admitTurn(`/agent/chats/${chatId}/messages`, input, idempotencyKey, options),
@@ -155,7 +124,7 @@ const agentApi = {
     ),
   editOutput: async (
     document: { chatId: string; outputId: string },
-    input: { base_revision_id: string; title: string; body: string },
+    input: AgentOutputEditRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
@@ -242,8 +211,11 @@ export const agentQueries = {
 export const agentMutations = {
   createChat: (workspaceId: string) =>
     mutationOptions({
-      mutationFn: (vars: { projectId: string; input: NewChatInput; idempotencyKey: string }) =>
-        agentApi.createChat(vars.projectId, vars.input, vars.idempotencyKey, { workspaceId }),
+      mutationFn: (vars: {
+        projectId: string;
+        input: AgentChatCreateRequest;
+        idempotencyKey: string;
+      }) => agentApi.createChat(vars.projectId, vars.input, vars.idempotencyKey, { workspaceId }),
     }),
   sendMessage: (workspaceId: string) =>
     mutationOptions({

@@ -392,3 +392,17 @@ export const executionEvidenceSchema = responseObject({
   ads: executionAdsSchema,
   created_at: z.string(),
 });
+
+export type ModelProvenance = z.infer<typeof modelProvenanceSchema>;
+export type AuditStatus = z.infer<typeof auditStatusSchema>;
+export type Audit = z.infer<typeof auditSchema>;
+export type AuditScheduleCadence = z.infer<typeof auditScheduleCadenceSchema>;
+export type AuditSchedule = z.infer<typeof auditScheduleSchema>;
+export type ExecutionStatus = z.infer<typeof executionStatusSchema>;
+export type CitationClassification = z.infer<typeof citationClassificationSchema>;
+export type Execution = z.infer<typeof executionSchema>;
+export type ExecutionEvidence = z.infer<typeof executionEvidenceSchema>;
+export type SearchSurfaceEvidence = z.infer<typeof searchSurfaceEvidenceSchema>;
+export type SurfaceEntity = z.infer<typeof surfaceEntitySchema>;
+export type AioRate = z.infer<typeof aioRateSchema>;
+export type SurfaceRates = z.infer<typeof surfaceRatesSchema>;

@@ -24,7 +24,7 @@ import { authApi } from '@/lib/api/auth';
 import { projectQueries, projectsApi } from '@/lib/api/projects';
 import { getAppQueryClient } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { Project, Workspace } from '@/lib/api/types';
+import type { Project, Workspace } from '@citeladder/contracts';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import { projectDestination, workspaceDestination } from '@/lib/navigation/project-destination';
 import { prefetchProjectShell, prefetchRoute } from '@/lib/navigation/route-prefetch';

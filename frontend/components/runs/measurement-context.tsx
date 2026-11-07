@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Inline } from '@/components/ui/layout';
-import type { ModelProvenance } from '@/lib/api/types';
+import type { ModelProvenance } from '@citeladder/contracts';
 
 /**
  * The measurement conditions behind a figure: model and retrieval.

@@ -32,7 +32,10 @@ describe('Commerce API client', () => {
       ),
     );
 
-    await commerceApi.generateBuyerPrompts(projectId, [{ kind: 'category', id: targetId }], 5);
+    await commerceApi.generateBuyerPrompts(projectId, {
+      targets: [{ kind: 'category', id: targetId }],
+      count: 5,
+    });
 
     expect(timeoutSpy).toHaveBeenCalledWith(COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS);
   });

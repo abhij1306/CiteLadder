@@ -15,6 +15,7 @@ import { competitorTarget, ownedTargets, type CanonicalTarget } from './targets.
 import { canonicalJson } from '../canonical-json.ts';
 import {
   buildRequest,
+  isBacklinkKind,
   pageEstimateMicrousd,
   quoteDataset,
   scopeHash,
@@ -23,6 +24,7 @@ import {
 } from './requests.ts';
 import type { Scope } from './reads.ts';
 import { runView } from './views.ts';
+import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
 import { connectionIdentity, reviewConnection } from './credentials.ts';
 
 const error = (code: string, message: string) =>
@@ -153,14 +155,14 @@ async function frozenConnection(
 }
 function assertSupportedMarket(payload: Review, location: number | null, language: string) {
   if (
-    payload.datasets.some((item) => !si.backlink_kinds.includes(item.kind)) &&
+    payload.datasets.some((item) => !isBacklinkKind(item.kind)) &&
     (!location || !surfaceSupports('google_ai_overview', location, searchLanguageOf(language)))
   )
     throw error('unsupported_market', 'Select a supported Labs location and language');
 }
 function datasetDepth(selection: Review['datasets'][number]) {
   if (selection.kind === 'backlink_history') return si.history_max_observations;
-  if (['footprint', 'backlink_summary'].includes(selection.kind)) return 1;
+  if (SEARCH_DATASET_KINDS[selection.kind].fixedDepth) return 1;
   return selection.depth;
 }
 /** A recent complete dataset for the same scope, reused instead of buying it again. */

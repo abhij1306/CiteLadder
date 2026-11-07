@@ -31,7 +31,7 @@ import type {
   ArchitecturePageKind,
   CoverageState,
   SiteArchitecture,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 import { PLACEHOLDER } from '@/lib/site-health/status';
 
 const COVERAGE_LABELS: Record<CoverageState, string> = {

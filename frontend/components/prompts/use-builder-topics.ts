@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { topicsApi } from '@/lib/api/topics';
-import type { Topic, TopicPreview } from '@/lib/api/types';
+import type { Topic, TopicPreview } from '@citeladder/contracts';
 import {
   addProposals,
   planIsEmpty,

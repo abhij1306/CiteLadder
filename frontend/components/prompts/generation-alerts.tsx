@@ -1,6 +1,6 @@
 import { Callout } from '@/components/ui/callout';
 import { httpErrorStatus, humanizeApiError } from '@/lib/api/errors';
-import type { PromptGenerateResponse } from '@/lib/api/types';
+import type { PromptGenerateResponse } from '@citeladder/contracts';
 import { admissionDropSummary } from '@/lib/prompts/admission';
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;

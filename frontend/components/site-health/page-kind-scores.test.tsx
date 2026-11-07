@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vite-plus/test';
 import { render, screen } from '@testing-library/react';
 
 import { PageKindScores } from './page-kind-scores';
-import type { SiteCrawl, SiteHealthDashboard, SiteScoreSummary } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard, SiteScoreSummary } from '@citeladder/contracts';
 import { COMPLETE_CLASSIFICATION_PROJECTION } from '@/test/site-health-fixtures';
 import { SITE_HEALTH_UUID as PROJECT, makeSiteCrawl } from '@/test/fixtures/site-health';
 

@@ -27,6 +27,7 @@ import {
   type SearchIntelligenceRun,
 } from '@/lib/api/search-intelligence';
 import { searchIntelligenceKeys } from '@/lib/api/query-keys/search-intelligence';
+import type { SearchReviewAction } from '@citeladder/contracts/search-intelligence-requests';
 import { searchMarketLabel } from '@/lib/config/search-intelligence';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';
@@ -96,7 +97,7 @@ export function SearchIntelligencePage() {
   const [comparison, setComparison] = useState<SearchIntelligenceDataset | null>(null);
   const [market, setMarket] = useState('');
   const [scope, setScope] = useState('');
-  const [action, setAction] = useState('analysis');
+  const [action, setAction] = useState<SearchReviewAction>('analysis');
   const requestScope = resolveActiveProjectRequestScope(activeProject);
   const readiness = useQuery({
     ...searchIntelligenceQueries.readiness(requestScope.workspaceId, requestScope.projectId),
@@ -145,7 +146,7 @@ export function SearchIntelligencePage() {
       ]);
     },
   });
-  const openReview = (nextAction: string) => {
+  const openReview = (nextAction: SearchReviewAction) => {
     setAction(nextAction);
     setDrawerOpen(true);
   };
@@ -340,7 +341,7 @@ function PageActions({
   onCost,
 }: Readonly<{
   hasDatasets: boolean;
-  onReview: (action: string) => void;
+  onReview: (action: SearchReviewAction) => void;
   onCost: () => void;
 }>) {
   return (

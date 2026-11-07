@@ -24,7 +24,7 @@ import {
 import { QueryState } from '@/components/ui/query-state';
 import { Select } from '@/components/ui/select';
 import { ControlCount } from '@/components/ui/tabs';
-import type { Topic } from '@/lib/api/types';
+import type { Topic } from '@citeladder/contracts';
 import { orderTopicsForRail } from '@/lib/prompts/topic-tree';
 
 import type { useTopicMutations } from './use-topic-mutations';

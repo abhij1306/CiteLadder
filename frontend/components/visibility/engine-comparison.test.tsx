@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vite-plus/test';
-import type { Visibility, VisibilityEngine } from '@/lib/api/types';
+import type { Visibility, VisibilityEngine } from '@citeladder/contracts';
 import { EngineComparison } from './engine-comparison';
 
 function engine(overrides: Partial<VisibilityEngine> = {}): VisibilityEngine {

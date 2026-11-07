@@ -1,6 +1,6 @@
 import { estimateUsd, runEstimate } from './search-intelligence-format';
+import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
 import {
-  FIXED_DEPTH_KINDS,
   SEARCH_DATASET_LABELS,
   SEARCH_MARKET_OPTIONS,
   searchMarketLabel,
@@ -19,8 +19,8 @@ import { Select } from '@/components/ui/select';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 import { formatCount, pluralCount } from '@/lib/format';
+import type { SearchDatasetSelectionRequest } from '@citeladder/contracts/search-intelligence-requests';
 import type {
-  DatasetSelection,
   ResearchScope,
   SearchIntelligenceReadiness,
   SearchIntelligenceRun,
@@ -37,7 +37,7 @@ export type Advanced = {
   researchScope: ResearchScope;
   ownedTarget: string;
   language: string;
-  rankingOrder: DatasetSelection['order'];
+  rankingOrder: SearchDatasetSelectionRequest['order'];
   acquisitionVolume: string;
   grouping: 'as_is' | 'one_per_domain';
   reuse: boolean;
@@ -62,13 +62,13 @@ export function DatasetChoices({
   onDepth,
 }: Readonly<{
   readiness: SearchIntelligenceReadiness;
-  isSelected: (option: DatasetSelection) => boolean;
-  onToggle: (option: DatasetSelection) => void;
-  depthOf: (option: DatasetSelection) => string;
-  onDepth: (option: DatasetSelection, text: string) => void;
+  isSelected: (option: SearchDatasetSelectionRequest) => boolean;
+  onToggle: (option: SearchDatasetSelectionRequest) => void;
+  depthOf: (option: SearchDatasetSelectionRequest) => string;
+  onDepth: (option: SearchDatasetSelectionRequest, text: string) => void;
 }>) {
   const { entries, firstCompetitor } = useMemo(() => {
-    const groups = new Map<string, DatasetSelection[]>();
+    const groups = new Map<string, SearchDatasetSelectionRequest[]>();
     for (const selection of availableSelections(readiness)) {
       const key = selection.competitor_id ?? 'owned';
       const group = groups.get(key);
@@ -77,7 +77,7 @@ export function DatasetChoices({
     }
     return { entries: [...groups.entries()], firstCompetitor: reviewCompetitors(readiness)[0] };
   }, [readiness]);
-  const group = ([owner, options]: [string, DatasetSelection[]]) => (
+  const group = ([owner, options]: [string, SearchDatasetSelectionRequest[]]) => (
     <DatasetGroup
       key={owner}
       legend={
@@ -112,11 +112,11 @@ function DatasetGroup({
   onDepth,
 }: Readonly<{
   legend: string;
-  options: DatasetSelection[];
-  isSelected: (option: DatasetSelection) => boolean;
-  onToggle: (option: DatasetSelection) => void;
-  depthOf: (option: DatasetSelection) => string;
-  onDepth: (option: DatasetSelection, text: string) => void;
+  options: SearchDatasetSelectionRequest[];
+  isSelected: (option: SearchDatasetSelectionRequest) => boolean;
+  onToggle: (option: SearchDatasetSelectionRequest) => void;
+  depthOf: (option: SearchDatasetSelectionRequest) => string;
+  onDepth: (option: SearchDatasetSelectionRequest, text: string) => void;
 }>) {
   return (
     <fieldset className={panelClasses({ tone: 'panel' })}>
@@ -132,7 +132,7 @@ function DatasetGroup({
               className="grid-cols-[1fr_6rem] items-center"
             >
               <Checkbox checked={checked} onCheckedChange={() => onToggle(option)} label={label} />
-              {FIXED_DEPTH_KINDS.includes(option.kind) ? null : (
+              {SEARCH_DATASET_KINDS[option.kind].fixedDepth ? null : (
                 <Input
                   aria-label={`${label}: number of results`}
                   disabled={!checked}
@@ -301,7 +301,7 @@ export function ReviewFooter({
 export function HistoryScopeNotice({
   scope,
   selections,
-}: Readonly<{ scope: ResearchScope; selections: DatasetSelection[] }>) {
+}: Readonly<{ scope: ResearchScope; selections: SearchDatasetSelectionRequest[] }>) {
   if (!historyScopeConflict(selections, scope)) return null;
   return (
     <Callout tone="negative">

@@ -1,5 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
-import { internalLinksReadSchema } from '@citeladder/contracts/site-health';
+import {
+  internalLinksReadSchema,
+  type InternalLinksInput,
+} from '@citeladder/contracts/site-health';
 
 import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
@@ -19,11 +22,7 @@ export const internalLinksApi = {
       'internalLinks.read',
     );
   },
-  async analyze(
-    projectId: string,
-    input: { crawl_id: string; idempotency_key: string },
-    options: ApiRequestOptions,
-  ) {
+  async analyze(projectId: string, input: InternalLinksInput, options: ApiRequestOptions) {
     const result = strictValidate(
       internalLinksReadSchema,
       await apiClient.post(`${root(projectId)}/analyses`, input, options),

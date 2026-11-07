@@ -7,7 +7,7 @@ import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { promptsQueries } from '@/lib/api/prompts';
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi, runsQueries } from '@/lib/api/runs';
-import type { Audit, LogicalEngine, PromptSet } from '@/lib/api/types';
+import type { Audit, LogicalEngine, PromptSet } from '@citeladder/contracts';
 import { isConsumerEngine } from '@/lib/providers/catalog';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 import { useProjectMarkets } from '@/lib/project/use-project-markets';

@@ -59,3 +59,4 @@ export const visibilityTrendPointSchema = responseObject({
 
 // The trends endpoint returns a chronological list of points (never wrapped).
 export const visibilityTrendListSchema = z.array(visibilityTrendPointSchema);
+export type VisibilityTrendPoint = z.infer<typeof visibilityTrendPointSchema>;

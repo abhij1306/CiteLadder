@@ -16,7 +16,7 @@ import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { BrandProfile } from '@/lib/api/types';
+import type { BrandProfile } from '@citeladder/contracts';
 import {
   businessDraft,
   showsServiceAreas,

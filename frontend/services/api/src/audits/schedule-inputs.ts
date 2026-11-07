@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { auditScheduleCadenceSchema } from '@citeladder/contracts/audits';
-import { benchmarkModeSchema } from '@citeladder/contracts/project';
+import { auditScheduleUpdateRequestSchema } from '@citeladder/contracts/audit-requests';
 import { logicalEngineSchema } from '@citeladder/contracts/providers';
 import { policy, resolveSettingSpec } from '../config.ts';
 import { marketIdList } from './inputs.ts';
@@ -42,11 +41,10 @@ const engines = z
       items.every((item) => policy.audit_schedules.selectable_engines.includes(item)),
     'engines must be unique supported logical engines',
   );
+const contract = auditScheduleUpdateRequestSchema.shape;
 const fields = {
-  prompt_set_id: z.uuid(),
-  audit_scope: z.enum(['brand', 'commerce']),
-  cadence: auditScheduleCadenceSchema,
-  interval_minutes: z.int().positive().max(2_147_483_647).nullable(),
+  ...contract,
+  interval_minutes: contract.interval_minutes.unwrap().max(2_147_483_647).nullable(),
   timezone,
   engines,
   market_ids: marketIdList,
@@ -55,9 +53,6 @@ const fields = {
     .min(policy.projects.min_repetitions)
     .max(policy.projects.max_repetitions)
     .nullable(),
-  benchmark_mode: benchmarkModeSchema.nullable(),
-  enabled: z.boolean(),
-  next_run_at: z.iso.datetime({ offset: true }).nullable(),
 };
 
 /** Validate after merging a patch with the locked current schedule. */

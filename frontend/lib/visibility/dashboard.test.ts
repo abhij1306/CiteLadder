@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { Visibility } from '@/lib/api/types';
+import type { Visibility } from '@citeladder/contracts';
 import {
   PLACEHOLDER,
   findActiveRun,

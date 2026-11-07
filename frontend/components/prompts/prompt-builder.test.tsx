@@ -9,7 +9,7 @@ import type {
   PromptGenerateResponse,
   SeedQueries,
   Topic,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 

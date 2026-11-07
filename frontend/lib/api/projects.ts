@@ -9,12 +9,7 @@ import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import { apiClient, type ApiRequestOptions } from './client';
 import { queryKeys } from './query-keys';
 import { workspaceSchema } from '@citeladder/contracts/auth';
-import {
-  brandFactListSchema,
-  brandFactSchema,
-  type FactStatus,
-  type FactTopic,
-} from '@citeladder/contracts/fact-checking';
+import { brandFactListSchema, brandFactSchema } from '@citeladder/contracts/fact-checking';
 import { commandCenterSchema } from '@citeladder/contracts/opportunities';
 import {
   overviewLayoutSchema,
@@ -23,76 +18,30 @@ import {
 } from '@citeladder/contracts/overview';
 import {
   brandProfileSchema,
-  businessModelSchema,
-  buyerTypeSchema,
-  marketScopeSchema,
   businessMapSchema,
   projectSchema,
 } from '@citeladder/contracts/project';
+import type {
+  BrandFactCreateRequest,
+  BrandFactUpdateRequest,
+  BrandProfileUpdateRequest,
+  BusinessMapUpdateRequest,
+  ProjectCreateRequest,
+  ProjectUpdateRequest,
+} from '@citeladder/contracts/project-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { projectMarketSchema, type ProjectMarketCreate } from '@citeladder/contracts/markets';
 import type {
   BrandProfile,
-  BrandProfileDraft,
   BusinessMap,
-  BusinessMapEntry,
   CommandCenter,
-  EntityMatching,
   Project,
   Workspace,
-} from './types';
+} from '@citeladder/contracts';
 
 const workspaceListSchema = z.array(workspaceSchema);
 const projectListSchema = z.array(projectSchema);
 const projectMarketListSchema = z.array(projectMarketSchema);
-
-export type ProjectInput = {
-  name: string;
-  brand_name: string;
-  website_url: string;
-  country_code: string;
-  language_code: string;
-  benchmark_mode: Project['benchmark_mode'];
-  default_repetitions: number;
-  brand: { aliases: string[] };
-  owned_domains: string[];
-  unintended_domains: string[];
-  competitors: Array<{ name: string; aliases: string[]; domains: string[] }>;
-  /** Mention rules to save, by brand or competitor name. */
-  entity_matching: Array<{
-    name: string;
-    mode: EntityMatching['mode'];
-    context_terms: string[];
-    exclusion_phrases: string[];
-  }>;
-};
-
-export type BrandProfileUpdateInput = Partial<
-  BrandProfileDraft & {
-    category: string;
-    buyer_type: z.infer<typeof buyerTypeSchema>;
-    market_scope: z.infer<typeof marketScopeSchema>;
-    business_model: z.infer<typeof businessModelSchema>;
-    // Business-context lists; an empty list clears one.
-    service_areas: string[];
-    buyer_roles: string[];
-    category_terms: string[];
-    jobs_to_be_done: string[];
-  }
->;
-
-type BusinessMapEntryInput = Pick<BusinessMapEntry, 'value' | 'review_state'>;
-
-/** A full business-map edit: every offering's entries and exclusions. */
-export type BusinessMapUpdateInput = {
-  offerings: Array<{
-    offering: string;
-    attributes: BusinessMapEntryInput[];
-    situations: BusinessMapEntryInput[];
-    audiences: BusinessMapEntryInput[];
-    exclusions: Array<{ first: string; second: string }>;
-  }>;
-};
 
 export const projectsApi = {
   listWorkspaces: async (options?: ApiRequestOptions) => {
@@ -136,13 +85,13 @@ export const projectsApi = {
   },
   downloadOverviewReport: (projectId: string, options?: ApiRequestOptions) =>
     apiClient.getBlob(`/projects/${projectId}/overview/report.pdf`, options),
-  createProject: async (input: ProjectInput, options?: ApiRequestOptions) => {
+  createProject: async (input: ProjectCreateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<Project>('/projects', input, options);
     return strictValidate(projectSchema, res, 'projects.createProject');
   },
   updateProject: async (
     projectId: string,
-    input: Partial<ProjectInput>,
+    input: ProjectUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.patch<Project>(`/projects/${projectId}`, input, options);
@@ -171,7 +120,7 @@ export const projectsApi = {
   },
   updateBrandProfile: async (
     projectId: string,
-    input: BrandProfileUpdateInput,
+    input: BrandProfileUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.put<BrandProfile>(
@@ -188,7 +137,7 @@ export const projectsApi = {
   },
   createBrandFact: async (
     projectId: string,
-    input: { topic: FactTopic; statement: string; source_url: string | null },
+    input: BrandFactCreateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post(`/projects/${projectId}/brand-facts`, input, options);
@@ -198,13 +147,7 @@ export const projectsApi = {
   updateBrandFact: async (
     projectId: string,
     factId: string,
-    input: {
-      expected_revision: number;
-      topic?: FactTopic;
-      statement?: string;
-      source_url?: string | null;
-      status?: FactStatus;
-    },
+    input: BrandFactUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.patch(
@@ -221,7 +164,7 @@ export const projectsApi = {
   /** Replace the business map; surviving entries keep their provenance. */
   updateBusinessMap: async (
     projectId: string,
-    input: BusinessMapUpdateInput,
+    input: BusinessMapUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.put<BusinessMap>(

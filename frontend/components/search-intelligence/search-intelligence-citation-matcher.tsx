@@ -58,8 +58,7 @@ export function SearchIntelligenceCitationMatcher({
     mutationFn: () =>
       searchIntelligenceApi.deriveCitationMatches(
         activeProject!.id,
-        referring!.id,
-        selectedAudits,
+        { backlink_dataset_id: referring!.id, audit_ids: selectedAudits },
         { workspaceId: activeProject!.workspace_id },
       ),
     onSuccess: async (dataset) => {

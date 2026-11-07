@@ -47,13 +47,6 @@
     "ranking_keywords",
     "shared_keywords"
   ],
-  "backlink_kinds": [
-    "backlink_history",
-    "backlink_summary",
-    "backlinks",
-    "destination_pages",
-    "referring_domains"
-  ],
   "page_size": 1000,
   "provider_timeout_seconds": 90.0,
   "provider_max_response_bytes": 8388608,

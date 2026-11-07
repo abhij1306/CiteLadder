@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { Prompt } from '@/lib/api/types';
+import type { Prompt } from '@citeladder/contracts';
 
 import { PromptTable } from './prompt-table';
 

@@ -13,8 +13,13 @@ import {
   topicPreviewResponseSchema,
   topicSchema,
 } from '@citeladder/contracts/project';
+import type {
+  TopicConfirmRequest,
+  TopicCreateRequest,
+  TopicUpdateRequest,
+} from '@citeladder/contracts/prompt-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
-import type { SeedQueries, Topic, TopicPreview } from './types';
+import type { SeedQueries, Topic, TopicPreview } from '@citeladder/contracts';
 
 const topicListSchema = z.array(topicSchema);
 
@@ -23,20 +28,11 @@ export const topicsApi = {
     const res = await apiClient.get<Topic[]>(`/projects/${projectId}/topics`, options);
     return strictValidate(topicListSchema, res, 'topics.list');
   },
-  create: async (
-    projectId: string,
-    // `parent_id` makes a subtopic of a top-level topic (one level deep).
-    input: { name: string; description?: string; parent_id?: string },
-    options?: ApiRequestOptions,
-  ) => {
+  create: async (projectId: string, input: TopicCreateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<Topic>(`/projects/${projectId}/topics`, input, options);
     return strictValidate(topicSchema, res, 'topics.create');
   },
-  update: async (
-    topicId: string,
-    input: { name?: string; description?: string },
-    options?: ApiRequestOptions,
-  ) => {
+  update: async (topicId: string, input: TopicUpdateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.patch<Topic>(`/topics/${topicId}`, input, options);
     return strictValidate(topicSchema, res, 'topics.update');
   },
@@ -61,7 +57,7 @@ export const topicsApi = {
    * created proposal names the offerings it covers. 409 on a name collision,
    * and then nothing is applied.
    */
-  confirm: async (projectId: string, input: TopicConfirmInput, options?: ApiRequestOptions) => {
+  confirm: async (projectId: string, input: TopicConfirmRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<Topic[]>(
       `/projects/${projectId}/topics/confirm`,
       input,
@@ -74,10 +70,4 @@ export const topicsApi = {
     const res = await apiClient.get<SeedQueries>(`/projects/${projectId}/seed-queries`, options);
     return strictValidate(seedQueriesResponseSchema, res, 'topics.seedQueries');
   },
-};
-
-export type TopicConfirmInput = {
-  create: { name: string; offerings: string[] }[];
-  rename: { id: string; name: string }[];
-  delete: string[];
 };

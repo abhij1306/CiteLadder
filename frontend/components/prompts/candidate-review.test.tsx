@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
-import type { PromptCandidate } from '@/lib/api/types';
+import type { PromptCandidate } from '@citeladder/contracts';
 
 import { CandidateReview } from './candidate-review';
 

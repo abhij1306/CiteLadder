@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import type { PromptCandidate, SeedQueries, Topic } from '@/lib/api/types';
+import type { PromptCandidate, SeedQueries, Topic } from '@citeladder/contracts';
 
 import {
   defaultRunSettings,

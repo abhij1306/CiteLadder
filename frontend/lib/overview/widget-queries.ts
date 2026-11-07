@@ -13,7 +13,7 @@ import type { OverviewWidget, OverviewWidgetKey } from '@citeladder/contracts/ov
 import { aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { performanceQueries } from '@/lib/api/performance';
 import { warmQuery } from '@/lib/api/query-client';
-import type { Project, Visibility } from '@/lib/api/types';
+import type { Project, Visibility } from '@citeladder/contracts';
 import { INITIAL_VISIBILITY_PARAMS } from '@/lib/api/visibility';
 import { visibilityQueries } from '@/lib/api/visibility-queries';
 import { TRAFFIC_RANGES } from '@/lib/config/crawl-logs';

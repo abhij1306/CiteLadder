@@ -19,7 +19,7 @@ import { projectsApi } from '@/lib/api/projects';
 import { brandDiscoveriesApi } from '@/lib/api/brand-discoveries';
 import { queryKeys } from '@/lib/api/query-keys';
 import { brandDiscoveryKeys } from '@/lib/api/query-keys/brand-discovery';
-import type { Project } from '@/lib/api/types';
+import type { Project } from '@citeladder/contracts';
 import { humanizeApiError } from '@/lib/api/errors';
 import { refreshBrandLogos } from '@/lib/project/brand-logos';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';

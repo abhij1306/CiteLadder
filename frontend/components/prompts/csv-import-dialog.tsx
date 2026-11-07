@@ -12,7 +12,7 @@ import { Icon } from '@/components/ui/icon';
 import { Stack } from '@/components/ui/layout';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { PromptImportRow } from '@/lib/api/prompts';
+import type { PromptImportRowRequest } from '@citeladder/contracts/prompt-requests';
 import { downloadCsv } from '@/lib/csv/download';
 import {
   PROMPT_CSV_COLUMNS,
@@ -55,7 +55,7 @@ export function CsvImportDialog({
 }: Readonly<{
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onImport: (rows: PromptImportRow[]) => Promise<void> | void;
+  onImport: (rows: PromptImportRowRequest[]) => Promise<void> | void;
   isImporting?: boolean;
   error?: string;
 }>) {

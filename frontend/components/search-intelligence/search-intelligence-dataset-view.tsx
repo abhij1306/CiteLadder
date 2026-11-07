@@ -25,11 +25,8 @@ import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { evidenceFields, searchNumber } from './search-intelligence-format';
-import {
-  KEYWORD_DATASET_KINDS,
-  SEARCH_COLUMNS_BY_KIND,
-  searchScopeLabel,
-} from '@/lib/config/search-intelligence';
+import { searchDatasetTraits } from '@citeladder/contracts/search-intelligence';
+import { SEARCH_COLUMNS_BY_KIND, searchScopeLabel } from '@/lib/config/search-intelligence';
 import { FilterField } from '@/components/ui/filter-bar';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
@@ -91,7 +88,7 @@ export function SearchIntelligenceDatasetView({
   });
   const rows = page?.items ?? [];
   useRowsPanelSeed(dataset.id, selected, page?.items, title);
-  const keywordDataset = KEYWORD_DATASET_KINDS.includes(dataset.dataset_kind);
+  const keywordDataset = Boolean(searchDatasetTraits(dataset.dataset_kind)?.keyword);
   if (!hasRows) return <EmptyDataset dataset={dataset} title={title} />;
   return (
     <>

@@ -3,8 +3,8 @@
  * generate request they make, and review's coverage of what came back
  * against what was asked for, with the request for "Generate more".
  */
-import type { PromptGenerateInput } from '@/lib/api/prompts';
-import type { PromptCandidate, SeedQueries, Topic } from '@/lib/api/types';
+import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
+import type { PromptCandidate, SeedQueries, Topic } from '@citeladder/contracts';
 import { MAX_GENERATION_COUNT, PROMPT_BUILDER } from '@/lib/config/prompts';
 
 export type SeedChoice = SeedQueries['sources'][number]['source'] | 'none';
@@ -61,13 +61,13 @@ function whole(text: string, min: number, max: number): number | null {
     : null;
 }
 
-type Built = { ok: true; request: PromptGenerateInput } | { ok: false; problem: string };
+type Built = { ok: true; request: PromptGenerateRequest } | { ok: false; problem: string };
 
 /** The seed fields: every listed query is `[]`, none is the `none` source. */
 function seedFields(
   settings: RunSettings,
   seeds: SeedQueries,
-): Pick<PromptGenerateInput, 'seed_source' | 'seed_query_ids'> | string {
+): Pick<PromptGenerateRequest, 'seed_source' | 'seed_query_ids'> | string {
   const source = seedSourceOf(settings, seeds);
   if (source === 'none') return { seed_source: 'none' };
   const listed = seeds.sources.find((item) => item.source === source)?.queries ?? [];
@@ -163,7 +163,7 @@ function apportion(total: number, weights: readonly number[]): number[] {
 
 /** Each requested topic: drafted suggestions against an even share of the count. */
 export function topicCoverage(
-  request: PromptGenerateInput,
+  request: PromptGenerateRequest,
   topics: readonly Topic[],
   drafted: readonly PromptCandidate[],
 ): CoverageRow[] {
@@ -197,7 +197,7 @@ export type SegmentCoverageRow = CoverageRow & { segment: Segment };
 
 /** Each planned segment (cohort): drafted suggestions against its share of the count. */
 export function segmentCoverage(
-  request: PromptGenerateInput,
+  request: PromptGenerateRequest,
   drafted: readonly PromptCandidate[],
 ): SegmentCoverageRow[] {
   const branded = request.distribution?.branded_share ?? 0;
@@ -218,15 +218,18 @@ export function segmentCoverage(
 const missing = (row: CoverageRow) => Math.max(1, row.target - row.actual);
 
 /** The builder's request narrowed to one topic, for the suggestions it is missing. */
-export function moreForTopic(request: PromptGenerateInput, row: CoverageRow): PromptGenerateInput {
+export function moreForTopic(
+  request: PromptGenerateRequest,
+  row: CoverageRow,
+): PromptGenerateRequest {
   return { ...request, topic_ids: [row.key], count: missing(row) };
 }
 
 /** The builder's request narrowed to one segment, for the suggestions it is missing. */
 export function moreForSegment(
-  request: PromptGenerateInput,
+  request: PromptGenerateRequest,
   row: SegmentCoverageRow,
-): PromptGenerateInput {
+): PromptGenerateRequest {
   return {
     ...request,
     count: missing(row),

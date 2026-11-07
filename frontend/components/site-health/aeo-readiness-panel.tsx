@@ -16,7 +16,7 @@ import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { siteHealthQueries } from '@/lib/api/site-health';
-import type { ReadinessCheck, ReadinessDimension } from '@/lib/api/types';
+import type { ReadinessCheck, ReadinessDimension } from '@citeladder/contracts';
 import { formatScore, PLACEHOLDER } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
 import {

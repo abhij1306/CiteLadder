@@ -8,6 +8,10 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import {
+  promptSetCreateRequestSchema,
+  promptSetUpdateRequestSchema,
+} from '@citeladder/contracts/prompt-requests';
 import type { Kysely } from 'kysely';
 import { z } from 'zod';
 
@@ -17,12 +21,11 @@ import type { DB } from '../generated/db-schema.ts';
 import { acquireProjectLock, acquirePromptSetLock } from './locks.ts';
 import { promptSetView, type PromptSetRow, type PromptSetView } from './views.ts';
 
-export const promptSetCreate = z.object({
-  project_id: z.uuid(),
+export const promptSetCreate = promptSetCreateRequestSchema.extend({
   name: z.string().max(255).default(''),
   description: z.string().max(1024).default(''),
 });
-export const promptSetUpdate = z.object({
+export const promptSetUpdate = promptSetUpdateRequestSchema.extend({
   name: z.string().max(255).nullish(),
   description: z.string().max(1024).nullish(),
 });

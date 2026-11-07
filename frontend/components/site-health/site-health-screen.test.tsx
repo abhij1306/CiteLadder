@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 
 import { mswServer } from '@/test/msw-server';
 import { COMPLETE_CLASSIFICATION_PROJECTION } from '@/test/site-health-fixtures';
-import type { SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteHealthDashboard } from '@citeladder/contracts';
 import { queryKeys } from '@/lib/api/query-keys';
 import {
   CRAWL,

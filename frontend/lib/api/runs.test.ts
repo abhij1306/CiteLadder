@@ -3,11 +3,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/
 
 import { mswServer } from '@/test/msw-server';
 import { createAppQueryClient } from './query-client';
-import { runsQueries, type LaunchAuditInput } from './runs';
+import type { AuditLaunchRequest } from '@citeladder/contracts/audit-requests';
+import { runsQueries } from './runs';
 
 const WORKSPACE_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const WORKSPACE_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const LAUNCH: LaunchAuditInput = {
+const LAUNCH: AuditLaunchRequest = {
   project_id: '11111111-1111-4111-8111-111111111111',
   prompt_set_id: '22222222-2222-4222-8222-222222222222',
   engines: ['chatgpt'],

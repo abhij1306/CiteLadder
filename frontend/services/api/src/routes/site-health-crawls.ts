@@ -7,6 +7,10 @@ import {
   siteCrawlListPageSchema,
   urlPreviewResponseSchema,
 } from '@citeladder/contracts/site-health';
+import {
+  monitoredUrlsBulkSelectRequestSchema,
+  monitoredUrlsReplaceRequestSchema,
+} from '@citeladder/contracts/site-health-requests';
 import { enforceWorkspaceRequest } from '../abuse/usage.ts';
 import { configEnvironment, policy, resolveSettingSpec } from '../config.ts';
 import { SiteHealthWorker } from '../workers/site-health-worker.ts';
@@ -42,17 +46,10 @@ const projectFamily = { family, authorize: 'active-project' } as const;
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid };
 const projectRoot = '/api/v1/projects/{project_id}/monitored-urls';
-const replaceBody = z.strictObject({
+const replaceBody = monitoredUrlsReplaceRequestSchema.extend({
   site_url_ids: z.array(z.uuid()).max(policy.site_health.crawl.monitored_url_selection_max),
-  expected_selection_version: z.int(),
 });
-const bulkBody = z.strictObject({
-  crawl_id: z.uuid(),
-  mode: z.enum(['first_n', 'all', 'none']),
-  count: z.int().nullable().optional(),
-  query: z.string().nullable().optional(),
-  expected_selection_version: z.int(),
-});
+const bulkBody = monitoredUrlsBulkSelectRequestSchema;
 
 export const siteHealthCrawlRoutes = [
   definePostRoute({

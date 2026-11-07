@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/menu';
 import { SearchField } from '@/components/ui/search-field';
 import { SegmentedControl } from '@/components/ui/tabs';
-import type { PromptStatus } from '@/lib/api/types';
+import type { PromptStatus } from '@citeladder/contracts';
 import {
   buyerStageLabels,
   buyerStageValues,

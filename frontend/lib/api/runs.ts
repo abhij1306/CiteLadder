@@ -17,70 +17,29 @@ import {
   executionEvidenceSchema,
   executionSchema,
 } from '@citeladder/contracts/audits';
+import type {
+  AuditEstimateRequest,
+  AuditLaunchRequest,
+  AuditRepairRequest,
+  AuditScheduleCreateRequest,
+  AuditScheduleUpdateRequest,
+} from '@citeladder/contracts/audit-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
 import { startInteractiveWork } from './interactive-work';
-import type {
-  Audit,
-  AuditSchedule,
-  AuditScheduleCadence,
-  Execution,
-  ExecutionEvidence,
-  LogicalEngine,
-} from './types';
+import type { Audit, AuditSchedule, Execution, ExecutionEvidence } from '@citeladder/contracts';
 
 const auditListSchema = z.array(auditSchema);
 const executionListSchema = z.array(executionSchema);
 const auditScheduleListSchema = z.array(auditScheduleSchema);
 
-/**
- * `POST /audits` body (`AuditCreate`). The workspace is resolved from the
- * `X-Workspace-Id` header, so it is not part of the body. A run measures a
- * project's prompts (a whole `prompt_set_id`, or explicit `prompt_ids`) across
- * one or more logical `engines`; provider keys are never carried here.
- */
-export type LaunchAuditInput = {
-  project_id: string;
-  prompt_set_id?: string;
-  prompt_ids?: string[];
-  engines: LogicalEngine[];
-  /** One run per market; `null` is the project default (the default selection). */
-  market_ids?: (string | null)[];
-  repetitions?: number;
-  benchmark_mode?: string;
-  audit_scope?: 'brand' | 'commerce';
-  /** Optional 64-bit seed as a decimal string; generated + stored when omitted. */
-  random_seed?: string;
-};
-
-export type AuditRepairInput = {
-  provider?: string;
-  engine?: string;
-  prompt_id?: string;
-  task_ids?: string[];
-};
-
-export type CreateAuditScheduleInput = {
-  prompt_set_id: string;
-  audit_scope?: 'brand' | 'commerce';
-  cadence: AuditScheduleCadence;
-  interval_minutes?: number;
-  timezone?: string;
-  engines: LogicalEngine[];
-  market_ids?: (string | null)[];
-  repetitions?: number;
-  benchmark_mode?: string;
-  enabled?: boolean;
-  next_run_at?: string;
-};
-
 export const runsApi = {
-  estimateAudit: async (input: LaunchAuditInput, options?: ApiRequestOptions) => {
+  estimateAudit: async (input: AuditEstimateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post('/audits/estimate', input, options);
     return strictValidate(auditEstimateSchema, res, 'runs.estimateAudit');
   },
   /** One launch: a queued run per selected market, each driven to its first results. */
-  launchAudit: async (input: LaunchAuditInput, options?: ApiRequestOptions) => {
+  launchAudit: async (input: AuditLaunchRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<Audit[]>('/audits', input, options);
     const audits = strictValidate(auditListSchema, res, 'runs.launchAudit');
     for (const audit of audits) startInteractiveWork(`/audits/${audit.id}/run`, options);
@@ -101,7 +60,7 @@ export const runsApi = {
   },
   rerunFailures: async (
     auditId: string,
-    input: AuditRepairInput = {},
+    input: AuditRepairRequest = {},
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<Audit>(`/audits/${auditId}/rerun-failures`, input, options);
@@ -118,7 +77,7 @@ export const runsApi = {
   },
   createSchedule: async (
     projectId: string,
-    input: CreateAuditScheduleInput,
+    input: AuditScheduleCreateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<AuditSchedule>(
@@ -131,7 +90,7 @@ export const runsApi = {
   updateSchedule: async (
     projectId: string,
     scheduleId: string,
-    input: { enabled: boolean },
+    input: AuditScheduleUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.patch<AuditSchedule>(
@@ -167,7 +126,7 @@ export const runsQueries = {
    * workspace and the exact payload; with either missing there is
    * nothing to estimate yet, so the query skips.
    */
-  estimate: (workspaceId: string | null, input: LaunchAuditInput | null) =>
+  estimate: (workspaceId: string | null, input: AuditEstimateRequest | null) =>
     queryOptions({
       queryKey: queryKeys.runs.estimate(workspaceId, input),
       queryFn:

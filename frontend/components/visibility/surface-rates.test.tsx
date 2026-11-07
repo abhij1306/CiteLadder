@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vite-plus/test';
 
 import { renderWithProviders as render } from '@/test/render';
-import type { AioRate, SurfaceRates } from '@/lib/api/types';
+import type { AioRate, SurfaceRates } from '@citeladder/contracts';
 
 import { SurfaceRatesPanel } from './surface-rates';
 

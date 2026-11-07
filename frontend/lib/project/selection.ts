@@ -1,4 +1,4 @@
-import type { Project, Workspace } from '@/lib/api/types';
+import type { Project, Workspace } from '@citeladder/contracts';
 
 /**
  * Pure selection algebra for the authenticated shell.

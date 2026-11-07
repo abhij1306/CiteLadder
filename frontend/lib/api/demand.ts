@@ -7,6 +7,7 @@ import {
   demandSignalSchema,
   demandSnapshotSchema,
 } from '@citeladder/contracts';
+import type { DemandRecomputeRequest } from '@citeladder/contracts/demand';
 import { strictValidate } from '@citeladder/contracts/validation';
 
 export type DemandSignal = z.infer<typeof demandSignalSchema>;
@@ -21,7 +22,7 @@ export const demandApi = {
     ),
   recompute: async (
     projectId: string,
-    payload: { window_start: string; window_end: string },
+    payload: DemandRecomputeRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(

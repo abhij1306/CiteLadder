@@ -3,11 +3,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import {
-  brandDiscoveriesApi,
-  type BrandDiscovery,
-  type BrandDiscoveryInput,
-} from '@/lib/api/brand-discoveries';
+import type { BrandDiscoveryCreateRequest } from '@citeladder/contracts/brand-discovery-requests';
+
+import { brandDiscoveriesApi, type BrandDiscovery } from '@/lib/api/brand-discoveries';
 import { brandDiscoveryKeys } from '@/lib/api/query-keys/brand-discovery';
 
 let fallbackOperationSequence = 0;
@@ -52,7 +50,7 @@ function useDiscoveryExecution(
 }
 
 export function useBrandDiscovery(
-  input: BrandDiscoveryInput | null,
+  input: BrandDiscoveryCreateRequest | null,
   resumeId: string | null = null,
   workspaceId: string | null = null,
 ) {
@@ -94,7 +92,7 @@ export function useBrandDiscovery(
       idempotencyKey,
       workspace,
     }: {
-      payload: BrandDiscoveryInput;
+      payload: BrandDiscoveryCreateRequest;
       idempotencyKey: string;
       fingerprint: string;
       workspace: string | null;

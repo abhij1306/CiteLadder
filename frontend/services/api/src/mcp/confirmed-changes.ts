@@ -14,7 +14,7 @@ import { createSchedule } from '../commands/schedules.ts';
 import type { ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { promptInput } from '../prompts/prompts.ts';
-import { declarationCreate } from '../routes/action-contracts.ts';
+import { actionDeclarationRequestSchema } from '@citeladder/contracts/actions';
 import type { Change, ConfirmedKind } from './confirmations.ts';
 import type { Evidence } from './types.ts';
 
@@ -25,7 +25,10 @@ export const payloads = {
   }),
   launch_audit: z.strictObject({ project_id: z.uuid(), request: auditLaunchInput }),
   schedule: z.strictObject({ project_id: z.uuid(), schedule: scheduleCreate }),
-  declare_implemented: z.strictObject({ action_id: z.uuid(), declaration: declarationCreate }),
+  declare_implemented: z.strictObject({
+    action_id: z.uuid(),
+    declaration: actionDeclarationRequestSchema,
+  }),
 } satisfies Record<ConfirmedKind, z.ZodType>;
 
 /** The idempotency key a declaration confirmed through MCP records. */

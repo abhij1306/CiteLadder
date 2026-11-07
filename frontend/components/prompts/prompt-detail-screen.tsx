@@ -19,7 +19,7 @@ import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate } from '@/lib/format';
 import { formatWholePercent } from '@/lib/visibility/dashboard';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { PromptHistory } from '@/lib/api/types';
+import type { PromptHistory } from '@citeladder/contracts';
 import { visibilityApi } from '@/lib/api/visibility';
 import { optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext } from '@/lib/project/project-context';

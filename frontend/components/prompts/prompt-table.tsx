@@ -12,7 +12,7 @@ import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/compone
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { Switch } from '@/components/ui/switch';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { Prompt, PromptStatus } from '@/lib/api/types';
+import type { Prompt, PromptStatus } from '@citeladder/contracts';
 import { ICONS } from '@/lib/icons';
 import { promptHistoryHref } from '@/lib/prompts/history';
 import { formatPosition, formatPositionExact, formatRate } from '@/lib/visibility/dashboard';

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from 'react';
 
-import type { Project, Workspace } from '@/lib/api/types';
+import type { Project, Workspace } from '@citeladder/contracts';
 import type { FailureScope, SelectionStatus } from '@/lib/project/selection';
 
 /**

@@ -14,7 +14,7 @@ import {
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { formatCount } from '@/lib/format';
 import { engineLabel, productTransportLabel } from '@/lib/providers/catalog';
-import type { Execution } from '@/lib/api/types';
+import type { Execution } from '@citeladder/contracts';
 import {
   executionBadgeValue,
   executionFailureReason,

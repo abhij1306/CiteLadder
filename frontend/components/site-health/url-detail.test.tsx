@@ -7,7 +7,7 @@ import { mswServer } from '@/test/msw-server';
 import { renderWithProviders as raw } from '@/test/render';
 import type { ReactElement } from 'react';
 import { useLocation } from 'react-router-dom';
-import type { PageDetail } from '@/lib/api/types';
+import type { PageDetail } from '@citeladder/contracts';
 
 import { UrlDetail } from './url-detail';
 

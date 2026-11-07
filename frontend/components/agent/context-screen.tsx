@@ -30,7 +30,7 @@ import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { projectQueries } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
 import { visibilityApi } from '@/lib/api/visibility';
-import type { BrandProfile, Project } from '@/lib/api/types';
+import type { BrandProfile, Project } from '@citeladder/contracts';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';
 import { useBrandFacts } from '@/lib/project/use-brand-facts';

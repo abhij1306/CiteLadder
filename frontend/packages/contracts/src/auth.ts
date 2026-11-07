@@ -28,3 +28,7 @@ export const workspaceSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
 });
+
+export type SessionUser = z.infer<typeof sessionUserSchema>;
+export type AuthResponse = z.infer<typeof authResponseSchema>;
+export type Workspace = z.infer<typeof workspaceSchema>;

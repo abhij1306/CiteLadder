@@ -13,7 +13,7 @@ import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { treeBranchClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health';
-import type { ChangeObservation, ChangeSummary } from '@/lib/api/types';
+import type { ChangeObservation, ChangeSummary } from '@citeladder/contracts';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
 import { textRole } from '@/components/ui/typography';
 import {

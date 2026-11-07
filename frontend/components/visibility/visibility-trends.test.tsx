@@ -3,7 +3,7 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vite-plus/test';
 
 import { ApiError } from '@/lib/api/errors';
-import type { SurfaceRates, Visibility, VisibilityTrendPoint } from '@/lib/api/types';
+import type { SurfaceRates, Visibility, VisibilityTrendPoint } from '@citeladder/contracts';
 import { renderWithProviders as render } from '@/test/render';
 
 import { VisibilityTrends } from './visibility-trends';

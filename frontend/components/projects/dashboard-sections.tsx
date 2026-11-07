@@ -27,7 +27,7 @@ import { textRole } from '@/components/ui/typography';
 import { MetricValue } from '@/components/ui/metric-value';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { availabilityLabel, pluralCount } from '@/lib/format';
-import type { CommandCenter, Project } from '@/lib/api/types';
+import type { CommandCenter, Project } from '@citeladder/contracts';
 import { DisplayTime } from '@/components/ui/display-time';
 
 import { ProjectControls } from './dashboard-controls';

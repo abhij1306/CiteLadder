@@ -416,3 +416,13 @@ export const siteHealthErrorSchema = responseObject({
   expected_selection_version: z.number().int().optional(),
   current_selection_version: z.number().int().optional(),
 });
+
+export type IssueHistoryPage = z.infer<typeof issueHistoryPageSchema>;
+export type SiteHealthDashboard = z.infer<typeof siteHealthDashboardSchema>;
+export type SiteHealthOverview = z.infer<typeof siteHealthOverviewSchema>;
+export type AeoReadiness = z.infer<typeof aeoReadinessSchema>;
+export type ReadinessDimension = z.infer<typeof readinessDimensionSchema>;
+export type ReadinessCheck = z.infer<typeof readinessCheckSchema>;
+export type ChangeSummary = z.infer<typeof changeSummarySchema>;
+export type ChangeObservation = z.infer<typeof changeObservationSchema>;
+export type ChangesPage = z.infer<typeof changesPageSchema>;

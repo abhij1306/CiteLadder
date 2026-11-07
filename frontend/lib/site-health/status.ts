@@ -19,7 +19,7 @@ import type {
   CrawlOverallStatus,
   PageAnalysisStatus,
   SiteCrawl,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 import type { PagesSort } from '@/lib/api/site-health';
 import type { RunStatusValue, StatusValue } from '@/components/ui/badge';
 import {

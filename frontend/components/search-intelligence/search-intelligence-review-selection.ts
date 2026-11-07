@@ -1,27 +1,18 @@
-import type {
-  DatasetSelection,
-  ResearchScope,
-  SearchIntelligenceReadiness,
-} from '@/lib/api/search-intelligence';
+import type { SearchDatasetSelectionRequest } from '@citeladder/contracts/search-intelligence-requests';
+import type { ResearchScope, SearchIntelligenceReadiness } from '@/lib/api/search-intelligence';
 import {
-  BACKLINK_DATASET_KINDS,
-  COMPARISON_DATASET_KINDS,
-  COMPETITOR_DATASET_KINDS,
-  KEYWORD_DATASET_KINDS,
-  OWNED_DATASET_KINDS,
-  PRESET_OWNED_KINDS,
-  SEARCH_DEFAULT_DEPTHS,
-} from '@/lib/config/search-intelligence';
+  SEARCH_DATASET_KINDS,
+  searchDatasetKindsWith,
+  type SearchDatasetKind,
+} from '@citeladder/contracts/search-intelligence';
+import { PRESET_OWNED_KINDS, SEARCH_DEFAULT_DEPTHS } from '@/lib/config/search-intelligence';
 import { matchesCompetitor } from './search-intelligence-competitors';
 
-export const selectionKey = (selection: DatasetSelection) =>
+export const selectionKey = (selection: SearchDatasetSelectionRequest) =>
   `${selection.kind}:${selection.competitor_id ?? ''}`;
 
-function depthFor(data: SearchIntelligenceReadiness, kind: string) {
-  return (
-    data.preferences.depths[kind] ??
-    SEARCH_DEFAULT_DEPTHS[kind as keyof typeof SEARCH_DEFAULT_DEPTHS]
-  );
+function depthFor(data: SearchIntelligenceReadiness, kind: SearchDatasetKind) {
+  return data.preferences.depths[kind] ?? SEARCH_DEFAULT_DEPTHS[kind];
 }
 
 /**
@@ -42,11 +33,13 @@ export function reviewOwnedTarget(data: SearchIntelligenceReadiness) {
   );
 }
 
-export function availableSelections(data: SearchIntelligenceReadiness): DatasetSelection[] {
+export function availableSelections(
+  data: SearchIntelligenceReadiness,
+): SearchDatasetSelectionRequest[] {
   return [
-    ...OWNED_DATASET_KINDS.map((kind) => ({ kind, depth: depthFor(data, kind) })),
+    ...searchDatasetKindsWith('owned').map((kind) => ({ kind, depth: depthFor(data, kind) })),
     ...reviewCompetitors(data).flatMap((competitor_id) =>
-      COMPETITOR_DATASET_KINDS.map((kind) => ({
+      searchDatasetKindsWith('competitor').map((kind) => ({
         kind,
         competitor_id,
         depth: depthFor(data, kind),
@@ -56,7 +49,7 @@ export function availableSelections(data: SearchIntelligenceReadiness): DatasetS
 }
 
 /** Whether a saved dataset already answers this selection, so a refresh re-reads it. */
-function saved(data: SearchIntelligenceReadiness, selection: DatasetSelection) {
+function saved(data: SearchIntelligenceReadiness, selection: SearchDatasetSelectionRequest) {
   const owned = reviewOwnedTarget(data)?.origin;
   const competitor = data.competitors.find((item) => item.identity === selection.competitor_id);
   return data.datasets.some((dataset) => {
@@ -64,7 +57,7 @@ function saved(data: SearchIntelligenceReadiness, selection: DatasetSelection) {
     if (!competitor) return dataset.target_origin === owned && !dataset.comparison_origin;
     // A comparison belongs to one of your websites as well as the competitor;
     // one saved for another of your websites does not answer this review.
-    if (COMPARISON_DATASET_KINDS.includes(selection.kind))
+    if (SEARCH_DATASET_KINDS[selection.kind].comparison)
       return (
         dataset.target_origin === owned &&
         matchesCompetitor(dataset.comparison_origin, competitor.registrable_domain)
@@ -81,7 +74,7 @@ function saved(data: SearchIntelligenceReadiness, selection: DatasetSelection) {
 export function defaultSelections(
   data: SearchIntelligenceReadiness,
   action: string,
-): DatasetSelection[] {
+): SearchDatasetSelectionRequest[] {
   const available = availableSelections(data);
   if (action === 'seed')
     return available.filter(
@@ -96,42 +89,45 @@ export function defaultSelections(
   const [first] = reviewCompetitors(data);
   return available.filter(({ kind, competitor_id }) =>
     competitor_id
-      ? competitor_id === first && COMPARISON_DATASET_KINDS.includes(kind)
+      ? competitor_id === first && SEARCH_DATASET_KINDS[kind].comparison
       : PRESET_OWNED_KINDS.includes(kind),
   );
 }
 
 /** Exact-host comparisons cannot be ordered by traffic or position; the API refuses them. */
 export function comparisonOrderConflict(
-  selections: DatasetSelection[],
+  selections: SearchDatasetSelectionRequest[],
   researchScope: ResearchScope,
-  order: DatasetSelection['order'],
+  order: SearchDatasetSelectionRequest['order'],
 ) {
   return (
     researchScope === 'exact_host' &&
     (order === 'traffic' || order === 'position') &&
-    selections.some(({ kind }) => COMPARISON_DATASET_KINDS.includes(kind))
+    selections.some(({ kind }) => SEARCH_DATASET_KINDS[kind].comparison)
   );
 }
 
 /** Backlink history covers the whole domain; the API refuses it for an exact host. */
-export function historyScopeConflict(selections: DatasetSelection[], researchScope: ResearchScope) {
+export function historyScopeConflict(
+  selections: SearchDatasetSelectionRequest[],
+  researchScope: ResearchScope,
+) {
   return (
     researchScope === 'exact_host' && selections.some(({ kind }) => kind === 'backlink_history')
   );
 }
 
 export function reviewInputsValid(
-  selections: DatasetSelection[],
+  selections: SearchDatasetSelectionRequest[],
   form: {
     ownedTarget: string;
     location: string;
     seed: string;
     researchScope: ResearchScope;
-    order: DatasetSelection['order'];
+    order: SearchDatasetSelectionRequest['order'];
   },
 ) {
-  const marketNeeded = selections.some(({ kind }) => !BACKLINK_DATASET_KINDS.includes(kind));
+  const marketNeeded = selections.some(({ kind }) => !SEARCH_DATASET_KINDS[kind].backlink);
   const location = Number(form.location);
   return Boolean(
     selections.length &&
@@ -139,25 +135,26 @@ export function reviewInputsValid(
     (!marketNeeded || (Number.isInteger(location) && location > 0)) &&
     !historyScopeConflict(selections, form.researchScope) &&
     !comparisonOrderConflict(selections, form.researchScope, form.order) &&
-    selections.every((item) => item.kind !== 'keyword_suggestions' || form.seed.trim()),
+    selections.every((item) => !SEARCH_DATASET_KINDS[item.kind].seed || form.seed.trim()),
   );
 }
 
 export function prepareReviewSelections(
-  selections: DatasetSelection[],
+  selections: SearchDatasetSelectionRequest[],
   controls: {
     seed: string;
     grouping: 'as_is' | 'one_per_domain';
-    order: DatasetSelection['order'];
+    order: SearchDatasetSelectionRequest['order'];
     minVolume: string;
   },
-): DatasetSelection[] {
+): SearchDatasetSelectionRequest[] {
   return selections.map((selection) => {
     if (selection.kind === 'backlinks') return { ...selection, grouping: controls.grouping };
-    if (!KEYWORD_DATASET_KINDS.includes(selection.kind)) return selection;
+    const kind = SEARCH_DATASET_KINDS[selection.kind];
+    if (!kind.keyword) return selection;
     return {
       ...selection,
-      ...(selection.kind === 'keyword_suggestions' ? { seed: controls.seed } : {}),
+      ...(kind.seed ? { seed: controls.seed } : {}),
       order: controls.order,
       min_volume: controls.minVolume === '' ? undefined : Number(controls.minVolume),
     };

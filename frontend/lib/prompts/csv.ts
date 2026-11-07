@@ -14,9 +14,9 @@
  * A tiny hand-rolled parser (no dependency) handles quoted fields, escaped
  * quotes (`""`), and embedded newlines — enough for prompt CSVs.
  */
-import type { PromptImportRow } from '@/lib/api/prompts';
+import type { PromptImportRowRequest } from '@citeladder/contracts/prompt-requests';
 import { buyerStageSchema, promptIntentSchema } from '@citeladder/contracts/project';
-import type { BuyerStage, PromptIntent } from '@/lib/api/types';
+import type { BuyerStage, PromptIntent } from '@citeladder/contracts';
 import { PERSONA_MAX_CHARS, PROMPT_IMPORT_MAX_ROWS } from '@/lib/config/prompts';
 
 /** The import's column contract, in the order the sample file uses. */
@@ -60,7 +60,7 @@ const VALID_STAGES = new Set<string>(buyerStageSchema.options);
 type ParsedPromptRow = {
   /** 1-based source row number (excludes the header) for user feedback. */
   line: number;
-  input: PromptImportRow;
+  input: PromptImportRowRequest;
   /** Fatal issues (row is not importable, e.g. empty prompt). */
   errors: string[];
 };
@@ -154,7 +154,7 @@ function normalizeStage(value: string | undefined): BuyerStage {
 }
 
 /** An explicit cohort is kept; a blank or missing one is left to the backend. */
-function cohortOf(value: string | undefined): Pick<PromptImportRow, 'cohort'> {
+function cohortOf(value: string | undefined): Pick<PromptImportRowRequest, 'cohort'> {
   const normalized = (value ?? '').trim().toLowerCase();
   if (normalized === 'comparison') return { cohort: 'comparison' };
   return normalized === 'core' ? { cohort: 'core' } : {};
@@ -262,6 +262,6 @@ export function parsePromptCsv(raw: string): ParsedCsv {
 }
 
 /** The importable subset (rows without fatal errors). */
-export function validRows(parsed: ParsedCsv): PromptImportRow[] {
+export function validRows(parsed: ParsedCsv): PromptImportRowRequest[] {
   return parsed.rows.flatMap((row) => (row.errors.length === 0 ? [row.input] : []));
 }

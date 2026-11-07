@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Inline } from '@/components/ui/layout';
 import { textRole } from '@/components/ui/typography';
-import type { SiteIssue } from '@/lib/api/types';
+import type { SiteIssue } from '@citeladder/contracts';
 import { dimensionLabel, severityBadgeValue, severityLabel } from '@/lib/site-health/issues';
 
 /**

@@ -3,8 +3,11 @@ import {
   integrationConnectionListSchema,
   performanceSyncEnqueueResponseSchema,
   integrationPropertyListSchema,
+  integrationPropertyDiscoveryRequestSchema,
   integrationPropertyMappingListSchema,
+  integrationPropertyMappingRequestSchema,
   integrationSyncEnqueueSchema,
+  integrationSyncRequestSchema,
   integrationSyncRunSchema,
   integrationTestResultSchema,
 } from '@citeladder/contracts/integrations';
@@ -49,17 +52,9 @@ const family = 'integrations';
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const connectionPath = { connection_id: uuid } as const;
 const syncPath = { ...connectionPath, sync_run_id: uuid } as const;
-const windowRequest = z.strictObject({
-  project_id: z.uuid().optional(),
-  window_start: z.iso.date().optional(),
-  window_end: z.iso.date().optional(),
-});
-const discoveryRequest = z.strictObject({ project_id: z.uuid().optional() });
-const mappingRequest = z.strictObject({
-  provider: z.enum(['gsc', 'ga4', 'bing']),
-  property_ref: z.string().min(1).max(512),
-  project_id: z.uuid(),
-});
+const windowRequest = integrationSyncRequestSchema;
+const discoveryRequest = integrationPropertyDiscoveryRequestSchema;
+const mappingRequest = integrationPropertyMappingRequestSchema;
 const providerPath = { provider: { scalar: { kind: 'str' }, required: true } } as const;
 const oauthCookie = integrationPolicy.transport.INTEGRATION_OAUTH_TRANSACTION_COOKIE;
 const logger = getLogger('api.integrations');

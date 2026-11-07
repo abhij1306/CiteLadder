@@ -16,10 +16,11 @@ import {
   opportunitiesPageSchema,
   opportunityDetailSchema,
   opportunityOrderResponseSchema,
+  type OpportunityOrderUpdateRequest,
 } from '@citeladder/contracts/opportunities';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
-import type { OpportunitiesPage, OpportunityDetail } from './types';
+import type { OpportunitiesPage, OpportunityDetail } from '@citeladder/contracts';
 
 /** Keyset catalog params. Ordering is server-owned (priority desc, id desc). */
 export type OpportunitiesParams = {
@@ -30,11 +31,6 @@ export type OpportunitiesParams = {
   status?: string;
   rule_id?: string;
   min_priority?: number;
-};
-
-export type OpportunityOrderUpdate = {
-  ordered_opportunity_ids: string[];
-  expected_version: number;
 };
 
 export const opportunitiesApi = {
@@ -49,7 +45,7 @@ export const opportunitiesApi = {
   },
   updateOrder: async (
     projectId: string,
-    input: OpportunityOrderUpdate,
+    input: OpportunityOrderUpdateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.put(`/projects/${projectId}/opportunities/order`, input, options);

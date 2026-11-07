@@ -11,7 +11,7 @@ import { Select } from '@/components/ui/select';
 import { ClampText, TableCell, TableHead, TableRow } from '@/components/ui/table';
 import { textRole } from '@/components/ui/typography';
 import { ProjectLink } from '@/components/layout/scoped-link';
-import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import { agentHandoffHref } from '@/lib/agent/handoff';
 import { formatCount, pluralCount } from '@/lib/format';
 import { useAgentPanelSeed } from '@/lib/agent/panel-context';

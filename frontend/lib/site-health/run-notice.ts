@@ -11,7 +11,7 @@
  * names the reason; this module never infers it.
  */
 import type { RunStatusValue } from '@/components/ui/badge';
-import type { SiteCrawl } from '@/lib/api/types';
+import type { SiteCrawl } from '@citeladder/contracts';
 
 import { crawlDisplayStatus, endSentence } from './status';
 

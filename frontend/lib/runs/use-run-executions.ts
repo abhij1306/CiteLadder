@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react';
 
 import { queryKeys } from '@/lib/api/query-keys';
 import { runsApi } from '@/lib/api/runs';
-import type { Audit } from '@/lib/api/types';
+import type { Audit } from '@citeladder/contracts';
 import { useActiveWorkspaceId } from '@/lib/project/project-context';
 
 /** The audit fields that move whenever one of its executions settles. */

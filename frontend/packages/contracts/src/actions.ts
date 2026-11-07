@@ -132,3 +132,24 @@ export const actionsPageSchema = responseObject({
   next_cursor: z.string().nullable(),
   status_counts: z.record(z.string(), z.number().int()),
 });
+
+/** The statuses a user may store; the rest are derived or declared. */
+export const actionUserStatusSchema = actionStatusSchema.extract(['open', 'dismissed']);
+export type ActionUserStatus = z.infer<typeof actionUserStatusSchema>;
+
+export const actionStatusUpdateRequestSchema = z.strictObject({ status: actionUserStatusSchema });
+export type ActionStatusUpdateRequest = z.input<typeof actionStatusUpdateRequestSchema>;
+
+/**
+ * An implementation declaration. Targets and expected checks are server-owned;
+ * the user names the recommendations done, the revision shipped (null for
+ * work done outside CiteLadder) and when it went live.
+ */
+export const actionDeclarationRequestSchema = z.strictObject({
+  recommendation_ids: z.array(uuid()).max(100).default([]),
+  output_revision_id: uuid().nullable().default(null),
+  declared_implemented_at: z.iso
+    .datetime({ offset: true })
+    .refine((value) => !value.startsWith('0000-'), 'A valid calendar year is required'),
+});
+export type ActionDeclarationRequest = z.input<typeof actionDeclarationRequestSchema>;

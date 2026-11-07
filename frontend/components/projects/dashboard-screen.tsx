@@ -10,7 +10,7 @@ import { Stack } from '@/components/ui/layout';
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { projectQueries } from '@/lib/api/projects';
-import type { CommandCenter, Project } from '@/lib/api/types';
+import type { CommandCenter, Project } from '@citeladder/contracts';
 import { useOverviewLayout } from '@/lib/overview/use-overview-layout';
 import { warmOverviewWidgets } from '@/lib/overview/widget-queries';
 import { useProjectContext, useWorkspaceCapability } from '@/lib/project/project-context';

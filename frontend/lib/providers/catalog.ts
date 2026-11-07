@@ -21,7 +21,7 @@ import type {
   ProviderConnectionState,
   ProviderConnectionStateEntry,
   TransportProvider,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 
 /** Logical engines rendered as cards, in display order. */
 export const ENGINE_ORDER: readonly LogicalEngine[] = [

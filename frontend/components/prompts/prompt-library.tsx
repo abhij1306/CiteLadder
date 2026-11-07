@@ -6,17 +6,17 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } 
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import {
-  promptsApi,
-  type PromptGenerateInput,
-  type PromptImportRow,
-  type PromptInput,
-  type PromptUpdateInput,
-} from '@/lib/api/prompts';
+import { promptsApi } from '@/lib/api/prompts';
+import type {
+  PromptCreateRequest,
+  PromptGenerateRequest,
+  PromptImportRowRequest,
+  PromptUpdateRequest,
+} from '@citeladder/contracts/prompt-requests';
 import { queryKeys } from '@/lib/api/query-keys';
 import { humanizeApiError } from '@/lib/api/errors';
 import { topicsApi } from '@/lib/api/topics';
-import type { Prompt, PromptSet, PromptStatus, Topic } from '@/lib/api/types';
+import type { Prompt, PromptSet, PromptStatus, Topic } from '@citeladder/contracts';
 import {
   emptyFilters,
   filterPrompts,
@@ -146,7 +146,7 @@ export function PromptLibrary({
   });
 
   const createMutation = useMutation({
-    mutationFn: async (input: PromptInput) => {
+    mutationFn: async (input: PromptCreateRequest) => {
       const options = requestOptions();
       const set = await ensurePromptSet();
       return promptsApi.createPrompt(set.id, input, options);
@@ -159,7 +159,7 @@ export function PromptLibrary({
   });
 
   const updateMutation = useMutation({
-    mutationFn: (vars: { id: string; input: PromptUpdateInput }) =>
+    mutationFn: (vars: { id: string; input: PromptUpdateRequest }) =>
       promptsApi.updatePrompt(vars.id, vars.input, requestOptions()),
     onSuccess: async () => {
       await invalidate();
@@ -189,7 +189,7 @@ export function PromptLibrary({
   });
 
   const importMutation = useMutation({
-    mutationFn: async (rows: PromptImportRow[]): Promise<PromptSet> => {
+    mutationFn: async (rows: PromptImportRowRequest[]): Promise<PromptSet> => {
       const options = requestOptions();
       const set = await ensurePromptSet();
       return promptsApi.importRows(set.id, rows, options);
@@ -204,7 +204,7 @@ export function PromptLibrary({
   // server already staged is replayed instead of drafted (and paid for) again.
   const generateKey = useRef<{ request: string; key: string } | null>(null);
   const generateMutation = useMutation({
-    mutationFn: async (input: PromptGenerateInput) => {
+    mutationFn: async (input: PromptGenerateRequest) => {
       const options = requestOptions();
       const set = await ensurePromptSet();
       const request = JSON.stringify(input);

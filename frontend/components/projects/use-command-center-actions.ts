@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { opportunitiesApi } from '@/lib/api/opportunities';
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { CommandCenter, Opportunity, Project } from '@/lib/api/types';
+import type { CommandCenter, Opportunity, Project } from '@citeladder/contracts';
 import { saveBlob } from '@/lib/download';
 
 export function useCommandCenterActions(data: CommandCenter, project: Project) {

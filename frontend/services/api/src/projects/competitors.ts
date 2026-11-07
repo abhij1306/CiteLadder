@@ -9,6 +9,10 @@
 import { randomUUID } from 'node:crypto';
 
 import { competitorSchema } from '@citeladder/contracts/project';
+import {
+  competitorCreateRequestSchema,
+  competitorUpdateRequestSchema,
+} from '@citeladder/contracts/project-requests';
 import type { Selectable } from 'kysely';
 import { z } from 'zod';
 
@@ -25,8 +29,8 @@ type Competitor = z.input<typeof competitorSchema>;
 const MAX_COMPETITORS = policy.brand_identity.max_project_competitors;
 const strings = z.array(z.string());
 
-export const competitorCreate = competitorInput.strict();
-export const competitorUpdate = z.strictObject({
+export const competitorCreate = competitorCreateRequestSchema.extend(competitorInput.shape);
+export const competitorUpdate = competitorUpdateRequestSchema.extend({
   name: competitorInput.shape.name.optional(),
   aliases: competitorInput.shape.aliases.unwrap().optional(),
   domains: competitorInput.shape.domains.unwrap().optional(),

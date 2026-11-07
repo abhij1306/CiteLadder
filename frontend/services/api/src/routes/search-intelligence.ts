@@ -29,7 +29,8 @@ import {
 } from '../search-intelligence/reads.ts';
 import { cancelRun, confirmRun, savePreferences } from '../search-intelligence/runs.ts';
 import { defineGetRoute, definePostRoute, definePutRoute } from './define.ts';
-import { citationMatchBody, preferencesBody, reviewBody } from './search-intelligence-contracts.ts';
+import { preferencesBody, reviewBody } from './search-intelligence-contracts.ts';
+import { searchCitationMatchRequestSchema } from '@citeladder/contracts/search-intelligence-requests';
 
 const family = 'search-intelligence';
 const authorize = 'project';
@@ -185,10 +186,10 @@ export const searchIntelligenceRoutes = [
     capability: 'write',
     status: 201,
     params: { path: projectPath, query: {} },
-    body: citationMatchBody,
+    body: searchCitationMatchRequestSchema,
     response: searchDatasetSchema,
     async handle({ c, db }, { path }) {
-      const body = await readBody(c, citationMatchBody);
+      const body = await readBody(c, searchCitationMatchRequestSchema);
       return deriveCitationMatches(
         db,
         scopeOf(c, path.project_id),

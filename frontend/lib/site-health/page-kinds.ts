@@ -7,7 +7,7 @@
  * No transport, no React.
  */
 import { pageKindSchema } from '@citeladder/contracts/site-health';
-import type { PageKind, PageKindScoreSummary } from '@/lib/api/types';
+import type { PageKind, PageKindScoreSummary } from '@citeladder/contracts';
 import { ownValue, titleCaseStatus } from '@/lib/utils';
 
 /**

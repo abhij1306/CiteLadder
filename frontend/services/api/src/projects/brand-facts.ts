@@ -16,6 +16,10 @@ import {
   type BrandFactList,
 } from '@citeladder/contracts/fact-checking';
 import { asApiErrorCode } from '@citeladder/contracts/error-codes';
+import {
+  brandFactCreateRequestSchema,
+  brandFactUpdateRequestSchema,
+} from '@citeladder/contracts/project-requests';
 import type { Selectable } from 'kysely';
 import { z } from 'zod';
 
@@ -35,20 +39,15 @@ const sourceUrl = z
   .max(limits.source_url_max_chars)
   .nullish();
 
-export const brandFactCreate = z.object({
-  topic: factTopicSchema,
+export const brandFactCreate = brandFactCreateRequestSchema.extend({
   statement,
   source_url: sourceUrl,
 });
 
 /** A partial edit of the revision the editor read; absent fields are kept. */
-export const brandFactUpdate = z.object({
-  expected_revision: z.int().positive(),
-  topic: factTopicSchema.optional(),
+export const brandFactUpdate = brandFactUpdateRequestSchema.extend({
   statement: statement.optional(),
-  // Null clears the source; absent keeps it.
   source_url: sourceUrl,
-  status: factStatusSchema.optional(),
 });
 
 function view(row: Selectable<BrandFacts>): BrandFact {

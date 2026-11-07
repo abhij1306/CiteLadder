@@ -26,6 +26,9 @@ import {
   type integrationConnectionSchema,
   type integrationPropertySchema,
   type integrationProviderSchema,
+  type IntegrationPropertyDiscoveryRequest,
+  type IntegrationPropertyMappingRequest,
+  type IntegrationSyncRequest,
 } from '@citeladder/contracts/integrations';
 import { strictValidate } from '@citeladder/contracts/validation';
 
@@ -37,20 +40,6 @@ export type IntegrationSyncRun = z.infer<typeof integrationSyncRunSchema>;
 export type IntegrationBackfillProgress = z.infer<typeof integrationBackfillProgressSchema>;
 export type IntegrationProperty = z.infer<typeof integrationPropertySchema>;
 export type IntegrationPropertyMapping = z.infer<typeof integrationPropertyMappingSchema>;
-
-/** Body for `POST /integrations/{id}/mappings`. */
-export type PropertyMappingInput = {
-  provider: IntegrationProvider;
-  property_ref: string;
-  project_id: string;
-};
-
-/** Optional body for `POST /integrations/{id}/sync`: the project and window (ISO dates). */
-export type SyncWindowInput = {
-  project_id?: string;
-  window_start?: string;
-  window_end?: string;
-};
 
 export const integrationsApi = {
   list: async (options?: ApiRequestOptions) => {
@@ -65,7 +54,11 @@ export const integrationsApi = {
     );
     return strictValidate(integrationTestResultSchema, res, 'integrations.test');
   },
-  sync: async (connectionId: string, input?: SyncWindowInput, options?: ApiRequestOptions) => {
+  sync: async (
+    connectionId: string,
+    input?: IntegrationSyncRequest,
+    options?: ApiRequestOptions,
+  ) => {
     const res = await apiClient.post<IntegrationSyncEnqueue>(
       `/integrations/${connectionId}/sync`,
       input,
@@ -115,7 +108,9 @@ export const integrationsApi = {
     // Naming the project marks the properties that belong to its site.
     const res = await apiClient.post<IntegrationProperty[]>(
       `/integrations/${connectionId}/properties`,
-      projectId ? { project_id: projectId } : undefined,
+      projectId
+        ? ({ project_id: projectId } satisfies IntegrationPropertyDiscoveryRequest)
+        : undefined,
       options,
     );
     return strictValidate(integrationPropertyListSchema, res, 'integrations.discoverProperties');
@@ -129,7 +124,7 @@ export const integrationsApi = {
   },
   createMapping: async (
     connectionId: string,
-    input: PropertyMappingInput,
+    input: IntegrationPropertyMappingRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<IntegrationPropertyMapping>(

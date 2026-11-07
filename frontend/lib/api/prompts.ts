@@ -19,70 +19,28 @@ import {
   promptSetSchema,
   topicSchema,
 } from '@citeladder/contracts/project';
+import type {
+  PromptBulkStatusRequest,
+  PromptCandidateReviewRequest,
+  PromptCreateRequest,
+  PromptGenerateRequest,
+  PromptImportRowRequest,
+  PromptSetCreateRequest,
+  PromptUpdateRequest,
+  TopicCreateRequest,
+} from '@citeladder/contracts/prompt-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import type {
-  BuyerStage,
   Prompt,
   PromptCandidate,
   PromptCandidateReviewResponse,
   PromptGenerateResponse,
   PromptSet,
-  PromptStatus,
   Topic,
-} from './types';
+} from '@citeladder/contracts';
 
 const promptSetListSchema = z.array(promptSetSchema);
 const promptCandidateListSchema = z.array(promptCandidateSchema);
-
-export type PromptInput = {
-  text: string;
-  // Theme, intent and cohort are internal vocabulary: users are never asked
-  // for them, and omitting them takes the backend's defaults. An omitted
-  // cohort is filed by the backend: branded when the text names the brand.
-  // Backend `PromptInput.theme` is a non-null `str = ""` — create/import 422 on null.
-  theme?: string;
-  intent?: Prompt['intent'];
-  cohort?: Prompt['cohort'];
-  enabled?: boolean;
-  // Files the prompt under an existing topic at creation time. Onboarding
-  // creates its topics first and passes this, rather than creating every
-  // prompt and then PATCHing every prompt. Must name a topic of the prompt's
-  // own project — the backend answers 404 otherwise.
-  topic_id?: string;
-};
-
-/** One CSV import row: the user's topic NAME (created when new, '' = none). */
-export type PromptImportRow = PromptInput & {
-  topic: string;
-  buyer_stage?: BuyerStage;
-  persona?: string;
-};
-
-export type PromptUpdateInput = Partial<Omit<PromptInput, 'topic_id'>> & {
-  status?: PromptStatus;
-  buyer_stage?: BuyerStage;
-  persona?: string;
-  // Explicit null detaches the prompt from its topic.
-  topic_id?: string | null;
-};
-
-export type PromptGenerateInput = {
-  count?: number;
-  // Scope generation to existing topics; omitted or empty = every topic.
-  topic_ids?: string[];
-  // A short note for this run only; never saved as a business fact.
-  run_context?: string;
-  // Omitted = a core-only run with stages balanced; shares are 0–1.
-  distribution?: {
-    branded_share?: number;
-    comparison_share?: number;
-    intent_mix?: { informational: number; commercial: number; transactional: number };
-    personas?: string[];
-  };
-  // Which persisted searches may steer wording; omitted = every source.
-  seed_source?: 'search_console' | 'search_intelligence' | 'none';
-  seed_query_ids?: string[];
-};
 
 export const promptsApi = {
   listPromptSets: async (projectId: string, options?: ApiRequestOptions) => {
@@ -96,10 +54,7 @@ export const promptsApi = {
     const res = await apiClient.get<PromptSet>(`/prompt-sets/${promptSetId}`, options);
     return strictValidate(promptSetSchema, res, 'prompts.getPromptSet');
   },
-  createPromptSet: async (
-    input: { project_id: string; name?: string; description?: string },
-    options?: ApiRequestOptions,
-  ) => {
+  createPromptSet: async (input: PromptSetCreateRequest, options?: ApiRequestOptions) => {
     const res = await apiClient.post<PromptSet>('/prompt-sets', input, options);
     return strictValidate(promptSetSchema, res, 'prompts.createPromptSet');
   },
@@ -114,7 +69,7 @@ export const promptsApi = {
    */
   createTopic: async (
     projectId: string,
-    input: { name: string; description?: string; parent_id?: string },
+    input: TopicCreateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<Topic>(
@@ -124,11 +79,19 @@ export const promptsApi = {
     );
     return strictValidate(topicSchema, res, 'prompts.createTopic');
   },
-  createPrompt: async (promptSetId: string, input: PromptInput, options?: ApiRequestOptions) => {
+  createPrompt: async (
+    promptSetId: string,
+    input: PromptCreateRequest,
+    options?: ApiRequestOptions,
+  ) => {
     const res = await apiClient.post<Prompt>(`/prompt-sets/${promptSetId}/prompts`, input, options);
     return strictValidate(promptSchema, res, 'prompts.createPrompt');
   },
-  updatePrompt: async (promptId: string, input: PromptUpdateInput, options?: ApiRequestOptions) => {
+  updatePrompt: async (
+    promptId: string,
+    input: PromptUpdateRequest,
+    options?: ApiRequestOptions,
+  ) => {
     const res = await apiClient.patch<Prompt>(`/prompts/${promptId}`, input, options);
     return strictValidate(promptSchema, res, 'prompts.updatePrompt');
   },
@@ -139,7 +102,11 @@ export const promptsApi = {
    * `{ prompts: [...] }` (rows already parsed and previewed in the browser),
    * bulk-created with `origin='imported'`.
    */
-  importRows: async (promptSetId: string, rows: PromptImportRow[], options?: ApiRequestOptions) => {
+  importRows: async (
+    promptSetId: string,
+    rows: PromptImportRowRequest[],
+    options?: ApiRequestOptions,
+  ) => {
     const res = await apiClient.post<PromptSet>(
       `/prompt-sets/${promptSetId}/import`,
       { prompts: rows },
@@ -156,7 +123,7 @@ export const promptsApi = {
    */
   generate: async (
     promptSetId: string,
-    input: PromptGenerateInput,
+    input: PromptGenerateRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<PromptGenerateResponse>(
@@ -181,7 +148,7 @@ export const promptsApi = {
    */
   reviewCandidates: async (
     promptSetId: string,
-    input: { accept_ids?: string[]; reject_ids?: string[] },
+    input: PromptCandidateReviewRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<PromptCandidateReviewResponse>(
@@ -194,7 +161,7 @@ export const promptsApi = {
   /** Bulk review transition (accept-all / archive-selected). */
   bulkStatus: async (
     promptSetId: string,
-    input: { prompt_ids: string[]; status: PromptStatus },
+    input: PromptBulkStatusRequest,
     options?: ApiRequestOptions,
   ) => {
     const res = await apiClient.post<PromptSet>(

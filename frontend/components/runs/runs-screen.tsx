@@ -17,7 +17,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps, type RetryableRead } from '@/components/ui/read-error';
 import { SegmentedControl } from '@/components/ui/tabs';
 import { runsQueries } from '@/lib/api/runs';
-import type { Audit } from '@/lib/api/types';
+import type { Audit } from '@citeladder/contracts';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useActiveProject } from '@/lib/project/project-context';
 import { resolveActiveProjectRequestScope } from '@/lib/project/request-scope';

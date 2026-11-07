@@ -2,7 +2,7 @@
 
 import { Inline, Stack } from '@/components/ui/layout';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { RootError } from '@/lib/api/types';
+import type { RootError } from '@citeladder/contracts';
 import { textRole } from '@/components/ui/typography';
 import { ledgerClasses, ledgerItemClasses } from '@/components/ui/workspace';
 

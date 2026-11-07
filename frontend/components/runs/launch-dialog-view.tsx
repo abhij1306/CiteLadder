@@ -10,7 +10,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { Select } from '@/components/ui/select';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
-import type { LogicalEngine, Prompt, PromptSet } from '@/lib/api/types';
+import type { LogicalEngine, Prompt, PromptSet } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
 import { ENGINE_LABELS, ENGINE_ORDER, isConsumerEngine } from '@/lib/providers/catalog';
 import {

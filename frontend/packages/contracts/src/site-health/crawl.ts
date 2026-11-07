@@ -261,3 +261,13 @@ export const urlPreviewResponseSchema = responseObject({
   counts: z.record(z.string(), z.number().int()),
   policy_version: z.string(),
 });
+
+export type CrawlOverallStatus = z.infer<typeof crawlOverallStatusSchema>;
+export type CrawlDiscoveryStatus = z.infer<typeof crawlDiscoveryStatusSchema>;
+export type CrawlAnalysisStatus = z.infer<typeof crawlAnalysisStatusSchema>;
+export type PageAnalysisStatus = z.infer<typeof pageAnalysisStatusSchema>;
+export type PageKind = z.infer<typeof pageKindSchema>;
+export type PageKindScoreSummary = z.infer<typeof pageKindScoreSummarySchema>;
+export type SiteScoreSummary = z.infer<typeof siteScoreSummarySchema>;
+export type SiteCrawl = z.infer<typeof siteCrawlSchema>;
+export type UrlPreviewResponse = z.infer<typeof urlPreviewResponseSchema>;

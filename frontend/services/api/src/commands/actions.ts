@@ -9,7 +9,7 @@ import { parseUuid } from '../http/uuid.ts';
 import { updateActionStatus } from '../opportunities/actions.ts';
 import { declarationView } from '../opportunities/declaration-view.ts';
 import { declareAction as declareOwnedAction } from '../opportunities/declarations.ts';
-import type { declarationCreate } from '../routes/action-contracts.ts';
+import type { actionDeclarationRequestSchema } from '@citeladder/contracts/actions';
 
 const SCOPE = 'actions:write';
 const KEY_MAX = policy.opportunity.opportunities.IMPLEMENTATION_IDEMPOTENCY_KEY_MAX_LEN;
@@ -24,7 +24,7 @@ export async function declareAction(
   db: Database,
   actor: Actor,
   actionId: string,
-  input: z.output<typeof declarationCreate>,
+  input: z.output<typeof actionDeclarationRequestSchema>,
   { idempotencyKey }: { idempotencyKey: string | null },
 ) {
   requireCapability(actor, 'write', SCOPE);

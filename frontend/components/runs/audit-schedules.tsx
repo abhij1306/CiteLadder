@@ -22,7 +22,7 @@ import type {
   AuditScheduleCadence,
   LogicalEngine,
   PromptSet,
-} from '@/lib/api/types';
+} from '@citeladder/contracts';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { DisplayTime } from '@/components/ui/display-time';
 import { textRole } from '@/components/ui/typography';

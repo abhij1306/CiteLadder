@@ -17,7 +17,7 @@ import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { ledgerClasses, ledgerItemClasses, SubsectionHeader } from '@/components/ui/workspace';
-import type { DeliveryFacts, IssueOccurrence, PageDetail } from '@/lib/api/types';
+import type { DeliveryFacts, IssueOccurrence, PageDetail } from '@citeladder/contracts';
 import { severityBadgeValue, severityLabel, severityRank } from '@/lib/site-health/issues';
 import {
   formatAudited,

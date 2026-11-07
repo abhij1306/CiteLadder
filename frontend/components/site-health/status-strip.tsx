@@ -8,7 +8,7 @@ import { Inline, Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { InlineFigure, textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import type { PageSummary, SiteCrawl } from '@/lib/api/types';
+import type { PageSummary, SiteCrawl } from '@citeladder/contracts';
 import { formatCount } from '@/lib/format';
 import { ICONS } from '@/lib/icons';
 import { CrawlStatusBadge } from '@/components/site-health/crawl-status-badge';

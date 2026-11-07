@@ -9,7 +9,7 @@ import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { httpErrorStatus } from '@/lib/api/client';
 import { siteHealthQueries } from '@/lib/api/site-health';
-import type { SiteCrawl, SiteHealthDashboard } from '@/lib/api/types';
+import type { SiteCrawl, SiteHealthDashboard } from '@citeladder/contracts';
 import { shouldPollCrawl } from '@/lib/site-health/status';
 
 /**

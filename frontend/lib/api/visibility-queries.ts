@@ -7,7 +7,7 @@ import { queryOptions } from '@tanstack/react-query';
 
 import { ApiError } from './errors';
 import { queryKeys } from './query-keys';
-import type { Visibility } from './types';
+import type { Visibility } from '@citeladder/contracts';
 import { visibilityApi, type ProjectVisibilityParams } from './visibility';
 
 type TrendParams = Parameters<typeof visibilityApi.getVisibilityTrends>[1];

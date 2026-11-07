@@ -6,7 +6,7 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import { authApi } from '@/lib/api/auth';
 import { humanizeApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
-import type { SessionUser } from '@/lib/api/types';
+import type { SessionUser } from '@citeladder/contracts';
 import { getBootstrapReadTimeoutMs } from '@/lib/config/operational';
 import { Callout } from '@/components/ui/callout';
 import { Button } from '@/components/ui/button';
