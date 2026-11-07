@@ -337,8 +337,8 @@ export function Track({ data }: Readonly<{ data: CommandCenter }>) {
 /**
  * With nothing comparable yet the section is wholly empty, so the empty state
  * stands alone, at the card-title rung beside its sibling cards. Its action
- * opens the Launch audit dialog, where the person confirms the run and its
- * credits (owner, 2026-11-06); nothing starts from here.
+ * opens the Launch audit dialog, where the person confirms the run; nothing
+ * starts from here.
  */
 export function Movement({ data }: Readonly<{ data: CommandCenter }>) {
   if (data.movements.length === 0)

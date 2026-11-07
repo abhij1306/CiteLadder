@@ -180,7 +180,7 @@ async function generateIdentity(
   } catch (error) {
     signal?.throwIfAborted();
     logModelFailure('identity', error, started);
-    // A refusal (credits, pricing) answers the same on every attempt; a model failure may not.
+    // A gateway refusal answers the same on every attempt; a model failure may not.
     throw new ResearchFailure(cfg.error_brand_identity_unavailable, !(error instanceof ApiError));
   } finally {
     deadline.clear();

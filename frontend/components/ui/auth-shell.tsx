@@ -60,8 +60,8 @@ export function AuthShell({
 
 /**
  * The card's head: an optional 40px icon tile, the title in Cal Sans 32/38
- * like the website's headings (decision D37; the auth pages are the app's
- * only Cal Sans besides the PageHeader title) and a 16/26 line under it. The title is the page's one `h1`; it takes focus by
+ * (decision D37; the setup cards are the app's only Cal Sans besides the
+ * PageHeader title) and a 16/26 line under it. The title is the page's one `h1`; it takes focus by
  * script (`tabIndex -1`) when a flow moves to a new step.
  */
 function AuthHead({

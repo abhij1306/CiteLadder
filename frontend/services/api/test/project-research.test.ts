@@ -358,7 +358,7 @@ it('retains supported field citations but refuses a field citing only unknown ev
 });
 it.each([
   ['an unusable answer', new Error('invalid output'), true],
-  ['a credit refusal', new ApiError(403, 'Your AI credits are used up'), false],
+  ['a gateway refusal', new ApiError(403, 'The model gateway refused the request'), false],
 ])(
   'fails research on %s from the identity request instead of an empty review',
   async (_label, failure, retryable) => {
