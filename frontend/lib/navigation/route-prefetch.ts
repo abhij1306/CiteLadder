@@ -87,19 +87,16 @@ const ROUTE_PREFETCHERS: Readonly<Record<string, RoutePrefetcher>> = {
     warmQuery(client, projectQueries.brandFacts(workspaceId, projectId));
   },
   '/prompts': async (client, { projectId, workspaceId }) => {
-    const [{ promptsQueries }, { topicsApi }, { visibilityQueries }] = await Promise.all([
+    const [{ promptsQueries }, { topicsQueries }, { visibilityQueries }] = await Promise.all([
       import('@/lib/api/prompts'),
       import('@/lib/api/topics'),
       import('@/lib/api/visibility-queries'),
     ]);
     // The library's three independent reads: its sets, its topic filter, and
     // what the latest run measured for each prompt.
-    warmQuery(client, promptsQueries.sets(workspaceId, projectId));
-    warmQuery(client, {
-      queryKey: queryKeys.topics.list(projectId),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        topicsApi.list(projectId, { signal, workspaceId }),
-    });
+    const scope = { workspaceId, projectId };
+    warmQuery(client, promptsQueries.sets(scope));
+    warmQuery(client, topicsQueries.list(scope));
     warmQuery(client, visibilityQueries.latestPrompts(workspaceId, projectId));
   },
   '/visibility': async (client, { projectId, workspaceId }) => {

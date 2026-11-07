@@ -232,7 +232,7 @@ export function TopicDialogs({
         onOpenChange={(open) => onDialogChange(open ? 'add' : null)}
         topics={topics}
         onCreate={async (name, parentId) => {
-          await mutations.create.mutateAsync({ name, parentId });
+          await mutations.create.mutateAsync({ name, parent_id: parentId });
         }}
         isCreating={mutations.create.isPending}
         error={createFailed ? mutations.error : null}

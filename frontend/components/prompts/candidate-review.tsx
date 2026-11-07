@@ -179,16 +179,7 @@ export function CandidateReviewPanel({
     return (
       <Callout tone="negative">
         {review.loadError || 'Could not load prompt sets.'}
-        <Button
-          variant="secondary"
-          onClick={
-            setsError
-              ? retrySets
-              : () => {
-                  void review.refresh();
-                }
-          }
-        >
+        <Button variant="secondary" onClick={setsError ? retrySets : review.retry}>
           Retry
         </Button>
       </Callout>

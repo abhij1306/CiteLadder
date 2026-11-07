@@ -1,10 +1,9 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
-import { promptsApi, promptsQueries } from '@/lib/api/prompts';
-import { queryKeys } from '@/lib/api/query-keys';
+import { promptsMutations, promptsQueries } from '@/lib/api/prompts';
 import type { PromptSet } from '@citeladder/contracts';
 import { useActiveProject, useActiveWorkspaceId } from '@/lib/project/project-context';
 
@@ -21,12 +20,13 @@ export function usePromptSet() {
   const project = useActiveProject();
   const workspaceId = useActiveWorkspaceId();
   const projectId = project?.id ?? null;
-  const queryClient = useQueryClient();
+  // Disabled until a project is active, so the empty id never reaches the API.
+  const scope = { workspaceId, projectId: projectId ?? '' };
+  const available = Boolean(projectId && workspaceId);
 
   const listQuery = useQuery({
-    // Disabled until a project is active, so the empty id never reaches the API.
-    ...promptsQueries.sets(workspaceId, projectId ?? ''),
-    enabled: Boolean(projectId && workspaceId),
+    ...promptsQueries.sets(scope),
+    enabled: available,
     // Seed from the embedded prompt sets so the table can render immediately.
     initialData: project?.prompt_sets?.length ? project.prompt_sets : undefined,
   });
@@ -34,37 +34,13 @@ export function usePromptSet() {
   const sets = listQuery.data ?? [];
   const promptSet: PromptSet | null = sets[0] ?? null;
 
-  const createMutation = useMutation({
-    scope: { id: `ensure-prompt-set:${workspaceId}:${projectId}` },
-    mutationFn: async () => {
-      if (!projectId || !workspaceId) throw new Error('Project is not available.');
-      // Resolve the list before interpreting an empty cache as an empty project.
-      // fetchQuery also joins an initial read already in flight.
-      const available = await queryClient.fetchQuery({
-        ...promptsQueries.sets(workspaceId, projectId),
-        staleTime: 0,
-      });
-      if (available[0]) return available[0];
-      return promptsApi.createPromptSet(
-        { project_id: projectId as string, name: 'Default prompt set' },
-        { workspaceId },
-      );
-    },
-    onSuccess: async (created) => {
-      if (projectId) {
-        queryClient.setQueryData<PromptSet[]>(
-          queryKeys.prompts.sets(workspaceId, projectId),
-          (prev) => (prev?.length ? prev : [created]),
-        );
-        await queryClient.invalidateQueries({ queryKey: queryKeys.prompts.projectSets(projectId) });
-      }
-    },
-  });
+  const createMutation = useMutation(promptsMutations.ensureSet(scope));
 
   const ensurePromptSet = useCallback((): Promise<PromptSet> => {
     if (promptSet) return Promise.resolve(promptSet);
+    if (!available) return Promise.reject(new Error('Project is not available.'));
     return createMutation.mutateAsync();
-  }, [promptSet, createMutation]);
+  }, [promptSet, available, createMutation]);
 
   return {
     projectId,

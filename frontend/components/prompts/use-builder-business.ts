@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
+import { refreshSeedQueries } from '@/lib/api/topics';
 import {
   businessDraft,
   mapChanges,
@@ -58,7 +59,7 @@ export function useBuilderBusiness({
     onSuccess: () => {
       setEdited(null);
       // Offerings and category terms decide which searches seed a run.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.topics.seedQueries(projectId) });
+      void refreshSeedQueries(queryClient, projectId);
     },
   });
 

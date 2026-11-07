@@ -484,7 +484,10 @@ describe('LaunchDialog prompt batching', () => {
     expect(screen.getByRole('button', { name: 'Launch audit' })).toBeEnabled();
 
     act(() => {
-      queryClient.setQueryData(queryKeys.prompts.sets(WORKSPACE_ID, PROJECT_ID), setWithPrompts(7));
+      queryClient.setQueryData(
+        queryKeys.prompts.sets({ workspaceId: WORKSPACE_ID, projectId: PROJECT_ID }),
+        setWithPrompts(7),
+      );
     });
 
     await waitFor(() =>

@@ -1,22 +1,16 @@
 'use client';
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { ProjectRequiredState } from '@/components/layout/project-required-state';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
-import { promptsApi } from '@/lib/api/prompts';
-import type {
-  PromptCreateRequest,
-  PromptGenerateRequest,
-  PromptImportRowRequest,
-  PromptUpdateRequest,
-} from '@citeladder/contracts/prompt-requests';
-import { queryKeys } from '@/lib/api/query-keys';
+import { promptsMutations } from '@/lib/api/prompts';
+import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
 import { humanizeApiError } from '@/lib/api/errors';
-import { topicsApi } from '@/lib/api/topics';
-import type { Prompt, PromptSet, PromptStatus, Topic } from '@citeladder/contracts';
+import { topicsQueries } from '@/lib/api/topics';
+import type { Prompt, PromptStatus, Topic } from '@citeladder/contracts';
 import {
   emptyFilters,
   filterPrompts,
@@ -84,15 +78,11 @@ export function PromptLibrary({
   generateRequest?: number;
   reviewRequest?: boolean;
 }>) {
-  const queryClient = useQueryClient();
   const workspaceId = useActiveWorkspaceId();
   const { projectId, promptSet, prompts, isLoading, error, ensurePromptSet, retry, retrying } =
     usePromptSet();
   const requestScope = resolveProjectRequestScope(workspaceId, projectId);
-  const requestOptions = () => {
-    if (!requestScope.enabled) throw new Error('Project is not available.');
-    return { workspaceId: requestScope.workspaceId };
-  };
+  const scope = { workspaceId: requestScope.workspaceId, projectId: requestScope.projectId };
 
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState<PromptFilters>(emptyFilters);
@@ -108,125 +98,52 @@ export function PromptLibrary({
   const hasCompetitors = (useActiveProject()?.competitors.length ?? 0) > 0;
 
   const topicsQuery = useQuery({
-    queryKey: queryKeys.topics.list(requestScope.projectId),
-    queryFn: ({ signal }) =>
-      topicsApi.list(requestScope.projectId, { signal, ...requestOptions() }),
+    ...topicsQueries.list(scope),
     enabled: requestScope.enabled,
   });
   const topics: Topic[] = useMemo(() => topicsQuery.data ?? [], [topicsQuery.data]);
   const measurements = useLatestPromptMeasurements(requestScope);
 
-  const invalidate = async () => {
-    if (projectId) {
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.prompts.projectSets(projectId),
-      });
-      // Seed queries bind to topics, so a topic change refreshes them with the list.
-      await queryClient.invalidateQueries({ queryKey: queryKeys.topics.all });
-    }
-    if (promptSet)
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.prompts.set(promptSet.id),
-      });
-    // The projects list embeds prompt_sets[].prompts, which the onboarding
-    // "Getting Started" card reads to mark the "Add prompts" step done. Refresh
-    // it so adding prompts (via generate, manual, or import) advances the flow.
-    await queryClient.invalidateQueries({ queryKey: queryKeys.projects.all });
-  };
-
   const review = usePromptCandidates({
+    projectId: scope.projectId,
     promptSet,
-    workspaceId: requestScope.workspaceId,
-    onReviewed: async () => {
+    workspaceId: scope.workspaceId,
+    onAccepted: () => {
       setStatusFilter('active');
       // Show every newly tracked prompt, whichever topic it landed in.
       setSelectedTopicId(null);
-      await invalidate();
     },
   });
 
-  const createMutation = useMutation({
-    mutationFn: async (input: PromptCreateRequest) => {
-      const options = requestOptions();
-      const set = await ensurePromptSet();
-      return promptsApi.createPrompt(set.id, input, options);
-    },
-    onSuccess: async () => {
-      await invalidate();
-      setFormOpen(false);
-      setEditing(undefined);
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (vars: { id: string; input: PromptUpdateRequest }) =>
-      promptsApi.updatePrompt(vars.id, vars.input, requestOptions()),
-    onSuccess: async () => {
-      await invalidate();
-      setFormOpen(false);
-      setEditing(undefined);
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => promptsApi.deletePrompt(id, requestOptions()),
-    onSettled: () => setBusyId(null),
-    onSuccess: invalidate,
-  });
-
-  const toggleMutation = useMutation({
-    mutationFn: (prompt: Prompt) =>
-      promptsApi.updatePrompt(prompt.id, { enabled: !prompt.enabled }, requestOptions()),
-    onSettled: () => setBusyId(null),
-    onSuccess: invalidate,
-  });
-
-  const statusMutation = useMutation({
-    mutationFn: (vars: { prompt: Prompt; status: PromptStatus }) =>
-      promptsApi.updatePrompt(vars.prompt.id, { status: vars.status }, requestOptions()),
-    onSettled: () => setBusyId(null),
-    onSuccess: invalidate,
-  });
-
-  const importMutation = useMutation({
-    mutationFn: async (rows: PromptImportRowRequest[]): Promise<PromptSet> => {
-      const options = requestOptions();
-      const set = await ensurePromptSet();
-      return promptsApi.importRows(set.id, rows, options);
-    },
-    onSuccess: async () => {
-      await invalidate();
-      setImportOpen(false);
-    },
-  });
+  // Every descriptor refreshes the library's reads; these add the screen's own reaction.
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(undefined);
+  };
+  const clearBusy = { onSettled: () => setBusyId(null) };
+  const createMutation = useMutation(promptsMutations.create(scope, ensurePromptSet));
+  const updateMutation = useMutation(promptsMutations.update(scope));
+  const deleteMutation = useMutation(promptsMutations.remove(scope));
+  const rowMutation = useMutation(promptsMutations.update(scope));
+  const importMutation = useMutation(promptsMutations.import(scope, ensurePromptSet));
 
   // A retry of the same request after a failure reuses its key, so a run the
   // server already staged is replayed instead of drafted (and paid for) again.
   const generateKey = useRef<{ request: string; key: string } | null>(null);
-  const generateMutation = useMutation({
-    mutationFn: async (input: PromptGenerateRequest) => {
-      const options = requestOptions();
-      const set = await ensurePromptSet();
-      const request = JSON.stringify(input);
-      if (generateKey.current?.request !== request)
-        generateKey.current = { request, key: crypto.randomUUID() };
-      return promptsApi.generate(set.id, input, {
-        ...options,
-        idempotencyKey: generateKey.current.key,
-      });
-    },
-    onSuccess: async (_result, input) => {
-      // Only this request's key retires; a different pending request keeps its own.
-      if (generateKey.current?.request === JSON.stringify(input)) generateKey.current = null;
-      review.clearNotice();
-      // Candidates are reviewed in the builder; topics may have been created.
-      await review.refresh();
-      await invalidate();
-    },
-    // A failed response can still follow a completed run (a dropped connection
-    // after staging), so the review list is re-read rather than assumed empty.
-    onError: () => void review.refresh(),
-  });
+  const generateMutation = useMutation(promptsMutations.generate(scope, ensurePromptSet));
+  const generatePrompts = async (input: PromptGenerateRequest) => {
+    const request = JSON.stringify(input);
+    if (generateKey.current?.request !== request)
+      generateKey.current = { request, key: crypto.randomUUID() };
+    const result = await generateMutation
+      .mutateAsync({ input, idempotencyKey: generateKey.current.key })
+      .catch(() => null);
+    if (result === null) return null;
+    // Only this request's key retires; a different pending request keeps its own.
+    if (generateKey.current?.request === request) generateKey.current = null;
+    review.clearNotice();
+    return result;
+  };
   // A fresh open clears the last run's outcome, but never a run still in
   // flight: resetting it would drop `isPending` and allow a second paid run.
   const openBuilder = (step: BuilderStep) => {
@@ -242,9 +159,7 @@ export function PromptLibrary({
   }, [generateRequest, reviewRequest]);
 
   const topicMutations = useTopicMutations({
-    projectId: requestScope.projectId,
-    requestOptions,
-    invalidate,
+    scope,
     onDeleted: (topic) => {
       if (selectedTopicId === topic.id) setSelectedTopicId(null);
     },
@@ -260,7 +175,7 @@ export function PromptLibrary({
   const confirmDelete = (pending: PendingDelete) => {
     if (pending.kind === 'topic') return topicMutations.remove.mutate(pending.topic);
     setBusyId(pending.prompt.id);
-    deleteMutation.mutate(pending.prompt.id);
+    deleteMutation.mutate(pending.prompt.id, clearBusy);
   };
 
   // Status -> topic -> search/filters, preserving order.
@@ -299,9 +214,12 @@ export function PromptLibrary({
   };
   const submitForm = async (values: PromptFormValues) => {
     const mutation = editing
-      ? updateMutation.mutateAsync({ id: editing.id, input: formValuesToPromptUpdate(values) })
+      ? updateMutation.mutateAsync({
+          promptId: editing.id,
+          input: formValuesToPromptUpdate(values),
+        })
       : createMutation.mutateAsync(formValuesToPromptInput(values));
-    await mutation.catch(() => undefined);
+    await mutation.then(closeForm, () => undefined);
   };
 
   if (!requestScope.enabled) {
@@ -321,11 +239,11 @@ export function PromptLibrary({
       onDelete={(prompt) => setPendingDelete({ kind: 'prompt', prompt })}
       onToggleEnabled={(prompt) => {
         setBusyId(prompt.id);
-        toggleMutation.mutate(prompt);
+        rowMutation.mutate({ promptId: prompt.id, input: { enabled: !prompt.enabled } }, clearBusy);
       }}
       onSetStatus={(prompt, status) => {
         setBusyId(prompt.id);
-        statusMutation.mutate({ prompt, status });
+        rowMutation.mutate({ promptId: prompt.id, input: { status } }, clearBusy);
       }}
       busyId={busyId}
       measurements={measurements}
@@ -427,7 +345,10 @@ export function PromptLibrary({
           importOpen={importOpen}
           setImportOpen={setImportOpen}
           importPrompts={async (rows) => {
-            await importMutation.mutateAsync(rows).catch(() => undefined);
+            await importMutation.mutateAsync(rows).then(
+              () => setImportOpen(false),
+              () => undefined,
+            );
           }}
           isImporting={importMutation.isPending}
           importError={
@@ -441,10 +362,9 @@ export function PromptLibrary({
           hasCompetitors={hasCompetitors}
           topics={topics}
           selectedTopicId={selectedTopicId}
-          generatePrompts={(input) => generateMutation.mutateAsync(input).catch(() => null)}
+          generatePrompts={generatePrompts}
           isGenerating={generateMutation.isPending}
           generateError={generateMutation.isError ? generateMutation.error : undefined}
-          onTopicsChanged={invalidate}
           review={review}
           setsLoading={isLoading}
           setsError={error !== null}

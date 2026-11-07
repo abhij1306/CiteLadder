@@ -38,7 +38,6 @@ type PromptLibraryDialogsProps = {
   generatePrompts: (input: PromptGenerateRequest) => Promise<PromptGenerateResponse | null>;
   isGenerating: boolean;
   generateError?: unknown;
-  onTopicsChanged: () => Promise<void>;
   review: ReturnType<typeof usePromptCandidates>;
   setsLoading?: boolean;
   setsError?: boolean;
@@ -72,7 +71,6 @@ export function PromptLibraryDialogs({
   generatePrompts,
   isGenerating,
   generateError,
-  onTopicsChanged,
   review,
   setsLoading,
   setsError,
@@ -122,7 +120,6 @@ export function PromptLibraryDialogs({
         generate={generatePrompts}
         isGenerating={isGenerating}
         generateError={generateError}
-        onTopicsChanged={onTopicsChanged}
         review={
           <CandidateReviewPanel
             review={review}

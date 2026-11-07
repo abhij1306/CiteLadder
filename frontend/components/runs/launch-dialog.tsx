@@ -80,7 +80,7 @@ export function LaunchDialog({
   const queryClient = useQueryClient();
   const workspaceId = useActiveWorkspaceId();
   const promptSetsQuery = useQuery({
-    ...promptsQueries.sets(workspaceId, projectId),
+    ...promptsQueries.sets({ workspaceId, projectId }),
     enabled: open && workspaceId !== null,
   });
   const { configuredEngines, unverifiedEngines, enginesReady } = useConfiguredEngines(

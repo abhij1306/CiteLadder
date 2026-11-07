@@ -7,6 +7,7 @@ import { brandProfileDraftSchema } from '@citeladder/contracts';
 
 import { projectsApi } from '@/lib/api/projects';
 import { queryKeys } from '@/lib/api/query-keys';
+import { refreshSeedQueries } from '@/lib/api/topics';
 import type { BrandProfile, BrandProfileDraft } from '@citeladder/contracts';
 import { identityFacets, type IdentityFacets } from '@/lib/project/identity-facets';
 
@@ -117,7 +118,7 @@ export function useBrandProfileForm({
     onSuccess: (next) => {
       queryClient.setQueryData(queryKeys.projects.brandProfile(projectId), next);
       // Seed queries carry the category and offerings, so the builder rereads them.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.topics.seedQueries(projectId) });
+      void refreshSeedQueries(queryClient, projectId);
       onSaved?.();
       setEdits(NO_EDITS);
       setNotice('Brand knowledge saved. These details now inform assisted features.');

@@ -1,4 +1,5 @@
 /** Auth + workspaces + projects + prompts + providers + content query-key namespaces. */
+import { scopedKeys, type ProjectScope } from './scope';
 
 export const authKeys = {
   all: ['auth'] as const,
@@ -36,23 +37,22 @@ export const projectKeys = {
   markets: (projectId: string) => ['projects', 'markets', projectId] as const,
 };
 
+const prompts = scopedKeys('prompts');
 export const promptKeys = {
-  all: ['prompts'] as const,
-  /** One workspace's read of a project's prompt sets. */
-  sets: (workspaceId: string | null, projectId: string) =>
-    ['prompts', 'sets', projectId, workspaceId] as const,
-  /** Every cached read of a project's prompt sets, for invalidation. */
-  projectSets: (projectId: string) => ['prompts', 'sets', projectId] as const,
-  set: (promptSetId: string) => ['prompts', 'set', promptSetId] as const,
-  list: (promptSetId: string) => ['prompts', 'list', promptSetId] as const,
-  candidates: (promptSetId: string) => ['prompts', 'candidates', promptSetId] as const,
+  ...prompts,
+  /** The project's prompt sets, with their prompts. */
+  sets: (scope: ProjectScope) => prompts.read('sets', scope),
+  /** One set's pending generated candidates; `null` before the project has a set. */
+  candidates: (scope: ProjectScope, promptSetId: string | null) =>
+    prompts.read('candidates', scope, promptSetId),
 };
 
+const topics = scopedKeys('topics');
 export const topicKeys = {
-  all: ['topics'] as const,
-  list: (projectId: string) => ['topics', 'list', projectId] as const,
-  // Seed queries bind to topics, so a topic change refreshes them under `all`.
-  seedQueries: (projectId: string) => ['topics', 'seed-queries', projectId] as const,
+  ...topics,
+  list: (scope: ProjectScope) => topics.read('list', scope),
+  // Seed queries bind to topics, so a topic change refreshes them under `project`.
+  seedQueries: (scope: ProjectScope) => topics.read('seed-queries', scope),
 };
 
 export const providerKeys = {

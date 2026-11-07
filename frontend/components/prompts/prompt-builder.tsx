@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
@@ -13,8 +13,7 @@ import { QueryState } from '@/components/ui/query-state';
 import { readErrorProps } from '@/components/ui/read-error';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import type { PromptGenerateRequest } from '@citeladder/contracts/prompt-requests';
-import { queryKeys } from '@/lib/api/query-keys';
-import { topicsApi } from '@/lib/api/topics';
+import { topicsQueries } from '@/lib/api/topics';
 import type { PromptGenerateResponse, SeedQueries, Topic } from '@citeladder/contracts';
 import { personaChoices } from '@/lib/prompts/builder-business';
 import { defaultRunSettings, runRequest, type RunSettings } from '@/lib/prompts/builder-run';
@@ -51,8 +50,6 @@ type PromptBuilderProps = {
   generateError?: unknown;
   /** The pending-candidate review list. */
   review: ReactNode;
-  /** Refreshes the library's reads after topics change. */
-  onTopicsChanged: () => Promise<void>;
 };
 
 /** What this open of the builder generated: its request and every run it made. */
@@ -78,22 +75,11 @@ export function PromptBuilder(props: Readonly<PromptBuilderProps>) {
 
 function BuilderSheet(props: Readonly<PromptBuilderProps>) {
   const { projectId, workspaceId, topics, hasCompetitors, isGenerating, generateError } = props;
-  const queryClient = useQueryClient();
+  const scope = { workspaceId, projectId };
   const [step, setStep] = useState<BuilderStep>(props.initialStep);
   const business = useBuilderBusiness({ projectId, workspaceId });
-  const seedsQuery = useQuery({
-    queryKey: queryKeys.topics.seedQueries(projectId),
-    queryFn: ({ signal }) => topicsApi.seedQueries(projectId, { signal, workspaceId }),
-  });
-  const topicStep = useBuilderTopics({
-    projectId,
-    workspaceId,
-    topics,
-    onConfirmed: async () => {
-      await props.onTopicsChanged();
-      await queryClient.invalidateQueries({ queryKey: queryKeys.topics.seedQueries(projectId) });
-    },
-  });
+  const seedsQuery = useQuery(topicsQueries.seedQueries(scope));
+  const topicStep = useBuilderTopics({ scope, topics });
   const [edited, setEdited] = useState<RunSettings | null>(null);
   const settings = edited ?? defaultRunSettings();
   const personas = business.draft ? personaChoices(business.draft) : [];
