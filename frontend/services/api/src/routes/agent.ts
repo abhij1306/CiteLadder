@@ -70,13 +70,13 @@ async function mapped<T>(action: () => Promise<T>) {
     return await action();
   } catch (error) {
     if (!(error instanceof AgentError)) throw error;
-    if (error.code === 'funding_unavailable')
+    if (error.code === 'model_unavailable')
       throw new ApiError(503, 'The Agent model is not configured', {
-        code: asApiErrorCode('agent_funding_unavailable'),
+        code: asApiErrorCode('agent_model_unavailable'),
       });
     if (error.code === 'model_changed')
       throw new ApiError(409, 'The Agent model changed', {
-        code: asApiErrorCode('agent_model_unavailable'),
+        code: asApiErrorCode('model_changed'),
       });
     if (error.code === 'access_revoked')
       throw new ApiError(403, 'Agent run permission is unavailable');

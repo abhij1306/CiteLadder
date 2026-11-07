@@ -89,7 +89,7 @@ export class AgentWorker {
   }
   /**
    * Turns execute only inside the browser's request; this lane never runs one.
-   * It ends turns whose process stopped or that no stream claimed, and settles
+   * It ends turns whose process stopped or that no stream claimed, and closes
    * cancelled turns' outstanding model attempts.
    */
   async runOnce() {
@@ -99,7 +99,7 @@ export class AgentWorker {
       workspaces,
       policy.agent.recovery_batch_size,
       policy.agent.unclaimed_grace_seconds,
-      (db, run) => models.settleFailed(db, run),
+      (db, run) => models.reconcile(db, run),
     );
     await models.recoverCancelled(
       workspaces,

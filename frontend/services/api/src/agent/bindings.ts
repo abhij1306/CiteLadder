@@ -4,7 +4,7 @@ import { gatewaySettings } from '../models/gateway.ts';
 import { agentSettings } from './config.ts';
 import { loadSkillCatalog } from './skills.ts';
 import { agentTools } from './tool-adapters.ts';
-import { agentAdmission, agentFunding } from './funding.ts';
+import { agentAdmission, agentAvailability } from './admission.ts';
 import { agentModels } from './models.ts';
 import { ModelCalls } from './model-calls.ts';
 import { AgentStore } from './store.ts';
@@ -19,14 +19,14 @@ export async function createAgentBindings(db: Database, env: SettingSource = pro
     platform = gatewaySettings(env);
   const catalog = await loadSkillCatalog(settings.skillsDirectory),
     tools = agentTools(db);
-  const models = new ModelCalls(db, agentFunding(platform));
+  const models = new ModelCalls(db, agentAvailability(platform));
   const store = new AgentStore(db, {
     catalog,
     registryVersion: tools.version,
     context: readAgentContext,
     admission: agentAdmission(settings, platform),
     timeoutSeconds: settings.executionTimeoutSeconds,
-    settleFailed: (trx, run) => models.settleFailed(trx, run),
+    reconcile: (trx, run) => models.reconcile(trx, run),
   });
   const runtime = new AgentRuntime(db, {
     catalog,

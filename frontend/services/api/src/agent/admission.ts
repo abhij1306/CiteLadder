@@ -1,8 +1,8 @@
 /**
  * Agent admission: the Agent calls the operator's configured model gateway
- * (`DEFAULT_AGENT_*`). Nothing is reserved or charged; admission only
- * requires the gateway to be configured and the workspace within its
- * concurrency and daily request limits.
+ * (`DEFAULT_AGENT_*`). A turn is admitted when that gateway is configured and
+ * the workspace is within its active-turn and daily request limits; before
+ * each model call the run's model is checked against the gateway again.
  */
 import { sql } from 'kysely';
 import { policy } from '../config.ts';
@@ -11,20 +11,17 @@ import { spendBudget } from '../abuse/usage.ts';
 import { agentSettings } from './config.ts';
 import { AgentError, type Run } from './contracts.ts';
 import type { Admission } from './store.ts';
-import type { Funding } from './model-calls.ts';
+import type { ModelAvailability } from './model-calls.ts';
 import type { GatewaySettings } from '../models/gateway.ts';
 
 type Settings = ReturnType<typeof agentSettings>;
-
-/** The single funding source: the operator's own gateway credentials. */
-export const SELF_HOSTED = 'self_hosted';
 
 function configured(gateway: GatewaySettings) {
   return [gateway.apiKey, gateway.baseUrl, gateway.model].every((value) => value.trim());
 }
 export function agentAdmission(settings: Settings, gateway: GatewaySettings): Admission {
   return async (db, scope) => {
-    if (!configured(gateway)) throw new AgentError('funding_unavailable');
+    if (!configured(gateway)) throw new AgentError('model_unavailable');
     const active = await db
       .selectFrom('agent_runs')
       .select(sql<string>`count(*)`.as('count'))
@@ -36,21 +33,13 @@ export function agentAdmission(settings: Settings, gateway: GatewaySettings): Ad
         headers: { 'retry-after': String(settings.retryAfterSeconds) },
       });
     await spendBudget(db, settings.dailyRuns, scope.workspaceId);
-    return { funding_source: SELF_HOSTED, requested_model: gateway.model };
+    return { requested_model: gateway.model };
   };
 }
-function recheck(run: Run, gateway: GatewaySettings) {
-  if (run.requested_model !== gateway.model) throw new AgentError('model_changed');
-  if (!configured(gateway)) throw new AgentError('funding_unavailable');
-}
-export function agentFunding(gateway: GatewaySettings): Funding {
-  return {
-    reserve: async (_db, run) => {
-      recheck(run, gateway);
-      return { reservationId: null, credits: 0, pricingRevision: '' };
-    },
-    settle: async () => ({ credits: 0, status: 'zero_debit' }),
-    // Nothing was debited, so a failed turn has nothing to refund.
-    refund: async () => {},
+/** Before each call: the run's frozen model is still the gateway's, and the gateway is configured. */
+export function agentAvailability(gateway: GatewaySettings): ModelAvailability {
+  return (run: Run) => {
+    if (run.requested_model !== gateway.model) throw new AgentError('model_changed');
+    if (!configured(gateway)) throw new AgentError('model_unavailable');
   };
 }

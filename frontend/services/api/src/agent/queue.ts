@@ -43,16 +43,16 @@ export async function terminalize(
 
 /**
  * Ends a turn no live request runs as interrupted, with its reply: its model
- * calls settle in the caller's transaction, which holds
+ * calls are closed in the caller's transaction, which holds
  * the run's row lock.
  */
 export async function endInterrupted(
   db: Database,
   run: Run,
-  settleFailed: (db: Database, run: Run) => Promise<void>,
+  reconcile: (db: Database, run: Run) => Promise<void>,
 ) {
-  // Settlement and terminal writes share one ordered transaction.
-  await settleFailed(db, run);
+  // Closing its calls and the terminal writes share one ordered transaction.
+  await reconcile(db, run);
   await db
     .updateTable('agent_runs')
     .set({
