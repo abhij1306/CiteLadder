@@ -37,22 +37,13 @@ const answer = (content: string, usage: Record<string, number>) => () =>
 
 const calls = (workspaceId: string) =>
   db
-    .selectFrom('platform_calls')
-    .select([
-      'feature',
-      'provider',
-      'charge',
-      'status',
-      'credits',
-      'input_tokens',
-      'output_tokens',
-      'cost_microusd',
-    ])
+    .selectFrom('model_calls')
+    .select(['feature', 'provider', 'status', 'input_tokens', 'output_tokens', 'cost_microusd'])
     .where('workspace_id', '=', workspaceId)
     .orderBy('created_at')
     .execute();
 
-describe('platform AI usage recording', () => {
+describe('model-call usage recording', () => {
   it('prices tokens at the serving model, cache reads and writes at their own rates', () => {
     const haiku = modelPrice('claude-haiku-5-5', '')!;
     // 10k input and 2k output tokens: $0.001 + $0.001.
@@ -102,7 +93,7 @@ describe('platform AI usage recording', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('records each call with its tokens and cost, charging nothing', async () => {
+  it('records each call with its tokens and cost', async () => {
     const t = await fixtures.tenant();
     const { gateway: raw } = gateway(
       answer('{"ok":true}', { prompt_tokens: 10_000, completion_tokens: 2_000 }),
@@ -120,9 +111,7 @@ describe('platform AI usage recording', () => {
       {
         feature: 'prompt_generation',
         provider: 'model_gateway',
-        charge: 'not_charged',
         status: 'settled',
-        credits: 0,
         input_tokens: 10_000,
         output_tokens: 2_000,
         cost_microusd: '2000',
@@ -130,9 +119,7 @@ describe('platform AI usage recording', () => {
       {
         feature: 'commerce_competitor_discovery',
         provider: 'tavily',
-        charge: 'not_charged',
         status: 'settled',
-        credits: 0,
         input_tokens: null,
         output_tokens: null,
         cost_microusd: null,

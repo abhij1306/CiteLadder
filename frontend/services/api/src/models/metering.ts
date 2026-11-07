@@ -2,7 +2,7 @@
  * The one AI usage recorder. Every provider call outside the Agent's own
  * dispatch runs through `metered`, which opens the metering scope the gateway,
  * the JEV judge and the research clients require, and records the call's
- * tokens and cost in `platform_calls` afterwards. Recording never fails the
+ * tokens and cost in `model_calls` afterwards. Recording never fails the
  * call, and nothing is charged.
  */
 import { randomUUID } from 'node:crypto';
@@ -14,7 +14,6 @@ import { gatewayCalls, type ModelGateway } from './gateway.ts';
 import { ModelError, type Complete } from './http.ts';
 import type { JevClient } from './jev.ts';
 import {
-  PRICING_REVISION,
   costMicrousd,
   modelPrice,
   tokenCount,
@@ -50,20 +49,14 @@ async function record(
   const now = new Date();
   try {
     await db
-      .insertInto('platform_calls')
+      .insertInto('model_calls')
       .values({
         id: randomUUID(),
         workspace_id: context.workspaceId,
         feature: context.feature,
         provider: spec.provider,
         model: spec.model.slice(0, 255),
-        charge: 'not_charged',
         status: error ? 'failed' : 'settled',
-        pricing_revision: PRICING_REVISION,
-        reservation_id: null,
-        reserved_credits: 0,
-        credits: 0,
-        owner_settled: false,
         input_tokens: tokenCount(usage?.input_tokens),
         cached_input_tokens: tokenCount(usage?.cached_input_tokens),
         output_tokens: tokenCount(usage?.output_tokens),
@@ -74,7 +67,7 @@ async function record(
       })
       .execute();
   } catch (error_) {
-    logger.warning('models.platform_call_unrecorded', {
+    logger.warning('models.model_call_unrecorded', {
       workspace_id: context.workspaceId,
       feature: context.feature,
       exception: error_ instanceof Error ? error_.message : String(error_),

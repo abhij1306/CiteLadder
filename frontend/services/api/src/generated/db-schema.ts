@@ -1531,6 +1531,22 @@ export interface MetricSnapshots {
   workspace_id: string;
 }
 
+export interface ModelCalls {
+  cached_input_tokens: number | null;
+  cost_microusd: Int8 | null;
+  created_at: Timestamp;
+  error_code: string;
+  feature: string;
+  id: string;
+  input_tokens: number | null;
+  model: string;
+  output_tokens: number | null;
+  provider: string;
+  settled_at: Timestamp | null;
+  status: string;
+  workspace_id: string;
+}
+
 export interface MonitoredSiteUrls {
   active: boolean;
   created_at: Timestamp;
@@ -1695,28 +1711,6 @@ export interface PerformanceDimensionStats {
   snapshot_id: string;
   source_artifact_ids: Json | null;
   source_metric_row_ids: Json | null;
-  workspace_id: string;
-}
-
-export interface PlatformCalls {
-  cached_input_tokens: number | null;
-  charge: string;
-  cost_microusd: Int8 | null;
-  created_at: Timestamp;
-  credits: number;
-  error_code: string;
-  feature: string;
-  id: string;
-  input_tokens: number | null;
-  model: string;
-  output_tokens: number | null;
-  owner_settled: boolean;
-  pricing_revision: string;
-  provider: string;
-  reservation_id: string | null;
-  reserved_credits: number;
-  settled_at: Timestamp | null;
-  status: string;
   workspace_id: string;
 }
 
@@ -2212,7 +2206,6 @@ export interface SearchIntelligenceRuns {
   analytics_task_id: string | null;
   call_plan: Json;
   cancelled_at: Timestamp | null;
-  charged_credits: number | null;
   completed_at: Timestamp | null;
   completed_calls: number;
   confirmed_at: Timestamp | null;
@@ -2223,14 +2216,12 @@ export interface SearchIntelligenceRuns {
   error_code: string;
   error_detail: string;
   estimated_cost_usd: Numeric;
-  estimated_credits: number | null;
   expires_at: Timestamp;
   frozen_scope: Json;
   id: string;
   idempotency_key: string;
   planned_calls: number;
   planned_rows: number;
-  platform_call_id: string | null;
   previous_run_id: string | null;
   pricing_version: string;
   project_id: string;
@@ -3054,6 +3045,7 @@ export interface DB {
   mcp_oauth_clients: McpOauthClients;
   mcp_oauth_grants: McpOauthGrants;
   metric_snapshots: MetricSnapshots;
+  model_calls: ModelCalls;
   monitored_site_urls: MonitoredSiteUrls;
   observed_entity_candidates: ObservedEntityCandidates;
   opportunities: Opportunities;
@@ -3064,7 +3056,6 @@ export interface DB {
   overview_layouts: OverviewLayouts;
   owned_domains: OwnedDomains;
   performance_dimension_stats: PerformanceDimensionStats;
-  platform_calls: PlatformCalls;
   project_markets: ProjectMarkets;
   projects: Projects;
   prompt_candidates: PromptCandidates;
