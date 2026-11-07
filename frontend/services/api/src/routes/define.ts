@@ -207,12 +207,13 @@ export function defineRoute<
   const publicSide = exposure === 'browser' ? null : publicOperation(route, shared, capability);
   const register = (app: Hono<AppEnv>, config: ServiceConfig, db: Database) => {
     const respond = async (c: Context<AppEnv>) => {
+      // The session read named the path project only if the active workspace
+      // holds it; a foreign project is 404 before its parameters are judged.
+      if (activeProject && c.get('workspace').projectId === null) throw notFound('Project');
       const params = validateParams(route.params, {
         path: c.req.param() as Record<string, string>,
         search: new URL(c.req.url).search,
       });
-      // The session read named the path project only if the active workspace holds it.
-      if (activeProject && c.get('workspace').projectId === null) throw notFound('Project');
       if (route.raw) return route.handle({ c, db, config }, params);
       return c.json(await route.handle({ c, db, config }, params), status as ContentfulStatusCode);
     };

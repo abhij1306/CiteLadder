@@ -17,6 +17,7 @@ import { readAudit, readAudits } from '../audits/reads.ts';
 import { configEnvironment, type ServiceConfig } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError } from '../errors.ts';
+import { interactiveSlots } from '../http/interactive-slots.ts';
 
 const SCOPE = 'audits:run';
 
@@ -37,11 +38,17 @@ export async function createQueuedAudit(
   return readAudits(db, actor.workspaceId, ids);
 }
 
-/** Drive a queued audit's first phases inside the request. */
+/**
+ * Drive a queued audit's first phases inside the request, in one of this
+ * instance's interactive slots: a full instance answers 429 and the runner
+ * keeps the queued audit.
+ */
 export async function runAudit(db: Database, config: ServiceConfig, actor: Actor, auditId: string) {
   requireCapability(actor, 'run', SCOPE);
   await readAudit(db, actor.workspaceId, auditId);
-  await executeInteractiveAudit(db, config, actor.workspaceId, auditId);
+  await interactiveSlots.run((stopping) =>
+    executeInteractiveAudit(db, config, actor.workspaceId, auditId, stopping),
+  );
   return readAudit(db, actor.workspaceId, auditId);
 }
 

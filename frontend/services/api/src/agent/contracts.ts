@@ -34,6 +34,8 @@ export const budgetSchema = z.object({
   compaction_trigger_tokens: z.number().int().positive(),
   replay_max_chars: z.number().int().positive(),
   execution_timeout_seconds: z.number().positive(),
+  /** The whole turn's time limit, which the browser's request enforces. */
+  turn_timeout_seconds: z.number().positive(),
   tool_result_max_chars: z.number().int().positive(),
   context_package_max_chars: z.number().int().positive(),
   reply_max_chars: z.number().int().positive(),

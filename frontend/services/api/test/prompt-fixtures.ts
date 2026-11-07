@@ -14,6 +14,9 @@ export async function promptSet(db: Database, projectId: string): Promise<string
     .insertInto('prompt_sets')
     .values({
       id,
+      // The owning project's workspace, read inside this insert.
+      workspace_id: (eb) =>
+        eb.selectFrom('projects').select('workspace_id').where('projects.id', '=', projectId),
       project_id: projectId,
       name: 'Set',
       description: '',
@@ -30,6 +33,8 @@ export async function topic(db: Database, projectId: string, name: string, descr
     .insertInto('topics')
     .values({
       id,
+      workspace_id: (eb) =>
+        eb.selectFrom('projects').select('workspace_id').where('projects.id', '=', projectId),
       project_id: projectId,
       parent_id: null,
       name,
@@ -53,6 +58,8 @@ export async function prompt(
     .insertInto('prompts')
     .values({
       id,
+      workspace_id: (eb) =>
+        eb.selectFrom('prompt_sets').select('workspace_id').where('prompt_sets.id', '=', setId),
       prompt_set_id: setId,
       topic_id: options.topicId ?? null,
       text,

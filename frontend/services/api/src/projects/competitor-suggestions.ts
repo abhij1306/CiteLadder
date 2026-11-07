@@ -94,6 +94,7 @@ export function acceptSuggestion(
         .insertInto('competitors')
         .values({
           id: randomUUID(),
+          workspace_id: scope.workspaceId,
           project_id: scope.projectId,
           name: candidate.name,
           aliases: JSON.stringify([candidate.name]),

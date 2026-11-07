@@ -104,6 +104,7 @@ export function addCompetitor(
       .insertInto('competitors')
       .values({
         id: randomUUID(),
+        workspace_id: scope.workspaceId,
         project_id: scope.projectId,
         name: input.name,
         aliases: JSON.stringify(cleanList(input.aliases)),

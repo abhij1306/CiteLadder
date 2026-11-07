@@ -8,6 +8,18 @@ export const interactiveExecution = {
   concurrency: 2,
 };
 
+/**
+ * In-request work one API instance runs at a time: interactive audits and
+ * Agent turns together. A full instance answers 429 with `Retry-After`; the
+ * queued work stays durable. On shutdown, open work is stopped and given
+ * `shutdownGraceMs` to settle before the server closes.
+ */
+export const interactiveCapacity = {
+  slots: 6,
+  retryAfterSeconds: 15,
+  shutdownGraceMs: 8000,
+};
+
 /** Runner lanes run concurrently; an idle lane is polled at most this far apart. */
 export const runnerLanes = {
   idlePollMs: 5000,

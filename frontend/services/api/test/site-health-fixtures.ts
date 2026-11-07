@@ -556,6 +556,7 @@ export class SiteFixtures extends VisibilityFixtures {
       .insertInto('brands')
       .values({
         id: brand,
+        workspace_id: seed.workspaceId,
         project_id: seed.projectId,
         name: 'Fixture',
         created_at: now,

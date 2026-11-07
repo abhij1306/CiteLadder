@@ -302,14 +302,13 @@ describe('Search Intelligence readiness and preferences', () => {
       .insertInto('owned_domains')
       .values([
         // The primary website's own origin, and a child subdomain.
-        { id: randomUUID(), project_id: t.projectId, domain: 'acme.example', created_at: now() },
-        {
+        ...['acme.example', 'blog.acme.example', 'www.acme.co.uk'].map((domain) => ({
           id: randomUUID(),
+          workspace_id: t.workspaceId,
           project_id: t.projectId,
-          domain: 'blog.acme.example',
+          domain,
           created_at: now(),
-        },
-        { id: randomUUID(), project_id: t.projectId, domain: 'www.acme.co.uk', created_at: now() },
+        })),
       ])
       .execute();
     await fixtures.competitor(t.projectId, { name: 'Rival', domains: ['www.rival.co.uk'] });

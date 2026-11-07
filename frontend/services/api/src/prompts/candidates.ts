@@ -166,6 +166,7 @@ async function acceptedRows(
     if (candidate.jev_decision !== null) evidence.jev_decision = candidate.jev_decision;
     return {
       id: randomUUID(),
+      workspace_id: set.workspaceId,
       prompt_set_id: set.id,
       topic_id: candidate.topic_id,
       text: candidate.text,

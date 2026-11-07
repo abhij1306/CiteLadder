@@ -83,6 +83,7 @@ async function tenant() {
     .insertInto('owned_domains')
     .values({
       id: randomUUID(),
+      workspace_id: t.workspaceId,
       project_id: t.projectId,
       domain: 'acme.example',
       created_at: new Date(),

@@ -14,6 +14,7 @@ async function seed(db: Database) {
     .insertInto('brands')
     .values({
       id: brandId,
+      workspace_id: seed.workspaceId,
       project_id: seed.projectId,
       name: 'Acme',
       created_at: now,

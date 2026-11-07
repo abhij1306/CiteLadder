@@ -388,6 +388,7 @@ export async function completeDiscovery(
       .insertInto('prompt_sets')
       .values({
         id: randomUUID(),
+        workspace_id: workspaceId,
         project_id: projectId,
         name: policy.projects.prompt_set_name,
         description: '',

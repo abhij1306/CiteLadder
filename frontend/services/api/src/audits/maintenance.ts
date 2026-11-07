@@ -225,9 +225,32 @@ export class AuditMaintenance {
     await this.finalizeParents(parents.values(), canAdmit);
     return reclaimed;
   }
+  /**
+   * Deletes capacity leases that expired more than the retention window ago,
+   * released or not: capacity counts only live leases, and every acquire
+   * locks its bucket and sums that bucket's leases. One batch per pass.
+   */
+  async purgeCapacityLeases(at = new Date()) {
+    const cutoff = new Date(
+      at.getTime() - auditPolicy.constants.capacity_lease_retention_seconds * 1000,
+    );
+    const purged = await this.db
+      .deleteFrom('provider_capacity_leases')
+      .where('id', 'in', (eb) =>
+        eb
+          .selectFrom('provider_capacity_leases')
+          .select('id')
+          .where('expires_at', '<', cutoff)
+          .orderBy('expires_at')
+          .limit(batchSize),
+      )
+      .executeTakeFirst();
+    return Number(purged.numDeletedRows);
+  }
   async runOnce(at = new Date(), canAdmit = () => true) {
     if (!canAdmit()) return 0;
     const { reclaimed, parents } = await this.#reclaim(at, canAdmit);
+    if (canAdmit()) await this.purgeCapacityLeases(at);
     // A separate sweeper may have failed the final BYOK task without owning audit finalization.
     const ready = await this.db
       .selectFrom('audits as a')

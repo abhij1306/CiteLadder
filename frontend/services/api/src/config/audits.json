@@ -240,6 +240,7 @@
     "audit_status_failed": "failed",
     "audit_status_cancelled": "cancelled",
     "audit_lease_sweep_batch_size": 500,
+    "capacity_lease_retention_seconds": 86400,
     "audit_terminal_statuses": ["cancelled", "completed", "failed", "partially_completed"],
     "audit_active_statuses": ["analyzing", "draft", "queued", "running", "validating"],
     "audit_trigger_manual": "manual",

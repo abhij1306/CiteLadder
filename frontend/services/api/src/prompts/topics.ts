@@ -174,6 +174,7 @@ export async function createTopic(
         .insertInto('topics')
         .values({
           id: randomUUID(),
+          workspace_id: workspaceId,
           project_id: projectId,
           parent_id: parentId,
           name: input.name,
@@ -330,6 +331,7 @@ export async function confirmTopics(
           .values(
             created.map((item) => ({
               id: item.id,
+              workspace_id: workspaceId,
               project_id: projectId,
               parent_id: null,
               name: item.name,
@@ -357,7 +359,7 @@ export async function confirmTopics(
  */
 export async function resolveTopicsByName(
   db: Kysely<DB>,
-  projectId: string,
+  { workspaceId, projectId }: { workspaceId: string; projectId: string },
   names: readonly string[],
 ): Promise<Map<string, string>> {
   const wanted = new Map<string, string>();
@@ -369,6 +371,7 @@ export async function resolveTopicsByName(
   const existing = await db
     .selectFrom('topics')
     .select(['id', 'name'])
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .execute();
   const resolved = new Map<string, string>();
@@ -384,6 +387,7 @@ export async function resolveTopicsByName(
       .values(
         created.map(([, topicName]) => ({
           id: randomUUID(),
+          workspace_id: workspaceId,
           project_id: projectId,
           parent_id: null,
           name: topicName,

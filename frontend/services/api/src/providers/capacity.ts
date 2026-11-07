@@ -199,12 +199,15 @@ export async function acquireCapacity(
         .where('lease_kind', '=', 'concurrency')
         .executeTakeFirst();
       const expiry = new Date(at.getTime() + runtime.audits.capacity_lease_ttl_seconds * 1000);
-      if (prior) {
-        await trx
-          .updateTable('provider_capacity_leases')
-          .set({ units: '1', released_at: null, expires_at: expiry, updated_at: at })
-          .where('id', '=', prior.id)
-          .execute();
+      // Maintenance may purge a long-expired prior lease meanwhile: then a new one is written.
+      const renewed = prior
+        ? await trx // NOSONAR -- One transaction: leases follow the bucket lock order.
+            .updateTable('provider_capacity_leases')
+            .set({ units: '1', released_at: null, expires_at: expiry, updated_at: at })
+            .where('id', '=', prior.id)
+            .executeTakeFirst()
+        : null;
+      if (prior && (renewed?.numUpdatedRows ?? 0n) > 0n) {
         leaseIds.push(prior.id);
       } else {
         const id = randomUUID();

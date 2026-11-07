@@ -10,6 +10,7 @@ import { createSecretCipher } from '../src/integrations/fernet.ts';
 import { createAudits } from '../src/audits/creation.ts';
 import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
+import { AuditMaintenance } from '../src/audits/maintenance.ts';
 import { testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant } from './audit-fixtures.ts';
@@ -74,6 +75,33 @@ describe('shared PostgreSQL provider capacity', () => {
     expect((await acquireCapacity(db, requests[blockedIndex]!, limited, future)).acquired).toBe(
       true,
     );
+  });
+  it('purges long-expired leases in maintenance while live leases keep holding capacity', async () => {
+    const t = await seed();
+    const limited = { ...runtime, audits: { ...runtime.audits, per_transport_concurrency: 1 } };
+    const [first, second, third] = t.tasks.map((task) => ({ ...t.request, taskId: task.id }));
+    // Older than any other fixture's lease, so it is in the first purge batch.
+    const old = new Date('2001-01-01T00:00:00Z');
+    expect((await acquireCapacity(db, first!, limited, old)).acquired).toBe(true);
+    await releaseCapacity(db, first!, limited, {}, old);
+    const now = new Date();
+    const live = await acquireCapacity(db, second!, limited, now);
+    expect(live.acquired).toBe(true);
+    await new AuditMaintenance(db, async () => {}).purgeCapacityLeases(now);
+    const remaining = await db
+      .selectFrom('provider_capacity_leases')
+      .select(['task_id', 'released_at'])
+      .where('task_id', 'in', [first!.taskId!, second!.taskId!])
+      .execute();
+    // One live lease per BYOK pool (transport and connection); the old ones are gone.
+    expect(remaining).toEqual([
+      { task_id: second!.taskId, released_at: null },
+      { task_id: second!.taskId, released_at: null },
+    ]);
+    expect(await acquireCapacity(db, third!, limited, now)).toMatchObject({
+      acquired: false,
+      code: 'capacity_concurrency',
+    });
   });
   it('consumes paced starts permanently and shares bounded cooldowns with sibling tasks', async () => {
     const t = await seed(),

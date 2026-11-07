@@ -507,6 +507,7 @@ describe('A3 persisted Pages join', () => {
       .insertInto('owned_domains')
       .values({
         id: randomUUID(),
+        workspace_id: owned.workspaceId,
         project_id: owned.projectId,
         domain: 'news.example.test',
         created_at: new Date(),

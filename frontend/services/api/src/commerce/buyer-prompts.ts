@@ -146,22 +146,24 @@ function admittedTexts(texts: string[], context: TargetContext, tracked: Set<str
   return admitted;
 }
 
-const findCommerceSet = (db: Database, projectId: string) =>
+const findCommerceSet = (db: Database, scope: CommerceScope) =>
   db
     .selectFrom('prompt_sets')
     .selectAll()
-    .where('project_id', '=', projectId)
+    .where('workspace_id', '=', scope.workspaceId)
+    .where('project_id', '=', scope.projectId)
     .where('name', '=', COMMERCE_SET_NAME)
     .executeTakeFirst();
 
-async function commerceSet(trx: Database, projectId: string, now: Date) {
+async function commerceSet(trx: Database, scope: CommerceScope, now: Date) {
   return (
-    (await findCommerceSet(trx, projectId)) ??
+    (await findCommerceSet(trx, scope)) ??
     trx
       .insertInto('prompt_sets')
       .values({
         id: randomUUID(),
-        project_id: projectId,
+        workspace_id: scope.workspaceId,
+        project_id: scope.projectId,
         name: COMMERCE_SET_NAME,
         description: 'Reviewed buyer-intent prompts linked to Commerce targets.',
         created_at: now,
@@ -173,12 +175,13 @@ async function commerceSet(trx: Database, projectId: string, now: Date) {
 }
 
 /** The case-insensitive topic index is the final guard against a racing insert. */
-async function commerceTopic(trx: Database, projectId: string, name: string, now: Date) {
+async function commerceTopic(trx: Database, scope: CommerceScope, name: string, now: Date) {
   const find = () =>
     trx
       .selectFrom('topics')
       .selectAll()
-      .where('project_id', '=', projectId)
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
       .where(sql<string>`lower(name)`, '=', name.toLowerCase());
   const topic = await find().executeTakeFirst();
   if (topic) return topic;
@@ -186,7 +189,8 @@ async function commerceTopic(trx: Database, projectId: string, name: string, now
     .insertInto('topics')
     .values({
       id: randomUUID(),
-      project_id: projectId,
+      workspace_id: scope.workspaceId,
+      project_id: scope.projectId,
       parent_id: null,
       name,
       description: 'Commerce target-bound buyer intent',
@@ -223,6 +227,7 @@ async function insertBuyerPrompt(
     .insertInto('prompts')
     .values({
       id,
+      workspace_id: scope.workspaceId,
       prompt_set_id: owner.set,
       topic_id: owner.topic,
       text,
@@ -263,7 +268,7 @@ function persist(db: Database, scope: CommerceScope, batches: Batch[]) {
     const contexts = [];
     for (const batch of batches) contexts.push(await targetContext(trx, scope, batch.target));
     const now = new Date();
-    const set = await commerceSet(trx, scope.projectId, now);
+    const set = await commerceSet(trx, scope, now);
     const ids: string[] = [];
     for (const [index, batch] of batches.entries()) {
       const name = contexts[index]!.name.trim()
@@ -271,7 +276,7 @@ function persist(db: Database, scope: CommerceScope, batches: Batch[]) {
         .slice(0, policy.prompts.topic_name_max_chars)
         .trim();
       if (!name) throw unavailable();
-      const topic = await commerceTopic(trx, scope.projectId, name, now);
+      const topic = await commerceTopic(trx, scope, name, now); // NOSONAR -- One transaction: statements run in order.
       for (const text of batch.texts)
         ids.push(
           await insertBuyerPrompt(
@@ -301,8 +306,8 @@ export async function manualBuyerPrompt(
   return firstOf(rows, 'the persisted manual buyer prompt');
 }
 
-async function trackedHashes(db: Database, projectId: string) {
-  const set = await findCommerceSet(db, projectId);
+async function trackedHashes(db: Database, scope: CommerceScope) {
+  const set = await findCommerceSet(db, scope);
   if (!set) return new Set<string>();
   const rows = await db
     .selectFrom('prompts')
@@ -331,7 +336,7 @@ export async function generateBuyerPrompts(
   for (const target of input.targets) contexts.push(await targetContext(db, scope, target));
   // Skip already tracked texts so a repeat generation is not a 409; the
   // unique normalized hash still guards writes that race this read.
-  const tracked = await trackedHashes(db, scope.projectId);
+  const tracked = await trackedHashes(db, scope);
   const gateway = meter.gateway(createGateway(gatewayFactory), 'commerce_buyer_prompts');
   await enforceWorkspaceRequest(db, scope.workspaceId, agentCallLimit(input.targets.length));
   // Each target keeps what it admitted, so one weak batch or a later model

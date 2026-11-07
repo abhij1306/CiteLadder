@@ -136,6 +136,7 @@ export async function recoverTopics(
       .values(
         created.map((topic) => ({
           id: topic.id,
+          workspace_id: scope.workspaceId,
           project_id: set.project_id,
           parent_id: null,
           name: topic.name,

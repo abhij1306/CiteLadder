@@ -21,7 +21,8 @@ import { readBody } from '../http/body.ts';
 import { agentBindings } from '../agent/bindings.ts';
 import { runAgentOnce } from '../agent/worker.ts';
 import type { TurnEvents } from '../agent/stream.ts';
-import { agentPolicy, AgentError, type Scope } from '../agent/contracts.ts';
+import { agentPolicy, AgentError, budgetSchema, type Scope } from '../agent/contracts.ts';
+import { interactiveSlots } from '../http/interactive-slots.ts';
 import { workspaceChat } from '../agent/messages.ts';
 import { readChat, listChats, listRevisions, runView, revisionView } from '../agent/reads.ts';
 import { defineGetRoute, definePostRoute, definePutRoute, defineDeleteRoute } from './define.ts';
@@ -161,16 +162,21 @@ export const agentRoutes = [
           .where('chat_id', '=', path.chat_id)
           .where('id', '=', path.run_id)
           .executeTakeFirst();
-      if (!(await read())) throw notFound('Agent run');
+      const run = await read();
+      if (!run) throw notFound('Agent run');
       const { queue, runtime } = await agentBindings(db);
       // The turn lives as long as this request: in-app navigation keeps the
-      // browser's stream open, and closing the browser ends the turn as
-      // interrupted. Its own time limit ends it as turn_timeout.
+      // browser's stream open, and closing the browser or stopping this
+      // instance ends the turn as interrupted. Its frozen time limit ends it
+      // as turn_timeout; a budget the runtime cannot read fails on load.
+      const limit = budgetSchema.safeParse(run.budget);
+      const slot = interactiveSlots.acquire();
       const gone = new AbortController();
       const signal = AbortSignal.any([
         c.req.raw.signal,
         gone.signal,
-        AbortSignal.timeout(agentPolicy.turn_timeout_seconds * 1000),
+        slot.signal,
+        ...(limit.success ? [AbortSignal.timeout(limit.data.turn_timeout_seconds * 1000)] : []),
       ]);
       const execute = (events?: TurnEvents) =>
         mapped(() =>
@@ -179,7 +185,7 @@ export const agentRoutes = [
             signal,
             events,
           }),
-        );
+        ).finally(slot.release);
       const finished = async () => {
         const run = await read();
         if (!run) throw notFound('Agent run');

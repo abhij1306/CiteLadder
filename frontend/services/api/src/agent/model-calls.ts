@@ -7,6 +7,7 @@ import {
   type ConversationRequest,
   type ConversationResult,
 } from '../models/conversation.ts';
+import { ModelError } from '../models/http.ts';
 import { authorize } from './access.ts';
 import { abortable } from './async.ts';
 import { AgentError, budgetSchema, type Lease, type ModelAttempt, type Run } from './contracts.ts';
@@ -14,6 +15,7 @@ import { lockRun } from './queue.ts';
 
 export type ModelResult = ConversationResult;
 export type ModelRequest = ConversationRequest;
+type Usage = ModelResult['usage'];
 export type AgentModel = {
   adapter: string;
   endpointHost: string;
@@ -48,7 +50,8 @@ export type Funding = {
   settle: (
     db: Database,
     attempt: ModelAttempt,
-    result: ModelResult | null,
+    /** The provider's reported usage, a failed call's included; null when it reported none. */
+    usage: Usage | null,
   ) => Promise<{ credits: number; status: string }>;
   /** Refunds every credit the run's settled calls debited; idempotent. */
   refund: (db: Database, run: Run) => Promise<void>;
@@ -154,8 +157,15 @@ export class ModelCalls {
     });
   }
   /** Receipt settlement outlives cancellation/lease loss; first settlement wins. */
-  receipt(workspaceId: string, attemptId: string, result: ModelResult | null) {
+  receipt(
+    workspaceId: string,
+    attemptId: string,
+    result: ModelResult | null,
+    /** Tokens a failed call still reported, charged as platform metering charges them. */
+    failedUsage: Usage | null = null,
+  ) {
     const outcome = result ? 'completed' : 'failed';
+    const reported = result?.usage ?? failedUsage;
     return this.db.transaction().execute(async (trx) => {
       const attempt = await trx
         .selectFrom('agent_model_attempts')
@@ -166,7 +176,7 @@ export class ModelCalls {
         .executeTakeFirstOrThrow();
       if (attempt.outcome !== 'dispatched') return;
       const usage = (name: string) => {
-        const value = result?.usage[name];
+        const value = reported?.[name];
         return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
           ? value
           : null;
@@ -196,7 +206,7 @@ export class ModelCalls {
           reasoning_tokens: stored(updated.reasoning_tokens),
           total_tokens: stored(updated.total_tokens),
         },
-        result,
+        reported,
       );
       if (settled.credits !== 0) throw new AgentError('funding_unavailable');
       await trx
@@ -262,8 +272,13 @@ export class ModelCalls {
       const deadline = AbortSignal.timeout(remaining);
       const signal = executionSignal ? AbortSignal.any([deadline, executionSignal]) : deadline;
       result = await abortable(() => model.converse(sent, signal, listener), signal);
-    } catch {
-      await this.receipt(lease.workspaceId, attempt.id, null);
+    } catch (error) {
+      await this.receipt(
+        lease.workspaceId,
+        attempt.id,
+        null,
+        error instanceof ModelError ? (error.usage ?? null) : null,
+      );
       throw new AgentError('provider_error');
     }
     await this.receipt(lease.workspaceId, attempt.id, result);
