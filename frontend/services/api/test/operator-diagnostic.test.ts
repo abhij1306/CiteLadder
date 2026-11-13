@@ -6,9 +6,9 @@ import { ApiError } from '../src/errors.ts';
 describe('operator CLI diagnostics', () => {
   it('prints an API refusal by its declared code, never its sentence', () => {
     const refusal = new ApiError(409, 'That project was not found.', {
-      code: 'project_not_found',
+      code: 'agent_not_configured',
     });
-    expect(operatorDiagnostic(refusal)).toBe('project_not_found');
+    expect(operatorDiagnostic(refusal)).toBe('agent_not_configured');
   });
 
   it('prints reviewed text and slugs, and only the type of anything else', () => {

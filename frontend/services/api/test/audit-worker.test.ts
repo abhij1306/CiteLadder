@@ -665,7 +665,6 @@ describe('leased audit worker phases', () => {
       {
         owner: 'worker',
         taskScope: t,
-        env: {},
         now: () => new Date(tick),
         send: async (input) => {
           paths.push(String(input).split('/').slice(-2).join('/'));
@@ -728,7 +727,6 @@ describe('leased audit worker phases', () => {
       {
         owner: 'worker',
         taskScope: t,
-        env: {},
         send: async () => {
           calls++;
           // The second answer is still running when the first task's finalize fails.

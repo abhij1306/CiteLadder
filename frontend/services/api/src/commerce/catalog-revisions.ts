@@ -150,7 +150,6 @@ export async function requestProjectionRevision(
   scope: CommerceScope,
   crawlId: string,
 ) {
-  if (!(await grantsCommerce(db, scope.workspaceId))) return;
   await enqueueCoalesced(db, {
     workspaceId: scope.workspaceId,
     projectId: scope.projectId,

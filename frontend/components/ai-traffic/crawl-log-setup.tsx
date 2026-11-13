@@ -45,8 +45,6 @@ export function CrawlLogSetup({
   model,
 }: Readonly<{ model: ReturnType<typeof useCrawlConnections> }>) {
   const { setup, setSetup, origin, setOrigin, setSampling, setFilter, setPoint, mutation } = model;
-  // `setup` is typed to the options' values; the first option is the default.
-  const chosen = CRAWL_LOG_SETUPS.find((s) => s.value === setup) ?? CRAWL_LOG_SETUPS[0];
   const steps = SETUP_STEPS[setup];
   const firehose = setup === 'aws_firehose';
   const gcp = setup === 'gcp_pubsub_pull';
