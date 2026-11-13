@@ -1,3 +1,4 @@
+import { chooseFilterOption, openFilterRow } from '@/test/all-filters';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -10,7 +11,12 @@ import type {
 } from '@/lib/api/search-intelligence';
 import { makeProject } from '@/test/fixtures/project';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders, testProjectSelection } from '@/test/render';
+import {
+  renderWithProviders,
+  selectionAs,
+  testProjectSelection,
+  type TestRole,
+} from '@/test/render';
 import { SearchIntelligencePage } from './search-intelligence-page';
 
 const project = makeProject();
@@ -62,18 +68,32 @@ const readiness: SearchIntelligenceReadiness = {
   },
   latest_run: null,
   datasets: [],
+  markets: [{ country_code: 'US', location_code: 2840 }],
+  max_depth: 1_000_000,
 };
 
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
-function renderPage(data: SearchIntelligenceReadiness) {
+function renderPage(data: SearchIntelligenceReadiness, role: TestRole = 'owner') {
   mswServer.use(http.get(root, () => HttpResponse.json(data)));
   renderWithProviders(<SearchIntelligencePage />, {
-    projectSelection: testProjectSelection({ activeProject: project, activeProjectId: project.id }),
+    projectSelection: testProjectSelection({
+      ...selectionAs(role),
+      activeProject: project,
+      activeProjectId: project.id,
+    }),
   });
 }
+
+it('lets a viewer read an analysis in progress without offering to start or cancel one', async () => {
+  renderPage({ ...readiness, latest_run: run }, 'viewer');
+  expect(await screen.findByText(/1 of 4 requests complete/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Cost details' })).toBeVisible();
+  for (const name of ['Cancel', 'Review first analysis', 'New analysis', 'Refresh'])
+    expect(screen.queryByRole('button', { name })).toBeNull();
+});
 
 it('offers the first analysis from the empty overview', async () => {
   renderPage(readiness);
@@ -131,6 +151,22 @@ it('says when saved results can no longer be refreshed', async () => {
   expect(screen.getByRole('link', { name: 'Open provider settings' })).toBeInTheDocument();
 });
 
+it('tells a Member who may not add the login who can, without sending them to settings', async () => {
+  renderPage(
+    {
+      ...readiness,
+      connected: false,
+      connection_id: null,
+      datasets: [dataset('www.example.com', { summary: { organic_keywords: 12 } })],
+    },
+    'member',
+  );
+  expect(
+    await screen.findByText(/A workspace Owner or Admin can add the login\./),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole('link', { name: 'Open provider settings' })).toBeNull();
+});
+
 it('offers citation matching only for the website whose list is on screen', async () => {
   // Reads behind the tab's views are not under test; an empty error keeps them quiet.
   mswServer.use(http.get(`${root}/*`, () => HttpResponse.json({}, { status: 404 })));
@@ -146,17 +182,38 @@ it('offers citation matching only for the website whose list is on screen', asyn
     ],
   });
   await userEvent.click(await screen.findByRole('tab', { name: 'Backlinks' }));
-  expect(await screen.findByRole('combobox', { name: 'Saved target' })).toHaveTextContent(
-    'www.example.com',
-  );
+  await screen.findByRole('radiogroup', { name: 'backlinks view' });
+  expect(await openFilterRow(userEvent.setup(), 'Website', 'www.example.com')).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  // The website and market read as one caption in the strip, not a filter.
+  expect(
+    screen.getByText(
+      (_, node) =>
+        node?.parentElement?.tagName === 'OUTPUT' &&
+        node.textContent === 'www.example.com · All referring countries · No saved analysis',
+    ),
+  ).toBeInTheDocument();
   expect(
     screen.queryByRole('button', { name: 'Match with Visibility citations' }),
   ).not.toBeInTheDocument();
-  await userEvent.click(screen.getByRole('combobox', { name: 'Saved target' }));
-  await userEvent.click(screen.getByRole('option', { name: 'blog.example.com' }));
+  await chooseFilterOption(userEvent.setup(), 'Website', 'blog.example.com');
   expect(
     await screen.findByRole('button', { name: 'Match with Visibility citations' }),
   ).toBeInTheDocument();
+});
+
+it('keeps the tab row when Keyword Research cannot be read', async () => {
+  mswServer.use(
+    http.get(root, () =>
+      // A 4xx is not retried, so the failure shows without waiting out a backoff.
+      HttpResponse.json({ error: { code: 'invalid', message: 'Read failed' } }, { status: 422 }),
+    ),
+  );
+  renderWithProviders(<SearchIntelligencePage />, {
+    projectSelection: testProjectSelection({ activeProject: project, activeProjectId: project.id }),
+  });
+  expect(await screen.findByText('Read failed')).toBeInTheDocument();
+  expect(screen.getByRole('tab', { name: 'Keywords' })).toBeInTheDocument();
 });
 
 it('cancels an analysis in progress', async () => {

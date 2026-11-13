@@ -1,16 +1,14 @@
-'use client';
-
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { Callout } from '@/components/ui/callout';
 import { CopyButton } from '@/components/ui/copy-button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Drawer } from '@/components/ui/drawer';
 import { Dot } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
+import { Pressable } from '@/components/ui/pressable';
 import { QueryState } from '@/components/ui/query-state';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
@@ -79,13 +77,30 @@ function dimensionState(dimension: ReadinessDimension): DimensionState {
   return 'Passing';
 }
 
-function stateBadgeValue(state: DimensionState) {
-  if (state === 'Critical') return 'danger' as const;
-  if (state === 'Needs work') return 'warning' as const;
-  if (state === 'Nearly there') return 'warning' as const;
-  if (state === 'Passing') return 'success' as const;
-  return 'info' as const;
-}
+/**
+ * Each band its own tone, so "Nearly there" never reads as "Needs work". A
+ * pillar with no score has no band: it takes the neutral badge.
+ */
+const DIMENSION_TONES: Record<DimensionState, BadgeTone> = {
+  Critical: 'negative',
+  'Needs work': 'warning',
+  'Nearly there': 'info',
+  Passing: 'positive',
+  'Not measured': 'neutral',
+  'Not applicable': 'neutral',
+  Excluded: 'neutral',
+};
+
+type CheckState = 'Incomplete' | 'Needs work' | 'Passing' | 'Did not apply' | 'Not measured';
+
+/** A check's state in the same tones as the pillar bands it rolls up into. */
+const CHECK_TONES: Record<CheckState, BadgeTone> = {
+  Incomplete: 'info',
+  'Needs work': 'warning',
+  Passing: 'positive',
+  'Did not apply': 'neutral',
+  'Not measured': 'neutral',
+};
 
 export function AeoReadinessPanel({
   workspaceId,
@@ -100,7 +115,7 @@ export function AeoReadinessPanel({
   const [detailKey, setDetailKey] = useState<string | null>(null);
 
   if (readiness.isLoading) {
-    return <QueryState kind="loading" label="Loading persisted AEO evaluations…" />;
+    return <QueryState kind="loading" label="Loading AEO Readiness…" />;
   }
   if (readiness.isError)
     return (
@@ -142,17 +157,28 @@ function ReadinessLedger({
     <DataTable title="Readiness dimensions" columns={READINESS_COLUMNS} minWidth="md">
       {dimensions.map((dimension) => {
         const state = dimensionState(dimension);
+        const open = () => onOpen(dimension.key);
         return (
-          <TableRow key={dimension.key}>
+          // The row is the drawer's trigger; its name cell is the button a
+          // keyboard and a screen reader reach, named by the pillar.
+          <TableRow key={dimension.key} onClick={open} className="cursor-pointer">
             <TableCell>
-              <div className="grid min-w-0">
+              <Pressable
+                aria-haspopup="dialog"
+                aria-label={`${dimension.label} evidence`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  open();
+                }}
+                className="grid min-w-0"
+              >
                 <ClampText lines={1} className={textRole('emphasis')}>
                   {dimension.label}
                 </ClampText>
                 <ClampText lines={1} className="type-caption">
                   {dimension.description}
                 </ClampText>
-              </div>
+              </Pressable>
             </TableCell>
             {/* The number only (decision D8); the State column says why a
                 dimension has none. */}
@@ -165,14 +191,7 @@ function ReadinessLedger({
               )}
             </TableCell>
             <TableCell>
-              <Badge variant="status" value={stateBadgeValue(state)}>
-                {state}
-              </Badge>
-            </TableCell>
-            <TableCell>
-              <Button variant="secondary" onClick={() => onOpen(dimension.key)}>
-                View details <span className="sr-only">for {dimension.label}</span>
-              </Button>
+              <Badge tone={DIMENSION_TONES[state]}>{state}</Badge>
             </TableCell>
           </TableRow>
         );
@@ -186,7 +205,6 @@ const READINESS_COLUMNS: readonly DataTableColumn[] = [
   { key: 'score', label: 'Score', width: 'figure', numeric: true },
   { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
   { key: 'state', label: 'State', width: 'status' },
-  { key: 'actions', label: 'Actions', width: 'date', hideLabel: true },
 ];
 
 function DimensionDrawer({
@@ -239,9 +257,9 @@ function CheckRow({ check }: Readonly<{ check: ReadinessCheck }>) {
     <Stack as="li" gap="tight" className={ledgerItemClasses()}>
       <Inline className="flex-wrap justify-between">
         <span className={textRole('itemTitle')}>{check.title}</span>
-        <span className="type-caption">{state}</span>
+        <Badge tone={CHECK_TONES[state]}>{state}</Badge>
       </Inline>
-      <p className={textRole('body')}>
+      <p className={textRole('body', check.remediation ? 'text-ink' : undefined)}>
         {check.remediation || 'No remediation guidance is recorded for this check.'}
       </p>
       <p className="type-caption tabular-nums">
@@ -252,7 +270,7 @@ function CheckRow({ check }: Readonly<{ check: ReadinessCheck }>) {
   );
 }
 
-function checkState(check: ReadinessCheck) {
+function checkState(check: ReadinessCheck): CheckState {
   if (check.error_count > 0 || check.unknown_count > 0) return 'Incomplete';
   if (check.missing_count > 0 || check.partial_count > 0) return 'Needs work';
   if (check.satisfied_count > 0) return 'Passing';

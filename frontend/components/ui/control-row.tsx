@@ -35,7 +35,7 @@ export function ControlRow({
       data-control-row=""
       className={cn(
         'desktop:flex-row desktop:items-center flex flex-col justify-between gap-[var(--compact-gap)]',
-        boxed && panelClasses({ tone: 'tonal' }),
+        boxed && panelClasses(),
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-[var(--compact-gap)]">

@@ -18,7 +18,10 @@ type ToolResult = {
 export type ToolOutcome = {
   status: 'completed' | 'unavailable' | 'failed' | 'refused';
   text: string;
+  /** Every record the read returned: the attempt's record. */
   refs: ToolResult['artifactRefs'];
+  /** The records in `text`, which the model received: the turn's sources (invariant 12). */
+  received: ToolResult['artifactRefs'];
   omissions: Json[];
   hash: string;
   error: string;
@@ -96,6 +99,9 @@ export class ToolRegistry {
         status: result.state === 'unavailable' ? 'unavailable' : 'completed',
         text: bounded.text,
         refs: result.artifactRefs,
+        received: bounded.complete
+          ? result.artifactRefs
+          : result.artifactRefs.filter((ref) => mentions(bounded.text, ref)),
         omissions: [...result.omissions, ...bounded.omissions],
         hash: createHash('sha256').update(serialized).digest('hex'),
         error: '',
@@ -110,6 +116,16 @@ export class ToolRegistry {
       };
     }
   }
+}
+/**
+ * Whether a bounded result still names a record. A record whose section the
+ * bound dropped never reached the model, so it is not a source; a record the
+ * text names by id or `record_uri` did.
+ */
+function mentions(text: string, ref: ToolResult['artifactRefs'][number]) {
+  return [ref.id, ref.record_uri].some(
+    (value) => typeof value === 'string' && value !== '' && text.includes(JSON.stringify(value)),
+  );
 }
 function packNestedEvidence(
   selected: Record<string, Json>,
@@ -134,7 +150,7 @@ function packNestedEvidence(
 }
 export function boundToolData(data: Json, maxChars: number, splitOverview = false) {
   const full = JSON.stringify(data);
-  if (full.length <= maxChars) return { text: full, supplied: true, omissions: [] };
+  if (full.length <= maxChars) return { text: full, complete: true, supplied: true, omissions: [] };
   const selected: Record<string, Json> = {};
   const fields = data && typeof data === 'object' && !Array.isArray(data) ? data : { value: data };
   const omitted = Object.keys(fields);
@@ -166,11 +182,12 @@ export function boundToolData(data: Json, maxChars: number, splitOverview = fals
       text.length <= maxChars
         ? text
         : JSON.stringify({ complete: false, reason: 'tool_result_size_limit' }),
+    complete: false,
     supplied: Object.keys(selected).length > 0 && text.length <= maxChars,
     omissions: [{ reason: 'tool_result_truncated', count: 1, sections: omitted }],
   };
 }
 /** A call not run: `error` is the recorded code, `text` what the model is told. */
 export function refused(error: string, text: string): ToolOutcome {
-  return { status: 'refused', text, refs: [], omissions: [], hash: '', error };
+  return { status: 'refused', text, refs: [], received: [], omissions: [], hash: '', error };
 }

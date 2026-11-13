@@ -2,7 +2,8 @@
  * Schema migrations: the numbered SQL files in `migrations/`
  * (`0001_baseline.sql`, then `0002_*.sql`, ...), each applied once and
  * recorded with its SHA-256 in `schema_migrations`. A run applies every
- * pending file, in order, in one transaction under an advisory lock.
+ * pending file, in order, in one transaction under an advisory lock and
+ * bounded lock and statement timeouts.
  *
  * An applied file is frozen: a schema change is a new numbered file, never an
  * edit, and a database whose recorded checksums differ from the files is
@@ -15,7 +16,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 
 import pg from 'pg';
 
-import { databaseSettings } from '../config.ts';
+import { databaseSettings, migrationTimeouts } from '../config.ts';
 import { poolOptions } from '../db/database.ts';
 import { OperatorRefusal } from './operator.ts';
 
@@ -28,7 +29,7 @@ const LOCK_KEY = createHash('sha256')
   .digest()
   .readBigInt64BE(0);
 const RESET =
-  'To start over with an empty database, run `pnpm --filter @citeladder/api reset:db` (this deletes all data).';
+  'To start over, point DATABASE_URL at a new, empty database (the old one keeps its data).';
 
 /** The migration files, in version order. */
 export function readMigrations(dir: URL = MIGRATIONS_DIR): Migration[] {
@@ -81,14 +82,24 @@ async function pending(client: pg.ClientBase, migrations: readonly Migration[]) 
   return migrations.filter((migration) => !applied.has(migration.version));
 }
 
-/** A schema client with the configured TLS; the apply can outlast any request-path query bound. */
+/**
+ * A schema client with the configured TLS and the migration bounds as its
+ * session timeouts: a statement that waits on a lock held by the running app
+ * fails after the lock bound instead of queueing the app's queries behind it,
+ * and a statement that runs past the statement bound fails the run. Either
+ * rolls the whole apply back. The client-side query bound is off because the
+ * server enforces both.
+ */
 export function baselineClient(
   databaseUrl: string,
   env: Record<string, string | undefined> = process.env,
 ) {
+  const timeouts = migrationTimeouts(env);
   return new pg.Client({
     ...poolOptions({ appName: 'CiteLadder migrate', databaseUrl, database: databaseSettings(env) }),
     query_timeout: undefined,
+    statement_timeout: timeouts.statementTimeoutMs,
+    lock_timeout: timeouts.lockTimeoutMs,
   });
 }
 
@@ -102,13 +113,17 @@ export async function applyMigrations(
 ): Promise<string[]> {
   await client.query('begin');
   try {
-    // DDL has no statement bound, and a concurrent run waits on the advisory
-    // lock instead of failing.
+    // A concurrent run waits on the advisory lock instead of failing; the
+    // migrations themselves then run under the session's migration bounds.
     await client.query('set local statement_timeout = 0; set local lock_timeout = 0');
     await client.query('select pg_advisory_xact_lock($1::bigint)', [LOCK_KEY.toString()]);
+    const bounds = 'reset statement_timeout; reset lock_timeout';
+    await client.query(bounds);
     const todo = await pending(client, migrations);
     for (const migration of todo) {
-      await client.query(migration.sql);
+      // A file that needs longer raises its own bound with `SET LOCAL`; the
+      // next file starts under the configured bounds again.
+      await client.query(`${migration.sql}\n;${bounds}`);
       await client.query(
         'insert into public.schema_migrations (version, checksum) values ($1, $2)',
         [migration.version, checksumOf(migration.sql)],

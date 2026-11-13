@@ -21,3 +21,15 @@ it('reads a refused Agent write as the shared notice with the Agent copy and sup
     startNewChat: false,
   });
 });
+
+it('shows the server’s reason for a refused suggestion change, with a fallback when it gives none', () => {
+  const refused = (message: string) =>
+    new ApiError(message, 409, '{}', 'req-4', { code: 'agent_suggestion_conflict' });
+  expect(
+    agentWriteFailure(refused('This suggestion was already applied.'), 'change the suggestion')
+      .message,
+  ).toBe('This suggestion was already applied.');
+  expect(agentWriteFailure(refused('  '), 'change the suggestion').message).toBe(
+    'This suggestion can’t be changed now. Reload the page and try again.',
+  );
+});

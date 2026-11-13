@@ -390,8 +390,66 @@ export const keywordPresenceExpectedCheckSchema = responseObject({
   location_code: z.number().int().nullable(),
   language_code: z.string(),
 });
+/**
+ * An answer to one of the frozen prompts cites an owned URL, in a run after
+ * go-live. `page`: the improved page's URL. `new_page`: any owned URL outside
+ * the ones already cited for those prompts from `baseline_from` to go-live.
+ * Frozen at declaration, so a later reclustering or rematch never changes it.
+ * It says whether a URL was cited, never which version of the page was read.
+ */
+const ownedUrlCitedExpectedCheckSchema = responseObject({
+  kind: z.literal('owned_url_cited'),
+  prompt_ids: z.array(uuid()).min(1),
+  // The content-angle lineage that raised the gap; null for Analyze a page.
+  lineage_id: z.string().nullable(),
+  expectation: z.discriminatedUnion('target', [
+    responseObject({ target: z.literal('page'), url: z.string().min(1), site_url_id: uuid() }),
+    responseObject({
+      target: z.literal('new_page'),
+      baseline_from: z.string(),
+      baseline_audit_ids: z.array(uuid()),
+      baseline_urls: z.array(z.string()),
+    }),
+  ]),
+});
+/**
+ * One product's metric over the answers after go-live: the Products read's
+ * window, limited to executions after the declaration. Met once the reading
+ * clears the rule (`at_least` / `at_most` the frozen target); a window with
+ * fewer than `min_samples` samples is still waiting. Frozen at declaration.
+ */
+export const productMetricExpectedCheckSchema = responseObject({
+  kind: z.literal('product_metric'),
+  product_id: uuid(),
+  product_name: z.string(),
+  metric: z.enum(['appearances', 'price_gap_share', 'win_rate', 'owned_merchant_answers']),
+  comparison: z.enum(['at_least', 'at_most']),
+  target: z.number(),
+  min_samples: z.number().int(),
+  window_days: z.number().int(),
+  baseline_value: z.number().optional(),
+});
+/**
+ * One Site Health rule across a frozen cohort of pages, read in the next crawl
+ * comparable with `baseline_crawl_id` (same analyzer and rule catalog): met
+ * when every cohort page passes, unmet with `partially_resolved` or
+ * `still_failing` otherwise, unavailable (inconclusive) when that crawl could
+ * not read the cohort. `page_count` counts the family's pages at declaration;
+ * more than `site_url_ids` means the frozen list was cut, and then a passing
+ * cohort is `cohort_sampled`, never met: the pages beyond it are unchecked.
+ */
+const issueFamilyExpectedCheckSchema = responseObject({
+  kind: z.literal('issue_family'),
+  rule_id: z.string(),
+  baseline_crawl_id: uuid(),
+  site_url_ids: z.array(uuid()).min(1),
+  page_count: z.number().int(),
+});
 export const expectedCheckSchema = z.discriminatedUnion('kind', [
+  issueFamilyExpectedCheckSchema,
   keywordPresenceExpectedCheckSchema,
+  productMetricExpectedCheckSchema,
+  ownedUrlCitedExpectedCheckSchema,
   responseObject({
     kind: z.literal('contextual_link'),
     recommendation_id: uuid(),

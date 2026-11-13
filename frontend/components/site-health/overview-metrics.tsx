@@ -10,7 +10,12 @@ import type { SiteCrawl, SiteHealthDashboard, SiteHealthOverview } from '@citela
 export type AuditMetric = {
   title: string;
   value: number | null;
-  valueUnit?: 'score' | 'percent';
+  /**
+   * `percent` is a share drawn as a ring, as the Overview and Pages strips
+   * show it; `plain-percent` is the same share as a plain figure, which the
+   * page detail keeps.
+   */
+  valueUnit?: 'score' | 'percent' | 'plain-percent';
   href?: string;
   icon: typeof ICONS.site;
   unavailable?: ReactNode;
@@ -33,6 +38,7 @@ function auditSegment({
   if (value === null) {
     return { ...base, value: unavailable ?? <UnavailableValue state="not_measured" /> };
   }
+  if (valueUnit === 'plain-percent') return { ...base, value: `${Math.round(value)}%` };
   // The ring names itself "<label>: <n> out of 100".
   return {
     ...base,
@@ -99,7 +105,7 @@ function technicalMetric(context: MetricContext): AuditMetric {
   return {
     title: 'Web Fundamentals',
     value: source?.web_fundamentals_score ?? null,
-    href: '/issues?dimension=technical',
+    href: '/issues?section=technical',
     icon: ICONS.siteHealth,
   };
 }
@@ -109,7 +115,7 @@ function aeoMetric(context: MetricContext): AuditMetric {
   return {
     title: 'AEO Readiness',
     value: source?.aeo_readiness_score ?? null,
-    href: '/issues?dimension=aeo',
+    href: '/issues?section=aeo',
     icon: ICONS.visibility,
   };
 }

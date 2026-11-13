@@ -1,6 +1,6 @@
 /** Binary scoring of the public checklist: Web Fundamentals and weighted AEO readiness. */
 import { policy } from '../../config.ts';
-import { finalizeEvaluation } from './finalize.ts';
+import { canonicalDeclarations, finalizeEvaluation } from './finalize.ts';
 import { analysisPolicy } from './policy.ts';
 import { membership, type RuleEvaluation } from './rules.ts';
 
@@ -36,6 +36,38 @@ export function crawlSiteChecks(rows: RuleEvaluation[]) {
     ...SCORED_SITE_RULES.filter((id) => !seen.has(id)).map((id) =>
       finalizeEvaluation(id, 'unknown', { reason: 'site_facts_unavailable' }),
     ),
+  ];
+}
+
+const SCORED_FINALIZE_RULES = policy.site_health.rule_catalog
+  .filter(
+    (rule) =>
+      rule.scope === 'page' &&
+      rule.applicability_key === 'crawl_finalize' &&
+      membership(rule.rule_id).score_roles.length,
+  )
+  .map((rule) => rule.rule_id);
+/** Why a crawl-finalize check does not apply to the page from its own facts alone; null when it may. */
+const FINALIZE_NOT_APPLICABLE: Record<string, (facts: Record<string, unknown>) => string | null> = {
+  'technical.canonical_integrity': (facts) =>
+    canonicalDeclarations(facts).length ? null : 'no_canonical',
+};
+/**
+ * A page's final checks, with every scored crawl-finalize check the crawl never
+ * evaluated (a cancelled crawl skips finalization) as unknown, so the missing
+ * verdict keeps measurement partial instead of silently dropping out. A check
+ * the page's own facts rule out (no canonical declared) stays not applicable.
+ */
+export function finalPageChecks(rows: RuleEvaluation[], facts: Record<string, unknown>) {
+  const seen = new Set(rows.map((row) => row.rule_id));
+  return [
+    ...rows,
+    ...SCORED_FINALIZE_RULES.filter((id) => !seen.has(id)).map((id) => {
+      const reason = FINALIZE_NOT_APPLICABLE[id]?.(facts);
+      return reason
+        ? finalizeEvaluation(id, 'not_applicable', { reason })
+        : finalizeEvaluation(id, 'unknown', { reason: 'crawl_not_finalized' });
+    }),
   ];
 }
 

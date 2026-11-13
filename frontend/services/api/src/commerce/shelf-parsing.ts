@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { auditPolicy } from '../audits/config.ts';
 import { casefold } from '../casefold.ts';
 import { canonicalPage } from '../page-identity.ts';
-import { localizedPrice } from './projection-facts.ts';
+import { AMOUNT_CHARACTERS, localizedPrice } from './projection-facts.ts';
 import { onlyOf } from '../lists.ts';
 import { domainMatches } from '../analysis/domains.ts';
 import { stripTrailing } from '../text-order.ts';
@@ -52,7 +52,7 @@ function normalize(value: string) {
     .trim()
     .replaceAll(/\s+/gu, ' ');
 }
-const productSchema = z.object({
+export const productSchema = z.object({
   id: z.uuid(),
   canonical_url: z.string(),
   name: z.string(),
@@ -62,7 +62,7 @@ const productSchema = z.object({
   mpn: z.string().nullish(),
   attributes: z.record(z.string(), z.unknown()).default({}),
 });
-const competitorSchema = z.object({
+export const competitorSchema = z.object({
   id: z.uuid(),
   canonical_url: z.string(),
   product_name: z.string(),
@@ -85,12 +85,26 @@ export const frozenTargetSchema = z.object({
   ),
 });
 export type FrozenShelfTarget = z.output<typeof frozenTargetSchema>;
+/** The products and approved competitors one answer is matched against. */
+export type ShelfCatalog = Pick<FrozenShelfTarget, 'products' | 'approved_competitors'>;
 type FrozenProduct = FrozenShelfTarget['products'][number];
-type Match =
+export type ShelfMatch =
   | { product: FrozenProduct; competitor: null; confidence: number }
   | { product: null; competitor: FrozenShelfTarget['approved_competitors'][number]; confidence: 1 }
   | { product: null; competitor: null; confidence: 0 };
-const NO_MATCH: Match = { product: null, competitor: null, confidence: 0 };
+export const NO_MATCH: ShelfMatch = { product: null, competitor: null, confidence: 0 };
+
+/** The catalog product or approved competitor whose page a carousel card links to. */
+export function matchPageUrl(url: string, target: ShelfCatalog): ShelfMatch {
+  const page = canonicalPage(url);
+  if (!page) return NO_MATCH;
+  const product = target.products.find((row) => canonicalPage(row.canonical_url) === page);
+  if (product) return { product, competitor: null, confidence: 1 };
+  const competitor = target.approved_competitors.find(
+    (row) => canonicalPage(row.canonical_url) === page,
+  );
+  return competitor ? { product: null, competitor, confidence: 1 } : NO_MATCH;
+}
 
 /**
  * The catalog product or approved competitor the span names first.
@@ -101,7 +115,7 @@ const NO_MATCH: Match = { product: null, competitor: null, confidence: 0 };
  * that brand on the shelf shares. When a span names both sides ("Rival Y, a
  * cheaper alternative to Owned"), the one named first holds the slot.
  */
-export function matchRecommendation(text: string, target: FrozenShelfTarget): Match {
+export function matchRecommendation(text: string, target: ShelfCatalog): ShelfMatch {
   const haystack = ` ${normalize(text)} `;
   const at = (value: string | null | undefined) => {
     const needle = normalize(value ?? '');
@@ -111,7 +125,7 @@ export function matchRecommendation(text: string, target: FrozenShelfTarget): Ma
   };
   const first = (values: Array<string | null | undefined>) => Math.min(...values.map(at));
   let best = { index: Infinity, match: NO_MATCH };
-  const consider = (index: number, match: Match) => {
+  const consider = (index: number, match: ShelfMatch) => {
     if (index < best.index) best = { index, match };
   };
   for (const product of target.products) {
@@ -125,7 +139,11 @@ export function matchRecommendation(text: string, target: FrozenShelfTarget): Ma
       brand < Infinity &&
       distinctiveAttributes(product, target).some((value) => at(value) < Infinity)
     )
-      consider(brand, { product, competitor: null, confidence: 0.9 });
+      consider(brand, {
+        product,
+        competitor: null,
+        confidence: shelfPolicy.brand_attribute_match_confidence,
+      });
   }
   for (const competitor of target.approved_competitors)
     consider(first([competitor.canonical_url, competitor.product_name, competitor.brand_name]), {
@@ -137,7 +155,7 @@ export function matchRecommendation(text: string, target: FrozenShelfTarget): Ma
 }
 
 /** Textual attribute values no other same-brand product on the shelf carries. */
-function distinctiveAttributes(product: FrozenProduct, target: FrozenShelfTarget) {
+function distinctiveAttributes(product: FrozenProduct, target: ShelfCatalog) {
   const textual = (row: FrozenProduct) =>
     Object.values(row.attributes).flatMap((value) => {
       const normalized = typeof value === 'string' ? normalize(value) : '';
@@ -198,7 +216,7 @@ const hasProductSignal = (span: RecommendationSpan) =>
  */
 export async function prepareRecommendations(
   answer: string,
-  target: FrozenShelfTarget,
+  target: ShelfCatalog,
   resolver?: ShelfResolver,
 ): Promise<PreparedRecommendation[]> {
   const spans = recommendationSpans(answer);
@@ -250,12 +268,15 @@ export async function prepareRecommendations(
   });
 }
 
+const OBSERVED_PRICE = new RegExp(
+  String.raw`([$£€₹]|AUD|USD|CAD|NZD|GBP|EUR|INR)\s*(\d[${AMOUNT_CHARACTERS}]*)`,
+  'iu',
+);
 export function observedPrice(
   span: string,
   locale: string,
 ): { price: number | null; currency: string } {
-  const [, symbol, amount] =
-    /([$£€₹]|AUD|USD|CAD|NZD|GBP|EUR|INR)\s*(\d[\d,.]*)/iu.exec(span) ?? [];
+  const [, symbol, amount] = OBSERVED_PRICE.exec(span) ?? [];
   if (symbol === undefined || amount === undefined) return { price: null, currency: '' };
   const marker = symbol.toUpperCase();
   const currencies = new Set(
@@ -298,11 +319,19 @@ export function resolvedCompetitorUrl(
   const inAnswer = (evidence.answer.match(/https?:\/\/[^\s)\]}>,"']+/giu) ?? []).some(
     (value) => canonicalPage(stripTrailing(value, '.;:!?')) === canonical,
   );
-  if (!inAnswer) return null;
+  return inAnswer ? competitorPageUrl(canonical, evidence.ownedHosts) : null;
+}
+/**
+ * A product page that may stand for an AI-observed competitor: a web page off
+ * the business's own hosts, not a known non-product host or path.
+ */
+export function competitorPageUrl(url: string, ownedHosts: string[]): string | null {
+  const canonical = canonicalPage(url);
+  if (!canonical) return null;
   const parsed = new URL(canonical);
   const within = (domains: readonly string[]) =>
     domains.some((domain) => domainMatches(parsed.hostname, domain));
-  if (within(shelfPolicy.non_pdp_hosts) || within(evidence.ownedHosts)) return null;
+  if (within(shelfPolicy.non_pdp_hosts) || within(ownedHosts)) return null;
   if (shelfPolicy.excluded_paths.some((token) => parsed.pathname.toLowerCase().includes(token)))
     return null;
   return canonical;

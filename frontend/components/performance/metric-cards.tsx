@@ -1,5 +1,3 @@
-'use client';
-
 import { Card, CardContent } from '@/components/ui/card';
 import { ChartSwatch, type ChartTone } from '@/components/ui/chart';
 import { InfoHint } from '@/components/ui/info-hint';

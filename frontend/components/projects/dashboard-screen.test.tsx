@@ -232,21 +232,33 @@ describe('DashboardScreen', () => {
         <DashboardScreen />
       </TooltipProvider>,
     );
-    expect(screen.getByRole('heading', { name: 'Acme' })).toBeInTheDocument();
-    // Visibility is a mention rate, so the tile carries a percent unit.
-    expect(
-      within(screen.getByRole('region', { name: 'Project state' })).getByText('72.5%'),
-    ).toBeInTheDocument();
+    // The project is named by the sidebar's switcher; the Overview keeps one
+    // line with the site and the run it was tracked in.
+    expect(screen.queryByRole('heading', { name: 'Acme' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^acme\.com/ })).toHaveAttribute(
+      'href',
+      'https://acme.com/',
+    );
+    expect(screen.getByText(/^Tracked .*· chatgpt, gemini$/u)).toBeVisible();
+    // The names and whole-percent precision AI Visibility uses for the same run.
+    const state = within(screen.getByRole('region', { name: 'Project state' }));
+    expect(state.getByText('Visibility')).toBeVisible();
+    expect(state.getByText('73%')).toBeVisible();
+    expect(state.getByText('Share of voice')).toBeVisible();
+    expect(state.getByText('48%')).toBeVisible();
+    expect(state.getByText('Rank')).toBeVisible();
+    expect(state.getByText('#2')).toBeVisible();
+    expect(state.queryByText('Brand rank')).not.toBeInTheDocument();
     // Rank is better when it falls, so climbing one place reads as an improvement.
-    const rankChange = within(screen.getByRole('region', { name: 'Project state' }))
+    const rankChange = state
       .getAllByText('vs previous')
       .map((context) => context.closest('[data-outcome]'))
-      .find((delta) => delta?.textContent === '↓down 1.0vs previous');
+      .find((delta) => delta?.textContent === '↓down 1vs previous');
     expect(rankChange).toHaveAttribute('data-outcome', 'improved');
-    expect(screen.getByRole('heading', { name: 'Project state' })).toBeInTheDocument();
     expect(
-      within(screen.getByRole('region', { name: 'Movement' })).getByText('68.3%'),
+      within(screen.getByRole('region', { name: 'Owned citation rate' })).getByText('33%'),
     ).toBeVisible();
+    expect(within(screen.getByRole('region', { name: 'Movement' })).getByText('68%')).toBeVisible();
     // With no open actions the section is only its empty state, still linking to every action.
     expect(screen.getByRole('heading', { name: 'No open actions' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: 'Ranked actions' })).not.toBeInTheDocument();
@@ -296,23 +308,78 @@ describe('DashboardScreen', () => {
     expect(ranked.queryByText('7.5')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'No open actions' })).not.toBeInTheDocument();
   });
-  it('shows an empty state instead of a movement card before a comparable run', async () => {
+  it('notes a missing comparable run in one line of the movement card', async () => {
     const user = userEvent.setup();
+    queryResult.data = {
+      ...commandCenter,
+      measurement: {
+        ...commandCenter.measurement,
+        comparable_audit_id: null,
+        comparison_status: 'no_baseline',
+      },
+      movements: [],
+    };
+    renderDashboard(
+      <TooltipProvider>
+        <DashboardScreen />
+      </TooltipProvider>,
+    );
+    const movement = within(screen.getByRole('region', { name: 'Movement' }));
+    expect(movement.getByText('No comparable measurement yet')).toBeVisible();
+    // A compact note, not a block empty state with a heading of its own.
+    expect(
+      screen.queryByRole('heading', { name: 'No comparable measurement yet' }),
+    ).not.toBeInTheDocument();
+    // Its action opens the Launch audit dialog, where the run is confirmed.
+    expect(screen.queryByRole('dialog', { name: 'Launch audit' })).not.toBeInTheDocument();
+    await user.click(movement.getByRole('button', { name: 'Launch audit' }));
+    expect(screen.getByRole('dialog', { name: 'Launch audit' })).toBeInTheDocument();
+  });
+  it('says a comparable run produced no change, without offering another run', () => {
     queryResult.data = { ...commandCenter, movements: [] };
     renderDashboard(
       <TooltipProvider>
         <DashboardScreen />
       </TooltipProvider>,
     );
-    // At the card-title rung, beside the H3 card titles.
-    expect(
-      screen.getByRole('heading', { level: 3, name: 'No comparable measurement yet' }),
-    ).toBeVisible();
-    expect(screen.queryByRole('region', { name: 'Movement' })).not.toBeInTheDocument();
-    // Its action opens the Launch audit dialog, where the run is confirmed.
-    expect(screen.queryByRole('dialog', { name: 'Launch audit' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Launch audit' }));
-    expect(screen.getByRole('dialog', { name: 'Launch audit' })).toBeInTheDocument();
+    const movement = within(screen.getByRole('region', { name: 'Movement' }));
+    expect(movement.getByText('No movement to show')).toBeVisible();
+    expect(movement.queryByText('No comparable measurement yet')).not.toBeInTheDocument();
+    expect(movement.queryByRole('button', { name: 'Launch audit' })).not.toBeInTheDocument();
+  });
+  it("gives the next Action its reason and the Action's evidence", () => {
+    queryResult.data = {
+      ...commandCenter,
+      next_action: {
+        kind: 'opportunity',
+        title: 'Publish a comparison page',
+        href: '/agent/actions/00000000-0000-4000-8000-0000000000d1',
+        opportunity_id: '00000000-0000-4000-8000-0000000000c1',
+      },
+      actions: [
+        {
+          id: '00000000-0000-4000-8000-0000000000c1',
+          action_id: '00000000-0000-4000-8000-0000000000d1',
+          title: 'Publish a comparison page',
+          severity: 'critical',
+          target_label: '/pricing',
+          evidence_summary: { count: 3 },
+          priority_score: 7.46,
+        },
+      ],
+    };
+    renderDashboard(
+      <TooltipProvider>
+        <DashboardScreen />
+      </TooltipProvider>,
+    );
+    const next = within(screen.getByRole('region', { name: 'Publish a comparison page' }));
+    expect(next.getByText('/pricing · 3 evidence items')).toBeVisible();
+    expect(next.getByText('High')).toBeVisible();
+    expect(next.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
+      'href',
+      '/agent/actions/00000000-0000-4000-8000-0000000000d1?project=00000000-0000-4000-8000-000000000001',
+    );
   });
   it("lists prompts where answers named a competitor but not the brand, with each prompt's Action", () => {
     const outcome = (engine: string, gaps: Record<string, number>) => ({
@@ -528,7 +595,7 @@ describe('DashboardScreen', () => {
       ),
     ).toHaveAttribute('href', '/runs?project=00000000-0000-4000-8000-000000000001');
     expect(
-      within(screen.getByRole('region', { name: 'Citation share' })).getByText('Not run'),
+      within(screen.getByRole('region', { name: 'Owned citation rate' })).getByText('Not run'),
     ).toBeVisible();
     // The PDF exports the layout, so it is available before the first audit too.
     expect(screen.getByRole('button', { name: /export pdf/i })).toBeVisible();
@@ -557,7 +624,7 @@ describe('DashboardScreen', () => {
       screen.queryByRole('region', { name: 'Choose the questions you want to track' }),
     ).not.toBeInTheDocument();
   });
-  it('labels a null citation share from an observed run as unavailable', () => {
+  it('labels a null owned citation rate from an observed run as unavailable', () => {
     queryResult.data = {
       ...commandCenter,
       track: {
@@ -572,7 +639,7 @@ describe('DashboardScreen', () => {
       </TooltipProvider>,
     );
     expect(
-      within(screen.getByRole('region', { name: 'Citation share' })).getByText('Unavailable'),
+      within(screen.getByRole('region', { name: 'Owned citation rate' })).getByText('Unavailable'),
     ).toBeVisible();
   });
   it('keeps observed zero distinct from an unavailable value', () => {

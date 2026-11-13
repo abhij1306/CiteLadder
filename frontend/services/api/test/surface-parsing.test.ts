@@ -3,9 +3,12 @@ import {
   parseAds,
   parseOverview,
   parseScraper,
+  parseShoppingResults,
   overviewAnswer,
 } from '../src/search-surfaces/parsing.ts';
 import adsEnvelope from './fixtures/chatgpt-ads/envelope.json' with { type: 'json' };
+import fullCards from './fixtures/chatgpt-products/full-cards.json' with { type: 'json' };
+import titleTagCards from './fixtures/chatgpt-products/title-tag-cards.json' with { type: 'json' };
 const task = (status: number, items?: unknown) => ({
   status_code: 20000,
   tasks: [
@@ -209,5 +212,147 @@ describe('observed surface parsing', () => {
     expect(parseAds(envelope([page]))).toEqual({ ads: [], skipped: 0 });
     expect(parseAds(envelope([]))).toBeNull();
     expect(parseAds({ status_code: 20000, tasks: [] })).toBeNull();
+  });
+});
+describe('ChatGPT shopping carousel parsing', () => {
+  it('reads every field a full product card carries, positioned within its carousel', () => {
+    const cards = parseShoppingResults(fullCards);
+    expect(cards.map((card) => [card.position, card.title, card.price, card.domain])).toEqual([
+      [1, "Nike Men's Winflo 12 Road Running Shoes in Grey, Size: 14 | …", 110, 'www.nike.com'],
+      [2, 'Brooks Revel 9 Mens Soft-Cushioned Running Shoes', 100, 'store.fleetfeet.com'],
+      [
+        3,
+        'New Balance 880 Running Shoe in Slate Grey/Reflection at Nor…',
+        99.97,
+        'www.nordstromrack.com',
+      ],
+      [
+        4,
+        "ASICS Gel Contend 10 D Men's Running Shoes | Big 5 Sporting …",
+        69.99,
+        'www.big5sportinggoods.com',
+      ],
+      [5, "Nike Men's Downshifter 14 Road Running Shoes in White, Size:…", 49.97, 'www.nike.com'],
+    ]);
+    expect(cards[0]).toEqual({
+      position: 1,
+      title: "Nike Men's Winflo 12 Road Running Shoes in Grey, Size: 14 | …",
+      tag: 'Best overall value',
+      price: 110,
+      currency: 'USD',
+      merchant_name: 'Nike',
+      url: 'https://www.nike.com/t/winflo-12-mens-road-running-shoes-GYVSurvY/HV9272-007?nikegos=true&utm_medium=feed&utm_source=chatgpt.com',
+      domain: 'www.nike.com',
+      external_product_id: '1015989646-00198966953284',
+      image_url: 'https://images.example/card-1.jpg',
+    });
+    expect(cards[2]).toMatchObject({ tag: null, merchant_name: 'Nordstrom Rack' });
+  });
+  it('keeps title-and-tag cards with every other field absent, not zero', () => {
+    expect(parseShoppingResults(titleTagCards)).toEqual([
+      {
+        position: 1,
+        title: 'Optimum Nutrition Gold Standard 100% Whey',
+        tag: 'Best overall value',
+        price: null,
+        currency: '',
+        merchant_name: null,
+        url: '',
+        domain: '',
+        external_product_id: null,
+        image_url: 'https://images.example/card-1.jpg?purpose=fullsize',
+      },
+      {
+        position: 2,
+        title: 'Transparent Labs Grass-Fed Whey Isolate',
+        tag: 'Best premium option',
+        price: null,
+        currency: '',
+        merchant_name: null,
+        url: '',
+        domain: '',
+        external_product_id: null,
+        image_url: 'https://images.example/card-2.jpg',
+      },
+      {
+        position: 3,
+        title: 'Dymatize ISO100',
+        tag: null,
+        price: null,
+        currency: '',
+        merchant_name: null,
+        url: '',
+        domain: '',
+        external_product_id: null,
+        image_url: 'https://images.example/card-3.jpg',
+      },
+      {
+        position: 4,
+        title: 'Naked Whey',
+        tag: null,
+        price: null,
+        currency: '',
+        merchant_name: null,
+        url: '',
+        domain: '',
+        external_product_id: null,
+        image_url: 'https://images.example/card-4.jpg',
+      },
+    ]);
+    // The scraper answer still parses with the carousel in the page.
+    expect(
+      parseScraper(titleTagCards, '11110537-2641-0626-0000-a43fc092bb93', 'chatgpt_search'),
+    ).toMatchObject({ logical_engine: 'chatgpt_search' });
+  });
+  it('gives sponsored cards no organic product or position, and skips untitled cards in place', () => {
+    const card = (title: string, extra: Record<string, unknown> = {}) => ({
+      type: 'chat_gpt_products_element',
+      title,
+      ...extra,
+    });
+    const envelope = {
+      status_code: 20000,
+      tasks: [
+        {
+          id: 'ours',
+          status_code: 20000,
+          result: [
+            {
+              items: [
+                {
+                  type: 'chat_gpt_carousel',
+                  items: [
+                    { type: 'chat_gpt_ad', title: 'Sponsored runner', url: 'https://ad.example/p' },
+                  ],
+                },
+                {
+                  type: 'chat_gpt_products',
+                  items: [
+                    { type: 'chat_gpt_ad', title: 'Sponsored card', url: 'https://ad.example/q' },
+                    card(''),
+                    card('Organic Runner', { price: '12', merchants: ['Shop'], rating: 4.8 }),
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(parseShoppingResults(envelope)).toEqual([
+      {
+        position: 2,
+        title: 'Organic Runner',
+        tag: null,
+        price: null,
+        currency: '',
+        merchant_name: null,
+        url: '',
+        domain: '',
+        external_product_id: null,
+        image_url: null,
+      },
+    ]);
+    expect(parseShoppingResults({ status_code: 20000, tasks: [] })).toEqual([]);
   });
 });

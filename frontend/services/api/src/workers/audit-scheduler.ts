@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { retryAfterSeconds } from '@citeladder/contracts/retry-after';
 import { sql } from 'kysely';
 import type { Database } from '../db/database.ts';
 import { strings } from '../db/json.ts';
@@ -129,16 +130,24 @@ export class AuditScheduler {
           return false;
         }
         const failures = schedule.failure_count + 1;
+        const enabled = failures < this.settings.max_consecutive_failures;
+        // `next_run_at` keeps anchoring the cadence: the same occurrence retries
+        // after an ownerless lease, and success advances from the original anchor.
+        // A schedule paused by failures holds no lease, so Resume plans at once.
         await trx
           .updateTable('audit_schedules')
           .set({
             ...release,
+            ...(enabled
+              ? {
+                  lease_expires_at: sql<Date>`clock_timestamp() + ${this.settings.failure_retry_seconds} * interval '1 second'`,
+                }
+              : {}),
             failure_count: failures,
             // The admission reason (e.g. no connected provider) is what the owner can act on.
             last_error: error instanceof ApiError ? error.code : 'audit_planning_failed',
             last_failure_at: at,
-            enabled: failures < this.settings.max_consecutive_failures,
-            next_run_at: new Date(at.getTime() + this.settings.failure_retry_seconds * 1000),
+            enabled,
           })
           .where('id', '=', schedule.id)
           .where('workspace_id', '=', claim.workspaceId)
@@ -150,8 +159,7 @@ export class AuditScheduler {
   }
   /** How long a retryable refusal asks to wait: its `Retry-After`, else the failure delay. */
   private retrySeconds(error: ApiError) {
-    const seconds = Number(error.headers?.['retry-after']);
-    return Number.isFinite(seconds) && seconds > 0 ? seconds : this.settings.failure_retry_seconds;
+    return retryAfterSeconds(error.headers?.['retry-after']) ?? this.settings.failure_retry_seconds;
   }
   async runOnce(at = this.now(), canAdmit?: () => boolean) {
     if (canAdmit) return this.planUntilBudget(at, canAdmit);

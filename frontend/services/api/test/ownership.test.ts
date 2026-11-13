@@ -16,6 +16,7 @@ function ownershipInputs(overrides: Partial<OwnershipInputs> = {}): OwnershipInp
         responses: { 200: z.object({ name: z.string() }) },
       },
     ]),
+    modules: { 'routes/executions.ts': ['executions', 'executions'] },
     ...overrides,
   };
 }
@@ -52,6 +53,15 @@ describe('route-ownership gate', () => {
     expect(
       routeOwnershipFailures(ownershipInputs({ document: machine, prefixes: ['/api/v1'] })),
     ).toEqual(["'executions' has no declared route"]);
+  });
+  it('refuses a family served by a second route module', () => {
+    const modules = {
+      'routes/executions.ts': ['executions'],
+      'routes/execution-exports.ts': ['executions'],
+    };
+    expect(routeOwnershipFailures(ownershipInputs({ modules }))).toEqual([
+      "'executions' is served by more than one module: routes/executions.ts, routes/execution-exports.ts",
+    ]);
   });
   it('refuses ambiguous family tags', () => {
     const input = ownershipInputs();

@@ -83,7 +83,8 @@ function Overview({
       </p>
       <p className={textRole('caption')}>
         Analyzer {projection.analyzer_version} · scoring {projection.scoring_rule_version} ·{' '}
-        {projection.counts?.expected ?? 'Unknown'} expected / {projection.total_failed} failed
+        {projection.counts?.expected ?? 'Unknown'} expected / {projection.total_failed ?? 'Unknown'}{' '}
+        failed
       </p>
       <p className={textRole('caption')}>
         {projection.model_provenance.length
@@ -289,7 +290,7 @@ function viewContent(view: AnalyticsSelection['view'], state: AppState, controll
         />
       );
     case 'sources':
-      return <SourcesView state={state} controller={controller} />;
+      return <SourcesView state={state} selection={selection} controller={controller} />;
     case 'site_health':
       return (
         <SiteHealthView

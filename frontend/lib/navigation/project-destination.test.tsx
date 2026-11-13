@@ -127,9 +127,11 @@ describe('useSelectProject', () => {
     const { result } = renderHook(() => useSelectProject());
 
     act(() => result.current(PROJECT_1));
+    const calls = [...navigate.mock.calls];
+    // The same hook navigates for a different project.
+    act(() => result.current(PROJECT_2));
 
-    expect(navigate).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
+    expect([calls, navigate.mock.calls]).toEqual([[], [[`/projects?project=${PROJECT_2}`]]]);
   });
 
   it('replaces when the entry being left behind is dead', () => {
@@ -183,12 +185,14 @@ describe('useSelectProject', () => {
   it('keeps a path that names no project-owned resource', () => {
     activeProjectId = PROJECT_1;
     pathname = '/issues';
-    search = new URLSearchParams({ dimension: 'technical' });
+    search = new URLSearchParams({ section: 'content', sort: 'pages' });
     const { result } = renderHook(() => useSelectProject());
 
     act(() => result.current(PROJECT_2));
 
-    expect(navigate).toHaveBeenCalledWith(`/issues?dimension=technical&project=${PROJECT_2}`);
+    expect(navigate).toHaveBeenCalledWith(
+      `/issues?section=content&sort=pages&project=${PROJECT_2}`,
+    );
   });
 
   it("drops the outgoing project's record ids and keeps its view", () => {

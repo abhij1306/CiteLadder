@@ -5,6 +5,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
+import { sql } from 'kysely';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { createAudits } from '../src/audits/creation.ts';
@@ -12,10 +13,16 @@ import { auditRuntime } from '../src/audits/config.ts';
 import { auditInput } from '../src/audits/inputs.ts';
 import { AgentQueue } from '../src/agent/queue.ts';
 import { integrationSettings } from '../src/integrations/config.ts';
+import { policy } from '../src/config.ts';
 import { createDiscovery } from '../src/projects/discovery.ts';
 import { discoveryCreate } from '../src/projects/discovery-inputs.ts';
 import { AuditQueue, type AuditClaimScope } from '../src/queue/audit-queue.ts';
-import { ANALYTICS_LANE, SITE_HEALTH_LANE, TaskQueue } from '../src/queue/task-queue.ts';
+import {
+  ANALYTICS_LANE,
+  SITE_HEALTH_LANE,
+  TaskQueue,
+  type ClaimFilter,
+} from '../src/queue/task-queue.ts';
 import { DiscoveryWorker } from '../src/workers/discovery-worker.ts';
 import { IntegrationWorker } from '../src/workers/integration-worker.ts';
 import { AgentFixtures } from './agent-support.ts';
@@ -73,16 +80,28 @@ async function analyticsTasks(workspaceId: string, backlog: Backlog) {
   }
 }
 
+/** Claims only this lane's seeded workspaces, never other work in the shared database. */
+const seeded =
+  (workspaces: readonly string[]): ClaimFilter =>
+  (column) =>
+    sql<boolean>`${column('workspace_id')} in (${sql.join(workspaces)})`;
+
 function analyticsLane(): Lane {
   const queue = new TaskQueue(db, ANALYTICS_LANE, { leaseTtlSeconds: 120 });
+  const workspaces: string[] = [];
   return {
     async seed(backlog) {
       const { workspaceId } = await fixtures.tenant();
       await analyticsTasks(workspaceId, backlog);
+      workspaces.push(workspaceId);
       return workspaceId;
     },
     async claimNext() {
-      const [task] = await queue.claim({ owner: 'fairness', kinds: [ANALYTICS_PROBE] });
+      const [task] = await queue.claim({
+        owner: 'fairness',
+        kinds: [ANALYTICS_PROBE],
+        where: seeded(workspaces),
+      });
       return task?.workspace_id ?? null;
     },
   };
@@ -90,6 +109,7 @@ function analyticsLane(): Lane {
 
 function siteHealthLane(): Lane {
   const queue = new TaskQueue(db, SITE_HEALTH_LANE, { leaseTtlSeconds: 120 });
+  const workspaces: string[] = [];
   return {
     async seed(backlog) {
       const crawl = await fixtures.crawl('running');
@@ -101,10 +121,15 @@ function siteHealthLane(): Lane {
         .set({ available_at: backlog.availableAt })
         .where('id', 'in', ids)
         .execute();
+      workspaces.push(crawl.workspaceId);
       return crawl.workspaceId;
     },
     async claimNext() {
-      const [task] = await queue.claim({ owner: 'fairness', kinds: [SITE_PROBE] });
+      const [task] = await queue.claim({
+        owner: 'fairness',
+        kinds: [SITE_PROBE],
+        where: seeded(workspaces),
+      });
       return task?.workspace_id ?? null;
     },
   };
@@ -148,6 +173,7 @@ function auditLane(): Lane {
 
 function discoveryLane(): Lane {
   const worker = new DiscoveryWorker(db, { gateway: null, env: {} });
+  const workspaces: string[] = [];
   const input = discoveryCreate.parse({
     brand_name: 'Acme',
     website_url: 'acme.com',
@@ -163,10 +189,16 @@ function discoveryLane(): Lane {
         .set({ priority: backlog.priority, available_at: backlog.availableAt })
         .where('workspace_id', '=', workspaceId)
         .execute();
+      workspaces.push(workspaceId);
       return workspaceId;
     },
     async claimNext() {
-      return (await worker.claim('fairness'))?.workspace_id ?? null;
+      const [task] = await worker.queue.claim({
+        owner: 'fairness',
+        kinds: [policy.discovery.constants.task_kind_brand_discovery],
+        where: seeded(workspaces),
+      });
+      return task?.workspace_id ?? null;
     },
   };
 }

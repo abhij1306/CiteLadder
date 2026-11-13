@@ -9,7 +9,6 @@ import {
   executionFailureReason,
   executionStatusLabel,
   formatDateTime,
-  isAuditCancelable,
   pollAudits,
   schedulePauseReason,
 } from './status';
@@ -19,11 +18,6 @@ describe('audit lifecycle decisions', () => {
     expect(pollAudits(['completed', 'reporting'])).toBe(ACTIVE_RUN_POLL_MS);
     expect(pollAudits(['completed', 'partially_completed'])).toBe(false);
     expect(pollAudits(undefined)).toBe(false);
-  });
-
-  it('cannot cancel a run that is already reporting', () => {
-    expect(isAuditCancelable('running')).toBe(true);
-    expect(isAuditCancelable('reporting')).toBe(false);
   });
 });
 

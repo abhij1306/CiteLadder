@@ -165,11 +165,11 @@ function pageLinks(
     if (group) group.variants += 1;
     else groups.set(fact, { fact, variants: 0 });
   }
-  return [...groups.values()].map(({ fact, variants }) =>
-    variants > 0
-      ? `${fact} (+${String(variants)} ${variants === 1 ? 'variant' : 'variants'})`
-      : fact,
-  );
+  return [...groups.values()].map(({ fact, variants }) => {
+    if (variants === 0) return fact;
+    const noun = variants === 1 ? 'variant' : 'variants';
+    return `${fact} (+${String(variants)} ${noun})`;
+  });
 }
 
 /** Where a redirecting link on this page lands; a link back to this page says so. */
@@ -332,6 +332,7 @@ const FACTS_BY_RULE: Readonly<
     text(evidence.declared_name) ? ['visible author'] : ['author'],
   'aeo.source_support_present': () => ['citation'],
   'aeo.llms_txt_present': () => ['/llms.txt'],
+  'technical.sitemap_present': () => ['XML sitemap'],
   'aeo.product_brand_identity': () => ['brand'],
   'aeo.product_evidence_facts': () => ['gtin', 'mpn', 'sku'],
   'aeo.offer_freshness_signal': offerFreshness,

@@ -293,6 +293,39 @@ describe('TrendChart', () => {
     expect(runsOf(container)).toBe(3);
   });
 
+  it('bridges a break between two measured points with a dashed connector, never a missing value', () => {
+    const connectors = (container: HTMLElement) =>
+      [...container.querySelectorAll('[data-trend-line="1"] [data-trend-connector]')].map((path) =>
+        path.getAttribute('stroke-dasharray'),
+      );
+    // Two runs measured under different methods: two dots, joined by a faint dash.
+    const { container, rerender } = render(
+      <TrendChart
+        label="Visibility trend"
+        data={[
+          { label: 'Jun', value: 40 },
+          { label: 'Jul', value: 60, breakBefore: true, versionChange: { note: 'New method' } },
+        ]}
+      />,
+    );
+    expect(runsOf(container)).toBe(3);
+    expect(container.querySelectorAll('[data-trend-line="1"] circle')).toHaveLength(2);
+    expect(connectors(container)).toEqual(['3 4']);
+    expect(container.querySelectorAll('[data-version-marker]')).toHaveLength(1);
+
+    rerender(
+      <TrendChart
+        label="Visibility trend"
+        data={[
+          { label: 'Jun', value: 40 },
+          { label: 'Jul', value: null },
+          { label: 'Aug', value: 60, breakBefore: true },
+        ]}
+      />,
+    );
+    expect(connectors(container)).toEqual([]);
+  });
+
   it('dots a value standing alone between gaps, so it is not drawn as nothing', () => {
     const { container } = render(
       <TrendChart

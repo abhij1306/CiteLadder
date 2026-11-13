@@ -1,10 +1,11 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
+import { focusByKeyboard } from '@/test/keyboard-focus';
 import { TrafficPages } from './pages-view';
 
 const WORKSPACE = '11111111-1111-4111-8111-111111111111';
@@ -112,7 +113,7 @@ it('keeps inventory, zero, partial values and distinct unavailable reasons reada
   expect(partial).toHaveTextContent('12Partial');
   const missing = within(row).getByRole('button', { name: 'Unavailable requests' });
   expect(missing).toHaveTextContent('–');
-  act(() => missing.focus());
+  focusByKeyboard(missing);
   expect(await screen.findByRole('tooltip')).toHaveTextContent('requests: Not connected');
   await user.keyboard('{Escape}');
   expect(within(row).getByRole('button', { name: /4xx and 5xx unavailable/ })).toHaveTextContent(

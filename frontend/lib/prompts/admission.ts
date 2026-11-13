@@ -11,6 +11,7 @@ const DROP_REASON_COPY: Record<PromptAdmissionDropReason, string> = {
   too_many_words: 'longer than 16 words',
   placeholder: 'with an unfilled placeholder',
   two_needs: 'asking for two things at once',
+  advice: 'asking for general advice instead of products or services',
   observed_copy: 'copying an observed search query',
   off_topic: "unrelated to this project's brand, topics or profile",
   location_unplanned: 'naming a place the plan did not ask for',

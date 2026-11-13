@@ -10,7 +10,12 @@
  */
 import type { TrendPoint, TrendSeries } from '@/components/ui/trend-chart';
 import type { VisibilityTrendPoint } from '@citeladder/contracts';
-import { formatDisplayDate, formatDisplayShortDate } from '@/lib/format';
+import {
+  formatDisplayDate,
+  formatDisplayShortDate,
+  formatShortDate,
+  formatWindowDate,
+} from '@/lib/format';
 
 /** Trend granularity — mirrors the backend `granularity=run|week|month`. */
 export type TrendGranularity = 'run' | 'day' | 'week' | 'month';
@@ -48,14 +53,20 @@ export function rangeToFrom(range: TrendRange, now: Date = new Date()): string |
 /** Which headline metric a chart plots. */
 export type TrendMetric = 'sov' | 'brand_mention_rate' | 'owned_citation_rate';
 
-/** Short x-axis label for a point's completion timestamp. */
-function formatPointLabel(timestamp: string, timeZone: string): string {
-  return formatDisplayShortDate(timestamp, timeZone);
-}
-
-/** Full date label (used for the start/latest ranking card subtitles). */
-export function formatPointDate(timestamp: string, timeZone = 'UTC'): string {
-  return formatDisplayDate(timestamp, timeZone);
+/**
+ * A point's short axis label and full date. A run point is an instant, shown in
+ * the display timezone. A day, week or month bucket (`audit_id` null) starts at
+ * a UTC midnight that names a calendar day, so it keeps that day in every zone.
+ */
+function pointDates(point: VisibilityTrendPoint, timeZone: string) {
+  if (point.audit_id === null) {
+    const day = point.completed_at.slice(0, 10);
+    return { label: formatShortDate(day), dateLabel: formatWindowDate(day) };
+  }
+  return {
+    label: formatDisplayShortDate(point.completed_at, timeZone),
+    dateLabel: formatDisplayDate(point.completed_at, timeZone),
+  };
 }
 
 /** A metric's 0–100 value for a point (percentages scaled to whole percent). */
@@ -81,7 +92,7 @@ export function toChartPoints(
   metric: TrendMetric,
   timeZone = 'UTC',
   valueOf: (point: VisibilityTrendPoint) => number | null = (point) => metricValue(point, metric),
-): (TrendPoint & { completedAt: string })[] {
+): (TrendPoint & { dateLabel: string })[] {
   let prevVersions: string | null = null;
   let previousIdentity: string | null | undefined = undefined;
   return points.map((point) => {
@@ -94,10 +105,9 @@ export function toChartPoints(
     previousIdentity = point.comparison_key;
     prevVersions = versionKey;
     return {
+      ...pointDates(point, timeZone),
       // Preserve unavailable metrics as null — the chart renders a GAP and an
       // "unavailable" label rather than coercing to a misleading zero.
-      label: formatPointLabel(point.completed_at, timeZone),
-      completedAt: point.completed_at,
       value,
       timestamp: new Date(point.completed_at).getTime(),
       breakBefore: changed || identityChanged || !point.comparison_key,

@@ -5,6 +5,7 @@ import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record, strings } from '../db/json.ts';
 import { sourcePassages } from './internal-link-placements.ts';
+import { loadCrawl, pageAuditsSql } from './reads/crawl.ts';
 
 export type LinkScope = { workspaceId: string; projectId: string };
 const text = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
@@ -59,19 +60,27 @@ async function contextualInbound(db: Database, scope: LinkScope, crawlId: string
   return new Map(rows.map((row) => [row.site_url_id, row.main_content_inbound_count]));
 }
 
+/**
+ * The crawl's link pages: each page's latest audit as the crawl shows it
+ * (`pageAuditsSql`, SH-B9), so a later page rerun's content and links count.
+ * The contextual inbound counts stay the crawl's own link graph.
+ */
 export async function loadLinkPages(db: Database, scope: LinkScope, crawlId: string) {
+  const crawl = await loadCrawl(db, scope.workspaceId, crawlId);
   const query = db
     .selectFrom('site_page_analyses as analysis')
     .innerJoin('site_fetch_artifacts as artifact', 'artifact.id', 'analysis.artifact_id')
     .innerJoin('site_urls as url', 'url.id', 'analysis.site_url_id')
     .where('analysis.workspace_id', '=', scope.workspaceId)
     .where('analysis.project_id', '=', scope.projectId)
-    .where('analysis.crawl_id', '=', crawlId)
+    .where(
+      'analysis.id',
+      'in',
+      sql<string>`(select v.analysis_id from (${pageAuditsSql(crawl)}) v)`,
+    )
     .where('artifact.workspace_id', '=', scope.workspaceId)
-    .where('artifact.crawl_id', '=', crawlId)
     .where('url.workspace_id', '=', scope.workspaceId)
     .where('url.project_id', '=', scope.projectId)
-    .where('analysis.is_current', '=', true)
     .where('analysis.finalized_at', 'is not', null)
     // Filter before the page cap, so discarded rows never take an eligible page's place.
     .where(sql<boolean>`artifact.normalized_facts #>> '{extraction,state}' = 'available'`)

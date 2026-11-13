@@ -123,18 +123,18 @@ describe('Source types card', () => {
       />,
     );
     expect(screen.getByRole('img', { name: /^Source types:/ })).toHaveAccessibleName(
-      'Source types: You 10.0% (10), Editorial 40.0% (40), Competitor 20.0% (20), Other 30.0% (30)',
+      'Source types: You 10.0%, Editorial 40.0%, Competitor 20.0%, Other 30.0%',
     );
   });
 
   it('shares citations that belong to no type as an unclassified remainder of the declared total', () => {
     renderWithProviders(<Types totals={{ brand_owned: 30, community: 30 }} total={80} />);
     expect(screen.getByRole('img', { name: /^Source types:/ })).toHaveAccessibleName(
-      'Source types: You 37.5% (30), UGC 37.5% (30), Unclassified 25.0% (20)',
+      'Source types: You 37.5%, UGC 37.5%, Unclassified 25.0%',
     );
   });
 
-  it('says the selection holds no citations instead of drawing an empty bar', () => {
+  it('says the selection holds no citations instead of drawing an empty donut', () => {
     renderWithProviders(<Types totals={{}} total={0} />);
     expect(screen.getByText('No citations in this selection.')).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /^Source types/ })).not.toBeInTheDocument();

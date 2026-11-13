@@ -1,20 +1,21 @@
-'use client';
-
 import type { ReactNode } from 'react';
 
 import { ActiveRunBanner } from '@/components/visibility/active-run-banner';
 import { VisibilityEmptyState } from '@/components/visibility/empty-state';
 import { FanoutEvidence } from '@/components/visibility/fanout-evidence';
-import {
-  VisibilitySources,
-  useSourceDimensionSwitch,
-} from '@/components/visibility/visibility-sources';
+import { VisibilitySources } from '@/components/visibility/visibility-sources';
 import { VisibilityPerception } from '@/components/visibility/visibility-perception';
 import { VisibilityAccuracy } from '@/components/visibility/visibility-accuracy';
 import { VisibilityAds } from '@/components/visibility/visibility-ads';
 import { VisibilityByMarket } from '@/components/visibility/visibility-by-market';
-import { VisibilityActions, VisibilityToolbar } from '@/components/visibility/visibility-toolbar';
+import { SelectionGate } from '@/components/visibility/selection-gate';
+import type { Visibility } from '@citeladder/contracts';
+import {
+  VisibilityActions,
+  useVisibilityFilterMenu,
+} from '@/components/visibility/visibility-toolbar';
 import { VisibilityTrends } from '@/components/visibility/visibility-trends';
+import type { FilterDefinition } from '@/components/ui/all-filters';
 import { TabPanel, TabsRoot } from '@/components/ui/tabs';
 import { ListScreen } from '@/components/layout/page-shell';
 import { QueryState } from '@/components/ui/query-state';
@@ -37,6 +38,8 @@ export function VisibilityDashboard() {
     queries.auditsQuery.isError,
     queries.hasRuns,
   );
+  // The Sources filters are listed in the page's All filters but stay owned
+  // by the Sources panel; the provider spans both.
   return <VisibilityWorkspace filters={filters} queries={queries} state={state} />;
 }
 
@@ -83,7 +86,7 @@ function VisibilityWorkspace({
 }>) {
   // The Accuracy tab exists only inside the fact-checking pilot.
   const factChecking = useBrandFacts().data?.enabled ?? false;
-  const sourceDimension = useSourceDimensionSwitch();
+  const pageFilters = useVisibilityPageFilters({ filters, queries });
   if (state === 'empty') {
     return (
       <ListScreen actions={<VisibilityActions />}>
@@ -92,8 +95,9 @@ function VisibilityWorkspace({
       </ListScreen>
     );
   }
-  // The root spans the whole page: the strip is the navigation band and its
-  // panels are two bands below, in the content region.
+  // The root spans the whole page: the filters every tab shares follow the
+  // strip (D60), and the panels are one band below. A table's own filters
+  // lead its toolbar.
   return (
     <TabsRoot value={filters.activeTab} onValueChange={filters.selectTab}>
       <ListScreen
@@ -106,40 +110,7 @@ function VisibilityWorkspace({
           ariaLabel: 'Visibility views',
           onIntent: queries.prefetchTab,
         }}
-        controls={{
-          // Domains | URLs leads the filters rather than taking the band's
-          // `view` slot, which pushes the filters to the end: every tab's
-          // filters start at the same left edge (2026-11-03 app review).
-          filters: (
-            <>
-              {filters.activeTab === 'sources' && !state ? sourceDimension : null}
-              <VisibilityToolbar
-                activeTab={filters.activeTab}
-                runs={queries.runOptions}
-                selectedRunId={filters.selectedRunId}
-                onSelectMeasurement={filters.selectMeasurement}
-                engine={filters.engine}
-                onChangeEngine={filters.setEngine}
-                promptOptions={queries.promptOptions}
-                promptId={filters.promptId}
-                onChangePrompt={filters.setPromptId}
-                range={filters.range}
-                onChangeRange={filters.setRange}
-                granularity={filters.granularity}
-                onChangeGranularity={filters.setGranularity}
-                cohort={filters.cohort}
-                onChangeCohort={filters.setCohort}
-                selectionMode={filters.selectionMode}
-                onChangeSelectionMode={filters.setSelectionMode}
-                outcome={filters.outcome}
-                onChangeOutcome={filters.setOutcome}
-                markets={queries.markets}
-                market={filters.market}
-                onChangeMarket={filters.setMarket}
-              />
-            </>
-          ),
-        }}
+        controls={{ filters: pageFilters }}
       >
         {queries.activeRun ? <ActiveRunBanner run={queries.activeRun} /> : null}
         <TabPanel value={filters.activeTab} className="focus-ring">
@@ -154,6 +125,43 @@ function VisibilityWorkspace({
   );
 }
 
+/**
+ * The page's All filters: the filters every tab shares (measurement, surface,
+ * prompts, period). A tab's table keeps its own in its toolbar.
+ */
+function useVisibilityPageFilters({
+  filters,
+  queries,
+}: Readonly<{
+  filters: ReturnType<typeof useVisibilityFilters>;
+  queries: ReturnType<typeof useVisibilityQueries>;
+}>): readonly FilterDefinition[] {
+  return useVisibilityFilterMenu({
+    activeTab: filters.activeTab,
+    runs: queries.runOptions,
+    selectedRunId: filters.selectedRunId,
+    onSelectMeasurement: filters.selectMeasurement,
+    engine: filters.engine,
+    onChangeEngine: filters.setEngine,
+    promptOptions: queries.promptOptions,
+    promptId: filters.promptId,
+    onChangePrompt: filters.setPromptId,
+    range: filters.range,
+    onChangeRange: filters.setRange,
+    granularity: filters.granularity,
+    onChangeGranularity: filters.setGranularity,
+    cohort: filters.cohort,
+    onChangeCohort: filters.setCohort,
+    selectionMode: filters.selectionMode,
+    onChangeSelectionMode: filters.setSelectionMode,
+    outcome: filters.outcome,
+    onChangeOutcome: filters.setOutcome,
+    markets: queries.markets,
+    market: filters.market,
+    onChangeMarket: filters.setMarket,
+  });
+}
+
 function DashboardPanel({
   filters,
   queries,
@@ -161,6 +169,11 @@ function DashboardPanel({
   filters: ReturnType<typeof useVisibilityFilters>;
   queries: ReturnType<typeof useVisibilityQueries>;
 }>) {
+  // Every panel below reads the selection's run, so each waits behind the
+  // selection's own state; the market table reads the project and does not.
+  const gated = (panel: (selected: Visibility) => ReactNode) => (
+    <SelectionGate query={queries.visibilityQuery}>{panel}</SelectionGate>
+  );
   const panels: Partial<Record<VisibilityTab, ReactNode>> = {
     trends: (
       <Stack gap="workspace">
@@ -170,23 +183,26 @@ function DashboardPanel({
           market={filters.market}
           onSelectMarket={filters.setMarket}
         />
-        <VisibilityTrends
-          query={queries.trendQuery}
-          visibilityQuery={queries.visibilityQuery}
-          engineFilter={filters.engine}
-          surfaceRatesQuery={queries.surfaceRatesQuery}
-          surfaceEngine={queries.surfaceEngine}
-          hasRuns={queries.hasRuns}
-          isFiltered={filters.isTrendFiltered}
-          onEvidence={filters.openEvidence}
-        />
+        {gated((selected) => (
+          <VisibilityTrends
+            query={queries.trendQuery}
+            selected={selected}
+            selectionBusy={queries.visibilityQuery.isFetching}
+            engineFilter={filters.engine}
+            surfaceRatesQuery={queries.surfaceRatesQuery}
+            surfaceEngine={queries.surfaceEngine}
+            hasRuns={queries.hasRuns}
+            isFiltered={filters.isTrendFiltered}
+            onEvidence={filters.openEvidence}
+          />
+        ))}
       </Stack>
     ),
-    sources: <VisibilitySources filters={filters} queries={queries} />,
-    perception: <VisibilityPerception filters={filters} queries={queries} />,
-    accuracy: <VisibilityAccuracy filters={filters} queries={queries} />,
-    ads: <VisibilityAds filters={filters} queries={queries} />,
-    'query-fanout': (
+    sources: gated(() => <VisibilitySources filters={filters} queries={queries} />),
+    perception: gated(() => <VisibilityPerception filters={filters} queries={queries} />),
+    accuracy: gated(() => <VisibilityAccuracy filters={filters} queries={queries} />),
+    ads: gated(() => <VisibilityAds filters={filters} queries={queries} />),
+    'query-fanout': gated(() => (
       <FanoutEvidence
         query={queries.evidenceQuery}
         isFiltered={filters.isFiltered}
@@ -197,7 +213,7 @@ function DashboardPanel({
         scopeReady={queries.hasEvidenceScope}
         scopeNarrowed={queries.evidenceScopeNarrowed}
       />
-    ),
+    )),
   };
   return panels[filters.activeTab] ?? null;
 }

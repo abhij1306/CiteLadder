@@ -1,0 +1,3 @@
+id	title	link	price	brand	product_type	item_group_id
+RR-1-9	Road Runner 9	https://shop.example/products/road-runner	89.00 USD	Acme	Footwear > Running	RR-1
+RR-1-10	Road Runner 10	https://shop.example/products/road-runner	99.00 GBP	Acme	Footwear > Running	RR-1

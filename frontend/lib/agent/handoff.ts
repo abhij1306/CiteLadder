@@ -1,13 +1,21 @@
 /**
  * Evidence-screen handoffs into the Agent.
  *
- * **Work on this** opens New chat attached to an Action. **Ask agent** opens
+ * **Work with the agent** opens New chat attached to an Action, which writes
+ * the Action's message once it reads it. **Ask agent** opens
  * New chat with typed evidence references and an optional prefilled question.
  * The URL carries identifiers only: the server resolves and authorizes each
  * one when the chat is created, so a tampered or stale id fails there, never
  * here. Parsing drops anything malformed rather than guessing.
  */
+import type { ActionHandoff } from '@citeladder/contracts/actions';
 import type { AgentContextRefs } from '@citeladder/contracts/agent';
+
+import type { DatedEvidence } from '@/lib/agent/evidence';
+import { checkKindLabel, checkStateLabel, measurementLegLabel } from '@/lib/agent/vocabulary';
+import type { ActionDetail } from '@/lib/api/actions';
+import { DEVELOPER_TICKET_PAGES_MAX } from '@/lib/config/agent';
+import { pluralCount } from '@/lib/format';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -79,6 +87,55 @@ export function agentHandoffHref(input: HandoffInput): string {
   set(PARAM.workflow, input.workflowId);
   const query = params.toString();
   return query ? `/agent?${query}` : '/agent';
+}
+
+/** The workflow that fetches a page into a page document and opens its workspace. */
+const PAGE_WORKFLOW = 'optimize_page';
+
+/**
+ * New chat on an Action (AS3): the Action attached, and the workflow its
+ * diagnosis names with the finding's Opportunity or the Action's page. An
+ * Action on one of the latest crawl's content pages (`editable_page`, as the
+ * Action detail reads it) opens that page in the page workspace instead
+ * (phase 2, E3). The message stays out of the URL (it names evidence history
+ * and logs must not keep); New chat reads it from the attached Action, so it
+ * is the same either way.
+ */
+export function actionHandoffHref(
+  action: Readonly<{
+    id: string;
+    target_url: string | null;
+    handoff: ActionHandoff;
+    editable_page?: boolean;
+  }>,
+): string {
+  const { handoff } = action;
+  if (action.editable_page && action.target_url)
+    return agentHandoffHref({
+      actionId: action.id,
+      targetUrl: action.target_url,
+      workflowId: PAGE_WORKFLOW,
+    });
+  switch (handoff.context) {
+    case 'opportunity':
+      return agentHandoffHref({
+        actionId: action.id,
+        opportunityId: handoff.opportunity_id,
+        workflowId: handoff.workflow_id,
+      });
+    case 'page_url':
+      return agentHandoffHref({
+        actionId: action.id,
+        targetUrl: action.target_url,
+        workflowId: handoff.workflow_id,
+      });
+    case 'action':
+      return agentHandoffHref({ actionId: action.id });
+    default: {
+      const unknownHandoff: never = handoff;
+      throw new Error(`Unknown Action handoff: ${JSON.stringify(unknownHandoff)}`);
+    }
+  }
 }
 
 /**
@@ -236,4 +293,128 @@ export function withoutContext(
     delete next.target_site_url_id;
   }
   return next;
+}
+
+type Declaration = NonNullable<ActionDetail['declaration']>;
+
+/** What a developer ticket reads from an Action's detail. */
+type TicketAction = Pick<ActionDetail, 'target_label' | 'target_url' | 'member_measurement'> & {
+  handoff: Pick<ActionDetail['handoff'], 'message'>;
+  members: readonly Pick<ActionDetail['members'][number], 'id' | 'title' | 'remediation'>[];
+  diagnosis: Pick<ActionDetail['diagnosis'], 'donts'>;
+  cohort: Pick<
+    NonNullable<ActionDetail['cohort']>,
+    'rule_label' | 'page_count' | 'pages' | 'crawl_completed_at'
+  > | null;
+  declaration:
+    | (Pick<Declaration, 'declared_implemented_at' | 'deployed_by' | 'deployment_reference'> & {
+        checks: readonly Pick<Declaration['checks'][number], 'kind' | 'state' | 'reason'>[];
+      })
+    | null;
+};
+
+/** Stored text on one line, so it never breaks the Markdown around it. */
+const oneLine = (text: string) => text.replaceAll(/\s+/g, ' ').trim();
+/** One Markdown list line. */
+const line = (text: string) => `- ${oneLine(text)}`;
+/** A Markdown list of `items`, or one line saying there are `none`. */
+const list = (items: readonly string[], none: string) =>
+  items.length ? items.map((item) => line(item)) : [line(none)];
+const unique = (values: readonly string[]) => [...new Set(values.filter(Boolean))];
+
+function affectedPages(action: TicketAction, formatDate: (iso: string) => string): string[] {
+  const { cohort } = action;
+  if (!cohort) return [line(action.target_url ?? action.target_label)];
+  const read = cohort.crawl_completed_at
+    ? `crawl completed ${formatDate(cohort.crawl_completed_at)}`
+    : 'crawl completion not recorded';
+  const shown = cohort.pages.slice(0, DEVELOPER_TICKET_PAGES_MAX);
+  // The Action lists the cohort's stored pages; a large family stores only the
+  // first of its affected pages, so the rest are listed nowhere.
+  const onAction = cohort.pages.length - shown.length;
+  const unlisted = cohort.page_count - cohort.pages.length;
+  return [
+    `${cohort.rule_label} on ${pluralCount(cohort.page_count, 'page')} (${read}):`,
+    '',
+    ...shown.map((page) => line(page.url)),
+    ...(onAction > 0
+      ? [line(`and ${pluralCount(onAction, 'more page')}, listed on the Action in CiteLadder`)]
+      : []),
+    ...(unlisted > 0
+      ? [line(`and ${pluralCount(unlisted, 'more page')} with this issue, not listed`)]
+      : []),
+  ];
+}
+
+function verification(action: TicketAction, formatDate: (iso: string) => string): string[] {
+  const { declaration } = action;
+  if (declaration) {
+    const by = declaration.deployed_by ?? 'a former workspace member';
+    const reference = declaration.deployment_reference
+      ? ` (${declaration.deployment_reference})`
+      : '';
+    return [
+      `Deployed on ${formatDate(declaration.declared_implemented_at)}, recorded by ${by}${reference}.`,
+      '',
+      ...list(
+        declaration.checks.map(
+          (check) => `${checkKindLabel(check.kind)}: ${checkStateLabel(check)}`,
+        ),
+        'No automatic check applies; CiteLadder records the work but cannot verify it.',
+      ),
+    ];
+  }
+  return [
+    ...action.members.map((member) => {
+      const leg = action.member_measurement[member.id];
+      const by = leg ? measurementLegLabel(leg) : null;
+      const how = by ? 'checked by ' + by.toLowerCase() : 'not measured automatically';
+      return line(`${member.title}: ${how}`);
+    }),
+    '',
+    'When it ships, record the deployment on the Action in CiteLadder: Mark implemented with the day it went live and the release, pull request or commit. Readings before that day are not counted.',
+  ];
+}
+
+/**
+ * "Prepare developer ticket": the Action as Markdown a developer can paste
+ * into an issue tracker. The issue, the affected page or issue family, the
+ * dated evidence, the minimal patch and how CiteLadder will verify it, all
+ * from the Action's persisted read. `formatDate` renders a stored timestamp
+ * in the reader's display time zone.
+ */
+export function developerTicket(
+  action: TicketAction,
+  evidence: readonly DatedEvidence[],
+  formatDate: (iso: string) => string,
+): string {
+  const findings = unique(action.members.map((member) => member.title));
+  const steps = unique(action.members.map((member) => member.remediation));
+  const donts = action.diagnosis.donts ?? [];
+  const sections: string[][] = [
+    [`# ${oneLine(action.target_label)}`, '', action.handoff.message],
+    ['## Issue', '', ...list(findings, 'No current finding targets this Action.')],
+    ['## Affected pages', '', ...affectedPages(action, formatDate)],
+    [
+      '## Evidence',
+      '',
+      ...list(
+        evidence.map(
+          (item) =>
+            `${item.label}: ${item.basis}, ${item.at ? formatDate(item.at) : 'date not recorded'}`,
+        ),
+        'No evidence is recorded for this Action.',
+      ),
+    ],
+    [
+      '## Minimal patch',
+      '',
+      ...(steps.length
+        ? steps.map((step, index) => `${index + 1}. ${oneLine(step)}`)
+        : [line('No step is recorded; see the issue above.')]),
+      ...(donts.length ? ['', 'Avoid:', '', ...donts.map(line)] : []),
+    ],
+    ['## How it will be verified', '', ...verification(action, formatDate)],
+  ];
+  return `${sections.map((section) => section.join('\n')).join('\n\n')}\n`;
 }

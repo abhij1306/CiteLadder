@@ -12,14 +12,12 @@ export const demandSnapshot = demandSnapshotSchema.extend({
   window_start: z.iso.date(),
   window_end: z.iso.date(),
   created_at: datetime,
-  signals: z
-    .array(
-      demandSignalSchema.extend({
-        created_at: datetime,
-        action_id: z.uuid().nullable().default(null),
-      }),
-    )
-    .optional(),
+  signals: z.array(
+    demandSignalSchema.extend({
+      created_at: datetime,
+      action_id: z.uuid().nullable().default(null),
+    }),
+  ),
 });
 export { demandRecomputeResponseSchema as recomputeResponse } from '@citeladder/contracts/demand';
 const recomputeDates = demandRecomputeRequestSchema;

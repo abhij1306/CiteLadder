@@ -1,16 +1,15 @@
 /** Atomic crawl-control family: all writes commit before workers can claim. */
-import { z } from 'zod';
 import {
+  crawlScheduleSchema,
+  issueFixesSchema,
+  issueFixProgressSchema,
+  issueRerunResponseSchema,
   monitoredUrlsResponseSchema,
   rerunPageResponseSchema,
   siteCrawlSchema,
   siteCrawlListPageSchema,
-  urlPreviewResponseSchema,
 } from '@citeladder/contracts/site-health';
-import {
-  monitoredUrlsBulkSelectRequestSchema,
-  monitoredUrlsReplaceRequestSchema,
-} from '@citeladder/contracts/site-health-requests';
+import { crawlScheduleUpdateRequestSchema } from '@citeladder/contracts/site-health-requests';
 import { budget, spendBudget } from '../abuse/usage.ts';
 import { policy } from '../config.ts';
 import { SiteHealthWorker } from '../workers/site-health-worker.ts';
@@ -24,32 +23,23 @@ import { readBody } from '../http/body.ts';
 import { InvalidCursorError } from '../http/keyset-cursor.ts';
 import { cancelCrawl, listCrawls } from '../site-health/controls.ts';
 import { createCrawl } from '../site-health/planner.ts';
-import { recrawlRequest } from '../site-health/recrawl.ts';
-import {
-  createCrawlRequest,
-  previewCrawlUrls,
-  previewRequest,
-} from '../site-health/planner-policy.ts';
-import { crawlProjection, loadCrawl, rootFailure } from '../site-health/reads/crawl.ts';
+import { crawlRequest } from '../site-health/crawl-request.ts';
+import { readSchedule, updateSchedule } from '../site-health/schedules.ts';
+import { createCrawlRequest } from '../site-health/planner-policy.ts';
+import { loadCrawl, rootFailure } from '../site-health/reads/crawl.ts';
+import { crawlProjection } from '../site-health/reads/crawl-projection.ts';
 import { requireAdmitted } from '../site-health/reads/pages.ts';
-import {
-  bulkMonitoredSet,
-  monitoredSet,
-  replaceMonitoredSet,
-  rerunPage,
-} from '../site-health/selection.ts';
+import { monitoredSet, rerunPage } from '../site-health/selection.ts';
+import { issueFixes, markIssueGroupFixed, rerunIssueGroup } from '../site-health/issue-fixes.ts';
 import { defineGetRoute, definePostRoute, definePutRoute } from './define.ts';
 
 const family = 'site-health-crawls';
-/** Monitored-URL routes act on the path project inside the active workspace (else 404). */
+/** Project routes act on the path project inside the active workspace (else 404). */
 const projectFamily = { family, authorize: 'active-project' } as const;
 const uuid = { scalar: { kind: 'uuid' }, required: true } as const;
 const projectPath = { project_id: uuid };
 const projectRoot = '/api/v1/projects/{project_id}/monitored-urls';
-const replaceBody = monitoredUrlsReplaceRequestSchema.extend({
-  site_url_ids: z.array(z.uuid()).max(policy.site_health.crawl.monitored_url_selection_max),
-});
-const bulkBody = monitoredUrlsBulkSelectRequestSchema;
+const scheduleRoot = '/api/v1/projects/{project_id}/crawl-schedule';
 
 export const siteHealthCrawlRoutes = [
   definePostRoute({
@@ -69,11 +59,7 @@ export const siteHealthCrawlRoutes = [
         taskScope: { workspaceId, crawlId: path.crawl_id },
         settings: {
           ...settings,
-          concurrency: Math.min(
-            settings.concurrency,
-            config.execution.poolSize,
-            interactive.concurrency,
-          ),
+          concurrency: Math.min(settings.concurrency, interactive.concurrency),
         },
         // Include robots.txt and redirect probes in the request's acquisition deadline.
         fetcher: new SitePageFetcher(
@@ -113,42 +99,37 @@ export const siteHealthCrawlRoutes = [
     async handle({ c, db, config }) {
       const request = await readBody(c, createCrawlRequest);
       const workspaceId = c.get('workspace').workspaceId;
-      await spendBudget(db, budget('crawl_create', config.settings), workspaceId);
-      const crawl = await db.transaction().execute((trx) => createCrawl(trx, workspaceId, request));
-      return siteCrawlSchema.parse(await crawlProjection(db, crawl));
-    },
-  }),
-  definePostRoute({
-    family,
-    path: '/api/v1/site-crawls/{crawl_id}/recrawl',
-    params: { path: { crawl_id: uuid }, query: {} },
-    response: siteCrawlSchema,
-    status: 201,
-    capability: 'run',
-    async handle({ c, db, config }, { path }) {
-      const workspaceId = c.get('workspace').workspaceId;
+      const user = c.get('user');
+      // Ignoring robots.txt is the signed-in person's confirmation, recorded on the crawl;
+      // a request naming no choice keeps the newest site crawl's (SH-B7: one crawl action).
+      let choice: Parameters<typeof crawlRequest>[3] = null;
+      if (request.robots === 'respect') choice = { robots: 'respect' };
+      if (request.robots === 'ignore') {
+        const { email } = await db
+          .selectFrom('users')
+          .select('email')
+          .where('id', '=', user.id)
+          .executeTakeFirstOrThrow();
+        choice = {
+          robots: 'ignore',
+          decision: {
+            user_id: user.id,
+            email,
+            decided_at: new Date().toISOString(),
+          },
+        };
+      }
       await spendBudget(db, budget('crawl_create', config.settings), workspaceId);
       const crawl = await db
         .transaction()
         .execute(async (trx) =>
-          createCrawl(trx, workspaceId, await recrawlRequest(trx, workspaceId, path.crawl_id)),
+          createCrawl(
+            trx,
+            workspaceId,
+            await crawlRequest(trx, workspaceId, request.project_id, choice),
+          ),
         );
       return siteCrawlSchema.parse(await crawlProjection(db, crawl));
-    },
-  }),
-  definePostRoute({
-    family,
-    path: '/api/v1/site-crawls/url-preview',
-    params: { path: {}, query: {} },
-    body: previewRequest,
-    response: urlPreviewResponseSchema,
-    capability: 'read',
-    async handle({ c, db }) {
-      return previewCrawlUrls(
-        db,
-        c.get('workspace').workspaceId,
-        await readBody(c, previewRequest),
-      );
     },
   }),
   defineGetRoute({
@@ -199,44 +180,27 @@ export const siteHealthCrawlRoutes = [
     handle: ({ c, db }, { path }) =>
       monitoredSet(db, c.get('workspace').workspaceId, path.project_id),
   }),
+  defineGetRoute({
+    ...projectFamily,
+    path: scheduleRoot,
+    params: { path: projectPath, query: {} },
+    response: crawlScheduleSchema,
+    handle: ({ c, db }, { path }) =>
+      readSchedule(db, c.get('workspace').workspaceId, path.project_id),
+  }),
   definePutRoute({
     ...projectFamily,
-    path: projectRoot,
+    path: scheduleRoot,
     params: { path: projectPath, query: {} },
-    body: replaceBody,
-    response: monitoredUrlsResponseSchema,
+    body: crawlScheduleUpdateRequestSchema,
+    response: crawlScheduleSchema,
     capability: 'write',
     async handle({ c, db }, { path }) {
       const workspaceId = c.get('workspace').workspaceId;
-      const input = await readBody(c, replaceBody);
-      await db
+      const input = await readBody(c, crawlScheduleUpdateRequestSchema);
+      return db
         .transaction()
-        .execute((trx) =>
-          replaceMonitoredSet(
-            trx,
-            workspaceId,
-            path.project_id,
-            input.site_url_ids,
-            input.expected_selection_version,
-          ),
-        );
-      return monitoredSet(db, workspaceId, path.project_id);
-    },
-  }),
-  definePostRoute({
-    ...projectFamily,
-    path: `${projectRoot}/bulk-select`,
-    params: { path: projectPath, query: {} },
-    body: bulkBody,
-    response: monitoredUrlsResponseSchema,
-    capability: 'write',
-    async handle({ c, db }, { path }) {
-      const workspaceId = c.get('workspace').workspaceId;
-      const input = await readBody(c, bulkBody);
-      await db
-        .transaction()
-        .execute((trx) => bulkMonitoredSet(trx, workspaceId, path.project_id, input));
-      return monitoredSet(db, workspaceId, path.project_id);
+        .execute((trx) => updateSchedule(trx, workspaceId, path.project_id, input));
     },
   }),
   definePostRoute({
@@ -256,5 +220,39 @@ export const siteHealthCrawlRoutes = [
           .execute((trx) => rerunPage(trx, workspaceId, crawl.project_id, path.site_url_id)),
       );
     },
+  }),
+  defineGetRoute({
+    family,
+    path: '/api/v1/site-crawls/{crawl_id}/issue-fixes',
+    params: { path: { crawl_id: uuid }, query: {} },
+    response: issueFixesSchema,
+    handle: ({ c, db }, { path }) => issueFixes(db, c.get('workspace').workspaceId, path.crawl_id),
+  }),
+  definePostRoute({
+    family,
+    path: '/api/v1/site-crawls/{crawl_id}/issues/{group_id}/mark-fixed',
+    params: { path: { crawl_id: uuid, group_id: uuid }, query: {} },
+    response: issueFixProgressSchema,
+    capability: 'write',
+    handle: ({ c, db }, { path }) =>
+      db
+        .transaction()
+        .execute((trx) =>
+          markIssueGroupFixed(trx, c.get('workspace').workspaceId, path.crawl_id, path.group_id),
+        ),
+  }),
+  definePostRoute({
+    family,
+    path: '/api/v1/site-crawls/{crawl_id}/issues/{group_id}/rerun',
+    params: { path: { crawl_id: uuid, group_id: uuid }, query: {} },
+    response: issueRerunResponseSchema,
+    status: 202,
+    capability: 'run',
+    handle: ({ c, db }, { path }) =>
+      db
+        .transaction()
+        .execute((trx) =>
+          rerunIssueGroup(trx, c.get('workspace').workspaceId, path.crawl_id, path.group_id),
+        ),
   }),
 ];

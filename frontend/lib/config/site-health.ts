@@ -1,6 +1,12 @@
 /** Polling controls for a page rerun before its first active snapshot appears. */
 export const RERUN_POLL_INTERVAL_MS = 3_000;
 export const RERUN_MAX_PRE_ACTIVE_POLLS = 10;
+/**
+ * How long an issue's Re-run all is watched for its landing, in polls of
+ * `RERUN_POLL_INTERVAL_MS` (10 minutes): the background runner's tick finishes
+ * one the interactive run left.
+ */
+export const ISSUE_RERUN_MAX_POLLS = 200;
 
 /** Coalescing window for non-progress Site Health lifecycle events. */
 export const SITE_HEALTH_STREAM_INVALIDATE_DEBOUNCE_MS = 500;

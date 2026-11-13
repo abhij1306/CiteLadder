@@ -10,6 +10,7 @@ import {
 import {
   CRAWL_LOG_SETUPS,
   FIREHOSE_BUFFER_INTERVAL,
+  UPLOAD_PROCESSING_MAX_WAIT_MS,
   UPLOAD_PROCESSING_POLL_MS,
 } from '@/lib/config/crawl-logs';
 import { uploadCrawlFile } from './upload';
@@ -38,17 +39,25 @@ export function useCrawlSources(
     ...aiTrafficQueries.sources({ workspaceId, projectId }),
     enabled: !!projectId && !!workspaceId,
     refetchInterval: (query) =>
-      awaiting && !uploadProcessed(query.state.data, awaiting) ? UPLOAD_PROCESSING_POLL_MS : false,
+      awaiting && uploadProcessing(query.state.data, awaiting) === 'processing'
+        ? UPLOAD_PROCESSING_POLL_MS
+        : false,
   });
 }
-/** A completed upload is processed after a short delay, then its source reports it. */
-type Awaiting = { sourceId: string; since: string };
-function uploadProcessed(
+/**
+ * A completed upload is processed after a short delay, then its source reports
+ * it. `completedAt` is the server's completion time, so both sides of the
+ * comparison come from the server clock; `timedOut` ends the bounded wait.
+ */
+type Awaiting = Readonly<{ sourceId: string; completedAt: string; timedOut: boolean }>;
+export type UploadProcessing = 'processing' | 'processed' | 'delayed';
+export function uploadProcessing(
   data: z.infer<typeof crawlSourceListSchema> | undefined,
   awaiting: Awaiting,
-) {
+): UploadProcessing {
   const at = data?.items.find((s) => s.id === awaiting.sourceId)?.last_processed_at;
-  return !!at && at >= awaiting.since;
+  if (at && Date.parse(at) >= Date.parse(awaiting.completedAt)) return 'processed';
+  return awaiting.timedOut ? 'delayed' : 'processing';
 }
 /** Crawl views stay for a project that already has sources, even if collection is unavailable. */
 export function crawlLogsAvailable(data: z.infer<typeof crawlSourceListSchema>) {
@@ -107,11 +116,22 @@ export function useCrawlConnections({
     scope = { workspaceId, projectId };
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const sources = useCrawlSources(projectId, workspaceId, awaiting);
-  const processing = awaiting !== null && !uploadProcessed(sources.data, awaiting);
+  const processing = awaiting ? uploadProcessing(sources.data, awaiting) : null;
   // Processing finished: refresh the reads that show the new rows.
   useEffect(() => {
-    if (awaiting && !processing) void refreshAiTraffic(client, projectId);
-  }, [awaiting, processing, client, projectId]);
+    if (processing === 'processed') void refreshAiTraffic(client, projectId);
+  }, [processing, client, projectId]);
+  // The wait is bounded: a failed or slow rollup stops the rechecks. Each
+  // upload's completion starts its own wait.
+  const waitingFor = awaiting && !awaiting.timedOut ? awaiting.completedAt : null;
+  useEffect(() => {
+    if (!waitingFor) return;
+    const timer = setTimeout(
+      () => setAwaiting((current) => current && { ...current, timedOut: true }),
+      UPLOAD_PROCESSING_MAX_WAIT_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [waitingFor]);
   const [localOpen, setLocalOpen] = useState(false),
     [setup, setSetup] = useState<(typeof CRAWL_LOG_SETUPS)[number]['value']>('cloudflare_worker');
   const open = controlledOpen ?? localOpen;
@@ -150,11 +170,12 @@ export function useCrawlConnections({
   } | null>(null);
   const mutation = useMutation(aiTrafficMutations.source(scope));
   /**
-   * Issue a source from the dialog's fields, or rotate or revoke one. The
-   * descriptor refreshes the project's reads; the issued token is shown here.
+   * Issue a source from the dialog's fields, or revoke one. The descriptor
+   * refreshes the project's reads; the issued token is shown here. Rotation
+   * owns its own dialog and mutation (`RotateTokenDialog`).
    */
   const issueSource = (
-    action: { kind: 'create' } | { kind: 'rotate' | 'revoke'; id: string },
+    action: { kind: 'create' } | { kind: 'revoke'; id: string },
     onSettled?: () => void,
   ) =>
     mutation.mutate(
@@ -180,13 +201,12 @@ export function useCrawlConnections({
         : action,
       {
         onSuccess: (result) => {
-          const issuedSetup =
-            action.kind === 'create'
-              ? setup
-              : sources.data?.items.find((source) => source.id === action.id)?.setup;
-          setIssued({ ...result, setup: issuedSetup });
-          if (action.kind === 'create' && setup === 'upload') setSourceId(result.id);
-          if (action.kind === 'revoke' && sourceId === action.id) setSourceId('');
+          if (action.kind === 'revoke') {
+            if (sourceId === action.id) setSourceId('');
+            return;
+          }
+          setIssued({ ...result, setup });
+          if (setup === 'upload') setSourceId(result.id);
         },
         onSettled,
       },
@@ -211,7 +231,7 @@ export function useCrawlConnections({
         options,
         onProgress: setProgress,
       });
-      setAwaiting({ sourceId, since: new Date().toISOString() });
+      setAwaiting({ sourceId, completedAt: result.completedAt, timedOut: false });
       // The rows appear after processing; the effect above refreshes every read then.
       await refreshCrawlSources(client, projectId);
       return result;

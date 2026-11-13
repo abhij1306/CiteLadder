@@ -1,5 +1,3 @@
-'use client';
-
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,11 +5,11 @@ import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { StatRow } from '@/components/ui/stat-row';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
-import { ClampText, TableCell, TableRow } from '@/components/ui/table';
+import { ClampText, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
-import { agentHandoffHref } from '@/lib/agent/handoff';
 import type { PromptMetricItem } from '@citeladder/contracts';
+import { agentHandoffHref } from '@/lib/agent/handoff';
 import { useDisplayTimeZone } from '@/lib/display-timezone';
 import { formatDisplayDate, pluralCount } from '@/lib/format';
 import { ANSWER_STATES, competitorGaps, type CompetitorGap } from '@/lib/prompts/history';
@@ -133,12 +131,13 @@ function CompetitorGapTable({ gaps }: Readonly<{ gaps: readonly CompetitorGap[] 
 
 type Outcome = NonNullable<PromptMetricItem['outcomes']>[number];
 
-/** Engine coverage: each engine and model that answered, by answer state. */
+/** Engine coverage: each engine and model the run asked, its failed answers and its answers by state. */
 // The engine leads at a quarter of the table, so "Google AI Overview" holds
-// one line at every width; the five counts share the rest evenly.
+// one line at every width; the six counts share the rest evenly.
 const ENGINE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'engine', label: 'Engine', width: 'lead' },
   { key: 'answers', label: 'Answers', numeric: true },
+  { key: 'failed', label: 'Failed', numeric: true },
   ...ANSWER_STATES.map((state): DataTableColumn => ({
     key: state.key,
     label: state.label,
@@ -152,8 +151,19 @@ function EngineTable({ outcomes }: Readonly<{ outcomes: readonly Outcome[] }>) {
     <DataTable title="Engine coverage" columns={ENGINE_COLUMNS}>
       {outcomes.map((outcome) => (
         <TableRow key={`${outcome.logical_engine}:${outcome.transport_model}`}>
-          <TableCell>{engines.label(outcome.logical_engine)}</TableCell>
+          {/* A row is one engine AND model, so the model is named under the
+              engine: two models of one engine no longer read as a repeat. */}
+          <TableCell>
+            <TableCellLines
+              primary={engines.label(outcome.logical_engine)}
+              secondary={engines.modelLabel(outcome.logical_engine, outcome.transport_model)}
+            />
+          </TableCell>
           <TableCell numeric>{outcome.counts.responses}</TableCell>
+          {/* An engine whose every answer failed keeps its row, read as failed. */}
+          <TableCell numeric>
+            {outcome.counts.failed ?? <UnavailableValue state="not_measured" />}
+          </TableCell>
           {ANSWER_STATES.map((state) => (
             <TableCell key={state.key} numeric>
               {outcome.answer_states ? (

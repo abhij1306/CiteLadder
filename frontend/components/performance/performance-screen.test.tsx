@@ -30,6 +30,9 @@ vi.mock('@/components/integrations/data-source-setup', () => ({
 vi.mock('@/lib/project/project-context', () => ({
   useActiveWorkspaceId: () => WORKSPACE,
   useProjectContext: () => ({ activeProject, isLoading: false }),
+  // A Member, who may sync.
+  useWorkspaceCapability: (capability: string) =>
+    (['read', 'run', 'write'] as const).some((granted) => granted === capability),
 }));
 vi.mock('./use-performance-sync', () => ({
   usePerformanceSync: () => ({
@@ -219,10 +222,31 @@ describe('PerformanceScreen evidence states', () => {
     await waitFor(() => expect(dashboardRead && readinessRead).toBe(true));
     // The `status` announcement is held back until the spinner becomes visible.
     expect(await screen.findByRole('status', { name: 'Loading performance…' })).toBeInTheDocument();
-    expect(screen.queryByText('No search performance evidence yet')).not.toBeInTheDocument();
+    expect(screen.queryByText('No imported history')).not.toBeInTheDocument();
     act(() => release());
-    expect(await screen.findByText('No search performance evidence yet')).toBeVisible();
+    expect(await screen.findByText('No imported history')).toBeVisible();
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
+  });
+
+  it('disables Sync now only when the connections read answered with none', async () => {
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(dashboard())),
+    );
+    const { unmount } = renderPerformance();
+    expect(await screen.findByText('No imported history')).toBeVisible();
+    await waitFor(() => expect(screen.getByTestId('sync-now-button')).toBeDisabled());
+    unmount();
+
+    // A failed read is unknown, not "no connections": the sync itself reports
+    // when there is nothing to sync.
+    mswServer.use(
+      http.get('/api/v1/integrations', () =>
+        HttpResponse.json({ detail: 'Bad request' }, { status: 400 }),
+      ),
+    );
+    renderPerformance();
+    expect(await screen.findByText('No imported history')).toBeVisible();
+    expect(screen.getByTestId('sync-now-button')).toBeEnabled();
   });
 
   it('paints the dashboard while a slow readiness read is still pending', async () => {
@@ -243,7 +267,7 @@ describe('PerformanceScreen evidence states', () => {
 
     // The dashboard alone controls first paint: the advisory readiness ladder
     // must not hold the whole surface on the slowest of two independent reads.
-    expect(await screen.findByText('No search performance evidence yet')).toBeVisible();
+    expect(await screen.findByText('No imported history')).toBeVisible();
     expect(screen.queryByTestId('readiness-ladder')).not.toBeInTheDocument();
 
     act(() => release());
@@ -280,6 +304,8 @@ describe('PerformanceScreen evidence states', () => {
     expect(await screen.findByTestId('performance-status')).toHaveTextContent(
       'Imported history Aug 1, 2026 – Aug 28, 2026 · 28 days',
     );
+    // The freshness note reads in the same date style, not as an ISO key.
+    expect(screen.getByText('Data through Aug 28, 2026')).toBeVisible();
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
     unmount();
 
@@ -291,7 +317,7 @@ describe('PerformanceScreen evidence states', () => {
     expect(screen.queryAllByRole('alert')).toHaveLength(0);
   });
 
-  it('shows first-use guidance without metric or table scaffolding', async () => {
+  it('shows no metric or table scaffolding before the first import', async () => {
     let tableReads = 0;
     mswServer.use(
       http.get(`/api/v1/projects/${PROJECT}/performance`, () => HttpResponse.json(dashboard())),
@@ -303,7 +329,7 @@ describe('PerformanceScreen evidence states', () => {
 
     renderPerformance();
 
-    expect(await screen.findByText('No search performance evidence yet')).toBeVisible();
+    expect(await screen.findByText('No imported history')).toBeVisible();
     expect(screen.queryByTestId('metric-card-strip')).not.toBeInTheDocument();
     expect(
       screen.queryByRole('tablist', { name: 'Performance breakdowns' }),
@@ -334,7 +360,6 @@ describe('PerformanceScreen evidence states', () => {
 
     expect(await screen.findByTestId('metric-card-strip')).toBeVisible();
     await waitFor(() => expect(tableSnapshot).toBe(SNAPSHOT));
-    expect(screen.queryByText('No search performance evidence yet')).not.toBeInTheDocument();
   });
 
   it('keeps GA4-only evidence visible without empty GSC tables', async () => {
@@ -414,7 +439,7 @@ describe('PerformanceScreen evidence states', () => {
 
     renderPerformance();
 
-    expect(await screen.findByText('No search performance evidence yet')).toBeVisible();
+    expect(await screen.findByText('No imported history')).toBeVisible();
     expect(screen.queryByTestId('bing-panel')).not.toBeInTheDocument();
   });
 
@@ -467,6 +492,96 @@ describe('PerformanceScreen evidence states', () => {
 
     expect(await screen.findByTestId('metric-card-strip')).toBeVisible();
     expect(enqueueCount).toBe(1);
+  });
+
+  it('reports a failed range build with Retry instead of claiming no imported data covers it', async () => {
+    const retryTask = '33333333-3333-4333-8333-333333333335';
+    let ready = false;
+    const enqueued: string[] = [];
+    const missing = dashboard({
+      selected: {
+        snapshot_id: null,
+        window_start: '2026-08-01',
+        window_end: '2026-08-28',
+        evidence_state: 'not_run',
+        totals: emptyTotals,
+        series: emptySeries,
+      },
+      coverage: { earliest_date: '2026-08-01', latest_date: '2026-08-28', covered_days: 28 },
+    });
+    const complete = dashboard({
+      selected: measuredWindow({ ...emptyTotals, clicks: 0, impressions: 0 }),
+      coverage: { earliest_date: '2026-08-01', latest_date: '2026-08-28', covered_days: 28 },
+    });
+    const task = (taskId: string, status: string) =>
+      HttpResponse.json({
+        task_id: taskId,
+        status,
+        window_start: '2026-08-01',
+        window_end: '2026-08-28',
+      });
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () =>
+        HttpResponse.json(ready ? complete : missing),
+      ),
+      http.post(`/api/v1/projects/${PROJECT}/performance/range`, () => {
+        const taskId = enqueued.length ? retryTask : TASK;
+        enqueued.push(taskId);
+        return task(taskId, 'queued');
+      }),
+      http.get(`/api/v1/projects/${PROJECT}/performance/range/${TASK}`, () => task(TASK, 'failed')),
+      http.get(`/api/v1/projects/${PROJECT}/performance/range/${retryTask}`, () => {
+        ready = true;
+        return task(retryTask, 'succeeded');
+      }),
+      http.get(`/api/v1/projects/${PROJECT}/performance/table`, ({ request }) =>
+        HttpResponse.json(tablePage(new URL(request.url).searchParams.get('dimension')!)),
+      ),
+    );
+
+    renderPerformance();
+
+    const failure = await screen.findByText("Couldn't build this range");
+    expect(failure).toBeVisible();
+    expect(screen.getByTestId('performance-status')).toHaveTextContent(
+      "Couldn't build this range from imported data.",
+    );
+    expect(screen.queryByText(/No imported data covers this range/)).not.toBeInTheDocument();
+    expect(screen.queryByText('No performance evidence here')).not.toBeInTheDocument();
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByTestId('metric-card-strip')).toBeVisible();
+    expect(enqueued).toEqual([TASK, retryTask]);
+    expect(screen.queryByText("Couldn't build this range")).not.toBeInTheDocument();
+  });
+
+  it('shows the Bing panel for a connected Bing that measured no rows', async () => {
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/readiness`, () =>
+        HttpResponse.json({
+          ...readiness,
+          stage: 'analysis_ready',
+          connection_count: 1,
+          providers: ['bing'],
+        }),
+      ),
+      http.get(`/api/v1/projects/${PROJECT}/performance`, () =>
+        HttpResponse.json(
+          dashboard({
+            selected: { ...measuredWindow(emptyTotals), evidence_state: 'observed_zero' },
+            coverage: { earliest_date: '2026-08-01', latest_date: '2026-08-28', covered_days: 28 },
+          }),
+        ),
+      ),
+      http.get(`/api/v1/projects/${PROJECT}/performance/table`, ({ request }) =>
+        HttpResponse.json(tablePage(new URL(request.url).searchParams.get('dimension')!)),
+      ),
+    );
+
+    renderPerformance();
+
+    expect(await screen.findByTestId('bing-panel')).toBeVisible();
   });
 });
 
@@ -571,13 +686,13 @@ describe('PerformanceScreen table interactions', () => {
     renderPerformance();
     const table = await screen.findByRole('table', { name: 'Top queries' });
     expect(await within(table).findByText('query 1')).toBeVisible();
-    await user.click(within(table).getByRole('button', { name: 'impressions' }));
+    await user.click(within(table).getByRole('button', { name: 'Impressions' }));
     await user.click(await screen.findByRole('button', { name: 'Next page' }));
     expect(await within(table).findByText('query 11')).toBeVisible();
     const sortedBy = asked.at(-1)!.split(' ')[0];
 
     // Hiding the sorted metric falls back to the default order.
-    await user.click(screen.getByRole('button', { name: 'Plot total impressions' }));
+    await user.click(screen.getByRole('button', { name: 'Plot impressions' }));
 
     // The first page of the default order (already cached from the landing view).
     expect(await within(table).findByText('query 1')).toBeVisible();

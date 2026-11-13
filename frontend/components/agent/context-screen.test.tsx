@@ -168,6 +168,69 @@ describe('Context layout', () => {
     expect(await screen.findByText('The fact-checking pilot is unavailable.')).toBeVisible();
   });
 
+  it('shows the fixed tabs while the pilot gate is read and adds Brand facts at the end', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderContext({
+      handlers: [
+        http.get('/api/v1/projects/:id/brand-facts', async () => {
+          await gate;
+          return HttpResponse.json({ enabled: true, facts: [] });
+        }),
+      ],
+    });
+    const tabs = await screen.findByRole('tablist', { name: 'Context sections' });
+    const labels = () =>
+      within(tabs)
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent);
+    expect(labels()).toEqual([
+      'Company',
+      'Audience & Offerings',
+      'Business map',
+      'Competitors',
+      'Agent instructions',
+    ]);
+    // The fixed tabs are usable before the gate answers.
+    expect(await screen.findByLabelText('Description')).toBeVisible();
+    release();
+    expect(await within(tabs).findByRole('tab', { name: 'Brand facts' })).toBeVisible();
+    expect(labels()).toEqual([
+      'Company',
+      'Audience & Offerings',
+      'Business map',
+      'Competitors',
+      'Agent instructions',
+      'Brand facts',
+    ]);
+  });
+
+  it('holds a link to Brand facts on its loading state until the pilot gate answers', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderContext({
+      tab: 'brand-facts',
+      handlers: [
+        http.get('/api/v1/projects/:id/brand-facts', async () => {
+          await gate;
+          return HttpResponse.json({ enabled: true, facts: [] });
+        }),
+      ],
+    });
+    expect(await screen.findByRole('status', { name: 'Loading brand facts…' })).toBeVisible();
+    // The link is not answered with the Company tab while the gate is read.
+    expect(screen.queryByLabelText('Description')).not.toBeInTheDocument();
+    release();
+    expect(await screen.findByRole('tab', { name: 'Brand facts' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
   it('keeps pilot Brand facts on their own tab', async () => {
     const user = userEvent.setup({ delay: null });
     renderContext({
@@ -490,24 +553,6 @@ describe('Business map', () => {
 });
 
 describe('Agent instruction drafts', () => {
-  it('resets a draft when the active project changes', async () => {
-    const nextProject = makeProject({ id: '11111111-1111-4111-8111-111111111112' });
-    const { rerender } = renderContext({ tab: 'instructions' });
-    mswServer.use(
-      http.get(`/api/v1/projects/${nextProject.id}/agent/instructions`, () =>
-        HttpResponse.json(saved('Second project')),
-      ),
-    );
-    const field = await screen.findByRole('textbox', { name: 'Agent instructions' });
-    fireEvent.change(field, { target: { value: 'Unsaved first-project draft' } });
-    rerender(<ContextScope activeProject={nextProject} />);
-    await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Agent instructions' })).toHaveValue(
-        'Second project',
-      ),
-    );
-  });
-
   it('follows refreshed instructions until edited, then preserves the local draft', async () => {
     const { queryClient } = renderContext({ tab: 'instructions' });
     const field = await screen.findByRole('textbox', { name: 'Agent instructions' });

@@ -2,23 +2,22 @@
  * Crawl events as a JSON replay or a Server-Sent Events tail.
  *
  * Both resume after a client's last event id; an id that is not an event of
- * this crawl yields nothing rather than replaying the whole history. Without
+ * this crawl yields nothing rather than replaying the whole history, and one
+ * that is not a UUID is refused before either is read. Without
  * count disclosure every payload drops its total-bearing keys.
  */
 import { siteCrawlEventSchema } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
-import { setTimeout as sleep } from 'node:timers/promises';
 import type { z } from 'zod';
 
 import { policy } from '../../config.ts';
 import type { Database } from '../../db/database.ts';
 import { record } from '../../db/json.ts';
 import { ApiError } from '../../errors.ts';
-import { getLogger } from '../../logging.ts';
+import type { EventTail } from '../../http/event-stream.ts';
 import { siteReadSettings } from '../runtime.ts';
 import { countDisclosure, isTerminal, loadCrawl, type Crawl } from './crawl.ts';
 
-const logger = getLogger('app.site_health.events');
 const COUNT_BEARING = new Set<string>(policy.site_health.reads.event_count_bearing_keys);
 // Polls after the crawl turns terminal, so its final events still arrive.
 const TERMINAL_GRACE_POLLS = policy.site_health.reads.terminal_grace_polls;
@@ -32,7 +31,7 @@ type EventRow = {
   created_at: Date;
 };
 
-async function loadEvents(db: Database, crawl: Crawl, after: string | null, limit: number) {
+async function loadEvents(db: Database, crawl: Crawl, after: string | undefined, limit: number) {
   const anchor = after
     ? sql`and (e.created_at, e.id) > ((
         select created_at from site_crawl_events where id = ${after} and crawl_id = ${crawl.id}
@@ -62,7 +61,7 @@ export async function eventReplay(
   db: Database,
   workspaceId: string,
   crawlId: string,
-  after: string | null,
+  after: string | undefined,
 ): Promise<z.infer<typeof siteCrawlEventSchema>[]> {
   const crawl = await loadCrawl(db, workspaceId, crawlId);
   const events = await loadEvents(db, crawl, after, siteReadSettings().maxEventPage);
@@ -70,55 +69,42 @@ export async function eventReplay(
 }
 
 /**
- * Tail a crawl's events until it has been terminal for the grace polls or the
- * stream reaches its maximum duration. Each poll reloads the crawl in the
- * workspace, so a crawl that disappears ends the stream.
+ * A crawl's events as a tail. Each poll reloads the crawl in the workspace,
+ * so a crawl that disappears ends the stream, and the next page is disclosed
+ * as the crawl now allows.
  */
-export function eventStream(
+export function crawlEventTail(
   db: Database,
   workspaceId: string,
   crawl: Crawl,
-  after: string | null,
-  signal: AbortSignal,
-): ReadableStream<Uint8Array> {
+  after: string | undefined,
+): EventTail {
   const settings = siteReadSettings();
-  const encoder = new TextEncoder();
-  return new ReadableStream({
-    async start(controller) {
-      let last = after;
-      let terminalPolls = 0;
-      const deadline = Date.now() + settings.sseMaxSeconds * 1000;
-      // A crawl deleted mid-stream ends the stream.
-      const reload = (id: string) =>
-        loadCrawl(db, workspaceId, id).catch((error: unknown) => {
-          if (error instanceof ApiError && error.status === 404) return null;
-          throw error;
-        });
+  let current = crawl;
+  return {
+    stream: 'site_health',
+    subjectId: crawl.id,
+    after,
+    page: async (cursor) =>
+      (await loadEvents(db, current, cursor, settings.maxEventPage)).map((event) => ({
+        id: event.id,
+        event: event.event_type,
+        data: eventView(event, countDisclosure(current)),
+      })),
+    poll: async () => {
       try {
-        let current: Crawl | null = crawl;
-        while (current && !signal.aborted) {
-          const events = await loadEvents(db, current, last, settings.maxEventPage);
-          for (const event of events) {
-            last = event.id;
-            const body = JSON.stringify(eventView(event, countDisclosure(current)));
-            controller.enqueue(
-              encoder.encode(`event: ${event.event_type}\nid: ${event.id}\ndata: ${body}\n\n`),
-            );
-          }
-          // A full page means a backlog: drain it before any grace counting.
-          if (events.length === settings.maxEventPage) continue;
-          if (isTerminal(current) && ++terminalPolls >= TERMINAL_GRACE_POLLS) break;
-          if (Date.now() >= deadline) break;
-          await sleep(settings.ssePollSeconds * 1000, undefined, { signal }).catch(() => {}); // NOSONAR: polls are sequential.
-          current = await reload(current.id); // NOSONAR: polls are sequential.
-        }
-        controller.close();
+        current = await loadCrawl(db, workspaceId, current.id);
       } catch (error) {
-        // A client that already went away has nothing left to receive.
-        if (signal.aborted) return;
-        logger.exception('site_health_event_stream_failed', error, { crawl_id: crawl.id });
-        controller.error(error);
+        if (error instanceof ApiError && error.status === 404) return 'gone';
+        throw error;
       }
+      return isTerminal(current) ? 'terminal' : 'open';
     },
-  });
+    settings: {
+      pageSize: settings.maxEventPage,
+      pollSeconds: settings.ssePollSeconds,
+      maxSeconds: settings.sseMaxSeconds,
+      terminalGracePolls: TERMINAL_GRACE_POLLS,
+    },
+  };
 }

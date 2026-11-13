@@ -8,6 +8,7 @@ import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
+import { ReadError, readErrorProps, type RetryableRead } from '@/components/ui/read-error';
 import { Select } from '@/components/ui/select';
 import type { MutationNotice as MutationNoticeData } from '@/lib/api/mutation-notice';
 import type { LogicalEngine, Prompt, PromptSet } from '@citeladder/contracts';
@@ -22,6 +23,9 @@ import {
 } from '@/lib/runs/launch';
 import { textRole } from '@/components/ui/typography';
 import { panelClasses } from '@/components/ui/panel';
+
+/** The prompt-set list read, kept apart from the list it yields. */
+type PromptSetsRead = RetryableRead & Readonly<{ status: 'pending' | 'error' | 'success' }>;
 
 type Estimate = {
   execution_count: number;
@@ -42,14 +46,14 @@ type Estimate = {
  */
 function PromptSetField({
   promptSets,
-  promptSetsLoading,
+  promptSetsRead,
   promptSetId,
   setPromptSetId,
   promptSetLocked,
   promptSelectionLabel,
 }: Readonly<{
   promptSets: PromptSet[];
-  promptSetsLoading: boolean;
+  promptSetsRead: PromptSetsRead;
   promptSetId: string | null;
   setPromptSetId: (id: string) => void;
   promptSetLocked?: boolean;
@@ -66,7 +70,17 @@ function PromptSetField({
         if (locked) {
           return <p className={textRole('body')}>{label}</p>;
         }
-        if (!promptSetsLoading && !promptSets.length) {
+        // A failed list is not an empty one: "add prompts first" would send a
+        // reader with many prompt sets off to recreate them.
+        if (promptSetsRead.status === 'error') {
+          return (
+            <ReadError
+              {...readErrorProps(promptSetsRead)}
+              fallback="Could not load this project's prompt sets."
+            />
+          );
+        }
+        if (promptSetsRead.status === 'success' && !promptSets.length) {
           return (
             <p className="type-body">No prompt set yet. Add prompts on the Prompts screen first.</p>
           );
@@ -142,12 +156,7 @@ function InlineProviderSetup({
 }: Readonly<{ connecting: LogicalEngine | 'any'; onClose: () => void }>) {
   const engine = connecting === 'any' ? null : connecting;
   return (
-    <Stack
-      as="section"
-      gap="item"
-      aria-label="Connect a provider"
-      className={panelClasses({ tone: 'well' })}
-    >
+    <Stack as="section" gap="item" aria-label="Connect a provider" className={panelClasses()}>
       <Inline className="justify-between">
         <p className={textRole('label')}>Connect a provider</p>
         <IconButton icon={X} label="Close provider setup" onClick={onClose} />
@@ -208,7 +217,7 @@ export function LaunchDialogView({
   open,
   onOpenChange,
   promptSets,
-  promptSetsLoading,
+  promptSetsRead,
   configuredEngines,
   unverifiedEngines,
   promptSetId,
@@ -237,7 +246,7 @@ export function LaunchDialogView({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   promptSets: PromptSet[];
-  promptSetsLoading: boolean;
+  promptSetsRead: PromptSetsRead;
   configuredEngines: LogicalEngine[];
   unverifiedEngines: LogicalEngine[];
   promptSetId: string | null;
@@ -288,7 +297,7 @@ export function LaunchDialogView({
         {launchNotice ? <MutationNotice notice={launchNotice} onRetry={onLaunch} /> : null}
         <PromptSetField
           promptSets={promptSets}
-          promptSetsLoading={promptSetsLoading}
+          promptSetsRead={promptSetsRead}
           promptSetId={promptSetId}
           setPromptSetId={setPromptSetId}
           promptSetLocked={promptSetLocked}
@@ -372,7 +381,7 @@ export function LaunchDialogView({
           )}
         </Field>
         {estimate ? (
-          <Stack gap="tight" className={panelClasses({ tone: 'well' }, 'type-caption')}>
+          <Stack gap="tight" className={panelClasses('type-caption')}>
             <span className={textRole('emphasis', 'text-ink')}>
               {estimate.execution_count} {estimate.execution_count === 1 ? 'response' : 'responses'}{' '}
               planned

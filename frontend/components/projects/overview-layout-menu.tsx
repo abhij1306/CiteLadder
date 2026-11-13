@@ -1,5 +1,3 @@
-'use client';
-
 import { LayoutGrid } from 'lucide-react';
 
 import {

@@ -1,10 +1,10 @@
 import { RefreshCw } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { Callout } from '@/components/ui/callout';
 import { DisplayTime } from '@/components/ui/display-time';
 import { Drawer } from '@/components/ui/drawer';
-import { Icon } from '@/components/ui/icon';
-import { Inline, Stack } from '@/components/ui/layout';
+import { Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { panelClasses } from '@/components/ui/panel';
 import { QueryState } from '@/components/ui/query-state';
@@ -45,29 +45,28 @@ export function RunNotice({
   cancelling,
 }: Readonly<{
   run: SearchIntelligenceRun | null;
-  onCancel: (runId: string) => void;
+  /** Cancel and Review again are offered only to a role that may run analyses. */
+  onCancel?: (runId: string) => void;
   /** Opens the analysis review: the recovery for a stopped run. */
-  onReview: () => void;
+  onReview?: () => void;
   cancelling: boolean;
 }>) {
   if (!run) return null;
   if (SEARCH_RUN_STATES[run.status].active)
     return (
-      <Inline
-        gap="compact"
-        className={panelClasses(
-          { tone: 'none' },
-          'type-body bg-info-soft text-info flex-wrap justify-between',
-        )}
+      <Callout
+        tone="info"
+        icon={RefreshCw}
+        action={
+          onCancel ? (
+            <Button variant="secondary" disabled={cancelling} onClick={() => onCancel(run.id)}>
+              Cancel
+            </Button>
+          ) : undefined
+        }
       >
-        <Inline as="span">
-          <Icon icon={RefreshCw} className="animate-spin" />
-          Analysis in progress: {run.completed_calls} of {run.planned_calls} requests complete.
-        </Inline>
-        <Button variant="secondary" disabled={cancelling} onClick={() => onCancel(run.id)}>
-          Cancel
-        </Button>
-      </Inline>
+        Analysis in progress: {run.completed_calls} of {run.planned_calls} requests complete.
+      </Callout>
     );
   if (!['partial', 'failed', 'uncertain'].includes(run.status)) return null;
   const reason =
@@ -82,9 +81,11 @@ export function RunNotice({
         retryable: false,
       }}
       recovery={
-        <Button type="button" variant="secondary" onClick={onReview}>
-          Review again
-        </Button>
+        onReview ? (
+          <Button type="button" variant="secondary" onClick={onReview}>
+            Review again
+          </Button>
+        ) : undefined
       }
     />
   );
@@ -111,7 +112,7 @@ export function CostDetails({
     content = (
       <Stack as="ul" gap="compact">
         {runs.map((run) => (
-          <Stack as="li" gap="compact" key={run.id} className={panelClasses({ tone: 'well' })}>
+          <Stack as="li" gap="compact" key={run.id} className={panelClasses()}>
             <Stack gap="tight">
               <p className={textRole('itemTitle')}>
                 {words(run.action)} · {SEARCH_RUN_STATES[run.status].label}

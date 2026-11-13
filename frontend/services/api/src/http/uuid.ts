@@ -15,3 +15,11 @@ export function parseUuid(value: unknown): string | null {
   const hex = body.replaceAll('-', '').toLowerCase();
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+/** The canonical UUIDs among `values`, in order; any value that is not one is skipped. */
+export function parseUuids(values: readonly unknown[]): string[] {
+  return values.flatMap((value) => {
+    const id = parseUuid(value);
+    return id ? [id] : [];
+  });
+}

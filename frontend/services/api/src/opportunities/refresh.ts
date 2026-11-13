@@ -5,7 +5,8 @@
  * A missing source is not an error. With a prior snapshot and no resolvable
  * audit, crawl or demand snapshot, the prior snapshot is returned unchanged,
  * so an in-flight crawl never empties the live set; zero hits WITH a source
- * still supersedes, and so does a snapshot whose keyword gaps have aged out. A refresh whose source identity the latest snapshot
+ * still supersedes, and so does a snapshot whose aging sources (keyword or
+ * content gaps) have aged out. A refresh whose source identity the latest snapshot
  * already describes loads no evidence. Evidence loads outside the project
  * lock; under it the identity is resolved again, and a refresh whose sources
  * moved meanwhile writes nothing and fails for a retry over the newer state.
@@ -35,6 +36,7 @@ import {
 } from './refresh-compute.ts';
 import {
   collectFamilies,
+  readAgingSource,
   resolveSources,
   sourceIdentity,
   type Sources,
@@ -87,9 +89,15 @@ async function insertOpportunities(
 async function writeRefresh(
   trx: Database,
   scope: Scope,
-  collected: Collected,
-  sources: Resolved,
-  scored: Scored[],
+  {
+    collected,
+    sources,
+    scored,
+  }: {
+    collected: Collected;
+    sources: Resolved;
+    scored: Scored[];
+  },
 ) {
   const crawl = sources.crawl;
   const workspace = new WorkspaceScope(scope.workspaceId);
@@ -205,20 +213,14 @@ export async function recomputeOpportunities(
     // supersede what that source says; the retry reads the newer state.
     if (!sameIdentity(latest.identity, sources.identity))
       throw new Error('Opportunity sources changed during the refresh; retry');
-    // Gap datasets age out by design, so a snapshot that read them is superseded
-    // when they do; an in-flight crawl alone never empties the live set.
-    const readGaps = Boolean(record(record(current?.coverage).source_identity).search_gap_revision);
+    // Some sources age out by design, so a snapshot that read one is superseded
+    // when it does; an in-flight crawl alone never empties the live set.
     const empty =
-      collected.audit === null &&
-      sources.commerceAuditId === null &&
-      sources.crawl === null &&
-      sources.demand === null &&
-      sources.gaps === null &&
-      !readGaps;
+      !collected.present && !readAgingSource(record(record(current?.coverage).source_identity));
     if (current !== null && empty) return projectSnapshot(current);
     if (options.skipIfCurrent && snapshotIsCurrent(current, sources.identity))
       return projectSnapshot(current!);
-    return writeRefresh(trx, scope, collected, sources, scored);
+    return writeRefresh(trx, scope, { collected, sources, scored });
   });
 }
 

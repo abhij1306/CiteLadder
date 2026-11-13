@@ -3,8 +3,7 @@ import { createHash } from 'node:crypto';
 
 /** The v5 UUID of `name` in the `namespace` UUID. */
 export function uuidV5(namespace: string, name: string): string {
-  // Version 5 is defined over SHA-1; the result is an identifier, not a secret.
-  const bytes = createHash('sha1') // NOSONAR
+  const bytes = createHash('sha1') // NOSONAR -- Version 5 is defined over SHA-1; the result is an identifier, not a secret.
     .update(Buffer.from(namespace.replaceAll('-', ''), 'hex'))
     .update(name, 'utf8')
     .digest()

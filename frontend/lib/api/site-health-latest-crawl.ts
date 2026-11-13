@@ -1,10 +1,11 @@
 /**
- * The project-scoped Site Health reads of the newest crawl's pages and issues.
+ * The project-scoped Site Health reads of the current crawl's pages and issues.
  *
  * The screens read pages and issues per crawl, and only the dashboard names the
- * crawl. These answer the same reads for the project's newest crawl (the one
- * the dashboard shows) and name it, so the route prefetchers can start them
- * beside the dashboard and file each answer under that crawl's key. They are
+ * crawl. These answer the same reads for the project's current crawl (the one
+ * the dashboard shows unless a crawl is running) and name it, so the route
+ * prefetchers can start them beside the dashboard and file each answer under
+ * that crawl's key. They are
  * read only through `latestCrawlQueries`, so the cache dedupes them.
  */
 import {

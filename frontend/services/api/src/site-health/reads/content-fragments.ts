@@ -1,5 +1,5 @@
 /** Bounded lexical selection over persisted crawl evidence; no acquisition. */
-import { TERMINAL_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
+import { USABLE_CRAWL_STATUSES } from '@citeladder/contracts/site-health';
 import { sql } from 'kysely';
 import { policy } from '../../config.ts';
 import type { Database } from '../../db/database.ts';
@@ -7,6 +7,7 @@ import { record, strings } from '../../db/json.ts';
 import { lexicalTokens } from '../../analysis/lexical.ts';
 import { compareText, scalarText, stripTrailing } from '../../text-order.ts';
 import type { Scope } from '../../opportunities/sources.ts';
+import { currentSiteCrawlQuery, latestPagesQuery, type ViewCrawl } from './crawl.ts';
 
 const p = policy.agent_context;
 /** A URL as pages are matched: scheme, `www.` and a trailing slash do not tell pages apart. */
@@ -30,33 +31,14 @@ function clean(value: unknown, cap = p.content_context_field_max_chars) {
     .trim()
     .slice(0, cap);
 }
-function pagesQuery(db: Database, scope: Scope) {
-  return db
-    .selectFrom('site_page_analyses as a')
-    .innerJoin('site_fetch_artifacts as f', (join) =>
-      join
-        .onRef('f.id', '=', 'a.artifact_id')
-        .onRef('f.workspace_id', '=', 'a.workspace_id')
-        .onRef('f.crawl_id', '=', 'a.crawl_id'),
-    )
-    .innerJoin('site_urls as u', (join) =>
-      join
-        .onRef('u.id', '=', 'a.site_url_id')
-        .onRef('u.workspace_id', '=', 'a.workspace_id')
-        .onRef('u.project_id', '=', 'a.project_id'),
-    )
-    .where('a.workspace_id', '=', scope.workspaceId)
-    .where('a.project_id', '=', scope.projectId)
-    .where('a.is_current', '=', true)
+type PageRow = Awaited<ReturnType<ReturnType<typeof rowsQuery>['execute']>>[number];
+/** The crawl's finalized pages with facts, at their latest audit (`latestPagesQuery`, SH-B9). */
+function rowsQuery(db: Database, crawl: ViewCrawl) {
+  return latestPagesQuery(db, crawl)
     .where('a.finalized_at', 'is not', null)
     .where(
       sql<boolean>`jsonb_typeof(f.normalized_facts) = 'object' and f.normalized_facts <> '{}'::jsonb`,
-    );
-}
-type PageRow = Awaited<ReturnType<ReturnType<typeof rowsQuery>['execute']>>[number];
-function rowsQuery(db: Database, scope: Scope, crawlId: string) {
-  return pagesQuery(db, scope)
-    .where('a.crawl_id', '=', crawlId)
+    )
     .select([
       'u.id as site_url_id',
       'u.normalized_url',
@@ -183,23 +165,22 @@ export async function selectContentFragments(
   targetUrl = '',
   crawlId?: string,
 ) {
-  let crawlQuery = db
-    .selectFrom('site_crawls as c')
-    .select(['c.id', 'c.completed_at'])
-    .where('c.workspace_id', '=', scope.workspaceId)
-    .where('c.project_id', '=', scope.projectId)
-    .where('c.status', 'in', TERMINAL_CRAWL_STATUSES)
-    .where((eb) =>
-      eb.exists(
-        pagesQuery(db, scope)
-          .select('a.id')
-          .where('a.crawl_id', '=', sql<string>`c.id`),
-      ),
-    )
-    .orderBy('c.created_at', 'desc')
-    .orderBy('c.id', 'desc');
-  if (crawlId) crawlQuery = crawlQuery.where('c.id', '=', crawlId);
-  const crawl = await crawlQuery.executeTakeFirst();
+  // The named usable crawl (a failed one has no audit of its own) or, without
+  // one, the current crawl (SH-B1); either must hold content pages. A current
+  // crawl without them never falls back to an older crawl: it reports no usable crawl.
+  const candidate = crawlId
+    ? db
+        .selectFrom('site_crawls')
+        .where('workspace_id', '=', scope.workspaceId)
+        .where('project_id', '=', scope.projectId)
+        .where('id', '=', crawlId)
+        .where('status', 'in', USABLE_CRAWL_STATUSES)
+    : currentSiteCrawlQuery(db, scope.workspaceId, scope.projectId);
+  const chosen = await candidate
+    .select(['id', 'workspace_id', 'project_id', 'created_at', 'configuration', 'completed_at'])
+    .executeTakeFirst();
+  const page = chosen && (await rowsQuery(db, chosen).limit(1).executeTakeFirst());
+  const crawl = page ? chosen : undefined;
   if (!crawl)
     return {
       pages: [],
@@ -245,9 +226,7 @@ export async function selectContentFragments(
   let after: string | null = null;
   let omitted = 0;
   for (;;) {
-    let query = rowsQuery(db, scope, crawl.id)
-      .orderBy('u.id')
-      .limit(p.content_context_read_batch_size);
+    let query = rowsQuery(db, crawl).orderBy('u.id').limit(p.content_context_read_batch_size);
     if (after) query = query.where('u.id', '>', after);
     const batch = await query.execute();
     candidates.push(

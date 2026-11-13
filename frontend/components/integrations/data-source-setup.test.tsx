@@ -81,7 +81,6 @@ function renderSetup(path = `/performance?project=${PROJECT}`, whenReady?: strin
       required={['gsc']}
       optional={['ga4']}
       title="Connect Search Console"
-      description="Performance reads this project's own search data."
       whenReady={whenReady}
     />,
     { initialEntries: [path] },

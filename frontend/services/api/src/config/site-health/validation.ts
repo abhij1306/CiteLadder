@@ -6,11 +6,7 @@ export function validateSiteHealthSettings(values: Record<string, unknown>) {
       throw new Error(`Site Health ${smaller} must not exceed ${larger}`);
   };
   for (const [smaller, larger] of [
-    ['automatic_page_limit', 'max_requested_page_limit'],
-    // Advanced controls (always on for the development account) bound the default crawl too.
-    ['automatic_page_limit', 'max_advanced_requested_page_limit'],
-    ['max_requested_page_limit', 'max_discovery_urls'],
-    ['max_advanced_requested_page_limit', 'max_discovery_urls'],
+    ['automatic_page_limit', 'max_discovery_urls'],
     ['sample_url_limit', 'sample_discovery_url_cap'],
     ['analysis_dependency_retry_seconds', 'analysis_dependency_retry_max_seconds'],
     ['per_host_concurrency', 'global_concurrency'],

@@ -1,13 +1,17 @@
 /** Exact quoted matches and explicit abstention when an extraction cannot establish absence. */
 import { policy } from '../config.ts';
+import { sourcePageVocabulary } from '../config/source-pages.ts';
 import { routePageKind } from '../site-health/routes.ts';
 import type { ExtractedPage } from './extract.ts';
 import { publicUrl } from '../safe-fetch.ts';
 import {
+  countsAnywhere,
   DENSE_SCRIPT,
   entityOffset,
   normalizeAlias,
   normalizeText,
+  occurrenceCounts,
+  tokensOf,
   type EntityPolicy,
 } from '../analysis/aliases.ts';
 import { scoringConfig } from '../analysis/scoring.ts';
@@ -72,14 +76,39 @@ const bounded = (body: string, alias: string) =>
     : new RegExp(`(?<!${WORD})${body}(?!${WORD})`, 'giu');
 /**
  * Raw-text spellings of an alias, so a positive verdict can quote the page:
- * the alias as written, then its characters in order with short separator
- * runs between them, so "northwindacademy" finds "Northwind Academy".
+ * the alias as written, then its words in order with short separator runs
+ * (or none) between them, so "Pine & Oak" finds "PineandOak" and "Blue
+ * Harbor" finds "Blue-Harbor". A one-word alias never finds its letters
+ * split across words (AR-6).
  */
 function spellings(alias: string): RegExp[] {
-  const compact = [...normalizeAlias(alias).replaceAll(' ', '')];
+  const words = normalizeAlias(alias).split(' ').filter(Boolean);
   // Separators are disjoint from the alias alphabet so matching never backtracks across them.
-  const joined = compact.map(escape).join(String.raw`[^\p{L}\p{M}\p{N}_]{0,3}`);
-  return [bounded(escape(alias), alias), ...(compact.length ? [bounded(joined, alias)] : [])];
+  const spaced = words.map(escape).join(String.raw`[^\p{L}\p{M}\p{N}_]{0,3}`);
+  return [bounded(escape(alias), alias), ...(words.length ? [bounded(spaced, alias)] : [])];
+}
+/**
+ * The raw matches the entity's mention rules accept (BE-902): each match is
+ * placed on the page's normalized tokens and kept only when that occurrence
+ * counts, so a quote never shows a mention the verdict rejected.
+ */
+function counted(
+  text: string,
+  matches: readonly RegExpExecArray[],
+  tokens: readonly string[],
+  entity: EntityPolicy | undefined,
+) {
+  if (countsAnywhere(entity)) return [...matches];
+  let cursor = 0;
+  let start = 0;
+  return matches.filter((match) => {
+    start += tokensOf(text.slice(cursor, match.index)).length;
+    const width = tokensOf(match[0]).length;
+    cursor = match.index + match[0].length;
+    const counts = occurrenceCounts(tokens, { start, end: start + width }, entity);
+    start += width;
+    return counts;
+  });
 }
 /** Up to the per-entity quote allowance, so one entity never starves the others. */
 function quote(text: string, matches: RegExpExecArray[], ref: string, passages: Passage[]) {
@@ -110,18 +139,16 @@ function entity(page: PageText, item: Entity, passages: Passage[]): Presence {
     (a) => a.length >= p.min_alias_chars,
   );
   const named = { entity_kind: item.kind, entity_name: item.name };
+  const unmatched = { match_method: 'none', match_count: 0, first_offset: null, passage_refs: [] };
+  // A name too short to tell from ordinary words is never judged absent (AR-6).
+  if (!aliases.length)
+    return { ...named, presence: sourcePageVocabulary.PRESENCE_NOT_ASSESSABLE, ...unmatched };
   const offset = entityOffset(page.normalized, aliases, item.matching);
   if (offset === null)
-    return {
-      ...named,
-      presence: page.sufficient ? 'not_detected' : 'partial',
-      match_method: 'none',
-      match_count: 0,
-      first_offset: null,
-      passage_refs: [],
-    };
+    return { ...named, presence: page.sufficient ? 'not_detected' : 'partial', ...unmatched };
+  const tokens = page.normalized.split(' ');
   for (const pattern of aliases.flatMap(spellings)) {
-    const matches = [...text.matchAll(pattern)];
+    const matches = counted(text, [...text.matchAll(pattern)], tokens, item.matching);
     const [first] = matches;
     if (!first) continue;
     const found = first[0].toLowerCase();

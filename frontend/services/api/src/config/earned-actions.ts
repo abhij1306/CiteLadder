@@ -7,16 +7,6 @@ export const earnedActions = {
   EARNED_PAGE_TARGET_PREFIX: 'earned-page:',
   /** Your own pages and competitors' own pages can never list you: never read, never acted on. */
   EARNED_EXCLUDED_SOURCE_CLASSES: ['brand_owned', 'competitor_owned'],
-  /** Page formats that can take another entry: lists, comparisons, directories, reviews. */
-  EARNED_PAGE_INCLUDABLE_FORMATS: [
-    'alternative',
-    'comparison',
-    'directory',
-    'listicle',
-    'profile',
-    'review',
-  ],
-  EARNED_PAGE_MIN_RECURRENCE: 2,
   EARNED_PAGE_USAGE_FACTOR_MAX: 2,
   EARNED_PAGE_COMPETITOR_FACTOR_MAX: 1.6,
   EARNED_PAGE_COMPETITOR_FACTOR_STEP: 0.2,

@@ -1,4 +1,3 @@
-'use client';
 import { CRAWL_ONLY_TABS, TRAFFIC_TABS } from '@/lib/config/crawl-logs';
 import { useUrlState, type UrlCodec } from '@/lib/navigation/url-state';
 import { useProjectScope } from '@/lib/project/active-project-scope';
@@ -8,7 +7,8 @@ import {
   useTrafficData,
   type TrafficDataTab,
 } from '@/lib/ai-traffic/use-traffic-data';
-import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
+import { ListScreen } from '@/components/layout/page-shell';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { Stack } from '@/components/ui/layout';
 import { QueryState } from '@/components/ui/query-state';
 import { TabsRoot, TabPanel, type TabRowProps } from '@/components/ui/tabs';
@@ -16,7 +16,7 @@ import { MutationNotice } from '@/components/ui/mutation-notice';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { readErrorProps } from '@/components/ui/read-error';
 import { AiReferralsScreen } from './referrals-screen';
-import { TrafficControls, TrafficExport } from './traffic-controls';
+import { TrafficExport, trafficFilters } from './traffic-controls';
 import { TrafficOverview, TrafficCrawlers, TrafficActivity } from './traffic-views';
 import { TrafficPages } from './pages-view';
 import { CrawlLogAvailabilityNotice } from './crawl-log-availability';
@@ -58,8 +58,8 @@ export function AiTrafficScreen() {
     items: crawlAvailable === false ? TRAFFIC_TABS.filter((t) => !t.crawlOnly) : TRAFFIC_TABS,
   };
   // The default view waits for crawl availability. The wait still draws the
-  // tab row (nothing selected yet) and the control band, so the loaded view's
-  // bands do not push its work down when they arrive.
+  // tab row (nothing selected yet), so the loaded view's filters, which join
+  // that row, do not push its work down when they arrive.
   if (tab === null)
     return (
       <TabsRoot<TrafficTab | ''>
@@ -68,7 +68,7 @@ export function AiTrafficScreen() {
           if (next) setTab(next);
         }}
       >
-        <ListScreen tabs={tabs} controls={RESERVED_CONTROLS}>
+        <ListScreen tabs={tabs}>
           <QueryState kind="loading" label="Loading AI Traffic…" />
         </ListScreen>
       </TabsRoot>
@@ -97,15 +97,16 @@ function TrafficDataView({
 }: Readonly<{ tab: TrafficDataTab; tabs: TabRowProps; crawlAvailable: boolean }>) {
   const model = useTrafficData(tab);
   const { summary } = model;
-  const controls = { filters: <TrafficControls model={model} crawlAvailable={crawlAvailable} /> };
-  // Export is a route action, so the control band keeps one short row on every tab.
+  // Every narrowing in All filters after the tabs; Export, on the tabs that
+  // list rows, is a header action (D60).
+  const controls: FilterBarProps = { filters: trafficFilters({ model, crawlAvailable }) };
   const actions = tab === 'overview' ? undefined : <TrafficExport model={model} />;
   // First load keeps the identity, tab and control bands; only the work waits.
   // The table tabs draw their own loading, error and empty states inside the
   // table, in the footprint of a page of rows.
   if (tab === 'overview' && summary.isLoading)
     return (
-      <ListScreen tabs={tabs} actions={actions} controls={controls}>
+      <ListScreen tabs={tabs} controls={controls} actions={actions}>
         <QueryState kind="loading" label="Loading AI Traffic…" />
       </ListScreen>
     );
@@ -113,7 +114,7 @@ function TrafficDataView({
   // footprint its loading state took.
   if (tab === 'overview' && summary.isError)
     return (
-      <ListScreen tabs={tabs} actions={actions} controls={controls}>
+      <ListScreen tabs={tabs} controls={controls} actions={actions}>
         <QueryState
           kind="error"
           {...readErrorProps(summary)}
@@ -122,7 +123,7 @@ function TrafficDataView({
       </ListScreen>
     );
   return (
-    <ListScreen tabs={tabs} actions={actions} controls={controls}>
+    <ListScreen tabs={tabs} controls={controls} actions={actions}>
       <TrafficTabContent tab={tab} model={model} crawlAvailable={crawlAvailable} />
     </ListScreen>
   );
@@ -155,7 +156,7 @@ function TrafficTabContent({
       {tab === 'activity' ? <TrafficActivity {...scope} /> : null}
       {tab === 'pages' ? (
         <TabPanel value="pages">
-          <TrafficPages {...scope} />
+          <TrafficPages {...scope} sort={model.selection.sort} onSort={model.selection.setSort} />
         </TabPanel>
       ) : null}
     </Stack>

@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { Save } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -40,8 +38,10 @@ const CONTEXT_TABS = [
   { id: 'audience', label: 'Audience & Offerings' },
   { id: 'map', label: 'Business map' },
   { id: 'competitors', label: 'Competitors' },
-  { id: 'brand-facts', label: 'Brand facts' },
   { id: 'instructions', label: 'Agent instructions' },
+  // Last, and only once the pilot gate answers: it joins the end of the row,
+  // so its arrival moves no other tab.
+  { id: 'brand-facts', label: 'Brand facts' },
 ] as const;
 
 type ContextTab = (typeof CONTEXT_TABS)[number]['id'];
@@ -71,8 +71,7 @@ const TAB_SAVE: Readonly<Record<ContextTab, 'profile' | 'instructions' | null>> 
  */
 export function ContextScreen() {
   const { workspaceId, project } = useProjectScope();
-  // Keyed by project so an unsaved draft never carries to another project.
-  return <ContextWorkspace key={project.id} workspaceId={workspaceId} project={project} />;
+  return <ContextWorkspace workspaceId={workspaceId} project={project} />;
 }
 
 function ContextWorkspace({
@@ -81,8 +80,9 @@ function ContextWorkspace({
 }: Readonly<{ workspaceId: string; project: Project }>) {
   const [requestedTab, setTab] = useUrlState('tab', CONTEXT_TAB_CODEC);
   const profile = useQuery(projectQueries.brandProfile({ workspaceId, projectId: project.id }));
-  // The pilot gate is known before the tabs render, so its tab never appears
-  // late. Outside the pilot there is no tab; an unreadable gate shows its error there.
+  // The five fixed tabs render at once; Brand facts joins the end of the row
+  // when the pilot gate answers. Outside the pilot there is no tab; an
+  // unreadable gate shows its error there.
   const facts = useBrandFacts();
   const form = useBrandProfileForm({
     projectId: project.id,
@@ -92,21 +92,21 @@ function ContextWorkspace({
   const instructions = useAgentInstructions(workspaceId, project.id);
   const offersBrandFacts = facts.isError || Boolean(facts.data?.enabled);
   const tabs = CONTEXT_TABS.filter((tab) => tab.id !== 'brand-facts' || offersBrandFacts);
-  // `?tab=` is deep-linkable, so a link can ask for a tab this project does not offer.
-  const activeTab = tabs.some((tab) => tab.id === requestedTab) ? requestedTab : 'facts';
+  // `?tab=` is deep-linkable, so a link can ask for a tab this project does
+  // not offer. A link to Brand facts holds that tab while the gate is read.
+  const awaitingGate = requestedTab === 'brand-facts' && facts.isPending;
+  const offered = awaitingGate || tabs.some((tab) => tab.id === requestedTab);
+  const activeTab = offered ? requestedTab : 'facts';
   const saveKind = TAB_SAVE[activeTab];
 
   return (
     <TabsRoot value={activeTab} onValueChange={setTab}>
       <ListScreen
-        tabs={
-          facts.isPending
-            ? undefined
-            : {
-                items: tabs.map((tab) => ({ value: tab.id, label: tab.label })),
-                ariaLabel: 'Context sections',
-              }
-        }
+        narrow
+        tabs={{
+          items: tabs.map((tab) => ({ value: tab.id, label: tab.label })),
+          ariaLabel: 'Context sections',
+        }}
         actions={
           <SaveAction
             kind={saveKind === 'profile' && !profile.data ? null : saveKind}
@@ -115,20 +115,16 @@ function ContextWorkspace({
           />
         }
       >
-        {facts.isPending ? (
-          <QueryState kind="loading" label="Loading company facts…" />
-        ) : (
-          <ContextPanels
-            project={project}
-            workspaceId={workspaceId}
-            profile={profile}
-            form={form}
-            brandFacts={
-              <BrandFactsTab facts={facts} workspaceId={workspaceId} projectId={project.id} />
-            }
-            instructions={<AgentInstructionsCard instructions={instructions} />}
-          />
-        )}
+        <ContextPanels
+          project={project}
+          workspaceId={workspaceId}
+          profile={profile}
+          form={form}
+          brandFacts={
+            <BrandFactsTab facts={facts} workspaceId={workspaceId} projectId={project.id} />
+          }
+          instructions={<AgentInstructionsCard instructions={instructions} />}
+        />
       </ListScreen>
     </TabsRoot>
   );
@@ -267,6 +263,7 @@ function BrandFactsTab({
   projectId: string;
 }>) {
   const mayEdit = useWorkspaceCapability('write');
+  if (facts.isPending) return <QueryState kind="loading" label="Loading brand facts…" />;
   return (
     <Card aria-labelledby="brand-facts">
       <CardHeader>

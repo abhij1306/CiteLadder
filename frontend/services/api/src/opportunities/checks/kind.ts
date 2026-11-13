@@ -28,12 +28,17 @@ export type MemberFacts = Pick<
   OpportunityRow,
   'rule_id' | 'target_prompt_id' | 'target_theme' | 'target_url' | 'evidence'
 >;
-export type MemberCheck = { check: ExpectedCheck; member: OpportunityRow };
+/** A frozen check and the finding it measures; null for Analyze a page's prompts. */
+export type MemberCheck = { check: ExpectedCheck; member: OpportunityRow | null };
 export type FreezeContext = {
   db: Database;
   scope: Scope;
   auditId: string | null;
+  /** The go-live instant (UTC ISO) and its day. */
+  declaredAt: string;
   declaredDay: string;
+  /** The output revision the user shipped; null for work done outside CiteLadder. */
+  outputRevisionId: string | null;
   /** Contextual links are declared per selected suggestion. */
   recommendationIds: string[];
 };

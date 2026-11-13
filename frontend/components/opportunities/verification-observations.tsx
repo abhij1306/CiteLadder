@@ -1,5 +1,3 @@
-'use client';
-
 import { Stack } from '@/components/ui/layout';
 import { TextLink } from '@/components/ui/text-link';
 import { textRole } from '@/components/ui/typography';

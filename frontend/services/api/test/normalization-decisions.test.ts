@@ -3,7 +3,12 @@ import { executionFrozenProvenance } from '../src/analysis/provenance.ts';
 import { policy } from '../src/config.ts';
 import { aiReferralSources } from '../src/analytics/ai-referrals.ts';
 import { metricSeriesPoints } from '../src/analytics/metric-series.ts';
-import { domainMatches, isGroundingRedirect, normalizeDomain } from '../src/analysis/domains.ts';
+import {
+  domainMatches,
+  isGroundingRedirect,
+  normalizeDomain,
+  siteDomain,
+} from '../src/analysis/domains.ts';
 import { landingPage, pathIdentity } from '../src/page-identity.ts';
 import { classifySourceDomain } from '../src/analysis/opportunities/source-patterns.ts';
 import { epochMicros, parseDatetime } from '../src/http/datetimes.ts';
@@ -45,6 +50,9 @@ describe('recorded evidence normalization', () => {
     expect(normalizeDomain('https://[broken/')).toBe('');
     expect(domainMatches('https://docs.brand.test/a', 'brand.test')).toBe(true);
     expect(domainMatches('brand.test.evil.test', 'brand.test')).toBe(false);
+    // A trailing-dot host is the same host.
+    expect(normalizeDomain('https://Brand.COM./pricing')).toBe('brand.com');
+    expect(domainMatches('https://www.brand.com./pricing', 'brand.com')).toBe(true);
     const p = policy.opportunity.source_patterns;
     expect(classifySourceDomain('google.com', true, null)).toBe(p.SOURCE_CLASS_BRAND_OWNED);
     expect(classifySourceDomain('google.com', false, 'Competitor')).toBe(
@@ -54,6 +62,21 @@ describe('recorded evidence normalization', () => {
     expect(classifySourceDomain('google.evil.test', false, null)).toBe(
       p.SOURCE_CLASS_OTHER_THIRD_PARTY,
     );
+  });
+
+  it('keeps a site on a shared platform whole, and other sites at their registrable domain', () => {
+    expect(siteDomain('https://www.shop.acme.co.uk/a')).toBe('acme.co.uk');
+    // The public suffix list's private section.
+    expect(siteDomain('acme.myshopify.com')).toBe('acme.myshopify.com');
+    expect(siteDomain('https://acme.github.io/docs')).toBe('acme.github.io');
+    // The configured shared-platform list.
+    expect(siteDomain('blog.acme.wordpress.com')).toBe('acme.wordpress.com');
+    expect(siteDomain('wordpress.com')).toBe('wordpress.com');
+    expect(siteDomain('https://[broken/')).toBeNull();
+    // A store on the platform owns only itself.
+    const owned = siteDomain('acme.myshopify.com');
+    expect(domainMatches('https://acme.myshopify.com/products/a', owned)).toBe(true);
+    expect(domainMatches('https://rival.myshopify.com/products/a', owned)).toBe(false);
   });
 
   it('reads a grounding redirect from its host, never a substring', () => {

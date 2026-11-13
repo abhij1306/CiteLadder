@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { SiteFactsPanel } from './site-facts-panel';
 import { makeSiteCrawl, makeSiteFacts } from '@/test/fixtures/site-health';
 import { parseAgentHandoff } from '@/lib/agent/handoff';
+import { chooseFilterOption } from '@/test/all-filters';
 
 it('renders all policies and Not specified with accessible purpose tables and an agent handoff', async () => {
   const user = userEvent.setup();
@@ -37,8 +38,7 @@ it('renders all policies and Not specified with accessible purpose tables and an
   expect(parseAgentHandoff(url.searchParams).context.site_facts_reference).toEqual({
     crawl_id: crawl.id,
   });
-  await user.click(screen.getByRole('combobox', { name: 'Filter crawlers by purpose' }));
-  await user.click(screen.getByRole('option', { name: 'AI search' }));
+  await chooseFilterOption(user, 'Purpose', 'AI search');
   expect(screen.queryByRole('row', { name: /GPTBot/ })).not.toBeInTheDocument();
   expect(
     screen.getByRole('region', { name: 'Crawler robots policy by purpose' }),

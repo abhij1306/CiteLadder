@@ -41,7 +41,7 @@ const RULE_MESSAGES = {
   'css-spacing': 'spacing must sit on the 4px grid (2px and below only for hairline insets)',
   'css-motion': 'timing must consume var(--motion-*) and var(--ease-*)',
   'css-outline': 'focus outlines belong to the shared focus rule in globals.css',
-  'css-shadow': 'box-shadow must be var(--shadow-edge|xs|card|pop|press) or a 1px token hairline',
+  'css-shadow': 'box-shadow must be var(--shadow-edge|xs|float|pop|press) or a 1px token hairline',
   'css-cycle': 'a custom property must not reference itself',
 };
 
@@ -167,7 +167,7 @@ function shadowAllowed(value) {
     (nodes) =>
       (nodes.length === 1 &&
         isVar(nodes[0]) &&
-        /^--shadow-(?:edge|xs|card|pop|press)$/.test(varName(nodes[0]))) ||
+        /^--shadow-(?:edge|xs|float|pop|press)$/.test(varName(nodes[0]))) ||
       hairlineLayer(nodes),
   );
 }

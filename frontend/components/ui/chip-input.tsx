@@ -1,5 +1,3 @@
-'use client';
-
 import { Check, X } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 
@@ -15,7 +13,7 @@ export type ChipItem = Readonly<{ value: string; suggested?: boolean }>;
 const sameValue = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 const CHIP_BUTTON =
-  'focus-ring text-ink-secondary hover:bg-surface hover:text-ink grid size-5 shrink-0 place-items-center rounded-xs transition-colors disabled:cursor-not-allowed';
+  'focus-ring text-ink-secondary hover:overlay-hover hover:text-ink grid size-5 shrink-0 place-items-center rounded-xs transition-colors disabled:cursor-not-allowed';
 
 /**
  * One value as a 24px `surface-sunken` chip with a 20px remove button. A
@@ -114,7 +112,7 @@ export function ChipInput({
     // A named group: its chips are a list of the same name, and the add field
     // is "Add to …", so each part says what it belongs to.
     <fieldset className="flex min-w-0 flex-col gap-2">
-      <legend className="text-label text-ink mb-2">{label}</legend>
+      <legend className="text-body-sm text-ink mb-2">{label}</legend>
       {/* The add field grows to fill the rest of its line, so a press on the
           box's empty space lands in it. */}
       <div

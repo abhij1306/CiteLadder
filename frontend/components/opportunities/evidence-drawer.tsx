@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -87,8 +85,8 @@ function OpportunityDetailBody({ detail }: Readonly<{ detail: OpportunityDetail 
       {detail.remediation ? (
         <Stack as="section">
           <Label>Recommended improvements</Label>
-          <div className={panelClasses({ tone: 'well' })}>
-            <p className="type-body whitespace-pre-line">{detail.remediation}</p>
+          <div className={panelClasses()}>
+            <p className="type-body text-ink whitespace-pre-line">{detail.remediation}</p>
           </div>
         </Stack>
       ) : null}

@@ -1,5 +1,3 @@
-'use client';
-
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
@@ -12,6 +10,7 @@ import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import { runsMutations, runsQueries } from '@/lib/api/runs';
 import { useProjectHref } from '@/lib/navigation/project-destination';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { useRunEvents } from '@/lib/runs/use-run-events';
 import { useRunExecutions } from '@/lib/runs/use-run-executions';
 import { AUDIT_STATES, pollAudits } from '@/lib/runs/status';
@@ -41,6 +40,7 @@ export function RunDetailScreen() {
   // Stream is the accelerator; polling remains the reliable baseline.
   useRunEvents(runId, auditQuery.data?.project_id, active);
 
+  const canRun = useWorkspaceCapability('run');
   const cancelMutation = useMutation(runsMutations.cancel(workspaceId, runId));
   const rerunFailuresMutation = useMutation(runsMutations.rerunFailures(workspaceId, runId));
   const rerunFailures = () =>
@@ -68,8 +68,8 @@ export function RunDetailScreen() {
           <RunActions
             audit={audit}
             cancelPending={cancelMutation.isPending}
-            onCancel={() => cancelMutation.mutate()}
-            onRerunFailures={rerunFailures}
+            onCancel={canRun ? () => cancelMutation.mutate() : undefined}
+            onRerunFailures={canRun ? rerunFailures : undefined}
             rerunPending={rerunFailuresMutation.isPending}
             onExport={runExport.onExport}
             exporting={runExport.exporting}

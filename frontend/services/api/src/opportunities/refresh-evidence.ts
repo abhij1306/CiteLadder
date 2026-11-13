@@ -3,6 +3,8 @@
  * confirmed prompt declines and one audit's visibility answers. Projections of existing rows only; nothing here
  * detects, scores or writes.
  */
+import { sql } from 'kysely';
+
 import { policy } from '../config.ts';
 import type {
   AnalysisEvidence,
@@ -14,6 +16,7 @@ import type {
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { record } from '../db/json.ts';
+import { viewIssuesSql, type ViewCrawl } from '../site-health/reads/crawl.ts';
 import { siteCoverage, type CoverageCrawl } from './refresh-compute.ts';
 import { compareText } from '../text-order.ts';
 import { isNonEmpty, lastOf } from '../lists.ts';
@@ -22,18 +25,78 @@ const o = policy.opportunity.opportunities;
 const r = policy.opportunity.refresh;
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.map(String) : []);
+const family = o.SITE_ISSUE_FAMILY;
+
+/**
+ * Each issue-family rule's defects in one crawl, grouped by owned page: the
+ * exact affected page count and the first `COHORT_PAGES_MAX` pages in URL
+ * order, so a large family's cohort is bounded but never undercounted.
+ */
+async function loadIssueFamilies(
+  db: Database,
+  crawl: ViewCrawl,
+): Promise<SiteEvidence['families']> {
+  const { rows } = await sql<{
+    rule_id: string;
+    severity: string;
+    category: string;
+    site_url_id: string;
+    url: string;
+    issue_ids: string[];
+    page_count: number;
+  }>`
+    with pages as (
+      select i.rule_id, i.site_url_id, u.normalized_url as url,
+        min(coalesce(i.severity, '')) as severity, min(coalesce(i.category, '')) as category,
+        array_agg(i.id::text order by i.id) as issue_ids
+      from site_issues i
+      join site_urls u on u.workspace_id = i.workspace_id and u.id = i.site_url_id
+        and u.project_id = ${crawl.project_id}
+      where ${viewIssuesSql(crawl)}
+        and i.finding_class = ${r.finding_class_defect}
+        and starts_with(i.rule_id, ${family.ISSUE_RULE_PREFIX})
+      group by i.rule_id, i.site_url_id, u.normalized_url
+    ), ranked as (
+      select pages.*,
+        row_number() over (partition by rule_id order by url collate "C", site_url_id) as page_rank,
+        count(*) over (partition by rule_id) as page_count
+      from pages
+    )
+    select rule_id, severity, category, site_url_id, url, issue_ids, page_count::int as page_count
+    from ranked
+    where page_rank <= ${family.COHORT_PAGES_MAX}
+    order by rule_id collate "C", page_rank`.execute(db);
+  const families = new Map<string, SiteEvidence['families'][number]>();
+  for (const row of rows) {
+    const page = { site_url_id: row.site_url_id, url: row.url, issue_ids: row.issue_ids };
+    const found = families.get(row.rule_id);
+    if (found) found.pages.push(page);
+    else
+      families.set(row.rule_id, {
+        rule_id: row.rule_id,
+        severity: row.severity,
+        category: row.category,
+        page_count: row.page_count,
+        pages: [page],
+      });
+  }
+  return [...families.values()];
+}
 
 export async function loadSiteEvidence(
   db: Database,
   workspaceId: string,
-  crawl: CoverageCrawl & { id: string; project_id: string },
+  crawl: CoverageCrawl & ViewCrawl,
 ): Promise<SiteEvidence> {
   const scope = new WorkspaceScope(workspaceId);
   const loaded = await scope
     .selectFrom(db, 'site_issues')
     .select(['id', 'rule_id', 'severity', 'category', 'finding_class', 'site_url_id', 'evidence'])
-    .where('crawl_id', '=', crawl.id)
+    // Each tracked page's latest audit and the crawl's site-level findings (SH-B9).
+    .where(viewIssuesSql(crawl, 'site_issues').$castTo<boolean>())
     .where('finding_class', '=', r.finding_class_defect)
+    // Issue-family rules load whole, by `loadIssueFamilies`, outside this cap.
+    .where(sql<boolean>`not starts_with(rule_id, ${family.ISSUE_RULE_PREFIX})`)
     .orderBy('created_at')
     .orderBy('id')
     .limit(o.RECOMPUTE_MAX_ISSUES + 1)
@@ -63,6 +126,7 @@ export async function loadSiteEvidence(
       evidence: record(issue.evidence),
     })),
     urls: urls.map((url) => ({ site_url_id: url.id, normalized_url: url.normalized_url })),
+    families: await loadIssueFamilies(db, crawl),
     coverage,
     limitations,
   };

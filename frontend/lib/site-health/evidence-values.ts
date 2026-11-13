@@ -18,7 +18,8 @@ export function records(value: unknown): Evidence[] {
 
 /** A URL without its query string or fragment: `?qv=…` quick-view links are one link. */
 export function withoutQuery(url: string): string {
-  return url.replace(/[?#].*$/u, '');
+  const end = url.search(/[?#]/u);
+  return end < 0 ? url : url.slice(0, end);
 }
 
 function parsedUrl(url: string): URL | null {

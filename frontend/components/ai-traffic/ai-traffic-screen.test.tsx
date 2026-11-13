@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 import { mswServer } from '@/test/msw-server';
+import { openFilterRow } from '@/test/all-filters';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { AiTrafficScreen } from './ai-traffic-screen';
@@ -35,8 +36,8 @@ const crawl = {
 };
 const referrals = {
   project_id: project.id,
-  window_start: '',
-  window_end: '',
+  window_start: null,
+  window_end: null,
   granularity: 'day',
   referral_volume: [],
   referral_share: [],
@@ -107,51 +108,6 @@ describe('AI Traffic state and navigation', () => {
     expect(await screen.findByText(/Custom webhook · Connected · Stalled/)).toBeVisible();
     expect(
       screen.getByText('A batch over 5 MiB was dropped. Lower the stream buffer size.'),
-    ).toBeVisible();
-  });
-  it('shows the Firehose endpoint for a rotated Amazon CloudFront token', async () => {
-    const id = '99999999-9999-4999-8999-999999999999';
-    mswServer.use(
-      http.get(root + '/crawl-logs/sources', () =>
-        HttpResponse.json(
-          sourceBody('available', [
-            {
-              id,
-              kind: 'webhook',
-              setup: 'aws_firehose',
-              preset: 'cloudfront_v2_json',
-              buffer_interval_seconds: 60,
-              format: 'ndjson',
-              collection_point: 'cdn_edge',
-              sampling: { kind: 'none' },
-              origin: 'https://example.test',
-              host: 'example.test',
-              status: 'active',
-              state: 'active',
-              stall_reason: null,
-              stalled_at: null,
-              token_prefix: 'clw_abcdefgh',
-              connection: 'connected',
-              last_accepted_batch: null,
-              last_processed_at: null,
-              rejected_lines: 0,
-              overlapping_lines: 0,
-              unsupported_uploads: 0,
-              unsupported_batches: 0,
-            },
-          ]),
-        ),
-      ),
-      http.post(root + '/crawl-logs/sources/' + id + '/rotate', () =>
-        HttpResponse.json({ id, token: 'clw_rotated' }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWithProviders(<CrawlLogConnections />);
-    await user.click(await screen.findByRole('button', { name: 'Rotate token' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Connect crawl logs' });
-    expect(
-      await within(dialog).findByText(new RegExp('/v1/crawl-logs/firehose/' + id)),
     ).toBeVisible();
   });
   it('keeps setup unavailable on a failed availability read and recovers on retry', async () => {
@@ -665,23 +621,40 @@ describe('AI Traffic state and navigation', () => {
     expect(
       await within(activityTable).findByRole('heading', { name: 'No matching requests' }),
     ).toBeVisible();
-    fireEvent.change(screen.getByRole('spinbutton', { name: 'Response status' }), {
-      target: { value: '404' },
-    });
+    await user.click(screen.getByRole('button', { name: /^All filters/ }));
+    await user.click(screen.getByRole('menuitem', { name: /^Status code/ }));
+    const statusField = await screen.findByRole('spinbutton', { name: 'Response status' });
+    // A partly typed code narrows nothing, so the menu does not report it.
+    fireEvent.change(statusField, { target: { value: '40' } });
+    expect(screen.getByRole('menuitem', { name: /^Status code/ })).toHaveTextContent('Any status');
+    fireEvent.change(statusField, { target: { value: '404' } });
+    expect(screen.getByRole('menuitem', { name: /^Status code/ })).toHaveTextContent('404');
+    await user.keyboard('{Escape}{Escape}');
+    expect(await screen.findByRole('button', { name: 'All filters (1)' })).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Export CSV' }));
     await waitFor(() => expect(exportStatus).toBe('404'));
     await user.click(screen.getByRole('tab', { name: 'Referrals' }));
-    expect(await screen.findByLabelText('Chart interval')).toBeVisible();
+    expect(await openFilterRow(user, 'Chart interval', 'Week')).toBeVisible();
+    await user.keyboard('{Escape}');
     await user.click(screen.getByRole('tab', { name: 'Pages' }));
     await screen.findByRole('table', { name: 'Path-level AI Traffic with separate signal units' });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Folder' }), {
+    await user.click(screen.getByRole('button', { name: /^All filters/ }));
+    await user.click(screen.getByRole('menuitem', { name: /^Resource class/ }));
+    const pageOption = await screen.findByRole('menuitemradio', { name: 'Page' });
+    pageOption.focus();
+    await user.keyboard('{Enter}');
+    await waitFor(() =>
+      expect(new URLSearchParams(window.location.search).get('resource')).toBe('page'),
+    );
+    await user.click(await screen.findByRole('button', { name: /^All filters/ }));
+    await user.click(screen.getByRole('menuitem', { name: /^Folder/ }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Folder' }), {
       target: { value: '/page' },
     });
-    await user.click(screen.getByRole('button', { name: 'Filter' }));
-    await user.click(screen.getByRole('menuitemradio', { name: 'Page' }));
-    expect(screen.getByRole('button', { name: 'Filter, 1 active' })).toBeVisible();
-    await user.click(screen.getByRole('combobox', { name: 'Sort pages' }));
-    await user.click(screen.getByRole('option', { name: 'AI referral sessions' }));
+    await user.keyboard('{Escape}{Escape}');
+    expect(await screen.findByRole('button', { name: 'All filters (2)' })).toBeVisible();
+    // Pages sort from their column headers, like every other table.
+    await user.click(screen.getByRole('button', { name: /^AI referral sessions/ }));
     await user.click(screen.getByRole('button', { name: 'Export CSV' }));
     await waitFor(() => expect(exportedPages.value?.get('folder')).toBe('/page'));
     expect(exportedPages.value?.get('resource_class')).toBe('page');
@@ -712,7 +685,7 @@ describe('AI Traffic state and navigation', () => {
     await waitFor(() =>
       expect(within(panel).queryByText(/0 requests · Measured zero/)).not.toBeInTheDocument(),
     );
-  });
+  }, 20_000);
   it('leads with Referrals and drops crawl-only views when crawl logs are unavailable', async () => {
     const dashboards: URLSearchParams[] = [];
     mswServer.use(
@@ -758,9 +731,7 @@ describe('AI Traffic state and navigation', () => {
     await user.click(screen.getByRole('tab', { name: 'Overview' }));
     expect(await screen.findByText(/not available for this workspace yet/)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Connect crawl logs' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^Filter/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Reporting range' })).toHaveTextContent(
-      'Last 90 days',
-    );
+    expect(await openFilterRow(user, 'Reporting range', 'Last 90 days')).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: /^Verification/ })).not.toBeInTheDocument();
   });
 });

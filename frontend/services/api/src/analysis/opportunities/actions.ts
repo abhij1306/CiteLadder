@@ -1,9 +1,19 @@
+import {
+  actionHandoffSchema,
+  type ActionGroup,
+  type ActionHandoff,
+  type ActionPriorityBand,
+  type ActionTargetKind,
+} from '@citeladder/contracts/actions';
+import type { IssueFamilyCohort } from '@citeladder/contracts/opportunity-evidence';
+
 import { policy } from '../../config.ts';
+import type { ActionGroupRule } from '../../config/actions.ts';
 import { roundScaled } from '../../numbers.ts';
-import { normalizedUrlForCompare } from '../url-compare.ts';
 import { compareText } from '../../text-order.ts';
 import type { NonEmpty } from '../../lists.ts';
-import { targetColumns, targetKey, type TargetRef } from './targets.ts';
+import { actionTargetOf, type ActionTarget } from '../../opportunities/targets/registry.ts';
+import type { TargetRef } from './targets.ts';
 const p = policy.opportunity.actions;
 const MEASUREMENT_LEG_ORDER = [p.LEG_VISIBILITY_RUN, p.LEG_SEARCH_CONSOLE_WINDOW, p.LEG_CRAWL];
 export type ActionMember = {
@@ -18,77 +28,146 @@ export type ActionMember = {
   source_analysis_ids: string[];
   source_issue_ids: string[];
   source_metric_ids: string[];
+  /** What the member's evidence states that a handoff message names. */
+  facts: HandoffFacts;
+  /** An issue-family finding's cohort; absent for every other rule. */
+  cohort?: IssueFamilyCohort;
 };
-export const pageGroupKey = (url: string) => `page:${normalizedUrlForCompare(url)}`;
-/** One planned page per topic, whether the Agent or evidence names it first; null without one. */
-export function plannedPageKey(topic: string): string | null {
-  // Letters in any script, so a keyword in Hindi or Japanese still names a page.
-  const slug = topic
-    .normalize('NFKC')
-    .toLowerCase()
-    .replaceAll(/[^\p{L}\p{M}\p{N}]+/gu, '-')
-    .replace(/^-|-$/gu, '');
-  return slug ? `planned:${[...slug].slice(0, p.PLANNED_PAGE_TOPIC_MAX_CHARS).join('')}` : null;
-}
-function target(
-  key: string,
-  kind: string,
-  member: ActionMember,
-  url: string | null = null,
-  prompt: string | null = null,
-) {
-  const theme = targetColumns(member.target).target_theme;
-  return {
-    group_key: key,
-    kind,
-    label: [...(url || member.label_hint || theme || member.title)]
-      .slice(0, p.ACTION_LABEL_MAX_CHARS)
-      .join(''),
-    url,
-    prompt_id: prompt,
-  };
-}
-const pageTarget = (member: ActionMember, url: string) =>
-  target(pageGroupKey(url), p.TARGET_PAGE, member, url);
-/** The Action a member groups into: one per page, prompt, query, product or listing. */
-export function targetFor(member: ActionMember) {
-  const ref = member.target;
-  const key = targetKey(ref);
-  switch (ref.kind) {
-    case 'earned_page':
-      return target(`earned:${key}`, p.TARGET_EARNED_PAGE, member, ref.url);
-    case 'product':
-      return target(key, p.TARGET_PRODUCT, member);
-    case 'category':
-      return target(key, p.TARGET_CATEGORY, member);
-    case 'prompt':
-      return target(key, p.TARGET_PROMPT, member, null, ref.prompt_id);
-    case 'prompt_index':
-      return target(key, p.TARGET_PROMPT, member);
-    case 'site_page':
-    case 'site_change':
-    case 'link_source':
-      return pageTarget(member, ref.url);
-    case 'demand':
-      if (ref.url) return pageTarget(member, ref.url);
-      return ref.query
-        ? target(`query:${ref.query.toLowerCase().trim()}`, p.TARGET_QUERY, member)
-        : target(key, p.TARGET_QUERY, member);
-    case 'search_gap': {
-      if (ref.url) return pageTarget(member, ref.url);
-      // A keyword gap no existing page covers is a page to create.
-      const planned = plannedPageKey(ref.keyword);
-      return planned
-        ? target(planned, p.TARGET_PLANNED_PAGE, member)
-        : target(key, p.TARGET_QUERY, member);
+/** The competitors read on an earned page, and a content gap's angle; empty when the rule has none. */
+export type HandoffFacts = Readonly<{ competitors: readonly string[]; angle: string | null }>;
+export const NO_HANDOFF_FACTS: HandoffFacts = { competitors: [], angle: null };
+type MessageFacts = Readonly<Partial<Record<string, string>>>;
+const NAMES = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' });
+/** Percent-encoding layers a crawled URL can carry (`%2527` is `'` encoded twice). */
+const MAX_URL_DECODE_PASSES = 3;
+
+/**
+ * A URL label as a reader reads it, for the message only: its escapes decoded
+ * layer by layer, so `Women%2527s-Clothing` reads `Women's-Clothing` (the
+ * stored URL keeps every byte). Any other label, or a layer with a malformed
+ * escape, is kept as it is.
+ */
+function readableTarget(label: string): string {
+  if (!/^https?:\/\//iu.test(label)) return label;
+  let current = label;
+  for (let pass = 0; pass < MAX_URL_DECODE_PASSES; pass += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return current;
     }
-    default: {
-      const unknownTarget: never = ref;
-      throw new Error(`Unknown Opportunity target: ${JSON.stringify(unknownTarget)}`);
-    }
+    if (next === current) return current;
+    current = next;
   }
+  return current;
 }
-export function selectApproach(ids: string[], kind: string) {
+
+/**
+ * The first template every placeholder of which `facts` fills (`config/actions.ts`
+ * `messages`), filled. A branch's last template names `{target}` alone. A
+ * template's full stop after a value that already ends a sentence (`.`, `?`
+ * or `!`) is dropped, so a label never ends in two.
+ */
+function handoffMessage(templates: readonly string[], facts: MessageFacts): string {
+  for (const template of templates) {
+    let complete = true;
+    const message = template.replaceAll(/\{(\w+)\}(\.?)/g, (_, name: string, stop: string) => {
+      const value = facts[name];
+      if (!value) complete = false;
+      return (value ?? '') + (value && /[.?!]$/u.test(value) ? '' : stop);
+    });
+    if (complete) return message;
+  }
+  return facts.target ?? '';
+}
+type ApproachBranch = ReturnType<typeof selectApproach>;
+
+/** A branch's templates filled from one member's facts and the Action's label. */
+function messageFor(branch: Pick<ApproachBranch, 'messages'>, member: ActionMember, label: string) {
+  return handoffMessage(branch.messages, {
+    target: readableTarget(label),
+    issue: member.title,
+    angle: member.facts.angle ?? undefined,
+    competitors: member.facts.competitors.length
+      ? NAMES.format(member.facts.competitors)
+      : undefined,
+  });
+}
+
+/**
+ * The Agent handoff. The first member, in priority order, whose rule's
+ * approach branch names a workflow is the one selection: that branch's
+ * message, filled from that member, opens the chat on its workflow. Without
+ * one, the chat starts on the Action alone with the Action's own branch's
+ * message, filled from that branch's strongest member (the strongest member
+ * for the default branch).
+ */
+function handoffFor(
+  approach: ApproachBranch,
+  members: NonEmpty<ActionMember>,
+  label: string,
+): ActionHandoff {
+  for (const member of members) {
+    const branch = p.APPROACH_TREE.find(
+      (candidate) => candidate.handoff && candidate.rule_ids.includes(member.rule_id),
+    );
+    const handoff = branch?.handoff;
+    if (!branch || !handoff) continue;
+    const message = messageFor(branch, member, label);
+    if (handoff.context === 'opportunity')
+      return {
+        context: 'opportunity',
+        workflow_id: handoff.workflow_id,
+        opportunity_id: member.opportunity_id,
+        message,
+      };
+    return { context: 'page_url', workflow_id: handoff.workflow_id, message };
+  }
+  const rules: readonly string[] = approach.rule_ids;
+  const member = members.find((m) => rules.includes(m.rule_id)) ?? members[0];
+  return { context: 'action', message: messageFor(approach, member, label) };
+}
+
+/**
+ * The handoff an Action's read returns: the one its diagnosis persisted, or,
+ * for an Action with no current evidence (an Agent row, a cleared Action),
+ * the default branch's message about its label.
+ */
+export function readHandoff(persisted: unknown, label: string): ActionHandoff {
+  const parsed = actionHandoffSchema.safeParse(persisted);
+  return parsed.success
+    ? parsed.data
+    : {
+        context: 'action',
+        message: handoffMessage(p.DEFAULT_APPROACH.messages, { target: readableTarget(label) }),
+      };
+}
+type GroupedAction = Readonly<{ approach: string; target_kind: string }>;
+
+function groupAdmits(rule: ActionGroupRule, action: GroupedAction): boolean {
+  // Widened so a stored kind, read as a string, can be looked up.
+  const kinds: readonly string[] | undefined = rule.target_kinds;
+  return (
+    (!kinds || kinds.includes(action.target_kind)) &&
+    (!rule.approaches || rule.approaches.includes(action.approach))
+  );
+}
+
+/** The Actions list group an Action belongs to: the first rule that admits it, else the default. */
+export function actionGroup(action: GroupedAction): ActionGroup {
+  const rule = p.ACTION_GROUPS.find((candidate) => groupAdmits(candidate, action));
+  return rule?.group ?? p.ACTION_GROUP_DEFAULT;
+}
+
+/** The band a priority score falls in; an unscored Action has none. */
+export function priorityBand(score: number | null): ActionPriorityBand | null {
+  if (score === null) return null;
+  if (score >= p.ACTION_PRIORITY_BANDS.high) return 'high';
+  return score >= p.ACTION_PRIORITY_BANDS.medium ? 'medium' : 'low';
+}
+
+function selectApproach(ids: string[], kind: ActionTargetKind) {
   return (
     p.APPROACH_TREE.find(
       (b) =>
@@ -97,7 +176,7 @@ export function selectApproach(ids: string[], kind: string) {
     ) ?? p.DEFAULT_APPROACH
   );
 }
-function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>) {
+function group(t: ActionTarget, members: NonEmpty<ActionMember>) {
   const ordered: [ActionMember, ...ActionMember[]] = [...members];
   ordered.sort(
     (a, b) =>
@@ -118,6 +197,8 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
   return {
     target: t,
     members: ordered,
+    // An issue-family Action holds one family, so its one cohort.
+    cohort: ordered.find((m) => m.cohort)?.cohort ?? null,
     families,
     // The strongest finding ranks the Action. Agreement is not rewarded: most
     // findings on a page come from the one crawl, so a count would double it.
@@ -139,6 +220,7 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
       skill_id: branch.skill_id,
       donts: [...branch.donts],
       measure_with: legs,
+      handoff: handoffFor(branch, ordered, t.label),
       versions: {
         grouping: p.ACTION_GROUPING_VERSION,
         diagnosis: p.ACTION_DIAGNOSIS_VERSION,
@@ -150,10 +232,10 @@ function group(t: ReturnType<typeof targetFor>, members: NonEmpty<ActionMember>)
 export function groupMembers(members: ActionMember[]) {
   const groups = new Map<
     string,
-    { target: ReturnType<typeof targetFor>; members: [ActionMember, ...ActionMember[]] }
+    { target: ActionTarget; members: [ActionMember, ...ActionMember[]] }
   >();
   for (const member of members) {
-    const t = targetFor(member);
+    const t = actionTargetOf(member);
     const entry = groups.get(t.group_key);
     if (entry) entry.members.push(member);
     else groups.set(t.group_key, { target: t, members: [member] });

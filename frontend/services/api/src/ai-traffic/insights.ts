@@ -2,6 +2,7 @@ import { sql } from 'kysely';
 import { randomUUID } from 'node:crypto';
 import { aiTrafficInsightsSchema } from '@citeladder/contracts/ai-traffic';
 import type { z } from 'zod';
+import { subjectXactLock } from '../db/advisory-lock.ts';
 import type { Database } from '../db/database.ts';
 import type { CrawlScope } from '../crawl-logs/state.ts';
 import {
@@ -119,14 +120,11 @@ export const refreshTrafficInsights: Executor = async (task, { db, checkCancelle
   const projectId = await taskProject(db, task),
     scope = { workspaceId: task.workspace_id, projectId };
   await db.transaction().execute(async (trx) => {
-    await sql`select pg_advisory_xact_lock(hashtextextended(${scope.workspaceId + ':' + projectId + ':ai-traffic-insights-publication'},0))`.execute(
-      trx,
-    );
+    await subjectXactLock(trx, `${scope.workspaceId}:${projectId}:ai-traffic-insights-publication`);
     if (!(await ga4Mapped(trx, scope))) return;
-    // Windows share one locked transaction; each checks cancellation first.
     for (const window of await insightWindows(trx, scope)) {
-      await checkCancelled('AI Traffic insight window'); // NOSONAR
-      await refreshInsightWindow(trx, scope, window); // NOSONAR
+      await checkCancelled('AI Traffic insight window'); // NOSONAR -- Each window checks cancellation first.
+      await refreshInsightWindow(trx, scope, window); // NOSONAR -- Windows share one locked transaction.
     }
   });
 };
@@ -139,7 +137,11 @@ export async function refreshInsightWindow(
   const options = await withReportingTimezone(db, scope, input);
   const w = crawlWindow(options);
   const [data, context] = await Promise.all([
-    pageDataset(db, scope, { ...options, dataset_limit: aiTraffic.max_timeline_items + 1 }),
+    pageDataset(db, scope, {
+      ...options,
+      dataset_limit: aiTraffic.max_timeline_items + 1,
+      provenance: true,
+    }),
     pageContext(db, scope, options),
   ]);
   const bounded = data.rows.length > aiTraffic.max_timeline_items;

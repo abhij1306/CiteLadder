@@ -63,6 +63,42 @@ function subscribe(notify: () => void): () => void {
   };
 }
 
+/** How far `timeZone`'s wall clock is ahead of UTC at `instant`, in milliseconds. */
+function zoneOffsetMs(instant: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+  }).formatToParts(new Date(instant));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((entry) => entry.type === type)?.value);
+  const wall = Date.UTC(
+    part('year'),
+    part('month') - 1,
+    part('day'),
+    part('hour'),
+    part('minute'),
+    part('second'),
+  );
+  return wall - Math.floor(instant / 1000) * 1000;
+}
+
+/**
+ * The last second of the calendar day `isoDay` (`YYYY-MM-DD`) in `timeZone`,
+ * as a UTC instant. The second pass settles a day whose offset changes (DST).
+ */
+export function endOfDayInZone(isoDay: string, timeZone: string): string {
+  const wall = Date.parse(`${isoDay}T23:59:59Z`);
+  let instant = wall - zoneOffsetMs(wall, timeZone);
+  instant = wall - zoneOffsetMs(instant, timeZone);
+  return new Date(instant).toISOString();
+}
+
 /** React consumers update when the preference changes without remounting a route. */
 export function useDisplayTimeZone(): string {
   return useSyncExternalStore(subscribe, browserTimeZone, () => 'UTC');

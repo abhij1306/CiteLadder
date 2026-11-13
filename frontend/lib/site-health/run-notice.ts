@@ -66,7 +66,7 @@ export function crawlFailureCopy(
  * did NOT complete cleanly. Returns `null` for a completed crawl (no notice),
  * otherwise a text-labelled badge value + tone + message so the dashboard can
  * explicitly say "Cancelled" / "Partial" (never color-only) while still showing
- * the scores/inventory that already landed. Recrawl is offered by the header.
+ * the scores/inventory that already landed. The header offers the next crawl.
  */
 export type DashboardRunNotice = {
   badge: RunStatusValue;

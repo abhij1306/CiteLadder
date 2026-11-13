@@ -9,6 +9,8 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { createAppQueryClient } from '@/lib/api/query-client';
 import { queryKeys } from '@/lib/api/query-keys';
 import { providerCatalogFixture } from './provider-catalog-fixture';
+import type { Workspace } from '@citeladder/contracts';
+import { roles } from '@/services/api/src/config/workspaces.json';
 import { SessionProvider } from '@/lib/auth/session-guard';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import {
@@ -38,6 +40,30 @@ const TEST_SESSION = {
   },
 };
 
+export type TestRole = keyof typeof roles;
+
+/**
+ * The test workspace as a member holding `role` sees it: the effective
+ * capabilities come from the backend's one role policy, so a screen's role
+ * test follows the policy rather than a copy of it.
+ */
+export function testWorkspace(role: TestRole): Workspace {
+  return {
+    id: TEST_WORKSPACE_ID,
+    name: 'Test Workspace',
+    role,
+    capabilities: [...roles[role]],
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  };
+}
+
+/** The selection overrides for a test user who holds `role` in the test workspace. */
+export function selectionAs(role: TestRole): Partial<ProjectContextValue> {
+  const workspace = testWorkspace(role);
+  return { workspaces: [workspace], activeWorkspace: workspace };
+}
+
 /**
  * A resolved, empty workspace — the minimum every authed screen mounts inside.
  *
@@ -48,17 +74,9 @@ const TEST_SESSION = {
 export function testProjectSelection(
   overrides: Partial<ProjectContextValue> = {},
 ): ProjectContextValue {
-  const workspace = {
-    id: TEST_WORKSPACE_ID,
-    name: 'Test Workspace',
-    role: 'owner',
-    // The Owner's effective capabilities, as the backend's one role policy
-    // publishes them. Consumers gate controls on these names, so a harness
-    // that omitted them would hide exactly what most screens render.
-    capabilities: ['delete_projects', 'manage_credentials', 'read', 'run', 'write'],
-    created_at: '2026-01-01T00:00:00Z',
-    updated_at: '2026-01-01T00:00:00Z',
-  };
+  // The Owner by default. Consumers gate controls on the capability names, so
+  // a harness that omitted them would hide exactly what most screens render.
+  const workspace = testWorkspace('owner');
   return {
     // The membership list, the resolved id and the resolved membership agree.
     // Leaving `activeWorkspace` null while naming an id described a state the

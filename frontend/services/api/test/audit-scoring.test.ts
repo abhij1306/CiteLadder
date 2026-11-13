@@ -155,6 +155,16 @@ describe('frozen deterministic execution scoring', () => {
     expect(spans('Try AceHardware today.')).toEqual(['Try AceHardware today.']);
     expect(spans('Try Acer hardware today.')).toEqual([]);
   });
+  it('never joins separate words into a one-word name unless an alias spells them so', () => {
+    const state = (answer: string, aliases: string[] = []) =>
+      assessEntities(
+        answer,
+        scoringConfig({ brand_name: 'Salesforce', brand_aliases: aliases }),
+      )[0]!.state;
+    expect(state('Grow your sales force this year.')).toBe('absent');
+    expect(state('Salesforce is a CRM.')).toBe('mentioned');
+    expect(state('Grow your sales force this year.', ['Sales Force'])).toBe('mentioned');
+  });
   it('preserves code-point ordering after Unicode folding', () => {
     expect(firstAliasOffset('Straße', normalizeAlias('😀 Rival then STRASSE'))).toBe(11);
     expect(firstAliasOffset('DuranDuran', normalizeAlias('Duran DuranDuran'))).toBe(6);

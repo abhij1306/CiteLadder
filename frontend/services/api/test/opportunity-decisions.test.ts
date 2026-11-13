@@ -1,6 +1,7 @@
 /**
  * Opportunity decisions the seeded PostgreSQL scenario never reaches: earned
- * page selection and scoring, which site changes promote to a rule, how a
+ * page selection and scoring, the Actions list's groups and priority bands,
+ * which site changes promote to a rule, how a
  * confirmed decline ranks, and how verification folds per-check readings.
  */
 import { describe, expect, it } from 'vitest';
@@ -9,6 +10,7 @@ import { policy } from '../src/config.ts';
 import { siteHealth } from '../src/config/site-health.ts';
 import type { SourcePageEvidence } from '../src/analysis/opportunities/evidence.ts';
 import { detectEarnedPageOpportunities } from '../src/analysis/opportunities/earned-pages.ts';
+import { actionGroup, priorityBand } from '../src/analysis/opportunities/actions.ts';
 import { changeRule } from '../src/opportunities/refresh-hits.ts';
 import { declineGap, declineValue } from '../src/opportunities/refresh-evidence.ts';
 import { priorityScore } from '../src/analysis/opportunities/scoring.ts';
@@ -40,14 +42,12 @@ function page(overrides: Partial<SourcePageEvidence> = {}): SourcePageEvidence {
     snapshot_id: 'snapshot-2',
     read_at: '2026-10-01T00:00:00Z',
     extracted_chars: 4000,
-    sufficient_coverage: true,
     title: 'Best CRM tools',
     entities: [
       entity('brand', 'Acme', 'not_detected', 0),
       entity('competitor', 'Rival One', 'present'),
       entity('competitor', 'Rival Two', 'present'),
     ],
-    roster_current: true,
     recurrence_count: 3,
     answer_count: 3,
     prompts: [{ prompt_id: 'prompt-1', text: 'best crm for startups' }],
@@ -85,10 +85,23 @@ describe('earned page opportunities', () => {
     });
   });
 
-  it('acts on directory profiles and alternatives pages too', () => {
-    expect(detect([page({ page_format: 'profile' })])).toHaveLength(1);
-    expect(detect([page({ page_format: 'alternative' })])).toHaveLength(1);
-    expect(detect([page({ page_format: 'article' })])).toEqual([]);
+  it('acts on every Gap page, whatever its format and however rarely it is cited', () => {
+    // An article cited by one answer, read thinly: still a Gap, so still an Action.
+    const once = page({
+      page_format: 'article',
+      recurrence_count: 1,
+      answer_count: 1,
+      extracted_chars: 200,
+    });
+    const [hit] = detect([once]);
+    expect(hit).toMatchObject({
+      rule_id: 'earned_page_acquire_listing',
+      target: { kind: 'earned_page', url_hash: 'hash-a' },
+      value_factor: 7 / 6,
+      gap_factor: 1.4,
+    });
+    // It ranks below the same page cited by three answers.
+    expect(hit!.value_factor).toBeLessThan(detect([page()])[0]!.value_factor);
   });
 
   it("never asks to be listed on a competitor's own page", () => {
@@ -105,10 +118,53 @@ describe('earned page opportunities', () => {
     expect(detect([page(brand('not_detected'))])).toHaveLength(1);
   });
 
-  it('judges a page on its last successful reading under the current roster', () => {
+  it('judges a page on its last successful reading', () => {
     expect(detect([page({ snapshot_id: null })])).toEqual([]);
-    expect(detect([page({ roster_current: false })])).toEqual([]);
-    expect(detect([page({ sufficient_coverage: false })])).toEqual([]);
+  });
+});
+
+describe('Actions list groups', () => {
+  const a = policy.opportunity.actions;
+  // Off product and category targets, the approach decides the group.
+  const BY_APPROACH: Record<string, string> = {
+    earned_placement: 'earned',
+    fix_technical: 'fix_site',
+    improve_links: 'fix_site',
+    create_new: 'own_pages',
+    improve_existing: 'own_pages',
+    consolidate: 'own_pages',
+    // An Agent-origin Action before any diagnosis.
+    '': 'own_pages',
+  };
+
+  it('names a group for every approach the tree can store', () => {
+    const stored = new Set([
+      ...a.APPROACH_TREE.map((b) => b.approach),
+      a.DEFAULT_APPROACH.approach,
+    ]);
+    expect([...stored].sort()).toEqual(Object.keys(BY_APPROACH).filter(Boolean).sort());
+  });
+
+  it('puts every Action in exactly one group: products by target, the rest by approach', () => {
+    for (const approach of Object.keys(BY_APPROACH))
+      for (const target_kind of a.ACTION_TARGET_KINDS)
+        expect([approach, target_kind, actionGroup({ approach, target_kind })]).toEqual([
+          approach,
+          target_kind,
+          ['product', 'category'].includes(target_kind) ? 'products' : BY_APPROACH[approach],
+        ]);
+  });
+
+  it('bands a priority score at 30 and 20; an unscored Action has no band', () => {
+    expect([40, 30, 29.9, 20, 19.9, 0, null].map(priorityBand)).toEqual([
+      'high',
+      'high',
+      'medium',
+      'medium',
+      'low',
+      'low',
+      null,
+    ]);
   });
 });
 

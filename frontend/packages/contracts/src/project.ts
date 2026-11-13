@@ -141,6 +141,9 @@ const promptAdmissionDropReasons = [
   'placeholder',
   // Joins two alternatives ("for a spare room or a commercial bay"): one need per prompt.
   'two_needs',
+  // A core question answered with general advice, ideas or kinds of things,
+  // not specific named products, services, brands or providers.
+  'advice',
   'observed_copy',
   'off_topic',
   'location_unplanned',
@@ -382,6 +385,19 @@ export const projectSchema = responseObject({
   updated_at: z.string(),
 });
 
+/**
+ * One row of a workspace's project list: only what the project switcher and
+ * other pickers show. The full view is the project's own detail read. Every
+ * field matches `projectSchema`, so a full project is also a valid summary.
+ */
+export const projectSummarySchema = responseObject({
+  id: uuid(),
+  name: z.string(),
+  brand_name: z.string(),
+  website_url: z.string(),
+  brand: responseObject({ logo_url: z.string().nullable().optional() }),
+});
+
 export type BrandProfileDraft = z.infer<typeof brandProfileDraftSchema>;
 export type BrandProfile = z.infer<typeof brandProfileSchema>;
 export type PromptIntent = z.infer<typeof promptIntentSchema>;
@@ -400,5 +416,6 @@ export type PromptCandidateReviewResponse = z.infer<typeof promptCandidateReview
 export type BusinessMap = z.infer<typeof businessMapSchema>;
 export type BusinessMapEntry = z.infer<typeof businessMapEntrySchema>;
 export type Project = z.infer<typeof projectSchema>;
+export type ProjectSummary = z.infer<typeof projectSummarySchema>;
 export type Competitor = z.infer<typeof competitorSchema>;
 export type EntityMatching = z.infer<typeof entityMatchingSchema>;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { citationSchema } from './audits.ts';
 import { pageEntitySchema } from './source-pages.ts';
+import { namedBrandSchema } from './visibility.ts';
 
 const responseObject = <Shape extends z.ZodRawShape>(shape: Shape) => z.object(shape);
 const uuid = () => z.uuid();
@@ -91,7 +92,8 @@ export const visibilityEvidenceResponseSchema = responseObject({
 /**
  * Where the business stands on one cited page, from its latest successful
  * reading: its own or a competitor's page, not read yet (and why), a `gap`
- * (competitors listed and the business not), listed, or read with neither.
+ * (competitors listed and the business not), listed, read with neither, or
+ * `not_assessable` when the business's name is too short to judge on a page.
  */
 export const pageStandingSchema = z.enum([
   'yours',
@@ -102,6 +104,7 @@ export const pageStandingSchema = z.enum([
   'gap',
   'listed',
   'read',
+  'not_assessable',
 ]);
 
 export const visibilitySourcesSchema = responseObject({
@@ -168,16 +171,7 @@ export const visibilitySourcesSchema = responseObject({
       // Brands named in the ANSWERS that cited this page, never found on it.
       // `mentions` is the distinct count; `brands` is the leading few.
       mentions: z.number().int(),
-      brands: z.array(
-        responseObject({
-          kind: z.enum(['brand', 'competitor']),
-          name: z.string(),
-          responses: z.number().int(),
-          // The cached mark this project holds, or a site to derive one from.
-          logo_url: z.string().nullable(),
-          website: z.string().nullable(),
-        }),
-      ),
+      brands: z.array(namedBrandSchema),
     }),
   ),
 });

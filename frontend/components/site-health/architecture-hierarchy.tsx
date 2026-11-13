@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo } from 'react';
 
 import { PageKindBadge } from '@/components/site-health/page-kind-badge';
@@ -10,11 +8,16 @@ import { TextLink } from '@/components/ui/text-link';
 import { treeBranchClasses } from '@/components/ui/workspace';
 import type { ArchitectureNode } from '@citeladder/contracts';
 
-const PARENT_SOURCE_LABELS: Record<ArchitectureNode['parent_source'], string> = {
+/**
+ * Where a page's parent came from. Most pages sit under their URL parent, so
+ * that default goes unlabelled and only the exceptions say where they came
+ * from: a caption on every row said nothing.
+ */
+const PARENT_SOURCE_LABELS: Record<ArchitectureNode['parent_source'], string | null> = {
   breadcrumb: 'Breadcrumb',
-  explicit_structure: 'Explicit structure',
-  url_parent: 'URL parent',
-  unknown: 'Root or unresolved',
+  explicit_structure: 'Site structure',
+  url_parent: null,
+  unknown: 'No known parent',
 };
 
 /**
@@ -55,8 +58,8 @@ export function HierarchyCard({
       <CardHeader>
         <CardTitle>Observed hierarchy</CardTitle>
         <CardDescription>
-          Persisted parent relationships from breadcrumbs, explicit structure, or a safe URL parent.
-          Unresolved pages remain at the root.
+          Each page sits under its parent in the URL path unless its breadcrumb or the site’s
+          structure says otherwise. Pages with no known parent sit at the top.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -88,6 +91,9 @@ function HierarchyList({
     <ul className={treeBranchClasses()}>
       {nodes.map((node) => {
         const children = grouped.get(node.site_url_id) ?? [];
+        // The home page is the root by definition, not a page missing a parent.
+        const home = node.depth_from_home === 0;
+        const source = home ? null : PARENT_SOURCE_LABELS[node.parent_source];
         return (
           <Stack as="li" gap="item" key={node.site_url_id} className="min-w-0">
             <Inline className="flex-wrap">
@@ -105,7 +111,7 @@ function HierarchyList({
                 </span>
               )}
               <PageKindBadge pageKind={node.page_kind} />
-              <span className="type-caption">{PARENT_SOURCE_LABELS[node.parent_source]}</span>
+              {source ? <span className="type-caption">{source}</span> : null}
             </Inline>
             {children.length > 0 ? (
               <HierarchyList nodes={children} grouped={grouped} crawlId={crawlId} />

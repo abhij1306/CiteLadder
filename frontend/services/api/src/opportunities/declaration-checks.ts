@@ -8,13 +8,14 @@ import type { Scope } from './sources.ts';
 /**
  * The checks a declaration freezes, one per distinct expectation, in check
  * kind order. A member whose rule nothing measures contributes none; the
- * Action still records the work.
+ * Action still records the work. A shipped revision from Analyze a page also
+ * freezes the prompts its chat was started for.
  */
 export async function declarationChecks(
   db: Database,
   scope: Scope,
   members: OpportunityRow[],
-  context: { auditId: string | null; declaredDay: string },
+  context: { auditId: string | null; declaredAt: string; outputRevisionId: string | null },
   recommendationIds: string[] = [],
 ): Promise<MemberCheck[]> {
   const byKind = new Map<CheckKind, OpportunityRow[]>();
@@ -23,7 +24,13 @@ export async function declarationChecks(
     if (kind) byKind.set(kind, [...(byKind.get(kind) ?? []), member]);
   }
   const checks = new Map<string, MemberCheck>();
-  const freezing = { db, scope, ...context, recommendationIds };
+  const freezing = {
+    db,
+    scope,
+    ...context,
+    declaredDay: context.declaredAt.slice(0, 10),
+    recommendationIds,
+  };
   for (const kind of CHECK_KINDS) {
     const found = await CHECKS[kind].freeze(byKind.get(kind) ?? [], freezing); // NOSONAR -- One transaction connection.
     for (const item of found) {

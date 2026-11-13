@@ -5,10 +5,13 @@ import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { openFilterOptions } from '@/test/all-filters';
 import { renderWithProviders } from '@/test/render';
 import { makeProject } from '@/test/fixtures/project';
 import { downloadCsv } from '@/lib/csv/download';
+import { ListScreen } from '@/components/layout/page-shell';
 import { InternalLinksPanel } from './internal-links-panel';
+import { useInternalLinksBands } from './internal-links-panel-bands';
 
 vi.mock('@/lib/csv/download', () => ({ downloadCsv: vi.fn() }));
 
@@ -75,10 +78,24 @@ function Navigation() {
   );
 }
 
+/** The tab as the screen draws it: actions in the header, search and filters in the control band. */
+function LinksTab({ canAnalyze }: Readonly<{ canAnalyze?: boolean }>) {
+  const links = useInternalLinksBands({
+    scope: { projectId: project.id, workspaceId: project.workspace_id },
+    enabled: true,
+    canAnalyze,
+  });
+  return (
+    <ListScreen actions={links.actions} controls={links.controls}>
+      <InternalLinksPanel read={links.read} workspaceId={project.workspace_id} />
+    </ListScreen>
+  );
+}
+
 function renderPanel(withNavigation = false) {
   return renderWithProviders(
     <>
-      <InternalLinksPanel projectId={project.id} workspaceId={project.workspace_id} />
+      <LinksTab />
       {withNavigation ? <Navigation /> : null}
     </>,
     {
@@ -95,6 +112,22 @@ afterEach(() => mswServer.resetHandlers());
 afterAll(() => mswServer.close());
 
 describe('Internal links', () => {
+  it('keeps the export but not the run while the screen withholds mutations', async () => {
+    mswServer.use(http.get(endpoint, () => HttpResponse.json(read(analysis()))));
+    const selection = {
+      activeProject: project,
+      activeProjectId: project.id,
+      status: 'ready',
+    } as const;
+    const allowed = renderWithProviders(<LinksTab />, { projectSelection: selection });
+    expect(await screen.findByRole('button', { name: 'Analyze again' })).toBeVisible();
+    allowed.unmount();
+
+    renderWithProviders(<LinksTab canAnalyze={false} />, { projectSelection: selection });
+    expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Analyze again' })).not.toBeInTheDocument();
+  });
+
   it('starts queued analysis immediately while keeping progress and cancellation responsive', async () => {
     let admitted = false;
     let release!: () => void;
@@ -165,8 +198,9 @@ describe('Internal links', () => {
     }));
     mswServer.use(http.get(endpoint, () => HttpResponse.json({ ...read(analysis()), history })));
     renderPanel();
-    await userEvent.click(await screen.findByRole('combobox', { name: 'Saved analysis' }));
-    const labels = (await screen.findAllByRole('option')).map((option) =>
+    await screen.findByRole('button', { name: /^All filters/ });
+    await openFilterOptions(userEvent.setup(), 'Saved analysis');
+    const labels = (await screen.findAllByRole('menuitemradio')).map((option) =>
       option.textContent?.split(' · ').at(-1),
     );
     expect(labels).toEqual([
@@ -258,7 +292,15 @@ describe('Internal links', () => {
     );
     renderPanel();
     expect(await screen.findByText('Anchor 0')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    // No Action yet reads as the missing mark, named for assistive technology only.
+    const firstRow = screen.getByRole('row', { name: /Anchor 0/ });
+    expect(within(firstRow).getByText('No Action yet')).toHaveClass('sr-only');
+    expect(within(firstRow).getByText('–')).toBeVisible();
+    // One export, at the end of the control row; the header keeps the tab's primary action.
+    const header = screen.getByRole('banner');
+    expect(within(header).getByRole('button', { name: 'Analyze again' })).toBeInTheDocument();
+    const controls = screen.getByRole('group', { name: 'Search and filters' });
+    await userEvent.click(within(controls).getByRole('button', { name: 'Export CSV' }));
     expect(downloadCsv).toHaveBeenCalledWith(
       'internal-links',
       expect.arrayContaining([

@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -15,6 +13,7 @@ import {
   writeStoredActiveWorkspaceId,
 } from '@/lib/project/active-project-storage';
 import { ProjectSelectionProvider, type ProjectContextValue } from '@/lib/project/project-scope';
+import type { Project, ProjectSummary } from '@citeladder/contracts';
 import {
   pickActiveProject,
   resolveFailed,
@@ -44,12 +43,64 @@ function useRequestedScope() {
   };
 }
 
-/** One workspace's projects, keyed by AND requested for that workspace. */
+/** One workspace's project summaries, keyed by AND requested for that workspace. */
 function useWorkspaceProjects(workspaceId: string | null, allowed: boolean) {
   return useQuery({
     ...projectQueries.list(workspaceId ?? 'unresolved'),
     enabled: workspaceId !== null && allowed,
   });
+}
+
+/**
+ * The active project's full view. The list carries summaries, so the view is
+ * the project's own detail read. It starts as soon as a selection exists —
+ * alongside the list, not after it — and an explicit address shares the
+ * requested project's read.
+ *
+ * It has failed with nothing usable when the list failed and nothing but the
+ * list could vouch for the selection — no project at all, or a stored one the
+ * list never confirmed (its view answering does not make the workspace's
+ * projects known) — or when a settled list's selection has no view. An
+ * explicit address is authorized by its own detail read, which reports its
+ * own failure.
+ */
+function useActiveProjectView({
+  activeProjectId,
+  activeWorkspaceId,
+  resolvedProject,
+  explicit,
+  listSettled,
+  listFailed,
+  allowed,
+}: Readonly<{
+  activeProjectId: string | null;
+  activeWorkspaceId: string | null;
+  resolvedProject: Project | null;
+  explicit: boolean;
+  listSettled: boolean;
+  listFailed: boolean;
+  allowed: boolean;
+}>) {
+  const viewQuery = useQuery({
+    ...projectQueries.detail(activeProjectId ?? 'none'),
+    enabled: activeProjectId !== null && allowed,
+  });
+  const activeProject = useMemo(
+    () => pickActiveProject([resolvedProject, viewQuery.data], activeProjectId, activeWorkspaceId),
+    [resolvedProject, viewQuery.data, activeProjectId, activeWorkspaceId],
+  );
+  const viewFailed = viewQuery.isError && listSettled && !explicit;
+  return {
+    activeProject,
+    failedWithNothingUsable:
+      (listFailed && (activeProject === null || !explicit)) ||
+      (activeProject === null && viewFailed),
+  };
+}
+
+/** The resolved workspace becomes the selection; until one resolves, the selection stands. */
+function adoptWorkspace(resolved: string | null, selected: string | null) {
+  return resolved ?? selected;
 }
 
 /**
@@ -108,7 +159,7 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
   const projectsQuery = useWorkspaceProjects(activeWorkspaceId, !contradictoryRequest);
   const listSettled = projectsQuery.isSuccess;
   // Include an authorized detail even if the list predates its creation.
-  const projects = useMemo(() => {
+  const projects = useMemo<ProjectSummary[]>(() => {
     const listed = projectsQuery.data ?? [];
     // A project whose workspace contradicts the URL is rejected, not merged.
     if (!resolvedProject || contradictoryRequest) return listed;
@@ -127,16 +178,21 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
     [requestedProjectId, selectedProjectId, projects, listSettled],
   );
 
-  const activeProject = useMemo(
-    () => pickActiveProject(resolvedProject, projects, activeProjectId),
-    [resolvedProject, projects, activeProjectId],
-  );
+  const { activeProject, failedWithNothingUsable } = useActiveProjectView({
+    activeProjectId,
+    activeWorkspaceId,
+    resolvedProject,
+    explicit: requestedProjectId !== null,
+    listSettled,
+    listFailed: projectsQuery.isError,
+    allowed: !contradictoryRequest,
+  });
 
   const requestedProjectMissing = isMissing(detailQuery.error);
   const failures = {
     detailFailed: detailQuery.isError && !requestedProjectMissing,
     membershipFailed: workspacesQuery.isError,
-    listFailedWithNothingUsable: projectsQuery.isError && activeProject === null,
+    listFailedWithNothingUsable: failedWithNothingUsable,
   };
   const failed = resolveFailed(failures);
   const errorScope = failed ? resolveFailureScope(failures) : null;
@@ -195,13 +251,10 @@ export function ProjectProvider({ children }: Readonly<{ children: ReactNode }>)
   // and with the selection living nowhere but the URL, the render in between
   // fell all the way back to the FIRST membership, sending one project-list
   // request against a workspace the reader is not in and flashing the loader
-  // before the detail pulled it back.
-  useEffect(() => {
-    // oxlint-disable-next-line react-hooks/set-state-in-effect -- mirror the resolved workspace.
-    setSelectedWorkspaceId((current) =>
-      activeWorkspaceId && current !== activeWorkspaceId ? activeWorkspaceId : current,
-    );
-  }, [activeWorkspaceId]);
+  // before the detail pulled it back. Adopted during render, so the selection
+  // never lags the workspace the screen already resolved.
+  const adoptedWorkspaceId = adoptWorkspace(activeWorkspaceId, selectedWorkspaceId);
+  if (adoptedWorkspaceId !== selectedWorkspaceId) setSelectedWorkspaceId(adoptedWorkspaceId);
 
   const value = useMemo<ProjectContextValue>(
     () => ({

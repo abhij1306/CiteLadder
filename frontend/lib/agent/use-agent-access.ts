@@ -1,5 +1,3 @@
-'use client';
-
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 /**

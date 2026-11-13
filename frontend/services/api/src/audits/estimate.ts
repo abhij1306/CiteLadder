@@ -7,7 +7,7 @@ import { auditRuntime, type AuditRuntime } from './config.ts';
 import { providerPolicy, surfaceKindOf } from '../providers/config.ts';
 import { resolveMarkets } from '../projects/markets.ts';
 import { searchContext } from '../search-surfaces/locations.ts';
-import { marketEngines } from './freeze.ts';
+import { launchPrompts, marketEngines } from './freeze.ts';
 import { marketIdsInput, repetitionsInput } from './inputs.ts';
 import { costPolicy, estimateTokens, knownTotal, previewCost } from './costs.ts';
 
@@ -39,18 +39,10 @@ export async function estimateAudit(
     .where('id', '=', input.project_id)
     .executeTakeFirst();
   if (!project) throw invalid('Project not found');
-  let query = db
-    .selectFrom('prompts as p')
-    .innerJoin('prompt_sets as s', 's.id', 'p.prompt_set_id')
-    .select(['p.id', 'p.text'])
-    .where('s.project_id', '=', project.id)
-    .where('p.enabled', '=', true)
-    .orderBy('p.created_at')
-    .orderBy('p.id');
-  if (input.prompt_ids.length) query = query.where('p.id', 'in', input.prompt_ids);
-  else if (input.prompt_set_id) query = query.where('s.id', '=', input.prompt_set_id);
-  else throw invalid('Either prompt_set_id or prompt_ids is required');
-  const prompts = await query.execute();
+  if (!input.prompt_ids.length && !input.prompt_set_id)
+    throw invalid('Either prompt_set_id or prompt_ids is required');
+  // The launch's own selection: archived prompts are never run.
+  const prompts = await launchPrompts(db, workspaceId, project.id, input);
   if (
     !prompts.length ||
     (input.prompt_ids.length && prompts.length !== new Set(input.prompt_ids).size)

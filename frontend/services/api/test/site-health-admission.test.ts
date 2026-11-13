@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { extractPageFacts, factSettings } from '../src/site-health/analysis/facts.ts';
+import { parseSitemapAsync } from '../src/site-health/analysis/off-thread.ts';
 import { discoveryLinks } from '../src/site-health/discovery-links.ts';
 import { classifyUrlAdmission } from '../src/site-health/url-admission.ts';
 import { document } from '../src/web-evidence/html.ts';
@@ -12,47 +13,11 @@ const reasons = policy.site_health.crawl.exclusions;
 const scope = { domain: 'example.test' };
 
 describe('URL admission', () => {
-  it('admits the registrable domain and its subdomains, and only narrows with globs', () => {
+  it('admits the registrable domain and its subdomains only', () => {
     expect(classifyUrlAdmission('https://blog.example.test/post', scope).accepted).toBe(true);
     expect(classifyUrlAdmission('https://example.test.evil/post', scope).reason).toBe(
       reasons.out_of_scope,
     );
-    const narrowed = {
-      ...scope,
-      include: ['https://example.test/docs/*'],
-      exclude: ['*/docs/private*'],
-    };
-    expect(classifyUrlAdmission('https://example.test/docs/a/b', narrowed).accepted).toBe(true);
-    expect(classifyUrlAdmission('https://example.test/blog', narrowed).reason).toBe(
-      reasons.narrowed,
-    );
-    expect(classifyUrlAdmission('https://example.test/docs/private-x', narrowed).reason).toBe(
-      reasons.narrowed,
-    );
-  });
-
-  it('translates fnmatch globs, including hyphens and literal brackets, without throwing', () => {
-    const admitted = (path: string, include: string[]) =>
-      classifyUrlAdmission(`https://example.test${path}`, { ...scope, include }).accepted;
-    expect(admitted('/blog-posts/a', ['*/blog-posts/*'])).toBe(true);
-    // A `]` right after `[` or `[!` is a set member, not the close.
-    expect(admitted('/axb', ['*/a[]x]b'])).toBe(true);
-    expect(admitted('/ayb', ['*/a[!]x]b'])).toBe(true);
-    expect(admitted('/axb', ['*/a[!]x]b'])).toBe(false);
-    // A reversed range cannot compile; the glob then matches only itself.
-    expect(admitted('/x', ['*[z-a]*'])).toBe(false);
-    expect(admitted('/archive-7/x', ['*/archive-[0-9]/?'])).toBe(true);
-    expect(admitted('/archive-x/x', ['*/archive-[0-9]/?'])).toBe(false);
-  });
-
-  it('matches many-star globs in linear time on long near-miss URLs', () => {
-    const glob = `https://example.test/${'*a'.repeat(200)}*b`;
-    const url = `https://example.test/${'a'.repeat(900)}`;
-    const started = performance.now();
-    const decision = classifyUrlAdmission(url, { ...scope, include: [glob] });
-    expect(decision.reason).toBe(reasons.narrowed);
-    expect(classifyUrlAdmission(`${url}b`, { ...scope, include: [glob] }).accepted).toBe(true);
-    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it('separates hard exclusions and documents from ordinary pages', () => {
@@ -125,8 +90,8 @@ describe('URL admission', () => {
   });
 });
 
-it('keeps content about crawler paths while excluding platform redirectors despite includes', () => {
-  const scope = { domain: 'example.com', include: ['*'] };
+it('keeps content about crawler paths while excluding platform redirectors', () => {
+  const scope = { domain: 'example.com' };
   for (const path of [
     '/cdn-cgi/l/email-protection',
     '/customer_authentication/redirect',
@@ -166,8 +131,8 @@ it('inventories readable documents while refusing binary downloads and oversized
   });
 });
 
-it('keeps a public-suffix sibling outside the root site even with an unrestricted include', () => {
-  const scope = { domain: 'example.co.uk', include: ['*'] };
+it('keeps a public-suffix sibling outside the root site', () => {
+  const scope = { domain: 'example.co.uk' };
   expect(classifyUrlAdmission('https://docs.example.co.uk/page', scope).accepted).toBe(true);
   for (const host of ['other.co.uk', 'example.co.uk.evil.com', 'notexample.co.uk']) {
     expect(classifyUrlAdmission(`https://${host}/page`, scope)).toMatchObject({
@@ -192,6 +157,21 @@ describe('discovery links', () => {
       ['https://example.test/a', 0, ''],
       ['https://example.test/p', 1, policy.site_health.crawl.link_rewrite.reason],
       ['https://example.test/b', 2, ''],
+    ]);
+  });
+
+  it('resolves relative links against the document base, not the page URL', () => {
+    const root = document(
+      Buffer.from(
+        '<head><base href="/shop/"></head><a href="boots">b</a><a href="/about">a</a>' +
+          '<a href="../blog/news">n</a>',
+      ),
+    );
+    const { links } = discoveryLinks(root, 'https://example.test/blog/post', scope, 10);
+    expect(links.map((link) => link.admission.url)).toEqual([
+      'https://example.test/shop/boots',
+      'https://example.test/about',
+      'https://example.test/blog/news',
     ]);
   });
 
@@ -246,11 +226,13 @@ describe('sitemaps', () => {
         .map((loc) => `<url><loc> ${loc} </loc></url>`)
         .join('')}</urlset>`,
     );
+  const read = (body: Buffer) => parseSitemap(body, 'text/xml', limits);
   it('reads page URLs and index references, and decodes gzip under the cap', () => {
     expect(parseSitemap(urlset('https://example.test/a?x=1&amp;y=2'), 'text/xml', limits)).toEqual({
       urls: ['https://example.test/a?x=1&y=2'],
       lastmod: new Map(),
       refs: [],
+      truncated: false,
     });
     const index = Buffer.from(
       '<sitemapindex><sitemap><loc>https://example.test/s1.xml</loc></sitemap></sitemapindex>',
@@ -259,7 +241,29 @@ describe('sitemaps', () => {
       urls: [],
       lastmod: new Map(),
       refs: ['https://example.test/s1.xml'],
+      truncated: false,
     });
+  });
+
+  it('flags a collected list a safety ceiling cut short, so its count is a lower bound', () => {
+    const four = urlset('/1', '/2', '/3', '/4')
+      .toString()
+      .replaceAll('> /', '> https://example.test/');
+    const capped = new SitemapCollector(limits);
+    capped.add('https://example.test/sitemap.xml', read(Buffer.from(four)), 0);
+    expect([capped.urls.length, capped.truncated]).toEqual([3, true]);
+    const whole = new SitemapCollector(limits);
+    whole.add('https://example.test/sitemap.xml', read(urlset('https://example.test/1')), 0);
+    expect([whole.urls.length, whole.truncated]).toEqual([1, false]);
+    // At the depth bound, a reference back to a read index leaves nothing unread.
+    const looped = new SitemapCollector(limits);
+    const index = (loc: string) =>
+      Buffer.from(`<sitemapindex><sitemap><loc>${loc}</loc></sitemap></sitemapindex>`);
+    looped.add('https://example.test/a.xml', read(index('https://example.test/b.xml')), 0);
+    looped.add('https://example.test/b.xml', read(index('https://example.test/a.xml')), 1);
+    expect(looped.truncated).toBe(false);
+    looped.add('https://example.test/b.xml', read(index('https://example.test/c.xml')), 1);
+    expect(looped.truncated).toBe(true);
   });
 
   it('keeps each page URL’s first declared lastmod through the collector', () => {
@@ -269,7 +273,7 @@ describe('sitemaps', () => {
       <url><loc>https://example.test/a</loc><lastmod>2020-01-01</lastmod></url></urlset>`,
     );
     const collector = new SitemapCollector(limits);
-    collector.add('https://example.test/sitemap.xml', dated, 'text/xml', 0);
+    collector.add('https://example.test/sitemap.xml', read(dated), 0);
     expect(collector.urls).toEqual([
       'https://example.test/a',
       'https://example.test/b',
@@ -296,17 +300,32 @@ describe('sitemaps', () => {
       '<sitemapindex><sitemap><loc>https://example.test/root.xml</loc></sitemap>' +
         '<sitemap><loc>https://example.test/child.xml</loc></sitemap></sitemapindex>',
     );
-    expect(collector.add('https://example.test/root.xml', index, 'text/xml', 0)).toEqual([
+    expect(collector.add('https://example.test/root.xml', read(index), 0)).toEqual([
       'https://example.test/child.xml',
     ]);
-    expect(collector.add('https://example.test/child.xml', index, 'text/xml', 1)).toEqual([]);
-    collector.add('https://example.test/u1.xml', urlset('a', 'b'), 'text/xml', 1);
-    collector.add('https://example.test/u2.xml', urlset('c', 'd'), 'text/xml', 1);
+    expect(collector.add('https://example.test/child.xml', read(index), 1)).toEqual([]);
+    collector.add('https://example.test/u1.xml', read(urlset('a', 'b')), 1);
+    collector.add('https://example.test/u2.xml', read(urlset('c', 'd')), 1);
     expect(collector.urls).toEqual(['a', 'b', 'c']);
     // A fragment or spelling variant of a visited sitemap is the same document.
     const again = Buffer.from(
       '<sitemapindex><sitemap><loc>https://EXAMPLE.test/root.xml#top</loc></sitemap></sitemapindex>',
     );
-    expect(collector.add('https://example.test/other.xml', again, 'text/xml', 0)).toEqual([]);
+    expect(collector.add('https://example.test/other.xml', read(again), 0)).toEqual([]);
+  });
+
+  it('parses a sitemap off the event loop with the same answer and refusals', async () => {
+    const dated = Buffer.from(
+      '<urlset><url><loc>https://example.test/a</loc><lastmod>2026-09-01</lastmod></url></urlset>',
+    );
+    expect(await parseSitemapAsync(gzipSync(dated), 'application/gzip', limits)).toEqual({
+      urls: ['https://example.test/a'],
+      lastmod: new Map([['https://example.test/a', '2026-09-01']]),
+      refs: [],
+      truncated: false,
+    });
+    await expect(
+      parseSitemapAsync(Buffer.from('<urlset><url>'), 'text/xml', limits),
+    ).rejects.toThrow(new SitemapParseError('malformed sitemap XML'));
   });
 });

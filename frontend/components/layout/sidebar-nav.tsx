@@ -1,5 +1,3 @@
-'use client';
-
 import { useLocation, useSearchParams } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 

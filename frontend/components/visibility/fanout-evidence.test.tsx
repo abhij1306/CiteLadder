@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useMemo } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
@@ -103,5 +104,19 @@ describe('Fanout evidence scope', () => {
         '1 distinct searches and 1 total occurrences in the searches shown below',
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe('Fanout grouping', () => {
+  it('groups the table by prompt from its own filters, naming each surface', async () => {
+    vi.spyOn(visibilityApi, 'getFanoutSummary').mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    renderWithProviders(<Panel projectId={A} />);
+    expect(screen.getByRole('columnheader', { name: 'Surface' })).toBeVisible();
+    expect(screen.queryByText('Best CRM?')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Group by: None' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Prompt' }));
+    expect(await screen.findByText('Best CRM?')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Group by: Prompt' })).toBeVisible();
   });
 });

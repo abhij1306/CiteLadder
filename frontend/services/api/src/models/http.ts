@@ -1,4 +1,5 @@
 import { setTimeout } from 'node:timers/promises';
+import { retryAfterSeconds } from '@citeladder/contracts/retry-after';
 import { stripTrailing } from '../text-order.ts';
 
 export function providerErrorCode(status: number) {
@@ -100,21 +101,16 @@ export type RetryPolicy = {
   retryConnection: boolean;
 };
 
-/** `Retry-After` as seconds (delta or HTTP date), or NaN when absent/invalid. */
-function retryAfterSeconds(response: Response | undefined) {
-  const header = response?.headers.get('retry-after');
-  if (header == null) return Number.NaN;
-  const seconds = Number(header);
-  return Number.isFinite(seconds) ? seconds : (Date.parse(header) - Date.now()) / 1000;
+/** A provider's `Retry-After` as whole seconds for a `ModelError`, when it asks for a wait. */
+export function retryAfterHeader(header: string | null | undefined): string | undefined {
+  const seconds = retryAfterSeconds(header);
+  return seconds === undefined ? undefined : String(Math.ceil(seconds));
 }
 
 function retryDelay(response: Response | undefined, attempt: number, policy: RetryPolicy) {
-  const after = retryAfterSeconds(response);
+  const after = retryAfterSeconds(response?.headers.get('retry-after')) ?? 0;
   return (
-    Math.min(
-      policy.maxDelaySeconds,
-      Math.max(policy.baseDelaySeconds * 2 ** attempt, Number.isFinite(after) ? after : 0),
-    ) * 1000
+    Math.min(policy.maxDelaySeconds, Math.max(policy.baseDelaySeconds * 2 ** attempt, after)) * 1000
   );
 }
 
@@ -171,11 +167,10 @@ async function backoff(transport: Transport, milliseconds: number, signal?: Abor
 
 export async function modelJson(response: Response): Promise<unknown> {
   if (!response.ok) {
-    const seconds = retryAfterSeconds(response);
     throw new ModelError(
       'http',
       response.status,
-      Number.isFinite(seconds) ? String(Math.max(1, Math.ceil(seconds))) : undefined,
+      retryAfterHeader(response.headers.get('retry-after')),
     );
   }
   try {

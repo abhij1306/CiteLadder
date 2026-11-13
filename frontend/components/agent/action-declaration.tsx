@@ -1,24 +1,23 @@
-'use client';
-
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { DeclarationStatus } from '@/components/agent/declaration-status';
 import { ProjectLink } from '@/components/ui/project-link';
-import { Button } from '@/components/ui/button';
+import { Button, type ButtonVariant } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { DateField } from '@/components/ui/date-field';
 import { Dialog } from '@/components/ui/dialog';
 import { Field } from '@/components/ui/field';
-import { Stack } from '@/components/ui/layout';
+import { Input } from '@/components/ui/input';
+import { Inline, Stack } from '@/components/ui/layout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { ReadError } from '@/components/ui/read-error';
 import { textRole } from '@/components/ui/typography';
 import { newIdempotencyKey } from '@/lib/agent/idempotency';
-import { measurementLegLabel } from '@/lib/agent/vocabulary';
+import { contentGapCheckPreview, measurementLegLabel } from '@/lib/agent/vocabulary';
 import { actionsMutations, actionsQueries, type ActionDetail } from '@/lib/api/actions';
-import type { AgentOutput } from '@/lib/api/agent';
+import { agentMutations, type AgentOutput } from '@/lib/api/agent';
 import { mutationNoticeForError } from '@/lib/api/mutation-notice';
 import {
   declarationDays,
@@ -46,12 +45,15 @@ export function MarkImplementedButton({
   recommendationIds,
   selectionDescription,
   onDeclared,
+  variant = 'primary',
 }: Readonly<{
   workspaceId: string;
   action: Declarable;
   /** The output revision shipped; null declares work done outside CiteLadder. */
   revision: { id: string; number: number } | null;
   disabled?: boolean;
+  /** Secondary where another action is the view's primary (the Action page). */
+  variant?: Extract<ButtonVariant, 'primary' | 'secondary'>;
   recommendationIds?: string[];
   selectionDescription?: string;
   onDeclared?: () => void;
@@ -73,6 +75,7 @@ export function MarkImplementedButton({
         input: {
           output_revision_id: revision?.id ?? null,
           declared_implemented_at: declaredInstant(attempt.day, attempt.openedAt),
+          deployment_reference: attempt.reference.trim() || null,
           ...(recommendationIds ? { recommendation_ids: recommendationIds } : {}),
         },
       },
@@ -86,7 +89,7 @@ export function MarkImplementedButton({
   return (
     <>
       <Button
-        variant="primary"
+        variant={variant}
         disabled={disabled}
         onClick={() => {
           declare.reset();
@@ -137,11 +140,34 @@ export function MarkImplementedButton({
                 value={attempt.day}
                 min={range.min}
                 max={range.max}
+                disabled={declare.isPending}
                 onChange={(day) => {
                   declare.reset();
                   setAttempt((current) => ({
                     ...current,
                     day,
+                    idempotencyKey: newIdempotencyKey(),
+                  }));
+                }}
+              />
+            )}
+          </Field>
+          <Field
+            label="What shipped it?"
+            hint="Optional: the release, pull request or commit. The deployment is recorded under your account."
+          >
+            {(field) => (
+              <Input
+                {...field}
+                value={attempt.reference}
+                maxLength={DEPLOYMENT_REFERENCE_MAX}
+                disabled={declare.isPending}
+                onChange={(event) => {
+                  const reference = event.target.value;
+                  declare.reset();
+                  setAttempt((current) => ({
+                    ...current,
+                    reference,
                     idempotencyKey: newIdempotencyKey(),
                   }));
                 }}
@@ -206,6 +232,11 @@ function MeasurementPreview({ action }: Readonly<{ action: Declarable }>) {
           return (
             <Stack as="li" gap="tight" key={member.id}>
               <span className={textRole('itemTitle')}>{member.title}</span>
+              {leg && member.content_gap_evidence ? (
+                <span className={textRole('caption', 'break-words')}>
+                  {contentGapCheckPreview(member.content_gap_evidence)}
+                </span>
+              ) : null}
               <span className={textRole('caption')}>
                 {leg
                   ? `Measured by ${measurementLegLabel(leg)?.toLowerCase() ?? 'the next reading'}.`
@@ -223,31 +254,44 @@ function MeasurementPreview({ action }: Readonly<{ action: Declarable }>) {
 }
 
 /**
- * Whether an Action can be declared now: still open, with a current finding.
- * Without one there is nothing to declare, and the server refuses.
+ * Whether an Action can be declared now: still open, with a finding to
+ * declare. A recrawl that resolved every finding leaves the last set, which
+ * the server freezes; with none there is nothing to declare, and it refuses.
  */
-export function isDeclarable(action: { status: string; member_count: number }): boolean {
-  return (action.status === 'open' || action.status === 'in_progress') && action.member_count > 0;
+export function isDeclarable(action: { status: string; declarable_member_count: number }): boolean {
+  return (
+    (action.status === 'open' || action.status === 'in_progress') &&
+    action.declarable_member_count > 0
+  );
 }
+
+/** The declaration request's bound on what shipped it. */
+const DEPLOYMENT_REFERENCE_MAX = 500;
 
 function newAttempt() {
   const openedAt = new Date();
-  return {
-    idempotencyKey: newIdempotencyKey(),
-    openedAt,
-    day: localDay(openedAt),
-  };
+  return { idempotencyKey: newIdempotencyKey(), openedAt, day: localDay(openedAt), reference: '' };
 }
 
 /**
  * The output pane's implementation state. Declaring anchors the Action to the
- * revision on screen; an output with no target has no Action to declare.
+ * revision on screen; an output with no target has no Action to declare. A
+ * document naming another page than its Action asks where it belongs first,
+ * so a declaration never anchors it to the wrong Action.
  */
 export function OutputDeclaration({
   workspaceId,
+  chatId,
   output,
   runActive,
-}: Readonly<{ workspaceId: string; output: AgentOutput; runActive: boolean }>) {
+  canEdit,
+}: Readonly<{
+  workspaceId: string;
+  chatId: string;
+  output: AgentOutput;
+  runActive: boolean;
+  canEdit: boolean;
+}>) {
   const revision = output.latest_revision;
   if (!revision) return null;
   if (!output.action_id)
@@ -256,6 +300,16 @@ export function OutputDeclaration({
         Name the page or topic this output is for to declare it implemented.
       </p>
     );
+  if (output.named_target)
+    return (
+      <TargetChoice
+        workspaceId={workspaceId}
+        chatId={chatId}
+        outputId={output.id}
+        named={output.named_target}
+        disabled={runActive || !canEdit}
+      />
+    );
   return (
     <AttachedDeclaration
       workspaceId={workspaceId}
@@ -263,6 +317,74 @@ export function OutputDeclaration({
       revision={revision}
       runActive={runActive}
     />
+  );
+}
+
+type NamedTarget = NonNullable<AgentOutput['named_target']>;
+
+/** A page by its path ("/pricing"), a planned page by its topic. */
+function targetName(named: NamedTarget) {
+  if (named.kind === 'planned_page') return named.target;
+  try {
+    const url = new URL(named.target);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return named.target;
+  }
+}
+
+/** Where a document naming another page than its Action belongs: there, or with the Action. */
+function TargetChoice({
+  workspaceId,
+  chatId,
+  outputId,
+  named,
+  disabled,
+}: Readonly<{
+  workspaceId: string;
+  chatId: string;
+  outputId: string;
+  named: NamedTarget;
+  disabled: boolean;
+}>) {
+  const choose = useMutation(agentMutations.chooseOutputTarget(workspaceId));
+  const name = targetName(named);
+  const submit = (decision: 'link' | 'keep') => choose.mutate({ chatId, outputId, decision });
+  const pending = (decision: 'link' | 'keep') =>
+    choose.isPending && choose.variables?.decision === decision;
+  return (
+    <Stack gap="tight">
+      <p className={textRole('caption', 'break-words')}>
+        This document names {name}, not the page of this chat&apos;s Action.
+      </p>
+      <Inline className="flex-wrap">
+        <Button
+          variant="primary"
+          disabled={disabled || pending('keep')}
+          pending={pending('link')}
+          pendingLabel="Linking…"
+          onClick={() => submit('link')}
+        >
+          Link to {name}
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={disabled || pending('link')}
+          pending={pending('keep')}
+          pendingLabel="Keeping…"
+          onClick={() => submit('keep')}
+        >
+          Keep with this Action
+        </Button>
+      </Inline>
+      {choose.isError ? (
+        <MutationNotice
+          notice={mutationNoticeForError(choose.error, {
+            action: 'choose where this document belongs',
+          })}
+        />
+      ) : null}
+    </Stack>
   );
 }
 

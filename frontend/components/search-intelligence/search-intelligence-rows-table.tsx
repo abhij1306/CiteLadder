@@ -25,10 +25,34 @@ function columnsFor(kind: string) {
   return SEARCH_COLUMNS_BY_KIND[kind] ?? SEARCH_COLUMNS_BY_KIND.footprint;
 }
 
+/** Text columns that hold one short word ("commercial", "Yes"), not a name. */
+const SHORT_TEXT_FIELDS: ReadonlySet<string> = new Set(['intent', 'dofollow']);
+
+/**
+ * The width a column takes: the first column is the row's identity (the
+ * keyword, query, page or domain) and takes what the others leave; figures
+ * take the figure width, a one-word text column the status width, and any
+ * other text the name width.
+ */
+function columnWidth(column: SearchColumn, first: boolean): DataTableColumn['width'] {
+  if (first) return 'flex';
+  if (column.numeric) return 'figure';
+  return SHORT_TEXT_FIELDS.has(column.field) ? 'status' : 'name';
+}
+
+/**
+ * Below this width a kind's table scrolls in its frame. Only the two kinds
+ * whose fixed columns leave the identity column too little room at the
+ * medium floor (ranking keywords: five figures, a page and intent;
+ * backlinks: two pages, an anchor, follow and two figures) take the large one.
+ */
+export function searchIntelligenceMinWidth(kind: string): 'md' | 'lg' {
+  return kind === 'ranking_keywords' || kind === 'backlinks' ? 'lg' : 'md';
+}
+
 /**
  * A dataset kind's columns for the shared `DataTable`: every column but a
- * detail one sorts on the server, figures take the figure width and text the
- * name width.
+ * detail one sorts on the server.
  */
 export function searchIntelligenceColumns({
   kind,
@@ -39,11 +63,11 @@ export function searchIntelligenceColumns({
   order: { sort: string; direction: 'asc' | 'desc' };
   onSort: (sort: string) => void;
 }>): DataTableColumn[] {
-  return columnsFor(kind).map((column) => ({
+  return columnsFor(kind).map((column, index) => ({
     key: column.field,
     label: column.label,
     numeric: column.numeric,
-    width: column.numeric ? 'figure' : 'name',
+    width: columnWidth(column, index === 0),
     sort: column.detail
       ? undefined
       : {

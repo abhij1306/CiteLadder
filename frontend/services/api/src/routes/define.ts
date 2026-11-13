@@ -31,6 +31,7 @@ import { policy, type ServiceConfig } from '../config.ts';
 import type { AppEnv } from '../context.ts';
 import type { Database } from '../db/database.ts';
 import { ApiError, notFound } from '../errors.ts';
+import { assertResponseContract } from './response-contract.ts';
 import {
   validateParams,
   type ParamSpec,
@@ -261,7 +262,10 @@ export function defineRoute<
         search: new URL(c.req.url).search,
       });
       if (route.raw) return route.handle({ c, db, config }, params);
-      return c.json(await route.handle({ c, db, config }, params), status as ContentfulStatusCode);
+      const body = await route.handle({ c, db, config }, params);
+      if (config.appEnv === 'test')
+        assertResponseContract(route.response, body, `${method.toUpperCase()} ${route.path}`);
+      return c.json(body, status as ContentfulStatusCode);
     };
     if (publicSide) publicSide.register(app, config, db, respond);
     if (browser === null) return;

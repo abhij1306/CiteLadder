@@ -71,6 +71,9 @@ export function createApp(
   );
   app.use(apiNoStore());
   app.use(conditionalReads());
+  // Liveness, before the host guard: container health checks reach it by any
+  // host name. Dependency-free and byte-stable, so it reveals nothing.
+  app.get('/health', (c) => c.json({ status: 'ok' }));
   app.use(hostGuard(config));
   const ordinaryBodyLimit = bodyLimit({
     maxSize: policy.api.request_body_max_bytes,
@@ -86,9 +89,6 @@ export function createApp(
   app.onError(onError);
   app.notFound(onNotFound);
   registerMcpRoutes(app, config, db);
-
-  // Liveness: dependency-free and byte-stable, like the backend's /health.
-  app.get('/health', (c) => c.json({ status: 'ok' }));
 
   // Readiness: bounded database reachability; never calls a provider.
   app.get('/ready', async (c) =>

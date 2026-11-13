@@ -139,6 +139,15 @@
       "inputs": [{ "key": "url", "label": "Page URL", "required": true }]
     },
     {
+      "id": "optimize_page",
+      "group": "improve",
+      "label": "Optimize a content page",
+      "description": "Read one of your content pages as it is live and improve it so AI answers can cite it.",
+      "skill_id": "content_optimize",
+      "prompt": "Improve this page so AI answers cite it.",
+      "inputs": [{ "key": "url", "label": "Page URL", "required": true }]
+    },
+    {
       "id": "internal_links",
       "group": "improve",
       "label": "Internal links",
@@ -263,6 +272,14 @@
     "page_edits": {
       "label": "Page edits",
       "refinements": ["Only the highest-impact edits", "Make it shorter"],
+      "next": [
+        { "workflow": "internal_links", "prompt": "Plan internal links that support" },
+        { "workflow": "measure_results", "prompt": "Plan how to measure the result of" }
+      ]
+    },
+    "page": {
+      "label": "Page",
+      "refinements": ["Only the highest-impact edits", "Tighten the introduction"],
       "next": [
         { "workflow": "internal_links", "prompt": "Plan internal links that support" },
         { "workflow": "measure_results", "prompt": "Plan how to measure the result of" }

@@ -87,6 +87,8 @@ const schema = z.strictObject({
   /** A pull holds its received batch unacknowledged; its lease outlasts the analytics default. */
   pull_lease_ttl_seconds: positive,
   max_export_rows: positive,
+  /** Rows an export reads per keyset batch while it streams the download. */
+  export_batch_rows: positive,
   worker_timeout_ms: positive,
   worker_flush_seconds: positive,
   worker_batch_lines: positive,

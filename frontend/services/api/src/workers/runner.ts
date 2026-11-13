@@ -5,7 +5,7 @@ import pg from 'pg';
 import { policy, type ServiceConfig } from '../config.ts';
 import { resolveSettingSpec } from '../config/settings.ts';
 import { loadWorkerSettings } from '../config/analytics.ts';
-import { poolOptions, type Database } from '../db/database.ts';
+import { observeDatabaseSize, poolOptions, type Database } from '../db/database.ts';
 import { createAgentBindings } from '../agent/bindings.ts';
 import { auditRuntime } from '../audits/config.ts';
 import { auditProjections } from '../audits/projections.ts';
@@ -18,12 +18,13 @@ import { IntegrationDispatcher } from './integration-dispatcher.ts';
 import { AgentWorker } from './agent-worker.ts';
 import { AuditWorker } from '../audits/worker.ts';
 import { AuditScheduler, schedulerSettings } from './audit-scheduler.ts';
+import { CrawlScheduler, crawlSchedulerSettings } from './crawl-scheduler.ts';
 import { SiteHealthWorker } from './site-health-worker.ts';
 import { integrationSettings } from '../integrations/config.ts';
 import { siteWorkerSettings } from '../site-health/runtime.ts';
 import { getLogger } from '../logging.ts';
 import { cleanupMcpProtocol } from '../mcp/maintenance.ts';
-import { pruneUsageWindows } from '../abuse/usage.ts';
+import { pruneSecurityEvents, pruneUsageWindows } from '../abuse/usage.ts';
 import { purgeApiIdempotency } from '../public-api/idempotency.ts';
 import { DRAIN_LOCK, runnerLanes } from '../config/execution.ts';
 import { maintainLease } from '../queue/heartbeat.ts';
@@ -276,13 +277,12 @@ export function exclusiveDrain(
   const now = options.now ?? (() => performance.now());
   return async (drain) => {
     const lock = new pg.Client(poolOptions(config));
-    // A lost session releases the lock; leases still arbitrate claims, so log
-    // instead of letting an unhandled 'error' event crash claimed work.
-    lock.on('error', (error) =>
-      getLogger('workers.runner').exception('runner_drain_lock_lost', error),
-    );
-    await lock.connect();
+    const logger = getLogger('workers.runner');
+    // A lost session frees the lock and leases arbitrate claims: log, never fail the drain.
+    const lost = (event: string) => (error: unknown) => logger.exception(event, error);
+    lock.on('error', lost('runner_drain_lock_lost'));
     try {
+      await lock.connect();
       const until = Math.min(now() + waitMs, options.deadline);
       for (;;) {
         const { rows } = await lock.query<{ locked: boolean }>( // NOSONAR -- Each attempt waits for the previous one.
@@ -291,21 +291,21 @@ export function exclusiveDrain(
         );
         if (rows[0]?.locked) break;
         if (options.signal.aborted || now() >= until) {
-          getLogger('workers.runner').info('runner_drain_active_elsewhere');
+          logger.info('runner_drain_active_elsewhere');
           return 0;
         }
-        const pause = sleep(config.execution.drainLockPollMs, undefined, {
-          signal: options.signal,
-        });
+        const pause = sleep(config.execution.drainLockPollMs, undefined, options);
         await pause.catch(() => undefined); // NOSONAR -- Polling interval between attempts.
       }
       try {
         return await drain();
       } finally {
-        await lock.query('select pg_advisory_unlock(hashtextextended($1, 0))', [DRAIN_LOCK]);
+        await lock
+          .query('select pg_advisory_unlock(hashtextextended($1, 0))', [DRAIN_LOCK])
+          .catch(lost('runner_drain_unlock_failed'));
       }
     } finally {
-      await lock.end();
+      await lock.end().catch(() => undefined);
     }
   };
 }
@@ -352,6 +352,7 @@ export async function runnerOwners(db: Database, config: ServiceConfig) {
   const owner = `runner-discovery:${randomUUID()}`;
   const maintenance = new AuditMaintenance(db, projections.finalize);
   const scheduler = new AuditScheduler(db, runtime, schedulerSettings(env));
+  const crawlScheduler = new CrawlScheduler(db, crawlSchedulerSettings(env));
   const dispatcher = new IntegrationDispatcher(db);
   // Owners that fetch public websites take turns, as interactive crawls and
   // competitor discovery do under the drain lock, to keep publisher pacing.
@@ -394,6 +395,7 @@ export async function runnerOwners(db: Database, config: ServiceConfig) {
       },
     ] satisfies RunnerLane[],
     periodic: [
+      { name: 'database-size', run: () => observeDatabaseSize(db) },
       {
         name: 'mcp-protocol-cleanup',
         run: (canAdmit) => cleanupMcpProtocol(db, new Date(), canAdmit),
@@ -412,29 +414,49 @@ export async function runnerOwners(db: Database, config: ServiceConfig) {
             canAdmit,
           ),
       },
+      {
+        name: 'security-event-retention',
+        run: (canAdmit) =>
+          pruneSecurityEvents(
+            db,
+            new Date(),
+            {
+              retentionDays: Number(
+                resolveSettingSpec(policy.abuse.security_event_retention_days, config.settings),
+              ),
+              batch: Number(
+                resolveSettingSpec(policy.abuse.security_event_prune_batch, config.settings),
+              ),
+            },
+            canAdmit,
+          ),
+      },
       { name: 'audit-maintenance', run: (canAdmit) => maintenance.runOnce(new Date(), canAdmit) },
       {
         name: 'research-recovery',
         run: (canAdmit) => reconcileResearch(db, new Date(), canAdmit),
       },
       { name: 'audit-scheduler', run: (canAdmit) => scheduler.runOnce(scheduler.now(), canAdmit) },
+      {
+        name: 'crawl-scheduler',
+        run: (canAdmit) => crawlScheduler.runOnce(crawlScheduler.now(), canAdmit),
+      },
       { name: 'integration-dispatcher', run: (canAdmit) => dispatcher.runOnce(canAdmit) },
       { name: 'crawl-log-maintenance', run: (canAdmit) => crawlLogTick(db, new Date(), canAdmit) },
     ] satisfies RunnerLane[],
   };
 }
 
-/** Periodic work runs once, followed by the same drain with the remaining budget. */
-export async function tickAndDrain(
-  owners: { lanes: RunnerLane[]; periodic: RunnerLane[] },
-  options: DrainOptions,
-  exclusive: Exclusive = (drain) => drain(),
-) {
+/** Each periodic owner runs once under one shared budget; returns the failures. */
+export async function runPeriodic(
+  periodic: readonly RunnerLane[],
+  options: Pick<DrainOptions, 'signal' | 'deadline' | 'now'>,
+): Promise<unknown[]> {
   const failures: unknown[] = [];
   const logger = getLogger('workers.runner');
   const now = options.now ?? (() => performance.now());
   const canAdmit = () => !options.signal.aborted && now() < options.deadline;
-  for (const phase of owners.periodic) {
+  for (const phase of periodic) {
     if (options.signal.aborted || now() >= options.deadline) break;
     const started = performance.now();
     try {
@@ -448,6 +470,16 @@ export async function tickAndDrain(
       logger.exception('tick_phase_failed', error, { phase: phase.name });
     }
   }
+  return failures;
+}
+
+/** Periodic work runs once, followed by the same drain with the remaining budget. */
+export async function tickAndDrain(
+  owners: { lanes: RunnerLane[]; periodic: RunnerLane[] },
+  options: DrainOptions,
+  exclusive: Exclusive = (drain) => drain(),
+) {
+  const failures = await runPeriodic(owners.periodic, options);
   let tasks = 0;
   let failedLanes: ReadonlySet<string> = new Set();
   try {

@@ -1,5 +1,6 @@
 /** Target-aware candidate filtering over shared Site Health facts and classification. */
 import type { CommerceTarget } from '@citeladder/contracts/commerce-suite';
+import { domainMatches, normalizeDomain } from '../analysis/domains.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { record } from '../db/json.ts';
@@ -12,16 +13,6 @@ import type { SearchResult } from './discovery-provider.ts';
 const p = policy.commerce.discovery;
 const editorial = p.editorial_patterns.map((pattern) => new RegExp(pattern, 'iu'));
 export const contextText = (value: unknown) => (typeof value === 'string' ? value : '');
-function competitorHost(value: string) {
-  try {
-    return new URL(value.includes('://') ? value : `https://${value}`).hostname
-      .toLowerCase()
-      .replace(/^www\./u, '')
-      .replace(/\.$/u, '');
-  } catch {
-    return '';
-  }
-}
 /** The business's own hosts: its website and every owned domain. */
 export async function ownedHosts(db: Database, scope: { workspaceId: string; projectId: string }) {
   const project = await db
@@ -38,13 +29,15 @@ export async function ownedHosts(db: Database, scope: { workspaceId: string; pro
     .where('d.project_id', '=', scope.projectId)
     .execute();
   return [project.website_url, ...domains.map((row) => row.domain)]
-    .map(competitorHost)
+    .map(normalizeDomain)
     .filter(Boolean);
 }
 const belongs = (host: string, domains: readonly string[]) =>
-  domains.some((domain) => domain && (host === domain || host.endsWith(`.${domain}`)));
+  domains.some((domain) => domainMatches(host, domain));
+/** Whether a URL or domain is on one of the business's own hosts (`ownedHosts`). */
+export const isOwnedHost = (value: string, owned: readonly string[]) => belongs(value, owned);
 export function exclusion(url: string, title: string, owned: readonly string[]) {
-  const host = competitorHost(url),
+  const host = normalizeDomain(url),
     text = `${url} ${title}`.toLowerCase();
   if (belongs(host, owned)) return 'excluded_owned_domain';
   if (belongs(host, p.excluded_hosts)) return 'excluded_marketplace';

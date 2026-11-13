@@ -1,5 +1,3 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import * as CheckboxPrimitive from '@radix-ui/react-checkbox';
 import { Check, Minus } from 'lucide-react';
@@ -128,7 +126,7 @@ export function Checkbox({
     >
       <span className="inline-flex h-5 shrink-0 items-center">{box}</span>
       <span className="flex min-w-0 flex-col">
-        <span className={cn('text-body-sm', description != null && 'font-medium')}>{label}</span>
+        <span className="text-body-sm">{label}</span>
         {description != null ? (
           <span className="text-body-sm text-ink-secondary">{description}</span>
         ) : null}

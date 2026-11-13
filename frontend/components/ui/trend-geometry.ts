@@ -6,6 +6,12 @@ const PAD_TOP = 10;
 const PAD_BOTTOM = 30;
 /** The least room between two date labels on the x axis. */
 const LABEL_SPACING = 64;
+/**
+ * The first and last points sit this far inside the plot's edges, so their
+ * dates centre under them without reaching the card's edge, and the line
+ * ends clear of the axis ticks and the right edge.
+ */
+const X_INSET = 32;
 
 export type TrendScale = Readonly<{
   padLeft: number;
@@ -15,6 +21,8 @@ export type TrendScale = Readonly<{
   right: number;
   ticks: readonly number[];
   x: (index: number) => number;
+  /** A position along the time axis, 0 at the first point and 1 at the last. */
+  xAt: (fraction: number) => number;
   y: (value: number) => number;
   /** The index whose point is nearest a horizontal position. */
   nearest: (offsetX: number) => number;
@@ -79,7 +87,10 @@ export function trendScale({
   const plotWidth = Math.max(1, width - padLeft - PAD_RIGHT);
   const plotHeight = Math.max(1, height - PAD_TOP - PAD_BOTTOM);
   const fractions = timeFractions(timestamps) ?? evenFractions(timestamps.length);
-  const xs = fractions.map((fraction) => padLeft + fraction * plotWidth);
+  // A plot too narrow for both insets keeps the full width.
+  const inset = plotWidth > 4 * X_INSET ? X_INSET : 0;
+  const xAt = (fraction: number) => padLeft + inset + fraction * (plotWidth - 2 * inset);
+  const xs = fractions.map(xAt);
   const span = top - bottom || 1;
   return {
     padLeft,
@@ -88,7 +99,8 @@ export function trendScale({
     plotHeight,
     right: width - PAD_RIGHT,
     ticks,
-    x: (index) => xs[index] ?? padLeft,
+    x: (index) => xs[index] ?? xAt(0),
+    xAt,
     y: (value) =>
       PAD_TOP +
       plotHeight -
@@ -135,6 +147,30 @@ export function linePoints(
   return values.flatMap((value, index) => {
     const point: [number, number] | null = value === null ? null : [scale.x(index), scale.y(value)];
     return breaks[index] && index > 0 ? [null, point] : [point];
+  });
+}
+
+/**
+ * The segments across each break (`breaks`) between two measured points: the
+ * point before the break and the point at it. They are drawn faint and
+ * dashed, so a series split by a method change still reads as one line while
+ * the solid line never crosses the break. A missing value is not bridged.
+ */
+export function breakConnectors(
+  values: readonly (number | null)[],
+  breaks: readonly boolean[],
+  scale: TrendScale,
+): [[number, number], [number, number]][] {
+  return values.flatMap((value, index) => {
+    const before = values[index - 1];
+    if (!breaks[index] || index === 0 || value === null || before === null || before === undefined)
+      return [];
+    return [
+      [
+        [scale.x(index - 1), scale.y(before)],
+        [scale.x(index), scale.y(value)],
+      ],
+    ];
   });
 }
 

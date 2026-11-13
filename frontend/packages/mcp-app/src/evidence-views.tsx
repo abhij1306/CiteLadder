@@ -4,6 +4,7 @@ import {
   mcpSiteSnapshotSchema,
   mcpUnavailableSchema,
   mcpVisibilitySourcesSchema,
+  type AnalyticsSelection,
   type McpSitePage,
 } from '@citeladder/contracts/mcp-app';
 import { Button } from '@/components/ui/button';
@@ -40,8 +41,11 @@ export function notYetMeasuredMessage(evidence: unknown): string | null {
   return parsed.success ? notYetMeasuredText[parsed.data.reason] : null;
 }
 
-export function SourcesView({ state, controller }: Props) {
-  const selection = state.selection!;
+export function SourcesView({
+  state,
+  selection,
+  controller,
+}: Props & Readonly<{ selection: AnalyticsSelection }>) {
   const parsed = mcpVisibilitySourcesSchema.safeParse(state.result?.evidence);
   if (!parsed.success) {
     const missing = notYetMeasuredMessage(state.result?.evidence);

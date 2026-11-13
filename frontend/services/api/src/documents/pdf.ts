@@ -200,6 +200,43 @@ export class PdfReport {
     if (this.y + height > this.bottom) this.newPage();
   }
 
+  /**
+   * Lays out a block of lines with `pad` points of chrome around each page's part.
+   * A block that fits on a page moves to the next page whole; a taller one
+   * splits between lines, so nothing is drawn past the content bottom. `part`
+   * draws lines `[start, end)` in a box at `top` of `height`.
+   */
+  private paginate(
+    heights: readonly number[],
+    pad: number,
+    part: (box: Readonly<{ start: number; end: number; top: number; height: number }>) => void,
+  ): void {
+    const total = heights.reduce((sum, height) => sum + height, 0);
+    if (total + pad <= this.bottom - CONTINUATION_TOP) this.ensure(total + pad);
+    let start = 0;
+    do {
+      let end = start;
+      let used = 0;
+      for (const height of heights.slice(start)) {
+        // A fresh page always takes its first line, even one taller than the page.
+        if (
+          this.y + pad + used + height > this.bottom &&
+          (end > start || this.y > CONTINUATION_TOP)
+        )
+          break;
+        used += height;
+        end += 1;
+      }
+      if (end === start && start < heights.length) {
+        this.newPage();
+        continue;
+      }
+      part({ start, end, top: this.y, height: used + pad });
+      this.y += used + pad;
+      start = end;
+    } while (start < heights.length);
+  }
+
   /** The first page's brand band: logo, eyebrow, title and context lines on a sunken band. */
   cover({
     eyebrow,
@@ -267,17 +304,21 @@ export class PdfReport {
   /** A one-time notice on a sunken strip. */
   note(text: string): void {
     const lines = this.wrap(text, 9, 'medium', this.width - 24);
-    const height = lines.length * 13 + 14;
-    this.ensure(height + 10);
-    this.document.rect(MARGIN, this.y, this.width, height).fill(this.fill('surfaceSunken'));
-    lines.forEach((line, index) =>
-      this.draw(line, MARGIN + 12, this.y + 19 + index * 13, {
-        size: 9,
-        style: 'medium',
-        tone: 'ink',
-      }),
+    this.paginate(
+      lines.map(() => 13),
+      14,
+      ({ start, end, top, height }) => {
+        this.document.rect(MARGIN, top, this.width, height).fill(this.fill('surfaceSunken'));
+        lines.slice(start, end).forEach((line, index) =>
+          this.draw(line, MARGIN + 12, top + 19 + index * 13, {
+            size: 9,
+            style: 'medium',
+            tone: 'ink',
+          }),
+        );
+      },
     );
-    this.y += height + 10;
+    this.y += 10;
   }
 
   /** The recommended step, on a sunken field. */
@@ -287,26 +328,37 @@ export class PdfReport {
     detail,
   }: Readonly<{ eyebrow: string; title: string; detail: string | null }>): void {
     const inner = this.width - 28;
-    const titleLines = this.wrap(title, 12, 'medium', inner);
-    const detailLines = detail ? this.wrap(detail, 9, 'text', inner) : [];
-    const details = detailLines.length ? 2 + detailLines.length * 12.5 : 0;
-    const height = 26 + titleLines.length * 16 + details + 16;
+    const titleInk: Ink = { size: 12, style: 'medium', tone: 'ink' };
+    const detailInk: Ink = { size: 9, style: 'text', tone: 'inkSecondary' };
+    // Each line advances to its own baseline; the first detail line also clears the title.
+    const lines = [
+      ...this.wrap(title, 12, 'medium', inner).map((text) => ({ text, ink: titleInk, step: 16 })),
+      ...(detail ? this.wrap(detail, 9, 'text', inner) : []).map((text, index) => ({
+        text,
+        ink: detailInk,
+        step: index ? 12.5 : 14.5,
+      })),
+    ];
     this.y += 8;
-    this.ensure(height + 10);
-    const top = this.y;
-    this.document.rect(MARGIN, top, this.width, height).fill(this.fill('surfaceSunken'));
-    this.draw(eyebrow, MARGIN + 14, top + 22, { size: 8.5, style: 'medium', tone: 'accentInk' });
-    let baseline = top + 26;
-    for (const line of titleLines) {
-      baseline += 16;
-      this.draw(line, MARGIN + 14, baseline, { size: 12, style: 'medium', tone: 'ink' });
-    }
-    baseline += 2;
-    for (const line of detailLines) {
-      baseline += 12.5;
-      this.draw(line, MARGIN + 14, baseline, { size: 9, style: 'text', tone: 'inkSecondary' });
-    }
-    this.y = top + height + 10;
+    this.paginate(
+      lines.map((line) => line.step),
+      42,
+      ({ start, end, top, height }) => {
+        this.document.rect(MARGIN, top, this.width, height).fill(this.fill('surfaceSunken'));
+        if (start === 0)
+          this.draw(eyebrow, MARGIN + 14, top + 22, {
+            size: 8.5,
+            style: 'medium',
+            tone: 'accentInk',
+          });
+        let baseline = top + 26;
+        for (const line of lines.slice(start, end)) {
+          baseline += line.step;
+          this.draw(line.text, MARGIN + 14, baseline, line.ink);
+        }
+      },
+    );
+    this.y += 10;
   }
 
   /** Headline figures in a row of equal cells under a Flare rule. */
@@ -431,43 +483,49 @@ export class PdfReport {
     const tagColumn = 78;
     const textX = MARGIN + 26;
     const textWidth = this.width - 26 - tagColumn;
+    const titleInk: Ink = { size: 10, style: 'medium', tone: 'ink' };
+    const detailInk: Ink = { size: 8.5, style: 'text', tone: 'inkMuted' };
     for (const item of items) {
-      const titleLines = this.wrap(item.title, 10, 'medium', textWidth);
-      const detailLines = item.detail ? this.wrap(item.detail, 8.5, 'text', textWidth) : [];
-      const height = 18 + titleLines.length * 13.5 + detailLines.length * 12;
-      this.ensure(height);
-      const top = this.y;
-      this.draw(item.rank, MARGIN, top + 20, {
-        size: 12,
-        style: 'figureMedium',
-        tone: 'accentInk',
-      });
-      titleLines.forEach((line, index) =>
-        this.draw(line, textX, top + 20 + index * 13.5, {
-          size: 10,
-          style: 'medium',
-          tone: 'ink',
-        }),
+      const lines = [
+        ...this.wrap(item.title, 10, 'medium', textWidth).map((text) => ({
+          text,
+          ink: titleInk,
+          step: 13.5,
+        })),
+        ...(item.detail ? this.wrap(item.detail, 8.5, 'text', textWidth) : []).map((text) => ({
+          text,
+          ink: detailInk,
+          step: 12,
+        })),
+      ];
+      this.paginate(
+        lines.map((line) => line.step),
+        18,
+        ({ start, end, top }) => {
+          let baseline = top + 20;
+          for (const line of lines.slice(start, end)) {
+            this.draw(line.text, textX, baseline, line.ink);
+            baseline += line.step;
+          }
+          if (start > 0) return;
+          this.draw(item.rank, MARGIN, top + 20, {
+            size: 12,
+            style: 'figureMedium',
+            tone: 'accentInk',
+          });
+          if (item.tag) {
+            const tones = TAG_TONES[item.tag.tone];
+            const width = this.measure(item.tag.label, 7.5, 'medium') + 14;
+            const x = MARGIN + this.width - width;
+            this.document.roundedRect(x, top + 9, width, 15, 7.5).fill(this.fill(tones.fill));
+            this.draw(item.tag.label, x + 7, top + 19.5, {
+              size: 7.5,
+              style: 'medium',
+              tone: tones.ink,
+            });
+          }
+        },
       );
-      detailLines.forEach((line, index) =>
-        this.draw(line, textX, top + 20 + titleLines.length * 13.5 + index * 12, {
-          size: 8.5,
-          style: 'text',
-          tone: 'inkMuted',
-        }),
-      );
-      if (item.tag) {
-        const tones = TAG_TONES[item.tag.tone];
-        const width = this.measure(item.tag.label, 7.5, 'medium') + 14;
-        const x = MARGIN + this.width - width;
-        this.document.roundedRect(x, top + 9, width, 15, 7.5).fill(this.fill(tones.fill));
-        this.draw(item.tag.label, x + 7, top + 19.5, {
-          size: 7.5,
-          style: 'medium',
-          tone: tones.ink,
-        });
-      }
-      this.y = top + height;
       this.rule(this.y);
     }
     this.y += 10;
@@ -479,34 +537,53 @@ export class PdfReport {
     const valueX = MARGIN + labelWidth;
     const valueWidth = this.width - labelWidth;
     for (const fact of facts) {
-      const chips = typeof fact.value === 'string' ? null : this.chipRows(fact.value, valueWidth);
-      const lines =
-        typeof fact.value === 'string' ? this.wrap(fact.value, 9.5, 'text', valueWidth) : [];
-      const height = chips ? chips.length * 22 + 12 : lines.length * 13.5 + 14;
-      this.ensure(height);
-      const top = this.y;
-      this.draw(fact.label, MARGIN, top + 18, { size: 8.5, style: 'medium', tone: 'inkSecondary' });
-      lines.forEach((line, index) =>
-        this.draw(line, valueX, top + 18 + index * 13.5, {
-          size: 9.5,
-          style: 'text',
-          tone: 'ink',
-        }),
-      );
-      chips?.forEach((row, index) =>
-        row.forEach((chip) => {
-          const y = top + 7 + index * 22;
-          this.document
-            .roundedRect(valueX + chip.x, y, chip.width, 17, 8.5)
-            .fill(this.fill('surfaceSunken'));
-          this.draw(chip.label, valueX + chip.x + 8, y + 12, {
+      const label = (start: number, top: number) => {
+        if (start === 0)
+          this.draw(fact.label, MARGIN, top + 18, {
             size: 8.5,
-            style: 'text',
-            tone: 'ink',
+            style: 'medium',
+            tone: 'inkSecondary',
           });
-        }),
-      );
-      this.y = top + height;
+      };
+      if (typeof fact.value === 'string') {
+        const lines = this.wrap(fact.value, 9.5, 'text', valueWidth);
+        this.paginate(
+          lines.map(() => 13.5),
+          14,
+          ({ start, end, top }) => {
+            label(start, top);
+            lines.slice(start, end).forEach((line, index) =>
+              this.draw(line, valueX, top + 18 + index * 13.5, {
+                size: 9.5,
+                style: 'text',
+                tone: 'ink',
+              }),
+            );
+          },
+        );
+      } else {
+        const rows = this.chipRows(fact.value, valueWidth);
+        this.paginate(
+          rows.map(() => 22),
+          12,
+          ({ start, end, top }) => {
+            label(start, top);
+            rows.slice(start, end).forEach((row, index) =>
+              row.forEach((chip) => {
+                const y = top + 7 + index * 22;
+                this.document
+                  .roundedRect(valueX + chip.x, y, chip.width, 17, 8.5)
+                  .fill(this.fill('surfaceSunken'));
+                this.draw(chip.label, valueX + chip.x + 8, y + 12, {
+                  size: 8.5,
+                  style: 'text',
+                  tone: 'ink',
+                });
+              }),
+            );
+          },
+        );
+      }
       this.rule(this.y);
     }
     this.y += 10;

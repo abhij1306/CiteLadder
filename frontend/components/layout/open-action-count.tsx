@@ -1,5 +1,3 @@
-'use client';
-
 import { queueCount, useActionStatusCounts } from '@/lib/agent/use-action-status-counts';
 
 /** Open plus in-progress Actions for the active project, in the Actions row's count slot. */

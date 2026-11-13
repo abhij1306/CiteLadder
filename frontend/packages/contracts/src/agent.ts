@@ -93,13 +93,23 @@ export const agentTurnEventSchema = z.discriminatedUnion('type', [
 /** A web page a search returned: an untrusted observation, apart from CiteLadder records. */
 export const agentWebSourceSchema = responseObject({ url: z.string(), title: z.string() });
 
+/** A page document's SEO block, as fetched (revision 1) or as last edited. */
+export const agentPageFieldsSchema = responseObject({
+  title: z.string(),
+  meta_description: z.string(),
+  json_ld: z.string(),
+});
+
+// `fetch` authors revision 1 of a page document: the live page as fetched.
 export const agentRevisionSchema = responseObject({
   id: uuid(),
   number: z.number().int(),
   parent_revision_id: uuid().nullable(),
-  author: z.enum(['agent', 'user']),
+  author: z.enum(['agent', 'user', 'fetch']),
   title: z.string(),
   body: z.string(),
+  // A page revision's SEO fields; null for every other kind of document.
+  fields: agentPageFieldsSchema.nullable().default(null),
   source_refs: z.array(z.string()),
   web_sources: z.array(agentWebSourceSchema),
   created_at: z.string(),
@@ -117,6 +127,14 @@ export const agentOutputSchema = responseObject({
   format_id: z.string().nullable(),
   target_kind: z.string().nullable(),
   target_label: z.string().nullable(),
+  // The page or topic the document names apart from its Action, until the
+  // person links the document to it or keeps it with its Action.
+  named_target: responseObject({
+    kind: z.enum(['page', 'planned_page']),
+    target: z.string(),
+  })
+    .nullable()
+    .default(null),
   // Every document has at least one revision.
   latest_revision: agentRevisionSchema,
 });
@@ -179,6 +197,43 @@ const agentContextDisclosureSchema = responseObject({
   limitations: z.array(z.json()).default([]),
   prompt: z.record(z.string(), z.json()).default({}),
 });
+/** How one fetch of a live page ended; only `fetched` gives the chat a page document. */
+export const pageFetchOutcomeSchema = z.enum([
+  'fetched',
+  'blocked_robots',
+  'http_error',
+  'unsupported',
+  'failed',
+]);
+
+/**
+ * One of Site Health's page-local checks as it judged the fetched page (E5):
+ * its rule and title, severity and outcome, and whether that outcome fails.
+ * Editing the page does not rerun it.
+ */
+export const agentPageCheckSchema = responseObject({
+  rule_id: z.string(),
+  label: z.string(),
+  severity: z.string(),
+  outcome: z.string(),
+  failing: z.boolean(),
+});
+
+/**
+ * The page fetch a page chat starts with. `reading` until it ends; then its
+ * outcome, when the page was fetched (null when the fetch never ran, for
+ * example after an internal failure) and the page-local checks shown for it.
+ */
+export const agentPageFetchSchema = z.discriminatedUnion('status', [
+  responseObject({ status: z.literal('reading') }),
+  responseObject({
+    status: z.literal('done'),
+    outcome: pageFetchOutcomeSchema,
+    fetched_at: z.string().nullable(),
+    checks: z.array(agentPageCheckSchema).default([]),
+  }),
+]);
+
 export const agentChatDetailSchema = responseObject({
   chat: agentChatSummarySchema,
   pinned_skill_id: z.string().nullable(),
@@ -187,16 +242,173 @@ export const agentChatDetailSchema = responseObject({
   latest_run: agentRunSchema.nullable(),
   // The chat's documents in number order.
   outputs: z.array(agentOutputSchema),
+  // A page chat's fetch; null for every other chat.
+  page_fetch: agentPageFetchSchema.nullable().default(null),
 });
 
+/** An accepted follow-up: its chat and the queued turn. */
 export const agentTurnAcceptedSchema = responseObject({
   chat_id: uuid(),
   run: agentRunSchema,
 });
 
+/**
+ * An accepted new chat. A page chat (`optimize_page`) starts with a page fetch
+ * instead of a turn, so its `run` is null until the fetch queues one; the
+ * chat read shows that turn as `latest_run`.
+ */
+export const agentChatCreatedSchema = responseObject({
+  chat_id: uuid(),
+  run: agentRunSchema.nullable(),
+});
+
 export const agentRevisionsPageSchema = responseObject({
   items: z.array(agentRevisionSchema),
 });
+
+/** An SEO field of a page document. */
+export const agentPageFieldSchema = agentPageFieldsSchema.keyof();
+/** A half-open range of the Markdown body in UTF-16 code units, as JavaScript and CodeMirror count. */
+const agentBodySpanSchema = responseObject({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+});
+
+/**
+ * Where a suggestion points in the revision it was made against (content rules
+ * engine, "Findings and anchoring"): a span of the body with its exact text and
+ * about 32 characters of context each side, an SEO field with the value it had,
+ * or the page as a whole.
+ */
+export const agentSuggestionAnchorSchema = z.discriminatedUnion('kind', [
+  responseObject({
+    kind: z.literal('span'),
+    position: agentBodySpanSchema,
+    quote: responseObject({ exact: z.string(), prefix: z.string(), suffix: z.string() }),
+  }),
+  responseObject({ kind: z.literal('field'), field: agentPageFieldSchema, expected: z.string() }),
+  responseObject({ kind: z.literal('page') }),
+]);
+
+/**
+ * What a suggestion's judgement read; a change to any of it makes the
+ * suggestion stale. A `section` is the body between the headings around the
+ * span, in the suggestion's own revision.
+ */
+export const agentSuggestionDependencySchema = z.discriminatedUnion('kind', [
+  responseObject({ kind: z.literal('span') }),
+  responseObject({
+    kind: z.literal('section'),
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
+  }),
+  responseObject({ kind: z.literal('body') }),
+  responseObject({ kind: z.literal('field'), field: agentPageFieldSchema }),
+]);
+
+/** Why a suggestion went stale: its text, its field or a dependency changed, or a newer suggestion replaced it. */
+export const agentSuggestionStaleReasonSchema = z.enum([
+  'span_changed',
+  'field_changed',
+  'dependency_changed',
+  'replaced',
+]);
+
+/** One status change; `reverted` returns a suggestion to open. */
+const agentSuggestionEventSchema = responseObject({
+  status: z.enum(['open', 'applied', 'dismissed', 'reverted', 'stale']),
+  actor: z.enum(['agent', 'user', 'system']),
+  revision_id: uuid().nullable(),
+  reason: agentSuggestionStaleReasonSchema.nullable(),
+  created_at: z.string(),
+});
+
+/**
+ * Where a suggestion's rule comes from, as stored when it was made: a
+ * `requirement` restates a search-engine policy, a `recommendation` is guidance
+ * offered as an option, and a `heuristic` is a tool convention or contested
+ * evidence, also an option.
+ */
+export const agentSuggestionGuidanceSchema = responseObject({
+  strength: z.enum(['requirement', 'recommendation', 'heuristic']),
+  source_label: z.string(),
+  source_url: z.string(),
+});
+
+/**
+ * One suggestion on a page document. `ready` carries replacement text,
+ * `needs_input` asks the person for a fact and `advice` has neither.
+ * `position` is where its text is in the latest revision: an open span's
+ * quote, or an applied span's replacement; null for a field, the page, or text
+ * that is no longer there. `choose_one` marks an open ready suggestion that
+ * overlaps another open one, which Apply all leaves for the person.
+ */
+export const agentSuggestionSchema = responseObject({
+  id: uuid(),
+  output_id: uuid(),
+  revision_id: uuid(),
+  source: z.enum(['model', 'site_health']),
+  category: z.string(),
+  rule_id: z.string(),
+  /** Null for a suggestion made before the rule catalog. */
+  guidance: agentSuggestionGuidanceSchema.nullable(),
+  rationale: z.string(),
+  anchor: agentSuggestionAnchorSchema,
+  depends_on: z.array(agentSuggestionDependencySchema),
+  replacement: z.string().nullable(),
+  needs_input: z.string().nullable(),
+  status: z.enum(['open', 'applied', 'dismissed', 'stale']),
+  readiness: z.enum(['ready', 'needs_input', 'advice']),
+  position: agentBodySpanSchema.nullable(),
+  choose_one: z.boolean(),
+  events: z.array(agentSuggestionEventSchema),
+  created_at: z.string(),
+});
+
+/**
+ * A page document's open, applied and dismissed suggestions against its latest
+ * revision, in position order, with counts per status and open ones per
+ * category. Stale suggestions are counted, not listed.
+ */
+export const agentSuggestionsPageSchema = responseObject({
+  revision_id: uuid(),
+  items: z.array(agentSuggestionSchema),
+  counts: responseObject({
+    open: z.number().int(),
+    applied: z.number().int(),
+    dismissed: z.number().int(),
+    stale: z.number().int(),
+    needs_input: z.number().int(),
+    by_category: z.array(responseObject({ category: z.string(), open: z.number().int() })),
+  }),
+});
+
+/**
+ * Apply, Dismiss or Revert on one suggestion. A check that failed marks it
+ * `stale` with its reason instead; `revision` is the revision the change
+ * appended, if it appended one.
+ */
+export const agentSuggestionResultSchema = responseObject({
+  outcome: z.enum(['applied', 'dismissed', 'reverted', 'stale']),
+  reason: agentSuggestionStaleReasonSchema.nullable(),
+  suggestion: agentSuggestionSchema,
+  revision: agentRevisionSchema.nullable(),
+});
+
+/**
+ * Apply all: the ready suggestions applied in one revision, those left for the
+ * person to choose between, the open ones that need input (always skipped)
+ * and the ones that went stale on the way.
+ */
+export const agentSuggestionsAppliedSchema = responseObject({
+  applied: z.number().int(),
+  left_to_choose: z.number().int(),
+  needs_input: z.number().int(),
+  stale: z.number().int(),
+  revision: agentRevisionSchema.nullable(),
+});
+
+export const agentSuggestionsDismissedSchema = responseObject({ dismissed: z.number().int() });
 
 export const agentSkillSchema = responseObject({
   id: z.string(),
@@ -277,6 +489,12 @@ export const agentContextRefsSchema = z.strictObject({
   site_facts_reference: z.strictObject({ crawl_id: uuid() }).nullish(),
   output_revision_reference: z.strictObject({ output_id: uuid(), revision_id: uuid() }).nullish(),
   search_intelligence_reference: agentSearchReferenceSchema.nullish(),
+  // The live page a page chat fetched; the fetch sets it before the first turn.
+  page_snapshot_reference: z.strictObject({ snapshot_id: uuid() }).nullish(),
+  // The topic and tracked prompts a page is optimized for (Analyze a page, CO6).
+  prompt_reference: z
+    .strictObject({ topic_id: uuid(), prompt_ids: z.array(uuid()).min(1).max(100) })
+    .nullish(),
 });
 /**
  * Typed evidence a new chat starts from. The server resolves and authorizes
@@ -316,6 +534,10 @@ export function agentRequestSchemas(bounds: {
       body: z.string().max(bounds.output_body_max_chars).trim().min(1),
     }),
     instructions: z.strictObject({ text: z.string().max(bounds.instructions_max_chars) }),
+    // Every suggestion change names the latest revision the person saw.
+    suggestion: z.strictObject({ base_revision_id: uuid() }),
+    // A document naming another page than its Action: link it there or keep it.
+    target: z.strictObject({ decision: z.enum(['link', 'keep']) }),
   };
 }
 type AgentRequestSchemas = ReturnType<typeof agentRequestSchemas>;
@@ -324,3 +546,4 @@ export type AgentChatCreateRequest = z.input<AgentRequestSchemas['create']>;
 export type AgentMessageRequest = z.input<AgentRequestSchemas['message']>;
 export type AgentOutputEditRequest = z.input<AgentRequestSchemas['edit']>;
 export type AgentInstructionsRequest = z.input<AgentRequestSchemas['instructions']>;
+export type AgentOutputTargetRequest = z.input<AgentRequestSchemas['target']>;

@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 import { ProjectLink } from '@/components/ui/project-link';
 
@@ -20,7 +18,6 @@ import type { SiteHealthOverview } from '@citeladder/contracts';
 import { issueTitle } from '@/lib/site-health/issues';
 import { formatScore, PLACEHOLDER, statusLabel } from '@/lib/site-health/status';
 import { textRole } from '@/components/ui/typography';
-import { panelClasses } from '@/components/ui/panel';
 import { Inline, Stack } from '@/components/ui/layout';
 import {
   EditorialSectionHeader,
@@ -46,7 +43,7 @@ export function OverviewDetails({ data }: Readonly<{ data: SiteHealthOverview }>
           data={data.web_fundamentals}
           onOpen={() => setWebFundamentalsOpen(true)}
         />
-        <TrendCard data={data.trend} />
+        <OpenIssuesTrendCard points={data.open_issue_trend} />
         <ChangeSummaryCard data={data.change_summary} />
       </AppGrid>
       <WebFundamentalsDrawer
@@ -67,7 +64,7 @@ function DimensionLedger({
       toolbar={{
         actions: (
           <Button asChild variant="secondary">
-            <ProjectLink href="/site?tab=aeo-readiness">View details</ProjectLink>
+            <ProjectLink href="/site?tab=aeo-readiness">Open AEO Readiness</ProjectLink>
           </Button>
         ),
       }}
@@ -118,7 +115,7 @@ function DimensionLedger({
 
 const PILLAR_COLUMNS: readonly DataTableColumn[] = [
   { key: 'pillar', label: 'Pillar' },
-  { key: 'score', label: 'Score', width: 'status', numeric: true },
+  { key: 'score', label: 'Score', width: 'figure', numeric: true },
   { key: 'coverage', label: 'Coverage', width: 'figure', numeric: true },
 ];
 
@@ -145,7 +142,7 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
       columns={TOP_ISSUE_COLUMNS}
       state={
         issues.length === 0
-          ? { kind: 'empty', icon: ICONS.issues, headingLevel: 3, heading: 'No persisted issues' }
+          ? { kind: 'empty', icon: ICONS.issues, headingLevel: 3, heading: 'No issues found' }
           : undefined
       }
     >
@@ -158,11 +155,7 @@ function TopIssues({ issues }: Readonly<{ issues: SiteHealthOverview['top_issues
           </TableCell>
           <TableCell>
             <Inline>
-              <TextLink
-                text="body"
-                href={issueHref(issue.rule_id, issue.finding_class)}
-                className="min-w-0"
-              >
+              <TextLink text="body" href={issueHref(issue)} className="min-w-0">
                 {/* One line, cut with its full title in a tooltip: beside an
                     Advisory badge in a half-width card, two clamped lines
                     broke a title mid-word ("Recommend / ed schema"). */}
@@ -186,24 +179,22 @@ function WebFundamentalsCard({
     <Card>
       <CardHeader>
         <CardTitle>Web Fundamentals</CardTitle>
-        <CardDescription>Persisted HTTP evidence across four areas.</CardDescription>
+        <CardDescription>What each page’s HTML and response headers show.</CardDescription>
       </CardHeader>
       <CardContent>
         <Stack gap="workspace">
-          <AppGrid layout="halves">
+          {/* One list, one area a row: a 2 × 2 grid of badges left uneven
+              cells in a row of equal-height cards. */}
+          <ul aria-label="Web Fundamentals areas" className={ledgerClasses()}>
             {data.areas.map((area) => (
-              <Stack
-                gap="tight"
-                key={area.key}
-                className={panelClasses({ tone: 'well' }, 'justify-items-start')}
-              >
+              <Inline as="li" key={area.key} className={ledgerItemClasses('justify-between')}>
                 <span className={textRole('label', 'capitalize')}>{area.key}</span>
                 <Badge variant="status" value={measurementTone(area.state)}>
                   {statusLabel(area.state)}
                 </Badge>
-              </Stack>
+              </Inline>
             ))}
-          </AppGrid>
+          </ul>
           <Button variant="secondary" onClick={onOpen} className="justify-self-start">
             View evidence
           </Button>
@@ -213,24 +204,34 @@ function WebFundamentalsCard({
   );
 }
 
-function TrendCard({ data }: Readonly<{ data: SiteHealthOverview['trend'] }>) {
+/** Open issues on the tracked pages, one point per day an audit landed (SH-B9). */
+function OpenIssuesTrendCard({
+  points,
+}: Readonly<{ points: SiteHealthOverview['open_issue_trend'] }>) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>AEO Readiness trend</CardTitle>
-        <CardDescription>Comparable terminal crawl snapshots only.</CardDescription>
+        <CardTitle>Open issues over time</CardTitle>
+        <CardDescription>
+          Each day&rsquo;s count after that day&rsquo;s crawls and re-audits of your tracked pages.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Stack gap="item">
           <TrendChart
-            data={data.series}
-            label="AEO Readiness trend"
-            name="AEO Readiness"
+            data={points.map((point) => ({
+              label: point.day,
+              value: point.open_count,
+              timestamp: Date.parse(point.day),
+            }))}
+            label="Open issues over time"
+            name="Open issues"
             height="sm"
-            yMax={100}
+            yMin={0}
+            yFormat={(value) => `${Math.round(value)}`}
           />
-          {data.state === 'unavailable' ? (
-            <p className="type-caption">Run a second comparable crawl to establish a trend.</p>
+          {points.length < 2 ? (
+            <p className="type-caption">The trend starts once audits land on two days.</p>
           ) : null}
         </Stack>
       </CardContent>
@@ -246,7 +247,7 @@ const CHANGE_METRIC_LABELS: Record<string, string> = {
   web_fundamentals_score: 'Web Fundamentals',
   web_fundamentals_coverage: 'Web Fundamentals coverage',
   aeo_readiness_score: 'AEO Readiness',
-  aeo_measurement_coverage: 'AEO coverage',
+  aeo_measurement_coverage: 'AEO checklist completion',
 };
 
 function ChangeSummaryCard({ data }: Readonly<{ data: SiteHealthOverview['change_summary'] }>) {
@@ -310,9 +311,11 @@ function measurementTone(state: string): 'success' | 'warning' | 'info' {
   return 'info';
 }
 
-function issueHref(ruleId: string, findingClass: string): string {
-  const params = new URLSearchParams({ rule: ruleId });
-  if (findingClass === 'advisory') params.set('finding_class', findingClass);
+function issueHref(issue: SiteHealthOverview['top_issues'][number]): string {
+  const params = new URLSearchParams({ rule: issue.rule_id });
+  // The tab the rule is listed under, so the filtered list is the one on screen.
+  if (issue.section && issue.section !== 'technical') params.set('section', issue.section);
+  if (issue.finding_class === 'advisory') params.set('finding_class', issue.finding_class);
   return `/issues?${params.toString()}`;
 }
 
@@ -330,7 +333,7 @@ function WebFundamentalsDrawer({
       open={open}
       onOpenChange={onOpenChange}
       title="Web Fundamentals"
-      description="Static evidence from the acquired HTML and response headers."
+      description="What each page’s HTML and response headers show, area by area."
     >
       <div className={ledgerClasses()}>
         {data.areas.map((area) => (
@@ -351,7 +354,7 @@ function WebFundamentalsDrawer({
             />
             <Stack>
               {area.top_findings.length === 0 ? (
-                <QueryState kind="empty" inline message="No missing HTTP-evidence checks." />
+                <QueryState kind="empty" inline message="No missing checks in this area." />
               ) : (
                 area.top_findings.map((finding) => (
                   <Stack gap="tight" key={finding.rule_id}>

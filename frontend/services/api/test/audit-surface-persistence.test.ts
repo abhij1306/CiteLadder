@@ -1,5 +1,5 @@
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import { testDatabase } from './support.ts';
+import { asOwner, testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
 import { auditRuntime } from '../src/audits/config.ts';
@@ -27,7 +27,9 @@ const db = testDatabase(),
 afterEach(async () => {
   if (tasks.length) {
     await db.deleteFrom('execution_cost_projections').where('task_id', 'in', tasks).execute();
-    await db.deleteFrom('provider_attempts').where('task_id', 'in', tasks).execute();
+    await asOwner((owner) =>
+      owner.deleteFrom('provider_attempts').where('task_id', 'in', tasks).execute(),
+    );
   }
   await fixtures.cleanup();
   tasks.length = 0;

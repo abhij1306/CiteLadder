@@ -10,6 +10,7 @@ import {
   type HtmlNode,
 } from '../../web-evidence/html.ts';
 import { limits, squash } from './policy.ts';
+import { referenceSnippet } from './reference-snippet.ts';
 
 const HEADINGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 const CONTROLS = new Set(['input', 'select', 'textarea', 'button']);
@@ -56,20 +57,30 @@ function hasNativeName(control: HtmlElement) {
   return type === 'image' && Boolean(attribute(control, 'alt').trim());
 }
 
-function hasAssociatedLabel(control: HtmlElement, explicitIds: Set<string>) {
-  if (explicitIds.has(attribute(control, 'id').trim())) return true;
+const LABELABLE = new Set(['button', 'input', 'meter', 'output', 'progress', 'select', 'textarea']);
+const labelable = (node: HtmlElement) =>
+  LABELABLE.has(node.tagName) && !(node.tagName === 'input' && inputType(node) === 'hidden');
+
+/**
+ * HTML's labeled control: a label with `for` names only the first element with
+ * that id (`explicit`), never the one it wraps, and an empty `for` names
+ * nothing; a label without `for` names its first labelable descendant.
+ */
+function hasAssociatedLabel(control: HtmlElement, explicit: Set<HtmlElement>) {
+  if (explicit.has(control)) return true;
   const label = [...ancestors(control)].find((item) => item.tagName === 'label');
-  return label ? Boolean(accessibleText(label)) : false;
+  if (!label || hasAttribute(label, 'for')) return false;
+  return [...elements(label)].find(labelable) === control && Boolean(accessibleText(label));
 }
 
-function hasName(control: HtmlElement, explicitIds: Set<string>, labelled: Map<string, boolean>) {
+function hasName(control: HtmlElement, explicit: Set<HtmlElement>, labelled: Map<string, boolean>) {
   return (
     Boolean(attribute(control, 'aria-label').trim()) ||
     attribute(control, 'aria-labelledby')
       .split(/\s+/u)
       .some((reference) => labelled.get(reference) === true) ||
     hasNativeName(control) ||
-    hasAssociatedLabel(control, explicitIds) ||
+    hasAssociatedLabel(control, explicit) ||
     Boolean(attribute(control, 'title').trim())
   );
 }
@@ -88,36 +99,46 @@ function controlFacts(root: HtmlNode) {
   const referenced = new Set(
     controls.flatMap((control) => attribute(control, 'aria-labelledby').split(/\s+/u)),
   );
-  const explicitIds = new Set(
-    all
-      .filter(
-        (node) => node.tagName === 'label' && hasAttribute(node, 'for') && accessibleText(node),
-      )
-      .map((node) => attribute(node, 'for').trim()),
+  // Ids should be unique; when one repeats, a label names only its first element.
+  const firstWithId = new Map<string, HtmlElement>();
+  for (const node of all) {
+    const id = attribute(node, 'id').trim();
+    if (id && !firstWithId.has(id)) firstWithId.set(id, node);
+  }
+  const explicit = new Set(
+    all.flatMap((node) => {
+      if (node.tagName !== 'label' || !accessibleText(node)) return [];
+      const target = firstWithId.get(attribute(node, 'for').trim());
+      return target && hasAttribute(node, 'for') ? [target] : [];
+    }),
   );
   const labelled = new Map<string, boolean>();
   for (const node of all) {
     const id = attribute(node, 'id').trim();
     if (id && referenced.has(id)) labelled.set(id, Boolean(accessibleText(node, true)));
   }
-  const missing = controls.flatMap((control, index) =>
-    hasName(control, explicitIds, labelled)
-      ? []
-      : [
-          {
-            tag: control.tagName,
-            type: control.tagName === 'input' ? inputType(control) || 'text' : control.tagName,
-            id: identifier(control, 'id'),
-            name: identifier(control, 'name'),
-            ordinal: index + 1,
-          },
-        ],
+  const unnamed = controls.flatMap((control, index) =>
+    hasName(control, explicit, labelled) ? [] : [{ control, ordinal: index + 1 }],
   );
-  return { count: controls.length, missing };
+  const missing = unnamed.map(({ control, ordinal }) => ({
+    tag: control.tagName,
+    type: control.tagName === 'input' ? inputType(control) || 'text' : control.tagName,
+    id: identifier(control, 'id'),
+    name: identifier(control, 'name'),
+    ordinal,
+  }));
+  // One reference snippet per page, of its first unnamed control: the issue
+  // catalog keeps one per issue family from these (`issue-catalog.ts`).
+  const first = unnamed[0];
+  return {
+    count: controls.length,
+    missing,
+    snippet: first ? referenceSnippet(first.control) : null,
+  };
 }
 
 export function accessibilityFacts(root: HtmlNode, maxHeadings: number) {
-  const { count, missing } = controlFacts(root);
+  const { count, missing, snippet } = controlFacts(root);
   const levels = [...elements(root)]
     .filter((node) => HEADINGS.has(node.tagName) && !excluded(node))
     .map((node) => Number(node.tagName[1]));
@@ -130,6 +151,7 @@ export function accessibilityFacts(root: HtmlNode, maxHeadings: number) {
       0,
       limits.accessibility_control_descriptors,
     ),
+    controls_missing_accessible_name_snippet: snippet,
     heading_levels: levels.slice(0, maxHeadings),
     heading_level_skips: skips,
     document_language: html ? attribute(html, 'lang').trim().slice(0, 32) : '',

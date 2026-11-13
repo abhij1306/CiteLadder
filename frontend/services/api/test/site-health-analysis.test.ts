@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { analyzePage } from '../src/site-health/analysis/analyze-page.ts';
 import { extractPageFacts } from '../src/site-health/analysis/facts.ts';
 import { isMetadataOrCta } from '../src/site-health/analysis/copy.ts';
-import { document, elements } from '../src/web-evidence/html.ts';
+import { document, elements, visibleText } from '../src/web-evidence/html.ts';
+import { robotsPolicy } from '../src/web-evidence/acquisition.ts';
+import { crawlerRootFacts } from '../src/site-health/crawler-policy.ts';
 import { extractFactsAsync, analyzePageAsync } from '../src/site-health/analysis/off-thread.ts';
 import { factSettings } from '../src/site-health/analysis/facts.ts';
 import { classify } from '../src/site-health/analysis/page-kinds.ts';
@@ -298,6 +300,47 @@ describe('page checklist', () => {
     expect(createsIssue(meta)).toBe(true);
   });
 
+  it.each([
+    [
+      'an explicit and a wrapping label',
+      `<label for='email'>Email</label><input id='email'><label>Name <input name='name'></label>`,
+      'satisfied',
+      0,
+    ],
+    [
+      'an empty for beside an input with no id',
+      `<label for=''>Email</label><input name='email'>`,
+      'missing',
+      1,
+    ],
+    [
+      'a wrapping label whose for names another control',
+      `<label for='other'>Email <input id='email'></label><input id='other'>`,
+      'missing',
+      1,
+    ],
+    [
+      'a wrapping label around two controls',
+      `<label>Dates <input name='from'> <input name='to'></label>`,
+      'missing',
+      1,
+    ],
+    [
+      'a for whose id repeats',
+      `<label for='email'>Email</label><input id='email'><input id='email'>`,
+      'missing',
+      1,
+    ],
+  ])(
+    'names form controls only through the label HTML associates: %s',
+    (_case, form, outcome, missing) => {
+      const row = evaluations(
+        `<html lang='en'><head><title>Signup</title></head><body><main><h1>Signup</h1><form>${form}</form></main></body></html>`,
+      ).get('web.accessibility_form_names')!;
+      expect([row.outcome, row.evidence.missing_accessible_name]).toEqual([outcome, missing]);
+    },
+  );
+
   it('never penalizes a purpose that only the URL suggests', () => {
     const rows = evaluations(
       '<html><head><title>Widget story</title></head><body><main><h1>Widget story</h1><p>How we designed the widget over three years of testing with customers.</p></main></body></html>',
@@ -465,6 +508,87 @@ describe('page checklist', () => {
     expect(absent.outcome).toBe('missing');
     expect(absent.score_roles).toEqual([]);
   });
+
+  it('measures crawler access against a missing robots.txt as no rules, not unknown', () => {
+    const origin = 'https://example.com';
+    const access = (status: number, robotsStatus: string) =>
+      byRule(
+        evaluatePageRules({
+          site: {
+            robots: {
+              fetched: false,
+              status: robotsStatus,
+              status_code: status,
+              bots: crawlerRootFacts(robotsPolicy(origin, status, ''), origin),
+            },
+          },
+        }),
+      ).get('search.crawler_access')!;
+    const missing = access(404, 'not_found');
+    expect([missing.outcome, missing.evidence.blocked]).toEqual(['satisfied', []]);
+    // A server failure is still not evidence either way.
+    expect(access(503, 'fetch_failed').outcome).toBe('unknown');
+  });
+
+  it('resolves links and assets against the document base', () => {
+    const page = facts(
+      `<html><head><base href="https://cdn.other.test/docs/"><link rel="alternate" hreflang="de" href="de/">
+      <meta http-equiv="refresh" content="5; url=next"></head><body><main>
+      <a href="guide">Guide</a><a href="https://example.test/pricing">Pricing</a></main>
+      <img src="logo.png" alt=""></body></html>`,
+      'https://example.test/blog/post',
+    );
+    expect(page.links.anchors.map((link) => [link.url, link.is_internal])).toEqual([
+      ['https://cdn.other.test/docs/guide', false],
+      ['https://example.test/pricing', true],
+    ]);
+    expect(page.links.images.map((image) => image.url)).toEqual([
+      'https://cdn.other.test/docs/logo.png',
+    ]);
+    expect(page.hreflang_alternates).toEqual([
+      { hreflang: 'de', url: 'https://cdn.other.test/docs/de/' },
+    ]);
+    expect(page.client_redirect.meta_refresh_url).toBe('https://cdn.other.test/docs/next');
+    // Without a base, a relative link resolves against the page itself.
+    const plain = facts('<main><a href="guide">Guide</a></main>', 'https://example.test/blog/post');
+    expect(plain.links.anchors.map((link) => [link.url, link.is_internal])).toEqual([
+      ['https://example.test/blog/guide', true],
+    ]);
+  });
+
+  it('keeps an agent-scoped X-Robots-Tag line from swallowing a generic one', () => {
+    const robots = (header: string) =>
+      extractPageFacts(Buffer.from('<main><p>Text</p></main>'), {
+        finalUrl: 'https://example.test/page',
+        contentType: 'text/html',
+        headers: { 'x-robots-tag': header },
+      }).robots;
+    const separate = robots('otherbot: noindex\nnosnippet');
+    expect([separate.noindex, separate.nosnippet]).toEqual([false, true]);
+    // Within one header line, the agent scope still covers the directives after it.
+    const scoped = robots('otherbot: noindex, nosnippet');
+    expect([scoped.noindex, scoped.nosnippet]).toEqual([false, false]);
+    const googlebot = robots('googlebot: noindex\nnofollow');
+    expect([googlebot.noindex, googlebot.nofollow]).toEqual([true, true]);
+  });
+
+  it('reads the visible text of an element with a very large number of children', () => {
+    const items = 200_000;
+    const root = document(Buffer.from(`<div>${'<b>x</b>'.repeat(items)}</div>`));
+    expect(visibleText(root)).toHaveLength(items * 2 - 1);
+  });
+
+  it('fails an interpretation that overruns its time limit and keeps serving later jobs', async () => {
+    const delivery = { finalUrl: 'https://example.test/page', contentType: 'text/html' };
+    const large = Buffer.from(`<main>${'<p>Long workshop notes.</p>'.repeat(50_000)}</main>`);
+    vi.stubEnv('SITE_HEALTH_INTERPRETATION_JOB_TIMEOUT_SECONDS', '0.001');
+    const overrun = extractFactsAsync(large, delivery, factSettings({}));
+    vi.unstubAllEnvs();
+    await expect(overrun).rejects.toThrow('Page interpretation exceeded its time limit');
+    const small = Buffer.from('<html><head><title>After</title></head><main><p>ok</p></main>');
+    const after = await extractFactsAsync(small, delivery, factSettings({}));
+    expect(after.title).toBe('After');
+  });
 });
 
 describe('primary schema entity', () => {
@@ -556,6 +680,40 @@ describe('primary schema entity', () => {
     );
     expect(types).toEqual(['BlogPosting', 'Blog']);
     expect(rows.get('aeo.schema_required_valid')!.outcome).toBe('satisfied');
+  });
+
+  it('holds microdata to the same required properties as JSON-LD', () => {
+    const product = (offers: string) => {
+      const page = facts(
+        `<html><head><title>Trail Shoe</title></head><body><main>
+        <div itemscope itemtype="https://schema.org/Product">
+          <h1 itemprop="name">Trail Shoe</h1>
+          <div itemprop="brand" itemscope itemtype="https://schema.org/Brand"><span itemprop="name">Acme</span></div>
+          ${offers}
+        </div></main></body></html>`,
+        'https://acme.test/products/trail-shoe',
+      );
+      return { page, rows: byRule(evaluatePageRules({ ...page, page_kind: 'product' })) };
+    };
+    const offered = product(`<div itemprop="offers" itemscope itemtype="https://schema.org/Offer">
+      <span itemprop="price" content="59.00">$59</span><meta itemprop="priceCurrency" content="USD">
+      <link itemprop="availability" href="https://schema.org/InStock"></div>`);
+    expect(offered.rows.get('aeo.schema_required_valid')).toMatchObject({
+      outcome: 'satisfied',
+      evidence: { schema_type: 'Product', missing: [] },
+    });
+    const found = offered.page.structured_data.product;
+    expect([
+      found.name,
+      found.brand,
+      found.price,
+      found.price_currency,
+      found.availability,
+    ]).toEqual([['Trail Shoe'], ['Acme'], ['59.00'], ['USD'], ['https://schema.org/InStock']]);
+    expect(product('').rows.get('aeo.schema_required_valid')).toMatchObject({
+      outcome: 'missing',
+      evidence: { schema_type: 'Product', missing: ['offers'] },
+    });
   });
 
   it('picks a homepage Organization over its WebSite and ignores a nested parent organization', () => {
@@ -813,7 +971,7 @@ describe('site audit regressions', () => {
     expect(anchors).toEqual([
       ['https://docs.example.test/start', true],
       ['https://www.example.test/pricing', true],
-      ['/faq', true],
+      ['https://example.test/faq', true],
       ['https://example.org/', false],
     ]);
     // Tenants of a shared hosting suffix are separate sites.
@@ -836,13 +994,13 @@ describe('site audit regressions', () => {
       <template><a href="/collections/packages">Packages</a></template>`,
     );
     expect(extracted.links.anchors.map((anchor) => [anchor.url, anchor.region])).toEqual([
-      ['/collections/nets', 'nav'],
-      ['/faq', 'main'],
+      ['https://example.test/collections/nets', 'nav'],
+      ['https://example.test/faq', 'main'],
     ]);
     expect(extracted.links.unrendered_anchors).toEqual([
-      { url: '/collections/launch-monitors', is_internal: true, rel: '' },
+      { url: 'https://example.test/collections/launch-monitors', is_internal: true, rel: '' },
       { url: 'https://www.example.test/collections/mats', is_internal: true, rel: 'nofollow' },
-      { url: '/collections/packages', is_internal: true, rel: '' },
+      { url: 'https://example.test/collections/packages', is_internal: true, rel: '' },
     ]);
     expect(extracted.link_context).toEqual(['Nets', 'FAQ']);
   });

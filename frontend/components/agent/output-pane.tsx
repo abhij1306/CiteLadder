@@ -1,5 +1,3 @@
-'use client';
-
 import { Download, Pencil } from 'lucide-react';
 import { useState } from 'react';
 
@@ -8,6 +6,7 @@ import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { OutputCanvas } from '@/components/agent/output-canvas';
 import { EvidenceChips } from '@/components/agent/evidence-chips';
 import { OutputEditor, type OutputDraft } from '@/components/agent/output-editor';
+import { UnsavedChangesGuard } from '@/components/ui/unsaved-changes-guard';
 import { OutputHistory } from '@/components/agent/output-history';
 import { WebSources } from '@/components/agent/web-sources';
 import { ProjectLink } from '@/components/ui/project-link';
@@ -21,6 +20,7 @@ import { textRole } from '@/components/ui/typography';
 import { downloadOutputMarkdown, outputMarkdown } from '@/lib/agent/export';
 import { type AgentOutput, type AgentRevision } from '@/lib/api/agent';
 import { PROMPTS_GENERATE_HREF } from '@/lib/prompts/routes';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 
 type PaneTab = 'output' | 'sources' | 'history';
 
@@ -53,6 +53,8 @@ export function OutputPane({
   // Held here, not in the editor, so switching tabs cannot discard it.
   const [draft, setDraft] = useState<OutputDraft | null>(null);
   const editing = draft !== null;
+  const unsaved =
+    draft !== null && (draft.title !== revision.title || draft.body !== revision.body);
   const locked = runActive || !canEdit;
   const target = { chatId, outputId: output.id, number: output.number };
   const headingId = `document-${output.id}-title`;
@@ -68,6 +70,7 @@ export function OutputPane({
   );
   return (
     <Stack as="section" gap="compact" aria-labelledby={headingId} className="min-w-0 content-start">
+      <UnsavedChangesGuard when={unsaved} />
       <Stack as="header" gap="tight">
         <h2 id={headingId} className={textRole('sectionTitle', 'min-w-0')}>
           {revision.title}
@@ -84,18 +87,28 @@ export function OutputPane({
           <OutputActions
             revision={revision}
             locked={locked}
-            onEdit={() => {
-              setTab('output');
-              setDraft({
-                baseRevisionId: revision.id,
-                title: revision.title,
-                body: revision.body,
-              });
-            }}
+            onEdit={
+              canEdit
+                ? () => {
+                    setTab('output');
+                    setDraft({
+                      baseRevisionId: revision.id,
+                      title: revision.title,
+                      body: revision.body,
+                    });
+                  }
+                : undefined
+            }
           />
         )}
         {editing ? null : (
-          <OutputDeclaration workspaceId={workspaceId} output={output} runActive={runActive} />
+          <OutputDeclaration
+            workspaceId={workspaceId}
+            chatId={chatId}
+            output={output}
+            runActive={runActive}
+            canEdit={canEdit}
+          />
         )}
         {editing ? null : <PromptBuilderHandoff kind={output.kind} />}
       </Stack>
@@ -155,7 +168,9 @@ export function OutputPane({
  * topics and starts the run; the Agent writes no prompts itself.
  */
 function PromptBuilderHandoff({ kind }: Readonly<{ kind: AgentOutput['kind'] }>) {
-  if (kind !== 'prompt_plan') return null;
+  // The Prompt Builder writes prompts, so a role that may not is not sent there.
+  const canWrite = useWorkspaceCapability('write');
+  if (kind !== 'prompt_plan' || !canWrite) return null;
   return (
     <Button asChild variant="primary" className="justify-self-start">
       <ProjectLink href={PROMPTS_GENERATE_HREF}>Open Prompt Builder</ProjectLink>
@@ -167,13 +182,20 @@ function OutputActions({
   revision,
   locked,
   onEdit,
-}: Readonly<{ revision: AgentRevision; locked: boolean; onEdit: () => void }>) {
+}: Readonly<{
+  revision: AgentRevision;
+  locked: boolean;
+  /** Opens the editor; omitted for a role that may not edit outputs. */
+  onEdit?: () => void;
+}>) {
   return (
     <Inline className="flex-wrap">
-      <Button variant="secondary" disabled={locked} onClick={onEdit}>
-        <Icon icon={Pencil} />
-        Edit
-      </Button>
+      {onEdit ? (
+        <Button variant="secondary" disabled={locked} onClick={onEdit}>
+          <Icon icon={Pencil} />
+          Edit
+        </Button>
+      ) : null}
       <CopyButton value={outputMarkdown(revision.title, revision.body)} variant="secondary">
         Copy
       </CopyButton>

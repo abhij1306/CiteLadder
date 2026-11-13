@@ -64,7 +64,7 @@ const isBreadcrumb = (node: HtmlElement) =>
   attribute(node, 'class').toLowerCase().includes('breadcrumb') ||
   ['breadcrumb', 'Breadcrumb'].includes(attribute(node, 'aria-label'));
 
-function breadcrumbs(page: PageScope, finalUrl: string) {
+function breadcrumbs(page: PageScope) {
   const values: string[] = [];
   const links: Link[] = [];
   for (const trail of [...elements(page.root)].filter(isBreadcrumb).slice(0, 4)) {
@@ -75,7 +75,8 @@ function breadcrumbs(page: PageScope, finalUrl: string) {
       const text = textContent(item).slice(0, 255);
       if (text && !values.includes(text) && values.length < MAX_BREADCRUMBS) values.push(text);
       const href = attribute(item, 'href').trim();
-      if (href) appendUnique(links, { url: resolve(href, finalUrl), title: text }, MAX_BREADCRUMBS);
+      if (href)
+        appendUnique(links, { url: resolve(href, page.baseUrl), title: text }, MAX_BREADCRUMBS);
       if (values.length >= MAX_BREADCRUMBS && links.length >= MAX_BREADCRUMBS)
         return { values, links };
     }
@@ -83,14 +84,14 @@ function breadcrumbs(page: PageScope, finalUrl: string) {
   return { values, links };
 }
 
-function cards(page: PageScope, finalUrl: string) {
+function cards(page: PageScope) {
   const products: Link[] = [];
   const categories: Link[] = [];
   for (const anchor of elements(page.region, 'a')) {
     const href = attribute(anchor, 'href').trim();
     const label = textContent(anchor);
     if (!href || !label) continue;
-    const row = { url: resolve(href, finalUrl), title: label.slice(0, 512) };
+    const row = { url: resolve(href, page.baseUrl), title: label.slice(0, 512) };
     const tokens = ancestorTokens(anchor);
     if (PRODUCT_TOKENS.some((token) => tokens.includes(token)) || isProductPath(href))
       appendUnique(products, row, 200);
@@ -105,9 +106,9 @@ function cards(page: PageScope, finalUrl: string) {
  * is read from the page's own visible text outside card lists, with the words
  * around it so a "free shipping over $100" banner is not taken as a price.
  */
-export function commerceFacts(page: PageScope, finalUrl: string) {
-  const trail = breadcrumbs(page, finalUrl);
-  const { products, categories } = cards(page, finalUrl);
+export function commerceFacts(page: PageScope) {
+  const trail = breadcrumbs(page);
+  const { products, categories } = cards(page);
   const text = regionText(page.region, page.cards);
   const price = PRICE.exec(text);
   const start = price ? Math.max(0, price.index - PRICE_CONTEXT_CHARS) : 0;

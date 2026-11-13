@@ -1,19 +1,17 @@
-'use client';
-
-import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { useState, type MouseEvent } from 'react';
+import { ChevronRight, MoreHorizontal, Search } from 'lucide-react';
 
 import { ProjectLink } from '@/components/ui/project-link';
-import { AppGrid } from '@/components/ui/app-grid';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { IconButton } from '@/components/ui/button';
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
 import { Icon } from '@/components/ui/icon';
-import { Inline } from '@/components/ui/layout';
+import { InfoHint } from '@/components/ui/info-hint';
+import { Menu, MenuContent, MenuItem, MenuLinkItem, MenuTrigger } from '@/components/ui/menu';
 import { pageNumberControls, useTablePage } from '@/components/ui/pager';
 import { TableActionsCell, TableCell, TableCellLines, TableRow } from '@/components/ui/table';
-import { textRole } from '@/components/ui/typography';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
+import type { DemandDetectorPolicy } from '@citeladder/contracts';
 import type { DemandSignal } from '@/lib/api/demand';
 import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
 import {
@@ -21,12 +19,18 @@ import {
   numericMetric,
   signalPage,
   signalSubject,
+  signalDefinition,
   signalTarget,
   signalTypeMeta,
   type RankedSignal,
 } from '@/lib/demand/signals';
 import { formatCount } from '@/lib/format';
 
+/**
+ * The row itself is the Inspect target, so the query keeps the width a
+ * column of row buttons used to take: its two remaining actions share one
+ * overflow menu in the narrow action column.
+ */
 const COLUMNS: readonly DataTableColumn[] = [
   // The index role fits '#', not a word; the figure role fits 'Position' on
   // one line where 'Avg. position' wrapped the header row to two.
@@ -37,7 +41,7 @@ const COLUMNS: readonly DataTableColumn[] = [
   { key: 'clicks', label: 'Clicks', width: 'figure', numeric: true },
   { key: 'ctr', label: 'CTR', width: 'figure', numeric: true },
   { key: 'position', label: 'Position', width: 'figure', numeric: true },
-  { key: 'actions', label: 'Actions', width: 'rowActions', hideLabel: true },
+  { key: 'actions', label: 'Actions', width: 'action', hideLabel: true, trailing: true },
 ];
 
 /** A signal type as a labelled chip; its meaning lives in the legend. */
@@ -52,23 +56,31 @@ export function SignalChip({ signalType }: Readonly<{ signalType: string }>) {
   );
 }
 
-/** Each signal type present, explained once. */
-export function SignalLegend({ signals }: Readonly<{ signals: readonly DemandSignal[] }>) {
+/**
+ * Each signal type in the snapshot, explained once, behind one
+ * hint on the summary line so it is read before the table. It lists the
+ * whole snapshot's types rather than the filtered ones, so choosing a filter
+ * never changes it.
+ */
+export function SignalLegend({
+  signals,
+  policy,
+}: Readonly<{ signals: readonly DemandSignal[]; policy: DemandDetectorPolicy }>) {
   const types = [...new Set(signals.map((signal) => signal.signal_type))];
   if (types.length === 0) return null;
+  // One line per type: joined into a sentence, each definition ran into the
+  // next type's label.
   return (
-    <section aria-label="Signal types">
-      <AppGrid as="dl" layout="halves">
-        {types.map((type) => (
-          <Inline key={type} className="items-start">
-            <dt className="shrink-0">
-              <SignalChip signalType={type} />
-            </dt>
-            <dd className={textRole('caption')}>{signalTypeMeta(type).definition}</dd>
-          </Inline>
-        ))}
-      </AppGrid>
-    </section>
+    <InfoHint label="Signal types">
+      {types.map((type) => {
+        const meta = signalTypeMeta(type);
+        return (
+          <span key={type} className="block">
+            {`${meta.label}: ${signalDefinition(type, policy)} `}
+          </span>
+        );
+      })}
+    </InfoHint>
   );
 }
 
@@ -105,7 +117,7 @@ export function DemandSignalTable({
     <DataTable
       label="Search demand signals"
       columns={COLUMNS}
-      minWidth="lg"
+      minWidth="md"
       rowLines={2}
       rowCount={pageRows.length}
       pageSize={pageCount > 1 ? pageSize : undefined}
@@ -133,13 +145,32 @@ function SignalRow({
   rank,
   onInspect,
 }: Readonly<{ signal: DemandSignal; rank: number; onInspect: (signal: DemandSignal) => void }>) {
-  const target = signalTarget(signal);
   const subject = signalSubject(signal);
+  const inspect = () => onInspect(signal);
+  // A press that selected text, or landed on a control inside the row, is not
+  // a request to inspect.
+  const inspectFromRow = (event: MouseEvent<HTMLTableRowElement>) => {
+    if (!window.getSelection()?.isCollapsed) return;
+    const control = event.target instanceof Element ? event.target.closest(ROW_CONTROLS) : null;
+    if (control && control !== event.currentTarget) return;
+    inspect();
+  };
   return (
-    <TableRow>
-      <TableCell numeric className={textRole('caption')}>
-        {rank}
-      </TableCell>
+    // The row is the Inspect target: pressed, or Enter/Space while focused.
+    // Native row and cell semantics stay; the menu names Inspect too, so the
+    // action is announced by name as well.
+    <TableRow
+      tabIndex={0}
+      onClick={inspectFromRow}
+      onKeyDown={(event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target !== event.currentTarget) return;
+        event.preventDefault();
+        inspect();
+      }}
+      className="focus-ring cursor-pointer"
+    >
+      <TableCell numeric>{rank}</TableCell>
       <TableCell>
         {/* Always two lines, so every row is one height, and the second
             always says whether the row is about a query or a page. */}
@@ -166,39 +197,59 @@ function SignalRow({
         <Position value={numericMetric(signal, 'position')} />
       </TableCell>
       <TableActionsCell>
-        <Button
-          variant="ghost"
-          aria-label={`Inspect evidence for ${target}`}
-          onClick={() => onInspect(signal)}
-        >
-          Inspect
-        </Button>
-        {/* A signal promoted into an Action opens it; any other is asked about.
-            Both are the same ghost button as Inspect, so every row's actions
-            read as one set whichever applies. */}
+        <SignalActions signal={signal} onInspect={inspect} />
+      </TableActionsCell>
+    </TableRow>
+  );
+}
+
+/** The controls a row can hold; a press on one is that control's alone. */
+const ROW_CONTROLS = 'a, button, input, select, textarea, [role="menuitem"]';
+
+/** A press inside the menu is the menu's, never the row's Inspect. */
+const keepFromRow = (event: MouseEvent) => event.stopPropagation();
+
+/**
+ * The row's actions in one overflow menu: Inspect, then the hand-off — a
+ * signal promoted into an Action opens it, any other is asked about.
+ */
+function SignalActions({
+  signal,
+  onInspect,
+}: Readonly<{ signal: DemandSignal; onInspect: () => void }>) {
+  const target = signalTarget(signal);
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <IconButton icon={MoreHorizontal} label={`Actions for ${target}`} onClick={keepFromRow} />
+      </MenuTrigger>
+      <MenuContent align="end" onClick={keepFromRow}>
+        <MenuItem icon={<Icon icon={Search} />} onSelect={onInspect}>
+          Inspect evidence
+        </MenuItem>
         {signal.action_id ? (
-          <Button variant="ghost" asChild>
+          <MenuLinkItem>
             <ProjectLink
               href={`/agent/actions/${signal.action_id}`}
               aria-label={`Open the Action for ${target}`}
             >
-              Open Action
               <Icon icon={ChevronRight} />
+              Open Action
             </ProjectLink>
-          </Button>
+          </MenuLinkItem>
         ) : (
-          <Button variant="ghost" asChild>
+          <MenuLinkItem>
             <ProjectLink
               href={demandSignalHandoffHref(signal)}
               aria-label={`Ask agent about ${target}`}
             >
-              Ask agent
               <Icon icon={ChevronRight} />
+              Ask agent
             </ProjectLink>
-          </Button>
+          </MenuLinkItem>
         )}
-      </TableActionsCell>
-    </TableRow>
+      </MenuContent>
+    </Menu>
   );
 }
 

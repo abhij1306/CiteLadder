@@ -9,7 +9,7 @@ import { FIXTURE_PROJECT, fixtureProjectPath, stubAuthedShell } from './helpers/
  * `check:policy` guards the inputs (tokens, classes). It cannot see a 28px
  * button beside a 32px tab, a toolbar rebinding a token, or an error block
  * that is 88px on one route and 152px on the next — and those are what made
- * the app look inconsistent (docs/design.md, Behaviour every surface keeps). So this
+ * the app look inconsistent (docs/design.md, Layout). So this
  * walks every product route at the owner's viewport (982×900, DPR 1) and at
  * 1280×900 (light: dark rebinds only colours and shadows), measures every visible control, badge, tab,
  * band, box and query state, and asserts ONE value per role — the same
@@ -35,6 +35,9 @@ const ROUTES = [
   '/visibility',
   '/runs',
   '/ai-traffic',
+  '/ai-traffic?tab=crawlers',
+  '/ai-traffic?tab=activity',
+  '/ai-traffic?tab=pages',
   '/settings',
   '/settings?tab=integrations',
   '/settings?tab=providers',
@@ -75,11 +78,11 @@ const CONTENT_GAP = 12;
 const CARD_GAP = 12;
 /**
  * One box recipe: padding 16 on the box element (D11), radius 8 (rounded-lg,
- * D10), and no border: a box is lifted by its shadow.
+ * D10), and a 1px border: every box's edge is a border, never a shadow (D51).
  */
 const CARD_INSET = 16;
 const BOX_RADIUS = 8;
-const BOX_BORDER = 0;
+const BOX_BORDER = 1;
 /**
  * Loading, read-error and first-use empty share one footprint: the block
  * EmptyState's. The state draws no box of its own (its Skeleton, Callout or
@@ -145,6 +148,9 @@ function measure({ route, shellMinWidth }: { route: string; shellMinWidth: numbe
     if (element.closest(':has(> input)')) continue;
     // The sidebar's project and account rows are their own role below.
     if (element.matches('[data-sidebar-ident]')) continue;
+    // A checkbox is its own 16px box, and a column header's sort or hint
+    // button is the header's label, measured as `data-table-header.height`.
+    if (element.getAttribute('role') === 'checkbox' || element.closest('th')) continue;
     const style = getComputedStyle(element);
     if (Number.parseFloat(style.marginTop) < 0) continue;
     if (
@@ -445,6 +451,7 @@ const RUNS = [
   workspace_id: FIXTURE_PROJECT.workspace_id,
   project_id: FIXTURE_PROJECT.id,
   status,
+  cancelable: false,
   benchmark_mode: 'consumer_like',
   repetitions: 3,
   random_seed: '7',

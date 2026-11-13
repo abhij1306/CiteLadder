@@ -1,5 +1,3 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -7,14 +5,20 @@ import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
 import { MutationNotice } from '@/components/ui/mutation-notice';
 import { TabsRoot } from '@/components/ui/tabs';
-import { Tooltip } from '@/components/ui/tooltip';
-import { ListScreen } from '@/components/layout/page-shell';
+import { ListScreen, RESERVED_CONTROLS } from '@/components/layout/page-shell';
+import type { FilterBarProps } from '@/components/ui/filter-bar';
 import { Inline, Stack } from '@/components/ui/layout';
 import { SiteHealthDashboardLayout } from '@/components/site-health/dashboard-layout';
+import { PAGES_INVENTORY_URL_KEYS } from '@/components/site-health/inventory-section';
 import { AeoReadinessPanel } from '@/components/site-health/aeo-readiness-panel';
 import { ArchitecturePanel } from '@/components/site-health/architecture-panel';
 import { ChangesPanel } from '@/components/site-health/changes-panel';
+import { useCrawlSchedule } from '@/components/site-health/crawl-schedule-control';
 import { InternalLinksPanel } from '@/components/site-health/internal-links-panel';
+import {
+  useInternalLinksBands,
+  type LinksRead,
+} from '@/components/site-health/internal-links-panel-bands';
 import { OverviewPanel } from '@/components/site-health/overview-panel';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
@@ -23,58 +27,71 @@ import { httpErrorStatus } from '@/lib/api/errors';
 import { warmQuery } from '@/lib/api/query-client';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import { internalLinksQueries } from '@/lib/api/site-health-internal-links';
+import type { CrawlRobotsHandling, SiteCrawl } from '@citeladder/contracts';
+import { StartCrawlControl } from '@/components/site-health/robots-choice';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { useSiteHealthScreen } from '@/lib/site-health/use-site-health-screen';
 import { stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 
 export function SiteHealthScreen() {
   const { workspaceId, projectId } = useProjectScope();
-  const screen = useSiteHealthScreen();
-  return <SiteHealthContent projectId={projectId} workspaceId={workspaceId} screen={screen} />;
+  return <SiteHealthContent projectId={projectId} workspaceId={workspaceId} />;
 }
 
 function SiteHealthContent({
   projectId,
   workspaceId,
-  screen,
 }: Readonly<{
   projectId: string;
   workspaceId: string;
-  screen: ReturnType<typeof useSiteHealthScreen>;
 }>) {
-  const {
-    crawl,
-    active,
-    startPending,
-    cancelMutation,
-    startCrawl,
-    recrawl,
-    cancelCrawl,
-    runExport,
-    exporting,
-  } = screen;
+  const screen = useSiteHealthScreen();
+  const { crawl, active, startPending, cancelMutation, startCrawl, cancelCrawl } = screen;
   const [tab, selectTab] = useUrlState('tab', TAB_CODEC, {
-    clearKeys: ['cursor', 'sort'],
+    clearKeys: ['cursor', 'sort', ...PAGES_INVENTORY_URL_KEYS],
   });
   const blocking = projectBlockingState(screen);
+  // Crawl controls are offered only to a role that may run crawls; the
+  // schedule, a saved setting, only to one that may write.
+  const canRun = useWorkspaceCapability('run');
+  const canWrite = useWorkspaceCapability('write');
+  const schedule = useCrawlSchedule(
+    { workspaceId, projectId },
+    Boolean(crawl) && canWrite,
+    crawl?.robots,
+  );
+  // Internal links' search, filters and header actions act on the analysis its panel draws.
+  const links = useInternalLinksBands({
+    scope: { projectId, workspaceId },
+    enabled: tab === 'internal-links' && !blocking,
+  });
+  const linksActions = tab === 'internal-links' ? links.actions : null;
+  const controls = tabControls({ tab, blocking, links: links.controls });
   const refreshFailures = !blocking ? <SiteHealthRefreshFailures screen={screen} /> : null;
-  const headerActions = crawl ? (
-    <CrawlActions
-      active={active}
-      exporting={exporting}
-      cancelPending={cancelMutation.isPending}
-      startPending={startPending}
-      onExport={() => runExport('csv', 'pages')}
-      onCancel={cancelCrawl}
-      onStart={startCrawl}
-      onRecrawl={recrawl}
-    />
-  ) : undefined;
+  // Each export sits at the end of the row of the list it exports: the pages
+  // table's toolbar, Internal links' control row. The header keeps the crawl
+  // controls and a tab's primary action.
+  const headerActions =
+    crawl && canRun ? (
+      <CrawlActions
+        crawl={crawl}
+        active={active}
+        cancelPending={cancelMutation.isPending}
+        startPending={startPending}
+        tabActions={linksActions}
+        schedule={schedule.control}
+        onCancel={cancelCrawl}
+        onStart={(robots) => startCrawl({ project_id: projectId, robots })}
+      />
+    ) : (
+      (linksActions ?? undefined)
+    );
   const prefetchTab = useSiteHealthTabPrefetch(workspaceId, projectId, crawl?.id, !active);
   if (blocking?.kind === 'state') {
     return (
       <ListScreen>
-        <Stack gap="section" className="min-w-0">
+        <Stack gap="workspace" className="min-w-0">
           {blocking.node}
         </Stack>
       </ListScreen>
@@ -88,12 +105,14 @@ function SiteHealthContent({
       <ListScreen
         actions={headerActions}
         tabs={{ items: ANALYSIS_TABS, ariaLabel: 'Website analysis', onIntent: prefetchTab }}
+        controls={controls}
       >
         {blocking ? (
           <QueryState kind="loading" label={blocking.label} />
         ) : (
-          <Stack gap="section" className="min-w-0">
+          <Stack gap="workspace" className="min-w-0">
             <SiteHealthNotices screen={screen} />
+            {schedule.notice}
             {refreshFailures}
             <AnalysisPanel
               tab={tab}
@@ -101,12 +120,34 @@ function SiteHealthContent({
               projectId={projectId}
               workspaceId={workspaceId}
               screen={screen}
+              linksRead={links.read}
             />
           </Stack>
         )}
       </ListScreen>
     </TabsRoot>
   );
+}
+
+/**
+ * The selected tab's control row: Internal links alone has one (Pages' view,
+ * filter and export scope its table, so they lead that table's toolbar). It
+ * holds the row through the first load, so its work starts on the same line
+ * once it lands.
+ */
+function tabControls({
+  tab,
+  blocking,
+  links,
+}: Readonly<{
+  tab: AnalysisTab;
+  blocking: BlockingState | null;
+  links: FilterBarProps | undefined;
+}>): FilterBarProps | undefined {
+  if (tab !== 'internal-links') return undefined;
+  if (blocking?.kind === 'loading') return RESERVED_CONTROLS;
+  if (blocking) return undefined;
+  return links;
 }
 
 /** What stands in for the analysis: the one first-load wait, or a state that replaces the page. */
@@ -186,7 +227,7 @@ function SiteHealthNotices({
           notice={mutationNoticeForError(screen.createMutation.error, {
             action: 'start a crawl',
           })}
-          onRetry={screen.startCrawl}
+          onRetry={screen.retryStart}
         />
       ) : null}
       {screen.cancelMutation.isError ? (
@@ -240,12 +281,14 @@ function AnalysisPanel({
   projectId,
   workspaceId,
   screen,
+  linksRead,
 }: Readonly<{
   tab: string;
   crawlId: string | undefined;
   projectId: string;
   workspaceId: string;
   screen: ReturnType<typeof useSiteHealthScreen>;
+  linksRead: LinksRead;
 }>) {
   if (tab === 'pages') return <SiteHealthDashboardLayout screen={screen} />;
   if (tab === 'overview' && crawlId)
@@ -261,20 +304,12 @@ function AnalysisPanel({
   // Architecture reads a project-scoped projection, so it renders its own
   // "derived after the crawl finishes" state rather than needing a crawl here.
   if (tab === 'architecture')
-    return (
-      <ArchitecturePanel
-        key={projectId}
-        projectId={projectId}
-        workspaceId={workspaceId}
-        crawlId={crawlId}
-      />
-    );
+    return <ArchitecturePanel projectId={projectId} workspaceId={workspaceId} crawlId={crawlId} />;
   if (tab === 'aeo-readiness' && crawlId)
     return <AeoReadinessPanel projectId={projectId} workspaceId={workspaceId} crawlId={crawlId} />;
   if (tab === 'internal-links')
-    return <InternalLinksPanel key={projectId} projectId={projectId} workspaceId={workspaceId} />;
-  if (tab === 'changes')
-    return <ChangesPanel key={projectId} projectId={projectId} workspaceId={workspaceId} />;
+    return <InternalLinksPanel read={linksRead} workspaceId={workspaceId} />;
+  if (tab === 'changes') return <ChangesPanel projectId={projectId} workspaceId={workspaceId} />;
   return <Callout tone="info">Run a crawl before opening Website analysis.</Callout>;
 }
 
@@ -304,44 +339,48 @@ function screenBlockingState({
 }
 
 function CrawlActions({
+  crawl,
   active,
-  exporting,
   cancelPending,
   startPending,
-  onExport,
+  tabActions,
+  schedule,
   onCancel,
   onStart,
-  onRecrawl,
 }: Readonly<{
+  /** The shown crawl: its site and robots choice, which the next crawl keeps. */
+  crawl: Pick<SiteCrawl, 'root_url' | 'robots'>;
   active: boolean;
-  exporting: boolean;
   cancelPending: boolean;
   startPending: boolean;
-  onExport: () => void;
+  /**
+   * A tab's own primary action (Internal links' Analyze again). Run new
+   * crawl then steps down to secondary, so the header keeps one primary
+   * button.
+   */
+  tabActions: ReactNode;
+  /** The crawl schedule, beside the crawl button. */
+  schedule: ReactNode;
   onCancel: () => void;
-  onStart: () => void;
-  onRecrawl: () => void;
+  onStart: (robots?: CrawlRobotsHandling) => void;
 }>) {
   return (
     <Inline>
-      <Button variant="secondary" onClick={onExport} disabled={exporting}>
-        {exporting ? 'Exporting…' : 'Export'}
-      </Button>
-      {/* Always present, so starting a crawl never reflows the header. */}
-      <Tooltip content="Rerun this crawl's scope and settings, so Changes compares like with like.">
-        <Button variant="secondary" onClick={onRecrawl} disabled={active || startPending}>
-          Recrawl
-        </Button>
-      </Tooltip>
+      {schedule}
       {active ? (
         <Button variant="danger" onClick={onCancel} disabled={cancelPending}>
           {cancelPending ? 'Stopping…' : 'Stop crawl'}
         </Button>
       ) : (
-        <Button variant="primary" onClick={() => onStart()} disabled={startPending}>
-          {startPending ? 'Starting…' : 'Run new crawl'}
-        </Button>
+        <StartCrawlControl
+          siteUrl={crawl.root_url}
+          robots={crawl.robots}
+          primary={!tabActions}
+          pending={startPending}
+          onStart={onStart}
+        />
       )}
+      {tabActions}
     </Inline>
   );
 }

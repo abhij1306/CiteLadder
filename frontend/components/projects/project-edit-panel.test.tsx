@@ -53,7 +53,7 @@ const project = makeProject({
 });
 
 describe('ProjectEditPanel', () => {
-  it('sends the edited fields and keeps the aliases of a renamed competitor', async () => {
+  it('sends the edited fields and keeps the id and aliases of a renamed competitor', async () => {
     const user = userEvent.setup();
     let body: Record<string, unknown> | undefined;
     mswServer.use(
@@ -76,9 +76,14 @@ describe('ProjectEditPanel', () => {
     await waitFor(() => expect(body).toBeDefined());
     expect(body?.brand).toEqual({ aliases: ['Acme Inc', 'Acme Co'] });
     // The panel does not edit per-competitor aliases, so a rename must keep
-    // the ones the project already had.
+    // the ones the project already had, and the id keeps the competitor.
     expect(body?.competitors).toEqual([
-      { name: 'Globex Group', aliases: ['Globex Corp'], domains: ['globex.com'] },
+      {
+        id: '44444444-4444-4444-8444-444444444444',
+        name: 'Globex Group',
+        aliases: ['Globex Corp'],
+        domains: ['globex.com'],
+      },
     ]);
   });
 

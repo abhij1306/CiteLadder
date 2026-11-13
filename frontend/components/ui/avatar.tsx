@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 
 import { cn, emailInitials } from '@/lib/utils';
@@ -18,7 +16,7 @@ export type AvatarPlacement = keyof typeof PLACEMENT;
 
 /**
  * Avatar — a person's photo or initials in a circle: the first and last
- * word's first letters in `ink` on `surface-sunken` with a `line` ring; a
+ * word's first letters in `ink` on `surface-sunken` with a 1px `line` border; a
  * failed photo falls back to the initials. Never coloured per person, never
  * a company (that is `BrandMark`). Decorative: the adjacent text or the
  * control's name says who it is.
@@ -38,7 +36,7 @@ export function Avatar({
     <span
       aria-hidden
       className={cn(
-        'bg-surface-sunken text-ink grid shrink-0 place-items-center overflow-hidden rounded-full font-medium uppercase ring-1 ring-line ring-inset',
+        'bg-surface-sunken border-line text-ink grid shrink-0 place-items-center overflow-hidden rounded-full border font-medium uppercase',
         PLACEMENT[placement],
       )}
     >

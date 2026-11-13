@@ -1,5 +1,6 @@
 import { benchmarkModeSchema } from '@citeladder/contracts/project';
 import {
+  competitorListItemRequestSchema,
   competitorRequestSchema,
   entityMatchingRequestSchema,
   projectCreateRequestSchema,
@@ -12,7 +13,8 @@ import { policy } from '../config.ts';
 const cfg = policy.projects;
 const profile = policy.brand_identity;
 const text = (max: number) => z.string().trim().max(max);
-const list = z.array(text(1024));
+/** Domains are stored as `varchar(255)`, so a longer one is a 422, not a database error. */
+const domainList = z.array(text(255));
 /** Every alias is compiled into a matcher run over each answer, so the set stays bounded. */
 const aliasList = z.array(text(profile.alias_max_chars)).max(profile.max_entity_aliases);
 /** The confirmed category buyers would search for. */
@@ -20,7 +22,7 @@ export const categoryInput = z.string().trim().min(1).max(profile.category_max_c
 export const competitorInput = competitorRequestSchema.extend({
   name: text(255).min(1),
   aliases: aliasList.default([]),
-  domains: list.default([]),
+  domains: domainList.default([]),
 });
 export const marketInput = text(8)
   .toUpperCase()
@@ -48,8 +50,8 @@ const scalars = {
 };
 const collections = {
   brand: z.object({ aliases: aliasList.default([]) }).default({ aliases: [] }),
-  owned_domains: list.default([]),
-  unintended_domains: list.default([]),
+  owned_domains: domainList.default([]),
+  unintended_domains: domainList.default([]),
   competitors: z.array(competitorInput).max(profile.max_project_competitors).default([]),
 };
 export const projectCreate = projectCreateRequestSchema.extend({
@@ -82,9 +84,12 @@ export const projectUpdate = projectUpdateRequestSchema.extend({
   benchmark_mode: benchmarkModeSchema.optional(),
   default_repetitions: scalars.default_repetitions.unwrap().optional(),
   brand: z.object({ aliases: aliasList }).optional(),
-  owned_domains: list.optional(),
-  unintended_domains: list.optional(),
-  competitors: collections.competitors.unwrap().optional(),
+  owned_domains: domainList.optional(),
+  unintended_domains: domainList.optional(),
+  competitors: z
+    .array(competitorListItemRequestSchema.extend(competitorInput.shape))
+    .max(profile.max_project_competitors)
+    .optional(),
   // Matching policies to save, by brand or competitor name; names the
   // project no longer tracks are dropped on save.
   entity_matching: z

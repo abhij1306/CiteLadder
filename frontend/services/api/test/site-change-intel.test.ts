@@ -269,6 +269,11 @@ describe('change_intel task', () => {
     // a project without GA4 without deriving anything.
     expect(await analyticsTasks(b)).toEqual([
       { task_kind: 'ai_traffic_insights_refresh', payload: {} },
+      // The crawl's content pages feed the content-angle refresh.
+      {
+        task_kind: 'content_angle_refresh',
+        payload: { trigger_kind: 'site_crawl', trigger_id: b.crawlId },
+      },
       {
         task_kind: 'opportunity_refresh',
         payload: { trigger_kind: 'site_change', trigger_id: snapshot!.id },

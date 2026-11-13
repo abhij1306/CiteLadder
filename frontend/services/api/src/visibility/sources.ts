@@ -29,7 +29,7 @@ import {
 } from '../http/keyset-cursor.ts';
 import { latestReadings, readingPresences } from '../source-pages/reading.ts';
 import { compareText } from '../text-order.ts';
-import { brandIdentities, identityKey } from './brand-identities.ts';
+import { brandIdentities, leadingBrands, type BrandCount } from './brand-identities.ts';
 import { gapPageHashes, pageStanding } from './page-standing.ts';
 import { earnedPageActions } from '../opportunities/earned-page-actions.ts';
 import { ratio } from './metrics.ts';
@@ -48,9 +48,6 @@ import {
 
 export type SourcesResponse = z.input<typeof visibilitySourcesSchema>;
 type SourceRow = SourcesResponse['items'][number];
-
-// Chips a cell holds before the rest become the "+N" overflow.
-const SOURCE_ROW_MAX_BRANDS = 3;
 
 export type SourceQuery = {
   domain: string | null;
@@ -476,12 +473,9 @@ async function attachRowMentions(
       where mention.competitor_name <> ''
       group by cited.url, mention.competitor_name
     `.execute(db),
-    brandIdentities(db, selection.projectId),
+    brandIdentities(db, selection),
   ]);
-  const found = new Map<
-    string,
-    { kind: 'brand' | 'competitor'; name: string; responses: number }[]
-  >();
+  const found = new Map<string, BrandCount[]>();
   for (const row of named) {
     const list = found.get(row.url) ?? [];
     list.push({ kind: row.kind, name: row.name, responses: row.responses });
@@ -489,18 +483,7 @@ async function attachRowMentions(
   }
   for (const row of input.items) {
     const entries = found.get(row.key);
-    if (!entries?.length) continue;
-    entries.sort(
-      (left, right) =>
-        right.responses - left.responses ||
-        compareText(left.kind, right.kind) ||
-        compareText(left.name, right.name),
-    );
-    row.mentions = entries.length;
-    row.brands = entries.slice(0, SOURCE_ROW_MAX_BRANDS).map((entry) => {
-      const identity = identities.get(identityKey(entry.name));
-      return { ...entry, logo_url: identity?.logo_url ?? null, website: identity?.website ?? null };
-    });
+    if (entries?.length) Object.assign(row, leadingBrands(entries, identities));
   }
 }
 

@@ -5,7 +5,8 @@
  */
 import { namesAlias } from '../analysis/aliases.ts';
 import { policy } from '../config.ts';
-import { bindingTokens, sharedTokens } from './binding.ts';
+import { jaccard } from '../lists.ts';
+import { bindingTokens } from './binding.ts';
 import type { Draft } from './generation-drafts.ts';
 import { namesPlace } from './generation-plan.ts';
 import { promptTextHash } from './normalization.ts';
@@ -51,12 +52,6 @@ const STOPWORDS = new Set(policy.prompts.binding.stopwords);
  */
 export const promptTokens = (text: string) =>
   new Set([...bindingTokens(text)].filter((token) => !STOPWORDS.has(token)));
-
-/** Token overlap of two prompts: shared comparable tokens over all of them. */
-export function jaccard(a: ReadonlySet<string>, b: ReadonlySet<string>) {
-  const union = new Set([...a, ...b]).size;
-  return union ? sharedTokens(a, b) / union : 0;
-}
 
 /**
  * Whether two prompts' tokens overlap at least `near_duplicate_jaccard`: one

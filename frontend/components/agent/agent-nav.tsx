@@ -1,16 +1,12 @@
-'use client';
-
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { useAgentCatalog } from '@/components/agent/use-agent-catalog';
 import { NavLink } from '@/components/layout/nav-link';
 import { AGENT_NAV_ITEMS } from '@/components/layout/nav-items';
 import { StationLinks } from '@/components/layout/sidebar-nav';
 import {
   SidebarNavGroup,
-  SidebarRecordMeta,
   SidebarRecordNotice,
   SidebarRecordRow,
   SidebarRecordRows,
@@ -165,20 +161,10 @@ function ChatRows({
             href={scoped(href)}
             active={pathname === href}
             title={chat.title}
-            meta={<ChatMeta chat={chat} />}
+            working={chat.running}
           />
         );
       })}
     </SidebarRecordRows>
-  );
-}
-
-function ChatMeta({ chat }: Readonly<{ chat: AgentChatSummary }>) {
-  const { kindLabel } = useAgentCatalog();
-  const marker = chat.output_kind ? kindLabel(chat.output_kind) : null;
-  return (
-    <SidebarRecordMeta working={chat.running}>
-      {[chat.target_label, marker].filter(Boolean).join(' · ')}
-    </SidebarRecordMeta>
   );
 }

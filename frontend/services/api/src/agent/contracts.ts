@@ -53,7 +53,7 @@ export function admittedBudget(executionTimeoutSeconds: number) {
 export const outputPayloadSchema = z.strictObject({
   title: z.string().trim().min(1).max(agentPolicy.output_title_max_chars),
   body: z.string().trim().min(1).max(agentPolicy.output_body_max_chars),
-  target_kind: z.enum(['page', 'planned_page']).nullish(),
+  target_kind: z.enum(policy.opportunity.actions.AGENT_TARGET_KINDS).nullish(),
   target: z.string().nullish(),
   format_id: z.string().nullish(),
 });

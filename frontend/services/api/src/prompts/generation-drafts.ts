@@ -88,8 +88,18 @@ const generatedRow = z.object({
   buyer_stage: z.string(),
   prompt_intent: z.string(),
   names_place: z.boolean().optional(),
+  // Required of the model (a defaulted field is required in its schema); a
+  // row parsed without one is never dropped for it.
+  answer_kind: z.enum(['named_options', 'general_advice']).default('named_options'),
 });
 const generated = z.object({ prompts: z.array(generatedRow) });
+type GeneratedRow = z.input<typeof generatedRow>;
+
+/** The project language's advice frames (`advice_phrases`), as padded word runs. */
+const advicePhrasesOf = (context: GenerationContext) =>
+  (G.advice_phrases[baseLanguage(context.context.language_code || 'en')] ?? []).map(
+    (phrase) => ` ${words(phrase).join(' ')} `,
+  );
 
 export type Drops = Partial<Record<PromptAdmissionDropReason, number>>;
 type AdmissionDrop = {
@@ -117,7 +127,7 @@ function mergeDrops(into: Drops, from: Drops) {
  * across all topics.
  */
 export function admitDrafts(
-  rows: z.infer<typeof generatedRow>[],
+  rows: GeneratedRow[],
   slots: Slot[],
   context: GenerationContext,
   prior: Draft[],
@@ -145,6 +155,18 @@ export function admitDrafts(
   /** Two alternatives joined into one prompt; comparisons ask "X or Y" by design. */
   const joinsTwoNeeds = (text: string, cohort: GenerationCohort) =>
     cohort !== 'comparison' && words(text).some((word) => disjunctions.has(word));
+  const advicePhrases = advicePhrasesOf(context);
+  /**
+   * A core draft whose answer would be general advice, not named options to
+   * buy: the drafter's own label, or an advice frame in the text. Branded
+   * cohorts may ask how the named brand works by design.
+   */
+  const seeksAdvice = (row: GeneratedRow, text: string, cohort: GenerationCohort) => {
+    if (cohort !== 'core') return false;
+    if (row.answer_kind === 'general_advice') return true;
+    const padded = ` ${words(text).join(' ')} `;
+    return advicePhrases.some((phrase) => padded.includes(phrase));
+  };
   // Names count under the project's matching policy, so a common-word brand
   // in ordinary language ("target audience") is not a branded draft.
   const brandRule = context.matching[entityKey(context.context.brand_name)];
@@ -156,7 +178,7 @@ export function admitDrafts(
     competitors.some(({ aliases, rule }) => namesEntity(text, aliases, rule));
   /** Planning checks: the row answers an open slot with labels it allows. */
   const planReason = (
-    row: z.infer<typeof generatedRow>,
+    row: GeneratedRow,
     slot: Slot | undefined,
   ): PromptAdmissionDropReason | null => {
     if (!slot || usedSlots.has(slot.slot_id)) return 'unplanned_slot';
@@ -170,7 +192,7 @@ export function admitDrafts(
   };
   /** Identity checks: who the row names, by cohort. */
   const cohortReason = (
-    row: z.infer<typeof generatedRow>,
+    row: GeneratedRow,
     cohort: GenerationCohort,
     text: string,
   ): PromptAdmissionDropReason | null => {
@@ -181,7 +203,7 @@ export function admitDrafts(
     return cohort === 'comparison' && !compares ? 'competitor_missing' : null;
   };
   const reason = (
-    row: z.infer<typeof generatedRow>,
+    row: GeneratedRow,
     slot: Slot | undefined,
     text: string,
     hash: string,
@@ -198,6 +220,7 @@ export function admitDrafts(
     if (words(text).length > G.text_max_words) return 'too_many_words';
     if (hasPlaceholder(text)) return 'placeholder';
     if (joinsTwoNeeds(text, slot.cohort)) return 'two_needs';
+    if (seeksAdvice(row, text, slot.cohort)) return 'advice';
     if (observed.has(hash)) return 'observed_copy';
     if (bindingFailure(text, context.vocabulary)) return 'off_topic';
     if (!slot.buyer_need.market && namesPlace(text, geo)) return 'location_unplanned';

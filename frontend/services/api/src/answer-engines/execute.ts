@@ -1,3 +1,4 @@
+import { retryAfterSeconds } from '@citeladder/contracts/retry-after';
 import { z } from 'zod';
 import { providerErrorCode, transientStatus } from '../models/http.ts';
 import { approvedEndpoint } from '../providers/connections.ts';
@@ -100,14 +101,6 @@ function authHeaders(
   if (provider === 'google') return { 'x-goog-api-key': secret };
   return { 'x-api-key': secret, 'anthropic-version': settings.anthropicVersion };
 }
-function retryAfterSeconds(response: Response) {
-  const raw = response.headers.get('retry-after');
-  if (raw === null) return undefined;
-  const seconds = Number.isFinite(Number(raw))
-    ? Math.max(0, Number(raw))
-    : Math.max(0, (Date.parse(raw) - Date.now()) / 1000);
-  return Number.isFinite(seconds) ? seconds : undefined;
-}
 function assertNoAnthropicSearchError(payload: unknown) {
   const parsed = z.object({ content: z.array(z.unknown()).optional() }).safeParse(payload);
   for (const block of parsed.data?.content ?? []) {
@@ -160,7 +153,7 @@ export async function executeAnswer(
     throw new ProviderError(
       providerErrorCode(response.status),
       transientStatus(response.status),
-      retryAfterSeconds(response),
+      retryAfterSeconds(response.headers.get('retry-after')),
     );
   }
   let payload: unknown;
@@ -185,8 +178,12 @@ export async function executeAnswer(
  * A budget exhausted before any text and an unexplained empty answer can
  * succeed on a fresh call; a safety decline will not. Non-empty text cut off
  * by the budget remains an observation, its `length` finish reason retained.
+ * An exchange the provider reports as failed, cancelled or paused is not an
+ * answer either, whatever text it carries: its text is unfinished.
  */
+const UNFINISHED = new Set<Answer['finish_reason']>(['error', 'cancelled', 'paused']);
 function answered(answer: Answer): Answer {
+  if (UNFINISHED.has(answer.finish_reason)) throw new ProviderError('answer_unfinished', true);
   if (answer.answer_text) return answer;
   if (answer.finish_reason === 'length') throw new ProviderError('truncated_before_answer', true);
   if (answer.finish_reason === 'content_filter') throw new ProviderError('content_filter');

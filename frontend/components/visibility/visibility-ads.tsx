@@ -1,5 +1,3 @@
-'use client';
-
 import type { VisibilityAdsResponse } from '@citeladder/contracts/visibility-ads';
 import { Megaphone } from 'lucide-react';
 
@@ -38,7 +36,7 @@ export function VisibilityAds({
   filters,
   queries,
 }: Readonly<{ filters: SourceFilters; queries: SourceQueries }>) {
-  const { query, enabled } = useAds(filters, queries);
+  const query = useAds(filters, queries);
   const [firstPage, ...laterPages] = query.data?.pages ?? [];
   if (query.error)
     return (
@@ -49,9 +47,8 @@ export function VisibilityAds({
         pending={query.isFetching}
       />
     );
-  // A range with no runs reads nothing; otherwise the selection is still resolving.
-  if (!enabled)
-    return queries.selectedRunIds?.length === 0 ? <AdsState state="no_runs" /> : <AdsLoading />;
+  // The selection above has settled on a measured run (`SelectionGate`), so
+  // no page yet is this read still on its way.
   if (!firstPage) return <AdsLoading />;
   return (
     <div className="relative">
@@ -99,7 +96,7 @@ function AdsState({
   state,
   engines = [],
 }: Readonly<{
-  state: Exclude<VisibilityAdsResponse['state'], 'value'> | 'no_runs';
+  state: Exclude<VisibilityAdsResponse['state'], 'value'>;
   engines?: VisibilityAdsResponse['engines'];
 }>) {
   const copy = adsStateCopy(state);
@@ -207,7 +204,7 @@ function AdvertiserTable({
           <TableCell numeric>{advertiser.appearances}</TableCell>
           <TableCell numeric>{advertiser.prompts}</TableCell>
           <TableCell numeric>{formatPercent(advertiser.share)}</TableCell>
-          <TableCell numeric>
+          <TableCell>
             {formatDisplayShortDate(advertiser.first_seen_at, timeZone)} –{' '}
             {formatDisplayShortDate(advertiser.last_seen_at, timeZone)}
           </TableCell>
@@ -222,14 +219,20 @@ const ADVERTISER_COLUMNS: readonly DataTableColumn[] = [
   { key: 'appearances', label: 'Appearances', width: 'figure', numeric: true },
   { key: 'prompts', label: 'Prompts', width: 'figure', numeric: true },
   { key: 'share', label: 'Share', width: 'figure', numeric: true },
-  { key: 'seen', label: 'Seen', width: 'date', numeric: true },
+  // A date range is text, aligned like every other date column.
+  { key: 'seen', label: 'Seen', width: 'date' },
 ];
 
 const PROMPT_COLUMNS: readonly DataTableColumn[] = [
   { key: 'prompt', label: 'Prompt' },
   { key: 'ads', label: 'Ads seen', width: 'figure', numeric: true },
   { key: 'top', label: 'Top advertiser', width: 'status' },
-  { key: 'beside', label: 'You mentioned beside a competitor ad', width: 'name' },
+  {
+    key: 'beside',
+    label: 'Mentioned you',
+    width: 'category',
+    hint: 'Of the answers that showed a competitor ad, how many also mentioned you organically.',
+  },
 ];
 
 function noAds(heading: string): DataTableState {

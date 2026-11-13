@@ -9,7 +9,6 @@
  */
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
-import { record } from '../db/json.ts';
 import type { FetchedPage } from '../safe-fetch.ts';
 import type { SiteTask } from '../queue/task-queue.ts';
 import { factSettings, type PageFacts } from './analysis/facts.ts';
@@ -21,6 +20,7 @@ import { duplicateOf, markDuplicates } from './canonical-alias.ts';
 import {
   admitCandidates,
   candidate,
+  crawlAdmit,
   crawlScope,
   enqueueDiscoveredAnalysis,
   lockRuntime,
@@ -28,7 +28,7 @@ import {
   releaseNonPage,
   type Candidate,
 } from './frontier.ts';
-import { isBotBlock } from './page-fetch.ts';
+import { crawlRobotsHandling, isBotBlock } from './page-fetch.ts';
 import {
   Abandoned,
   commitTask,
@@ -43,7 +43,7 @@ import {
   type SiteTaskContext,
 } from './site-task.ts';
 import { taskOutcome } from './task-outcome.ts';
-import { classifyUrlAdmission, hardExcluded } from './url-admission.ts';
+import { classifyUrlAdmission } from './url-admission.ts';
 import { canonicalIdentity } from './url-identity.ts';
 
 const crawlPolicy = policy.site_health.crawl;
@@ -55,21 +55,19 @@ type Outcome = AttemptOutcome & {
   page: FetchedPage | null;
   discovery: Discovery | null;
   facts: PageFacts | null;
+  robotsExcluded: boolean;
   retryable: boolean;
   errorDetail: string;
 };
 
 async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Promise<Outcome> {
-  const scope = crawlScope(crawl);
   const fetched = await ctx.fetcher.fetch(task.requested_url, {
     signal: ctx.signal,
-    // Redirects may not leave the crawl's scope any more than links may.
-    admit: scope.domain
-      ? (hop) => classifyUrlAdmission(hop.href, scope).accepted
-      : (hop) => !hardExcluded(hop),
+    admit: crawlAdmit(crawl),
     contentTypes: [...acquisition.html_content_types, ...crawlPolicy.document_media_types],
+    robots: crawlRobotsHandling(crawl.configuration),
   });
-  const empty = { page: null, discovery: null, facts: null };
+  const empty = { page: null, discovery: null, facts: null, robotsExcluded: false };
   if (!fetched.ok)
     return {
       ...empty,
@@ -100,7 +98,14 @@ async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Prom
       errorDetail: '',
       retryable: failure[1],
     };
-  const success = { ...common, succeeded: true, errorCode: '', errorDetail: '', retryable: false };
+  const success = {
+    ...common,
+    robotsExcluded: fetched.robotsExcluded,
+    succeeded: true,
+    errorCode: '',
+    errorDetail: '',
+    retryable: false,
+  };
   if (DOCUMENT_TYPES.has(page.contentType))
     return { ...success, discovery: { title: '', links: [] }, facts: null };
   // One parse, off the event loop: discovery reads every anchor of the whole
@@ -120,7 +125,7 @@ async function acquire(ctx: SiteTaskContext, crawl: Crawl, task: SiteTask): Prom
       decodedBytes: page.body.length,
     },
     factSettings(),
-    scope,
+    crawlScope(crawl),
   );
   return { ...success, discovery, facts };
 }
@@ -267,9 +272,8 @@ async function observeFailedUrl(trx: Database, crawl: Crawl, task: SiteTask, out
 function candidatesFor(
   task: SiteTask,
   discovery: Discovery,
-  options: { exact: boolean; referrerId: string | null },
+  referrerId: string | null,
 ): Candidate[] {
-  if (options.exact) return [];
   const links = discovery.links.map((link) =>
     candidate(link.admission, {
       url: link.admission.url,
@@ -280,7 +284,7 @@ function candidatesFor(
       linkOrdinal: link.ordinal,
       rewriteReason: link.rewriteReason,
       rewriteVersion: link.rewriteVersion,
-      referrerId: options.referrerId,
+      referrerId,
     }),
   );
   if (task.depth !== 0) return links;
@@ -339,15 +343,15 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
         policyVersion: ctx.fetcher.settings.policyVersion,
         latencyMs: outcome.latencyMs ?? 0,
         purpose: 'discover',
+        robotsExcluded: outcome.robotsExcluded,
       });
       const referrerId = await writeObservation(trx, crawl, task, page, discovery, artifactId);
-      const exact = record(crawl.configuration).input_mode === 'exact_urls';
       const admission = await admitCandidates(
         trx,
         crawl,
-        candidatesFor(task, discovery, { exact, referrerId }),
+        candidatesFor(task, discovery, referrerId),
         runtime,
-        { enqueueChildren: !exact, sourceArtifactId: artifactId },
+        { sourceArtifactId: artifactId },
       );
       admitted = admission.admitted;
       sampleCapped = admission.sampleCapped;
@@ -355,17 +359,8 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
       await dispose(trx, crawl, task, page, outcome.facts);
     } else if (finalFailure(task, outcome.retryable)) {
       // Membership before the crawl and task, in the Site Health lock order.
-      const runtime = await lockRuntime(trx, crawl.workspace_id);
-      // The freed slot goes to the frontier's next best URL, or the crawl ends a
-      // page short. An exact URL list has no frontier to refill from.
-      const exact = record(crawl.configuration).input_mode === 'exact_urls';
-      const released = await releaseNonPage(trx, crawl, task.url_hash, outcome, {
-        record: true,
-      });
-      if (released && !exact)
-        ({ admitted, sampleCapped } = await admitCandidates(trx, crawl, [], runtime, {
-          releasing: 1,
-        }));
+      await lockRuntime(trx, crawl.workspace_id);
+      await releaseNonPage(trx, crawl, task.url_hash, outcome, { record: true });
     }
     const locked = await lock();
     if (!artifactId && finalFailure(locked.task, outcome.retryable))
@@ -417,6 +412,6 @@ async function persist(ctx: SiteTaskContext, claimed: SiteTask, outcome: Outcome
 
 export async function runDiscover(ctx: SiteTaskContext, claimed: SiteTask) {
   const scope = await prepareTask(ctx, claimed);
-  if (!scope || !(await markRunning(ctx, scope.task))) return;
+  if (!scope || !(await markRunning(ctx, claimed))) return;
   await persist(ctx, claimed, await acquire(ctx, scope.crawl, scope.task));
 }

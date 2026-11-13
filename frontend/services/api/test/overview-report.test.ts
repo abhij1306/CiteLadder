@@ -226,6 +226,9 @@ describe('Overview PDF', () => {
     expect(text).toContain('2nd');
     expect(text).toContain('of 2 brands');
     expect(text).toContain('of answers cite you · 2 engines');
+    // The metric keeps the app's name in the PDF.
+    expect(text).toContain('Owned citation rate');
+    expect(text).not.toContain('Citation share');
     expect(text).toContain('1 prompt measured');
     expect(text).toContain('0 actions resolved so far.');
     // Ligatures stay out of the text layer, so "first" and "Offerings" copy and search intact.
@@ -238,6 +241,53 @@ describe('Overview PDF', () => {
     expect(text).not.toMatch(/\b(chatgpt|claude)\b/u);
     expect(text).not.toMatch(/\((s)\)|Unknown|opp-formula|Formula/u);
     expect(text).not.toMatch(UUID);
+  });
+
+  it('reads Top movers and Retrieved versus cited from the latest run, not every run', async () => {
+    const tenant = await consumerProject();
+    const configuration = {
+      ...CONFIGURATION,
+      competitors: [{ name: 'Globex', aliases: [], domains: ['globex.example'] }],
+      engine_routes: { chatgpt: CONFIGURATION.engine_routes.chatgpt },
+    };
+    const metrics = {
+      total_completed: 1,
+      brand_mention_count: 0,
+      owned_citation_response_count: 0,
+      brand_mention_rate: 0,
+      owned_citation_rate: 0,
+      competitor_mention_rate: { Globex: 0 },
+      competitor_citation_rate: { Globex: 0 },
+      share_of_voice: { mention_counts: { 'Acme Corp': 0, Globex: 0 } },
+      coverage: { requested: 1, failed: 0, not_run: 0 },
+    };
+    const run = async (completedAt: string, cited: string) => {
+      const auditId = await fixtures.audit(tenant, {
+        completedAt: new Date(completedAt),
+        configuration,
+      });
+      await fixtures.metricSnapshot(tenant, auditId, {
+        metrics: { ...metrics, per_engine: { chatgpt: metrics } },
+      });
+      await fixtures.execution(tenant, {
+        auditId,
+        engine: 'chatgpt',
+        analysis: {
+          citations: [{ url: `https://${cited}/a` }],
+          retrieved: [{ url: 'https://acme.example/pricing', isOwned: true, urlHash: 'hash-p' }],
+        },
+      });
+    };
+    await run('2026-09-01T00:00:00Z', 'falling.example');
+    await run('2026-09-08T00:00:00Z', 'rising.example');
+    await saveLayout(tenant, ['top_movers', 'retrieval']);
+
+    const text = await reportText(tenant);
+    expect(text).toContain('rising.example 0% 100% +100 pts');
+    expect(text).toContain('falling.example 100% 0% −100 pts');
+    // Only the latest run's one answer, not both runs' answers pooled.
+    expect(text).toContain('1 answer showed which pages the engine read.');
+    expect(text).toContain('https://acme.example/pricing 1 0');
   });
 
   it('prints every library widget heading as not available before any measurement', async () => {

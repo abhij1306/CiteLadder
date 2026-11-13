@@ -2,8 +2,6 @@ import { policy } from '../../config.ts';
 import type { EarnedPageEvidence, SourcePageEvidence } from './evidence.ts';
 const p = policy.opportunity.earned_actions;
 const s = policy.opportunity.source_pages;
-export const brandOf = (page: SourcePageEvidence) =>
-  page.entities.find((e) => e.entity_kind === s.ENTITY_KIND_BRAND);
 export const competitorsOf = (page: SourcePageEvidence) =>
   page.entities.filter(
     (e) => e.entity_kind === s.ENTITY_KIND_COMPETITOR && e.presence === s.PRESENCE_PRESENT,

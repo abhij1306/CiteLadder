@@ -1,0 +1,176 @@
+[
+  {
+    "name": "openai completed",
+    "engine": "chatgpt",
+    "payload": {
+      "status": "completed",
+      "output": [
+        { "type": "message", "content": [{ "type": "output_text", "text": "Acme suits." }] }
+      ]
+    },
+    "expected": { "finish_reason": "stop", "raw_finish_reason": "completed" }
+  },
+  {
+    "name": "openai incomplete at the output budget with text",
+    "engine": "chatgpt",
+    "payload": {
+      "status": "incomplete",
+      "incomplete_details": { "reason": "max_output_tokens" },
+      "output": [
+        { "type": "message", "content": [{ "type": "output_text", "text": "Acme suits" }] }
+      ]
+    },
+    "expected": { "finish_reason": "length", "raw_finish_reason": "max_output_tokens" }
+  },
+  {
+    "name": "openai incomplete by content filter with text",
+    "engine": "chatgpt",
+    "payload": {
+      "status": "incomplete",
+      "incomplete_details": { "reason": "content_filter" },
+      "output": [
+        { "type": "message", "content": [{ "type": "output_text", "text": "Acme suits" }] }
+      ]
+    },
+    "expected": { "finish_reason": "content_filter", "raw_finish_reason": "content_filter" }
+  },
+  {
+    "name": "openai failed with text",
+    "engine": "chatgpt",
+    "payload": {
+      "status": "failed",
+      "error": { "code": "server_error" },
+      "output": [
+        { "type": "message", "content": [{ "type": "output_text", "text": "Acme suits" }] }
+      ]
+    },
+    "expected": { "code": "answer_unfinished", "retryable": true }
+  },
+  {
+    "name": "openai cancelled with text",
+    "engine": "chatgpt",
+    "payload": {
+      "status": "cancelled",
+      "output": [
+        { "type": "message", "content": [{ "type": "output_text", "text": "Acme suits" }] }
+      ]
+    },
+    "expected": { "code": "answer_unfinished", "retryable": true }
+  },
+  {
+    "name": "openai still in progress",
+    "engine": "chatgpt",
+    "payload": { "status": "in_progress", "output": [] },
+    "expected": { "code": "answer_unfinished", "retryable": true }
+  },
+  {
+    "name": "gemini completed",
+    "engine": "gemini",
+    "payload": {
+      "status": "completed",
+      "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "Acme suits." }] }]
+    },
+    "expected": { "finish_reason": "stop", "raw_finish_reason": "completed" }
+  },
+  {
+    "name": "gemini completed without a response",
+    "engine": "gemini",
+    "payload": {
+      "status": "completed",
+      "steps": [{ "type": "google_search_call", "arguments": { "queries": ["acme"] } }]
+    },
+    "expected": { "code": "empty_answer", "retryable": true }
+  },
+  {
+    "name": "gemini incomplete at the output budget with text",
+    "engine": "gemini",
+    "payload": {
+      "status": "incomplete",
+      "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "Acme suits" }] }]
+    },
+    "expected": { "finish_reason": "length", "raw_finish_reason": "incomplete" }
+  },
+  {
+    "name": "gemini failed with text",
+    "engine": "gemini",
+    "payload": {
+      "status": "failed",
+      "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "Acme suits" }] }]
+    },
+    "expected": { "code": "answer_unfinished", "retryable": true }
+  },
+  {
+    "name": "gemini cancelled with text",
+    "engine": "gemini",
+    "payload": {
+      "status": "cancelled",
+      "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "Acme suits" }] }]
+    },
+    "expected": { "code": "answer_unfinished", "retryable": true }
+  },
+  {
+    "name": "gemini requiring continuation with text",
+    "engine": "gemini",
+    "payload": {
+      "status": "requires_continuation",
+      "steps": [{ "type": "model_output", "content": [{ "type": "text", "text": "Acme suits" }] }]
+    },
+    "expected": { "code": "answer_unfinished", "retryable": true }
+  },
+  {
+    "name": "gemini stopped for safety without text",
+    "engine": "gemini",
+    "payload": { "finish_reason": "SAFETY", "steps": [] },
+    "expected": { "code": "content_filter", "retryable": false }
+  },
+  {
+    "name": "claude end of turn",
+    "engine": "claude",
+    "payload": {
+      "stop_reason": "end_turn",
+      "content": [{ "type": "text", "text": "Acme suits." }]
+    },
+    "expected": { "finish_reason": "stop", "raw_finish_reason": "end_turn" }
+  },
+  {
+    "name": "claude stop sequence",
+    "engine": "claude",
+    "payload": {
+      "stop_reason": "stop_sequence",
+      "content": [{ "type": "text", "text": "Acme suits." }]
+    },
+    "expected": { "finish_reason": "stop", "raw_finish_reason": "stop_sequence" }
+  },
+  {
+    "name": "claude output budget with text",
+    "engine": "claude",
+    "payload": {
+      "stop_reason": "max_tokens",
+      "content": [{ "type": "text", "text": "Acme suits" }]
+    },
+    "expected": { "finish_reason": "length", "raw_finish_reason": "max_tokens" }
+  },
+  {
+    "name": "claude paused mid-search with preamble text",
+    "engine": "claude",
+    "payload": {
+      "stop_reason": "pause_turn",
+      "content": [
+        { "type": "text", "text": "I'll search for running shoe options." },
+        {
+          "type": "server_tool_use",
+          "id": "srvtoolu_1",
+          "name": "web_search",
+          "input": { "query": "running shoes" }
+        }
+      ]
+    },
+    "expected": { "code": "answer_unfinished", "retryable": true }
+  },
+  {
+    "name": "claude refusal",
+    "engine": "claude",
+    "payload": { "stop_reason": "refusal", "content": [] },
+    "expected": { "code": "content_filter", "retryable": false }
+  }
+]

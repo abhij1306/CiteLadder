@@ -156,15 +156,16 @@ export function parseLogLine(line: string, format: string, mapping: LogMapping):
   const status = logStatus(field('status'));
   if (timestamp === null || status === null) return null;
   const text = (key: MappedField) => (typeof field(key) === 'string' ? String(field(key)) : null);
-  const path = text('path')!;
+  const path = text('path');
   const method = text('method');
-  if (!method || !/^[A-Z]{1,16}$/u.test(method) || !path) return null;
+  const userAgent = text('user_agent');
+  if (!method || !/^[A-Z]{1,16}$/u.test(method) || !path || userAgent === null) return null;
   return {
     timestamp,
     path,
     method,
     status,
-    user_agent: decodedUserAgent(text('user_agent')!, mapping.user_agent_decode),
+    user_agent: decodedUserAgent(userAgent, mapping.user_agent_decode),
     host: text('host'),
     client_ip: text('client_ip'),
     request_id: text('request_id'),

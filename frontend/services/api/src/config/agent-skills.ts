@@ -14,8 +14,14 @@ export const agentSkills = {
     'diagnosis',
     'earned_brief',
     'content',
+    'page',
   ],
   format_kinds: ['content'],
+  /**
+   * Kinds whose document is a fetched page: a workflow of such a skill starts
+   * with a page fetch instead of a turn, and `save_document` never writes one.
+   */
+  fetched_kinds: ['page'],
   description_max_chars: 320,
   body_max_chars: 14000,
   vocabularies: {

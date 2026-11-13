@@ -112,11 +112,11 @@ function metaPropertyMap(root: HtmlNode, prefix: string) {
   return found;
 }
 
-function canonicalDeclarations(root: HtmlNode) {
+function canonicalDeclarations(root: HtmlNode, baseUrl: string) {
   const declarations: string[] = [];
   for (const link of elements(root, 'link')) {
     if (attribute(link, 'rel').toLowerCase() !== 'canonical') continue;
-    const href = attribute(link, 'href').trim().slice(0, limits.url_chars);
+    const href = resolvedHref(attribute(link, 'href').trim(), baseUrl).slice(0, limits.url_chars);
     if (href && !declarations.includes(href)) declarations.push(href);
   }
   return declarations;
@@ -174,18 +174,30 @@ const isInternal = (href: string, baseHost: string) => {
   return host === null || (Boolean(baseHost) && sameSite(host, baseHost.toLowerCase()));
 };
 
+/** An href resolved as a browser resolves it; an empty one names nothing, an unresolvable one stays. */
+function resolvedHref(href: string, baseUrl: string) {
+  try {
+    return href && new URL(href, baseUrl).href;
+  } catch {
+    return href;
+  }
+}
+
 /**
  * Rendered anchors carry text and region for content diagnostics. Anchors in
  * template content or hidden markup (a collapsed menu) are links crawlers
  * follow, as discovery does, so they are kept apart for reachability only.
+ * URLs are recorded resolved against the document base (`<base href>`), so a
+ * relative link means what it means to a browser.
  */
-function linksAndAssets(root: HtmlNode, baseHost: string, maxLinks: number) {
+function linksAndAssets(root: HtmlNode, baseUrl: string, baseHost: string, maxLinks: number) {
   const anchors = [];
   const unrendered = [];
   for (const { anchor, inTemplate } of anchorElements(root)) {
     if (anchors.length >= maxLinks && unrendered.length >= maxLinks) break;
-    const href = attribute(anchor, 'href').trim();
-    if (!href || NON_NAVIGABLE.some((prefix) => href.toLowerCase().startsWith(prefix))) continue;
+    const raw = attribute(anchor, 'href').trim();
+    if (!raw || NON_NAVIGABLE.some((prefix) => raw.toLowerCase().startsWith(prefix))) continue;
+    const href = resolvedHref(raw, baseUrl);
     if (inTemplate || !nodeIsRendered(anchor)) {
       if (unrendered.length < maxLinks)
         unrendered.push({
@@ -215,7 +227,7 @@ function linksAndAssets(root: HtmlNode, baseHost: string, maxLinks: number) {
       .filter((node) => include(node) && attribute(node, name).trim())
       .slice(0, maxLinks)
       .map((node) => {
-        const url = attribute(node, name).trim();
+        const url = resolvedHref(attribute(node, name).trim(), baseUrl);
         return {
           kind,
           url: url.slice(0, limits.url_chars),
@@ -309,7 +321,7 @@ function images(root: HtmlNode) {
   };
 }
 
-function hreflangAlternates(root: HtmlNode, finalUrl: string) {
+function hreflangAlternates(root: HtmlNode, baseUrl: string) {
   const alternates: { hreflang: string; url: string }[] = [];
   for (const link of elements(root, 'link')) {
     if (alternates.length >= limits.hreflang_alternates) break;
@@ -323,7 +335,7 @@ function hreflangAlternates(root: HtmlNode, finalUrl: string) {
       continue;
     let url: string;
     try {
-      url = new URL(href, finalUrl).href;
+      url = new URL(href, baseUrl).href;
     } catch {
       continue;
     }
@@ -368,8 +380,8 @@ function refreshTarget(content: string) {
  * A meta refresh that sends the reader to another URL, and whether inline
  * script navigates the window. A refresh to the page itself is a reload.
  */
-function clientRedirect(root: HtmlNode, finalUrl: string) {
-  const refresh = metaRefresh(root, finalUrl);
+function clientRedirect(root: HtmlNode, finalUrl: string, baseUrl: string) {
+  const refresh = metaRefresh(root, finalUrl, baseUrl);
   return {
     meta_refresh_url: refresh?.url ?? '',
     meta_refresh_seconds: refresh?.seconds ?? null,
@@ -377,14 +389,14 @@ function clientRedirect(root: HtmlNode, finalUrl: string) {
   };
 }
 
-/** The first meta refresh that leads to another URL, resolved against the page. */
-function metaRefresh(root: HtmlNode, finalUrl: string) {
+/** The first meta refresh that leads to another URL, resolved against the document base. */
+function metaRefresh(root: HtmlNode, finalUrl: string, baseUrl: string) {
   for (const meta of elements(root, 'meta')) {
     if (attribute(meta, 'http-equiv').trim().toLowerCase() !== 'refresh') continue;
     const refresh = refreshTarget(attribute(meta, 'content'));
     if (!refresh) continue;
     try {
-      const target = new URL(refresh.target, finalUrl);
+      const target = new URL(refresh.target, baseUrl);
       if (target.href !== new URL(finalUrl).href)
         return { url: target.href.slice(0, limits.url_chars), seconds: refresh.seconds };
     } catch {
@@ -466,8 +478,8 @@ function emptyFacts() {
     form_fields: [] as string[],
     link_context: [] as string[],
     entity: emptyEntityFacts(),
-    structured_data: structuredData(document(Buffer.alloc(0)), 0),
-    links: linksAndAssets(document(Buffer.alloc(0)), '', 0),
+    structured_data: structuredData(document(Buffer.alloc(0)), 0, ''),
+    links: linksAndAssets(document(Buffer.alloc(0)), '', '', 0),
     blocking_resources: { scripts: 0, stylesheets: 0, total: 0 },
     author: '',
     dates: { published: '', modified: '' },
@@ -512,13 +524,13 @@ function clearPageOwned<T extends DocumentFacts>(facts: T, reason: string): T {
   };
 }
 
-function structuredData(root: HtmlNode, maxBlocks: number) {
+function structuredData(root: HtmlNode, maxBlocks: number, baseUrl: string) {
   const raw = [...elements(root, 'script')]
     .filter((node) => attribute(node, 'type').toLowerCase() === 'application/ld+json')
     .map(textContent);
   const objects = jsonLdObjects(raw);
   const jsonLd = jsonLdBlocks(objects, maxBlocks);
-  const microdata = microdataBlocks(root, maxBlocks);
+  const microdata = microdataBlocks(root, maxBlocks, baseUrl);
   const blocks = [...jsonLd, ...microdata].slice(0, maxBlocks);
   return {
     blocks,
@@ -545,9 +557,9 @@ function extractDocument(
   }
   const title = elements(root, 'title').next().value;
   const headings = headingFacts(root);
-  const declarations = canonicalDeclarations(root);
-  const sd = structuredData(root, settings.maxBlocks);
-  const links = linksAndAssets(root, baseHost, settings.maxLinks);
+  const declarations = canonicalDeclarations(root, page.baseUrl);
+  const sd = structuredData(root, settings.maxBlocks, page.baseUrl);
+  const links = linksAndAssets(root, page.baseUrl, baseHost, settings.maxLinks);
   const viewport = metaContent(root, 'viewport');
   const articleMeta = metaPropertyMap(root, 'article:');
   const allMeta = metaPropertyMap(root, '');
@@ -579,15 +591,15 @@ function extractDocument(
       ['main', 'article', 'nav'].map((tag) => [tag, !elements(root, tag).next().done]),
     ),
     ordered_list_steps: orderedListSteps(page),
-    hreflang_alternates: hreflangAlternates(root, finalUrl),
+    hreflang_alternates: hreflangAlternates(root, page.baseUrl),
     ...contentFacts(page),
-    source_support: sourceSupportFacts(page, finalUrl),
+    source_support: sourceSupportFacts(page),
     inline_script_chars: inlineScriptChars(root),
-    client_redirect: clientRedirect(root, finalUrl),
+    client_redirect: clientRedirect(root, finalUrl, page.baseUrl),
     blocking_resources: blockingResources(root, links.stylesheets.length),
     body: bodyText(root, settings.maxTextChars),
     ...authorshipFacts(page, sd.blocks, articleMeta, metaContent(root, 'author'), modifiedMeta),
-    commerce: commerceFacts(page, finalUrl),
+    commerce: commerceFacts(page),
   };
   const shell =
     facts.body.word_count < f.server_rendered_min_words &&

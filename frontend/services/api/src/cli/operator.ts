@@ -1,5 +1,6 @@
 import { loadConfig, policy } from '../config.ts';
 import { createDatabase, type Database, type DatabaseConfig } from '../db/database.ts';
+import { ApiError } from '../errors.ts';
 
 export function required(value: string | undefined, name: string): string {
   if (!value) throw new Error(`--${name} is required`);
@@ -14,6 +15,8 @@ export class OperatorRefusal extends Error {}
 
 export function operatorDiagnostic(error: unknown): string {
   if (error instanceof OperatorRefusal) return error.message;
+  // An API refusal's code is a declared machine code, never input.
+  if (error instanceof ApiError) return error.code;
   if (error instanceof Error && safeFailures.has(error.message)) return error.message;
   if (error instanceof Error && error.message === 'An active admin user is required')
     return 'active_admin_required';

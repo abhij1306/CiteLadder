@@ -169,7 +169,10 @@ describe('durable onboarding', () => {
       .set({ available_at: new Date(0) })
       .where('id', '=', task.id)
       .execute();
-    await new DiscoveryWorker(db, { fetcher, gateway: null, env: {} }).runOnce('background-retry');
+    await new DiscoveryWorker(db, { fetcher, gateway: null, env: {} }).runOnce(
+      'background-retry',
+      target,
+    );
     expect((await discoveryRow(db, t.workspaceId, selected.id)).status).toBe('ready');
   });
 
@@ -524,7 +527,8 @@ describe('durable onboarding', () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
-    await worker.runOnce('test-worker');
+    const target = { workspaceId: t.workspaceId, discoveryId: row.id };
+    await worker.runOnce('test-worker', target);
     const after = await discoveryRow(db, t.workspaceId, row.id);
     expect(after).toMatchObject({ status: 'ready', project_id: null });
     expect(after.warnings).toContain('research_degraded');
@@ -538,7 +542,7 @@ describe('durable onboarding', () => {
         expect.objectContaining({ source_url: 'https://acme.com/' }),
       ]),
     });
-    expect(await worker.runOnce('test-worker')).toBe(false);
+    expect(await worker.runOnce('test-worker', target)).toBe(false);
   });
   it('retries a timed-out identity and then fails with its own code, never an empty ready review', async () => {
     const t = await tenant();
@@ -597,9 +601,11 @@ describe('durable onboarding', () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
-    const claimed = await Promise.all([worker.claim('one'), worker.claim('two')]);
-    const task = claimed.find((item) => item?.discovery_id === row.id)!;
-    expect(claimed.filter((item) => item?.id === task.id)).toHaveLength(1);
+    const target = { workspaceId: t.workspaceId, discoveryId: row.id };
+    const claimed = await Promise.all([worker.claim('one', target), worker.claim('two', target)]);
+    expect(claimed.filter(Boolean)).toHaveLength(1);
+    const task = claimed.find((item) => item !== null)!;
+    expect(task.discovery_id).toBe(row.id);
     expect(await worker.queue.heartbeat(task.id, task.lease_owner!, task.workspace_id)).toBe(true);
     await db
       .updateTable('brand_discovery_tasks')
@@ -647,7 +653,10 @@ describe('durable onboarding', () => {
     const t = await tenant();
     const row = await createDiscovery(db, t.workspaceId, input, randomUUID());
     const worker = new DiscoveryWorker(db, { fetcher, gateway: null, env: {} });
-    const task = (await worker.claim('blocked-worker'))!;
+    const task = (await worker.claim('blocked-worker', {
+      workspaceId: t.workspaceId,
+      discoveryId: row.id,
+    }))!;
     await db
       .updateTable('brand_discovery_tasks')
       .set({ lease_expires_at: new Date(Date.now() + 400) })

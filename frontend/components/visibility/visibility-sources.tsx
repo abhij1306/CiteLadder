@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState, type ReactNode } from 'react';
 import { Globe } from 'lucide-react';
 
@@ -9,9 +7,7 @@ import { Stack } from '@/components/ui/layout';
 import { SegmentedControl } from '@/components/ui/tabs';
 import { SourceDomainDetail } from '@/components/visibility/source-domain-detail';
 import {
-  DomainFilter,
-  StandingFilter,
-  TypeFilter,
+  sourceTableFilters,
   type PageStandingFilter,
 } from '@/components/visibility/source-filters';
 import { TopMoversCard, useSourceMovers } from '@/components/visibility/source-movers';
@@ -39,7 +35,6 @@ import {
   useSourceAnalysis,
   useSourceDomains,
   useSourceSeries,
-  selectionHasNoRun,
   type SourceQueries,
 } from '@/lib/visibility/use-source-analysis';
 
@@ -121,25 +116,10 @@ function useSourceDimension() {
 }
 
 /**
- * The Domains / URLs switch for the page's control band. Only the inventory
- * has the two halves; a domain's or URL's own page shows nothing here.
+ * The Domains / URLs inventory: the table, then the usage chart and type
+ * ring. Only the inventory has the two halves, so only it carries the switch,
+ * at the start of the table's toolbar before the search.
  */
-export function useSourceDimensionSwitch(): ReactNode {
-  const [dimension, setDimension] = useSourceDimension();
-  const [domain] = useUrlState('source_domain', optionalStringUrlCodec);
-  const [url] = useUrlState('source_url', optionalStringUrlCodec);
-  if (domain || url) return null;
-  return (
-    <SegmentedControl
-      value={dimension}
-      onChange={setDimension}
-      options={DIMENSIONS.map((entry) => ({ value: entry.value, label: entry.label }))}
-      ariaLabel="Source dimension"
-    />
-  );
-}
-
-/** The Domains / URLs inventory: the table, then the usage chart and type ring. */
 function SourcesInventory({
   filters,
   queries,
@@ -151,7 +131,7 @@ function SourcesInventory({
   onOpenUrl: (url: string) => void;
   onOpenDomain: (domain: string) => void;
 }>) {
-  const [dimension] = useSourceDimension();
+  const [dimension, setDimension] = useSourceDimension();
   return (
     // Deliberately NOT keyed on `dimension`. Remounting threw away the React
     // Query observer along with the panel, so `retainPreviousDataForScope` had
@@ -163,6 +143,14 @@ function SourcesInventory({
       queries={queries}
       onOpenUrl={onOpenUrl}
       onOpenDomain={onOpenDomain}
+      view={
+        <SegmentedControl
+          value={dimension}
+          onChange={setDimension}
+          options={DIMENSIONS}
+          ariaLabel="Source dimension"
+        />
+      }
     />
   );
 }
@@ -207,6 +195,7 @@ export function SourcesPanel({
   domain = null,
   onOpenUrl,
   onOpenDomain,
+  view,
 }: Readonly<{
   dimension: 'domain' | 'url';
   filters: SourceFilters;
@@ -216,6 +205,8 @@ export function SourcesPanel({
   onOpenUrl: (url: string) => void;
   /** Required whenever the domain dimension can be shown. */
   onOpenDomain?: (domain: string) => void;
+  /** The Domains | URLs switch, leading the table's toolbar (the inventory only). */
+  view?: ReactNode;
 }>) {
   const [offset] = useUrlState('source_offset', optionalStringUrlCodec);
   const [cursor] = useUrlState('source_cursor', optionalStringUrlCodec);
@@ -249,7 +240,9 @@ export function SourcesPanel({
     clearKeys: ['source_cursor', 'source_offset', 'source_as_of'],
   });
   const domainOptions = useSourceDomains(filters, queries);
-  const activeDomain = domain ?? pickedDomain;
+  // The publisher filter is a URL-table filter: the Domains view neither
+  // offers it nor reads a pick left over from the URLs view.
+  const activeDomain = domain ?? (dimension === 'url' ? pickedDomain : null);
   const scope = { dimension, domain: activeDomain, cursor, asOf, sourceType, gapOnly, pageSize };
   const { sourceQuery } = useSourceAnalysis(filters, queries, scope);
   const seriesQuery = useSourceSeries(filters, queries, {
@@ -294,29 +287,26 @@ export function SourcesPanel({
         : { column, direction: 'desc' },
     );
 
+  // The table's own filters, in its toolbar's All filters after the search
+  // (D57): they narrow this table alone. On a domain's own page the publisher
+  // is fixed.
+  const tableFilters = sourceTableFilters({
+    dimension,
+    type: { value: sourceType, options: types, onChange: setSourceType },
+    standing: { value: standingFilter, onChange: setStanding },
+    domain: domain
+      ? null
+      : { value: pickedDomain, options: domainOptions, onChange: setPickedDomain },
+  });
   // One toolbar for both bodies, so switching to near misses moves nothing.
   const toolbar = sourceTableToolbar({
     dimension,
+    view,
     search,
     onSearch: setSearch,
     rows,
     domain: activeDomain,
-    domainControl: domain ? null : (
-      <DomainFilter value={pickedDomain} options={domainOptions} onChange={setPickedDomain} />
-    ),
-    typeControl: (
-      <>
-        <TypeFilter
-          dimension={dimension}
-          value={sourceType}
-          options={types}
-          onChange={setSourceType}
-        />
-        {dimension === 'url' ? (
-          <StandingFilter value={standingFilter} onChange={setStanding} />
-        ) : null}
-      </>
-    ),
+    filters: tableFilters,
   });
 
   return (
@@ -324,7 +314,6 @@ export function SourcesPanel({
       {nearMiss ? (
         <NearMissTable
           query={nearMissQuery}
-          noRun={selectionHasNoRun(queries)}
           pageSize={pageSize}
           toolbar={toolbar}
           onOpenUrl={onOpenUrl}
@@ -345,7 +334,6 @@ export function SourcesPanel({
             busy: { active: sourceQuery.isFetching, label: 'Updating sources' },
             state: tableState({
               query: sourceQuery,
-              noRun: selectionHasNoRun(queries),
               rows,
               narrowed: Boolean(search || sourceType),
               searching: Boolean(search),
@@ -355,7 +343,7 @@ export function SourcesPanel({
               data,
               domain: activeDomain,
               dimension,
-              offset: Math.max(0, Number.parseInt(offset ?? '0', 10) || 0),
+              offset: pageOffset(offset),
               pageSize,
               busy: sourceQuery.isFetching,
               onPageSizeChange,
@@ -374,6 +362,11 @@ export function SourcesPanel({
       )}
     </Stack>
   );
+}
+
+/** The page's first row from the address: zero when absent or not a count. */
+function pageOffset(raw: string | null): number {
+  return Math.max(0, Number.parseInt(raw ?? '0', 10) || 0);
 }
 
 /** Only pages have a standing, so the standing filter applies to the URL table. */
@@ -398,14 +391,12 @@ function useStanding(dimension: 'domain' | 'url') {
  */
 function tableState({
   query,
-  noRun,
   rows,
   narrowed,
   searching,
   gapOnly,
 }: Readonly<{
   query: ReturnType<typeof useSourceAnalysis>['sourceQuery'];
-  noRun: boolean;
   rows: ReturnType<typeof sortItems>;
   narrowed: boolean;
   searching: boolean;
@@ -422,12 +413,9 @@ function tableState({
       pending: query.isFetching,
     };
   }
-  // No data yet is a read waiting on its run, never an empty finding.
-  if (!query.data) {
-    return noRun
-      ? { kind: 'empty', headingLevel: 3, icon: Globe, heading: 'No run selected' }
-      : { kind: 'loading', label: 'Loading sources…' };
-  }
+  // The selection has settled on a measured run (`SelectionGate`), so no data
+  // yet is this read on its way, never an empty finding.
+  if (!query.data) return { kind: 'loading', label: 'Loading sources…' };
   if (rows.length) return undefined;
   return {
     kind: 'empty',

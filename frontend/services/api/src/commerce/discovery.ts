@@ -55,7 +55,8 @@ async function targetContext(
     .where('project_id', '=', scope.projectId)
     .where('id', '=', target.id)
     .executeTakeFirst();
-  if (!row) {
+  // An archived product takes no new competitors until restored.
+  if (!row || ('lifecycle_state' in row && row.lifecycle_state !== 'active')) {
     if (executing) throw new TerminalExecutorError(p.target_missing_error);
     commerceMissing('Commerce target not found');
   }

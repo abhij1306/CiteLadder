@@ -113,6 +113,8 @@ function history(latestStates: PromptHistory['points'][number]['answer_states'])
       scoring_rule_version: 'v1',
       created_at: '2026-03-16T00:00:00Z',
       action_id: ACTION,
+      mentions: 0,
+      brands: [],
       counts: counts(latestStates ? 2 : 0, 1),
       answer_states: latestStates,
       outcomes: latestStates
@@ -125,6 +127,15 @@ function history(latestStates: PromptHistory['points'][number]['answer_states'])
               owned_citation_rate: 0.5,
               answer_states: latestStates,
               gap_counts: { Globex: 1 },
+            },
+            {
+              logical_engine: 'gemini',
+              transport_model: 'model',
+              counts: counts(0, 1),
+              visibility_rate: null,
+              owned_citation_rate: null,
+              answer_states: null,
+              gap_counts: {},
             },
           ]
         : [],
@@ -167,7 +178,7 @@ it('charts the prompt over time with declared work marked, and hands off to its 
   );
   renderScreen();
 
-  const marked = await screen.findByRole('list', { name: 'Mention rate over time: marked' });
+  const marked = await screen.findByRole('list', { name: 'Visibility over time: marked' });
   expect(marked.textContent).toMatch(/^Marked implemented .+: reviews\.example\/crm$/);
   expect(screen.getByText('Marked implemented')).toBeVisible();
   expect(getPromptHistory).toHaveBeenCalledWith(
@@ -190,6 +201,16 @@ it('charts the prompt over time with declared work marked, and hands off to its 
   );
   const gaps = within(screen.getByRole('region', { name: 'Competitors named without you' }));
   expect(gaps.getByRole('row', { name: /Globex/ })).toHaveTextContent('Globex1ChatGPT API');
+  // An engine whose every answer failed keeps its row and reads as failed.
+  const coverage = within(screen.getByRole('region', { name: 'Engine coverage' }));
+  const cells = (engine: RegExp) =>
+    within(coverage.getByRole('row', { name: engine }))
+      .getAllByRole('cell')
+      .slice(1)
+      .map((cell) => cell.textContent);
+  expect(cells(/ChatGPT API/)).toEqual(['2', '0', '1', '0', '0', '1']);
+  const unmeasured = '–Not measured';
+  expect(cells(/Gemini API/)).toEqual(['0', '1', unmeasured, unmeasured, unmeasured, unmeasured]);
   expect(screen.getByRole('link', { name: 'Open the Action' })).toHaveAttribute(
     'href',
     `/agent/actions/${ACTION}?project=${PROJECT}`,

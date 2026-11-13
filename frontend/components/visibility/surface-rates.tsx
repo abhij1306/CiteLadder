@@ -1,5 +1,3 @@
-'use client';
-
 import type { UseQueryResult } from '@tanstack/react-query';
 
 import { BusyBar } from '@/components/ui/progress-bar';
@@ -80,7 +78,7 @@ function CompetitorRates({ rates }: Readonly<{ rates: SurfaceRates['competitor_m
         title="Competitors, when an overview appeared"
         description="Over the same denominator as your own conditional mention rate, so the two are comparable."
       />
-      <ul className={ledgerClasses('open')}>
+      <ul className={ledgerClasses()}>
         {rates.map((entry) => (
           <Inline
             as="li"

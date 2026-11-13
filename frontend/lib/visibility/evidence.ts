@@ -29,7 +29,7 @@ export type PromptGroup = {
  * prompt total or an average over the truncated window.
  */
 export function groupByPrompt(items: readonly VisibilityExecutionEvidence[]): PromptGroup[] {
-  const order: string[] = [];
+  // A Map keeps first-insertion order.
   const groups = new Map<string, PromptGroup>();
   for (const item of items) {
     const key = item.prompt_snapshot_id;
@@ -42,11 +42,10 @@ export function groupByPrompt(items: readonly VisibilityExecutionEvidence[]): Pr
         executions: [],
       };
       groups.set(key, group);
-      order.push(key);
     }
     group.executions.push(item);
   }
-  return order.map((key) => groups.get(key)!);
+  return [...groups.values()];
 }
 
 /**

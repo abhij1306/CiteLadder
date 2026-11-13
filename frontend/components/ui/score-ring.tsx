@@ -20,7 +20,7 @@ function scoreFill(tone: ScoreTone, value: number): ScoreFill {
   return tone === 'ink' ? 'ink' : BAND_FILL[scoreBand(value)];
 }
 
-export const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
+const clampScore = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
 
 const RING_STROKE = {
   ink: 'stroke-ink',
@@ -29,52 +29,43 @@ const RING_STROKE = {
   negative: 'stroke-negative',
 } as const satisfies Record<ScoreFill, string>;
 
-/** The two sizes: 96px with the number at the centre, 48px bare beside a score card's number. */
-const RING = {
-  full: { size: 96, stroke: 8, box: 'size-24' },
-  bare: { size: 48, stroke: 6, box: 'size-12' },
-} as const;
+/** The one size: 64px with a 5px stroke, room for "100" in the 24px figure. */
+const SIZE = 64;
+const STROKE = 5;
 
 /**
  * ScoreRing — a 0–100 score as a ring, the app's only score graphic
- * (decision D8): 96px with the number at its centre in Geist 500 32/38 (the
- * Site Health score, a page's readiness), or bare at 48px (`showValue={false}`)
- * beside a score card's number. A `chart-grid` track; the arc is `ink`, or
- * banded with `tone="auto"` where several scores are compared and in score
- * cards. Pair the 96px ring with the failing count and the crawl time beside
- * it, never alone; shares are a `StackedBar`. It has no other size and shows
- * no percent sign.
+ * (decisions D8, D48): 64px with the number at its centre in the metric
+ * figure (500, 24/32). A `chart-grid` track; the arc is `ink`, or banded
+ * with `tone="auto"` where several scores are compared and in score stats.
+ * Shares are a `StackedBar`. It has no other size and shows no percent sign.
  */
 export function ScoreRing({
   value,
   label,
   tone = 'ink',
-  showValue = true,
 }: Readonly<{
   /** Score 0–100. */
   value: number;
   /** The accessible name, e.g. "Site Health score". */
   label: string;
   tone?: ScoreTone;
-  /** `false` draws the bare 48px ring a score card puts beside its number. */
-  showValue?: boolean;
 }>) {
   const score = clampScore(value);
-  const { size, stroke, box } = RING[showValue ? 'full' : 'bare'];
-  const centre = size / 2;
-  const radius = centre - stroke / 2;
+  const centre = SIZE / 2;
+  const radius = centre - STROKE / 2;
   const circumference = 2 * Math.PI * radius;
   return (
     <div
       // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The ring and its numeral are one generated image; <img> cannot hold them.
       role="img" // NOSONAR -- the ring and its numeral are one generated image
       aria-label={`${label}: ${score} out of 100`}
-      className={cn('relative inline-grid shrink-0 place-items-center', box)}
+      className="relative inline-grid size-16 shrink-0 place-items-center"
     >
       <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
+        width={SIZE}
+        height={SIZE}
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
         aria-hidden
         className="absolute inset-0"
       >
@@ -83,7 +74,7 @@ export function ScoreRing({
           cy={centre}
           r={radius}
           fill="none"
-          strokeWidth={stroke}
+          strokeWidth={STROKE}
           className="stroke-chart-grid"
         />
         {score > 0 ? (
@@ -92,7 +83,7 @@ export function ScoreRing({
             cy={centre}
             r={radius}
             fill="none"
-            strokeWidth={stroke}
+            strokeWidth={STROKE}
             strokeLinecap="round"
             strokeDasharray={`${(circumference * score) / 100} ${circumference}`}
             transform={`rotate(-90 ${centre} ${centre})`}
@@ -100,11 +91,9 @@ export function ScoreRing({
           />
         ) : null}
       </svg>
-      {showValue ? (
-        <span aria-hidden className="type-figure-ring relative">
-          {score}
-        </span>
-      ) : null}
+      <span aria-hidden className="type-figure relative">
+        {score}
+      </span>
     </div>
   );
 }

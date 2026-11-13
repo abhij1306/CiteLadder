@@ -1,4 +1,5 @@
 import type { IssueOccurrence } from '@citeladder/contracts';
+import { textRole } from '@/components/ui/typography';
 import { evidenceFacts, evidenceLead } from '@/lib/site-health/issue-evidence';
 
 /**
@@ -23,15 +24,27 @@ export function IssueEvidence({ occurrence }: Readonly<{ occurrence: IssueOccurr
   // remediation already stand on their own, and an empty-state sentence in a
   // two-hundred-row catalog is two hundred lines of apology.
   if (facts.length === 0) return null;
-  const lead = evidenceLead(occurrence.rule_id);
+  return <EvidenceLine lead={evidenceLead(occurrence.rule_id)} facts={facts} />;
+}
+
+/**
+ * The evidence line itself, for one page's occurrence or for evidence shown
+ * once over the pages that share it. `text` lets a shared line stand as the
+ * header of the pages under it.
+ */
+export function EvidenceLine({
+  lead,
+  facts,
+  text: role = 'caption',
+}: Readonly<{ lead: string | null; facts: readonly string[]; text?: 'caption' | 'itemTitle' }>) {
   if (!lead)
     return (
-      <p className="type-caption [overflow-wrap:anywhere]">
+      <p className={textRole(role, '[overflow-wrap:anywhere]')}>
         <code>{facts.join(', ')}</code>
       </p>
     );
   return (
-    <div className="type-caption min-w-0 [overflow-wrap:anywhere]">
+    <div className={textRole(role, 'min-w-0 [overflow-wrap:anywhere]')}>
       <span>{lead}</span>
       <ul>
         {facts.map((fact) => (

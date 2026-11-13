@@ -72,7 +72,7 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
               as="li"
               gap="tight"
               key={citation.url || citation.domain}
-              className={panelClasses({ tone: 'well' })}
+              className={panelClasses()}
             >
               <span className="type-caption text-ink">{citation.title || citation.domain}</span>
               <span className="type-caption break-all tabular-nums">{citation.domain}</span>
@@ -89,7 +89,7 @@ export function OpportunitySourcePattern({ pattern }: Readonly<{ pattern: Source
       ) : null}
 
       {action ? (
-        <Stack gap="tight" className={panelClasses({ tone: 'well' })}>
+        <Stack gap="tight" className={panelClasses()}>
           <span className="type-caption">Suggested next action</span>
           <p className="type-body text-ink">{action}</p>
         </Stack>

@@ -1,6 +1,4 @@
-'use client';
-
-import { FilterChoice } from '@/components/ui/filter-bar';
+import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
 import { PAGE_KINDS, pageKindLabel } from '@/lib/site-health/page-kinds';
 
 const OPTIONS = [
@@ -10,21 +8,19 @@ const OPTIONS = [
 
 /**
  * The page-kind filter (site-health v2 P1) shared by the pages inventory and
- * the issues list: the shared single-choice filter trigger, whose empty
- * option clears the filter (all page kinds).
+ * the issues list, as one entry of their All filters menu; its empty option
+ * clears the filter (all page kinds).
  */
-export function PageKindSelect({
+export function pageKindFilter({
   value,
   onChange,
-}: Readonly<{ value: string; onChange: (value: string) => void }>) {
-  return (
-    <FilterChoice
-      label="Filter by page kind"
-      menuLabel="Page kind"
-      value={value}
-      defaultValue=""
-      options={OPTIONS}
-      onChange={onChange}
-    />
-  );
+}: Readonly<{ value: string; onChange: (value: string) => void }>): FilterDefinition {
+  return choiceFilter({
+    id: 'page_kind',
+    label: 'Page kind',
+    value,
+    defaultValue: '',
+    groups: [{ options: OPTIONS }],
+    onChange,
+  });
 }

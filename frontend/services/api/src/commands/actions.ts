@@ -49,6 +49,8 @@ export async function declareAction(
   const result = await declareOwnedAction(db, scope, actionId, actor.userId, key, {
     ...input,
     output_revision_id: input.output_revision_id ? parseUuid(input.output_revision_id) : null,
+    // A blank reference (trimmed by the schema) records none.
+    deployment_reference: input.deployment_reference || null,
   });
   return { declaration: await declarationView(db, result.row), created: result.created };
 }

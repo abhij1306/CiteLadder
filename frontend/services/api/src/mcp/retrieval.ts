@@ -11,6 +11,7 @@ import { getAction } from '../opportunities/actions.ts';
 import { getExecutionEvidence } from '../visibility/execution.ts';
 import { authorizedWorkspaceIds, authorizeProject } from './data.ts';
 import { businessContext } from './context.ts';
+import { textWithoutUrlQuery, withoutQueryDeep } from './evidence-site.ts';
 import { appLink, recordPath } from './links.ts';
 import { mcpPolicy } from './config.ts';
 import { McpInputError, type Evidence, type EvidencePrincipal } from './types.ts';
@@ -634,6 +635,12 @@ async function resolveSpecRecord(
   attachCounts(kind, row);
   rowShapers[kind]?.(row);
   if (kind === 'site_page') title = await attachSitePage(db, row, recordScope, title);
+  // Site records' page and link URLs, the title included (a page may be titled
+  // by its URL), leave without query or fragment, as the Site tools return them.
+  if (kind.startsWith('site_')) {
+    title = textWithoutUrlQuery(title);
+    for (const [key, value] of Object.entries(row)) row[key] = withoutQueryDeep(value);
+  }
   // Put the diagnosis ahead of bulky crawl facts in continuation documents.
   const record =
     kind === 'site_page' ? { issues: row.issues, evaluations: row.evaluations, ...row } : row;

@@ -1,5 +1,3 @@
-'use client';
-
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Search, type LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -15,6 +13,7 @@ import {
 
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Button } from '@/components/ui/button';
+import { FLOAT_FACE } from '@/components/ui/card';
 import { Kbd } from '@/components/ui/kbd';
 import { useProjectContext } from '@/lib/project/project-context';
 import {
@@ -106,7 +105,8 @@ export function CommandPaletteTrigger({
       )}
     >
       <Search className="text-ink-muted size-4 shrink-0" aria-hidden />
-      <span className="min-w-0 truncate">Search or jump to…</span>
+      {/* The visible word stays short beside the shortcut; the name says it all. */}
+      <span className="min-w-0 truncate">Search</span>
       <Kbd className="desktop:inline-flex ms-auto hidden">{isMac ? '⌘K' : 'Ctrl K'}</Kbd>
     </Button>
   );
@@ -322,7 +322,10 @@ export function CommandPalette({
             event.preventDefault();
             restoreFocus();
           }}
-          className="dialog-panel bg-surface text-ink shadow-pop z-modal fixed top-16 left-1/2 flex max-h-[calc(100dvh-8rem)] w-[calc(100vw-3rem)] max-w-160 -translate-x-1/2 flex-col overflow-hidden overscroll-contain rounded-lg border border-transparent"
+          className={cn(
+            FLOAT_FACE,
+            'dialog-panel z-modal fixed top-16 left-1/2 flex max-h-[calc(100dvh-8rem)] w-[calc(100vw-3rem)] max-w-160 -translate-x-1/2 flex-col overflow-hidden overscroll-contain rounded-lg',
+          )}
         >
           <DialogPrimitive.Title className="sr-only">Command palette</DialogPrimitive.Title>
           {/* The search row is the dialog's header: the open dialog is the
@@ -343,7 +346,7 @@ export function CommandPalette({
               aria-activedescendant={
                 results[activeIndex] ? `${listboxId}-${results[activeIndex].id}` : undefined
               }
-              className="text-body text-ink placeholder:text-ink-muted h-full min-w-0 flex-1 bg-transparent"
+              className="text-body-sm text-ink placeholder:text-ink-muted h-full min-w-0 flex-1 bg-transparent"
             />
             <Kbd>Esc</Kbd>
           </div>
@@ -375,7 +378,7 @@ export function CommandPalette({
                     aria-labelledby={headingId}
                     className="[&+&]:mt-2"
                   >
-                    <p id={headingId} className="text-ink-muted text-caption px-2 py-1 font-medium">
+                    <p id={headingId} className="text-ink-muted text-caption px-2 py-1">
                       {section.group}
                     </p>
                     {section.rows.map(({ command, index }) => {
@@ -397,7 +400,7 @@ export function CommandPalette({
                           onClick={() => runCommand(command)}
                           className={cn(
                             'text-ink flex h-[var(--control-md)] w-full items-center gap-3 rounded-sm px-2 text-left text-body-sm',
-                            isActive && 'bg-surface-sunken',
+                            isActive && 'overlay-hover',
                           )}
                         >
                           {Icon ? (

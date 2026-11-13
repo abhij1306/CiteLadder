@@ -1,6 +1,6 @@
 import { sql } from 'kysely';
 import { afterAll, afterEach, describe, expect, it } from 'vitest';
-import { testDatabase } from './support.ts';
+import { asOwner, testDatabase } from './support.ts';
 import { VisibilityFixtures } from './visibility-fixtures.ts';
 import { auditTenant } from './audit-fixtures.ts';
 import { auditRuntime } from '../src/audits/config.ts';
@@ -37,7 +37,9 @@ it('continues recovery for other audits when one persisted parent cannot finaliz
 afterEach(async () => {
   if (taskIds.length) {
     await db.deleteFrom('execution_cost_projections').where('task_id', 'in', taskIds).execute();
-    await db.deleteFrom('provider_attempts').where('task_id', 'in', taskIds).execute();
+    await asOwner((owner) =>
+      owner.deleteFrom('provider_attempts').where('task_id', 'in', taskIds).execute(),
+    );
   }
   await fixtures.cleanup();
   taskIds.length = 0;

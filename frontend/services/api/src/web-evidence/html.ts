@@ -1,5 +1,5 @@
 /** One parsed HTML tree shared by discovery, source inspection and page analysis. */
-import { parse, type DefaultTreeAdapterTypes } from 'parse5';
+import { parse, parseFragment, type DefaultTreeAdapterTypes } from 'parse5';
 
 export type HtmlNode = DefaultTreeAdapterTypes.Node;
 export type HtmlElement = DefaultTreeAdapterTypes.Element;
@@ -21,7 +21,7 @@ export function document(body: Buffer, charset = '') {
   const declared = META_CHARSET.exec(body.subarray(0, SNIFF_BYTES).toString('latin1'))?.[1];
   return parse((decoder(charset) ?? decoder(declared) ?? new TextDecoder('utf-8')).decode(body));
 }
-const isElement = (node: HtmlNode): node is HtmlElement => 'tagName' in node;
+export const isElement = (node: HtmlNode): node is HtmlElement => 'tagName' in node;
 const isText = (node: HtmlNode): node is HtmlText => node.nodeName === '#text';
 /**
  * Pushes `items` last-first so the stack pops them in order. A loop, not a
@@ -57,7 +57,9 @@ export function* anchorElements(
     const { node, inTemplate } = pending.pop()!;
     if (isElement(node) && node.tagName === 'a') yield { anchor: node, inTemplate };
     const content = isElement(node) && isTemplate(node) ? node.content : null;
-    const children = content ? content.childNodes : 'childNodes' in node ? node.childNodes : [];
+    let children: readonly HtmlNode[] = [];
+    if (content) children = content.childNodes;
+    else if ('childNodes' in node) children = node.childNodes;
     const nested = inTemplate || content !== null;
     pushReversed(pending, children, (child) => ({ node: child, inTemplate: nested }));
   }
@@ -96,7 +98,26 @@ export function visibleText(root: HtmlNode, prune = true): string {
     const node = pending.pop()!;
     if (isElement(node) && prune && excluded.has(node.tagName)) continue;
     if (isText(node)) fragments.push(node.value);
-    if ('childNodes' in node) pending.push(...node.childNodes.toReversed());
+    if ('childNodes' in node) pushReversed(pending, node.childNodes, same);
   }
   return fragments.join(' ').replaceAll(/\s+/gu, ' ').trim();
+}
+/** The visible text of an HTML fragment (a stored description body): entities decoded, scripts dropped. */
+export const fragmentText = (html: string) => visibleText(parseFragment(html));
+/**
+ * The URL a document's relative links resolve against, as browsers resolve
+ * them: the first `<base>` with an `href`, itself resolved against the
+ * document URL, else the document URL. An unusable or non-web base is ignored.
+ */
+export function documentBaseUrl(root: HtmlNode, documentUrl: string): string {
+  for (const base of elements(root, 'base')) {
+    if (!hasAttribute(base, 'href')) continue;
+    try {
+      const resolved = new URL(attribute(base, 'href').trim(), documentUrl);
+      return ['http:', 'https:'].includes(resolved.protocol) ? resolved.href : documentUrl;
+    } catch {
+      return documentUrl;
+    }
+  }
+  return documentUrl;
 }

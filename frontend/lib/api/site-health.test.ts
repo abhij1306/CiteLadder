@@ -15,7 +15,6 @@ import {
   siteCrawlSchema,
   siteHealthErrorSchema,
   siteIssueSchema,
-  urlPreviewResponseSchema,
 } from '@citeladder/contracts/site-health';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { siteHealthApi } from './site-health';
@@ -53,6 +52,7 @@ const inventoryRow = {
   aeo_measurement_state: 'not_measured' as const,
   aeo_measurement_reason: '',
   main_content_indexable: null,
+  robots_excluded: false,
   last_audited: null,
   page_kind: null,
 };
@@ -83,40 +83,6 @@ describe('crawl admission and URL preview', () => {
     } finally {
       release();
     }
-  });
-  it('uses the same-origin preview endpoint and preserves exclusion reasons', async () => {
-    mswServer.use(
-      http.post('/api/v1/site-crawls/url-preview', async ({ request }) => {
-        expect(await request.json()).toMatchObject({
-          project_id: UUID2,
-          content: 'https://example.com/login',
-        });
-        return HttpResponse.json({
-          items: [
-            {
-              row: 1,
-              input: 'https://example.com/login',
-              accepted: false,
-              canonical_url: null,
-              reason_code: 'excluded_auth_path',
-              value_kind: 'other',
-              priority: 0,
-            },
-          ],
-          truncated: false,
-          counts: { excluded_auth_path: 1 },
-          policy_version: 'admission-v1',
-        });
-      }),
-    );
-    const preview = await siteHealthApi.previewUrls({
-      project_id: UUID2,
-      content: 'https://example.com/login',
-    });
-    expect(preview.items[0]?.reason_code).toBe('excluded_auth_path');
-    expect(strictValidate(urlPreviewResponseSchema, preview, 'preview').policy_version).toBe(
-      'admission-v1',
-    );
   });
 });
 
@@ -220,6 +186,7 @@ describe('inventoryRowSchema (nullable analysis summaries)', () => {
       aeo_measurement_state: 'measured',
       aeo_measurement_reason: '',
       main_content_indexable: true,
+      robots_excluded: false,
       last_audited: '2026-07-15T00:00:00Z',
       page_kind: 'article',
     };
@@ -289,7 +256,6 @@ describe('monitoredUrlSchema', () => {
       monitoredUrlsResponseSchema,
       {
         project_id: UUID,
-        selection_version: 1,
         monitored_urls: [
           {
             site_url_id: UUID2,
@@ -313,7 +279,6 @@ describe('monitoredUrlSchema', () => {
 describe('monitoredUrlsResponseSchema', () => {
   const response = {
     project_id: UUID,
-    selection_version: 4,
     monitored_urls: [
       {
         site_url_id: UUID2,
@@ -321,7 +286,7 @@ describe('monitoredUrlsResponseSchema', () => {
         display_url: 'https://example.com/',
         title: 'Home',
         active: true,
-        selection_source: 'user' as const,
+        selection_source: 'free_sample' as const,
         selected_at: '2026-07-15T00:00:00Z',
         deselected_at: null,
       },
@@ -329,18 +294,19 @@ describe('monitoredUrlsResponseSchema', () => {
     quota: { used: 1, limit: 50 },
   };
 
-  it('accepts a monitored set with quota + version', () => {
+  it('accepts a monitored set with quota', () => {
     const parsed = strictValidate(monitoredUrlsResponseSchema, response, 'mon');
     expect(parsed.quota.limit).toBe(50);
-    expect(parsed.selection_version).toBe(4);
   });
 
-  it('rejects an invalid selection_source', () => {
-    const bad = {
-      ...response,
-      monitored_urls: [{ ...response.monitored_urls[0], selection_source: 'admin' }],
-    };
-    expect(() => strictValidate(monitoredUrlsResponseSchema, bad, 'mon')).toThrow();
+  it('rejects a selection_source nothing can write any more', () => {
+    for (const source of ['admin', 'user']) {
+      const bad = {
+        ...response,
+        monitored_urls: [{ ...response.monitored_urls[0], selection_source: source }],
+      };
+      expect(() => strictValidate(monitoredUrlsResponseSchema, bad, 'mon')).toThrow();
+    }
   });
 });
 
@@ -363,6 +329,7 @@ describe('pageDetailSchema (field_cwv_available literal false)', () => {
     aeo_measurement_state: 'measured',
     aeo_measurement_reason: '',
     main_content_indexable: true,
+    robots_excluded: false,
     issue_count: 2,
     last_audited: '2026-07-15T00:00:00Z',
     page_kind: 'homepage',
@@ -479,23 +446,12 @@ describe('rerunPageResponseSchema (rerun identity/status)', () => {
     crawl_id: UUID,
     site_url_id: UUID2,
     task_id: UUID,
-    created_new_crawl: true,
     analysis_status: 'pending' as const,
   };
 
   it('accepts a fresh-crawl rerun response', () => {
     const parsed = strictValidate(rerunPageResponseSchema, base, 'rerun');
-    expect(parsed.created_new_crawl).toBe(true);
     expect(parsed.crawl_id).toBe(UUID);
-  });
-
-  it('accepts a same-active-crawl rerun response', () => {
-    const parsed = strictValidate(
-      rerunPageResponseSchema,
-      { ...base, created_new_crawl: false, analysis_status: 'running' },
-      'rerun',
-    );
-    expect(parsed.created_new_crawl).toBe(false);
   });
 
   it('rejects an unknown analysis_status', () => {
@@ -542,24 +498,14 @@ describe('siteIssueSchema + siteHealthErrorSchema', () => {
     expect(parsed.page_kinds).toEqual(['article', 'guide']);
   });
 
-  it('accepts a quota error carrying limit + currently_used', () => {
+  it('accepts a limit error carrying limit + currently_used', () => {
     const err = {
-      code: 'site_health_quota_exceeded' as const,
+      code: 'site_health_analysis_limit_exceeded' as const,
       message: 'over',
       limit: 50,
       currently_used: 50,
     };
     expect(strictValidate(siteHealthErrorSchema, err, 'err').limit).toBe(50);
-  });
-
-  it('accepts a stale-selection error carrying versions', () => {
-    const err = {
-      code: 'stale_selection_version' as const,
-      message: 'stale',
-      expected_selection_version: 3,
-      current_selection_version: 5,
-    };
-    expect(strictValidate(siteHealthErrorSchema, err, 'err').current_selection_version).toBe(5);
   });
 
   it('rejects an unknown error code', () => {

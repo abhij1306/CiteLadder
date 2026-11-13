@@ -11,6 +11,8 @@ import { ApiError } from '@/lib/api/errors';
 import { createAppQueryClient } from '@/lib/api/query-client';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import { makeProject } from '@/test/fixtures/project';
+import { focusByKeyboard } from '@/test/keyboard-focus';
+import { roles } from '@/services/api/src/config/workspaces.json';
 
 import { DemandProjection } from './demand-projection';
 
@@ -30,8 +32,14 @@ function signalRows() {
 /** The pager's announced position, e.g. "1–10 of 28 signals". */
 function pagerSummary() {
   return screen.getByText(
-    (_, node) => node?.tagName === 'OUTPUT' && /signals$/.test(node.textContent ?? ''),
+    (_, node) =>
+      node?.tagName === 'OUTPUT' && /^\d+–\d+ of .* signals$/.test(node.textContent ?? ''),
   ).textContent;
+}
+
+/** The signal row naming `target`: the row itself is the Inspect target. */
+async function findSignalRow(target: string) {
+  return (await screen.findByText(target)).closest('tr')!;
 }
 
 function rankOf(row: HTMLElement) {
@@ -43,6 +51,8 @@ function rankOf(row: HTMLElement) {
 const project = vi.hoisted(() => ({
   id: '11111111-1111-4111-8111-111111111111',
   workspace_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  /** What the reader's role may do in the workspace. */
+  capabilities: ['read', 'run', 'write'] as readonly string[],
 }));
 
 vi.mock('@/components/integrations/data-source-setup', () => ({
@@ -61,6 +71,7 @@ vi.mock('@/lib/project/project-context', () => {
     useActiveWorkspaceId: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
     useOptionalProjectContext: context,
     useProjectContext: context,
+    useWorkspaceCapability: (capability: string) => project.capabilities.includes(capability),
   };
 });
 
@@ -161,6 +172,20 @@ const snapshot = {
       action_id: null,
     },
   ],
+  // Not the shipped thresholds: each rule must state what the server sent.
+  detector_policy: {
+    striking_distance: { min_impressions: 50, min_position: 4, max_position: 15 },
+    cannibalization: { min_page_impressions: 20, min_page_share: 0.1 },
+    ctr_gap: {
+      min_candidate_impressions: 100,
+      relative_threshold: 0.25,
+      absolute_threshold: 0.03,
+      min_cohort_rows: 20,
+      min_cohort_impressions: 500,
+    },
+    low_ctr: { min_impressions: 10, ctr_threshold: 0.02, max_signals: 50 },
+    trends: { window_days: 21, required_days: 42, emerging_ratio: 1.5, declining_ratio: 0.67 },
+  },
 };
 
 import { demandApi } from '@/lib/api/demand';
@@ -185,6 +210,7 @@ describe('DemandProjection', () => {
     // The filter and selection live in the address, which outlives a render.
     window.history.replaceState(null, '', '/demand');
     project.id = '11111111-1111-4111-8111-111111111111';
+    project.capabilities = roles.member;
     vi.mocked(demandApi.getLatest).mockResolvedValue(snapshot);
   });
 
@@ -248,8 +274,6 @@ describe('DemandProjection', () => {
       expect.stringMatching(/^2school feesQuery · \/feesLow CTR10000\.0%12\.0/),
     ]);
     expect(within(table).queryByText('https://example.com/ai-tools')).not.toBeInTheDocument();
-    const legend = screen.getByRole('region', { name: 'Signal types' });
-    expect(within(legend).getByText(/Earns many impressions but few clicks/)).toBeInTheDocument();
     expect(screen.queryByText('Within reach of the top results')).not.toBeInTheDocument();
 
     // Tabular metrics
@@ -267,14 +291,27 @@ describe('DemandProjection', () => {
     expect(screen.queryByText(/Demand overview/i)).not.toBeInTheDocument();
   });
 
+  it('explains the signal types before the table, unchanged by the filter', async () => {
+    renderProjection();
+
+    const hint = await screen.findByRole('button', { name: 'Signal types' });
+    expect(
+      hint.compareDocumentPosition(signalTable()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /^Striking distance/i }));
+    focusByKeyboard(screen.getByRole('button', { name: 'Signal types' }));
+    // Both of the snapshot's types, though the filter now shows only one.
+    expect((await screen.findByRole('tooltip')).textContent).toMatch(
+      /Striking distance: .*Low CTR: Earns many impressions but few clicks/,
+    );
+  });
+
   it('keeps the reading and query relevance in the evidence drawer, quoting no unobserved benchmark', async () => {
     // `school fees` carries ctr but no `cohort_median_ctr` — the reading must
     // describe the gap without inventing a benchmark to compare against.
     renderProjection();
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Inspect evidence for school fees' }),
-    );
+    fireEvent.click(await findSignalRow('school fees'));
 
     const reading = await screen.findByRole('region', { name: 'Reading' });
     expect(within(reading).getByText(/Earns many impressions but few clicks/)).toBeInTheDocument();
@@ -284,26 +321,62 @@ describe('DemandProjection', () => {
     expect(relevance).toHaveTextContent('Missing from title or H1: fees, school');
   });
 
-  it('opens a promoted signal’s Action from its row and asks about the rest', async () => {
+  it('opens a promoted signal’s Action from its row menu and asks about the rest', async () => {
+    const user = userEvent.setup();
     renderProjection();
 
     await screen.findByText('ai marketing tools');
-    const [promoted, unpromoted] = signalRows();
-    // The promoted signal's row opens its Action instead of asking the agent.
-    const link = within(promoted!).getByRole('link', {
-      name: 'Open the Action for ai marketing tools',
-    });
-    expect(link.getAttribute('href')).toContain(
-      '/agent/actions/66666666-6666-4666-8666-666666666666',
-    );
-    expect(within(promoted!).queryByRole('link', { name: /^Ask agent/ })).not.toBeInTheDocument();
-    // An unpromoted signal is asked about instead.
+    // The promoted signal's menu opens its Action instead of asking the agent.
+    await user.click(screen.getByRole('button', { name: 'Actions for ai marketing tools' }));
+    const menu = await screen.findByRole('menu');
     expect(
-      within(unpromoted!).getByRole('link', { name: 'Ask agent about school fees' }),
+      within(menu)
+        .getByRole('menuitem', { name: 'Open the Action for ai marketing tools' })
+        .getAttribute('href'),
+    ).toContain('/agent/actions/66666666-6666-4666-8666-666666666666');
+    expect(within(menu).queryByRole('menuitem', { name: /^Ask agent/ })).not.toBeInTheDocument();
+    // Opening the menu is not a press on the row: no evidence drawer opens.
+    expect(screen.queryByRole('dialog', { name: 'Signal evidence' })).not.toBeInTheDocument();
+    await user.keyboard('{Escape}');
+
+    // An unpromoted signal is asked about instead.
+    await user.click(screen.getByRole('button', { name: 'Actions for school fees' }));
+    const other = await screen.findByRole('menu');
+    expect(
+      within(other).getByRole('menuitem', { name: 'Ask agent about school fees' }),
     ).toBeVisible();
     expect(
-      within(unpromoted!).queryByRole('link', { name: /^Open the Action/ }),
+      within(other).queryByRole('menuitem', { name: /^Open the Action/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it('inspects a signal from the keyboard on its focused row', async () => {
+    const user = userEvent.setup();
+    renderProjection();
+
+    const row = await findSignalRow('school fees');
+    row.focus();
+    await user.keyboard('{Enter}');
+
+    const drawer = await screen.findByRole('dialog', { name: 'Signal evidence' });
+    expect(within(drawer).getByRole('region', { name: 'Reading' })).toHaveTextContent(
+      'Earns many impressions but few clicks',
+    );
+  });
+
+  it('opens the evidence from a press on the row, but not from selecting its text', async () => {
+    const user = userEvent.setup();
+    renderProjection();
+    const row = await findSignalRow('school fees');
+
+    const selection = window.getSelection()!;
+    selection.selectAllChildren(row);
+    fireEvent.click(row);
+    expect(screen.queryByRole('dialog', { name: 'Signal evidence' })).not.toBeInTheDocument();
+
+    selection.removeAllRanges();
+    await user.click(row);
+    expect(await screen.findByRole('dialog', { name: 'Signal evidence' })).toBeVisible();
   });
 
   it('keeps a signal’s priority rank stable when a filter hides the signals above it', async () => {
@@ -385,7 +458,7 @@ describe('DemandProjection', () => {
         detectors: {
           ...snapshot.summary.detectors,
           query_trends: detector('insufficient_history', [
-            'At least 28 days of coverage are required.',
+            'At least 42 days of coverage are required.',
           ]),
         },
       },
@@ -395,9 +468,10 @@ describe('DemandProjection', () => {
 
     await user.hover(await screen.findByRole('button', { name: 'How the Trends detector works' }));
 
-    // The rule first, then the snapshot's own reason the detector is held back.
-    expect((await screen.findByRole('tooltip')).textContent).toMatch(
-      /last two 14-day windows\..* At least 28 days of coverage are required\.$/,
+    // The rule, in the server's thresholds, then the snapshot's own reason the
+    // detector is held back.
+    expect((await screen.findByRole('tooltip')).textContent).toBe(
+      'Queries whose impressions grew 1.5× or more, or fell to 0.67× or less, between the last two 21-day windows. Needs 42 days of continuous Search Console coverage. At least 42 days of coverage are required.',
     );
   });
 
@@ -422,7 +496,7 @@ describe('DemandProjection', () => {
       screen.getByRole('button', { name: 'How the CTR gap and Low CTR detectors work' }),
     );
     expect((await screen.findByRole('tooltip')).textContent).toMatch(
-      /^CTR gap: Queries with .* No cohort reached 20 queries\. Low CTR: Non-branded queries and pages /,
+      /^CTR gap: Queries with .*, and 3 points, below .* No cohort reached 20 queries\. Low CTR: Non-branded queries and pages /,
     );
   });
 
@@ -547,9 +621,7 @@ describe('DemandProjection', () => {
     });
     renderProjection();
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Inspect evidence for ai marketing tools' }),
-    );
+    fireEvent.click(await findSignalRow('ai marketing tools'));
 
     const drawer = await screen.findByRole('dialog', { name: 'Signal evidence' });
     expect(within(drawer).getByText('Search Console performance')).toBeInTheDocument();
@@ -585,6 +657,14 @@ describe('DemandProjection', () => {
     // must NOT silently refetch the identical snapshot as if it had rebuilt.
     expect(await screen.findByText(/Recompute queued/i)).toBeInTheDocument();
     expect(vi.mocked(demandApi.getLatest).mock.calls).toHaveLength(fetchesBeforeRecompute);
+  });
+
+  it('shows a viewer the signals without offering a recompute', async () => {
+    project.capabilities = roles.viewer;
+    renderProjection();
+
+    expect(await findSignalCount('2 signals observed')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Recompute signals/i })).toBeNull();
   });
 
   it('shows no snapshot from the project that was just switched away from', async () => {

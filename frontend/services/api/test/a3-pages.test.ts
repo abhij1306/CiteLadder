@@ -374,7 +374,7 @@ describe('A3 persisted Pages join', () => {
       vi.useRealTimers();
     }
   });
-  it('exports in one bounded read exactly the CSV that walking every page cursor yields', async () => {
+  it('streams an export of exactly the CSV that walking every page cursor yields', async () => {
     const paged: Awaited<ReturnType<typeof pagesRead>>['items'] = [];
     let cursor: string | null = null,
       pages = 0;
@@ -423,15 +423,18 @@ describe('A3 persisted Pages join', () => {
           },
         },
       );
-    const response = await exportCsv();
-    expect(response.status).toBe(200);
-    expect(await response.text()).toBe(expected + '\r\n');
-    const bound = crawlLogs.max_export_rows;
-    crawlLogs.max_export_rows = pages - 1;
+    const { max_export_rows: bound, export_batch_rows: batch } = crawlLogs;
+    // One-row batches: every row after the first continues from the previous batch's keyset.
+    crawlLogs.export_batch_rows = 1;
     try {
+      const response = await exportCsv();
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(expected + '\r\n');
+      crawlLogs.max_export_rows = pages - 1;
       expect((await exportCsv()).status).toBe(422);
     } finally {
       crawlLogs.max_export_rows = bound;
+      crawlLogs.export_batch_rows = batch;
     }
   });
   it('keeps timezone mismatches non-comparable, flagged absence unavailable, and missing connections distinct', async () => {
@@ -472,7 +475,10 @@ describe('A3 persisted Pages join', () => {
     await db
       .updateTable('integration_import_artifacts')
       .set({
-        extract_metadata: JSON.stringify({ timeZone: 'UTC', analytics_quality: ['thresholding'] }),
+        extract_metadata: JSON.stringify({
+          timeZone: 'UTC',
+          analytics_quality: ['thresholding'],
+        }),
       })
       .where('id', '=', artifactId)
       .execute();
@@ -609,6 +615,48 @@ describe('A3 persisted Pages join', () => {
       'https://example.test/guide?utm_source=x',
     ])
       expect(hash(canonicalPage(url)!)).toBe(canonicalIdentity(url).hash);
+  });
+  it('answers not_connected over MCP for a project with no AI-traffic source, and figures for one with a source', async () => {
+    const bare = await fixtures.crawl();
+    const read = (tenant: SiteSeed, tool: string, args: Record<string, unknown>) =>
+      dispatchTool(
+        db,
+        {
+          kind: 'member' as const,
+          userId: tenant.userId,
+          workspaceId: tenant.workspaceId,
+          projectId: tenant.projectId,
+        },
+        tool,
+        { project_id: tenant.projectId, ...args },
+        'https://app.example.test',
+      );
+    const notConnected = { state: 'unavailable', reason: 'not_connected' };
+    expect(await read(bare, 'read_crawl_logs', { view: 'summary' })).toMatchObject(notConnected);
+    expect(await read(bare, 'read_ai_traffic_pages', filters)).toMatchObject(notConnected);
+    expect(
+      await read(bare, 'read_ai_traffic_url', { url: 'https://example.test/guide', ...filters }),
+    ).toMatchObject(notConnected);
+    expect(await read(seed, 'read_crawl_logs', { view: 'summary', ...filters })).toMatchObject({
+      state: 'available',
+      connection: 'connected',
+    });
+    expect(await read(seed, 'read_ai_traffic_pages', filters)).toMatchObject({
+      state: 'available',
+    });
+    // Revoking the source keeps its retained history readable.
+    const setStatus = (status: string) =>
+      db.updateTable('crawl_log_sources').set({ status }).where('id', '=', sourceId).execute();
+    await setStatus('revoked');
+    try {
+      expect(await read(seed, 'read_crawl_logs', { view: 'summary', ...filters })).toMatchObject({
+        state: 'available',
+        connection: 'not_connected',
+        requests: 7,
+      });
+    } finally {
+      await setStatus('active');
+    }
   });
 });
 
@@ -819,7 +867,10 @@ describe('A3 persisted insight gates', () => {
     await db
       .updateTable('integration_import_artifacts')
       .set({
-        extract_metadata: JSON.stringify({ timeZone: 'UTC', analytics_quality: ['thresholding'] }),
+        extract_metadata: JSON.stringify({
+          timeZone: 'UTC',
+          analytics_quality: ['thresholding'],
+        }),
       })
       .where('id', '=', artifactId)
       .execute();

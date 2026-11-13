@@ -26,6 +26,8 @@ export type FinishReason =
   | 'tool_error'
   | 'content_filter'
   | 'cancelled'
+  /** The provider stopped before finishing and expects the exchange to continue. */
+  | 'paused'
   | 'error'
   | 'unknown';
 export type Usage = {

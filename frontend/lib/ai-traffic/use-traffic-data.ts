@@ -4,7 +4,12 @@ import { useProjectScope } from '@/lib/project/active-project-scope';
 import { aiTrafficApi, aiTrafficQueries } from '@/lib/api/ai-traffic';
 import { stringUrlCodec, optionalStringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { saveBlob } from '@/lib/download';
-import { TRAFFIC_RANGES, VERIFICATION_OPTIONS } from '@/lib/config/crawl-logs';
+import {
+  TRAFFIC_PAGE_SORTS,
+  TRAFFIC_RANGES,
+  VERIFICATION_OPTIONS,
+  type TrafficPagesSort,
+} from '@/lib/config/crawl-logs';
 export type TrafficDataTab = 'overview' | 'crawlers' | 'activity' | 'pages';
 const rangeCodec = stringUrlCodec(
   TRAFFIC_RANGES.map((t) => t.value),
@@ -25,10 +30,7 @@ function useTrafficSelection() {
   const [pattern, setPattern] = useUrlState('pattern', optionalStringUrlCodec);
   const [sort, setSort] = useUrlState(
     'sort',
-    stringUrlCodec(
-      ['requests_desc', 'sessions_desc', 'key_events_desc', 'citations_desc', 'url_asc'],
-      'requests_desc',
-    ),
+    stringUrlCodec<TrafficPagesSort>(TRAFFIC_PAGE_SORTS, TRAFFIC_PAGE_SORTS[0]),
   );
   return {
     range,
@@ -64,14 +66,13 @@ function selectedFilters(tab: TrafficDataTab, selection: ReturnType<typeof useTr
 function viewFilters(tab: TrafficDataTab, selection: ReturnType<typeof useTrafficSelection>) {
   if (tab === 'crawlers') return { purpose: selection.purpose };
   if (tab === 'pages') return { sort: selection.sort, pattern: selection.pattern };
-  if (tab === 'activity') {
-    const status = selection.status;
-    return {
-      bot_id: selection.bot,
-      status: status && /^[1-5]\d{2}$/u.test(status) ? Number(status) : undefined,
-    };
-  }
+  if (tab === 'activity')
+    return { bot_id: selection.bot, status: trafficStatusCode(selection.status) };
   return {};
+}
+/** The typed status as the code the Activity read filters by; anything but a 100–599 code filters nothing. */
+export function trafficStatusCode(status: string | null): number | undefined {
+  return status && /^[1-5]\d{2}$/u.test(status) ? Number(status) : undefined;
 }
 /**
  * Start the Overview tab's reads together, before the tab is chosen.

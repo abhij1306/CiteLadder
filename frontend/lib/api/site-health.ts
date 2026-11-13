@@ -21,8 +21,12 @@ import {
   architectureSchema,
   changeSummarySchema,
   changesPageSchema,
+  crawlScheduleSchema,
   inventoryPageSchema,
+  issueFixesSchema,
+  issueFixProgressSchema,
   issueHistoryPageSchema,
+  issueRerunResponseSchema,
   monitoredUrlsResponseSchema,
   pageDetailSchema,
   pagesPageSchema,
@@ -33,12 +37,11 @@ import {
   siteHealthOverviewSchema,
   siteIssueDetailSchema,
   siteIssuesPageSchema,
-  urlPreviewResponseSchema,
   robotsHistoryPageSchema,
 } from '@citeladder/contracts/site-health';
 import type {
+  CrawlScheduleUpdateRequest,
   SiteCrawlCreateRequest,
-  UrlPreviewRequest,
 } from '@citeladder/contracts/site-health-requests';
 import { strictValidate } from '@citeladder/contracts/validation';
 import { definedQuery, withQuery } from './shared';
@@ -46,8 +49,14 @@ import type {
   AeoReadiness,
   ChangeSummary,
   ChangesPage,
+  CrawlSchedule,
   InventoryPage,
+  IssueFixes,
+  IssueFixProgress,
   IssueHistoryPage,
+  IssueRerunResponse,
+  IssueSection,
+  IssueSort,
   MonitoredUrlsResponse,
   PageDetail,
   PagesPage,
@@ -59,14 +68,13 @@ import type {
   SiteHealthOverview,
   SiteIssueDetail,
   SiteIssuesPage,
-  UrlPreviewResponse,
 } from '@citeladder/contracts';
 
 /**
- * A new crawl, or with `recrawl_of` a rerun of that crawl's frozen scope and
- * settings. `recrawl_of` picks the route; it is never part of the body.
+ * The one crawl action: it audits the project's tracked pages. Without a
+ * robots choice the crawl keeps the newest site crawl's.
  */
-export type StartCrawlInput = SiteCrawlCreateRequest & { recrawl_of?: string };
+export type StartCrawlInput = SiteCrawlCreateRequest;
 
 /** Keyset inventory query params. `limit<=200`, ordering is URL-only. */
 export type InventoryParams = {
@@ -89,6 +97,8 @@ export type PagesParams = {
   monitored?: boolean;
   /** v2 P1: filter to one classified page type (omitted = all types). */
   page_kind?: string;
+  /** Case-insensitive part of the page URL. */
+  query?: string;
   /** Ordering. Part of the cursor fingerprint, so changing it resets paging. */
   sort?: PagesSort;
 };
@@ -104,7 +114,8 @@ export type IssuesParams = {
   site_url_id?: string;
   finding_class?: 'defect' | 'advisory';
   page_kind?: string; // v2 P1: issues affecting one classified page type
-  detail_limit?: number; // embeds the first row's detail as `first_issue`
+  section?: IssueSection; // the Issues tab
+  sort?: IssueSort;
 };
 
 /** Keyset params for a grouped issue's affected-URL page and a URL's issue history. */
@@ -120,23 +131,14 @@ export const siteHealthApi = {
     );
     return strictValidate(robotsHistoryPageSchema, res, 'siteHealth.getRobotsHistory');
   },
-  createCrawl: async ({ recrawl_of, ...input }: StartCrawlInput, options?: ApiRequestOptions) => {
-    const path = recrawl_of ? `/site-crawls/${recrawl_of}/recrawl` : '/site-crawls';
-    const res = await apiClient.post<SiteCrawl>(path, recrawl_of ? undefined : input, options);
+  createCrawl: async (input: StartCrawlInput, options?: ApiRequestOptions) => {
+    const res = await apiClient.post<SiteCrawl>('/site-crawls', input, options);
     const crawl = strictValidate(siteCrawlSchema, res, 'siteHealth.createCrawl');
     startInteractiveWork(`/site-crawls/${crawl.id}/run`, {
       ...options,
       timeoutMs: SITE_HEALTH_EXECUTION_REQUEST_TIMEOUT_MS,
     });
     return crawl;
-  },
-  previewUrls: async (input: UrlPreviewRequest, options?: ApiRequestOptions) => {
-    const res = await apiClient.post<UrlPreviewResponse>(
-      '/site-crawls/url-preview',
-      input,
-      options,
-    );
-    return strictValidate(urlPreviewResponseSchema, res, 'siteHealth.previewUrls');
   },
   listCrawls: async (params: CrawlListParams, options?: ApiRequestOptions) => {
     const path = withQuery('/site-crawls', definedQuery(params));
@@ -166,6 +168,25 @@ export const siteHealthApi = {
       options,
     );
     return strictValidate(monitoredUrlsResponseSchema, res, 'siteHealth.getMonitoredUrls');
+  },
+  getCrawlSchedule: async (projectId: string, options?: ApiRequestOptions) => {
+    const res = await apiClient.get<CrawlSchedule>(
+      `/projects/${projectId}/crawl-schedule`,
+      options,
+    );
+    return strictValidate(crawlScheduleSchema, res, 'siteHealth.getCrawlSchedule');
+  },
+  updateCrawlSchedule: async (
+    projectId: string,
+    input: CrawlScheduleUpdateRequest,
+    options?: ApiRequestOptions,
+  ) => {
+    const res = await apiClient.put<CrawlSchedule>(
+      `/projects/${projectId}/crawl-schedule`,
+      input,
+      options,
+    );
+    return strictValidate(crawlScheduleSchema, res, 'siteHealth.updateCrawlSchedule');
   },
   getPages: async (crawlId: string, params?: PagesParams, options?: ApiRequestOptions) => {
     const path = withQuery(`/site-crawls/${crawlId}/pages`, definedQuery(params));
@@ -203,6 +224,27 @@ export const siteHealthApi = {
     const path = withQuery(`/site-crawls/${crawlId}/issues/${groupId}`, definedQuery(params));
     const res = await apiClient.get<SiteIssueDetail>(path, options);
     return strictValidate(siteIssueDetailSchema, res, 'siteHealth.getIssue');
+  },
+  getIssueFixes: async (crawlId: string, options?: ApiRequestOptions) => {
+    const res = await apiClient.get<IssueFixes>(`/site-crawls/${crawlId}/issue-fixes`, options);
+    return strictValidate(issueFixesSchema, res, 'siteHealth.getIssueFixes');
+  },
+  markIssueFixed: async (crawlId: string, groupId: string, options?: ApiRequestOptions) => {
+    const res = await apiClient.post<IssueFixProgress>(
+      `/site-crawls/${crawlId}/issues/${groupId}/mark-fixed`,
+      undefined,
+      options,
+    );
+    return strictValidate(issueFixProgressSchema, res, 'siteHealth.markIssueFixed');
+  },
+  /** Re-run all: one re-audit crawl of every tracked page the issue is still open on (202). */
+  rerunIssue: async (crawlId: string, groupId: string, options?: ApiRequestOptions) => {
+    const res = await apiClient.post<IssueRerunResponse>(
+      `/site-crawls/${crawlId}/issues/${groupId}/rerun`,
+      undefined,
+      options,
+    );
+    return strictValidate(issueRerunResponseSchema, res, 'siteHealth.rerunIssue');
   },
   getIssueHistory: async (
     crawlId: string,

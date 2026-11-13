@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vite-plus/test';
 
-import { absenceBasis, presenceLabel } from './source-pages';
+import { absenceBasis, presenceLabel, standingLabel } from './source-pages';
 
 /**
  * "Nobody looked" and "we looked and you are not there" are different
@@ -11,6 +11,12 @@ describe('cited-page vocabulary', () => {
   it('never renders an unread page as an absence', () => {
     expect(presenceLabel('not_inspected')).toBe('Not inspected');
     expect(presenceLabel('not_detected')).toBe('Not found on the page');
+  });
+
+  it('says a name too short to judge was not judged, never that it is absent', () => {
+    expect(presenceLabel('not_assessable')).toBe('Name too short to judge on a page');
+    expect(standingLabel('not_assessable')).toBe('Not assessable');
+    expect(absenceBasis('not_assessable', 'none', 4200)).toBeNull();
   });
 
   it('drops a token it has no words for rather than leaking it', () => {

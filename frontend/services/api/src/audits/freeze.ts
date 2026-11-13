@@ -13,7 +13,7 @@ import { approvedEndpoint } from '../providers/connections.ts';
 import { auditPolicy, auditSettings } from './config.ts';
 import type { AuditInput } from './inputs.ts';
 import { frozenConfiguration } from './frozen-configuration.ts';
-import { freezeCommerceContext } from '../commerce/audit-context.ts';
+import { freezeCatalogRevision, freezeCommerceContext } from '../commerce/audit-context.ts';
 import { frozenEntityMatching, projectEntityMatching } from '../analysis/entity-matching.ts';
 import { strings } from '../db/json.ts';
 import { admittedFactCheck, admittedPerceptionVersions } from '../perception/admission.ts';
@@ -88,12 +88,16 @@ export type FrozenRoute = {
   connection_id: string;
   base_url: string;
 };
-async function loadPrompts(
+/**
+ * The prompts a launch measures, shared with the estimate: the active, enabled
+ * prompts in the project that the input names. The caller requires a prompt
+ * set or prompt IDs.
+ */
+export async function launchPrompts(
   db: Database,
   workspaceId: string,
   projectId: string,
-  input: AuditInput,
-  settings: ReturnType<typeof auditSettings>,
+  input: Pick<AuditInput, 'prompt_ids' | 'prompt_set_id'>,
 ) {
   let query = db
     .selectFrom('prompts as p')
@@ -108,11 +112,21 @@ async function loadPrompts(
     .orderBy('p.id');
   if (input.prompt_ids.length) query = query.where('p.id', 'in', input.prompt_ids);
   else if (input.prompt_set_id) query = query.where('p.prompt_set_id', '=', input.prompt_set_id);
-  else throw invalid('Select a prompt set or prompt IDs');
-  const selected = await query.execute();
-  if (input.prompt_ids.length && new Set(input.prompt_ids).size !== selected.length)
+  else return [];
+  return query.execute();
+}
+async function loadPrompts(
+  db: Database,
+  workspaceId: string,
+  projectId: string,
+  input: AuditInput,
+  settings: ReturnType<typeof auditSettings>,
+) {
+  if (!input.prompt_ids.length && !input.prompt_set_id)
+    throw invalid('Select a prompt set or prompt IDs');
+  const prompts = await launchPrompts(db, workspaceId, projectId, input);
+  if (input.prompt_ids.length && new Set(input.prompt_ids).size !== prompts.length)
     throw invalid('Selected prompts must be active, enabled and in this project');
-  const prompts = selected;
   if (!prompts.length) throw invalid('No enabled prompts to audit');
   if (prompts.some((prompt) => Array.from(prompt.text).length > settings.max_prompt_chars))
     throw invalid('Selected prompts exceed the configured length limit');
@@ -264,6 +278,7 @@ async function loadBrandContext(
       ? db
           .selectFrom('brand_aliases')
           .select('alias')
+          .where('workspace_id', '=', workspaceId)
           .where('brand_id', '=', brand.id)
           .orderBy('id')
           .execute()
@@ -271,18 +286,21 @@ async function loadBrandContext(
     db
       .selectFrom('owned_domains')
       .select('domain')
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', project.id)
       .orderBy('id')
       .execute(),
     db
       .selectFrom('unintended_domains')
       .select('domain')
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', project.id)
       .orderBy('id')
       .execute(),
     db
       .selectFrom('competitors')
       .select(['id', 'name', 'aliases', 'domains'])
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', project.id)
       .orderBy('id')
       .execute(),
@@ -391,6 +409,7 @@ export async function prepareAudit(
   const brand = await db
     .selectFrom('brands')
     .selectAll()
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', project.id)
     .executeTakeFirst();
   const { aliases, owned, unintended, competitors, profile, factCheck } = await loadBrandContext(
@@ -407,7 +426,7 @@ export async function prepareAudit(
     retrieval_enabled: true,
     max_output_tokens: settings.audit_max_output_tokens,
     timeout_seconds: settings.audit_timeout_seconds,
-    repetitions: settings.audit_repetitions,
+    repetitions,
     answer_instruction: auditPolicy.constants.audit_answer_instruction,
     max_attempts: settings.max_attempts,
   };
@@ -468,6 +487,7 @@ export async function prepareAudit(
         { ...route, ...auditPolicy.route_policies[route.logical_engine] },
       ]),
     ),
+    ...(await freezeCatalogRevision(db, { workspaceId, projectId: project.id })),
     ...(input.audit_scope === 'commerce'
       ? {
           commerce_measurement: await freezeCommerceContext(

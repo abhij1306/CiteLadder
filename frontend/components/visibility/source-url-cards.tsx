@@ -1,5 +1,3 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import { Bot } from 'lucide-react';
 import type { z } from 'zod';

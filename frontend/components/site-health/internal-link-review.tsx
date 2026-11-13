@@ -63,7 +63,7 @@ export function InternalLinkReview({
           <Stack as="section">
             <EditorialSectionHeader title="Source passage" />
             {link.placement ? (
-              <p className="type-body">
+              <p className="type-body text-ink">
                 {link.placement.text.slice(0, link.placement.anchor_start)}
                 <mark>{link.anchor}</mark>
                 {link.placement.text.slice(link.placement.anchor_start + link.anchor.length)}
@@ -77,7 +77,7 @@ export function InternalLinkReview({
           <PageSummary heading="Add a link to" page={link.target} />
           <Stack as="section">
             <EditorialSectionHeader title="Suggested anchor text" />
-            <p className="type-body">{link.anchor}</p>
+            <p className="type-body text-ink">{link.anchor}</p>
             <p className="type-caption">
               {link.target.contextual_inbound === null
                 ? 'Existing contextual links to the destination were not measured.'
@@ -87,18 +87,19 @@ export function InternalLinkReview({
                 : 'Verify the source text before using this historical suggestion.'}
             </p>
           </Stack>
+          {/* One primary: the ready-to-paste link. Its parts are secondary. */}
           <Inline className="flex-wrap">
-            <CopyButton variant="primary" value={link.anchor}>
-              Copy anchor
-            </CopyButton>
-            <CopyButton variant="primary" value={link.target.url}>
-              Copy URL
-            </CopyButton>
             <CopyButton
               variant="primary"
               value={`<a href="${escapeHtml(link.target.url)}">${escapeHtml(link.anchor)}</a>`}
             >
               Copy HTML
+            </CopyButton>
+            <CopyButton variant="secondary" value={link.anchor}>
+              Copy anchor
+            </CopyButton>
+            <CopyButton variant="secondary" value={link.target.url}>
+              Copy URL
             </CopyButton>
             <Button asChild variant="secondary">
               <ProjectLink href={`/site/crawls/${crawlId}/pages/${link.source.site_url_id}`}>

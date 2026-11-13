@@ -11,6 +11,7 @@ import { policy } from '../config.ts';
 import { resolveSettingSpec, type SettingSource } from '../config/settings.ts';
 import { failureFacts, getLogger } from '../logging.ts';
 import { prepareSavedShelf } from '../commerce/shelf-recovery.ts';
+import { enqueueContentAngles } from '../content-gaps/enqueue.ts';
 
 /** Compose existing deterministic analysis, bounded shelf preparation and persisted downstream work. */
 export function auditProjections(
@@ -33,14 +34,17 @@ export function auditProjections(
         (trx, task, audit, artifactId) =>
           (prepared.get(task.id) ?? deriveExecution)(trx, task, audit, artifactId),
       );
-      await enqueueSourcePageInspection(db, workspaceId, auditId, env);
+      await enqueueAuditAnalytics(db, workspaceId, auditId, env);
       return result;
     },
   };
 }
 
-/** A finished audit queues its source-page inspection; an enqueue failure never fails finalize. */
-async function enqueueSourcePageInspection(
+/**
+ * A finished audit queues its source-page inspection and its content-angle
+ * refresh; an enqueue failure is logged and never fails finalize.
+ */
+async function enqueueAuditAnalytics(
   db: Database,
   workspaceId: string,
   auditId: string,
@@ -53,21 +57,34 @@ async function enqueueSourcePageInspection(
     .where('id', '=', auditId)
     .executeTakeFirst();
   if (!audit || !['completed', 'partially_completed'].includes(audit.status)) return;
-  try {
-    await enqueueTask(db, {
-      workspaceId,
-      projectId: audit.project_id,
-      kind: 'source_page_inspection',
-      payload: { audit_id: auditId },
-      keyParts: [audit.project_id, auditId],
-      maxAttempts: Number(
-        resolveSettingSpec(policy.analytics.worker_settings.task_max_attempts, env),
+  const maxAttempts = Number(
+    resolveSettingSpec(policy.analytics.worker_settings.task_max_attempts, env),
+  );
+  const enqueues = {
+    source_page_inspection: () =>
+      enqueueTask(db, {
+        workspaceId,
+        projectId: audit.project_id,
+        kind: 'source_page_inspection',
+        payload: { audit_id: auditId },
+        keyParts: [audit.project_id, auditId],
+        maxAttempts,
+      }),
+    content_angle_refresh: () =>
+      enqueueContentAngles(
+        db,
+        { workspaceId, projectId: audit.project_id },
+        { kind: 'audit', id: auditId, maxAttempts },
       ),
-    });
-  } catch (error) {
-    getLogger('workers.audit').warning('source_page_inspection_enqueue_failed', {
-      audit_id: auditId,
-      ...failureFacts(error),
-    });
+  };
+  for (const [kind, enqueue] of Object.entries(enqueues)) {
+    try {
+      await enqueue(); // NOSONAR -- Each enqueue is independent and logged on its own.
+    } catch (error) {
+      getLogger('workers.audit').warning(`${kind}_enqueue_failed`, {
+        audit_id: auditId,
+        ...failureFacts(error),
+      });
+    }
   }
 }

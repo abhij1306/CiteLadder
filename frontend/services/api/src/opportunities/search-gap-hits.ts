@@ -72,6 +72,7 @@ async function brandRevision(db: Database, scope: Scope) {
       .selectFrom('brands as b')
       .leftJoin('brand_aliases as a', 'a.brand_id', 'b.id')
       .select(['b.name', 'a.alias'])
+      .where('b.workspace_id', '=', scope.workspaceId)
       .where('b.project_id', '=', scope.projectId)
       .execute(),
     new WorkspaceScope(scope.workspaceId)

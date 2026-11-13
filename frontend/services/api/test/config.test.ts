@@ -51,17 +51,19 @@ describe('loadConfig', () => {
     }
   });
   it('refuses invalid JEV thresholds and destinations before accepting work', () => {
-    expect(() => loadConfig({ JEV_FAIL_BELOW: '0.5', JEV_FLAG_BELOW: '0.3' })).toThrow(
-      'Invalid JEV thresholds',
-    );
     expect(() =>
-      loadConfig({ JEV_DUPLICATE_FAIL_AT: '0.5', JEV_DUPLICATE_FLAG_AT: '0.7' }),
+      loadConfig({ APP_ENV: 'test', JEV_FAIL_BELOW: '0.5', JEV_FLAG_BELOW: '0.3' }),
     ).toThrow('Invalid JEV thresholds');
-    expect(() => loadConfig({ JEV_BASE_URL: 'http://example.test' })).toThrow('JEV_BASE_URL');
-    expect(() => loadConfig({ JEV_BASE_URL: 'not-a-url' })).toThrow(ConfigError);
+    expect(() =>
+      loadConfig({ APP_ENV: 'test', JEV_DUPLICATE_FAIL_AT: '0.5', JEV_DUPLICATE_FLAG_AT: '0.7' }),
+    ).toThrow('Invalid JEV thresholds');
+    expect(() => loadConfig({ APP_ENV: 'test', JEV_BASE_URL: 'http://example.test' })).toThrow(
+      'JEV_BASE_URL',
+    );
+    expect(() => loadConfig({ APP_ENV: 'test', JEV_BASE_URL: 'not-a-url' })).toThrow(ConfigError);
     for (const baseUrl of ['https://example.test?token=fixture', 'https://example.test#fragment'])
-      expect(() => loadConfig({ JEV_BASE_URL: baseUrl })).toThrow(ConfigError);
-    expect(() => loadConfig({ JEV_TIMEOUT_SECONDS: '61' })).toThrow(ConfigError);
+      expect(() => loadConfig({ APP_ENV: 'test', JEV_BASE_URL: baseUrl })).toThrow(ConfigError);
+    expect(() => loadConfig({ APP_ENV: 'test', JEV_TIMEOUT_SECONDS: '61' })).toThrow(ConfigError);
   });
   it('resolves native abuse budgets with case-insensitive aliases and positive integer bounds', () => {
     const spec = policy.abuse.crawl_create_limit;
@@ -74,24 +76,30 @@ describe('loadConfig', () => {
   });
 
   it('uses native config defaults when the environment is silent', () => {
-    const config = loadConfig({});
+    const config = loadConfig({ APP_ENV: 'test' });
     expect(config.database.poolSize).toBe(policy.settings.db_pool_size.default);
   });
 
   it('validates every owner setting at startup and hands owners the startup values', () => {
     // Settings no startup field reads still refuse a bad value before any work.
-    expect(() => loadConfig({ INTEGRATION_LEASE_TTL_SECONDS: '0' })).toThrow(ConfigError);
-    expect(() => loadConfig({ RUNNER_DB_POOL_SIZE: '5' })).toThrow(ConfigError);
-    expect(() => loadConfig({ ANALYTICS_HEARTBEAT_INTERVAL_SECONDS: '100000' })).toThrow(
-      'heartbeat_interval_seconds',
+    expect(() => loadConfig({ APP_ENV: 'test', INTEGRATION_LEASE_TTL_SECONDS: '0' })).toThrow(
+      ConfigError,
     );
-    const config = loadConfig({ ANALYTICS_TASK_MAX_ATTEMPTS: '7', RUNNER_BUDGET_SECONDS: '90' });
+    expect(() => loadConfig({ APP_ENV: 'test', RUNNER_DB_POOL_SIZE: '5' })).toThrow(ConfigError);
+    expect(() =>
+      loadConfig({ APP_ENV: 'test', ANALYTICS_HEARTBEAT_INTERVAL_SECONDS: '100000' }),
+    ).toThrow('heartbeat_interval_seconds');
+    const config = loadConfig({
+      APP_ENV: 'test',
+      ANALYTICS_TASK_MAX_ATTEMPTS: '7',
+      RUNNER_BUDGET_SECONDS: '90',
+    });
     expect(loadWorkerSettings(config.settings).taskMaxAttempts).toBe(7);
     expect(config.execution.budgetSeconds).toBe(90);
   });
 
   it('matches environment names case-insensitively.', () => {
-    expect(loadConfig({ db_pool_size: '7' }).database.poolSize).toBe(7);
+    expect(loadConfig({ APP_ENV: 'test', db_pool_size: '7' }).database.poolSize).toBe(7);
   });
 
   it('rejects a value at an exported exclusive maximum', () => {
@@ -101,9 +109,9 @@ describe('loadConfig', () => {
   });
 
   it('enforces field bounds and literal values', () => {
-    expect(() => loadConfig({ DB_POOL_SIZE: '51' })).toThrow(ConfigError);
-    expect(() => loadConfig({ DB_POOL_SIZE: 'twenty' })).toThrow(ConfigError);
-    expect(() => loadConfig({ DB_SSL_MODE: 'prefer' })).toThrow(ConfigError);
+    expect(() => loadConfig({ APP_ENV: 'test', DB_POOL_SIZE: '51' })).toThrow(ConfigError);
+    expect(() => loadConfig({ APP_ENV: 'test', DB_POOL_SIZE: 'twenty' })).toThrow(ConfigError);
+    expect(() => loadConfig({ APP_ENV: 'test', DB_SSL_MODE: 'prefer' })).toThrow(ConfigError);
   });
 
   it('refuses placeholder secrets outside development', () => {
@@ -113,10 +121,21 @@ describe('loadConfig', () => {
   });
 
   it('carries the backend timeouts into the pool', () => {
-    const options = poolOptions(loadConfig({ DB_STATEMENT_TIMEOUT_MS: '9000' }));
+    const options = poolOptions(loadConfig({ APP_ENV: 'test', DB_STATEMENT_TIMEOUT_MS: '9000' }));
     expect(options.statement_timeout).toBe(9000);
     expect(options.max).toBe(
       policy.settings.db_pool_size.default + policy.settings.db_max_overflow.default,
     );
+  });
+
+  it('sizes the API pool from its own settings even when it starts runner jobs', () => {
+    const config = loadConfig({
+      APP_ENV: 'test',
+      DB_POOL_SIZE: '9',
+      DB_MAX_OVERFLOW: '1',
+      RUNNER_DB_POOL_SIZE: '3',
+    });
+    expect(poolOptions(config).max).toBe(10);
+    expect(poolOptions(config, { execution: true }).max).toBe(3);
   });
 });

@@ -60,8 +60,8 @@ describe('GET /projects/{project_id}/ai-traffic', () => {
     expect(status).toBe(200);
     expect(body).toMatchObject({
       project_id: empty.projectId,
-      window_start: '',
-      window_end: '',
+      window_start: null,
+      window_end: null,
       granularity: 'day',
       referral_volume: [],
       referral_share: [],
@@ -71,6 +71,12 @@ describe('GET /projects/{project_id}/ai-traffic', () => {
       analyzer_version: policy.analytics.ai_referral_analyzer_version,
       formula_version: policy.analytics.ai_referral_formula_version,
     });
+    // A requested window no snapshot covers still resolves no window: never synced.
+    const window = await referrals(empty, empty.projectId, {
+      from: '2026-09-01',
+      to: '2026-09-07',
+    });
+    expect(window.body).toMatchObject({ window_start: null, window_end: null });
     expect((await referrals(tenant, empty.projectId)).status).toBe(404);
     const retired = await app.request(`/api/v1/projects/${empty.projectId}/ai-referrals`, {
       headers: {

@@ -1,5 +1,3 @@
-'use client';
-
 import { useQueryClient } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -253,13 +251,11 @@ export function DataSourceSetup({
   required,
   optional = [],
   title,
-  description,
   whenReady = null,
 }: Readonly<{
   required: readonly IntegrationProvider[];
   optional?: readonly IntegrationProvider[];
   title: string;
-  description: string;
   /** Shown in place of the setup card once every required source is ready. */
   whenReady?: ReactNode;
 }>) {
@@ -286,10 +282,10 @@ export function DataSourceSetup({
     );
 
   return (
-    <Card data-testid="data-source-setup">
+    // At the prose width, so a row's Connect button sits close to its text (D61).
+    <Card data-testid="data-source-setup" className="mx-auto w-full max-w-[var(--container-prose)]">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <p className="type-body max-w-[60ch]">{description}</p>
       </CardHeader>
       <Stack gap="compact">
         {oauth.error ? <Callout tone="negative">{oauthErrorMessage(oauth.error)}</Callout> : null}

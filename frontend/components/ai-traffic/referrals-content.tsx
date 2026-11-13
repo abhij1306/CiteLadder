@@ -31,7 +31,7 @@ export function AiReferralsContent({
   // work jumping a row's height the moment data arrived.
   const data = <AiReferralsDataRegion range={range} query={query} />;
   const region = notice ? (
-    <Stack gap="section">
+    <Stack gap="workspace">
       {notice}
       {data}
     </Stack>

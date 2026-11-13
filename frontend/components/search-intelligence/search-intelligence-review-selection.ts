@@ -5,14 +5,18 @@ import {
   searchDatasetKindsWith,
   type SearchDatasetKind,
 } from '@citeladder/contracts/search-intelligence';
-import { PRESET_OWNED_KINDS, SEARCH_DEFAULT_DEPTHS } from '@/lib/config/search-intelligence';
+import { PRESET_OWNED_KINDS } from '@/lib/config/search-intelligence';
 import { matchesCompetitor } from './search-intelligence-competitors';
 
 export const selectionKey = (selection: SearchDatasetSelectionRequest) =>
   `${selection.kind}:${selection.competitor_id ?? ''}`;
 
+/**
+ * The server sends every list dataset's depth, saved or default; any other
+ * kind has a fixed size the API sets, so its request depth is 1.
+ */
 function depthFor(data: SearchIntelligenceReadiness, kind: SearchDatasetKind) {
-  return data.preferences.depths[kind] ?? SEARCH_DEFAULT_DEPTHS[kind];
+  return data.preferences.depths[kind] ?? 1;
 }
 
 /**

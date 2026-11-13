@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 
 import { FieldGroup } from '@/components/ui/checklist-field';

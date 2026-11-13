@@ -1,7 +1,6 @@
-'use client';
-
+import type { DemandDetectorPolicy } from '@citeladder/contracts';
 import type { DemandSignal } from '@/lib/api/demand';
-import { numericMetric, signalTypeMeta } from '@/lib/demand/signals';
+import { numericMetric, signalDefinition } from '@/lib/demand/signals';
 import { availabilityLabel, formatCount } from '@/lib/format';
 import { AppGrid } from '@/components/ui/app-grid';
 import { Stack } from '@/components/ui/layout';
@@ -16,17 +15,23 @@ import { textRole } from '@/components/ui/typography';
  * substituting a default — a page whose whole premise is "versioned GSC
  * evidence" cannot print a count it did not measure.
  */
-export function SignalInsight({ signal }: Readonly<{ signal: DemandSignal }>) {
-  const detail = (DETAIL[signal.signal_type] ?? (() => null))(signal);
+export function SignalInsight({
+  signal,
+  policy,
+}: Readonly<{ signal: DemandSignal; policy: DemandDetectorPolicy }>) {
+  const detail = (DETAIL[signal.signal_type] ?? (() => null))(signal, policy);
   return (
     <Stack as="section" aria-label="Reading">
-      <p className={textRole('body')}>{detail ?? signalTypeMeta(signal.signal_type).definition}</p>
+      <p className={textRole('body')}>{detail ?? signalDefinition(signal.signal_type, policy)}</p>
       <QueryRelevanceEvidence signal={signal} />
     </Stack>
   );
 }
 
-const DETAIL: Record<string, (signal: DemandSignal) => string | null> = {
+const DETAIL: Record<
+  string,
+  (signal: DemandSignal, policy: DemandDetectorPolicy) => string | null
+> = {
   striking_distance: strikingDistanceDetail,
   property_relative_ctr_gap: ctrGapDetail,
   high_impression_low_ctr: ctrGapDetail,
@@ -51,11 +56,11 @@ function ctrGapDetail(signal: DemandSignal): string | null {
   return `A ${(ctr * 100).toFixed(1)}% click-through rate against a ${(median * 100).toFixed(1)}% median for this position band. The ranking is fine; the result is not being clicked.`;
 }
 
-function emergingDetail(signal: DemandSignal): string | null {
+function emergingDetail(signal: DemandSignal, { trends }: DemandDetectorPolicy): string | null {
   const prior = numericMetric(signal, 'prior_impressions');
   const recent = numericMetric(signal, 'recent_impressions');
   if (prior === null || recent === null || prior <= 0) return null;
-  return `Impressions grew ${Math.round(((recent - prior) / prior) * 100)}% (+${formatCount(recent - prior)}) across the last two 14-day windows.`;
+  return `Impressions grew ${Math.round(((recent - prior) / prior) * 100)}% (+${formatCount(recent - prior)}) across the last two ${trends.window_days}-day windows.`;
 }
 
 type QueryRelevance = {
@@ -88,7 +93,7 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
   if (!relevance) return null;
   if (relevance.state !== 'measured') {
     return (
-      <Stack gap="tight" className={panelClasses({ tone: 'well' })}>
+      <Stack gap="tight" className={panelClasses()}>
         <span className={textRole('label')}>Query relevance unavailable</span>
         <p className="type-caption">
           {relevance.reason === 'page_content_unavailable'
@@ -102,7 +107,7 @@ function QueryRelevanceEvidence({ signal }: Readonly<{ signal: DemandSignal }>) 
     new Set([...(relevance.absent_from_title ?? []), ...(relevance.absent_from_h1 ?? [])]),
   );
   return (
-    <section className={panelClasses({ tone: 'well' })} aria-label="Query relevance">
+    <section className={panelClasses()} aria-label="Query relevance">
       <Stack>
         <Stack gap="tight">
           <span className={textRole('label')}>Query relevance</span>

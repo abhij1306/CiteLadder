@@ -1,5 +1,5 @@
 /**
- * URL sanitiser for untrusted (model-generated) Markdown links.
+ * URL sanitiser and off-site check for untrusted (model-generated) Markdown links.
  *
  * Split out of `markdown.tsx` so that file exports only its component — a
  * component module that also exports plain functions cannot keep state across a
@@ -27,4 +27,55 @@ export function safeUrlTransform(url: string): string {
     return '';
   }
   return trimmed;
+}
+
+/**
+ * The comparable host of a URL or bare domain (`https://www.Acme.com/x` and
+ * `acme.com` both give `acme.com`); null when it names no host.
+ */
+export function linkHost(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    const host = url.hostname
+      .toLowerCase()
+      .replace(/\.$/, '')
+      .replace(/^www\./, '');
+    return host === '' ? null : host;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether opening a sanitised link should first confirm that the person is
+ * leaving CiteLadder: a link to a host outside `knownHosts` (or a subdomain of
+ * one) could carry project data a prompt-injected page asked the model to put
+ * in its address. Links that stay on `appOrigin` (relative paths, fragments)
+ * and inert links do not; `mailto:` always does, since its address can carry
+ * data to anyone.
+ *
+ * The href is resolved the way the browser will resolve it, so a "relative"
+ * value the browser reads as another host (`/\evil.example/x`) is judged by
+ * that host.
+ */
+export function leavesForUnknownHost(
+  href: string,
+  knownHosts: readonly string[],
+  appOrigin: string = globalThis.location?.origin ?? 'https://local.invalid',
+): boolean {
+  if (href === '') return false;
+  let url: URL;
+  try {
+    url = new URL(href, appOrigin);
+  } catch {
+    return true;
+  }
+  if (url.protocol === 'mailto:') return true;
+  if (url.origin === new URL(appOrigin).origin) return false;
+  const host = linkHost(url.href);
+  if (host === null) return true;
+  return !knownHosts.some((known) => host === known || host.endsWith(`.${known}`));
 }

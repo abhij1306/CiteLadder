@@ -1,5 +1,4 @@
-'use client';
-
+import { lazy } from 'react';
 import { useParams } from 'react-router-dom';
 
 import {
@@ -11,7 +10,8 @@ import {
 import { OutputPane } from '@/components/agent/output-pane';
 import { useFollowLatest } from '@/components/agent/use-follow-latest';
 import { useChatDetail } from '@/components/agent/use-chat-turns';
-import { ListScreen } from '@/components/layout/page-shell';
+import { ListScreen, RouteLoadingScreen } from '@/components/layout/page-shell';
+import { IslandUnavailable, LazyIsland } from '@/components/ui/lazy-island';
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
@@ -22,7 +22,18 @@ import type { AgentChatDetail } from '@/lib/api/agent';
 import { useProjectScope } from '@/lib/project/active-project-scope';
 import { useWorkspaceCapability } from '@/lib/project/project-context';
 
-/** One chat: a single thread with its documents inline and the composer pinned below. */
+/** A chat working on a page (`optimize_page`) has this document, and opens as its workspace (E1). */
+const PAGE_OUTPUT_KIND = 'page';
+
+// The workspace carries the editor (CodeMirror), so it loads only for a page chat.
+const PageWorkspace = lazy(() =>
+  import('./workspace/page-workspace').then(({ PageWorkspace }) => ({ default: PageWorkspace })),
+);
+
+/**
+ * One chat: a single thread with its documents inline and the composer pinned
+ * below, or, once a page chat has its page, the page workspace.
+ */
 export function ChatScreen() {
   const { chatId = '' } = useParams();
   const { workspaceId, projectId } = useProjectScope();
@@ -53,6 +64,27 @@ export function ChatScreen() {
         <Callout tone="negative">This chat belongs to another project.</Callout>
       </ListScreen>
     );
+  const page = query.data.outputs.find((output) => output.kind === PAGE_OUTPUT_KIND);
+  if (page)
+    return (
+      <LazyIsland
+        label="Page workspace"
+        defects="surface"
+        loading={<RouteLoadingScreen />}
+        failed={
+          <ListScreen>
+            <IslandUnavailable message="The page workspace could not load. Reload the page to try again." />
+          </ListScreen>
+        }
+      >
+        <PageWorkspace
+          key={`${workspaceId}:${chatId}`}
+          detail={query.data}
+          output={page}
+          workspaceId={workspaceId}
+        />
+      </LazyIsland>
+    );
   return (
     <ChatView key={`${workspaceId}:${chatId}`} detail={query.data} workspaceId={workspaceId} />
   );
@@ -69,6 +101,7 @@ function ChatView({
 
   return (
     <ListScreen
+      title={detail.chat.title}
       // Fill the viewport below the shell chrome: only the thread scrolls and
       // the composer stays under it. Kept identical in chat- and new-chat-screen.
       fill

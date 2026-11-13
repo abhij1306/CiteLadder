@@ -21,7 +21,6 @@ export async function executeInteractiveAudit(
   const signal = stopping ? AbortSignal.any([timeout, stopping]) : timeout;
   runtime.audits.worker_concurrency = Math.min(
     runtime.audits.worker_concurrency,
-    config.execution.poolSize,
     interactiveExecution.concurrency,
   );
   const worker = new AuditWorker(

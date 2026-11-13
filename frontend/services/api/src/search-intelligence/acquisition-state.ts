@@ -1,7 +1,6 @@
-import { randomUUID } from 'node:crypto';
-import { sql, type Selectable } from 'kysely';
+import type { Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
-import { jsonObjects, record, strings } from '../db/json.ts';
+import { jsonObjects, record } from '../db/json.ts';
 import type { QueueTask } from '../queue/task-queue.ts';
 import type {
   ProviderConnections,
@@ -9,24 +8,36 @@ import type {
   SearchIntelligenceCalls,
   SearchIntelligenceDatasets,
 } from '../generated/db-schema.ts';
-import { policy } from '../config.ts';
 import { runConnection } from './credentials.ts';
-import {
-  datasetKind,
-  isBacklinkKind,
-  pageEstimateMicrousd,
-  si,
-  usdUnits,
-  type DatasetKind,
-} from './requests.ts';
-import { INT4_MAX, normalizeResponse } from './normalization.ts';
+import { datasetKind, pageEstimateMicrousd, si } from './requests.ts';
+import { normalizeResponse } from './normalization.ts';
 import type { ResearchResponse } from './live.ts';
 import type { ProviderError } from '../providers/errors.ts';
 import { isDataError } from '../db/errors.ts';
 import { memberCan } from '../auth/workspace.ts';
-import { scalarText } from '../text-order.ts';
-import { SEARCH_DATASET_KINDS } from '@citeladder/contracts/search-intelligence';
 import { announceEvidence } from '../opportunities/evidence-announcement.ts';
+import {
+  costUpdate,
+  failureStates,
+  money,
+  rejectedCost,
+  retryAt,
+  stoppedRun,
+  summedCost,
+  uncertainRun,
+} from './acquisition-costs.ts';
+import { newAttempt, newCall, newDataset, newRows, publishedPage } from './acquisition-rows.ts';
+import {
+  callDataset,
+  callsQuery,
+  endedTask,
+  latestDispatch,
+  ownedTask,
+  priorOutcome,
+  runDatasets,
+  runQuery,
+  scopedDataset,
+} from './acquisition-reads.ts';
 
 /** Datasets whose rows say whether the project ranks for a search. */
 const KEYWORD_EVIDENCE_KINDS = new Set(['missing_keywords', 'ranking_keywords', 'shared_keywords']);
@@ -46,83 +57,7 @@ export type PreparedResearch =
       ordinal: number;
       connection: Selectable<ProviderConnections>;
     };
-/** Provider refusals that every later call on the same connection would repeat. */
-const REFUSED_CODES = new Set([
-  'auth_failure',
-  policy.dataforseo.constants.error_account_unavailable,
-]);
 const terminal = new Set(['succeeded', 'failed', 'partial', 'cancelled', 'uncertain']);
-/** What one failed send means for the call and the run. */
-function failureStates(error: ProviderError, ordinal: number) {
-  const uncertain = ['connection', 'timeout'].includes(error.code),
-    rateLimited = error.code === 'rate_limit',
-    retry = rateLimited && ordinal <= si.rate_limit_retries;
-  let attempt = 'failed';
-  if (uncertain) attempt = 'uncertain';
-  else if (rateLimited) attempt = 'rate_limited';
-  let callStatus = 'failed';
-  if (retry) callStatus = 'intent';
-  else if (uncertain) callStatus = 'uncertain';
-  // Every remaining call would use the same refused credential or account.
-  const refused = REFUSED_CODES.has(error.code);
-  return { uncertain, retry, refused, attempt, callStatus };
-}
-/** When a rate-limited call may be sent again: the provider's wait, bounded. */
-const retryAt = (error: ProviderError, at: Date) =>
-  new Date(
-    at.getTime() +
-      Math.min(
-        si.rate_limit_max_wait_seconds,
-        Math.max(0, error.retryAfterSeconds ?? si.rate_limit_default_wait_seconds),
-      ) *
-        1000,
-  );
-const money = usdUnits;
-const amount = (value: number) => (value / 1e8).toFixed(8);
-
-/** The run's cost, status and error after one paid page is added to it. */
-function costUpdate(run: Run, call: Call, at: Date) {
-  const totalCost = money(run.provider_reported_cost_usd) + money(call.provider_reported_cost_usd);
-  const missingCost = call.provider_reported_cost_usd === null,
-    over = totalCost > money(run.estimated_cost_usd);
-  let status = 'running';
-  let errorCode = run.error_code;
-  if (missingCost) {
-    status = 'uncertain';
-    errorCode = 'provider_cost_unavailable';
-  } else if (over) {
-    status = 'partial';
-    errorCode = 'cost_ceiling_exceeded';
-  }
-  const update = {
-    provider_reported_cost_usd: missingCost ? run.provider_reported_cost_usd : amount(totalCost),
-    uncertain_calls: run.uncertain_calls + (missingCost ? 1 : 0),
-    status,
-    error_code: errorCode,
-    completed_at: missingCost || over ? at : null,
-    updated_at: at,
-  };
-  return { update, missingCost, stopped: missingCost || over };
-}
-/** Whether a dataset holds everything asked for, some of it, nothing, or is unknowable. */
-function datasetCoverage(o: {
-  resultAvailable: boolean;
-  received: number;
-  kind: DatasetKind;
-  exhausted: boolean;
-  saved: number;
-  requested: number;
-}) {
-  if (!o.resultAvailable) return 'unknown';
-  if (o.received === 0) return 'empty';
-  const whole = SEARCH_DATASET_KINDS[o.kind].fixedDepth || o.exhausted || o.saved >= o.requested;
-  return whole ? 'complete' : 'partial';
-}
-/** Whether the provider holds more rows than were saved for a list dataset. */
-function isTruncated(coverage: string, kind: DatasetKind, total: number | null, saved: number) {
-  if (coverage === 'partial') return true;
-  return !SEARCH_DATASET_KINDS[kind].summary && total !== null && total > saved;
-}
 
 /** Root run lock precedes queue/call locks, matching cancellation's lock order. */
 export class AcquisitionState {
@@ -139,44 +74,16 @@ export class AcquisitionState {
     this.projectId = task.project_id;
   }
   run(db = this.db) {
-    return db
-      .selectFrom('search_intelligence_runs')
-      .selectAll()
-      .where('workspace_id', '=', this.task.workspace_id)
-      .where('project_id', '=', this.projectId)
-      .where('id', '=', this.runId);
+    return runQuery(db, this);
   }
   calls(db = this.db) {
-    return db
-      .selectFrom('search_intelligence_calls')
-      .selectAll()
-      .where('workspace_id', '=', this.task.workspace_id)
-      .where('project_id', '=', this.projectId)
-      .where('run_id', '=', this.runId);
+    return callsQuery(db, this);
   }
   owned(db: Database) {
-    return db
-      .selectFrom('analytics_tasks')
-      .select('id')
-      .where('workspace_id', '=', this.task.workspace_id)
-      .where('project_id', '=', this.task.project_id)
-      .where('id', '=', this.task.id)
-      .where('lease_owner', '=', this.task.lease_owner)
-      .where('status', '=', 'running')
-      .where('lease_expires_at', '>', sql<Date>`clock_timestamp()`)
-      .forUpdate()
-      .executeTakeFirst();
+    return ownedTask(db, this);
   }
   terminalTask(db: Database) {
-    return db
-      .selectFrom('analytics_tasks')
-      .select('id')
-      .where('workspace_id', '=', this.task.workspace_id)
-      .where('project_id', '=', this.task.project_id)
-      .where('id', '=', this.task.id)
-      .where('status', 'in', ['failed', 'cancelled'])
-      .forUpdate()
-      .executeTakeFirst();
+    return endedTask(db, this);
   }
   async connection(db: Database, run: Run) {
     if (!(await memberCan(db, run.workspace_id, run.actor_user_id, 'run'))) return undefined;
@@ -186,24 +93,11 @@ export class AcquisitionState {
     return this.db.transaction().execute(async (trx) => {
       const run = await this.run(trx).forUpdate().executeTakeFirst();
       if (!run || terminal.has(run.status) || !(await this.owned(trx))) return null;
-      if (
-        !run.confirmed_at ||
-        run.pricing_version !== si.price_version ||
-        !(await this.connection(trx, run))
-      ) {
-        await trx
-          .updateTable('search_intelligence_runs')
-          .set({
-            status: 'failed',
-            error_code:
-              run.pricing_version !== si.price_version ? 'pricing_changed' : 'connection_changed',
-            completed_at: at,
-            updated_at: at,
-          })
-          .where('id', '=', run.id)
-          .where('workspace_id', '=', run.workspace_id)
-          .execute();
-        await this.closeCollecting(trx, at);
+      // A parked run may already have published datasets, so a restart that
+      // finds the price or connection changed ends it like any other stop.
+      const priced = run.pricing_version === si.price_version;
+      if (!priced || !run.confirmed_at || !(await this.connection(trx, run))) {
+        await this.stopRun(trx, run, priced ? 'connection_changed' : 'pricing_changed', at);
         return null;
       }
       await trx
@@ -221,7 +115,7 @@ export class AcquisitionState {
       if (run?.status !== 'running' || !(await this.owned(trx))) return { action: 'stop' };
       const connection = await this.connection(trx, run);
       if (!connection) {
-        await this.failChangedConnection(trx, run, at);
+        await this.stopRun(trx, run, 'connection_changed', at);
         return { action: 'stop' };
       }
       const request = record(plan.request);
@@ -236,40 +130,11 @@ export class AcquisitionState {
       if (!call)
         call = await trx
           .insertInto('search_intelligence_calls')
-          .values({
-            id: randomUUID(),
-            workspace_id: run.workspace_id,
-            project_id: run.project_id,
-            run_id: run.id,
-            dataset_id: dataset.id,
-            request_key: requestKey,
-            sequence,
-            endpoint: String(plan.endpoint),
-            sanitized_request: JSON.stringify(request),
-            estimated_cost_usd: String(plan.estimated_cost_usd),
-            status: 'intent',
-            created_at: at,
-            completed_at: null,
-            dispatched_at: null,
-            error_code: '',
-            error_detail: '',
-            provider_reported_cost_usd: null,
-            provider_task_id: '',
-            response_sha256: '',
-            sanitized_response: null,
-          })
+          .values(newCall({ run, datasetId: dataset.id, requestKey, sequence, plan, request, at }))
           .returningAll()
           .executeTakeFirstOrThrow();
       if (['succeeded', 'failed', 'uncertain'].includes(call.status)) return { action: 'skip' };
-      const latest = await trx
-        .selectFrom('search_intelligence_dispatch_attempts')
-        .selectAll()
-        .where('workspace_id', '=', run.workspace_id)
-        .where('project_id', '=', run.project_id)
-        .where('call_id', '=', call.id)
-        .where('phase', '=', 'dispatch')
-        .orderBy('ordinal', 'desc')
-        .executeTakeFirst();
+      const latest = await latestDispatch(trx, run, call.id);
       // The reviewed estimate is a ceiling: never send a call that could pass it.
       // The page's own price, not the stored average: a short last page costs less.
       const pageCost = pageEstimateMicrousd(kind, Number(request.limit)) * 100;
@@ -299,12 +164,7 @@ export class AcquisitionState {
           .execute();
         await trx
           .updateTable('search_intelligence_runs')
-          .set({
-            status: 'uncertain',
-            uncertain_calls: run.uncertain_calls + 1,
-            completed_at: at,
-            updated_at: at,
-          })
+          .set(uncertainRun(run, at))
           .where('id', '=', run.id)
           .where('workspace_id', '=', run.workspace_id)
           .execute();
@@ -330,31 +190,11 @@ export class AcquisitionState {
     error: ProviderError | null,
     at: Date,
   ) {
-    const prior = await db
-      .selectFrom('search_intelligence_dispatch_attempts')
-      .select('id')
-      .where('workspace_id', '=', call.workspace_id)
-      .where('project_id', '=', call.project_id)
-      .where('call_id', '=', call.id)
-      .where('ordinal', '=', ordinal)
-      .where('phase', '=', 'outcome')
-      .executeTakeFirst();
+    const prior = await priorOutcome(db, call, ordinal);
     if (!prior)
       await db
         .insertInto('search_intelligence_dispatch_attempts')
-        .values({
-          id: randomUUID(),
-          workspace_id: call.workspace_id,
-          project_id: call.project_id,
-          call_id: call.id,
-          ordinal,
-          phase: 'outcome',
-          status,
-          error_code: error?.code ?? '',
-          retry_after_seconds: error?.retryAfterSeconds ?? null,
-          dispatched_at: dispatched,
-          completed_at: at,
-        })
+        .values(newAttempt(call, { ordinal, phase: 'outcome', status, error, dispatched, at }))
         .execute();
   }
   dispatch(
@@ -367,7 +207,7 @@ export class AcquisitionState {
       // A connection or member change since `prepare` ends the run, as there:
       // returning without a transition would leave it running with its hold.
       if (!(await this.connection(trx, run))) {
-        await this.failChangedConnection(trx, run, at);
+        await this.stopRun(trx, run, 'connection_changed', at);
         return false;
       }
       const call = await this.calls(trx)
@@ -384,19 +224,16 @@ export class AcquisitionState {
         .execute();
       await trx
         .insertInto('search_intelligence_dispatch_attempts')
-        .values({
-          id: randomUUID(),
-          workspace_id: run.workspace_id,
-          project_id: run.project_id,
-          call_id: call.id,
-          ordinal: prepared.ordinal,
-          phase: 'dispatch',
-          status: 'dispatched',
-          error_code: '',
-          retry_after_seconds: null,
-          dispatched_at: at,
-          completed_at: null,
-        })
+        .values(
+          newAttempt(call, {
+            ordinal: prepared.ordinal,
+            phase: 'dispatch',
+            status: 'dispatched',
+            error: null,
+            dispatched: at,
+            at: null,
+          }),
+        )
         .execute();
       return true;
     });
@@ -423,27 +260,14 @@ export class AcquisitionState {
         .where('id', '=', call.id)
         .where('workspace_id', '=', run.workspace_id)
         .execute();
-      const latest = await trx
-        .selectFrom('search_intelligence_dispatch_attempts')
-        .selectAll()
-        .where('workspace_id', '=', run.workspace_id)
-        .where('project_id', '=', run.project_id)
-        .where('call_id', '=', call.id)
-        .where('phase', '=', 'dispatch')
-        .orderBy('ordinal', 'desc')
-        .executeTakeFirst();
+      const latest = await latestDispatch(trx, run, call.id);
       if (latest)
         await this.outcome(trx, call, latest.ordinal, latest.dispatched_at, 'succeeded', null, at);
       if (['cancelled', 'uncertain', 'failed', 'partial'].includes(run.status)) {
         const costs = await this.calls(trx).select('provider_reported_cost_usd').execute();
         await trx
           .updateTable('search_intelligence_runs')
-          .set({
-            provider_reported_cost_usd: amount(
-              costs.reduce((sum, item) => sum + money(item.provider_reported_cost_usd), 0),
-            ),
-            updated_at: at,
-          })
+          .set({ provider_reported_cost_usd: summedCost(costs), updated_at: at })
           .where('id', '=', run.id)
           .where('workspace_id', '=', run.workspace_id)
           .execute();
@@ -495,14 +319,7 @@ export class AcquisitionState {
         .forUpdate()
         .executeTakeFirst();
       if (!call?.sanitized_response) return true;
-      const dataset = await trx
-        .selectFrom('search_intelligence_datasets')
-        .selectAll()
-        .where('workspace_id', '=', run.workspace_id)
-        .where('project_id', '=', run.project_id)
-        .where('id', '=', call.dataset_id)
-        .forUpdate()
-        .executeTakeFirstOrThrow();
+      const dataset = await callDataset(trx, run, call.dataset_id);
       const { update, missingCost, stopped } = costUpdate(run, call, at);
       await trx
         .updateTable('search_intelligence_calls')
@@ -518,65 +335,23 @@ export class AcquisitionState {
         return true;
       }
       // Bound SQL parameters even when a provider returns more than the requested page.
-      for (let offset = 0; offset < normalized.rows.length; offset += si.page_size)
-        await trx
+      // The locked dataset's saved count grows by the rows this page added; never a recount.
+      let saved = dataset.unique_rows_saved;
+      for (let offset = 0; offset < normalized.rows.length; offset += si.page_size) {
+        const [inserted] = await trx // NOSONAR -- One transaction: pages insert in order.
           .insertInto('search_intelligence_rows')
           .values(
-            normalized.rows.slice(offset, offset + si.page_size).map((row) => ({
-              ...row,
-              auxiliary: JSON.stringify(row.auxiliary),
-              id: randomUUID(),
-              workspace_id: run.workspace_id,
-              project_id: run.project_id,
-              dataset_id: dataset.id,
-              call_id: call.id,
-              row_kind: dataset.dataset_kind,
-              created_at: at,
-            })),
+            newRows(normalized.rows.slice(offset, offset + si.page_size), dataset, call.id, at),
           )
           .onConflict((oc) => oc.columns(['dataset_id', 'provider_row_key']).doNothing())
           .execute();
-      const count = await trx
-        .selectFrom('search_intelligence_rows')
-        .select(sql<number>`count(*)::int`.as('count'))
-        .where('workspace_id', '=', run.workspace_id)
-        .where('project_id', '=', run.project_id)
-        .where('dataset_id', '=', dataset.id)
-        .executeTakeFirstOrThrow();
-      const received = dataset.raw_rows_received + normalized.received,
-        exhausted = normalized.received < Number(record(plan.request).limit ?? 1),
-        finished = !later.some((item) => item.dataset_key === plan.dataset_key) || exhausted;
-      const kind = datasetKind(dataset.dataset_kind);
-      const coverage = datasetCoverage({
-        resultAvailable: Boolean(normalized.summary.result_available),
-        received,
-        kind,
-        exhausted,
-        saved: count.count,
-        requested: dataset.requested_rows,
-      });
-      const total = normalized.total ?? dataset.provider_total;
+        saved += Number(inserted?.numInsertedOrUpdatedRows ?? 0n);
+      }
+      const page = publishedPage({ dataset, normalized, plan, later, saved, callId: call.id, at });
+      const { finished } = page;
       await trx
         .updateTable('search_intelligence_datasets')
-        .set({
-          raw_rows_received: received,
-          unique_rows_saved: count.count,
-          provider_total: total !== null && total > INT4_MAX ? null : total,
-          summary: JSON.stringify({
-            ...record(dataset.summary),
-            ...normalized.summary,
-            source_call_ids: [...strings(record(dataset.summary).source_call_ids), call.id],
-          }),
-          ...(finished
-            ? {
-                status: 'published',
-                coverage,
-                truncated: isTruncated(coverage, kind, total, count.count),
-                collection_ended_at: at,
-                published_at: at,
-              }
-            : {}),
-        })
+        .set(page.update)
         .where('id', '=', dataset.id)
         .where('workspace_id', '=', run.workspace_id)
         .execute();
@@ -637,12 +412,7 @@ export class AcquisitionState {
       if (uncertain)
         await trx
           .updateTable('search_intelligence_runs')
-          .set({
-            status: 'uncertain',
-            uncertain_calls: run.uncertain_calls + 1,
-            completed_at: at,
-            updated_at: at,
-          })
+          .set(uncertainRun(run, at))
           .where('id', '=', run.id)
           .where('workspace_id', '=', run.workspace_id)
           .execute();
@@ -656,13 +426,7 @@ export class AcquisitionState {
       const run = await this.run(trx).forUpdate().executeTakeFirst();
       if (run?.status !== 'running' || !(await this.owned(trx))) return;
       await this.closeCollecting(trx, at);
-      const datasets = await trx
-        .selectFrom('search_intelligence_datasets')
-        .select(['status', 'coverage'])
-        .where('workspace_id', '=', run.workspace_id)
-        .where('project_id', '=', run.project_id)
-        .where('run_id', '=', run.id)
-        .execute();
+      const datasets = await runDatasets(trx, run);
       const failed = datasets.some(
         (item) => item.status === 'failed' || item.coverage === 'unknown',
       );
@@ -674,21 +438,6 @@ export class AcquisitionState {
         .execute();
     });
   }
-  /** The run's collecting datasets close and the run ends once its connection has changed. */
-  private async failChangedConnection(trx: Database, run: Run, at: Date) {
-    await trx
-      .updateTable('search_intelligence_runs')
-      .set({
-        status: run.completed_calls ? 'partial' : 'failed',
-        error_code: 'connection_changed',
-        completed_at: at,
-        updated_at: at,
-      })
-      .where('id', '=', run.id)
-      .where('workspace_id', '=', run.workspace_id)
-      .execute();
-    await this.closeCollecting(trx, at);
-  }
   /** The plan's dataset for this run: the existing locked row, or a new collecting one. */
   private async upsertDataset(
     trx: Database,
@@ -697,53 +446,11 @@ export class AcquisitionState {
     kind: ReturnType<typeof datasetKind>,
     at: Date,
   ) {
-    const target = record(plan.target),
-      comparison = record(plan.comparison),
-      request = record(plan.request);
-    let dataset = await trx
-      .selectFrom('search_intelligence_datasets')
-      .selectAll()
-      .where('workspace_id', '=', run.workspace_id)
-      .where('project_id', '=', run.project_id)
-      .where('run_id', '=', run.id)
-      .where('scope_hash', '=', String(plan.scope_hash))
-      .forUpdate()
-      .executeTakeFirst();
+    let dataset = await scopedDataset(trx, run, String(plan.scope_hash));
     if (!dataset)
       dataset = await trx
         .insertInto('search_intelligence_datasets')
-        .values({
-          id: randomUUID(),
-          workspace_id: run.workspace_id,
-          project_id: run.project_id,
-          run_id: run.id,
-          dataset_kind: kind,
-          scope_hash: String(plan.scope_hash),
-          target_domain: String(target.registrable_domain),
-          target_hostname: String(target.hostname),
-          target_origin: String(target.origin),
-          comparison_origin: scalarText(comparison.origin ?? ''),
-          location_code: isBacklinkKind(kind) ? null : Number(request.location_code),
-          language_code: isBacklinkKind(kind) ? '' : scalarText(request.language_code ?? ''),
-          requested_rows: Number(plan.requested_rows),
-          provider_filters: JSON.stringify({
-            ...request,
-            research_scope: plan.research_scope ?? 'exact_host',
-          }),
-          collection_started_at: at,
-          collection_ended_at: null,
-          published_at: null,
-          parent_dataset_id: null,
-          parser_version: si.parser_version,
-          status: 'collecting',
-          coverage: 'unknown',
-          created_at: at,
-          provider_total: null,
-          raw_rows_received: 0,
-          unique_rows_saved: 0,
-          truncated: false,
-          summary: JSON.stringify({}),
-        })
+        .values(newDataset(run, plan, kind, at))
         .returningAll()
         .executeTakeFirstOrThrow();
     return dataset;
@@ -846,25 +553,10 @@ export class AcquisitionState {
         .where('id', '=', call.dataset_id)
         .where('workspace_id', '=', run.workspace_id)
         .execute();
-      const missingCost = call.provider_reported_cost_usd === null;
+      const { missingCost, update } = rejectedCost(run, call, at);
       await trx
         .updateTable('search_intelligence_runs')
-        .set({
-          provider_reported_cost_usd: missingCost
-            ? run.provider_reported_cost_usd
-            : amount(
-                money(run.provider_reported_cost_usd) + money(call.provider_reported_cost_usd),
-              ),
-          ...(missingCost
-            ? {
-                status: 'uncertain',
-                uncertain_calls: run.uncertain_calls + 1,
-                error_code: 'provider_cost_unavailable',
-                completed_at: at,
-              }
-            : {}),
-          updated_at: at,
-        })
+        .set(update)
         .where('id', '=', run.id)
         .where('workspace_id', '=', run.workspace_id)
         .execute();
@@ -895,12 +587,7 @@ export class AcquisitionState {
   private async stopRun(trx: Database, run: Run, code: string, at: Date) {
     await trx
       .updateTable('search_intelligence_runs')
-      .set({
-        status: run.completed_calls ? 'partial' : 'failed',
-        error_code: code,
-        completed_at: at,
-        updated_at: at,
-      })
+      .set(stoppedRun(run, code, at))
       .where('id', '=', run.id)
       .where('workspace_id', '=', run.workspace_id)
       .execute();

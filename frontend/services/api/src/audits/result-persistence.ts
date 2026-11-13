@@ -44,6 +44,7 @@ export async function appendProviderAttempt(
     .insertInto('provider_attempts')
     .values({
       id: randomUUID(),
+      workspace_id: task.workspace_id,
       audit_id: task.audit_id,
       task_id: task.id,
       attempt_number: Number(count.count) + 1,
@@ -101,6 +102,7 @@ export function persistExecutionSuccess(
     const metadata = { ...previous, ...result.provider_metadata };
     const artifact = {
       id: artifactId,
+      workspace_id: claimed.workspace_id,
       audit_id: claimed.audit_id,
       task_id: claimed.id,
       logical_engine: result.logical_engine,
@@ -151,7 +153,7 @@ export function persistExecutionSuccess(
     await appendCostProjection(trx, task.workspace_id, artifactId);
     await auditEvent(
       trx,
-      task.audit_id,
+      { workspaceId: task.workspace_id, auditId: task.audit_id },
       auditPolicy.constants.event_task_succeeded,
       'task succeeded',
       { task_id: task.id },
@@ -172,6 +174,7 @@ async function insertFailureArtifact(
     .insertInto('raw_response_artifacts')
     .values({
       id: artifactId,
+      workspace_id: claimed.workspace_id,
       audit_id: claimed.audit_id,
       task_id: claimed.id,
       logical_engine: claimed.logical_engine,
@@ -382,7 +385,7 @@ async function settleFailedTask(
   else await markTaskFailed(trx, task, at);
   await auditEvent(
     trx,
-    task.audit_id,
+    { workspaceId: task.workspace_id, auditId: task.audit_id },
     retry ? auditPolicy.constants.event_task_retry : auditPolicy.constants.event_task_failed,
     retry ? 'task retry' : 'task failed',
     { task_id: task.id, error_code: error.code },

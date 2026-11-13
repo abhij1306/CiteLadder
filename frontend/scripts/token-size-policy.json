@@ -1,0 +1,83 @@
+{
+  "limit_tokens": 6000,
+  "bytes_per_token": 4,
+  "extensions": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".css"],
+  "ignore": [
+    {
+      "glob": "**/test/**",
+      "reason": "tests and their helpers; max_test_loc covers them"
+    },
+    {
+      "glob": "**/__tests__/**",
+      "reason": "tests"
+    },
+    {
+      "glob": "**/*.test.*",
+      "reason": "tests"
+    },
+    {
+      "glob": "**/*.spec.*",
+      "reason": "tests"
+    },
+    {
+      "glob": "frontend/e2e/**",
+      "reason": "browser tests"
+    },
+    {
+      "glob": "**/fixtures/**",
+      "reason": "test fixtures"
+    },
+    {
+      "glob": "**/*-fixtures.*",
+      "reason": "test fixtures"
+    },
+    {
+      "glob": "**/generated/**",
+      "reason": "codegen (kysely-codegen), checked by db:types:check"
+    },
+    {
+      "glob": "**/db-schema.ts",
+      "reason": "codegen database types"
+    },
+    {
+      "glob": "**/*.gen.ts",
+      "reason": "codegen"
+    },
+    {
+      "glob": "**/migrations/**",
+      "reason": "migrations are append-only history"
+    },
+    {
+      "glob": "frontend/services/api/src/config/**",
+      "reason": "API config and policy data"
+    },
+    {
+      "glob": "frontend/lib/config/**",
+      "reason": "frontend config owner"
+    },
+    {
+      "glob": "frontend/apps/app/src/globals.css",
+      "reason": "design tokens"
+    },
+    {
+      "glob": "frontend/services/api/src/mcp/tools.ts",
+      "reason": "MCP read-tool registry"
+    },
+    {
+      "glob": "frontend/services/api/src/mcp/write-tools.ts",
+      "reason": "MCP write-tool registry"
+    }
+  ],
+  "baseline": {
+    "frontend/services/api/src/commerce/shelf.ts": 6609,
+    "frontend/services/api/src/content-gaps/refresh.ts": 6436,
+    "frontend/services/api/src/mcp/evidence-site.ts": 6603,
+    "frontend/services/api/src/routes/integrations.ts": 6740,
+    "frontend/services/api/src/site-health/analysis/facts.ts": 6303,
+    "frontend/services/api/src/site-health/frontier.ts": 6556,
+    "frontend/services/api/src/site-health/lifecycle.ts": 6294,
+    "frontend/services/api/src/site-health/reads/issues.ts": 6903,
+    "frontend/services/api/src/visibility/prompts.ts": 6501,
+    "frontend/services/api/src/workers/integration-worker.ts": 6380
+  }
+}

@@ -63,5 +63,14 @@
       "exclusive_minimum": 0
     }
   },
-  "max_attempts": 3
+  "max_attempts": 3,
+  "feature_output_tokens": {
+    "prompt_generation": 16000,
+    "project_research": 16000,
+    "commerce_buyer_prompts": 8000,
+    "answer_perception": 8000,
+    "fact_verification": 8000,
+    "commerce_shelf": 8000,
+    "content_angles": 8000
+  }
 }

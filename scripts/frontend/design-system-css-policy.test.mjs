@@ -67,9 +67,10 @@ test('box-shadow takes a shadow role or a token hairline', () => {
   // Only the system's four shadows: a retired or invented role is not one.
   assert.deepEqual(rules('.a { box-shadow: var(--elevation-card); }'), ['css-shadow']);
   assert.deepEqual(rules('.a { box-shadow: var(--shadow-overlay); }'), ['css-shadow']);
+  assert.deepEqual(rules('.a { box-shadow: var(--shadow-card); }'), ['css-shadow']);
   assert.deepEqual(
     rules(
-      '.t { box-shadow: inset 0 -2px 0 var(--color-ink); } .a { box-shadow: var(--shadow-card); } .b { box-shadow: none; } .c { box-shadow: 0 0 0 1px var(--color-line), var(--shadow-pop); } .d { box-shadow: inset 0 1px 0 var(--color-line); } .e { box-shadow: var(--shadow-xs); } .f { box-shadow: var(--shadow-press); }',
+      '.t { box-shadow: inset 0 -2px 0 var(--color-ink); } .a { box-shadow: var(--shadow-float); } .b { box-shadow: none; } .c { box-shadow: 0 0 0 1px var(--color-line), var(--shadow-pop); } .d { box-shadow: inset 0 1px 0 var(--color-line); } .e { box-shadow: var(--shadow-xs); } .f { box-shadow: var(--shadow-press); }',
     ),
     [],
   );

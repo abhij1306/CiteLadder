@@ -29,7 +29,6 @@ export const classifyReferrals: Executor = async (task, { db, checkCancelled, ma
     .selectFrom('integration_sync_runs')
     .select([
       'id',
-      'resync_seq',
       isoDateText(sql.ref('window_start')).as('window_start'),
       isoDateText(sql.ref('window_end')).as('window_end'),
     ])
@@ -102,8 +101,8 @@ export const classifyReferrals: Executor = async (task, { db, checkCancelled, ma
     projectId,
     windowStart: run.window_start,
     windowEnd: run.window_end,
-    resyncSeq: run.resync_seq,
     sourceRevision: run.id,
+    artifactId: artifact.id,
     maxAttempts,
   });
 };

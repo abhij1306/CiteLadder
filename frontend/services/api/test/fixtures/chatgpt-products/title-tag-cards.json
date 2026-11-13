@@ -1,0 +1,104 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "id": "11110537-2641-0626-0000-a43fc092bb93",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "cost": 0.0012,
+      "result_count": 1,
+      "result": [
+        {
+          "keyword": "best whey protein powder to buy for muscle gain",
+          "language_code": "en",
+          "model": "gpt-6",
+          "datetime": "2026-11-11 05:37:33 +00:00",
+          "markdown": "If your goal is **building muscle, increasing strength, and gaining lean mass**, I'd recommend starting with a high-quality whey protein.\n\n**1\\. Optimum Nutrition Gold Standard 100% Whey**",
+          "fan_out_queries": [
+            "best whey protein powder for muscle gain 2026 reviews third party tested protein per serving"
+          ],
+          "search_results": [],
+          "sources": [],
+          "item_types": ["chat_gpt_text", "chat_gpt_products"],
+          "items_count": 2,
+          "items": [
+            {
+              "type": "chat_gpt_text",
+              "rank_group": 1,
+              "rank_absolute": 9,
+              "markdown": "These are my top picks."
+            },
+            {
+              "type": "chat_gpt_products",
+              "rank_group": 1,
+              "rank_absolute": 10,
+              "items": [
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": null,
+                  "merchants": null,
+                  "id_to_token_map": null,
+                  "title": "Optimum Nutrition Gold Standard 100% Whey",
+                  "rating": null,
+                  "price": null,
+                  "currency": null,
+                  "tag": "Best overall value",
+                  "url": null,
+                  "domain": null,
+                  "images": ["https://images.example/card-1.jpg?purpose=fullsize"],
+                  "product_ids": null
+                },
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": null,
+                  "merchants": null,
+                  "id_to_token_map": null,
+                  "title": "Transparent Labs Grass-Fed Whey Isolate",
+                  "rating": null,
+                  "price": null,
+                  "currency": null,
+                  "tag": "Best premium option",
+                  "url": null,
+                  "domain": null,
+                  "images": ["https://images.example/card-2.jpg"],
+                  "product_ids": null
+                },
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": null,
+                  "merchants": null,
+                  "id_to_token_map": null,
+                  "title": "Dymatize ISO100",
+                  "rating": null,
+                  "price": null,
+                  "currency": null,
+                  "tag": null,
+                  "url": null,
+                  "domain": null,
+                  "images": ["https://images.example/card-3.jpg"],
+                  "product_ids": null
+                },
+                {
+                  "type": "chat_gpt_products_element",
+                  "product_id": null,
+                  "merchants": null,
+                  "id_to_token_map": null,
+                  "title": "Naked Whey",
+                  "rating": null,
+                  "price": null,
+                  "currency": null,
+                  "tag": null,
+                  "url": null,
+                  "domain": null,
+                  "images": ["https://images.example/card-4.jpg"],
+                  "product_ids": null
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

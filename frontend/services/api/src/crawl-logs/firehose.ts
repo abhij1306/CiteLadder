@@ -111,7 +111,7 @@ async function admit(
   // quota was spent before the body was read.
   for (let index = chunks - 1; index >= 0; index -= 1) {
     const key = chunkKey(requestId, index);
-    if (index > 0) await batchQuota(db, source, now, key); // NOSONAR
+    if (index > 0) await batchQuota(db, source, now, key); // NOSONAR -- Chunks are admitted in order, last to first.
     const chunk = Buffer.from(lines.slice(index * size, (index + 1) * size).join('\n'));
     const options = {
       key,
@@ -123,7 +123,7 @@ async function admit(
       rejectedRecords: index === 0 ? rejected : 0,
       receivedBytes: index === 0 ? receivedBytes : 0,
     };
-    await ingest(db, source, chunk, options); // NOSONAR
+    await ingest(db, source, chunk, options); // NOSONAR -- A stored chunk 0 must prove every later chunk was stored first.
   }
 }
 

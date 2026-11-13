@@ -10,36 +10,41 @@ import { cn } from '@/lib/utils';
  * in `apps/app/src/globals.css`; this map only names them, so retuning a role
  * is one CSS edit and no call site changes.
  *
- * Size carries the hierarchy; weight only separates reading text from
- * everything else: 400 for sentences and captions, 500 for titles, figures,
- * labels and controls. Ink steps from `foreground` (titles, values) through
- * `secondary` (sentences, labels) to `muted` (captions, meta): three inks only.
- * The sizes below are the `.type-*` recipes in globals.css (size/leading in px).
+ * Size carries the hierarchy, then ink, and weight last (D49). Every role is
+ * one of three text styles:
+ * - heading: 500 in `ink`. Page, section, card, dialog and drawer titles, a
+ *   metric's figure, buttons and the selected tab or nav item.
+ * - primary: 400 in `ink`. What is read first in a row or a sentence: row and
+ *   item titles, names, values, table cells, prose.
+ * - secondary: 400 in the app's one grey. What supports it: descriptions,
+ *   labels, column heads, captions, meta, counts, inactive tabs and nav.
+ * `ink-muted` is an alias of `ink-secondary` (D50), so there are two inks. The sizes below are the `.type-*` recipes in globals.css
+ * (size/leading in px).
  */
 const TEXT_ROLES = {
-  /** The route `h1`. 24/32, 400, −0.01em, foreground, display face (D7, D11). One per page. */
+  /** The route `h1`. 20/28 (D58), −0.01em, ink, display face at its one weight (D7, D11). One per page. */
   pageTitle: 'type-page-title',
-  /** A section, card, drawer or dialog heading. 16/24, 500, −0.011em, foreground. */
+  /** A section, card, drawer or dialog heading. 16/24, heading (500, ink). */
   sectionTitle: 'type-section-title',
-  /** The title of a row, list item or insight. 14/20, 500, −0.006em, foreground. */
+  /** The title of a row, list item or insight. 14/20, primary (400, ink); 500 when set on an `h2`–`h6`. */
   itemTitle: 'type-item-title',
-  /** Sentences: descriptions, prose, table cell text. 14/20, 400, secondary. */
+  /** Sentences: descriptions and supporting copy. 14/20, secondary (400, grey). */
   body: 'type-body',
-  /** Buttons, navigation, tabs, links. 14/20, 500; ink comes from state. */
+  /** Navigation, tabs, links, list rows. 14/20, 400; ink and the selected 500 come from state. */
   control: 'type-control',
-  /** Names a value: metric, field and column labels. 14/20, 500, secondary. */
+  /** Names a value: metric, fact and group labels. 14/20, secondary (400, grey). */
   label: 'type-label',
-  /** Timestamps, counts, help, footnotes. 12/16, 400, muted. */
+  /** Timestamps, counts, help, footnotes. 12/16, secondary (400, grey). */
   caption: 'type-caption',
-  /** A metric value (`stat`). 28/36 (D15), Geist 500, −0.02em, foreground, tabular digits. */
+  /** A metric value. 24/32 (D48), heading (500, ink), tabular digits. */
   figure: 'type-figure',
-  /** A value inside a dense row or cell. 16/24, 500, foreground, figure-face digits. */
+  /** A value inside a dense row or cell. 14/20, primary (400, ink), tabular digits. */
   figureSm: 'type-figure-sm',
-  /** A change indicator. 12/16, 500, figure-face digits; the caller supplies the tone. */
+  /** A change indicator. 12/16, 400, mono; the caller supplies the tone. */
   delta: 'type-delta',
-  /** Badges, chips, segment labels, counts, key hints. 12/16, 500; the tone supplies the ink. */
+  /** Badges, chips, segment labels, counts, key hints. 12/16, 400; the tone supplies the ink. */
   badge: 'type-badge',
-  /** A value or name inside text that owns its size: 500, foreground. */
+  /** A value or name inside grey text that owns its size: primary (400, ink). */
   emphasis: 'type-emphasis',
 } as const;
 

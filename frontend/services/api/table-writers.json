@@ -1,0 +1,346 @@
+{
+  "format_version": 1,
+  "tables": {
+    "action_status_events": ["src/opportunities/actions.ts"],
+    "actions": [
+      "src/opportunities/action-status.ts",
+      "src/opportunities/action-sync.ts",
+      "src/opportunities/actions.ts"
+    ],
+    "agent_chats": ["src/agent/messages.ts", "src/agent/store.ts", "src/agent/target-adapter.ts"],
+    "agent_instruction_revisions": ["src/agent/outputs.ts"],
+    "agent_messages": ["src/agent/messages.ts"],
+    "agent_model_attempts": ["src/agent/model-calls.ts"],
+    "agent_output_revisions": ["src/agent/outputs.ts"],
+    "agent_output_suggestion_events": ["src/page-documents/suggestions.ts"],
+    "agent_output_suggestions": ["src/page-documents/suggestions.ts"],
+    "agent_outputs": ["src/agent/outputs.ts", "src/agent/target-adapter.ts"],
+    "agent_run_transcripts": ["src/agent/transcript.ts"],
+    "agent_runs": [
+      "src/agent/model-calls.ts",
+      "src/agent/queue.ts",
+      "src/agent/runtime.ts",
+      "src/agent/store.ts"
+    ],
+    "agent_tool_attempts": ["src/agent/runtime.ts"],
+    "ai_referral_landing_daily": ["src/referrals/landing.ts"],
+    "ai_referrals_snapshots": ["src/referrals/snapshot.ts"],
+    "ai_traffic_insights": ["src/ai-traffic/insights.ts"],
+    "aio_entity_links": ["src/audits/surface-persistence.ts"],
+    "aio_observations": ["src/audits/surface-persistence.ts"],
+    "analytics_tasks": [
+      "src/queue/enqueue.ts",
+      "src/search-intelligence/acquisition-state.ts",
+      "src/search-intelligence/runs.ts",
+      "src/workers/analytics-worker.ts",
+      "src/workers/terminal-compensation.ts"
+    ],
+    "answer_ad_observations": ["src/analysis/ads.ts"],
+    "answer_claims": ["src/perception/executor.ts"],
+    "answer_perceptions": ["src/perception/executor.ts"],
+    "api_idempotency": ["src/public-api/idempotency.ts"],
+    "api_keys": ["src/api-keys/keys.ts"],
+    "audit_answer_aggregates": ["src/visibility/source-aggregates.ts"],
+    "audit_comparison_baselines": ["src/visibility/baselines.ts"],
+    "audit_engine_snapshots": ["src/audits/creation.ts", "src/audits/repair.ts"],
+    "audit_events": ["src/audits/state.ts"],
+    "audit_prompt_snapshots": ["src/audits/creation.ts", "src/audits/repair.ts"],
+    "audit_schedules": [
+      "src/audits/schedules.ts",
+      "src/projects/markets.ts",
+      "src/queue/audit-queue.ts",
+      "src/workers/audit-scheduler.ts"
+    ],
+    "audit_source_aggregates": ["src/visibility/source-aggregates.ts"],
+    "audit_tasks": [
+      "src/analysis/execution.ts",
+      "src/audits/creation.ts",
+      "src/audits/maintenance.ts",
+      "src/audits/repair.ts",
+      "src/audits/result-persistence.ts",
+      "src/audits/submission-intent.ts",
+      "src/audits/surface-persistence.ts"
+    ],
+    "audits": [
+      "src/audits/creation.ts",
+      "src/audits/finalization.ts",
+      "src/audits/maintenance.ts",
+      "src/audits/repair.ts",
+      "src/audits/state.ts",
+      "src/queue/audit-queue.ts"
+    ],
+    "bot_activity_daily": ["src/crawl-logs/rollup.ts"],
+    "bot_ip_range_snapshots": ["src/crawl-logs/maintenance.ts"],
+    "bot_requests": ["src/crawl-logs/ingest.ts", "src/crawl-logs/maintenance.ts"],
+    "brand_aliases": ["src/projects/service.ts"],
+    "brand_discoveries": [
+      "src/projects/discovery.ts",
+      "src/queue/recovery.ts",
+      "src/workers/discovery-worker.ts"
+    ],
+    "brand_discovery_tasks": ["src/projects/discovery.ts", "src/workers/discovery-worker.ts"],
+    "brand_fact_revisions": ["src/projects/brand-facts.ts"],
+    "brand_facts": ["src/projects/brand-facts.ts"],
+    "brand_logo_assets": ["src/projects/logo-refresh.ts"],
+    "brand_mentions": ["src/analysis/execution.ts"],
+    "brand_profiles": [
+      "src/projects/brand-profile.ts",
+      "src/projects/business-map.ts",
+      "src/projects/service.ts",
+      "src/prompts/generation.ts",
+      "src/prompts/topics.ts"
+    ],
+    "brand_research_snapshots": ["src/workers/discovery-worker.ts"],
+    "branded_query_overrides": ["src/routes/demand.ts"],
+    "brands": ["src/projects/logo-refresh.ts", "src/projects/service.ts"],
+    "citations": ["src/analysis/execution.ts", "src/source-pages/sync.ts"],
+    "claim_verdicts": ["src/perception/fact-verification.ts"],
+    "commerce_catalog_revisions": ["src/commerce/catalog-revisions.ts"],
+    "commerce_categories": ["src/commerce/catalog-store.ts", "src/commerce/projection.ts"],
+    "commerce_competitor_attempts": ["src/commerce/discovery.ts"],
+    "commerce_competitor_candidates": [
+      "src/commerce/decisions.ts",
+      "src/commerce/discovery.ts",
+      "src/commerce/shelf.ts"
+    ],
+    "commerce_csv_imports": ["src/commerce/import.ts"],
+    "commerce_match_passes": ["src/commerce/shelf.ts"],
+    "commerce_observation_citations": ["src/commerce/shelf.ts"],
+    "commerce_product_categories": [
+      "src/commerce/catalog-store.ts",
+      "src/commerce/edits.ts",
+      "src/commerce/import.ts"
+    ],
+    "commerce_product_observations": ["src/commerce/catalog-store.ts"],
+    "commerce_products": [
+      "src/commerce/catalog-store.ts",
+      "src/commerce/edits.ts",
+      "src/commerce/import.ts",
+      "src/commerce/projection.ts"
+    ],
+    "commerce_prompt_targets": ["src/commerce/buyer-prompts.ts", "src/commerce/decisions.ts"],
+    "commerce_recommendation_observations": ["src/commerce/shelf.ts"],
+    "commerce_shelf_snapshots": ["src/commerce/shelf-metrics.ts"],
+    "competitor_mentions": ["src/analysis/execution.ts"],
+    "competitors": [
+      "src/projects/competitor-suggestions.ts",
+      "src/projects/competitors.ts",
+      "src/projects/logo-refresh.ts"
+    ],
+    "content_angle_lineages": ["src/content-gaps/refresh.ts"],
+    "content_angle_members": ["src/content-gaps/refresh.ts"],
+    "content_angle_owned_matches": ["src/content-gaps/refresh.ts"],
+    "content_angle_runs": ["src/content-gaps/refresh.ts"],
+    "content_angles": ["src/content-gaps/refresh.ts"],
+    "content_differentiation_candidates": ["src/source-pages/sync.ts"],
+    "content_differentiation_reports": ["src/source-pages/differentiation.ts"],
+    "crawl_log_batches": ["src/crawl-logs/ingest.ts"],
+    "crawl_log_coverage_daily": ["src/crawl-logs/rollup.ts"],
+    "crawl_log_sources": [
+      "src/crawl-logs/gcp-verify.ts",
+      "src/crawl-logs/pull.ts",
+      "src/crawl-logs/rollup.ts",
+      "src/crawl-logs/sources.ts",
+      "src/crawl-logs/stall.ts"
+    ],
+    "crawl_log_states": ["src/crawl-logs/rollup.ts", "src/crawl-logs/state.ts"],
+    "crawl_log_uploads": [
+      "src/crawl-logs/ingest.ts",
+      "src/crawl-logs/maintenance.ts",
+      "src/crawl-logs/uploads.ts"
+    ],
+    "crawl_schedules": ["src/site-health/schedules.ts", "src/workers/crawl-scheduler.ts"],
+    "demand_signals": ["src/demand/snapshot.ts"],
+    "demand_snapshots": ["src/demand/snapshot.ts"],
+    "entity_sentiments": ["src/perception/executor.ts"],
+    "execution_cost_projections": ["src/audits/costs.ts"],
+    "fact_verifications": ["src/perception/fact-verification.ts"],
+    "integration_connections": [
+      "src/integrations/oauth.ts",
+      "src/routes/integrations.ts",
+      "src/workers/integration-worker.ts"
+    ],
+    "integration_events": ["src/integrations/events.ts"],
+    "integration_import_artifacts": ["src/workers/integration-worker.ts"],
+    "integration_metric_rows": ["src/workers/integration-worker.ts"],
+    "integration_oauth_grants": [
+      "src/integrations/grants.ts",
+      "src/integrations/oauth.ts",
+      "src/integrations/tokens.ts"
+    ],
+    "integration_oauth_states": ["src/integrations/oauth.ts"],
+    "integration_property_mappings": [
+      "src/integrations/grants.ts",
+      "src/routes/integrations.ts",
+      "src/workers/integration-worker.ts"
+    ],
+    "integration_sync_runs": ["src/integrations/sync.ts", "src/workers/integration-worker.ts"],
+    "mcp_confirmations": ["src/mcp/confirmations.ts"],
+    "mcp_oauth_clients": ["src/mcp/token-auth.ts"],
+    "mcp_oauth_grants": ["src/mcp/token-auth.ts"],
+    "metric_snapshots": ["src/analysis/finalization.ts"],
+    "model_calls": ["src/models/metering.ts"],
+    "monitored_site_urls": ["src/site-health/admission-writes.ts", "src/site-health/frontier.ts"],
+    "observed_entity_candidates": [
+      "src/analysis/observed-competitors.ts",
+      "src/projects/competitor-suggestions.ts"
+    ],
+    "opportunities": ["src/opportunities/refresh.ts"],
+    "opportunity_implementation_events": ["src/opportunities/declarations.ts"],
+    "opportunity_orders": ["src/opportunities/order.ts"],
+    "opportunity_snapshots": ["src/opportunities/refresh.ts"],
+    "opportunity_verification_events": ["src/opportunities/verification.ts"],
+    "overview_layouts": ["src/projects/overview-layout.ts"],
+    "page_snapshots": ["src/page-documents/fetch-task.ts"],
+    "performance_dimension_stats": ["src/traffic/snapshot.ts"],
+    "project_markets": ["src/projects/markets.ts"],
+    "projects": [
+      "src/projects/service.ts",
+      "src/search-intelligence/reviews.ts",
+      "src/search-intelligence/runs.ts"
+    ],
+    "prompt_candidates": ["src/prompts/candidates.ts", "src/prompts/generation.ts"],
+    "prompt_generation_runs": ["src/prompts/generation.ts"],
+    "prompt_metric_snapshots": ["src/analysis/finalization.ts"],
+    "prompt_sets": [
+      "src/commerce/buyer-prompts.ts",
+      "src/projects/discovery.ts",
+      "src/prompts/prompt-sets.ts"
+    ],
+    "prompts": ["src/prompts/insert.ts", "src/prompts/prompts.ts"],
+    "provider_attempts": ["src/audits/result-persistence.ts"],
+    "provider_capacity_buckets": ["src/providers/capacity.ts", "src/providers/connections.ts"],
+    "provider_capacity_leases": ["src/audits/maintenance.ts", "src/providers/capacity.ts"],
+    "provider_connection_tests": ["src/providers/probes.ts"],
+    "provider_connections": [
+      "src/audits/execution-context.ts",
+      "src/providers/connections.ts",
+      "src/providers/probes.ts"
+    ],
+    "provider_routes": ["src/providers/connections.ts"],
+    "query_evidence_rows": ["src/demand/query-evidence.ts"],
+    "query_evidence_snapshots": ["src/demand/query-evidence.ts"],
+    "queue_workspace_turns": ["src/queue/task-queue.ts"],
+    "raw_response_artifacts": ["src/audits/result-persistence.ts"],
+    "referral_classifications": ["src/referrals/classify.ts", "src/referrals/retention.ts"],
+    "referral_events": ["src/referrals/ingest.ts", "src/referrals/retention.ts"],
+    "response_analyses": ["src/analysis/execution.ts"],
+    "retrieved_sources": ["src/analysis/execution.ts"],
+    "robots_snapshots": ["src/site-health/robots-snapshots.ts"],
+    "search_intelligence_calls": [
+      "src/search-intelligence/acquisition-state.ts",
+      "src/search-intelligence/maintenance.ts"
+    ],
+    "search_intelligence_datasets": [
+      "src/search-intelligence/acquisition-state.ts",
+      "src/search-intelligence/citations.ts",
+      "src/search-intelligence/maintenance.ts"
+    ],
+    "search_intelligence_dispatch_attempts": ["src/search-intelligence/acquisition-state.ts"],
+    "search_intelligence_rows": [
+      "src/search-intelligence/acquisition-state.ts",
+      "src/search-intelligence/citations.ts"
+    ],
+    "search_intelligence_runs": [
+      "src/search-intelligence/acquisition-state.ts",
+      "src/search-intelligence/maintenance.ts",
+      "src/search-intelligence/reviews.ts",
+      "src/search-intelligence/runs.ts"
+    ],
+    "security_events": ["src/abuse/usage.ts", "src/auth/security-events.ts"],
+    "site_change_observations": ["src/site-health/change-snapshot.ts"],
+    "site_change_snapshots": ["src/site-health/change-snapshot.ts"],
+    "site_crawl_events": ["src/site-health/site-task.ts"],
+    "site_crawl_tasks": [
+      "src/site-health/admission-writes.ts",
+      "src/site-health/controls.ts",
+      "src/site-health/discover-task.ts",
+      "src/site-health/lifecycle.ts",
+      "src/site-health/site-task.ts"
+    ],
+    "site_crawls": [
+      "src/site-health/analyze-task.ts",
+      "src/site-health/controls.ts",
+      "src/site-health/discover-task.ts",
+      "src/site-health/lifecycle.ts",
+      "src/site-health/planner.ts",
+      "src/site-health/site-setup-task.ts",
+      "src/site-health/site-task.ts",
+      "src/site-health/snapshot.ts",
+      "src/site-health/terminal-counters.ts"
+    ],
+    "site_discovery_frontier": [
+      "src/site-health/admission-writes.ts",
+      "src/site-health/frontier.ts"
+    ],
+    "site_fetch_artifacts": ["src/site-health/analysis-rows.ts"],
+    "site_fetch_attempts": ["src/site-health/analysis-rows.ts"],
+    "site_health_profiles": ["src/site-health/planner.ts"],
+    "site_health_snapshots": ["src/site-health/snapshot.ts"],
+    "site_internal_link_events": ["src/site-health/internal-link-judgments.ts"],
+    "site_internal_link_runs": [
+      "src/site-health/internal-link-publish.ts",
+      "src/site-health/internal-link-runs.ts"
+    ],
+    "site_issue_catalogs": ["src/site-health/issue-catalog.ts"],
+    "site_issue_states": ["src/site-health/issue-states.ts"],
+    "site_issue_trend": ["src/site-health/issue-states.ts"],
+    "site_issues": [
+      "src/site-health/analysis-rows.ts",
+      "src/site-health/architecture.ts",
+      "src/site-health/issue-currency.ts"
+    ],
+    "site_observed_architectures": ["src/site-health/architecture.ts"],
+    "site_page_analyses": [
+      "src/site-health/analysis-rows.ts",
+      "src/site-health/canonical-alias.ts",
+      "src/site-health/terminal-analysis.ts"
+    ],
+    "site_page_link_metrics": ["src/site-health/link-metrics.ts"],
+    "site_rule_evaluations": [
+      "src/site-health/analysis-rows.ts",
+      "src/site-health/architecture.ts"
+    ],
+    "site_url_observations": [
+      "src/site-health/admission-writes.ts",
+      "src/site-health/analysis-rows.ts"
+    ],
+    "site_urls": [
+      "src/site-health/admission-writes.ts",
+      "src/site-health/analysis-rows.ts",
+      "src/site-health/canonical-alias.ts",
+      "src/site-health/discover-task.ts",
+      "src/site-health/frontier.ts"
+    ],
+    "source_page_entity_presences": ["src/source-pages/persistence.ts"],
+    "source_page_inspection_spend": ["src/source-pages/admission.ts"],
+    "source_page_snapshots": ["src/source-pages/persistence.ts"],
+    "source_pages": [
+      "src/source-pages/admission.ts",
+      "src/source-pages/persistence.ts",
+      "src/source-pages/sync.ts"
+    ],
+    "topics": [
+      "src/commerce/buyer-prompts.ts",
+      "src/prompts/generation-context.ts",
+      "src/prompts/topics.ts"
+    ],
+    "traffic_page_stats": ["src/traffic/snapshot.ts"],
+    "traffic_query_stats": ["src/traffic/snapshot.ts"],
+    "traffic_snapshots": ["src/traffic/snapshot.ts"],
+    "usage_windows": ["src/abuse/usage.ts"],
+    "users": ["src/auth/local.ts"],
+    "web_acquisition_controls": ["src/web-evidence/control.ts"],
+    "workspace_members": ["src/auth/local.ts"],
+    "workspace_site_health_runtime": ["src/site-health/planner.ts"],
+    "workspaces": ["src/auth/local.ts"]
+  },
+  "dynamic_writers": [
+    "src/mcp/maintenance.ts",
+    "src/projects/service.ts",
+    "src/queue/audit-queue.ts",
+    "src/queue/recovery.ts",
+    "src/queue/task-queue.ts",
+    "src/traffic/snapshot.ts"
+  ]
+}

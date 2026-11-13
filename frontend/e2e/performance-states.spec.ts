@@ -99,7 +99,7 @@ test('Performance distinguishes first use, measured zero, and Bing-only evidence
   await page.route('**/api/v1/integrations', (route) => route.fulfill({ json: [] }));
 
   await page.goto(fixtureProjectPath('/performance'));
-  await expect(page.getByText('No search performance evidence yet')).toBeVisible();
+  await expect(page.getByText('No imported history')).toBeVisible();
   await expect(page.getByTestId('metric-card-strip')).toHaveCount(0);
   await expect(page.getByRole('tablist', { name: 'Performance breakdowns' })).toHaveCount(0);
   expect(tableReads).toBe(0);

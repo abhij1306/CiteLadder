@@ -1,15 +1,18 @@
 /**
  * The grouped issue catalog, one group's occurrences, and a URL's issue history.
  *
- * A crawl's issues are those of its current, finalized page analyses. Groups
+ * A crawl's issues are each page's current issues from its latest audit as
+ * the crawl shows it, plus the crawl's site-level findings (`viewIssuesSql`,
+ * SH-B9): a page rerun landing after the crawl moves its page. Groups
  * are `(rule, finding class)` within the crawl, identified by a stable UUID;
  * the summary counts groups rather than occurrences, so its tiles match the
  * list.
  *
  * The unfiltered list and summary of each finding class are persisted per
- * crawl once its issues are final (`site-health/issue-catalog.ts`) and read
- * from there. A filtered read (search, severity, category, dimension, rule,
- * page, page kind) and a crawl whose catalog is not written yet compute them
+ * crawl once its issues are final, and again when a page rerun lands in it
+ * (`site-health/issue-catalog.ts`), and read from there. A filtered read
+ * (search, severity, category, dimension, rule, page, page kind) and a crawl
+ * whose catalog is not written yet compute them
  * here. The monitored affected count is always live: the selection is
  * configuration.
  */
@@ -17,6 +20,8 @@ import {
   issueHistoryPageSchema,
   siteIssueDetailSchema,
   siteIssuesPageSchema,
+  type IssueSection,
+  type IssueSort,
 } from '@citeladder/contracts/site-health';
 import { sql, type RawBuilder } from 'kysely';
 import { z } from 'zod';
@@ -34,11 +39,13 @@ import { containsPattern } from '../../db/like.ts';
 import { parseUuid } from '../../http/uuid.ts';
 import { firstOf } from '../../lists.ts';
 import { compareText } from '../../text-order.ts';
-import { loadCrawl, type Crawl } from './crawl.ts';
+import { loadCrawl, pageAuditsSql, viewIssuesSql, type Crawl } from './crawl.ts';
+import { shownIssueFilter } from './page-rows.ts';
 import { requireAdmitted } from './pages.ts';
 import {
   issueGroupId,
   issueOccurrence,
+  issueSection,
   remediationRoute,
   rulesTitled,
   ruleTitle,
@@ -80,22 +87,24 @@ function ofPageKind(crawl: Crawl, pageKind: string) {
     end)`;
 }
 
-/** The issue's own page has a current, finalized analysis of the kind (and `also` holds). */
+/**
+ * The issue's own page has a current, finalized analysis of the kind (and
+ * `also` holds) in the audit the issue came from.
+ */
 function onPageOfKind(crawl: Crawl, pageKind: string, also = sql``) {
   return sql`exists (
     select 1 from site_page_analyses a
-    where a.workspace_id = ${crawl.workspace_id} and a.crawl_id = ${crawl.id}
+    where a.workspace_id = ${crawl.workspace_id} and a.crawl_id = i.crawl_id
       and a.site_url_id = i.site_url_id and a.is_current and a.finalized_at is not null
       and a.page_kind = ${pageKind} ${also})`;
 }
 
 /**
- * Issues of the crawl's current, finalized analyses and its site-level
- * architecture findings, which the snapshot's issue counts include. The
+ * The issues the crawl shows: each page's current issues from its latest
+ * audit and the crawl's site-level findings (`viewIssuesSql`, SH-B9). The
  * writers keep `is_current` (`issue-currency.ts`).
  */
-const currentIssues = (crawl: Crawl) =>
-  sql`i.workspace_id = ${crawl.workspace_id} and i.crawl_id = ${crawl.id} and i.is_current`;
+const currentIssues = (crawl: Crawl) => viewIssuesSql(crawl);
 
 function issueWhere(
   crawl: Crawl,
@@ -123,9 +132,10 @@ function issueWhere(
 
 type Group = IssueRow & { affected_url_count: number; group_id: string };
 type IssueItem = z.infer<typeof siteIssuesPageSchema>['items'][number];
+/** The summary a catalog persists: the live monitored count and the tab counts ride each read. */
 export type IssueSummary = Omit<
   z.input<typeof siteIssuesPageSchema>['summary'],
-  'monitored_affected_url_count'
+  'monitored_affected_url_count' | 'section_counts'
 >;
 
 /** The finding classes the catalog lists, each with its own groups and summary. */
@@ -174,16 +184,34 @@ async function issueGroups(db: Database, crawl: Crawl, filters: IssueFilters): P
     .sort(compareGroups);
 }
 
-/** Worst first; within a severity, the issue on the most pages first. */
 type GroupKey = readonly [rank: number, affected: number, rule: string, group: string];
 type Ranked = Pick<Group, 'severity' | 'affected_url_count' | 'rule_id' | 'group_id'>;
 const groupKey = (group: Ranked): GroupKey =>
   [severityRank(group.severity), group.affected_url_count, group.rule_id, group.group_id] as const;
 
-function compareKeys(a: GroupKey, b: GroupKey) {
-  return a[0] - b[0] || b[1] - a[1] || compareText(a[2], b[2]) || compareText(a[3], b[3]);
+const byIdentity = (a: GroupKey, b: GroupKey) => compareText(a[2], b[2]) || compareText(a[3], b[3]);
+
+/**
+ * The catalog's orderings over one key: worst first (then the issue on the
+ * most pages), or the issue on the most pages first (then the worst). Both
+ * end on the group's identity, so the order is total and a cursor resumes it.
+ */
+const KEY_ORDER: Readonly<Record<IssueSort, (a: GroupKey, b: GroupKey) => number>> = {
+  severity: (a, b) => a[0] - b[0] || b[1] - a[1] || byIdentity(a, b),
+  pages: (a, b) => b[1] - a[1] || a[0] - b[0] || byIdentity(a, b),
+};
+const compareGroups = (a: Group, b: Group) => KEY_ORDER.severity(groupKey(a), groupKey(b));
+
+/** How the catalog page is cut and ordered: one tab, one ordering. Neither narrows the summary. */
+export type IssueView = { section: IssueSection | null; sort: IssueSort };
+const ALL_SECTIONS_BY_SEVERITY: IssueView = { section: null, sort: 'severity' };
+
+/** Issue groups per tab. */
+function sectionCounts(groups: readonly Pick<IssueItem, 'dimension' | 'category'>[]) {
+  const counts: Record<IssueSection, number> = { technical: 0, content: 0, aeo: 0 };
+  for (const group of groups) counts[issueSection(group)] += 1;
+  return counts;
 }
-const compareGroups = (a: Group, b: Group) => compareKeys(groupKey(a), groupKey(b));
 
 /** The summary's issue scope: severity and dimension chips never narrow it. */
 function summaryScope(crawl: Crawl, filters: IssueFilters) {
@@ -323,8 +351,7 @@ export async function issues(
   crawlId: string,
   filters: IssueFilters,
   paging: Paging,
-  /** When set, also return the first row's detail with this many occurrences. */
-  detailLimit: number | null = null,
+  view: IssueView = ALL_SECTIONS_BY_SEVERITY,
 ) {
   const crawl = await loadCrawl(db, workspaceId, crawlId);
   const fingerprint = {
@@ -337,45 +364,41 @@ export async function issues(
     site_url_id: filters.siteUrlId,
     page_kind: filters.pageKind,
     finding_class: filters.findingClass,
+    section: view.section,
+    sort: view.sort,
   };
   const after = groupCursor(paging.cursor, fingerprint);
   // The unfiltered catalog is persisted once its crawl's issues are final;
-  // any other filter, and a crawl not yet published, is computed here.
+  // any other filter, and a crawl not yet published, is computed here. The
+  // tab and the ordering cut the listed groups, so the persisted catalog
+  // serves every tab.
   const catalog = isUnfiltered(filters)
     ? await persistedCatalog(db, crawl, filters.findingClass)
     : null;
-  const [ranked, summary, monitored] = await Promise.all([
+  const [listed, summary, monitored] = await Promise.all([
     catalog?.items ?? catalogItems(db, crawl, filters),
     catalog?.summary ?? issueSummary(db, crawl, filters),
     monitoredAffected(db, crawl, filters),
   ]);
-  const start = after ? ranked.findIndex((group) => compareKeys(groupKey(group), after) > 0) : 0;
+  const order = KEY_ORDER[view.sort];
+  const ranked = listed
+    .filter((group) => view.section === null || issueSection(group) === view.section)
+    .sort((a, b) => order(groupKey(a), groupKey(b)));
+  const start = after ? ranked.findIndex((group) => order(groupKey(group), after) > 0) : 0;
   const window = start < 0 ? [] : ranked.slice(start, start + paging.limit + 1);
   const items = window.slice(0, paging.limit);
   const last = items.at(-1);
-  const first = items[0];
-  const firstIssue =
-    // The same read the detail route serves for this row: first occurrence
-    // page, narrowed by the list's page-kind filter exactly as the rail asks.
-    detailLimit !== null && first !== undefined
-      ? await issueDetail(
-          db,
-          workspaceId,
-          crawl.id,
-          first.group_id,
-          { limit: detailLimit, cursor: null },
-          undefined,
-          filters.pageKind,
-        )
-      : undefined;
   return siteIssuesPageSchema.parse({
     items,
     next_cursor:
       window.length > paging.limit && last
         ? encodeKeysetCursor('issues', fingerprint, groupKey(last).map(String))
         : null,
-    summary: { ...summary, monitored_affected_url_count: monitored },
-    ...(firstIssue ? { first_issue: firstIssue } : {}),
+    summary: {
+      ...summary,
+      monitored_affected_url_count: monitored,
+      section_counts: sectionCounts(listed),
+    },
   });
 }
 
@@ -453,7 +476,10 @@ export async function catalogSources(
 
 const catalogSchema = z.object({
   items: siteIssuesPageSchema.shape.items,
-  summary: siteIssuesPageSchema.shape.summary.omit({ monitored_affected_url_count: true }),
+  summary: siteIssuesPageSchema.shape.summary.omit({
+    monitored_affected_url_count: true,
+    section_counts: true,
+  }),
 });
 
 /** The crawl's persisted unfiltered catalog for the class, or null before its issues are final. */
@@ -561,12 +587,12 @@ export async function issueDetail(
 }
 
 /**
- * A URL's resolved issues: rules found on it in the selected crawl's superseded
- * analyses or the project's earlier crawls that its current, finalized
- * analysis no longer reports. One row per rule, its latest record, newest
- * first. Current open issues never appear (they are the page detail), nor does
- * a later crawl's record on an older crawl; without a finalized current
- * analysis nothing is known to be resolved.
+ * A URL's resolved issues: rules found on it in earlier audits (or the latest
+ * audit's superseded analyses) that its latest audit as the selected crawl
+ * shows it (`pageAuditsSql`) no longer reports. One row per rule, its latest
+ * record, newest first. Current open issues never appear (they are the page
+ * detail), nor does an audit newer than that one; without a finalized latest
+ * audit nothing is known to be resolved.
  */
 export async function issueHistory(
   db: Database,
@@ -577,15 +603,11 @@ export async function issueHistory(
 ) {
   const crawl = await loadCrawl(db, workspaceId, crawlId);
   await requireAdmitted(db, crawl, siteUrlId);
-  const finalized = await db
-    .selectFrom('site_page_analyses')
-    .select('id')
-    .where('workspace_id', '=', workspaceId)
-    .where('crawl_id', '=', crawl.id)
-    .where('site_url_id', '=', siteUrlId)
-    .where('is_current', '=', true)
-    .where('finalized_at', 'is not', null)
-    .executeTakeFirst();
+  const { rows: latest } = await sql<{ id: string }>`
+    select a.id from (${pageAuditsSql(crawl, sql`${siteUrlId}::uuid`)}) v
+    join site_page_analyses a on a.id = v.analysis_id and a.workspace_id = ${workspaceId}
+    where a.finalized_at is not null`.execute(db);
+  const finalized = latest[0];
   if (!finalized)
     return issueHistoryPageSchema.parse({
       items: [],
@@ -605,18 +627,19 @@ export async function issueHistory(
     with resolved as (
       select distinct on (i.rule_id) i.*
       from site_issues i
-      join site_crawls c on c.id = i.crawl_id
-      join site_crawls selected on selected.id = ${crawl.id}
-      -- The page's one current, finalized analysis in the selected crawl.
-      join site_page_analyses cur on cur.id = ${finalized.id}
+      join site_crawls c on c.id = i.crawl_id and c.workspace_id = i.workspace_id
+      -- The page's latest audit as the selected crawl shows it, and its crawl.
+      join site_page_analyses cur on cur.id = ${finalized.id} and cur.workspace_id = i.workspace_id
+      join site_crawls audited on audited.id = cur.crawl_id and audited.workspace_id = i.workspace_id
       where i.workspace_id = ${workspaceId} and i.project_id = ${crawl.project_id}
         and i.site_url_id = ${siteUrlId} and c.project_id = ${crawl.project_id}
-        and (c.created_at, c.id) <= (selected.created_at, selected.id)
+        and (coalesce(c.started_at, c.created_at), c.id)
+          <= (coalesce(audited.started_at, audited.created_at), audited.id)
         and not exists (
           select 1 from site_issues still_open
-          where still_open.workspace_id = ${workspaceId} and still_open.crawl_id = ${crawl.id}
-            and still_open.evaluation_id = any(cur.source_evaluation_ids)
-            and still_open.site_url_id = ${siteUrlId} and still_open.rule_id = i.rule_id)
+          where still_open.workspace_id = ${workspaceId}
+            and ${shownIssueFilter(crawl, 'still_open', 'cur')}
+            and still_open.rule_id = i.rule_id)
       order by i.rule_id, i.created_at desc, i.id desc
     )
     select r.*, ${utcTextOf(sql.ref('r.created_at'))} as created_text

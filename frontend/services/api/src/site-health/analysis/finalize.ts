@@ -1,5 +1,6 @@
 /** Cross-page checks use only the persisted acquisition evidence supplied by the caller. */
 import { policy } from '../../config.ts';
+import { strings } from '../../db/json.ts';
 import { scalarText } from '../../text-order.ts';
 import { onlyOf } from '../../lists.ts';
 import { membership, type RuleEvaluation } from './rules.ts';
@@ -79,6 +80,13 @@ export function entitySetEvaluation(
   });
 }
 
+/** The page's declared canonicals: every `<link rel=canonical>`, or the one extracted URL. */
+export function canonicalDeclarations(facts: Record<string, unknown>) {
+  const declarations = strings(facts.canonical_declarations);
+  const single = scalarText(facts.canonical_url);
+  return declarations.length || !single ? declarations : [single];
+}
+
 /**
  * A canonical must name the URL search engines should index: one declaration,
  * same origin, answering directly (no redirect), and, when this crawl analyzed
@@ -134,6 +142,32 @@ export function canonicalIntegrity(input: {
   return finalizeEvaluation('technical.canonical_integrity', 'satisfied', {
     ...observed,
     target_page_checked: Boolean(target),
+  });
+}
+
+/**
+ * "No sitemap" (SH-B5): a full crawl's site setup read no sitemap document and
+ * the server answered for every one it tried, so the crawl fell back to an
+ * HTML walk. A sample never reads sitemaps; a crawl whose setup never published
+ * its sitemap facts, or whose documents went unanswered (no response, a
+ * timeout, a rate limit or a server error), has no evidence either way.
+ */
+export function sitemapPresent(input: { sampleMode: boolean; sitemap: Record<string, unknown> }) {
+  const rule = 'technical.sitemap_present';
+  if (input.sampleMode)
+    return finalizeEvaluation(rule, 'not_applicable', { reason: 'sample_crawl' });
+  if (typeof input.sitemap.fetched !== 'boolean' || input.sitemap.pending === true)
+    return finalizeEvaluation(rule, 'unknown', { reason: 'insufficient_evidence' });
+  const files = Array.isArray(input.sitemap.files) ? input.sitemap.files.length : 0;
+  const unread = Number(input.sitemap.unread_count) || 0;
+  if (!input.sitemap.fetched && unread > 0)
+    return finalizeEvaluation(rule, 'unknown', {
+      reason: 'sitemap_unavailable',
+      unread_document_count: unread,
+    });
+  return finalizeEvaluation(rule, input.sitemap.fetched ? 'satisfied' : 'missing', {
+    fetched: input.sitemap.fetched,
+    sitemap_file_count: files,
   });
 }
 

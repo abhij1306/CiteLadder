@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect } from 'react';
 
 import { parseSseFrame, splitSseFrames, type RawSseFrame } from '@/lib/sse/frames';
@@ -23,6 +21,18 @@ type SseEventStreamOptions = {
   onInvalidate: () => void;
   streamName: string;
 };
+
+/**
+ * Refusals a reconnect cannot change: the session ended (401), access to the
+ * workspace or record ended (403), or the run or crawl is gone (404). Anything
+ * else (a dropped connection, 408, 429, 5xx) is worth asking again.
+ */
+const REFUSALS: ReadonlySet<number> = new Set([401, 403, 404]);
+
+type StreamOutcome =
+  | Readonly<{ kind: 'read'; frames: number }>
+  | Readonly<{ kind: 'dropped' }>
+  | Readonly<{ kind: 'refused' }>;
 
 export function streamHeaders(
   workspaceId: string | null,
@@ -80,59 +90,68 @@ export function useSseEventStream({
 
     const controller = new AbortController();
     let cancelled = false;
-    let invalidateTimer: ReturnType<typeof setTimeout> | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastEventId: string | null = null;
+    // Written by the async reader and reconnect loop, so held in one effect-local object.
+    const stream: {
+      invalidateTimer: ReturnType<typeof setTimeout> | null;
+      reconnectTimer: ReturnType<typeof setTimeout> | null;
+      lastEventId: string | null;
+    } = { invalidateTimer: null, reconnectTimer: null, lastEventId: null };
 
     const scheduleInvalidate = () => {
-      if (invalidateTimer !== null) return;
-      invalidateTimer = setTimeout(() => {
-        invalidateTimer = null;
+      if (stream.invalidateTimer !== null) return;
+      stream.invalidateTimer = setTimeout(() => {
+        stream.invalidateTimer = null;
         onInvalidate();
       }, invalidateDebounceMs);
     };
 
-    const connect = async (): Promise<number | null> => {
+    const connect = async (): Promise<StreamOutcome> => {
       const response = await fetch(url, {
         method: 'GET',
-        headers: streamHeaders(workspaceId, lastEventId),
+        headers: streamHeaders(workspaceId, stream.lastEventId),
         credentials: 'include',
         cache: 'no-store',
         signal: controller.signal,
       });
-      if (!response.ok || !response.body) return null;
-      return readSseResponse(
+      if (REFUSALS.has(response.status)) return { kind: 'refused' };
+      if (!response.ok || !response.body) return { kind: 'dropped' };
+      const frames = await readSseResponse(
         response.body,
         () => cancelled,
         (frame) => {
-          if (frame.id) lastEventId = frame.id;
+          if (frame.id) stream.lastEventId = frame.id;
           if (onFrame(frame)) scheduleInvalidate();
         },
       );
+      return { kind: 'read', frames };
     };
 
     const run = async (attempt = 0) => {
-      let frameCount: number | null = null;
+      let outcome: StreamOutcome = { kind: 'dropped' };
       try {
-        frameCount = await connect();
+        outcome = await connect();
       } catch (error) {
         if (cancelled || controller.signal.aborted) return;
         console.error(`[${streamName}] event stream failed`, { attempt, error });
       }
       if (cancelled || controller.signal.aborted) return;
+      // Asking again cannot change a refusal. The screen's polled read stays
+      // authoritative and reports why (an ended session reaches the session
+      // guard from there).
+      if (outcome.kind === 'refused') return;
 
-      const hitDurationCap = frameCount !== null && frameCount > 0;
+      const hitDurationCap = outcome.kind === 'read' && outcome.frames > 0;
       const delay = hitDurationCap
         ? reconnectBaseMs
         : Math.min(reconnectBaseMs * 2 ** attempt, reconnectMaxMs);
-      reconnectTimer = setTimeout(() => void run(hitDurationCap ? 0 : attempt + 1), delay);
+      stream.reconnectTimer = setTimeout(() => void run(hitDurationCap ? 0 : attempt + 1), delay);
     };
 
     void run();
     return () => {
       cancelled = true;
-      if (invalidateTimer !== null) clearTimeout(invalidateTimer);
-      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      if (stream.invalidateTimer !== null) clearTimeout(stream.invalidateTimer);
+      if (stream.reconnectTimer !== null) clearTimeout(stream.reconnectTimer);
       controller.abort();
     };
   }, [

@@ -9,6 +9,10 @@
     "max_detail_evaluations": 200,
     "scoring_version": "sh-scoring-1",
     "rule_dimensions": ["aeo", "technical"],
+    "issue_section_by_category": {
+      "content": "content",
+      "metadata": "content"
+    },
     "failing_outcomes": ["missing", "partial"],
     "event_count_bearing_keys": [
       "discarded",
@@ -54,6 +58,15 @@
       ],
       "gone_status_codes": [404, 410]
     },
+    "issue_states": {
+      "policy_version": "sh-issue-states-1",
+      "open_states": ["open", "regressed", "marked_fixed"],
+      "resolving_outcomes": ["satisfied", "not_applicable"],
+      "unavailable_rules": {
+        "gone": "technical.page_not_found",
+        "redirect": "technical.page_redirects"
+      }
+    },
     "fetch_attempt_error_outcome": "error",
     "defect_impact_bands": {
       "critical": 4,
@@ -88,11 +101,11 @@
       "technical.indexable": "crawlability"
     },
     "unknown_rule_remediation_route": "code",
-    "issue_history_max_crawls": 24,
+    "snapshot_top_issues": 10,
     "inventory_source_crawl_ids_key": "inventory_source_crawl_ids",
     "coverage_formula_version": "sh-coverage-1",
     "classification_formula_version": "sh-classification-1",
-    "overview_trend_point_limit": 12,
+    "overview_issue_trend_day_limit": 90,
     "overview_cohort_share_shift_points": 10,
     "web_fundamentals_areas": ["accessibility", "mobile", "security", "lab"],
     "eligibility_critical_checkpoints": [

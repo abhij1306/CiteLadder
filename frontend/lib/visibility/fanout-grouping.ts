@@ -122,23 +122,19 @@ export function searchRowsByTopic(
   items: readonly VisibilityExecutionEvidence[],
   topicOf: ReadonlyMap<string, string>,
 ): SearchGroup[] {
-  const order: string[] = [];
   const buckets = new Map<string, VisibilityExecutionEvidence[]>();
   for (const item of items) {
     const topic =
       topicOf.get(item.prompt_id ?? '') ?? topicOf.get(item.prompt_snapshot_id) ?? 'Unclassified';
     const bucket = buckets.get(topic);
-    if (bucket) {
-      bucket.push(item);
-    } else {
-      buckets.set(topic, [item]);
-      order.push(topic);
-    }
+    if (bucket) bucket.push(item);
+    else buckets.set(topic, [item]);
   }
-  order.sort((a, b) => a.localeCompare(b));
-  return order.map((topic) => ({
-    ...foldRows(buckets.get(topic)!),
-    key: topic,
-    label: topic,
-  }));
+  return [...buckets]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([topic, rows]) => ({
+      ...foldRows(rows),
+      key: topic,
+      label: topic,
+    }));
 }

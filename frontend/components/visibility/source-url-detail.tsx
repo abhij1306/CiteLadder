@@ -1,5 +1,3 @@
-'use client';
-
 import { AppGrid } from '@/components/ui/app-grid';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -57,6 +55,9 @@ export function SourceUrlDetail({
     url,
   });
   const data = query.data;
+  // Pending, not merely loading: a read still waiting on its run fetches
+  // nothing, and no data then is not "no engine used this page".
+  const pending = query.isPending;
   const title = data?.title?.trim() || pathOf(url);
 
   return (
@@ -83,12 +84,12 @@ export function SourceUrlDetail({
               pending={query.isFetching}
             />
           ) : null}
-          {query.isLoading ? <Skeleton variant="block" /> : null}
+          {pending ? <Skeleton variant="block" /> : null}
           {data ? <Overview data={data} /> : null}
         </CardContent>
       </Card>
 
-      <SourceUrlPageCard url={url} page={data?.page} loading={query.isLoading} />
+      <SourceUrlPageCard url={url} page={data?.page} loading={pending} />
 
       <UsageCard
         dimension="url"
@@ -101,8 +102,8 @@ export function SourceUrlDetail({
       />
 
       <AppGrid layout="halves">
-        <EnginesCard engines={data?.engines} loading={query.isLoading} errored={query.isError} />
-        <BrandsCard brands={data?.brands} loading={query.isLoading} errored={query.isError} />
+        <EnginesCard engines={data?.engines} loading={pending} errored={query.isError} />
+        <BrandsCard brands={data?.brands} loading={pending} errored={query.isError} />
       </AppGrid>
 
       <SourcePrompts filters={filters} queries={queries} url={url} />

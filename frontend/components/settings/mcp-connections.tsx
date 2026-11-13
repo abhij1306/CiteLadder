@@ -14,12 +14,7 @@ function Snippet({ label, value }: Readonly<{ label: string; value: string }>) {
           Copy
         </CopyButton>
       </Inline>
-      <pre
-        className={panelClasses(
-          { tone: 'well' },
-          'type-code overflow-x-auto border-0 whitespace-pre',
-        )}
-      >
+      <pre className={panelClasses('type-code overflow-x-auto border-0 whitespace-pre')}>
         {/* Block, so the first line sits on the well's inset, not a line-height below it. */}
         <code className="block">{value}</code>
       </pre>

@@ -5,7 +5,7 @@ import type { z } from 'zod';
 import * as sharedTools from '../src/mcp/tools.ts';
 import { AgentFixtures, reply, save, scripted, toolUse, type Response } from './agent-support.ts';
 import { testDatabase } from './support.ts';
-import { agentTools, smallerLimit } from '../src/agent/tool-adapters.ts';
+import { agentTools, sharedReads, smallerLimit } from '../src/agent/tool-adapters.ts';
 import { attachAgentTarget } from '../src/agent/target-adapter.ts';
 import { attachOrCreateAction } from '../src/opportunities/actions.ts';
 import { readChat } from '../src/agent/reads.ts';
@@ -136,6 +136,36 @@ describe('Agent bindings to the evidence and Action owners', () => {
     expect(
       [...pluginNamed].filter((name) => !Object.hasOwn(sharedTools.definitions, name)),
     ).toEqual([]);
+  });
+  it('stops issuing a shared read’s queries once its signal aborts', async () => {
+    const scope = await fixtures.scope();
+    const demand = (queries: string[], onResult = () => {}) =>
+      sharedReads(
+        // Records each query PostgreSQL answered.
+        db.withPlugin({
+          transformQuery: ({ node }) => node,
+          transformResult: async ({ result }) => {
+            queries.push(`query ${queries.length + 1}`);
+            onResult();
+            return result;
+          },
+        }),
+      ).find((tool) => tool.name === 'read_demand')!;
+    const unstopped: string[] = [];
+    await demand(unstopped).read(scope, {}, signal(), 10_000);
+    expect(unstopped.length).toBeGreaterThan(1);
+    // Stop (or the read timeout) lands after the first query: no further query runs.
+    const controller = new AbortController();
+    const stopped: string[] = [];
+    await expect(
+      demand(stopped, () => controller.abort(new Error('Stopped'))).read(
+        scope,
+        {},
+        controller.signal,
+        10_000,
+      ),
+    ).rejects.toThrow('Stopped');
+    expect(stopped).toEqual(['query 1']);
   });
   it('pins shared MCP reads and fetches to one project and rechecks the member', async () => {
     const scope = await fixtures.scope(),

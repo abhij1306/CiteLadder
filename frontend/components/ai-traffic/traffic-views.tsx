@@ -1,4 +1,3 @@
-'use client';
 import { useState } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import type { z } from 'zod';

@@ -1,5 +1,3 @@
-'use client';
-
 import { InfoHint } from '@/components/ui/info-hint';
 import { SegmentedControl, type SegmentedOption } from '@/components/ui/tabs';
 import type { DemandDetectorState } from '@citeladder/contracts';
@@ -44,18 +42,24 @@ type Detector = (typeof DEMAND_DETECTORS)[number];
 function DetectorHint({
   detectors,
   states,
-}: Readonly<{ detectors: readonly Detector[]; states: DetectorSummaries }>) {
+  policy,
+}: Readonly<{
+  detectors: readonly Detector[];
+  states: DetectorSummaries;
+  policy: DemandSnapshot['detector_policy'];
+}>) {
   const several = detectors.length > 1;
   const label = several
     ? `How the ${detectors.map((detector) => detector.label).join(' and ')} detectors work`
     : `How the ${detectors[0]?.label} detector works`;
   const text = detectors
-    .map((detector) =>
-      [
-        several ? `${detector.label}: ${detector.rule}` : detector.rule,
+    .map((detector) => {
+      const rule = detector.rule(policy);
+      return [
+        several ? `${detector.label}: ${rule}` : rule,
         ...states[detector.key].limitations,
-      ].join(' '),
-    )
+      ].join(' ');
+    })
     .join(' ');
   return <InfoHint label={label}>{text}</InfoHint>;
 }
@@ -94,7 +98,9 @@ export function DemandSignalFilters({
         label,
         count,
         detail: status ?? undefined,
-        hint: counted.length ? <DetectorHint detectors={counted} states={detectors} /> : undefined,
+        hint: counted.length ? (
+          <DetectorHint detectors={counted} states={detectors} policy={snapshot.detector_policy} />
+        ) : undefined,
       },
     ];
   });

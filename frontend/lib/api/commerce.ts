@@ -1,30 +1,41 @@
-/** Typed Commerce catalog, discovery, prompt, and AI Shelf client. */
-import { mutationOptions, queryOptions, skipToken, type QueryClient } from '@tanstack/react-query';
+/** Typed Commerce catalog, product metrics, discovery and prompt client. */
+import { mutationOptions, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { apiClient, type ApiRequestOptions } from './client';
 import { startInteractiveWork } from './interactive-work';
+import { retainPreviousDataForScope } from './query-client';
 import { queryKeys } from './query-keys';
 import type { ProjectScope } from './query-keys/scope';
-import { COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS } from '@/lib/config/operational';
+import {
+  COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS,
+  COMMERCE_STORE_IMPORT_REQUEST_TIMEOUT_MS,
+} from '@/lib/config/operational';
 import { strictValidate } from '@citeladder/contracts/validation';
 import type {
   BuyerPromptDecisionRequest,
   BuyerPromptGenerateRequest,
   BuyerPromptManualRequest,
+  CatalogImportApplyRequest,
   CatalogImportRequest,
   CompetitorDecisionRequest,
   CompetitorDiscoveryRequest,
+  ProductEditRequest,
+  ProductLifecycleRequest,
 } from '@citeladder/contracts/commerce-requests';
 import {
   buyerPromptSchema,
   catalogImportSchema,
+  catalogImportStageSchema,
   commerceCatalogSchema,
+  commerceProductDetailSchema,
+  commerceProductPageSchema,
+  commerceProductSchema,
   commerceProjectionSchema,
+  commerceShoppingOverviewSchema,
   competitorDiscoverySchema,
   competitorDiscoveryTaskSchema,
   competitorCandidateSchema,
-  shelfSchema,
   type CommerceTarget,
   type CompetitorDiscoveryTask,
 } from '@citeladder/contracts/commerce-suite';
@@ -44,15 +55,33 @@ export const commerceApi = {
       await apiClient.get(path(projectId, 'catalog/projection'), options),
       'commerce.catalogProjection',
     ),
-  importCatalog: async (
+  stageImport: async (
     projectId: string,
     input: CatalogImportRequest,
     options?: ApiRequestOptions,
   ) =>
     strictValidate(
+      catalogImportStageSchema,
+      await apiClient.post(
+        path(projectId, 'catalog/imports'),
+        input,
+        // A store import fetches the storefront before it answers.
+        input.source === 'shopify'
+          ? { ...options, timeoutMs: COMMERCE_STORE_IMPORT_REQUEST_TIMEOUT_MS }
+          : options,
+      ),
+      'commerce.stageImport',
+    ),
+  applyImport: async (
+    projectId: string,
+    importId: string,
+    input: CatalogImportApplyRequest,
+    options?: ApiRequestOptions,
+  ) =>
+    strictValidate(
       catalogImportSchema,
-      await apiClient.post(path(projectId, 'catalog/import'), input, options),
-      'commerce.importCatalog',
+      await apiClient.post(path(projectId, `catalog/imports/${importId}/apply`), input, options),
+      'commerce.applyImport',
     ),
   competitors: async (projectId: string, options?: ApiRequestOptions) =>
     strictValidate(
@@ -142,15 +171,69 @@ export const commerceApi = {
       await apiClient.patch(path(projectId, `buyer-prompts/${promptId}`), input, options),
       'commerce.decideBuyerPrompt',
     ),
-  shelf: async (projectId: string, target: CommerceTarget, options?: ApiRequestOptions) =>
+  editProduct: async (
+    projectId: string,
+    productId: string,
+    input: ProductEditRequest,
+    options?: ApiRequestOptions,
+  ) =>
     strictValidate(
-      shelfSchema,
-      await apiClient.get(
-        `${path(projectId, 'ai-shelf')}?target_kind=${target.kind}&target_id=${encodeURIComponent(target.id)}`,
+      commerceProductSchema,
+      await apiClient.patch(
+        path(projectId, 'products/' + encodeURIComponent(productId)),
+        input,
         options,
       ),
-      'commerce.shelf',
+      'commerce.editProduct',
     ),
+  setProductLifecycle: async (
+    projectId: string,
+    productId: string,
+    input: ProductLifecycleRequest,
+    options?: ApiRequestOptions,
+  ) =>
+    strictValidate(
+      commerceProductSchema,
+      await apiClient.put(
+        path(projectId, `products/${encodeURIComponent(productId)}/lifecycle`),
+        input,
+        options,
+      ),
+      'commerce.setProductLifecycle',
+    ),
+  products: async (
+    projectId: string,
+    search: string,
+    cursor: string | null,
+    options?: ApiRequestOptions,
+  ) => {
+    const params = new URLSearchParams(search);
+    if (cursor) params.set('cursor', cursor);
+    return strictValidate(
+      commerceProductPageSchema,
+      await apiClient.get(`${path(projectId, 'products')}?${params.toString()}`, options),
+      'commerce.products',
+    );
+  },
+  overview: async (projectId: string, search: string, options?: ApiRequestOptions) =>
+    strictValidate(
+      commerceShoppingOverviewSchema,
+      await apiClient.get(`${path(projectId, 'overview')}?${search}`, options),
+      'commerce.overview',
+    ),
+  productDetail: async (
+    projectId: string,
+    holderId: string,
+    search: string,
+    options?: ApiRequestOptions,
+  ) => {
+    const resource = path(projectId, 'products/' + encodeURIComponent(holderId));
+    return strictValidate(
+      commerceProductDetailSchema,
+      await apiClient.get(`${resource}?${search}`, options),
+      'commerce.productDetail',
+    );
+  },
 };
 
 const scoped = (scope: ProjectScope, signal?: AbortSignal) => ({
@@ -172,6 +255,27 @@ export const commerceQueries = {
       queryFn: ({ signal }) =>
         commerceApi.catalogProjection(scope.projectId, scoped(scope, signal)),
     }),
+  /**
+   * One Products page for the filters' query string (`productSearch`). The
+   * project's previous page stays on screen while the next one loads, so a
+   * filter or a page turn never empties the table; another project's never does.
+   */
+  products: (scope: ProjectScope, search: string, cursor: string | null) =>
+    queryOptions({
+      queryKey: queryKeys.commerce.products(scope, search, cursor),
+      queryFn: ({ signal }) =>
+        commerceApi.products(scope.projectId, search, cursor, scoped(scope, signal)),
+      placeholderData: (previous, previousQuery) =>
+        retainPreviousDataForScope(scope.projectId, previous, previousQuery),
+    }),
+  /** The Shopping overview; like a Products page, the project's previous one stays while the next loads. */
+  overview: (scope: ProjectScope, search: string) =>
+    queryOptions({
+      queryKey: queryKeys.commerce.overview(scope, search),
+      queryFn: ({ signal }) => commerceApi.overview(scope.projectId, search, scoped(scope, signal)),
+      placeholderData: (previous, previousQuery) =>
+        retainPreviousDataForScope(scope.projectId, previous, previousQuery),
+    }),
   competitors: (scope: ProjectScope) =>
     queryOptions({
       queryKey: queryKeys.commerce.competitors(scope),
@@ -182,13 +286,19 @@ export const commerceQueries = {
       queryKey: queryKeys.commerce.buyerPrompts(scope),
       queryFn: ({ signal }) => commerceApi.buyerPrompts(scope.projectId, scoped(scope, signal)),
     }),
-  /** One target's AI Shelf; skips until a target is selected. */
-  shelf: (scope: ProjectScope, target: CommerceTarget | null) =>
+  /**
+   * One product holder's page for the window's query string (`window=30`).
+   * The previous window's page stays on screen while the next one loads.
+   */
+  productDetail: (scope: ProjectScope, holderId: string, search: string) =>
     queryOptions({
-      queryKey: queryKeys.commerce.shelf(scope, target),
-      queryFn: target
-        ? ({ signal }) => commerceApi.shelf(scope.projectId, target, scoped(scope, signal))
-        : skipToken,
+      queryKey: queryKeys.commerce.productDetail(scope, holderId, search),
+      queryFn: ({ signal }) =>
+        commerceApi.productDetail(scope.projectId, holderId, search, scoped(scope, signal)),
+      placeholderData: (previous, previousQuery) =>
+        previous?.product.holder_id === holderId
+          ? retainPreviousDataForScope(scope.projectId, previous, previousQuery)
+          : undefined,
     }),
   /**
    * Discovery task status: the tracked ids, or, with none (after a reload),
@@ -250,6 +360,26 @@ export const refreshCatalog = (
     { cancelRefetch: !joinInFlight },
   );
 
+/** Every Products page and Shopping overview, after the catalog or the approved competitors change. */
+const refreshProducts = (client: QueryClient, projectId: string) =>
+  Promise.all(
+    (['products', 'overview'] as const).map((resource) =>
+      client.invalidateQueries({ queryKey: queryKeys.commerce.resource(projectId, resource) }),
+    ),
+  );
+
+/** Every product page, after a product's catalog record or a competitor's state changes. */
+const refreshProductDetails = (client: QueryClient, projectId: string) =>
+  client.invalidateQueries({ queryKey: queryKeys.commerce.resource(projectId, 'product-detail') });
+
+/** Every read a catalog product's edit, archive or restore changes. */
+const refreshCatalogProduct = (client: QueryClient, projectId: string) =>
+  Promise.all([
+    refreshCatalog(client, projectId),
+    refreshProducts(client, projectId),
+    refreshProductDetails(client, projectId),
+  ]);
+
 /** The project's competitor candidates, after a decision or a finished discovery. */
 const refreshCompetitors = (client: QueryClient, projectId: string) =>
   client.invalidateQueries({ queryKey: queryKeys.commerce.resource(projectId, 'competitors') });
@@ -259,15 +389,22 @@ const refreshBuyerPrompts = (client: QueryClient, projectId: string) =>
 
 /** Commerce writes; each success refreshes every read it changes. */
 export const commerceMutations = {
-  importCatalog: (scope: ProjectScope) =>
+  /** Stage an import for review; nothing reaches the catalog until it is applied. */
+  stageImport: (scope: ProjectScope) =>
     mutationOptions({
-      mutationFn: async (file: File) =>
-        commerceApi.importCatalog(
-          scope.projectId,
-          { content: await file.text(), filename: file.name },
-          scoped(scope),
-        ),
-      onSuccess: (_result, _file, _context, { client }) => refreshCatalog(client, scope.projectId),
+      mutationFn: (input: CatalogImportRequest) =>
+        commerceApi.stageImport(scope.projectId, input, scoped(scope)),
+    }),
+  applyImport: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: ({ importId, ...input }: { importId: string } & CatalogImportApplyRequest) =>
+        commerceApi.applyImport(scope.projectId, importId, input, scoped(scope)),
+      onSuccess: (_result, _input, _context, { client }) =>
+        Promise.all([
+          refreshCatalog(client, scope.projectId),
+          refreshProducts(client, scope.projectId),
+          refreshProductDetails(client, scope.projectId),
+        ]),
     }),
   discoverCompetitors: (scope: ProjectScope) =>
     mutationOptions({
@@ -279,12 +416,40 @@ export const commerceMutations = {
       mutationFn: ({ id, decision }: { id: string } & CompetitorDecisionRequest) =>
         commerceApi.decideCompetitor(scope.projectId, id, { decision }, scoped(scope)),
       onSuccess: (_candidate, _input, _context, { client }) =>
-        refreshCompetitors(client, scope.projectId),
+        Promise.all([
+          refreshCompetitors(client, scope.projectId),
+          refreshProducts(client, scope.projectId),
+          refreshProductDetails(client, scope.projectId),
+        ]),
     }),
+  editProduct: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: ({ id, ...input }: { id: string } & ProductEditRequest) =>
+        commerceApi.editProduct(scope.projectId, id, input, scoped(scope)),
+      onSuccess: (_product, _input, _context, { client }) =>
+        refreshCatalogProduct(client, scope.projectId),
+    }),
+  setProductLifecycle: (scope: ProjectScope) =>
+    mutationOptions({
+      mutationFn: ({ id, ...input }: { id: string } & ProductLifecycleRequest) =>
+        commerceApi.setProductLifecycle(scope.projectId, id, input, scoped(scope)),
+      onSuccess: (_product, _input, _context, { client }) =>
+        refreshCatalogProduct(client, scope.projectId),
+    }),
+  /** Metered: a retry of one request sends the same key and is replayed, not run again. */
   generateBuyerPrompts: (scope: ProjectScope) =>
     mutationOptions({
-      mutationFn: (input: BuyerPromptGenerateRequest) =>
-        commerceApi.generateBuyerPrompts(scope.projectId, input, scoped(scope)),
+      mutationFn: ({
+        input,
+        idempotencyKey,
+      }: {
+        input: BuyerPromptGenerateRequest;
+        idempotencyKey: string;
+      }) =>
+        commerceApi.generateBuyerPrompts(scope.projectId, input, {
+          ...scoped(scope),
+          idempotencyKey,
+        }),
       onSuccess: (_created, _input, _context, { client }) =>
         refreshBuyerPrompts(client, scope.projectId),
     }),

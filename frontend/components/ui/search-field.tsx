@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useRef, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Search, X } from 'lucide-react';
 

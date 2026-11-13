@@ -8,6 +8,7 @@
 import { normalizeDomain } from '../analysis/domains.ts';
 import type { Database } from '../db/database.ts';
 import { strings } from '../db/json.ts';
+import type { ProjectScope } from '../projects/brand-profile.ts';
 import { brandLogoUrl, competitorLogoUrl } from '../projects/logos.ts';
 
 type Mark = { logo_url: string | null; website_url: string | null };
@@ -25,24 +26,30 @@ function website(value: string | undefined): string | null {
 
 const markKey = (isBrand: boolean, name: string) => `${isBrand ? 'brand' : 'competitor'}:${name}`;
 
-/** Marks for this already-authorized project, keyed by kind and exact name. */
-export async function rankingMarks(db: Database, projectId: string): Promise<Map<string, Mark>> {
+/** Marks for the scope's project, keyed by kind and exact name. */
+export async function rankingMarks(
+  db: Database,
+  { workspaceId, projectId }: ProjectScope,
+): Promise<Map<string, Mark>> {
   const marks = new Map<string, Mark>();
   const project = await db
     .selectFrom('projects')
     .select(['id', 'website_url'])
     .where('id', '=', projectId)
+    .where('workspace_id', '=', workspaceId)
     .executeTakeFirst();
   if (project === undefined) return marks;
   const brand = await db
     .selectFrom('brands')
     .select(['name', 'logo_asset_id'])
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .executeTakeFirst();
   if (brand !== undefined) {
     const owned = await db
       .selectFrom('owned_domains')
       .select('domain')
+      .where('workspace_id', '=', workspaceId)
       .where('project_id', '=', projectId)
       .where('domain', '!=', '')
       .orderBy('created_at')
@@ -56,6 +63,7 @@ export async function rankingMarks(db: Database, projectId: string): Promise<Map
   const competitors = await db
     .selectFrom('competitors')
     .select(['id', 'name', 'domains', 'logo_asset_id'])
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .orderBy('created_at')
     .execute();

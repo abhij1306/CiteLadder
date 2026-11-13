@@ -9,7 +9,7 @@ import {
   type CrawlReadOptions,
 } from '../crawl-logs/reads.ts';
 import { insightsRead } from '../ai-traffic/insights.ts';
-import { pagesRead, urlRead } from '../ai-traffic/pages.ts';
+import { pageContext, pagesRead, urlRead } from '../ai-traffic/pages.ts';
 import { readAiReferrals } from '../analytics/ai-referrals.ts';
 import { queryEvidencePage } from '../demand/reads.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
@@ -210,6 +210,10 @@ export async function crawlLogsRead(
   args: CrawlArgs & { view: 'summary' | 'crawlers' | 'coverage' | 'requests' },
 ): Promise<Evidence> {
   const options = crawlOptions(args);
+  // No source and nothing retained in the window is its own state: empty
+  // views would read as an observed zero. A revoked source keeps its history.
+  if (crawlNotConnected(await crawlSummary(db, scope, options)))
+    return unavailable('not_connected');
   const reader = {
     summary: crawlSummary,
     crawlers: crawlerPage,
@@ -219,10 +223,33 @@ export async function crawlLogsRead(
   return { state: 'available', ...(await reader(db, scope, options)) };
 }
 
+/** No crawl-log source is connected and the window holds no retained crawl measurement. */
+function crawlNotConnected(crawl: Awaited<ReturnType<typeof crawlSummary>>) {
+  return crawl.connection === 'not_connected' && crawl.requests === null;
+}
+
+/**
+ * True when none of a page's AI-activity sources answers for the window: no
+ * crawl logs, no GA4 property and no completed AI Visibility run.
+ */
+async function aiTrafficNotConnected(
+  db: ProjectRead['db'],
+  scope: ProjectRead['scope'],
+  args: Window,
+) {
+  const context = await pageContext(db, scope, crawlOptions(args));
+  return (
+    crawlNotConnected(context.crawl) &&
+    !context.ga4Connected &&
+    context.citations === 'no_completed_run'
+  );
+}
+
 export async function aiTrafficPages(
   { db, scope }: ProjectRead,
   args: CrawlArgs,
 ): Promise<Evidence> {
+  if (await aiTrafficNotConnected(db, scope, args)) return unavailable('not_connected');
   return { state: 'available', ...(await pagesRead(db, scope, crawlOptions(args))) };
 }
 
@@ -249,6 +276,7 @@ export async function aiTrafficUrl(
   // The ingestion owner's identity: a redacted secret path never joins.
   const identity = pathIdentity(args.url, project.website_url);
   if (!identity?.url_hash) return unavailable('url_not_joinable');
+  if (await aiTrafficNotConnected(db, scope, args)) return unavailable('not_connected');
   const result = await urlRead(db, scope, identity.url_hash, crawlOptions(args));
   return { state: result.page ? 'available' : 'unavailable', ...result };
 }

@@ -66,6 +66,12 @@ export function siteCoverage(crawl: CoverageCrawl | null): [Json, string[]] {
 const mergedIds = (left: string[], right: string[]) =>
   [...new Set([...left, ...right])].sort(compareText);
 
+/** The hit's own severity when it carries a known one, else its rule's. */
+function hitSeverity(hit: DetectorHit): string {
+  const own = hit.finding?.severity;
+  return own && o.OPPORTUNITY_SEVERITIES.includes(own) ? own : rules[hit.rule_id]!.severity;
+}
+
 /** Positive when `left` is the higher-scored hit. */
 const preference = (left: Scored, right: Scored) => left[1] - right[1];
 
@@ -75,7 +81,7 @@ export function scoreHits(hits: DetectorHit[]): Scored[] {
   for (const hit of hits) {
     const rule = rules[hit.rule_id];
     if (!rule) throw new Error(`unknown opportunity rule_id: ${hit.rule_id}`);
-    const score = priorityScore(rule.severity, hit.value_factor, hit.gap_factor);
+    const score = priorityScore(hitSeverity(hit), hit.value_factor, hit.gap_factor);
     if (score < o.MIN_PRIORITY_TO_SURFACE) continue;
     const key = JSON.stringify([hit.rule_id, targetKey(hit.target)]);
     const current = consolidated.get(key);
@@ -109,9 +115,9 @@ export function newOpportunity(hit: DetectorHit, score: number) {
   return {
     rule_id: rule.rule_id,
     opportunity_type: rule.opportunity_type,
-    severity: rule.severity,
+    severity: hitSeverity(hit),
     priority_score: score,
-    title: rule.title,
+    title: hit.finding?.title || rule.title,
     remediation: rule.remediation,
     ...targetColumns(hit.target),
     evidence: hit.evidence,
@@ -204,20 +210,30 @@ type CurrentSnapshot = {
 };
 
 /**
- * Every persisted input a refresh reads, by identity: the audit, crawl, demand
- * revision, internal-link run, source-page revision and keyword-gap datasets.
+ * Every persisted input a refresh reads, by identity: the audit, the Commerce
+ * run, match pass and catalog fields, crawl (and the
+ * newest page rerun it folds in), demand revision, internal-link run,
+ * source-page revision, keyword-gap datasets and content-angle run.
  * Two refreshes over equal identities compute the same set.
  */
 export type SourceIdentity = {
   audit_id: string | null;
   /** The latest Commerce run, read for Commerce hits apart from the brand run. */
   commerce_audit_id: string | null;
+  /** The newest match pass, read for the per-product metric findings. */
+  commerce_match_pass_id: string | null;
+  /** The catalog products' fields, read for catalog-field and per-product findings. */
+  commerce_catalog_revision: string | null;
   site_crawl_id: string | null;
+  /** The newest page rerun the crawl's view folds in (`foldedRerunId`). */
+  site_rerun_id: string | null;
   demand_snapshot_id: string | null;
   demand_source_revision: string | null;
   internal_link_run_id: string | null;
   source_pages_revision: string | null;
   search_gap_revision: string | null;
+  /** The content-angle run content gaps are read from; null when none is current. */
+  content_angle_run_id: string | null;
 };
 
 /** Equal identities; a stored one missing a field (an older snapshot) never matches. */

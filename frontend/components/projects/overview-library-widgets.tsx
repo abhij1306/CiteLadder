@@ -1,5 +1,3 @@
-'use client';
-
 import type { UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -9,6 +7,7 @@ import { overviewWidgetTitles, type OverviewWidgetKey } from '@citeladder/contra
 import { ProjectLink } from '@/components/ui/project-link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Delta } from '@/components/ui/delta';
 import { QueryState } from '@/components/ui/query-state';
 import { ReadError } from '@/components/ui/read-error';
 import { Stack } from '@/components/ui/layout';
@@ -143,7 +142,7 @@ export function VisibilityTrendWidget({ project }: Readonly<{ project: Project }
           points.length ? (
             <TrendChart
               data={toChartPoints(points, 'brand_mention_rate')}
-              label="Brand mention rate by run"
+              label="Visibility by run"
               height="sm"
               yMax={100}
               yFormat={(value) => `${Math.round(value)}%`}
@@ -204,7 +203,7 @@ export function TopMoversWidget({ project }: Readonly<{ project: Project }>) {
               rows={rows.map((mover) => ({
                 key: mover.key,
                 label: mover.key,
-                value: `${mover.delta > 0 ? '+' : ''}${mover.delta} pp`,
+                value: <Delta value={mover.delta} policy="neutral" unit=" pp" />,
               }))}
             />
           ) : (

@@ -91,6 +91,7 @@ async function analysed(owner: Tenant, auditId: string, answerText = ANSWER) {
     .insertInto('raw_response_artifacts')
     .values({
       id: artifactId,
+      workspace_id: owner.workspaceId,
       audit_id: auditId,
       task_id: taskId,
       logical_engine: 'chatgpt',

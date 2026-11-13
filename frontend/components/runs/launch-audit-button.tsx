@@ -1,5 +1,3 @@
-'use client';
-
 import { Rocket } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
@@ -7,12 +5,19 @@ import { useState } from 'react';
 import { Button, type ButtonProps } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { useProjectHref } from '@/lib/navigation/project-destination';
-import { useActiveProject } from '@/lib/project/project-context';
+import { useActiveProject, useWorkspaceCapability } from '@/lib/project/project-context';
 
 import { LaunchDialog } from './launch-dialog';
 
-/** Opens the shared audit configuration dialog and routes directly to the new run. */
-export function LaunchAuditButton({
+/**
+ * Opens the shared audit configuration dialog and routes directly to the new
+ * run. A role that may not run audits is not offered it.
+ */
+export function LaunchAuditButton(props: Readonly<ButtonProps & { showIcon?: boolean }>) {
+  return useWorkspaceCapability('run') ? <LaunchAudit {...props} /> : null;
+}
+
+function LaunchAudit({
   children = 'Launch audit',
   showIcon = true,
   ...buttonProps

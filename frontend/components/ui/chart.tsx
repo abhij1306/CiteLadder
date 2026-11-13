@@ -1,7 +1,6 @@
-'use client';
-
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
+import { FLOAT_FACE } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 /**
@@ -123,7 +122,7 @@ export function useChartWidth<T extends HTMLElement>(fallback = 640) {
 }
 
 /** The Other texture: `data-other` stripes on the `chart-grid` ground. */
-function ChartHatchPattern({ id }: Readonly<{ id: string }>) {
+export function ChartHatchPattern({ id }: Readonly<{ id: string }>) {
   return (
     <pattern
       id={id}
@@ -204,28 +203,36 @@ export function ChartLegend({
   entries,
   line = false,
   markerLabel,
+  compact = false,
 }: Readonly<{
   entries: readonly ChartLegendEntry[];
   line?: boolean;
   /** The key for event markers drawn across the plot (a dashed `line-control` rule). */
   markerLabel?: string;
+  /** Caption-size names and values instead of `body-sm`. */
+  compact?: boolean;
 }>) {
+  const item = cn(
+    compact ? 'text-caption' : 'text-body-sm',
+    // Capped, so three long names still share a row instead of taking one each.
+    'inline-flex max-w-[min(100%,20rem)] min-w-0 items-center gap-2 whitespace-nowrap',
+  );
   return (
-    <ul aria-hidden className="flex flex-wrap gap-x-6 gap-y-2">
+    <ul aria-hidden className="flex min-w-0 flex-wrap gap-x-6 gap-y-2">
       {entries.map((entry) => (
-        <li
-          key={entry.name}
-          className="text-body-sm inline-flex items-center gap-2 whitespace-nowrap"
-        >
+        <li key={entry.name} className={item}>
           <ChartSwatch tone={entry.tone} line={line} />
-          <span className="text-ink-secondary">{entry.name}</span>
+          {/* A name wider than the card (a page's URL) is cut, whole in its title. */}
+          <span className="text-ink-secondary min-w-0 truncate" title={entry.name}>
+            {entry.name}
+          </span>
           {entry.value === undefined ? null : (
-            <span className="text-ink font-medium tabular-nums">{entry.value}</span>
+            <span className="text-ink shrink-0 tabular-nums">{entry.value}</span>
           )}
         </li>
       ))}
       {markerLabel ? (
-        <li className="text-body-sm inline-flex items-center gap-2 whitespace-nowrap">
+        <li className={item}>
           <svg width={12} height={3} viewBox="0 0 12 3" className="shrink-0">
             <line
               x1={0}
@@ -245,8 +252,9 @@ export function ChartLegend({
 }
 
 /**
- * The hover card every chart shares: `surface` lifted by `shadow-pop`, a mono
- * caption naming the point, then one row per series.
+ * The hover card every chart shares: the floating face (`surface`, 1px `line`
+ * border, `shadow-float`) at the floating radius, a mono caption naming the
+ * point, then one row per series.
  */
 export function ChartTip({
   title,
@@ -257,7 +265,10 @@ export function ChartTip({
   return (
     <div
       aria-hidden
-      className="bg-surface shadow-pop pointer-events-none absolute z-20 flex w-54 flex-col gap-1 rounded-md p-3"
+      className={cn(
+        FLOAT_FACE,
+        'pointer-events-none absolute z-20 flex w-54 flex-col gap-1 rounded-lg p-3',
+      )}
       style={{ left, top }}
     >
       <p className="text-caption text-ink-muted mb-1 font-mono">{title}</p>
@@ -270,12 +281,13 @@ export function ChartTipRow({
   tone,
   name,
   value,
-}: Readonly<{ tone: ChartTone; name: string; value: string }>) {
+  compact = false,
+}: Readonly<{ tone: ChartTone; name: string; value: string; compact?: boolean }>) {
   return (
-    <div className="text-body-sm flex items-center gap-2">
+    <div className={cn(compact ? 'text-caption' : 'text-body-sm', 'flex items-center gap-2')}>
       <ChartSwatch tone={tone} line />
       <span className="text-ink-secondary min-w-0 flex-1 truncate">{name}</span>
-      <span className="text-ink font-medium tabular-nums">{value}</span>
+      <span className="text-ink tabular-nums">{value}</span>
     </div>
   );
 }

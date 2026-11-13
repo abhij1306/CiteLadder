@@ -57,6 +57,13 @@ export function getBootstrapReadTimeoutMs(): number {
 export const COMMERCE_BUYER_PROMPT_REQUEST_TIMEOUT_MS = 195_000;
 
 /**
+ * Staging a Shopify store import fetches its product pages first, bounded by
+ * the API's 120-second storefront deadline; the browser waits for that plus
+ * parsing and storage instead of the ordinary 30-second limit.
+ */
+export const COMMERCE_STORE_IMPORT_REQUEST_TIMEOUT_MS = 135_000;
+
+/**
  * Prompt generation makes sequential structured model calls (offering maps,
  * then generation batches, each bounded by the 180-second model gateway)
  * before a JEV judging pass that is bounded at 30 seconds. A measured local

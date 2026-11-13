@@ -21,6 +21,7 @@ import { finalizeCrawlAnalyses } from './lifecycle-finalize.ts';
 import { rootFailure } from './reads/crawl.ts';
 import type { SiteWorkerSettings } from './runtime.ts';
 import { recordCrawlEvent } from './site-task.ts';
+import { isPageRerun, pageRerunSql } from './page-rerun.ts';
 import { persistCrawlSnapshot, refreshLiveScoreSummary } from './snapshot.ts';
 import type { Crawl } from './site-task.ts';
 import { failedAs } from './task-outcome.ts';
@@ -155,7 +156,9 @@ function reconcileDiscovery(crawl: Crawl, summary: Summary) {
   // useful partial evidence; it is not a failed crawl.
   const fullyFailed =
     summary.analyzeSucceeded === 0 && (discoveryFailed || summary.analyzeApplicable > 0);
-  if (!summary.discoverOpen && crawl.discovery_status === 'running')
+  // A full crawl's discovery is pending until site setup settles it; a setup that
+  // failed for good never started it.
+  if (!summary.discoverOpen && ['pending', 'running'].includes(crawl.discovery_status))
     crawl.discovery_status = discoveryFailed ? 'failed' : 'completed';
   return { fullyFailed, discoveryPartial: summary.discoverFailed > 0 && !fullyFailed };
 }
@@ -290,7 +293,7 @@ async function reconcileLockedCrawl(db: Database, crawl: Crawl, options: Reconci
   if (!isActiveCrawl(crawl.status)) return;
   const summary = await taskSummary(db, crawl);
   await refreshCounters(db, crawl, summary);
-  const discoveryWasRunning = crawl.discovery_status === 'running';
+  const discoveryWasRunning = ['pending', 'running'].includes(crawl.discovery_status);
   const { fullyFailed, discoveryPartial } = reconcileDiscovery(crawl, summary);
   await reconcileInventory(db, crawl, summary, discoveryWasRunning);
   reconcileAnalysis(crawl, summary, fullyFailed);
@@ -445,8 +448,7 @@ async function eachCrawl<T extends { id: string }>(
   let acted = 0;
   for (const crawl of crawls)
     try {
-      // One crawl lock at a time: a bounded batch never holds several crawl rows.
-      if ((await work(crawl)) !== false) acted++; // NOSONAR
+      if ((await work(crawl)) !== false) acted++; // NOSONAR -- One crawl lock at a time: a batch never holds several crawl rows.
     } catch (error) {
       logger.exception(failure, error, { crawl_id: crawl.id });
     }
@@ -549,22 +551,21 @@ export async function reconcileOverdue(db: Database, settings: SiteWorkerSetting
  * and the snapshot once. The selection mirrors the snapshot writer's own
  * condition (a completed analysis or classification-expected task of an
  * active monitored page), so a crawl with nothing to publish is never chosen.
+ * A page rerun writes no snapshot, so its `change_intel` successor marks it
+ * published instead.
  */
 export async function publishCancelledCrawls(db: Database, batch: number) {
   const pending = await db
     .selectFrom('site_crawls as c')
     .select(['c.id', 'c.workspace_id'])
     .where('c.status', '=', 'cancelled')
-    .where(({ not, exists, selectFrom }) =>
-      not(
-        exists(
-          selectFrom('site_health_snapshots as s')
-            .select('s.id')
-            .whereRef('s.crawl_id', '=', 'c.id')
-            .whereRef('s.workspace_id', '=', 'c.workspace_id'),
-        ),
-      ),
-    )
+    .where(sql<boolean>`not exists (
+      select 1 from site_health_snapshots s
+      where s.crawl_id = c.id and s.workspace_id = c.workspace_id)`)
+    .where(sql<boolean>`not (${pageRerunSql} and exists (
+      select 1 from site_crawl_tasks t
+      where t.crawl_id = c.id and t.workspace_id = c.workspace_id
+        and t.task_kind = 'change_intel'))`)
     .where(sql<boolean>`(
       exists (
         select 1 from site_page_analyses p
@@ -589,7 +590,8 @@ export async function publishCancelledCrawls(db: Database, batch: number) {
       if (crawl?.status !== 'cancelled') return false;
       await publishFinalPageAnalyses(trx, crawl);
       await persistTerminalCounters(trx, crawl);
-      if (await persistCrawlSnapshot(trx, crawl)) await enqueueSuccessors(trx, crawl);
+      if (isPageRerun(crawl) || (await persistCrawlSnapshot(trx, crawl)))
+        await enqueueSuccessors(trx, crawl);
       return true;
     }),
   );

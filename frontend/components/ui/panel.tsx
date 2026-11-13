@@ -1,46 +1,28 @@
 import { cn } from '@/lib/utils';
 
 /**
- * Panel — the bordered, filled box that sits *inside* a Card or a section.
+ * Panel — a box that groups part of a page: evidence, a payload, a quoted
+ * source, a form's fieldset, a summary.
  *
  * Twenty-seven places used to build this by hand, each picking its own fill,
  * border colour, radius and padding, which is why the same evidence box looked
- * different in six screens. `Card` could not absorb them: a Card may not nest
- * inside a Card, and most of these are structure rather than semantic objects.
+ * different in six screens. This is a class recipe, not a component, because
+ * these boxes land on `div`, `li`, `section`, `fieldset` and `dd` alike and the
+ * element must stay semantic.
  *
- * This is a class recipe, not a component, because these boxes land on `div`,
- * `li`, `section` and `dd` alike and the element must stay semantic.
- *
- * One box recipe (docs/design.md §Component recipes), shared with `Card`:
- * `radius-lg` (8), a one-pixel `border` and `card-padding`. The tone picks the fill and
- * the edge colour only; there is no padding, radius or edge variant.
+ * The box takes its fill from where it sits (D51, after Carbon's contextual
+ * layers), so it is never a box drawn inside a box: on the page ground it is a
+ * container (`surface` with a 1px `line` border, like a Card); inside a card,
+ * panel, dialog or drawer it is the inset (`surface-sunken`, its border
+ * transparent so the geometry stays one pixel). `radius-lg` and `card-padding`
+ * either way; there is no tone, padding, radius or edge variant.
  */
-const PANEL_TONE = {
-  /** Raised out of the section — the default for a nested object. */
-  panel: 'bg-surface border-line',
-  /** Recessed — evidence, payloads, quoted source. */
-  well: 'bg-surface-sunken border-transparent',
-  /** A row inside a card that is chrome rather than content: its edge only,
-   *  because a fill inside a card would be a fourth surface level. */
-  tonal: 'border-line',
-  /** The caller supplies the fill because it carries a status meaning. */
-  none: 'border-transparent',
-} as const;
-
-/*
- * A box is separated by a fill OR an edge, never both. The `panel` and `tonal`
- * tones show their edge; the recessed `well` is the one inset fill a card may
- * hold (owner, 2026-11-03: at most three surface levels), so its border is
- * transparent and keeps the same one-pixel geometry.
- */
-export type PanelTone = keyof typeof PANEL_TONE;
-
-export function panelClasses({ tone = 'panel' }: { tone?: PanelTone } = {}, className?: string) {
+export function panelClasses(className?: string) {
   return cn(
-    // Marks a container surface: a nested empty state shares it rather than
-    // drawing a second card inside.
-    'surface-panel rounded-lg border p-[var(--card-padding)]',
-    PANEL_TONE[tone],
+    // `surface-panel` marks a container, so what nests inside it (a table, a
+    // query state, another inset) shares it rather than drawing a second edge;
+    // `surface-inset` picks the fill by context (globals.css).
+    'surface-panel surface-inset rounded-lg border p-[var(--card-padding)]',
     className,
   );
 }

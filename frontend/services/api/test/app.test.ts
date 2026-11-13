@@ -172,6 +172,7 @@ describe('request ids and the error envelope', () => {
         expect.objectContaining({
           event: 'unhandled_api_exception',
           level: 'error',
+          severity: 'ERROR',
           correlation_id: 'trace-500',
         }),
       );

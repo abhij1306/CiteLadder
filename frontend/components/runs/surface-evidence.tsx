@@ -1,5 +1,3 @@
-'use client';
-
 import { Check, Link2, Minus, Users } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
@@ -157,7 +155,7 @@ function InlineLinks({ links }: Readonly<{ links: SearchSurfaceEvidence['links']
           heading="The overview’s text carried no inline links"
         />
       ) : (
-        <ul className={ledgerClasses('boxed')}>
+        <ul className={ledgerClasses()}>
           {links.map((link) => {
             const href = safeLinkUrl(link.url);
             const title = link.title || link.domain || link.url;
@@ -236,14 +234,14 @@ export function SurfaceEvidence({ evidence }: Readonly<{ evidence: SearchSurface
           <Stack as="section" gap="compact">
             <SubsectionHeader
               title="Who appeared, and how"
-              description="Three independent observations. A brand can be linked without being cited, and cited without being named."
+              description="Three independent observations."
             />
             <PresenceTable entities={evidence.entities} />
           </Stack>
           <InlineLinks links={evidence.links} />
         </>
       ) : (
-        <div className={panelClasses({ tone: 'well' }, 'type-body min-w-0')}>
+        <div className={panelClasses('type-body min-w-0')}>
           {evidence.aio_present === false
             ? 'There was nothing to compose: no overview appeared, so no brand could appear in one.'
             : 'No presence can be reported for a search that was never retrieved. This is a gap in our measurement, not an absence of the brand.'}

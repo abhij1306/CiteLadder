@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeDomain as domain } from '../analysis/domains.ts';
 import type {
   Answer,
   AnswerRequest,
@@ -36,16 +37,6 @@ const sum = (...values: (number | null)[]) =>
     : null;
 const subtract = (total: number | null, part: number | null) =>
   total !== null && part !== null ? Math.max(0, total - part) : total;
-function domain(value: string) {
-  try {
-    return new URL(value.includes('://') ? value : `https://${value}`).hostname
-      .toLowerCase()
-      .replace(/^www\./u, '')
-      .replace(/\.$/u, '');
-  } catch {
-    return '';
-  }
-}
 function citation(
   block: ObjectValue,
   annotation: ObjectValue,
@@ -139,9 +130,12 @@ function retrievedSources(
   }
   return sources;
 }
+/** Gemini `finish_reason` values and Interactions `status` values (upper-cased). */
 const GOOGLE_FINISH: Record<string, FinishReason> = {
   STOP: 'stop',
+  COMPLETED: 'stop',
   MAX_TOKENS: 'length',
+  INCOMPLETE: 'length',
   SAFETY: 'content_filter',
   RECITATION: 'content_filter',
   BLOCKLIST: 'content_filter',
@@ -154,12 +148,17 @@ const GOOGLE_FINISH: Record<string, FinishReason> = {
   MALFORMED_FUNCTION_CALL: 'error',
   UNEXPECTED_TOOL_CALL: 'error',
   CANCELLED: 'cancelled',
+  IN_PROGRESS: 'paused',
+  REQUIRES_ACTION: 'paused',
+  REQUIRES_CONTINUATION: 'paused',
 };
 const OPENAI_FINISH: Record<string, FinishReason> = {
   completed: 'stop',
   failed: 'error',
   cancelled: 'cancelled',
   canceled: 'cancelled',
+  queued: 'paused',
+  in_progress: 'paused',
   max_output_tokens: 'length',
   max_tokens: 'length',
   content_filter: 'content_filter',
@@ -169,9 +168,36 @@ const ANTHROPIC_FINISH: Record<string, FinishReason> = {
   stop_sequence: 'stop',
   max_tokens: 'length',
   tool_use: 'unknown',
-  pause_turn: 'unknown',
+  pause_turn: 'paused',
   refusal: 'content_filter',
 };
+
+/**
+ * Claude's answer is the text after its last search. Text before it is the
+ * search preamble ("I'll search for…"), not the answer.
+ */
+function anthropicAnswerBlocks(items: ObjectValue[]) {
+  const lastSearch = items.findLastIndex(
+    (item) => item.type === 'server_tool_use' || item.type === 'web_search_tool_result',
+  );
+  return items.slice(lastSearch + 1).filter((item) => item.type === 'text');
+}
+/**
+ * Claude splits one answer into a text block per cited span, so its blocks
+ * join exactly as written: trimming or separating them would break a cited
+ * sentence in two. Other engines' blocks are whole paragraphs.
+ */
+function answerText(blocks: ObjectValue[], transport: string) {
+  if (transport === 'anthropic')
+    return blocks
+      .map((block) => (typeof block.text === 'string' ? block.text : ''))
+      .join('')
+      .trim();
+  return blocks
+    .map((block) => text(block.text))
+    .filter(Boolean)
+    .join('\n\n');
+}
 
 /** Provider objects never pass through: only observable answer/search evidence is retained. */
 export function parseAnswer(payload: unknown, request: AnswerRequest, latencyMs = 0): Answer {
@@ -182,7 +208,7 @@ export function parseAnswer(payload: unknown, request: AnswerRequest, latencyMs 
   const searchEvents = events(calls, transport);
   const blocks =
     transport === 'anthropic'
-      ? items.filter((item) => item.type === 'text')
+      ? anthropicAnswerBlocks(items)
       : items
           .filter((item) =>
             transport === 'openai'
@@ -284,10 +310,7 @@ export function parseAnswer(payload: unknown, request: AnswerRequest, latencyMs 
     logical_engine: request.logical_engine,
     transport_provider: transport,
     transport_model: model,
-    answer_text: blocks
-      .map((block) => text(block.text))
-      .filter(Boolean)
-      .join('\n\n'),
+    answer_text: answerText(blocks, transport),
     search_used:
       transport === 'openai'
         ? calls.length > 0 || citations.length > 0

@@ -4,17 +4,13 @@ import {
   commerceProjectionSchema,
   competitorCandidateSchema,
   competitorDiscoveryTaskSchema,
-  shelfHolderSchema,
-  shelfSchema,
 } from '@citeladder/contracts/commerce-suite';
 import { sql } from 'kysely';
-import { z } from 'zod';
 
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { jsonObject } from '../db/json.ts';
 import { catalogApplicability, UNCATEGORIZED_KEY } from './projection-facts.ts';
-import { holderIdentity, orderedRank } from './shelf-metrics.ts';
 import { ApiError } from '../errors.ts';
 
 export type CommerceScope = { workspaceId: string; projectId: string };
@@ -31,10 +27,12 @@ export function commerceMissing(message: string): never {
  * cover every product. The reads are independent and run together.
  */
 export async function catalog(db: Database, scope: CommerceScope) {
+  // Archived products are out of the catalog; their history stays on their pages.
   const ownedProducts = db
     .selectFrom('commerce_products')
     .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId);
+    .where('project_id', '=', scope.projectId)
+    .where('lifecycle_state', '=', 'active');
   // The listed products, first by name; memberships are read for these only.
   const listed = ownedProducts
     .orderBy('name')
@@ -52,7 +50,7 @@ export async function catalog(db: Database, scope: CommerceScope) {
     // products read as uncategorized.
     db
       .selectFrom('commerce_categories')
-      .select(['id', 'name'])
+      .select(['id', 'name', 'parent_category_id'])
       .where('workspace_id', '=', scope.workspaceId)
       .where('project_id', '=', scope.projectId)
       .where('normalized_name', '!=', UNCATEGORIZED_KEY)
@@ -61,9 +59,10 @@ export async function catalog(db: Database, scope: CommerceScope) {
       .select(['product_id', 'category_id'])
       .where('product_id', 'in', listed.select('id'))
       .execute(),
-    // Category counts cover every product, listed or not.
+    // Category counts cover every active product, listed or not.
     ownedMemberships
       .select((eb) => ['category_id', eb.fn.countAll<string>().as('count')])
+      .where('product_id', 'in', ownedProducts.select('id'))
       .groupBy('category_id')
       .execute(),
     catalogProjection(db, scope),
@@ -84,7 +83,12 @@ export async function catalog(db: Database, scope: CommerceScope) {
     })),
     product_total: Number(total.count),
     categories: categories
-      .map((row) => ({ ...row, product_count: counts.get(row.id) ?? 0 }))
+      .map(({ parent_category_id: parent, ...row }) => ({
+        ...row,
+        // A parent the list does not show leaves its child at the top.
+        parent_id: parent && shown.has(parent) ? parent : null,
+        product_count: counts.get(row.id) ?? 0,
+      }))
       .sort(
         (a, b) =>
           b.product_count - a.product_count ||
@@ -212,6 +216,9 @@ export async function buyerPrompts(db: Database, scope: CommerceScope, id?: stri
       'p.id',
       'p.prompt_set_id',
       'p.text',
+      'p.branded',
+      'p.buyer_stage',
+      'p.persona',
       'p.enabled',
       't.target_kind',
       't.target_id',
@@ -223,143 +230,20 @@ export async function buyerPrompts(db: Database, scope: CommerceScope, id?: stri
     .where('t.project_id', '=', scope.projectId);
   if (id) query = query.where('p.id', '=', id);
   return (await query.orderBy('p.created_at').orderBy('p.id').execute()).map(
-    ({ target_kind, target_id, approved_at, ...row }) =>
+    ({ target_kind, target_id, approved_at, persona, ...row }) =>
       buyerPromptSchema.parse({
         ...row,
+        context: persona,
         target: { kind: target_kind, id: target_id },
         approved_at: approved_at?.toISOString() ?? null,
       }),
   );
 }
 
-type HolderKind = z.infer<typeof shelfHolderSchema>['kind'];
 const SETTLED_ACTION_STATUSES = ['done', 'dismissed'];
 
-/**
- * The latest measurement of one target, the recommendations behind it and the
- * Actions open against it.
- *
- * Holders come from exactly the observations the snapshot was computed from,
- * so the list and the numbers above it always describe the same answers.
- */
-export async function shelf(
-  db: Database,
-  scope: CommerceScope,
-  target: { kind: 'category' | 'product'; id: string },
-) {
-  // Independent of the snapshot; read alongside it.
-  const actions = targetActions(db, scope, target);
-  const snapshot = await db
-    .selectFrom('commerce_shelf_snapshots')
-    .select([
-      'product_visibility',
-      'share_of_shelf',
-      'average_shelf_position',
-      'first_position_win_rate',
-      'successful_execution_count',
-      'recognized_slot_count',
-      'ranked_execution_count',
-      'source_observation_ids',
-      'created_at',
-    ])
-    .where('workspace_id', '=', scope.workspaceId)
-    .where('project_id', '=', scope.projectId)
-    .where('target_kind', '=', target.kind)
-    .where('target_id', '=', target.id)
-    .orderBy('created_at', 'desc')
-    .orderBy('id')
-    .limit(1)
-    .executeTakeFirst();
-  const sourceIds = z.array(z.uuid()).parse(snapshot?.source_observation_ids ?? []);
-  const observations = sourceIds.length
-    ? await db
-        .selectFrom('commerce_recommendation_observations')
-        .select([
-          'task_id',
-          'classification',
-          'product_id',
-          'competitor_candidate_id',
-          'observed_product',
-          'observed_brand',
-          'merchant_domain',
-          'rank',
-          'order_observable',
-        ])
-        .where('workspace_id', '=', scope.workspaceId)
-        .where('project_id', '=', scope.projectId)
-        .where('id', 'in', sourceIds)
-        .orderBy('created_at')
-        .orderBy('id')
-        .execute()
-    : [];
-  const holders = new Map<
-    string,
-    {
-      kind: HolderKind;
-      name: string;
-      brand: string;
-      merchant_domain: string;
-      tasks: Set<string>;
-      best_rank: number | null;
-    }
-  >();
-  let unresolved = 0;
-  for (const row of observations) {
-    // A rejected candidate is excluded from the shelf, not an unresolved recommendation.
-    if (row.classification === 'rejected_competitor') continue;
-    const identity = holderIdentity(row);
-    const kind = shelfHolderSchema.shape.kind.safeParse(row.classification);
-    if (identity === null || !kind.success) {
-      unresolved++;
-      continue;
-    }
-    const key = JSON.stringify([kind.data, identity]);
-    const holder = holders.get(key) ?? {
-      kind: kind.data,
-      name: row.observed_product,
-      brand: row.observed_brand,
-      merchant_domain: row.merchant_domain,
-      tasks: new Set<string>(),
-      best_rank: null,
-    };
-    holder.tasks.add(row.task_id);
-    holder.merchant_domain ||= row.merchant_domain;
-    const rank = orderedRank(row);
-    if (rank !== null && (holder.best_rank === null || rank < holder.best_rank))
-      holder.best_rank = rank;
-    holders.set(key, holder);
-  }
-  return shelfSchema.parse({
-    target,
-    snapshot: snapshot
-      ? {
-          product_visibility: snapshot.successful_execution_count
-            ? snapshot.product_visibility
-            : null,
-          share_of_shelf: snapshot.share_of_shelf,
-          average_shelf_position: snapshot.average_shelf_position,
-          first_position_win_rate: snapshot.first_position_win_rate,
-          successful_execution_count: snapshot.successful_execution_count,
-          recognized_slot_count: snapshot.recognized_slot_count,
-          ranked_execution_count: snapshot.ranked_execution_count,
-          measured_at: snapshot.created_at.toISOString(),
-        }
-      : null,
-    holders: [...holders.values()]
-      .map(({ tasks, ...holder }) => ({ ...holder, appearances: tasks.size }))
-      .sort(
-        (a, b) =>
-          b.appearances - a.appearances ||
-          (a.best_rank ?? Infinity) - (b.best_rank ?? Infinity) ||
-          a.name.localeCompare(b.name),
-      ),
-    unresolved_count: unresolved,
-    actions: await actions,
-  });
-}
-
 /** Live commerce Opportunities keyed to the target, by the Action that holds them. */
-async function targetActions(
+export async function targetActions(
   db: Database,
   scope: CommerceScope,
   target: { kind: 'category' | 'product'; id: string },

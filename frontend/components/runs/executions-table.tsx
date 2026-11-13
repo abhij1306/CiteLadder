@@ -1,6 +1,9 @@
-'use client';
+import { useState } from 'react';
 
+import { useExecutionFilters } from '@/components/runs/executions-filters';
 import { Badge } from '@/components/ui/badge';
+import { pageNumberControls, useTablePage } from '@/components/ui/pager';
+import { TABLE_DEFAULT_PAGE_SIZE, isTablePageSize, type TablePageSize } from '@/lib/config/tables';
 import { Button } from '@/components/ui/button';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { Stack } from '@/components/ui/layout';
@@ -13,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { UnavailableValue } from '@/components/ui/unavailable-value';
 import { formatCount } from '@/lib/format';
+import { ICONS } from '@/lib/icons';
 import { productTransportLabel } from '@/lib/providers/catalog';
 import { useEngineCatalog } from '@/lib/providers/engines';
 import type { Execution } from '@citeladder/contracts';
@@ -35,6 +39,8 @@ const COLUMNS: readonly DataTableColumn[] = [
  * engine badge (logical + transport), status badge, and latency (mono).
  * Succeeded rows open the evidence drawer without leaving the run. The read's
  * loading, error and empty states render inside the table under its header.
+ * The list arrives whole, so the Engine and Status filters and the pages are
+ * cut here.
  */
 export function ExecutionsTable({
   executions,
@@ -47,9 +53,47 @@ export function ExecutionsTable({
   onSelectEvidence: (execution: Execution) => void;
 }>) {
   const engines = useEngineCatalog();
+  const filters = useExecutionFilters(executions);
+  const [pageSize, setPageSize] = useState<TablePageSize>(TABLE_DEFAULT_PAGE_SIZE);
+  const { page, setPage, pageCount, from, to } = useTablePage(filters.rows.length, pageSize);
+  const [pagedFilter, setPagedFilter] = useState(filters.key);
+  if (pagedFilter !== filters.key) {
+    setPagedFilter(filters.key);
+    setPage(1);
+  }
+  const pageRows = filters.rows.slice(from - 1, to);
+  const unmatched: DataTableState | undefined =
+    executions.length > 0 && filters.rows.length === 0
+      ? {
+          kind: 'empty',
+          headingLevel: 3,
+          icon: ICONS.runs,
+          heading: 'No executions match your filters',
+        }
+      : undefined;
   return (
-    <DataTable title="Executions" columns={COLUMNS} state={state}>
-      {executions.map((execution) => (
+    <DataTable
+      title="Executions"
+      // The filters need rows to choose from: none while the read stands in.
+      toolbar={state ? undefined : { filters: filters.definitions }}
+      columns={COLUMNS}
+      state={state ?? unmatched}
+      rowLines={2}
+      rowCount={pageRows.length}
+      pageSize={pageCount > 1 ? pageSize : undefined}
+      pager={{
+        range: { from, to, total: filters.rows.length, noun: 'executions' },
+        pageSize: {
+          value: pageSize,
+          onChange: (size) => {
+            setPageSize(isTablePageSize(size) ? size : TABLE_DEFAULT_PAGE_SIZE);
+            setPage(1);
+          },
+        },
+        ...pageNumberControls(page, pageCount, setPage),
+      }}
+    >
+      {pageRows.map((execution) => (
         <TableRow key={execution.id}>
           <TableCell>
             <ClampText>

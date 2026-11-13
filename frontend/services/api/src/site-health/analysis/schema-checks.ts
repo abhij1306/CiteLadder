@@ -4,7 +4,7 @@ import { firstOf, onlyOf } from '../../lists.ts';
 import { passFail } from './delivery-checks.ts';
 import { resolveCanonical, type CheckResult } from './indexing.ts';
 import { analysisPolicy } from './policy.ts';
-import { list, record, records, text, textList, type Facts } from './read-facts.ts';
+import { record, records, text, textList, type Facts } from './read-facts.ts';
 
 const r = analysisPolicy.rules;
 type Expectation = (typeof r.expected_schema)[keyof typeof r.expected_schema];
@@ -233,10 +233,6 @@ function propertyCheck(facts: Facts, recommended: boolean): CheckResult {
     missing: first.missing,
     checked_blocks: candidates.length,
   };
-  const shallowMicrodata = candidates.some(
-    ({ block }) => block.syntax === 'microdata' && !list(block.props_present).length,
-  );
-  if (first.missing.length && shallowMicrodata) evidence.extraction = 'microdata_shallow';
   return [passFail(!first.missing.length), evidence];
 }
 

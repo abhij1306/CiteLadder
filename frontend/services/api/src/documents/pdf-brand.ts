@@ -114,7 +114,7 @@ let tokens: Promise<Palette> | undefined;
 
 async function sourceFiles(source: Source): Promise<FontFile[]> {
   const subset = source.only ? 'latin' : '[a-z-]+';
-  const pattern = new RegExp(`^${source.prefix}-${subset}-(400|500)-normal\\.woff$`, 'u');
+  const pattern = new RegExp(String.raw`^${source.prefix}-${subset}-(400|500)-normal\.woff$`, 'u');
   const names = (await readdir(source.directory))
     .filter((name) => pattern.test(name) && source.weights.some((w) => name.includes(`-${w}-`)))
     // Latin first, so the common case finds its glyphs in the first face.
@@ -173,7 +173,7 @@ async function tokenSource(): Promise<string> {
 /** Each token's first (light) declaration, with `var()` references resolved. */
 function parsePalette(css: string): Palette {
   const declared = new Map<string, string>();
-  for (const match of css.matchAll(/^\s*(--[a-z0-9-]+)\s*:\s*([^;{}]+);/gimu)) {
+  for (const match of css.matchAll(/^[ \t]*(--[a-z0-9-]+)[ \t]*:([^;{}]+);/gimu)) {
     const [, name = '', value = ''] = match;
     if (!declared.has(name)) declared.set(name, value.trim());
   }

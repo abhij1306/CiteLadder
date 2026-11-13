@@ -1,5 +1,3 @@
-'use client';
-
 import { Users } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
@@ -7,6 +5,7 @@ import { Inline } from '@/components/ui/layout';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { BrandMark } from '@/components/ui/brand-mark';
 import { Pressable } from '@/components/ui/pressable';
+import { Tooltip } from '@/components/ui/tooltip';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import type { RankingRow } from '@citeladder/contracts';
 import { SHARE_OF_VOICE_HINT } from '@/lib/config/visibility';
@@ -40,6 +39,9 @@ import { TAG_FACE } from '@/components/ui/tag';
  *
  * The table is never paged: it holds at most six brands (owner, 2026-10-21).
  */
+
+/** The KPI row's name for a brand's citation column. */
+const OWNED_CITATION_RATE = 'Owned citation rate';
 
 /** Stable identity for one row, matching the React key used below. */
 function rowKey(row: RankingRow): string {
@@ -121,27 +123,41 @@ function BrandName({
   selected: boolean;
   onSelect?: (name: string | null) => void;
 }>) {
-  const name = (
-    <ClampText lines={1} className={textRole('emphasis')}>
-      {row.name}
-    </ClampText>
-  );
-  if (!onSelect) return name;
+  if (!onSelect)
+    return (
+      <ClampText lines={1} className={textRole('emphasis')}>
+        {row.name}
+      </ClampText>
+    );
+  // The button is the tooltip's trigger, so a cut name shows in full on
+  // keyboard focus as well as on hover; a name that fits shows no tooltip.
   return (
-    <Pressable
-      aria-pressed={selected}
-      aria-label={selected ? `Stop plotting ${row.name} on its own` : `Plot ${row.name} on its own`}
-      // The name truncates inside its own box before the "You" tag beside it,
-      // never running under it.
-      className="hover:text-accent-ink w-auto min-w-0 overflow-hidden"
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(selected ? null : row.name);
-      }}
-    >
-      {name}
-    </Pressable>
+    <Tooltip content={row.name} describe={false} shouldOpen={nameIsCut}>
+      <Pressable
+        aria-pressed={selected}
+        aria-label={
+          selected ? `Stop plotting ${row.name} on its own` : `Plot ${row.name} on its own`
+        }
+        // The name truncates inside its own box before the "You" tag beside it,
+        // never running under it.
+        className="hover:text-accent-ink w-auto min-w-0 overflow-hidden"
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(selected ? null : row.name);
+        }}
+      >
+        <span data-brand-name="" className={textRole('emphasis', 'block truncate')}>
+          {row.name}
+        </span>
+      </Pressable>
+    </Tooltip>
   );
+}
+
+/** Whether the brand name inside the trigger is cut by its ellipsis. */
+function nameIsCut(trigger: HTMLElement) {
+  const name = trigger.querySelector<HTMLElement>('[data-brand-name]');
+  return name !== null && name.scrollWidth > name.clientWidth + 1;
 }
 
 /**
@@ -238,7 +254,7 @@ export function RankingRowsTable({
                 className={textRole('caption', 'text-ink-secondary desktop:hidden')}
               >
                 {formatRate(row.share_of_voice)} share of voice · {formatRate(row.citation_rate)}{' '}
-                citations
+                owned citation rate
               </ClampText>
             </TableCell>
             {/* The rate is the column. Printing its fraction under every
@@ -278,26 +294,38 @@ function rankingColumns({
   anyPosition,
   anyChange,
 }: Readonly<{ anyPosition: boolean; anyChange: boolean }>): DataTableColumn[] {
+  // The table shares its row with the history chart, so its figures take the
+  // short widths and the Brand column keeps the rest for each logo and name.
   return [
     { key: 'brand', label: 'Brand' },
-    { key: 'visibility', label: 'Visibility', width: 'figure', numeric: true },
-    // "Rank", not "Position": the headline Average position is the mean order
-    // an answer names you in, a different measure that can read #1 while this
-    // column reads #3.
+    { key: 'visibility', label: 'Visibility', width: 'short', numeric: true },
+    // "Rank", not "Position": the headline "Average position in answers" is
+    // the mean order an answer names you in, a different measure that can
+    // read #1 while this column reads #3.
     ...(anyPosition
-      ? [{ key: 'rank', label: 'Rank', width: 'figure', numeric: true } as const]
+      ? [{ key: 'rank', label: 'Rank', width: 'short', numeric: true } as const]
       : []),
     ...(anyChange
-      ? [{ key: 'change', label: 'Change', width: 'figure', numeric: true } as const]
+      ? [{ key: 'change', label: 'Change', width: 'short', numeric: true } as const]
       : []),
+    // Spelled out, with the KPI row's names: "S.O.V." and "Citations" read as
+    // different measures from the Share of voice and Owned citation rate
+    // tiles above. The headers wrap to two lines rather than abbreviate.
     {
       key: 'sov',
-      label: 'S.O.V.',
+      label: 'Share of voice',
       hint: SHARE_OF_VOICE_HINT,
-      width: 'figure',
+      width: 'short',
       numeric: true,
       desktopOnly: true,
     },
-    { key: 'citations', label: 'Citations', width: 'figure', numeric: true, desktopOnly: true },
+    {
+      key: 'citations',
+      label: OWNED_CITATION_RATE,
+      hint: 'For your brand, the share of answers that link to a page you own; for a competitor, the share that link to its domains.',
+      width: 'shortMetric',
+      numeric: true,
+      desktopOnly: true,
+    },
   ];
 }

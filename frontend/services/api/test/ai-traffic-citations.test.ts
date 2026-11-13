@@ -21,7 +21,7 @@ import { aiTrafficOverview } from '../src/ai-traffic/overview.ts';
 import { AuditQueue } from '../src/queue/audit-queue.ts';
 import { persistSourceAggregates } from '../src/visibility/source-aggregates.ts';
 import { auditTenant, auditTestKey, claimAsWorker } from './audit-fixtures.ts';
-import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
+import { TEST_SESSION_COOKIE, asOwner, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
 const config = testConfig(),
@@ -34,7 +34,9 @@ const tasks: string[] = [];
 afterEach(async () => {
   if (tasks.length) {
     await db.deleteFrom('execution_cost_projections').where('task_id', 'in', tasks).execute();
-    await db.deleteFrom('provider_attempts').where('task_id', 'in', tasks).execute();
+    await asOwner((owner) =>
+      owner.deleteFrom('provider_attempts').where('task_id', 'in', tasks).execute(),
+    );
   }
   await fixtures.cleanup();
   tasks.length = 0;

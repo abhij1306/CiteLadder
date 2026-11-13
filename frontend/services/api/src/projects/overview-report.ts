@@ -93,7 +93,7 @@ function rankStat({ view, brands }: ReportContext): Stat {
 function citationStat({ view }: ReportContext): Stat {
   return percentStat(
     view,
-    'Citation share',
+    'Owned citation rate',
     view.track.citation_share,
     `of answers cite you · ${plural(view.track.engine_coverage, 'engine')}`,
   );
@@ -103,7 +103,7 @@ const commandCenterSections: Partial<Record<OverviewWidgetKey, Section>> = {
   project_state: (context) => {
     const { view, report, shown } = context;
     heading(report, 'project_state');
-    // Citation share joins the headline figures when both widgets are shown.
+    // The owned citation rate joins the headline figures when both widgets are shown.
     report.stats([
       percentStat(view, 'Visibility', view.state.visibility, 'of answers name you'),
       percentStat(view, 'Share of voice', view.state.share_of_voice, 'of brand mentions'),
@@ -204,7 +204,7 @@ const commandCenterSections: Partial<Record<OverviewWidgetKey, Section>> = {
 function guide({ view, report, prompts }: ReportContext, brand: string) {
   report.heading('How to read this report');
   report.text(
-    `Visibility is the share of AI answers to your tracked prompts that name ${brand}. Share of voice is ${brand}'s share of all brand mentions in those answers, competitors included, and brand rank orders the tracked brands by it. Citation share is the share of answers that cite a page on your website.`,
+    `Visibility is the share of AI answers to your tracked prompts that name ${brand}. Share of voice is ${brand}'s share of the mentions of the brands you track in those answers, competitors included, and brand rank orders the tracked brands by it. The owned citation rate is the share of answers that cite a page on your website.`,
   );
   const measurement = view.measurement;
   if (!measurement) {

@@ -127,6 +127,7 @@ export async function loadMeasuredRuns(
   if (newestFirst) rows.reverse();
   const routes = await engineSnapshots(
     db,
+    scope.workspaceId,
     rows.map((row) => row.audit_id),
   );
   return rows.map((row) => ({
@@ -144,9 +145,10 @@ export async function loadMeasuredRuns(
   }));
 }
 
-/** Each run's frozen engine routes; the runs are already authorized. */
+/** Each of the workspace's runs' frozen engine routes. */
 export async function engineSnapshots(
   db: Database,
+  workspaceId: string,
   auditIds: readonly string[],
 ): Promise<
   Map<string, { logical_engine: string; transport_provider: string; transport_model: string }[]>
@@ -159,6 +161,7 @@ export async function engineSnapshots(
   const rows = await db
     .selectFrom('audit_engine_snapshots')
     .select(['audit_id', 'logical_engine', 'transport_provider', 'transport_model'])
+    .where('workspace_id', '=', workspaceId)
     .where('audit_id', 'in', [...new Set(auditIds)])
     .execute();
   for (const row of rows) {

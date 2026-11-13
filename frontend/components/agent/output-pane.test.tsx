@@ -4,7 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vite-plus/
 
 import type { AgentOutput } from '@/lib/api/agent';
 import { mswServer } from '@/test/msw-server';
-import { renderWithProviders } from '@/test/render';
+import { renderWithProviders, selectionAs, type TestRole } from '@/test/render';
 
 import { OutputPane } from './output-pane';
 
@@ -22,6 +22,7 @@ const output = (kind: string): AgentOutput => ({
   format_id: null,
   target_kind: null,
   target_label: null,
+  named_target: null,
   latest_revision: {
     id: '22222222-2222-4222-8222-222222222222',
     number: 1,
@@ -29,25 +30,36 @@ const output = (kind: string): AgentOutput => ({
     author: 'agent',
     title: 'Prompt plan',
     body: '## Topics\n\nKeep "Golf nets"; add "Golf simulator enclosures".',
+    fields: null,
     source_refs: [],
     web_sources: [],
     created_at: '2026-11-01T00:00:00Z',
   },
 });
 
-function renderPane(kind: string) {
+function renderPane(kind: string, role: TestRole = 'owner') {
   renderWithProviders(
     <OutputPane
       workspaceId="33333333-3333-4333-8333-333333333333"
       chatId="44444444-4444-4444-8444-444444444444"
       output={output(kind)}
       runActive={false}
-      canEdit
-      canSend
+      canEdit={role !== 'viewer'}
+      canSend={role !== 'viewer'}
       onRevise={() => {}}
     />,
+    { projectSelection: selectionAs(role) },
   );
 }
+
+describe('a viewer', () => {
+  it('reads, copies and exports a document without an edit or a Prompt Builder handoff', () => {
+    renderPane('prompt_plan', 'viewer');
+    expect(screen.getByRole('button', { name: 'Export Markdown' })).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open Prompt Builder' })).toBeNull();
+  });
+});
 
 describe('a prompt plan', () => {
   it('hands off to the Prompt Builder instead of staging prompts itself', () => {

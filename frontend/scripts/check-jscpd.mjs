@@ -1,4 +1,7 @@
-/** Run the pinned jscpd production ratchet and advisory test scans. */
+/**
+ * Run the pinned jscpd production ratchets (`--scope frontend|api`) and the
+ * advisory frontend test scan (`--tests`).
+ */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,16 +10,25 @@ import { execFileSync, spawnSync } from 'node:child_process';
 
 const FRONTEND = path.resolve(import.meta.dirname, '..');
 const ROOT = path.resolve(FRONTEND, '..');
-const BASELINE_PATH = path.join(FRONTEND, 'scripts', 'jscpd-baseline.json');
 const CONFIG_PATH = path.join(ROOT, 'jscpd.json');
-const BASELINE_REPOSITORY_PATH = 'frontend/scripts/jscpd-baseline.json';
 const GIT_EXECUTABLE =
   process.platform === 'win32' ? String.raw`C:\Program Files\Git\cmd\git.exe` : '/usr/bin/git';
 const BIN = process.execPath;
 const JSCPD_ENTRYPOINT = path.join(FRONTEND, 'node_modules', 'jscpd', 'run-jscpd.js');
 const REVISION = /^(?:HEAD|[0-9a-fA-F]{40})$/;
 export const TOOL_VERSION = '5.2.1';
-export const EXPECTED_SCOPE = ['frontend/apps/app/src', 'frontend/components', 'frontend/lib'];
+/** Each ratchet's baseline below `frontend/` and the production directories it scans. */
+export const SCOPES = {
+  frontend: {
+    baseline: 'scripts/jscpd-baseline.json',
+    scope: ['frontend/apps/app/src', 'frontend/components', 'frontend/lib'],
+  },
+  api: {
+    baseline: 'services/api/jscpd-baseline.json',
+    scope: ['frontend/services/api/src', 'frontend/services/api/scripts'],
+  },
+};
+const scanPaths = (scope) => scope.map((directory) => `./${directory.slice('frontend/'.length)}`);
 const FINGERPRINT_PATTERN = /^[^|]+\|[^|]+\|[^|]+\|[0-9a-f]{16}\|\d+\|\d+$/;
 
 function normalizeName(value) {
@@ -139,11 +151,11 @@ export function validateHistoricalBaseline(raw) {
   return raw;
 }
 
-export function validateBaseline(raw) {
+export function validateBaseline(raw, expectedScope) {
   const baseline = validateHistoricalBaseline(raw);
   if (
     baseline.tool_version !== TOOL_VERSION ||
-    JSON.stringify(baseline.scope) !== JSON.stringify(EXPECTED_SCOPE)
+    JSON.stringify(baseline.scope) !== JSON.stringify(expectedScope)
   ) {
     throw new Error('invalid jscpd baseline');
   }
@@ -192,12 +204,12 @@ function runJscpd(paths, extraArgs = []) {
   }
 }
 
-function baselineAtRevision(revision) {
+function baselineAtRevision(revision, baselineFile) {
   if (!REVISION.test(revision)) throw new Error(`invalid base revision: ${revision}`);
   try {
     return validateHistoricalBaseline(
       JSON.parse(
-        execFileSync(GIT_EXECUTABLE, ['show', `${revision}:${BASELINE_REPOSITORY_PATH}`], {
+        execFileSync(GIT_EXECUTABLE, ['show', `${revision}:frontend/${baselineFile}`], {
           cwd: ROOT,
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'pipe'],
@@ -267,10 +279,12 @@ function appendBaselineDiffFailures(failures, baseline, baseBaseline) {
 }
 
 function advisoryTestScan() {
-  const frontend = runJscpd(
-    ['./apps/app/src', './components', './lib'],
-    ['--format', 'typescript,tsx,javascript,jsx', '--pattern', '**/*.{test,spec}.{ts,tsx,js,jsx}'],
-  );
+  const frontend = runJscpd(scanPaths(SCOPES.frontend.scope), [
+    '--format',
+    'typescript,tsx,javascript,jsx',
+    '--pattern',
+    '**/*.{test,spec}.{ts,tsx,js,jsx}',
+  ]);
   const frontendPercentage = Number(frontend.statistics?.total?.percentage ?? 0);
   console.log(`jscpd test scan advisory: ${frontendPercentage.toFixed(4)}% duplicated lines`);
 }
@@ -280,26 +294,31 @@ function main() {
     advisoryTestScan();
     return;
   }
-  const baseline = validateBaseline(JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8')));
+  const scopeIndex = process.argv.indexOf('--scope');
+  const name = process.argv[scopeIndex + 1];
+  if (scopeIndex < 0 || !Object.hasOwn(SCOPES, name))
+    throw new Error(`--scope must be one of ${Object.keys(SCOPES).join(', ')}`);
+  const { baseline: baselineFile, scope } = SCOPES[name];
+  const baseline = validateBaseline(
+    JSON.parse(fs.readFileSync(path.join(FRONTEND, baselineFile), 'utf8')),
+    scope,
+  );
   const diffIndex = process.argv.indexOf('--check-policy-diff');
   const revision = diffIndex >= 0 ? process.argv[diffIndex + 1] : undefined;
   if (diffIndex >= 0 && !revision) throw new Error('--check-policy-diff requires a revision');
-  const report = runJscpd(
-    ['./apps/app/src', './components', './lib'],
-    ['--format', 'typescript,tsx,javascript,jsx'],
-  );
+  const report = runJscpd(scanPaths(scope), ['--format', 'typescript,tsx,javascript,jsx']);
   const failures = productionFailures(
     report,
     baseline,
-    revision ? baselineAtRevision(revision) : null,
+    revision ? baselineAtRevision(revision, baselineFile) : null,
   );
   if (failures.length) {
-    console.error(`jscpd production gate failed:\n- ${failures.join('\n- ')}`);
+    console.error(`jscpd ${name} production gate failed:\n- ${failures.join('\n- ')}`);
     process.exitCode = 1;
     return;
   }
   const percentage = Number(report.statistics?.total?.percentage ?? 0);
-  console.log(`jscpd production gate passed: ${percentage.toFixed(4)}%`);
+  console.log(`jscpd ${name} production gate passed: ${percentage.toFixed(4)}%`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) main();

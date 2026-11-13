@@ -115,6 +115,24 @@ describe('station navigation', () => {
     expect(screen.getByRole('link', { name: 'Integrations' })).not.toHaveAttribute('aria-current');
   });
 
+  it('marks the Commerce Overview current, not also Products below it', () => {
+    const shoppingOverview = () =>
+      screen
+        .getAllByRole('link', { name: 'Overview' })
+        .find((link) => link.getAttribute('href')?.startsWith('/products/overview?'));
+    pathname = '/products/overview';
+    const { unmount } = render(<SidebarNav />);
+    expect(shoppingOverview()).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Products' })).not.toHaveAttribute('aria-current');
+    unmount();
+
+    // A product's own page is still under Products.
+    pathname = '/products/22222222-2222-4222-8222-222222222222';
+    render(<SidebarNav />);
+    expect(screen.getByRole('link', { name: 'Products' })).toHaveAttribute('aria-current', 'page');
+    expect(shoppingOverview()).not.toHaveAttribute('aria-current');
+  });
+
   it('derives the Dashboard | Agent mode from the route', () => {
     pathname = '/site';
     const { unmount } = render(<SidebarNav />);

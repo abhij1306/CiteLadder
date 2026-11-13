@@ -30,7 +30,7 @@ export type OverviewWidgetKey = z.infer<typeof overviewWidgetKeySchema>;
 /** Each widget's title, on the Overview and as its section heading in the PDF. */
 export const overviewWidgetTitles: Record<OverviewWidgetKey, string> = {
   project_state: 'Project state',
-  citation_share: 'Citation share',
+  citation_share: 'Owned citation rate',
   movement: 'Movement',
   next_action: 'Next action',
   missing_prompts: "Where you're missing",

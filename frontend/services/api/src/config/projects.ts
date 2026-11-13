@@ -18,6 +18,8 @@ export const projectReads = {
     { key: 'company_facts', size: 'full' },
   ] satisfies OverviewWidget[] as OverviewWidget[],
   CODE_OVERVIEW_LAYOUT_CONFLICT: 'overview_layout_conflict',
+  /** Ranked opportunities the Overview reads for its action widgets. */
+  overview_opportunity_rows: 8,
   /** Rows a list widget prints in the Overview PDF. */
   overview_report_list_rows: 10,
 };

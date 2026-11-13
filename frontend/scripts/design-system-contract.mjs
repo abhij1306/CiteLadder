@@ -4,9 +4,9 @@ import { join } from 'node:path';
 import postcss from 'postcss';
 
 /**
- * The design system's own contract (docs/design.md): globals.css carries
- * exactly the system's tokens (design-system-tokens.json, a copy of the
- * artifact's tokens.json) with its values in both themes.
+ * The design system's own contract: globals.css carries
+ * exactly the system's tokens (design-system-tokens.json) with its values in
+ * both themes.
  */
 
 const TOKEN_CSS = 'apps/app/src/globals.css';

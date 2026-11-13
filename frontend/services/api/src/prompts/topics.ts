@@ -26,6 +26,7 @@ import type { RecordScope } from '../db/workspace-scope.ts';
 import { ApiError, notFound } from '../errors.ts';
 import type { DB } from '../generated/db-schema.ts';
 import { requireProject } from '../projects/access.ts';
+import type { ProjectScope } from '../projects/brand-profile.ts';
 import { topicLinks } from './generation-plan.ts';
 import { acquireProjectLock } from './locks.ts';
 import { topicView, type TopicRow, type TopicView } from './views.ts';
@@ -89,11 +90,15 @@ async function scopedTopic(db: Kysely<DB>, scope: RecordScope, topicId: string):
 }
 
 /** Active prompts per topic of the project, for the topics rail. */
-async function activeCounts(db: Kysely<DB>, projectId: string): Promise<Map<string, number>> {
+async function activeCounts(
+  db: Kysely<DB>,
+  { workspaceId, projectId }: ProjectScope,
+): Promise<Map<string, number>> {
   const rows = await db
     .selectFrom('prompts')
     .innerJoin('topics', 'topics.id', 'prompts.topic_id')
     .select(['prompts.topic_id', sql<string>`count(*)`.as('count')])
+    .where('topics.workspace_id', '=', workspaceId)
     .where('topics.project_id', '=', projectId)
     .where('prompts.status', '=', P.status_active)
     .groupBy('prompts.topic_id')
@@ -102,7 +107,12 @@ async function activeCounts(db: Kysely<DB>, projectId: string): Promise<Map<stri
 }
 
 async function view(db: Kysely<DB>, topic: TopicRow): Promise<TopicView> {
-  return topicView(topic, (await activeCounts(db, topic.project_id)).get(topic.id) ?? 0);
+  return topicView(
+    topic,
+    (await activeCounts(db, { workspaceId: topic.workspace_id, projectId: topic.project_id })).get(
+      topic.id,
+    ) ?? 0,
+  );
 }
 
 /**
@@ -112,7 +122,7 @@ async function view(db: Kysely<DB>, topic: TopicRow): Promise<TopicView> {
  */
 async function validateParent(
   db: Kysely<DB>,
-  projectId: string,
+  { workspaceId, projectId }: ProjectScope,
   parentId: string,
   topicId: string | null,
 ): Promise<void> {
@@ -120,6 +130,7 @@ async function validateParent(
     .selectFrom('topics')
     .select(['id', 'parent_id'])
     .where('id', '=', parentId)
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .executeTakeFirst();
   if (parent === undefined) throw notFound('Parent topic');
@@ -129,6 +140,7 @@ async function validateParent(
   const child = await db
     .selectFrom('topics')
     .select('id')
+    .where('workspace_id', '=', workspaceId)
     .where('parent_id', '=', topicId)
     .executeTakeFirst();
   if (child !== undefined) {
@@ -145,17 +157,18 @@ async function writing<T>(write: () => Promise<T>): Promise<T> {
   }
 }
 
-/** The project's topics; the caller (the route, MCP or a generation run) has authorized the project. */
-export async function listTopics(db: Database, projectId: string): Promise<TopicView[]> {
+/** The scope's project topics. */
+export async function listTopics(db: Database, scope: ProjectScope): Promise<TopicView[]> {
   const [topics, counts] = await Promise.all([
     db
       .selectFrom('topics')
       .selectAll()
-      .where('project_id', '=', projectId)
+      .where('workspace_id', '=', scope.workspaceId)
+      .where('project_id', '=', scope.projectId)
       .orderBy('name')
       .orderBy('id')
       .execute(),
-    activeCounts(db, projectId),
+    activeCounts(db, scope),
   ]);
   return topics.map((topic) => topicView(topic, counts.get(topic.id) ?? 0));
 }
@@ -171,7 +184,7 @@ export async function createTopic(
       await requireProject(trx, { workspaceId, projectId });
       await acquireProjectLock(trx, projectId);
       const parentId = input.parent_id ?? null;
-      if (parentId !== null) await validateParent(trx, projectId, parentId, null);
+      if (parentId !== null) await validateParent(trx, { workspaceId, projectId }, parentId, null);
       const now = new Date();
       const row = await trx
         .insertInto('topics')
@@ -208,7 +221,12 @@ export async function updateTopic(
       const reparent = 'parent_id' in input;
       const parentId = input.parent_id ?? null;
       if (reparent && parentId !== null) {
-        await validateParent(trx, topic.project_id, parentId, topic.id);
+        await validateParent(
+          trx,
+          { workspaceId: topic.workspace_id, projectId: topic.project_id },
+          parentId,
+          topic.id,
+        );
       }
       const row = await trx
         .updateTable('topics')
@@ -353,7 +371,7 @@ export async function confirmTopics(
       );
     }),
   );
-  return listTopics(db, projectId);
+  return listTopics(db, { workspaceId, projectId });
 }
 
 /**
@@ -405,4 +423,37 @@ export async function resolveTopicsByName(
     for (const row of rows) resolved.set(row.name.toLowerCase(), row.id);
   }
   return resolved;
+}
+
+/**
+ * One topic of the project with its active prompts in text order, or null
+ * when the project has no such topic. Both reads name the workspace and the
+ * project, so a foreign id reads as absent.
+ */
+export async function topicWithPrompts(
+  db: Database,
+  { workspaceId, projectId }: { workspaceId: string; projectId: string },
+  topicId: string,
+) {
+  const topic = await db
+    .selectFrom('topics')
+    .select(['id', 'name'])
+    .where('workspace_id', '=', workspaceId)
+    .where('project_id', '=', projectId)
+    .where('id', '=', topicId)
+    .executeTakeFirst();
+  if (!topic) return null;
+  const prompts = await db
+    .selectFrom('prompts')
+    .innerJoin('prompt_sets as set', 'set.id', 'prompts.prompt_set_id')
+    .select(['prompts.id', 'prompts.text'])
+    .where('prompts.workspace_id', '=', workspaceId)
+    .where('set.workspace_id', '=', workspaceId)
+    .where('set.project_id', '=', projectId)
+    .where('prompts.topic_id', '=', topic.id)
+    .where('prompts.status', '=', P.status_active)
+    .orderBy('prompts.text')
+    .orderBy('prompts.id')
+    .execute();
+  return { ...topic, prompts };
 }

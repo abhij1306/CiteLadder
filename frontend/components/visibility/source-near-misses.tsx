@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { Link2Off } from 'lucide-react';
 import type { z } from 'zod';
@@ -74,7 +72,6 @@ function nearMissColumns(
 
 function nearMissState(
   query: ReturnType<typeof useSourceNearMisses>,
-  noRun: boolean,
   engineLabel: EngineLabel,
 ): DataTableState | undefined {
   if (query.isError) {
@@ -87,12 +84,8 @@ function nearMissState(
     };
   }
   const data = query.data;
-  // No data yet is a read waiting on its run, never "every page was cited".
-  if (!data) {
-    return noRun
-      ? { kind: 'empty', headingLevel: 3, icon: Link2Off, heading: 'No run selected' }
-      : { kind: 'loading', label: 'Loading your pages read but not cited…' };
-  }
+  // No data yet is a read on its way, never "every page was cited".
+  if (!data) return { kind: 'loading', label: 'Loading your pages read but not cited…' };
   if (data.items.length) return undefined;
   if (data.responses === 0)
     return {
@@ -123,15 +116,12 @@ function nearMissState(
  */
 export function NearMissTable({
   query,
-  noRun,
   pageSize,
   toolbar,
   onOpenUrl,
   onPageSizeChange,
 }: Readonly<{
   query: ReturnType<typeof useSourceNearMisses>;
-  /** The selection settled on no run (see `selectionHasNoRun`). */
-  noRun: boolean;
   pageSize: number;
   toolbar: FilterBarProps;
   onOpenUrl: (url: string) => void;
@@ -145,7 +135,7 @@ export function NearMissTable({
       label="Your pages read but not cited"
       toolbar={toolbar}
       columns={nearMissColumns(query.data, engines.label)}
-      state={nearMissState(query, noRun, engines.label)}
+      state={nearMissState(query, engines.label)}
       pageSize={pageSize}
       rowCount={shown}
       busy={{ active: query.isFetching, label: 'Updating your pages read but not cited' }}

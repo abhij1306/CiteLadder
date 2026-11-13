@@ -1,5 +1,3 @@
-'use client';
-
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, type ReactNode } from 'react';
 
@@ -62,10 +60,18 @@ export function OnboardingGate({ children }: Readonly<{ children: ReactNode }>) 
   }
 
   // A ready project-required route always has its project resolved; the
-  // screen receives it non-null instead of re-checking the selection.
+  // screen receives it non-null instead of re-checking the selection. Keyed by
+  // the project, so a switch remounts the route: no draft, filter or mutation
+  // outcome of one project carries into the next, while view state held in the
+  // URL still does.
   if (projectRequired && activeProject) {
     return (
-      <ActiveProjectScopeProvider project={activeProject}>{children}</ActiveProjectScopeProvider>
+      <ActiveProjectScopeProvider
+        key={`${activeProject.workspace_id}:${activeProject.id}`}
+        project={activeProject}
+      >
+        {children}
+      </ActiveProjectScopeProvider>
     );
   }
   return <>{children}</>;

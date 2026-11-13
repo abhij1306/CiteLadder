@@ -34,7 +34,7 @@ describe('DateRangeDialog', () => {
     const user = userEvent.setup();
     const onApply = renderDialog();
     const ranges = screen.getByRole('radiogroup', { name: 'Date range' });
-    expect(within(ranges).getByRole('radio', { name: '3 months' })).toBeChecked();
+    expect(within(ranges).getByRole('radio', { name: 'Last 90 days' })).toBeChecked();
 
     await user.click(screen.getByRole('textbox', { name: 'End date' }));
 

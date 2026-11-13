@@ -24,6 +24,9 @@ const config = {
     // per commit. A function task gets no staged paths appended; a long path
     // list would otherwise split it into parallel duplicate runs.
     'frontend/**/*.{css,ts,tsx,astro,svg}': () => 'node frontend/scripts/check-design-system.mjs',
+    // Reads the staged blobs and its staged policy itself, so it runs once.
+    '**/*.{js,jsx,mjs,cjs,ts,tsx,css,json}': () =>
+      'node frontend/scripts/check-token-size.mjs --staged',
   },
 };
 

@@ -48,8 +48,14 @@ describe('URL state codecs', () => {
     const push = vi.spyOn(window.history, 'pushState');
 
     setUrlParams({ query: 'one two' });
+    const equivalent = push.mock.calls.length;
+    setUrlParams({ query: 'one three' });
 
-    expect(push).not.toHaveBeenCalled();
+    expect([equivalent, push.mock.calls.length, window.location.search]).toEqual([
+      0,
+      1,
+      '?query=one+three',
+    ]);
     push.mockRestore();
   });
 });

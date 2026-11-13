@@ -7,22 +7,24 @@ import {
   cardHeaderLayoutViolations,
   nestedCardViolations,
   directRadixImportViolations,
-  productContractViolations,
   productControlViolations,
   productUiSourceViolations,
   standalonePlaceholderViolations,
   textContrastViolations,
-  rawRadiusViolations,
   motionRoleViolations,
   focusRoleViolations,
   shadowRoleViolations,
   radiusRoleAdvisories,
   densityRoleViolations,
-  styleAssertionViolations,
   textRoleBackgroundViolations,
-  tsxGeometryFindings,
-  featureLayeringViolations,
 } from './design-system-source-checks.mjs';
+import {
+  featureLayeringViolations,
+  rawRadiusViolations,
+  tsxGeometryFindings,
+} from './design-system-geometry-checks.mjs';
+import { productContractViolations } from './design-system-stylesheet-checks.mjs';
+import { styleAssertionViolations } from './design-system-test-checks.mjs';
 import { tokenAuditViolations } from './audit-design-tokens.mjs';
 import { tokenContractViolations } from './design-system-contract.mjs';
 import { brandTokenViolations, svgColorScan } from './design-system-asset-checks.mjs';
@@ -100,9 +102,8 @@ for (const path of files(root)) {
     (label.startsWith('apps/app/src/') ||
       label.startsWith('components/') ||
       label.startsWith('lib/'));
-  // Applies to every source file, not just product UI: the ESLint rule this
-  // replaced was repository-wide, and a text-ink background is wrong on a
-  // flow surface too.
+  // Applies to every source file, not just product UI: a text-ink background
+  // is wrong on any surface.
   violations.push(
     ...textRoleBackgroundViolations(source, label),
     ...rawRadiusViolations(source, label),

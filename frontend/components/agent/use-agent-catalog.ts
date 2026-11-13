@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
@@ -24,6 +22,7 @@ export function useAgentCatalog() {
   const catalog = query.data ?? EMPTY;
   // Unknown until the catalog loads: no bound is assumed in the meantime.
   const limits = query.data?.limits ?? null;
+  const { status, error, refetch, isFetching } = query;
   return useMemo(() => {
     const kinds = new Map(catalog.output_kinds.map((kind) => [kind.kind, kind]));
     const workflows = new Map(catalog.workflows.map((workflow) => [workflow.id, workflow]));
@@ -32,9 +31,15 @@ export function useAgentCatalog() {
       ...catalog,
       /** Bounds the API enforces on a composed message; null until the catalog loads. */
       limits,
+      /**
+       * The catalog read itself. Until it succeeds the lists above are empty
+       * because nothing was read, not because the plan has no skills or
+       * workflows, so a failure is reported where the catalog is offered.
+       */
+      read: { status, error, refetch, isFetching },
       workflow: (id: string | null | undefined) => (id ? workflows.get(id) : undefined),
       outputKind,
       kindLabel: (kind: string | null | undefined) => outputKind(kind)?.label ?? 'Output',
     };
-  }, [catalog, limits]);
+  }, [catalog, limits, status, error, refetch, isFetching]);
 }

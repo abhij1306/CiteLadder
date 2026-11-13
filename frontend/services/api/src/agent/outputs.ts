@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { Selectable } from 'kysely';
+import { sql, type Selectable } from 'kysely';
 import { z } from 'zod';
 import type { Database } from '../db/database.ts';
 import type { AgentOutputRevisions, AgentOutputs as OutputTable } from '../generated/db-schema.ts';
 import type { WebSource } from '../models/conversation.ts';
 import { refreshActionStatus } from '../opportunities/action-status.ts';
+import { recheckOpen } from '../page-documents/suggestions.ts';
 import { authorize } from './access.ts';
 import {
   agentPolicy,
@@ -66,7 +67,7 @@ export function latestDocument(documents: readonly ChatDocument[]) {
 }
 
 /** One chat document by id, with its latest revision; `null` when the chat has no such document. */
-async function chatDocument(db: Database, chat: Chat, outputId: string) {
+export async function chatDocument(db: Database, chat: Chat, outputId: string) {
   const documents = await chatDocuments(db, chat);
   return documents.find((document) => document.output.id === outputId) ?? null;
 }
@@ -142,26 +143,47 @@ export async function saveAgentOutput(
     .returning('action_id')
     .executeTakeFirstOrThrow();
   if (actionId) await refreshActionStatus(db, chat.workspace_id, actionId);
-  return appendRevision(db, chat, output, current?.revision ?? null, {
+  const revision = await appendRevision(db, chat, output, current?.revision ?? null, {
     author: 'agent',
     run_id: input.runId,
     message_id: input.messageId,
     author_user_id: null,
     title: payload.title,
     body: payload.body,
+    // A body edit keeps a page's SEO fields; the model edits only the body.
+    fields: pageFields(current?.revision.fields ?? null),
     source_refs: [...new Set(input.refs)],
     web_sources: input.webSources,
   });
+  // The Agent's edit stales the open suggestions it changed, as a person's does.
+  await recheckOpen(db, ownerOf(chat), output.id, { actor: 'agent', runId: input.runId });
+  return revision;
 }
+
+const ownerOf = (chat: Chat) => ({ workspaceId: chat.workspace_id, projectId: chat.project_id });
+
+/** A page revision's SEO block, as fetched or last edited. */
+const pageFieldsSchema = z.strictObject({
+  title: z.string(),
+  meta_description: z.string(),
+  json_ld: z.string(),
+});
+export type PageFields = z.infer<typeof pageFieldsSchema>;
+/** The stored SEO block of a revision: a page's fields, or null for every other document. */
+function pageFields(value: unknown): PageFields | null {
+  return value === null ? null : pageFieldsSchema.parse(value);
+}
+
+type RevisionContent = Pick<
+  Revision,
+  'author' | 'author_user_id' | 'run_id' | 'message_id' | 'title' | 'body' | 'source_refs'
+> & { web_sources: unknown; fields: PageFields | null };
 function appendRevision(
   db: Database,
   chat: Chat,
   output: Output,
   parent: Revision | null,
-  content: Pick<
-    Revision,
-    'author' | 'author_user_id' | 'run_id' | 'message_id' | 'title' | 'body' | 'source_refs'
-  > & { web_sources: unknown },
+  content: RevisionContent,
 ) {
   return db
     .insertInto('agent_output_revisions')
@@ -173,6 +195,7 @@ function appendRevision(
       number: (parent?.number ?? 0) + 1,
       parent_revision_id: parent?.id ?? null,
       ...content,
+      fields: content.fields === null ? null : JSON.stringify(content.fields),
       source_refs: JSON.stringify(revisionRefs(content.source_refs)),
       web_sources: JSON.stringify(revisionWebSources(content.web_sources)),
       created_at: new Date(),
@@ -181,24 +204,114 @@ function appendRevision(
     .executeTakeFirstOrThrow();
 }
 
+/**
+ * A fetched page becomes the chat's next document: revision 1 is authored
+ * `fetch`, its body the page's main content as Markdown and its fields the
+ * page's SEO block. It carries the chat's Action like any document of the chat.
+ */
+export async function createFetchedDocument(
+  db: Database,
+  chat: Chat,
+  input: {
+    kind: string;
+    skillId: string;
+    snapshotId: string;
+    title: string;
+    body: string;
+    fields: PageFields;
+  },
+) {
+  const now = new Date();
+  const last = await db
+    .selectFrom('agent_outputs')
+    .select(sql<number>`coalesce(max(number), 0)`.as('number'))
+    .where('workspace_id', '=', chat.workspace_id)
+    .where('chat_id', '=', chat.id)
+    .executeTakeFirstOrThrow();
+  const output = await db
+    .insertInto('agent_outputs')
+    .values({
+      id: randomUUID(),
+      workspace_id: chat.workspace_id,
+      project_id: chat.project_id,
+      chat_id: chat.id,
+      number: last.number + 1,
+      action_id: chat.action_id,
+      kind: input.kind,
+      skill_id: input.skillId,
+      format_id: null,
+      target_kind: null,
+      target_label: null,
+      snapshot_id: input.snapshotId,
+      created_at: now,
+      updated_at: now,
+    })
+    .returningAll()
+    .executeTakeFirstOrThrow();
+  // An open Action now reads as in progress, as it does for any document.
+  if (output.action_id) await refreshActionStatus(db, chat.workspace_id, output.action_id);
+  const revision = await appendRevision(db, chat, output, null, {
+    author: 'fetch',
+    author_user_id: null,
+    run_id: null,
+    message_id: null,
+    title: input.title,
+    body: input.body,
+    fields: pageFieldsSchema.parse(input.fields),
+    source_refs: [],
+    web_sources: [],
+  });
+  return { output, revision };
+}
+
+/**
+ * A person's change to a chat: authorized, with the chat locked and no turn
+ * or page fetch running, in one transaction that marks the chat active.
+ */
+export function changeIdleChat<T>(
+  database: Database,
+  scope: Scope,
+  chatId: string,
+  action: (db: Database, chat: Chat) => Promise<T>,
+) {
+  return database.transaction().execute(async (trx) => {
+    await authorize(trx, scope);
+    const chat = await getChat(trx, scope, chatId, true);
+    await requireIdle(trx, chat);
+    const result = await action(trx, chat);
+    await touchChat(trx, scope.workspaceId, chat.id);
+    return result;
+  });
+}
+
+/**
+ * A person's new revision of a document from its latest one: the title,
+ * body and SEO fields as given, the sources kept. The caller rechecks the
+ * document's open suggestions once its own events are recorded.
+ */
+export async function appendUserRevision(
+  db: Database,
+  scope: Scope,
+  chat: Chat,
+  current: ChatDocument,
+  content: { title: string; body: string; fields: PageFields | null },
+) {
+  await touchOutput(db, scope, current.output.id);
+  return appendRevision(db, chat, current.output, current.revision, {
+    author: 'user',
+    author_user_id: scope.userId,
+    run_id: null,
+    message_id: null,
+    ...content,
+    source_refs: current.revision.source_refs,
+    web_sources: current.revision.web_sources,
+  });
+}
+
 export class AgentOutputs {
   readonly db: Database;
   constructor(db: Database) {
     this.db = db;
-  }
-  private mutate<T>(
-    scope: Scope,
-    chatId: string,
-    action: (db: Database, chat: Chat) => Promise<T>,
-  ) {
-    return this.db.transaction().execute(async (trx) => {
-      await authorize(trx, scope);
-      const chat = await getChat(trx, scope, chatId, true);
-      await requireIdle(trx, chat);
-      const result = await action(trx, chat);
-      await touchChat(trx, scope.workspaceId, chat.id);
-      return result;
-    });
   }
   /** A person's edit of one document, against the revision they edited. */
   edit(
@@ -207,24 +320,20 @@ export class AgentOutputs {
     outputId: string,
     edit: { baseId: string; title: string; body: string },
   ) {
-    return this.mutate(scope, chatId, async (db, chat) => {
+    return changeIdleChat(this.db, scope, chatId, async (db, chat) => {
       const current = await chatDocument(db, chat, outputId);
       if (current?.revision.id !== edit.baseId || !current) throw new AgentError('output_conflict');
       const payload = outputPayloadSchema.parse({ title: edit.title, body: edit.body });
-      await touchOutput(db, scope, current.output.id);
-      return appendRevision(db, chat, current.output, current.revision, {
-        author: 'user',
-        author_user_id: scope.userId,
-        run_id: null,
-        message_id: null,
+      const revision = await appendUserRevision(db, scope, chat, current, {
         ...payload,
-        source_refs: current.revision.source_refs,
-        web_sources: current.revision.web_sources,
+        fields: pageFields(current.revision.fields),
       });
+      await recheckOpen(db, scope, current.output.id, { actor: 'user', userId: scope.userId });
+      return revision;
     });
   }
   restore(scope: Scope, chatId: string, outputId: string, revisionId: string) {
-    return this.mutate(scope, chatId, async (db, chat) => {
+    return changeIdleChat(this.db, scope, chatId, async (db, chat) => {
       const current = await chatDocument(db, chat, outputId);
       if (!current) throw new AgentError('output_conflict');
       const source = await db
@@ -236,16 +345,19 @@ export class AgentOutputs {
         .executeTakeFirst();
       if (!source) throw new AgentError('output_conflict');
       await touchOutput(db, scope, current.output.id);
-      return appendRevision(db, chat, current.output, current.revision, {
+      const revision = await appendRevision(db, chat, current.output, current.revision, {
         author: 'user',
         author_user_id: scope.userId,
         run_id: null,
         message_id: null,
         title: source.title,
         body: source.body,
+        fields: pageFields(source.fields),
         source_refs: source.source_refs,
         web_sources: source.web_sources,
       });
+      await recheckOpen(db, scope, current.output.id, { actor: 'user', userId: scope.userId });
+      return revision;
     });
   }
   saveInstructions(scope: Scope, text: string) {
@@ -257,7 +369,7 @@ export class AgentOutputs {
         .select('id')
         .where('workspace_id', '=', scope.workspaceId)
         .where('id', '=', scope.projectId)
-        .forUpdate()
+        .forNoKeyUpdate()
         .executeTakeFirstOrThrow();
       const last = await trx
         .selectFrom('agent_instruction_revisions')

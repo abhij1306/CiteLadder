@@ -45,7 +45,9 @@ it('uses database time to recover leases despite application clock skew', async 
     })
     .where('id', '=', id)
     .execute();
-  expect((await recoverExpiredLeases(db, 10, new Date(Date.now() + 86_400_000))).reclaimed).toBe(0);
+  expect(
+    (await recoverExpiredLeases(db, 10, new Date(Date.now() + 86_400_000), seed)).reclaimed,
+  ).toBe(0);
   await db
     .updateTable('site_crawl_tasks')
     .set({
@@ -53,7 +55,9 @@ it('uses database time to recover leases despite application clock skew', async 
     })
     .where('id', '=', id)
     .execute();
-  expect((await recoverExpiredLeases(db, 10, new Date(Date.now() - 86_400_000))).reclaimed).toBe(1);
+  expect(
+    (await recoverExpiredLeases(db, 10, new Date(Date.now() - 86_400_000), seed)).reclaimed,
+  ).toBe(1);
   expect(await row(id)).toMatchObject({ status: 'retry_wait', attempt_count: 1 });
   await db
     .updateTable('site_crawl_tasks')
@@ -68,7 +72,7 @@ it('reclaims retryable leases, spends one attempt, and fences the old owner afte
   await expired(id);
   const claimed = await row(id);
   const now = new Date();
-  expect((await recoverExpiredLeases(db, 10, now)).reclaimed).toBe(1);
+  expect((await recoverExpiredLeases(db, 10, now, seed)).reclaimed).toBe(1);
   expect(await row(id)).toMatchObject({
     status: 'retry_wait',
     attempt_count: 1,
@@ -79,7 +83,11 @@ it('reclaims retryable leases, spends one attempt, and fences the old owner afte
     updated_at: now,
   });
   const worker = new SiteHealthWorker(db, { owner: 'replacement', settings });
-  const tasks = await worker.queue.claim({ owner: worker.owner, kinds: ['link_metrics'] });
+  const tasks = await worker.queue.claim({
+    owner: worker.owner,
+    kinds: ['link_metrics'],
+    scope: { workspaceId: seed.workspaceId, taskIds: [id] },
+  });
   expect(tasks.map((task) => task.id)).toEqual([id]);
   expect(await worker.queue.markRunning(id, worker.owner)).toBe(true);
   expect(await worker.queue.heartbeat(id, 'dead-worker', seed.workspaceId)).toBe(false);
@@ -108,7 +116,7 @@ it('terminal recovery preserves committed evidence and names the crawl to reconc
   const page = await fixtures.page(seed, '/', { title: 'Persisted' });
   await expired(page.taskId, 2);
   const now = new Date();
-  const result = await recoverExpiredLeases(db, 10, now);
+  const result = await recoverExpiredLeases(db, 10, now, seed);
   expect(result).toEqual({
     reclaimed: 1,
     failedTaskIds: [page.taskId],
@@ -131,14 +139,13 @@ it('terminal recovery preserves committed evidence and names the crawl to reconc
       .where('id', '=', page.artifactId)
       .executeTakeFirstOrThrow(),
   ).toEqual({ normalized_facts: { title: 'Persisted' } });
-  expect((await recoverExpiredLeases(db, 10, now)).reclaimed).toBe(0);
+  expect((await recoverExpiredLeases(db, 10, now, seed)).reclaimed).toBe(0);
 });
 
 it('bounds recovery, skips locked rows, leaves unexpired and terminal tasks untouched, and concurrent sweeps spend once', async () => {
   const first = await fixtures.crawl();
-  const second = await fixtures.crawl();
   const oldest = await fixtures.task(first);
-  const next = await fixtures.task(second);
+  const next = await fixtures.task(first);
   const live = await fixtures.task(first);
   const terminal = await fixtures.task(first);
   const now = new Date();
@@ -157,13 +164,13 @@ it('bounds recovery, skips locked rows, leaves unexpired and terminal tasks unto
       .where('id', '=', oldest)
       .forUpdate()
       .execute();
-    expect((await recoverExpiredLeases(db, 1, now)).reclaimed).toBe(1);
+    expect((await recoverExpiredLeases(db, 1, now, first)).reclaimed).toBe(1);
     expect((await row(next)).attempt_count).toBe(1);
     expect((await row(oldest)).attempt_count).toBe(0);
   });
   const results = await Promise.all([
-    recoverExpiredLeases(db, 1, now),
-    recoverExpiredLeases(db, 1, now),
+    recoverExpiredLeases(db, 1, now, first),
+    recoverExpiredLeases(db, 1, now, first),
   ]);
   expect(results.reduce((sum, result) => sum + result.reclaimed, 0)).toBe(1);
   expect((await row(oldest)).attempt_count).toBe(1);
@@ -185,7 +192,7 @@ it('preserves a more specific failure code when a recovered lease exhausts its a
     .set({ error_code: 'fetch_timeout', error_detail: 'recorded failure' })
     .where('id', '=', id)
     .execute();
-  await recoverExpiredLeases(db, 10);
+  await recoverExpiredLeases(db, 10, undefined, seed);
   expect(await row(id)).toMatchObject({
     status: 'failed',
     attempt_count: 1,
@@ -207,6 +214,7 @@ it('drains recovered and successor work through acknowledgement without claiming
   let successor: string | null = null;
   const worker = new SiteHealthWorker(db, {
     settings,
+    taskScope: seed,
     executors: {
       link_metrics: async (trx, crawl) => {
         if (successor) return;
@@ -237,6 +245,7 @@ it('finishes its leased batch and stops new claims once the budget expires or sh
   const clock = vi.spyOn(performance, 'now').mockImplementation(() => elapsed);
   const worker = new SiteHealthWorker(db, {
     settings,
+    taskScope: seed,
     executors: {
       link_metrics: async () => {
         elapsed = 20;
@@ -304,7 +313,10 @@ it('drains every bounded recovery batch before treating an empty claim as idle',
     fixtures.task(seed, 'discover', { maximum: 1 }),
   ]);
   for (const id of ids) await expired(id);
-  const worker = new SiteHealthWorker(db, { settings: { ...settings, reclaimBatch: 1 } });
+  const worker = new SiteHealthWorker(db, {
+    settings: { ...settings, reclaimBatch: 1 },
+    taskScope: seed,
+  });
   expect(await worker.runUntilIdle(new AbortController().signal)).toBe(0);
   expect((await Promise.all(ids.map(row))).map((task) => task.status)).toEqual([
     'failed',

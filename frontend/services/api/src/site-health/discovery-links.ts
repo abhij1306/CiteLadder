@@ -3,6 +3,7 @@ import { policy } from '../config.ts';
 import {
   anchorElements,
   attribute,
+  documentBaseUrl,
   elements,
   textContent,
   type HtmlNode,
@@ -42,8 +43,12 @@ export function linkTargetUrl(href: string, baseUrl: string) {
   return canonicalUrl(rewriteHref(href) ?? href, baseUrl);
 }
 
-/** The page title and its bounded, canonical, in-scope links in document order. */
-export function discoveryLinks(root: HtmlNode, baseUrl: string, scope: Scope, maxLinks: number) {
+/**
+ * The page title and its bounded, canonical, in-scope links in document order,
+ * each resolved against the document base (`<base href>`, else the page URL).
+ */
+export function discoveryLinks(root: HtmlNode, pageUrl: string, scope: Scope, maxLinks: number) {
+  const baseUrl = documentBaseUrl(root, pageUrl);
   const titleNode = elements(root, 'title').next().value;
   const title = titleNode ? textContent(titleNode).slice(0, 1024) : '';
   const links: DiscoveredLink[] = [];

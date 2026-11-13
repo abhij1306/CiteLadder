@@ -1,5 +1,3 @@
-'use client';
-
 import type { ExecutionPerception } from '@citeladder/contracts/visibility-perception';
 
 import { Badge } from '@/components/ui/badge';
@@ -57,12 +55,7 @@ export function EvidencePerception({
       <Label>Perception</Label>
       <Stack as="ul" gap="item">
         {perception.map((entity) => (
-          <Stack
-            as="li"
-            gap="tight"
-            key={entity.entity}
-            className={panelClasses({ tone: 'well' }, 'min-w-0')}
-          >
+          <Stack as="li" gap="tight" key={entity.entity} className={panelClasses('min-w-0')}>
             <Inline as="span" className="flex-wrap">
               <span className={textRole('emphasis')}>{entity.entity}</span>
               {entity.is_brand ? (

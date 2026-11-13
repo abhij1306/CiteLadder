@@ -1,6 +1,5 @@
 {
   "crawl": {
-    "monitored_url_selection_max": 5000,
     "value_priorities": {
       "root": 100,
       "product": 90,
@@ -38,10 +37,8 @@
       "hard_asset": "hard_excluded_asset",
       "hard_query": "hard_excluded_query",
       "out_of_scope": "out_of_scope",
-      "narrowed": "narrowed",
       "invalid": "invalid_url",
       "duplicate": "duplicate",
-      "page_kind": "page_kind_filtered",
       "hard_host": "hard_excluded_host"
     },
     "inventory_document_extensions": [
@@ -97,11 +94,6 @@
       "text/xml"
     ],
     "sitemap_path_suffixes": [".xml", ".xml.gz"],
-    "value_kind_page_kinds": {
-      "about": "about_contact",
-      "contact": "about_contact",
-      "trust": "trust_policy"
-    },
     "coverage_expected_value_kinds": ["about", "contact", "pricing"]
   },
   "route_patterns": [

@@ -102,7 +102,7 @@ export function selectedCohorts(cohort: string): readonly string[] {
 }
 
 /** Without named runs a selection reads its market; named runs bring their own. */
-export const readsMarket = (selection: Pick<RunSelection, 'auditId' | 'auditIds'>) =>
+const readsMarket = (selection: Pick<RunSelection, 'auditId' | 'auditIds'>) =>
   selection.auditId === null && !selection.auditIds?.length;
 
 /**

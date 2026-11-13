@@ -1,12 +1,18 @@
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { normalizeDomain } from '../analysis/domains.ts';
 
+const DOMAIN_PROPERTY_PREFIX = policy.integrations.transport.GSC_DOMAIN_PROPERTY_PREFIX;
+
 /**
- * The registrable site of a URL, property or bare host: lower-cased, with
- * `sc-domain:` and a leading `www.` removed. Empty when unparseable.
+ * The registrable site of a URL, property or bare host: lower-cased, with the
+ * Search Console domain-property prefix and a leading `www.` removed. Empty
+ * when unparseable.
  */
 function siteDomain(value: string): string {
-  return normalizeDomain(value.trim().replace(/^sc-domain:/iu, ''));
+  const text = value.trim();
+  const prefixed = text.toLowerCase().startsWith(DOMAIN_PROPERTY_PREFIX);
+  return normalizeDomain(prefixed ? text.slice(DOMAIN_PROPERTY_PREFIX.length) : text);
 }
 
 /**
@@ -24,17 +30,24 @@ export async function projectSiteDomains(
     .where('workspace_id', '=', workspaceId)
     .where('id', '=', projectId)
     .executeTakeFirst();
-  return project ? siteDomainsOf(db, { id: projectId, website_url: project.website_url }) : null;
+  return project
+    ? siteDomainsOf(db, {
+        id: projectId,
+        workspace_id: workspaceId,
+        website_url: project.website_url,
+      })
+    : null;
 }
 
 /** The sites of a project the caller already read inside its workspace. */
 export async function siteDomainsOf(
   db: Database,
-  project: { id: string; website_url: string },
+  project: { id: string; workspace_id: string; website_url: string },
 ): Promise<Set<string>> {
   const domains = await db
     .selectFrom('owned_domains')
     .select('domain')
+    .where('workspace_id', '=', project.workspace_id)
     .where('project_id', '=', project.id)
     .execute();
   return new Set(

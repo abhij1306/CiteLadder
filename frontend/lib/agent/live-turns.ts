@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Turns this tab started. Admission opens one streamed request per accepted
  * run, and the turn runs inside that request: it lives in this module, so
@@ -12,6 +10,7 @@ import { useSyncExternalStore } from 'react';
 import type { z } from 'zod';
 
 import { agentTurnEventSchema } from '@citeladder/contracts/agent';
+import { retryAfterSeconds } from '@citeladder/contracts/retry-after';
 import { AGENT_RUN_RETRY, AGENT_STREAM_IDLE_MS } from '@/lib/config/agent';
 import { API_BASE_URL } from '@/lib/config/operational';
 import { readSseResponse, streamHeaders } from '@/lib/sse/use-event-stream';
@@ -142,12 +141,10 @@ async function read(
   }
 }
 
-/** The 429 `Retry-After` delay in milliseconds, or the default when absent or unreadable. */
+/** The 429 `Retry-After` delay in milliseconds, or the default when it gives no positive wait. */
 function retryDelayMs(response: Response): number {
-  const seconds = Number(response.headers.get('retry-after') ?? '');
-  return Number.isFinite(seconds) && seconds >= 0
-    ? Math.ceil(seconds) * 1000
-    : AGENT_RUN_RETRY.defaultDelayMs;
+  const seconds = retryAfterSeconds(response.headers.get('retry-after'));
+  return seconds === undefined ? AGENT_RUN_RETRY.defaultDelayMs : Math.ceil(seconds) * 1000;
 }
 
 /**

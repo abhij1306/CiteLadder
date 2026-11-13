@@ -13,7 +13,13 @@ import {
   type DuplicateComparison,
   type Fingerprint,
 } from './analysis/duplicate-content.ts';
-import { finalizeEvaluation, hreflangConflict, sitemapOrphan } from './analysis/finalize.ts';
+import {
+  canonicalDeclarations,
+  finalizeEvaluation,
+  hreflangConflict,
+  sitemapOrphan,
+  sitemapPresent,
+} from './analysis/finalize.ts';
 import { crawlCoverage } from './coverage.ts';
 import { linkTargetUrl } from './discovery-links.ts';
 import { pageAnchors } from './link-graph.ts';
@@ -100,12 +106,6 @@ function hreflang(
   });
 }
 
-function canonicalDeclarations(facts: Facts) {
-  const declarations = strings(facts.canonical_declarations);
-  const single = scalarText(facts.canonical_url);
-  return declarations.length || !single ? declarations : [single];
-}
-
 /** The page's one declared canonical in identity form; null for none or a conflicting set. */
 function declaredCanonical(finalUrl: string, facts: Facts) {
   const unique = [...new Set(canonicalDeclarations(facts).map((value) => value.trim()))];
@@ -177,7 +177,7 @@ async function sitemapObservations(db: Database, crawl: Crawl) {
   return rows.map((row) => row.observed_url);
 }
 
-/** The root page also carries the crawl-wide sitemap orphan and reachability checks. */
+/** The root page also carries the crawl-wide sitemap presence, orphan and reachability checks. */
 async function rootEvaluations(
   db: Database,
   crawl: Crawl,
@@ -197,6 +197,10 @@ async function rootEvaluations(
   ];
   const coverage = await crawlCoverage(db, crawl);
   return [
+    sitemapPresent({
+      sampleMode: crawl.sample_mode,
+      sitemap: record(record(crawl.site_facts).sitemap),
+    }),
     sitemapOrphan(observed.length, orphans, coverage.state),
     resolutionSet(targets, resolutions, { sitemap: true }),
     redirectChains(resolutions),
@@ -335,8 +339,7 @@ export async function finalizeCrawlAnalyses(db: Database, crawl: Crawl) {
     const fresh = evaluations
       .filter((evaluation) => !recorded.has(`${row.id}:${evaluation.rule_id}`))
       .map((evaluation) => ({ ...evaluation, id: randomUUID() }));
-    // Sequential: one transaction's connection, under the crawl lock.
-    await insertEvaluations(db, crawl, row.id, row.site_url_id, row.artifact_id, fresh); // NOSONAR
+    await insertEvaluations(db, crawl, row.id, row.site_url_id, row.artifact_id, fresh); // NOSONAR -- One transaction's connection, under the crawl lock.
   }
   await publishFinalPageAnalyses(db, crawl);
 }

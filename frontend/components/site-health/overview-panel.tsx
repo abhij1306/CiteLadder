@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 
@@ -54,7 +52,7 @@ export function OverviewPanel({
       <QueryState
         kind="error"
         error={overview.error}
-        fallback="Could not load the persisted Site Health Overview."
+        fallback="Could not load the Website overview."
         onRetry={() => void overview.refetch()}
         pending={overview.isFetching}
       />

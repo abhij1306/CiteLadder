@@ -122,7 +122,7 @@ function StackedLegendItem({
     <li className="text-body-sm inline-flex items-center gap-2 whitespace-nowrap">
       {swatch}
       <span className="text-ink-secondary">{label}</span>
-      <span className="text-ink font-medium tabular-nums">{share}</span>
+      <span className="text-ink tabular-nums">{share}</span>
       <span className="text-ink-muted tabular-nums">{value}</span>
     </li>
   );

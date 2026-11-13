@@ -6,11 +6,50 @@
  * the tracked brand wins a name collision, and a name that resolves to
  * nothing has no mark rather than a borrowed one.
  */
+import type { NamedBrand } from '@citeladder/contracts/visibility';
+
+import type { ProjectScope } from '../projects/brand-profile.ts';
 import { brandLogoUrl, competitorLogoUrl } from '../projects/logos.ts';
 import type { Database } from '../db/database.ts';
-import { scalarText } from '../text-order.ts';
+import { compareText, scalarText } from '../text-order.ts';
 
 export type BrandIdentity = { logo_url: string | null; website: string | null };
+
+/** How many named brands a table row shows before its overflow count. */
+const LEADING_BRANDS = 3;
+
+/** One name recorded in a set of answers, and how many of them named it. */
+export type BrandCount = Pick<NamedBrand, 'kind' | 'name' | 'responses'>;
+
+/**
+ * A row's named brands: the distinct count, and the leading few with their
+ * marks — most answers first, then the tracked brand before competitors, then
+ * by name.
+ */
+export function leadingBrands(
+  counts: readonly BrandCount[],
+  identities: ReadonlyMap<string, BrandIdentity>,
+): { mentions: number; brands: NamedBrand[] } {
+  const ordered = [...counts].sort(
+    (left, right) =>
+      right.responses - left.responses ||
+      compareText(left.kind, right.kind) ||
+      compareText(left.name, right.name),
+  );
+  return {
+    mentions: ordered.length,
+    brands: ordered.slice(0, LEADING_BRANDS).map((entry) => {
+      const identity = identities.get(identityKey(entry.name));
+      return {
+        kind: entry.kind,
+        name: entry.name,
+        responses: entry.responses,
+        logo_url: identity?.logo_url ?? null,
+        website: identity?.website ?? null,
+      };
+    }),
+  };
+}
 
 /**
  * `identity_key`: whitespace-collapsed and lowercased. Lowercasing rather than
@@ -25,21 +64,23 @@ function listOf(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** This project's marks keyed by `identityKey`; the project is already authorized. */
+/** The scope's project marks keyed by `identityKey`. */
 export async function brandIdentities(
   db: Database,
-  projectId: string,
+  { workspaceId, projectId }: ProjectScope,
 ): Promise<Map<string, BrandIdentity>> {
   const project = await db
     .selectFrom('projects')
     .select(['id', 'website_url'])
     .where('id', '=', projectId)
+    .where('workspace_id', '=', workspaceId)
     .executeTakeFirst();
   const found = new Map<string, BrandIdentity>();
   if (project === undefined) return found;
   const brand = await db
     .selectFrom('brands')
     .select(['name', 'logo_asset_id'])
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .executeTakeFirst();
   if (brand?.name) {
@@ -51,6 +92,7 @@ export async function brandIdentities(
   const competitors = await db
     .selectFrom('competitors')
     .select(['id', 'name', 'aliases', 'domains', 'logo_asset_id'])
+    .where('workspace_id', '=', workspaceId)
     .where('project_id', '=', projectId)
     .orderBy('created_at')
     .execute();

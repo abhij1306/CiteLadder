@@ -44,7 +44,7 @@ function crawl(scoreSummary: SiteScoreSummary | null): SiteCrawl {
 describe('PageKindScores', () => {
   it('keeps its section with an empty state before any score summary exists', () => {
     render(<PageKindScores crawl={null} dashboard={undefined} />);
-    expect(screen.getByRole('heading', { name: 'Scores by Page Kind' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Scores by page kind' })).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Scores by page kind appear after the first analysis' }),
     ).toBeInTheDocument();

@@ -123,6 +123,24 @@ describe('Perception view', () => {
     expect(screen.getByText('0 of 4 answers naming you')).toBeVisible();
   });
 
+  it('marks the classified counts unavailable when the brand has no score, never 0 of 0', () => {
+    const { unmount } = render(<PerceptionView data={response()} />);
+    expect(screen.getByText('3 of 4 classified mentions')).toBeVisible();
+    unmount();
+
+    render(<PerceptionView data={response({ brand: null })} />);
+    expect(screen.queryByText(/of \d+ classified mentions/u)).toBeNull();
+    expect(screen.queryByText(/0 of 0/u)).toBeNull();
+  });
+
+  it('says in one line that no source was cited alongside criticism', () => {
+    render(<PerceptionView data={response({ drivers: [] })} />);
+    expect(screen.getByText('No sources cited alongside criticism.')).toBeVisible();
+    expect(
+      screen.queryByRole('heading', { name: 'No sources cited alongside criticism.' }),
+    ).toBeNull();
+  });
+
   it.each([
     ['pending', null, 'Classifying answers…'],
     ['unavailable', 'model_not_configured', 'Perception unavailable'],

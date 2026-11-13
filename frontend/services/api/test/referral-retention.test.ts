@@ -10,7 +10,7 @@ import { ingestReferrals } from '../src/referrals/ingest.ts';
 import { referralRetentionSweep } from '../src/referrals/retention.ts';
 import { refreshTrafficSnapshot } from '../src/traffic/snapshot.ts';
 import { seedImport, seedMetricRow, SOURCE_MEDIUM_DAILY } from './referral-fixtures.ts';
-import { Fixtures, testDatabase } from './support.ts';
+import { asOwner, Fixtures, testDatabase } from './support.ts';
 import { requests, task, tenant, type Tenant } from './traffic-fixtures.ts';
 
 const db = testDatabase();
@@ -39,18 +39,20 @@ it('keeps a 200-day-old AI referral counted in Performance and deletes one older
     dataset: SOURCE_MEDIUM_DAILY,
     window: [expired, daysAgo(0)],
   });
-  await db
-    .updateTable('integration_import_artifacts')
-    .set({
-      extract_metadata: JSON.stringify({
-        timeZone: 'UTC',
-        currencyCode: 'USD',
-        analytics_quality: [],
-        truncated: false,
-      }),
-    })
-    .where('id', '=', seed.artifactId)
-    .execute();
+  await asOwner((owner) =>
+    owner
+      .updateTable('integration_import_artifacts')
+      .set({
+        extract_metadata: JSON.stringify({
+          timeZone: 'UTC',
+          currencyCode: 'USD',
+          analytics_quality: [],
+          truncated: false,
+        }),
+      })
+      .where('id', '=', seed.artifactId)
+      .execute(),
+  );
   for (const [date, sessions] of [
     [inWindow, 7],
     [firstDay, 2],

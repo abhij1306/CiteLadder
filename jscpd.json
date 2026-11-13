@@ -11,6 +11,7 @@
     "**/playwright-report/**",
     "**/test-results/**",
     "**/migrations/**",
+    "**/services/api/src/generated/**",
     "**/pnpm-lock.yaml",
     "**/package-lock.json",
     "**/yarn.lock"

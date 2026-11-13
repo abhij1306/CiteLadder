@@ -1,6 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vite-plus/test';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { mswServer } from '@/test/msw-server';
@@ -12,6 +12,7 @@ import {
   CRAWL,
   PROJECT,
   crawl,
+  crawlSchedule,
   inventoryRow,
   mockRoutes,
   overview,
@@ -58,6 +59,11 @@ describe('SiteHealthScreen — Website tab deep links', () => {
       'true',
     );
     expect(await screen.findByText('Architecture is not available yet.')).toBeVisible();
+    // The pages export belongs to the Pages table's toolbar: another tab has none.
+    expect(screen.getByRole('button', { name: 'Run new crawl' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'Pages' }));
+    expect(await screen.findByRole('button', { name: 'Export CSV' })).toBeInTheDocument();
   });
 
   it('opens on Pages for a finished crawl, from the loading frame onward', async () => {
@@ -128,6 +134,30 @@ describe('SiteHealthScreen — Pages tab reads', () => {
     expect(await screen.findByText('No pages in this view')).toBeVisible();
     expect(reads).toEqual(['true|status|10']);
   });
+
+  it('draws the page views and page-kind filter from the address, only on Pages', async () => {
+    const user = userEvent.setup();
+    setSearch('tab=pages&pages_view=errors&page_kind=faq');
+    mockRoutes();
+
+    renderScreen();
+
+    const views = await screen.findByRole('radiogroup', { name: 'Page inventory views' });
+    expect(within(views).getByRole('radio', { name: 'Errors & Blocked' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: /^Page kind: (?!All page kinds)/ })).toBeVisible();
+
+    await user.click(screen.getByRole('tab', { name: 'Overview' }));
+    const params = new URLSearchParams(window.location.search);
+    expect([params.get('tab'), params.get('pages_view'), params.get('page_kind')]).toEqual([
+      'overview',
+      null,
+      null,
+    ]);
+    expect(screen.queryByRole('radiogroup', { name: 'Page inventory views' })).toBeNull();
+  });
 });
 
 describe('SiteHealthScreen — loading failures', () => {
@@ -186,7 +216,7 @@ describe('SiteHealthScreen — loading failures', () => {
     const { queryClient } = renderScreen();
     // The crawl's own controls mean the evidence has loaded; the tab row alone
     // is already drawn by the loading frame.
-    expect(await screen.findByRole('button', { name: 'Recrawl' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Run new crawl' })).toBeVisible();
 
     available = false;
     void refreshSiteHealthDashboard(queryClient, PROJECT);
@@ -248,7 +278,7 @@ describe('SiteHealthScreen — loading frames', () => {
 
     // The crawl is known but its Overview is not: still the one box, no scores.
     dashboard.release();
-    expect(await screen.findByRole('button', { name: 'Recrawl' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: 'Run new crawl' })).toBeVisible();
     expect(loadingRegions()).toHaveLength(1);
     expect(screen.queryByTestId('overview-metrics')).not.toBeInTheDocument();
 
@@ -294,29 +324,6 @@ describe('SiteHealthScreen — loading frames', () => {
   });
 });
 
-describe('SiteHealthScreen — recrawl', () => {
-  it('reruns the shown crawl through its own recrawl route', async () => {
-    const user = userEvent.setup();
-    const recrawled: string[] = [];
-    mockRoutes();
-    mswServer.use(
-      http.post('/api/v1/site-crawls/:crawlId/recrawl', ({ params }) => {
-        recrawled.push(String(params.crawlId));
-        return HttpResponse.json(
-          crawl({ status: 'queued', discovery_status: 'pending', analysis_status: 'pending' }),
-        );
-      }),
-    );
-
-    renderScreen();
-
-    const button = await screen.findByRole('button', { name: 'Recrawl' });
-    await waitFor(() => expect(button).toBeEnabled());
-    await user.click(button);
-    await waitFor(() => expect(recrawled).toEqual([CRAWL]));
-  });
-});
-
 describe('SiteHealthScreen — before the first crawl', () => {
   it('shows one Run new crawl placeholder instead of empty metrics', async () => {
     const user = userEvent.setup();
@@ -339,7 +346,6 @@ describe('SiteHealthScreen — before the first crawl', () => {
         monitoredRequests += 1;
         return HttpResponse.json({
           project_id: PROJECT,
-          selection_version: 1,
           monitored_urls: [],
           quota: { used: 0, limit: 50 },
         });
@@ -360,10 +366,10 @@ describe('SiteHealthScreen — before the first crawl', () => {
     renderScreen();
 
     expect(await screen.findByText('Run your first site crawl')).toBeVisible();
-    expect(screen.queryByTestId('score-section')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('status-strip')).not.toBeInTheDocument();
     const runButtons = screen.getAllByRole('button', { name: 'Run new crawl' });
     expect(runButtons).toHaveLength(1);
-    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export CSV' })).not.toBeInTheDocument();
 
     await waitFor(() => expect(monitoredRequests).toBe(1));
     await user.click(runButtons[0]!);
@@ -434,6 +440,7 @@ describe('SiteHealthScreen — canonical single-screen flow (regression)', () =>
 
     mswServer.use(
       http.get('/api/v1/projects', () => HttpResponse.json([project])),
+      http.get(`/api/v1/projects/${PROJECT}`, () => HttpResponse.json(project)),
       http.get(`/api/v1/projects/${PROJECT}/site-health`, () =>
         HttpResponse.json({
           project_id: PROJECT,
@@ -448,7 +455,6 @@ describe('SiteHealthScreen — canonical single-screen flow (regression)', () =>
       http.get(`/api/v1/projects/${PROJECT}/monitored-urls`, () =>
         HttpResponse.json({
           project_id: PROJECT,
-          selection_version: 1,
           monitored_urls: monitored,
           quota: { used: monitored.length, limit: 50 },
         }),
@@ -541,5 +547,96 @@ describe('SiteHealthScreen — canonical single-screen flow (regression)', () =>
     expect(screen.getByRole('tab', { name: 'Pages' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByTestId('site-health-canonical')).toBe(canonical);
     expect(screen.queryByTestId('site-health-overview')).not.toBeInTheDocument();
+  });
+});
+
+describe('SiteHealthScreen — crawl schedule', () => {
+  /** Opens the schedule menu of a schedule that is off, once it has loaded. */
+  async function openOffSchedule() {
+    const trigger = await screen.findByRole('button', { name: 'Crawl schedule: Off' });
+    await waitFor(() => expect(trigger).toBeEnabled());
+    await userEvent.click(trigger);
+    return screen.findByRole('menu');
+  }
+
+  it('turns on a weekly crawl beside Run new crawl and shows the next run', async () => {
+    mockRoutes();
+    const saved: unknown[] = [];
+    mswServer.use(
+      http.put(`/api/v1/projects/${PROJECT}/crawl-schedule`, async ({ request }) => {
+        saved.push(await request.json());
+        return HttpResponse.json(
+          crawlSchedule({ enabled: true, next_run_at: '2027-01-11T09:00:00Z' }),
+        );
+      }),
+    );
+
+    renderScreen();
+
+    await openOffSchedule();
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Weekly' }));
+
+    await waitFor(() => expect(saved).toEqual([{ enabled: true, cadence: 'weekly' }]));
+    await userEvent.click(await screen.findByRole('button', { name: 'Crawl schedule: Weekly' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).getByText(/Next crawl/)).toHaveTextContent('Next crawl Jan 11, 2027');
+  });
+
+  it('says why a schedule that kept failing turned itself off', async () => {
+    mockRoutes();
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/crawl-schedule`, () =>
+        HttpResponse.json(crawlSchedule({ last_outcome: 'failed' })),
+      ),
+    );
+
+    renderScreen();
+
+    const menu = await openOffSchedule();
+    expect(
+      within(menu).getByText('Turned off: scheduled crawls kept failing to start.'),
+    ).toBeVisible();
+    expect(within(menu).queryByText(/Next crawl/)).not.toBeInTheDocument();
+  });
+
+  it('says scheduled crawls keep the latest crawl’s choice to ignore robots.txt', async () => {
+    mockRoutes({
+      robots: {
+        handling: 'ignore',
+        decided_by_email: 'owner@example.test',
+        decided_at: '2026-01-02T03:04:05.000Z',
+      },
+    });
+
+    renderScreen();
+
+    expect(
+      within(await openOffSchedule()).getByText(
+        'Ignores robots.txt (confirmed by owner@example.test)',
+      ),
+    ).toBeVisible();
+  });
+
+  it('tells an unreadable schedule apart from one that is off', async () => {
+    mockRoutes();
+    mswServer.use(
+      http.get(`/api/v1/projects/${PROJECT}/crawl-schedule`, () =>
+        HttpResponse.json(
+          {
+            error: {
+              code: 'internal_error',
+              message: 'unavailable',
+              request_id: 'req-1',
+              retryable: false,
+            },
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+
+    renderScreen();
+
+    expect(await screen.findByRole('button', { name: 'Schedule unavailable' })).toBeDisabled();
   });
 });

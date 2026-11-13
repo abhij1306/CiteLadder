@@ -1,10 +1,9 @@
-'use client';
-
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { SearchX } from 'lucide-react';
 
 import { DataTable, type DataTableColumn } from '@/components/ui/data-table';
+import { Delta } from '@/components/ui/delta';
 import { MissingValue } from '@/components/ui/unavailable-value';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import {
@@ -20,12 +19,11 @@ import {
   METRIC_CARDS,
   DIMENSION_SORT_KEY,
   defaultSort,
-  differenceTone,
   dimensionTab,
-  formatDifference,
   formatDimensionValue,
   formatMetric,
   measured,
+  metricDelta,
   metricDifference,
   sortDirection,
   sortKey,
@@ -50,12 +48,6 @@ import { cn } from '@/lib/utils';
  * projection. The exact total comes from that snapshot's persisted
  * per-dimension count — no `COUNT(*)` runs on a page navigation.
  */
-
-const TONE_CLASS: Record<'up' | 'down' | 'flat', string> = {
-  up: 'text-ink-secondary',
-  down: 'text-ink-secondary',
-  flat: 'text-ink-muted',
-};
 
 /**
  * The sort ACTUALLY applied, given which columns are on screen.
@@ -289,7 +281,7 @@ export function DimensionTable({
           kind: 'empty',
           icon: SearchX,
           heading: `No ${tab.noun} imported`,
-          description: `Search Console does not provide ${tab.noun} alongside a date range, so this breakdown is not imported. Every other tab is unaffected.`,
+          description: `Search Console does not provide ${tab.noun} with a date range.`,
         }}
       />
     );
@@ -335,12 +327,8 @@ export function DimensionTable({
               <TableCell key={`${metric.key}-comparison`} numeric className="text-ink-muted">
                 {measured(formatMetric(metric.key, comparisonValue)) ?? <MissingValue />}
               </TableCell>,
-              <TableCell
-                key={`${metric.key}-difference`}
-                numeric
-                className={TONE_CLASS[differenceTone(metric.key, difference)]}
-              >
-                {measured(formatDifference(metric.key, difference)) ?? <MissingValue />}
+              <TableCell key={`${metric.key}-difference`} numeric>
+                <Delta {...metricDelta(metric.key, difference)} />
               </TableCell>,
             ];
           })}

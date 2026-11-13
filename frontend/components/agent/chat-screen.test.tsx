@@ -14,6 +14,7 @@ import {
 } from 'vite-plus/test';
 
 import { mswServer } from '@/test/msw-server';
+import { actionsPage } from '@/test/fixtures/actions';
 import { makeProject } from '@/test/fixtures/project';
 import { renderWithProviders } from '@/test/render';
 import { expectThreadFollowsLatest } from '@/test/chat-follow';
@@ -32,6 +33,7 @@ import {
   REV2,
   RUN,
   detail,
+  pageChatPhases,
   revision,
   skills,
 } from '@/test/agent-chat-fixture';
@@ -55,9 +57,7 @@ function renderChat() {
 beforeAll(() => mswServer.listen({ onUnhandledFrame: 'error' }));
 beforeEach(() =>
   mswServer.use(
-    http.get(`/api/v1/projects/${PROJECT}/actions`, () =>
-      HttpResponse.json({ items: [], next_cursor: null, status_counts: {} }),
-    ),
+    http.get(`/api/v1/projects/${PROJECT}/actions`, () => HttpResponse.json(actionsPage())),
   ),
 );
 afterEach(() => {
@@ -251,9 +251,7 @@ describe('ChatScreen', () => {
     mswServer.use(
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
       http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(withMention)),
-      http.get(`/api/v1/projects/${PROJECT}/actions`, () =>
-        HttpResponse.json({ items: [], next_cursor: null, status_counts: {} }),
-      ),
+      http.get(`/api/v1/projects/${PROJECT}/actions`, () => HttpResponse.json(actionsPage())),
     );
     renderChat();
 
@@ -412,10 +410,41 @@ describe('ChatScreen', () => {
     expect(await screen.findByText('Deciding the next step…')).toBeVisible();
     expect(live).toHaveTextContent('Partly written');
     release();
-    expect(await screen.findByText('The saved answer.')).toBeVisible();
-    expect(
-      screen.queryByRole('article', { name: 'Agent reply in progress' }),
-    ).not.toBeInTheDocument();
+    // The saved reply replaces the live one; the two may land in separate renders.
+    await vi.waitFor(() => {
+      expect(screen.getByText('The saved answer.')).toBeVisible();
+      expect(
+        screen.queryByRole('article', { name: 'Agent reply in progress' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('waits while the page is read, then runs the turn the fetch queued', async () => {
+    const { reading, fetched, answered } = pageChatPhases('Here is what to change.');
+    let phase: 'reading' | 'fetched' | 'answered' = 'reading';
+    const streamed: string[] = [];
+    mswServer.use(
+      http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
+      http.get(`/api/v1/agent/chats/${CHAT}`, () =>
+        HttpResponse.json({ reading, fetched, answered }[phase]),
+      ),
+      http.post(`/api/v1/agent/chats/${CHAT}/runs/:runId/run`, ({ params }) => {
+        streamed.push(String(params.runId));
+        phase = 'answered';
+        const done = `data: ${JSON.stringify({ type: 'done', run: answered.latest_run })}\n\n`;
+        return new HttpResponse(done, { headers: { 'content-type': 'text/event-stream' } });
+      }),
+    );
+    const user = userEvent.setup();
+    renderChat();
+
+    expect(await screen.findByText('Reading your page…')).toBeVisible();
+    await user.type(screen.getByLabelText('Reply to the agent'), 'Also the title');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    phase = 'fetched';
+    expect(await screen.findByText('Here is what to change.', {}, { timeout: 5000 })).toBeVisible();
+    expect(streamed).toEqual([fetched.latest_run.id]);
+    expect(screen.queryByText('Reading your page…')).not.toBeInTheDocument();
   });
 
   it('regenerates the last reply by sending its request again as a new turn', async () => {
@@ -514,8 +543,8 @@ describe('ChatScreen', () => {
       http.get('/api/v1/agent/skills', () => HttpResponse.json(skills)),
       http.get(`/api/v1/agent/chats/${CHAT}`, () => HttpResponse.json(current)),
       http.get(`/api/v1/projects/${PROJECT}/actions`, () =>
-        HttpResponse.json({
-          items: [
+        HttpResponse.json(
+          actionsPage([
             {
               id: ACTION,
               project_id: PROJECT,
@@ -526,18 +555,20 @@ describe('ChatScreen', () => {
               origin: 'evidence',
               status: 'open',
               priority_score: 1,
+              priority_band: 'low',
               families: [],
               approach: 'fix_technical',
+              group: 'fix_site',
               skill_id: 'technical_health',
               member_count: 1,
+              declarable_member_count: 1,
+              handoff: { context: 'action', message: 'Work on Pricing page.' },
               evidence_cleared_at: null,
               created_at: NOW,
               updated_at: NOW,
             },
-          ],
-          next_cursor: null,
-          status_counts: {},
-        }),
+          ]),
+        ),
       ),
       http.post(`/api/v1/agent/chats/${CHAT}/messages`, async ({ request }) => {
         keys.push(request.headers.get('Idempotency-Key'));

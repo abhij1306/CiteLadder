@@ -1,5 +1,3 @@
-'use client';
-
 import { useState } from 'react';
 
 import { ProjectEditPanel } from '@/components/projects/project-edit-panel';

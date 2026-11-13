@@ -31,7 +31,9 @@ import {
 import { auditPerformance } from '../audits/performance.ts';
 import { createRepairAudit, repairInput } from '../audits/repair.ts';
 import { exportAudit } from '../audits/exports.ts';
-import { resumeCursor, eventStreamResponse } from '../audits/events.ts';
+import { auditEventStreamResponse } from '../audits/events.ts';
+import { resumeCursor } from '../http/event-stream.ts';
+import { streamOwner } from '../http/stream-slots.ts';
 import { defineGetRoute, definePostRoute } from './define.ts';
 
 const family = 'audits',
@@ -200,7 +202,7 @@ export const auditRoutes = [
     async handle({ c, db, config }, { path, query }) {
       const workspace = c.get('workspace').workspaceId,
         runtime = auditRuntime(config.settings);
-      const after = resumeCursor(c.req.header('last-event-id'));
+      const after = resumeCursor({ header: c.req.header('last-event-id') });
       const events = await auditEvents(
         db,
         workspace,
@@ -209,15 +211,12 @@ export const auditRoutes = [
         runtime.audits.max_event_page,
       );
       return query.stream
-        ? eventStreamResponse(
+        ? auditEventStreamResponse(
             db,
-            workspace,
-            path.audit_id,
-            after,
+            { workspaceId: workspace, auditId: path.audit_id, after, initial: events },
             runtime,
             c.req.raw.signal,
-            events,
-            { userId: c.get('user').id, limits: config.auth.limits },
+            streamOwner(c, db, config.auth.limits),
           )
         : c.json(events);
     },

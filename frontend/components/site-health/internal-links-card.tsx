@@ -112,17 +112,14 @@ function NeighbourList({
               {neighbour.site_url_id ? (
                 <TextLink
                   text="caption"
-                  className="min-w-0 [overflow-wrap:anywhere] tabular-nums"
+                  className="min-w-0 truncate tabular-nums"
                   href={`/site/crawls/${crawlId}/pages/${neighbour.site_url_id}`}
                   title={neighbour.url}
                 >
                   {neighbour.url}
                 </TextLink>
               ) : (
-                <span
-                  className="type-caption min-w-0 [overflow-wrap:anywhere] tabular-nums"
-                  title={neighbour.url}
-                >
+                <span className="type-caption min-w-0 truncate tabular-nums" title={neighbour.url}>
                   {neighbour.url}
                 </span>
               )}

@@ -1,12 +1,9 @@
-'use client';
-
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 
-import { AppGrid, type AppGridLayout } from '@/components/ui/app-grid';
 import { cardClasses } from '@/components/ui/card';
 import { ComparisonValue, MetricValue } from '@/components/ui/metric-value';
-import { clampScore, ScoreRing } from '@/components/ui/score-ring';
+import { ScoreRing } from '@/components/ui/score-ring';
 import { availabilityLabel } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -22,10 +19,11 @@ import { cn } from '@/lib/utils';
  *
  * A Stat's anatomy, in order: the mono eyebrow label (with an optional leading
  * icon and a trailing marker), an optional caption naming the value's period,
- * the value in Geist 500 (`stat` 28, decision D15), the change line (a `Delta`), a sub-line,
- * a comparison window's value, and one action. A 0–100 score is its number
- * in `stat` with a bare 48px `ScoreRing` (auto tone) centred on its right —
- * never a bar (decision D8).
+ * the value at 500, 24/32 (decision D48), the change
+ * line (a `Delta`), a sub-line, a comparison window's value, and one action. A
+ * 0–100 score is a 64px `ScoreRing` (auto tone) with the number inside, on the
+ * right beside the label and action, so the Stat is the ring's height — never
+ * a bar (decisions D8, D48).
  *
  * `value: null` is the missing state — the muted dash with `missingLabel`
  * (default "Not measured") as its accessible name. A string or number is the
@@ -39,7 +37,7 @@ import { cn } from '@/lib/utils';
 
 type StatValue =
   | { value: ReactNode; score?: undefined }
-  /** A 0–100 score: its number with a bare ScoreRing, named by `label`. */
+  /** A 0–100 score: a ScoreRing with its number inside, named by `label`. */
   | { score: Readonly<{ value: number; label: string }>; value?: undefined };
 
 type StatAction =
@@ -73,7 +71,7 @@ export type StatSegment = Readonly<
     StatAction
 >;
 
-/** At most four Stats a row; more are balanced across rows. */
+/** At most four Stats a StatRow row; more are balanced across rows. */
 const MAX_PER_ROW = 4;
 
 const DESKTOP_COLUMNS = {
@@ -81,110 +79,100 @@ const DESKTOP_COLUMNS = {
   2: 'desktop:grid-cols-2',
   3: 'desktop:grid-cols-3',
   4: 'desktop:grid-cols-4',
+  5: 'desktop:grid-cols-5',
+  6: 'desktop:grid-cols-6',
 } as const;
 
-function columnsOf(count: number) {
+type Columns = keyof typeof DESKTOP_COLUMNS;
+
+function balancedColumns(count: number): Columns {
   const rowCount = Math.ceil(count / MAX_PER_ROW);
   const perRow = Math.ceil(count / Math.max(1, rowCount));
-  return Math.max(1, Math.min(MAX_PER_ROW, perRow)) as 1 | 2 | 3 | 4;
+  return Math.max(1, Math.min(MAX_PER_ROW, perRow)) as Columns;
 }
 
-export function StatRow({
-  segments,
-  label,
-  testId,
-}: Readonly<{
+type StatGroupProps = Readonly<{
   segments: readonly StatSegment[];
   /** Accessible name for the group, when the section heading does not give one. */
   label?: string;
   testId?: string;
-}>) {
+}>;
+
+/** The Stats' grid: 32 between columns, 24 between rows, stacked below desktop. */
+function StatGrid({
+  segments,
+  label,
+  testId,
+  columns,
+  kpi,
+}: StatGroupProps & Readonly<{ columns: Columns; kpi: boolean }>) {
   return (
     <dl // NOSONAR -- a <fieldset> would add form-group semantics and its own border, padding and min-width to a grid of figures
       role={label ? 'group' : undefined}
       aria-label={label}
       data-testid={testId}
-      data-stat-row=""
-      className={cn(
-        'grid min-w-0 grid-cols-1 gap-x-8 gap-y-6',
-        DESKTOP_COLUMNS[columnsOf(segments.length)],
-      )}
+      data-stat-row={kpi ? undefined : ''}
+      data-kpi-row={kpi ? '' : undefined}
+      className={cn('grid min-w-0 grid-cols-1 gap-x-8 gap-y-6', DESKTOP_COLUMNS[columns])}
     >
       {segments.map((segment) => (
-        <Stat key={segment.key} segment={segment} framed={false} />
+        <Stat key={segment.key} segment={segment} />
       ))}
     </dl>
   );
 }
 
-/**
- * The KPI row's grid by count: one row from the desktop breakpoint for up to
- * five (decision D9: 4 across at 982px, never 2 × 2 or 2 + 1), stacked below.
- */
-function kpiLayout(count: number): AppGridLayout {
-  if (count === 5) return 'fifths';
-  if (count === 3) return 'thirds';
-  if (count === 2) return 'pair';
-  return 'quarters';
+export function StatRow(props: StatGroupProps) {
+  return <StatGrid {...props} columns={balancedColumns(props.segments.length)} kpi={false} />;
 }
 
 /**
- * KpiRow — the row of numbers that opens a report page: each Stat in a Card
- * of its own (`surface`, `shadow-card`, 24 inset), up to four in a row, the
- * cards of a row at one height. A page's headline figures are a KpiRow; a
- * group of figures inside a card that also holds other content is a
- * `StatRow`.
+ * KpiRow — the row of numbers that opens a report page: one Card holding the
+ * Stats as a single strip (decision D48), one row from the desktop breakpoint
+ * for up to six (D9: never 2 × 2 or 2 + 1), stacked below. A page's headline
+ * figures are a KpiRow; a group of figures inside a card that also holds
+ * other content is a `StatRow`. A record's page passes its summary as `lead`:
+ * it opens the same card above a hairline, so the record and its figures are
+ * one box, not two.
  */
-export function KpiRow({
-  segments,
-  label,
-  testId,
-}: Readonly<{
-  segments: readonly StatSegment[];
-  /** Accessible name for the group, when the section heading does not give one. */
-  label?: string;
-  testId?: string;
-}>) {
+export function KpiRow({ lead, ...props }: StatGroupProps & Readonly<{ lead?: ReactNode }>) {
+  const columns = Math.max(1, Math.min(6, props.segments.length)) as Columns;
   return (
-    <AppGrid
-      as="dl"
-      layout={kpiLayout(segments.length)}
-      role={label ? 'group' : undefined}
-      aria-label={label}
-      data-kpi-row=""
-      data-testid={testId}
-    >
-      {segments.map((segment) => (
-        <Stat key={segment.key} segment={segment} framed />
-      ))}
-    </AppGrid>
+    <div className={cardClasses()}>
+      {lead ? (
+        <div className="border-line -mx-[var(--card-padding)] mb-[var(--card-padding)] border-b px-[var(--card-padding)] pb-[var(--card-padding)]">
+          {lead}
+        </div>
+      ) : null}
+      <StatGrid {...props} columns={columns} kpi />
+    </div>
   );
 }
 
 /**
- * A pressable Stat's state: selected takes the shared selected fill and the
- * foreground ink; unselected takes the neutral hover.
+ * A pressable Stat's state: selected takes the selected overlay and the
+ * foreground ink; unselected takes the hover overlay (D51).
  */
 function statSelectionClasses(selected: boolean) {
   return cn(
     'transition-colors duration-[var(--motion-fast)] ease-[var(--ease-standard)]',
-    selected ? 'bg-surface-sunken' : 'hover:bg-surface-sunken',
+    selected ? 'overlay-selected' : 'hover:overlay-hover',
   );
 }
 
-function Stat({ segment, framed }: Readonly<{ segment: StatSegment; framed: boolean }>) {
+function Stat({ segment }: Readonly<{ segment: StatSegment }>) {
   const pressable = Boolean(segment.onSelect);
   return (
     <div
-      data-stat-segment={framed ? undefined : ''}
+      data-stat-segment=""
       className={cn(
-        framed
-          ? // A KPI is its own card; a pressable one is pressed as a whole card.
-            cn(cardClasses(), 'relative grid min-w-0 content-start gap-1')
-          : // Every Stat in a row carries the inset a pressable one's fill
-            // needs, so its label never touches the selected fill's edge; the
-            // matching negative margin keeps the figures on the row's grid.
-            '-m-3 grid min-w-0 content-start gap-1 rounded-md p-3',
+        // Every Stat carries the inset a pressable one's fill needs, so its
+        // label never touches the selected fill's edge; the matching negative
+        // margin keeps the figures on the row's grid.
+        '-m-3 grid min-w-0 content-start gap-x-4 gap-y-1 rounded-md p-3',
+        // A score: the label and its foot on the left, the ringed number on
+        // the right, so the Stat is only the ring's height.
+        segment.score && 'grid-cols-[minmax(0,1fr)_auto] content-center',
         pressable && cn('relative', statSelectionClasses(segment.selected ?? false)),
       )}
     >
@@ -230,31 +218,29 @@ function StatLabel({ segment }: StatPart) {
 }
 
 /**
- * The caption, then the value. A score's value is its number with the bare
- * ring on its right, centred on the number; the ring carries the accessible
- * "out of 100" name, so the drawn number is not read twice.
+ * The caption, then the value. A score's value is the ring with its number
+ * inside, in the right column across the label and foot rows; the ring
+ * carries the accessible "out of 100" name.
  */
 function StatBody({ segment }: StatPart) {
+  if (segment.score) {
+    return (
+      <>
+        <dd className="col-start-2 row-span-4 row-start-1 self-center">
+          <ScoreRing value={segment.score.value} label={segment.score.label} tone="auto" />
+        </dd>
+        {segment.caption ? (
+          <dd className="text-caption text-ink-muted min-w-0">{segment.caption}</dd>
+        ) : null}
+      </>
+    );
+  }
   return (
     <dd className="grid min-w-0 gap-1">
       {segment.caption ? (
         <span className="text-caption text-ink-muted">{segment.caption}</span>
       ) : null}
-      {segment.score ? (
-        <span className="flex min-w-0 items-center justify-between gap-4">
-          <span aria-hidden className="type-figure min-w-0">
-            {clampScore(segment.score.value)}
-          </span>
-          <ScoreRing
-            value={segment.score.value}
-            label={segment.score.label}
-            tone="auto"
-            showValue={false}
-          />
-        </span>
-      ) : (
-        <StatValue segment={segment} />
-      )}
+      <StatValue segment={segment} />
     </dd>
   );
 }

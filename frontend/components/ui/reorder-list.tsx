@@ -1,5 +1,3 @@
-'use client';
-
 import { ArrowDown, ArrowUp, GripVertical } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 
@@ -46,7 +44,7 @@ export function ReorderList({
       onMove(from, to);
   };
   return (
-    <ol className={ledgerClasses('open')}>
+    <ol className={ledgerClasses()}>
       {items.map((item, index) => (
         <ReorderRow
           key={item.key}
@@ -93,7 +91,7 @@ function ReorderRow({
         if (!pending) onDropped(event.dataTransfer.getData(ROW_DRAG_TYPE));
       }}
       className={cn(
-        'hover:bg-surface-sunken active:bg-surface-sunken desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center grid gap-3 py-3 transition-colors',
+        'hover:overlay-hover active:overlay-pressed desktop:grid-cols-[auto_minmax(0,1fr)_auto] desktop:items-center grid gap-3 py-3 transition-colors',
         dragging && 'opacity-60',
       )}
     >

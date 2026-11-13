@@ -1,7 +1,10 @@
+import type { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vite-plus/test';
 
+import { choiceFilter } from '@/components/ui/all-filters';
+import { TabsRoot } from '@/components/ui/tabs';
 import { DetailScreen, ListScreen, RouteLoadingScreen } from './page-shell';
 
 describe('ListScreen', () => {
@@ -33,6 +36,37 @@ describe('ListScreen', () => {
       filters.compareDocumentPosition(content) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add prompts' })).toBeInTheDocument();
+  });
+
+  it('puts a tabbed page’s filters after its tabs, and a row with an action in its own band', () => {
+    const choice = (id: string) =>
+      choiceFilter({
+        id,
+        label: id,
+        value: 'all',
+        defaultValue: 'all',
+        groups: [{ options: [{ value: 'all', label: 'All' }] }],
+        onChange: () => undefined,
+      });
+    const page = (actions?: ReactNode) => (
+      <MemoryRouter initialEntries={['/visibility']}>
+        <TabsRoot value="a" onValueChange={() => undefined}>
+          <ListScreen
+            tabs={{ items: [{ value: 'a', label: 'A' }], ariaLabel: 'Views' }}
+            controls={{ filters: [choice('Period'), choice('Engine')], actions }}
+          >
+            <p>Table</p>
+          </ListScreen>
+        </TabsRoot>
+      </MemoryRouter>
+    );
+    const band = (name: string | RegExp) =>
+      screen.getByRole('button', { name }).closest('[data-page-band]');
+    const { rerender } = render(page());
+    expect(band(/^All filters/u)).toBe(screen.getByRole('tablist').closest('[data-page-band]'));
+    rerender(page(<button type="button">Export</button>));
+    expect(band(/^All filters/u)).toBe(band('Export'));
+    expect(band('Export')).not.toBe(screen.getByRole('tablist').closest('[data-page-band]'));
   });
 });
 

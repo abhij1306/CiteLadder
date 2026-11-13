@@ -9,6 +9,7 @@ import type { Database } from '../db/database.ts';
 type IntegrationEventType =
   | 'integration.connected'
   | 'integration.disconnected'
+  | 'integration.mapping_retired'
   | 'integration.tested'
   | 'integration.revoked'
   | 'integration.revoke_failed'
@@ -46,4 +47,41 @@ export async function recordIntegrationEvents(
       })),
     )
     .execute();
+}
+
+/** A property mapping as its retirement records it. */
+type RetiredMapping = {
+  id: string;
+  connection_id: string;
+  project_id: string;
+  provider: string;
+  property_ref: string;
+};
+
+/**
+ * Record each mapping a write retired, in the transaction that retired it:
+ * a removal, or a replacement by another property for the same project.
+ */
+export async function recordRetiredMappings(
+  db: Database,
+  workspaceId: string,
+  retired: readonly RetiredMapping[],
+  at: Date,
+): Promise<void> {
+  await recordIntegrationEvents(
+    db,
+    retired.map((mapping) => ({
+      workspaceId,
+      connectionId: mapping.connection_id,
+      type: 'integration.mapping_retired',
+      message: 'Integration property mapping removed',
+      payload: {
+        mapping_id: mapping.id,
+        project_id: mapping.project_id,
+        provider: mapping.provider,
+        property_ref: mapping.property_ref,
+      },
+      at,
+    })),
+  );
 }

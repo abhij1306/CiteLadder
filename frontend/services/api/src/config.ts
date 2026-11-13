@@ -39,6 +39,7 @@ import { crawlLogs } from './config/crawl-logs.ts';
 import { validateSiteHealthSettings } from './config/site-health/validation.ts';
 import { commerce, commerceShelf } from './config/commerce.ts';
 import { auditSchedules } from './config/audit-schedules.ts';
+import { crawlSchedules } from './config/crawl-schedules.ts';
 import { industryLibrary } from './config/industry-library.ts';
 import { opportunities, opportunityDefaults } from './config/opportunity.ts';
 import { earnedActions } from './config/earned-actions.ts';
@@ -47,6 +48,8 @@ import { sourcePatterns } from './config/source-patterns.ts';
 import { sourcePages, sourcePageVocabulary, urlIdentity } from './config/source-pages.ts';
 import { jev, quality, qualityGatesReported, validateJevSettings } from './config/jev.ts';
 import { contentDifferentiation } from './config/content-differentiation.ts';
+import { contentOptimization } from './config/content-optimization.ts';
+import { contentRules } from './config/content-rules.ts';
 import { agentContext } from './config/agent-context.ts';
 import { projectReads } from './config/projects.ts';
 import { agentSkills } from './config/agent-skills.ts';
@@ -93,6 +96,7 @@ export const policy = {
     selectable_engines: selectableEngines,
     min_interval_minutes: auditSchedules.settings.min_interval_minutes,
   },
+  crawl_schedules: crawlSchedules,
   discovery: { ...discovery, industry_library: industryLibrary },
   source_pages: sourcePages,
   audits: { ...audits, url_identity: urlIdentity, commerce_shelf: commerceShelf },
@@ -127,6 +131,8 @@ export const policy = {
     ...contentDifferentiation,
     stop_words: demand.stop_words,
   },
+  content_optimization: contentOptimization,
+  content_rules: contentRules,
   site_health: siteHealth,
   site_health_runtime: siteHealthRuntime,
   web_fetch: siteHealth.web_fetch,
@@ -220,16 +226,30 @@ export function databaseSettings(source: SettingSource) {
   };
 }
 
+/**
+ * Bounds on each migration statement: a lock wait that would queue the serving
+ * revision's queries behind DDL fails fast, and no statement outlasts the job.
+ */
+export function migrationTimeouts(source: SettingSource) {
+  return {
+    lockTimeoutMs: resolveSetting('migration_lock_timeout_ms', source) as number,
+    statementTimeoutMs: resolveSetting('migration_statement_timeout_ms', source) as number,
+  };
+}
+
 function resolveSetting(name: keyof typeof policy.settings, source: SettingSource): unknown {
   return resolveSpec(name, policy.settings[name], source);
 }
+
+/** The deployment environment (AR-1): only these names start the service. */
+type AppEnv = 'development' | 'test' | 'production';
 
 export type ServiceConfig = {
   /** Every catalogued setting, resolved and validated once at startup. */
   settings: Settings;
   execution: ReturnType<typeof executionSettings>;
   appName: string;
-  appEnv: string;
+  appEnv: AppEnv;
   host: string;
   port: number;
   databaseUrl: string;
@@ -301,8 +321,30 @@ function parsePort(raw: string | undefined): number {
   return port;
 }
 
-function isDevelopmentEnv(appEnv: string): boolean {
-  return policy.development_env_names.includes(appEnv.trim().toLowerCase());
+function isDevelopmentEnv(appEnv: AppEnv): boolean {
+  return policy.development_env_names.includes(appEnv);
+}
+
+/**
+ * The startup environment, or a refusal (AR-1): an unset APP_ENV must not fall
+ * back to development, which would switch off every production assertion. The
+ * setting itself already refuses an unknown or misspelled name.
+ */
+function appEnvironment(settings: Settings): AppEnv {
+  const appEnv = resolveSetting('app_env', settings);
+  if (appEnv === 'development' || appEnv === 'test' || appEnv === 'production') return appEnv;
+  throw new ConfigError(
+    `APP_ENV must be set to one of ${policy.settings.app_env.values.join(', ')}`,
+  );
+}
+
+const placeholderPatterns = policy.secret_policy.placeholder_patterns.map(
+  (pattern) => new RegExp(pattern, 'iu'),
+);
+
+/** A template value by its shape ("replace-with-…", "<your-…>"), not by an exact-match list. */
+function secretIsPlaceholder(value: string): boolean {
+  return placeholderPatterns.some((pattern) => pattern.test(value.trim()));
 }
 
 /** Deployment secret-strength admission. */
@@ -311,7 +353,7 @@ export function secretIsWeak(value: string): boolean {
   return (
     new TextEncoder().encode(value).length < rules.min_bytes ||
     new Set(value).size < rules.min_unique_chars ||
-    rules.insecure_values.includes(value) ||
+    secretIsPlaceholder(value) ||
     rules.weak_words.includes(value.trim().toLowerCase())
   );
 }
@@ -356,6 +398,7 @@ export function assertDeployable(config: ServiceConfig, force = false): void {
  */
 export function loadConfig(env: Env = process.env): ServiceConfig {
   const settings = resolveSettings(env);
+  const appEnv = appEnvironment(settings);
   const values = <K extends string>(specs: Record<K, SettingSpec>) =>
     Object.fromEntries(
       Object.entries<SettingSpec>(specs).map(([name, spec]) => [name, settings.of(spec)]),
@@ -368,7 +411,7 @@ export function loadConfig(env: Env = process.env): ServiceConfig {
     settings,
     execution: executionSettings(settings),
     appName: setting('app_name') as string,
-    appEnv: setting('app_env') as string,
+    appEnv,
     // Loopback by default: there is no login, so binding every interface is an
     // explicit choice (the Docker image sets HOST=0.0.0.0 behind a loopback port).
     host: String(settings.of(listenSpecs.host)).trim() || '127.0.0.1',

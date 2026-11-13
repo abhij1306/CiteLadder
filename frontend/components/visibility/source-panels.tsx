@@ -1,5 +1,3 @@
-'use client';
-
 import type { DataTablePager } from '@/components/ui/data-table';
 import { setUrlParams } from '@/lib/navigation/url-state';
 import type { SourcesData } from '@/lib/visibility/sources';

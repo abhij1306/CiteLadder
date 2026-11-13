@@ -1,20 +1,8 @@
-'use client';
-
-import { CircleHelp, Download } from 'lucide-react';
+import { CircleHelp } from 'lucide-react';
 
 import { LaunchAuditButton } from '@/components/runs/launch-audit-button';
-import { Button, IconButton } from '@/components/ui/button';
-import { FilterChoice, FilterTrigger } from '@/components/ui/filter-bar';
-import { Icon } from '@/components/ui/icon';
-import {
-  Menu,
-  MenuContent,
-  MenuLabel,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  MenuTrigger,
-} from '@/components/ui/menu';
+import { choiceFilter, type FilterDefinition } from '@/components/ui/all-filters';
+import { IconButton } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 import type { LogicalEngine } from '@citeladder/contracts';
 import type { ProjectMarket } from '@citeladder/contracts/markets';
@@ -38,12 +26,10 @@ type EngineFilter = LogicalEngine | 'all';
 const METRICS_HELP_URL = '/faq';
 
 /**
- * Trigger copy for the prompt cohort: whether the questions name a brand.
- * Unbranded questions are the honest headline; branded comparison questions
- * name the brand or a competitor, so they read separately. The menu's own
- * label says "Prompts", so the two cohorts name only their branding: the
- * longer "Unbranded prompts" wrapped the Trends band at 982px in the wider
- * text face.
+ * The prompt cohort: whether the questions name a brand. Unbranded questions
+ * are the honest headline; branded comparison questions name the brand or a
+ * competitor, so they read separately. The filter is called "Prompts", so the
+ * two cohorts name only their branding.
  */
 const COHORT_LABELS = {
   core: 'Unbranded',
@@ -79,259 +65,198 @@ type ToolbarProps = Readonly<{
 }>;
 
 /**
- * Two clusters, and every control answers a question a customer would actually
- * ask: which measurement, over what period, about which prompts and surfaces.
+ * The filters every AI visibility tab shares, for its All filters menu. Every
+ * one answers a question a customer would ask: which market, which
+ * measurement, about which prompts and surfaces, over what period.
  *
- * What used to sit here and no longer does: a separate "Measurement selection"
- * toggle (folded into the measurement picker, because "which run am I looking
- * at" is one question, not two), a "Comparison baseline" picker and a "Frozen
- * configuration" picker (both are analyst controls that named internal
- * machinery; they stay honoured from the URL and are no longer surfaced as
- * permanent chrome).
+ * A period and a grouping only mean something while the page pools every run
+ * in a period; beside "Latest run" or one named run they read as a
+ * contradiction, so they are listed only then, and last. The prompt and
+ * answer-outcome filters apply where answers are rendered (Query fanouts).
+ *
+ * The analyst controls that named internal machinery (a comparison baseline,
+ * a frozen configuration) stay honoured from the URL and are not offered.
  */
-export function VisibilityToolbar(props: ToolbarProps) {
+export function useVisibilityFilterMenu(props: ToolbarProps): FilterDefinition[] {
+  const catalog = useEngineCatalog();
   const evidence = isEvidenceTab(props.activeTab);
-  return (
-    <div className="contents" data-testid="visibility-toolbar">
-      <MarketFilter {...props} />
-      <MeasurementFilter {...props} />
-      <RangeFilter {...props} />
-      {props.activeTab === 'trends' ? <GranularityFilter {...props} /> : null}
-      <CohortFilter {...props} />
-      <EngineFilterControl {...props} />
-      {evidence ? <PromptFilter {...props} /> : null}
-      {/* The answer-outcome narrowing belongs with the rest of the filters
-          rather than in a second row under them. It applies wherever answers
-          are rendered, which is Query fanouts. */}
-      {evidence && props.onChangeOutcome ? (
-        <FilterChoice
-          label="Answer outcome"
-          value={props.outcome ?? 'all'}
-          options={ANSWER_OUTCOMES}
-          onChange={(value) => props.onChangeOutcome?.(value === 'all' ? null : value)}
-        />
-      ) : null}
-    </div>
-  );
+  const pooled = props.selectionMode === 'range';
+  const filters: (FilterDefinition | null)[] = [
+    marketFilter(props),
+    measurementFilter(props),
+    choiceFilter({
+      id: 'cohort',
+      label: 'Prompts',
+      value: props.cohort,
+      defaultValue: 'core',
+      groups: [
+        { options: PROMPT_COHORTS.map((value) => ({ value, label: COHORT_LABELS[value] })) },
+      ],
+      onChange: props.onChangeCohort,
+    }),
+    engineFilter(props, catalog),
+    evidence ? promptFilter(props) : null,
+    evidence ? outcomeFilter(props) : null,
+    pooled
+      ? choiceFilter({
+          id: 'range',
+          label: 'Period',
+          value: props.range,
+          defaultValue: '90d',
+          groups: [{ options: RANGE_OPTIONS }],
+          onChange: props.onChangeRange,
+        })
+      : null,
+    pooled && props.activeTab === 'trends'
+      ? choiceFilter({
+          id: 'granularity',
+          label: 'Group by',
+          value: props.granularity,
+          defaultValue: 'run',
+          groups: [{ options: GRANULARITY_OPTIONS }],
+          onChange: props.onChangeGranularity,
+        })
+      : null,
+  ];
+  return filters.filter((filter): filter is FilterDefinition => filter !== null);
 }
 
 const DEFAULT_MARKET = 'default';
 
 /** Which market the page reads; offered only once a project measures more than one. */
-export function MarketFilter({
+export function marketFilter({
   markets = [],
   market = null,
   onChangeMarket,
-}: Pick<ToolbarProps, 'markets' | 'market' | 'onChangeMarket'>) {
+}: Pick<ToolbarProps, 'markets' | 'market' | 'onChangeMarket'>): FilterDefinition | null {
   if (markets.length < 2 || !onChangeMarket) return null;
-  return (
-    <FilterChoice
-      label="Select market"
-      menuLabel="Market"
-      value={market ?? DEFAULT_MARKET}
-      defaultValue={DEFAULT_MARKET}
-      options={markets.map((option) => ({
-        value: option.id ?? DEFAULT_MARKET,
-        label: option.label,
-      }))}
-      onChange={(value) => onChangeMarket(value === DEFAULT_MARKET ? null : value)}
-    />
-  );
+  return choiceFilter({
+    id: 'market',
+    label: 'Market',
+    value: market ?? DEFAULT_MARKET,
+    defaultValue: DEFAULT_MARKET,
+    groups: [
+      {
+        options: markets.map((option) => ({
+          value: option.id ?? DEFAULT_MARKET,
+          label: option.label,
+        })),
+      },
+    ],
+    onChange: (value) => onChangeMarket(value === DEFAULT_MARKET ? null : value),
+  });
 }
 
-const COHORT_OPTIONS = PROMPT_COHORTS.map((value) => ({
-  value,
-  label: COHORT_LABELS[value],
-}));
-
-function CohortFilter({ cohort, onChangeCohort }: ToolbarProps) {
-  return (
-    <FilterChoice
-      label="Filter by branding"
-      menuLabel="Prompts"
-      value={cohort}
-      defaultValue="core"
-      options={COHORT_OPTIONS}
-      onChange={onChangeCohort}
-    />
-  );
-}
+const LATEST = '__latest__';
+const POOLED = '__range__';
 
 /**
- * Which measurement the page is reading — one run, or every run in the period.
- *
- * These were two adjacent chips ("Selected run" beside "Latest run"), which
- * asked the reader to hold a mode and a value apart before either meant
- * anything. One menu, one answer.
+ * Which measurement the page is reading: one run, or every run in the period.
+ * One filter, because "which run am I looking at" is one question, not a mode
+ * and a value held apart.
  */
-function MeasurementFilter({
+function measurementFilter({
   runs,
   selectedRunId,
   onSelectMeasurement,
   selectionMode,
   onChangeSelectionMode,
-}: ToolbarProps) {
+}: ToolbarProps): FilterDefinition {
   const pooled = selectionMode === 'range';
   const selected = runs.find((run) => run.id === selectedRunId);
   // A selected run the list no longer carries is not the latest run: saying so
   // keeps a stale link from reading as a fresh measurement.
   const missingRunLabel = selectedRunId ? 'Run unavailable' : 'Latest run';
-  const current = pooled ? 'All runs in period' : (selected?.label ?? missingRunLabel);
-  return (
-    <Menu>
-      <MenuTrigger asChild>
-        <FilterTrigger
-          label="Select measurement"
-          hideLabel
-          value={current}
-          active={pooled || Boolean(selectedRunId)}
-        />
-      </MenuTrigger>
-      <MenuContent>
-        <MenuLabel>Measurement</MenuLabel>
-        <MenuRadioGroup value={pooled ? '__range__' : (selectedRunId ?? '__latest__')}>
-          <MenuRadioItem value="__latest__" onSelect={() => onSelectMeasurement(null)}>
-            Latest run
-          </MenuRadioItem>
-          <MenuRadioItem value="__range__" onSelect={() => onChangeSelectionMode('range')}>
-            All runs in period
-          </MenuRadioItem>
-          {runs.length ? (
-            <>
-              <MenuSeparator />
-              <MenuLabel>Individual runs</MenuLabel>
-              {runs.map((run) => (
-                <MenuRadioItem
-                  key={run.id}
-                  value={run.id}
-                  onSelect={() => onSelectMeasurement(run.id)}
-                >
-                  {run.label}
-                </MenuRadioItem>
-              ))}
-            </>
-          ) : null}
-        </MenuRadioGroup>
-      </MenuContent>
-    </Menu>
-  );
+  return choiceFilter({
+    id: 'measurement',
+    label: 'Measurement',
+    value: pooled ? POOLED : (selectedRunId ?? LATEST),
+    defaultValue: LATEST,
+    valueLabel: pooled ? 'All runs in period' : (selected?.label ?? missingRunLabel),
+    groups: [
+      {
+        options: [
+          { value: LATEST, label: 'Latest run' },
+          { value: POOLED, label: 'All runs in period' },
+        ],
+      },
+      ...(runs.length
+        ? [
+            {
+              label: 'Individual runs',
+              options: runs.map((run) => ({ value: run.id, label: run.label })),
+            },
+          ]
+        : []),
+    ],
+    onChange: (value) => {
+      if (value === POOLED) onChangeSelectionMode('range');
+      else onSelectMeasurement(value === LATEST ? null : value);
+    },
+  });
 }
 
 /**
- * Which measured surface the page is reading.
- *
- * Two groups, not one flat list, and the control no longer says "model". An
- * answer engine is ASKED a question and answers with a model; Google's AI
- * Overview is OBSERVED on a results page and has no model at all. Listing
- * them together under "All models" described three of the four correctly and
- * quietly misdescribed the fourth.
+ * Which measured surface the page is reading, in two groups. An answer engine
+ * is ASKED a question and answers with a model; Google's AI Overview is
+ * OBSERVED on a results page and has no model, so the filter says "surface".
  */
-function EngineFilterControl({ engine, onChangeEngine }: ToolbarProps) {
-  const catalog = useEngineCatalog();
-  const engineLabel = catalog.label;
+function engineFilter(
+  { engine, onChangeEngine }: ToolbarProps,
+  catalog: ReturnType<typeof useEngineCatalog>,
+): FilterDefinition {
+  const option = (key: LogicalEngine) => ({ value: key, label: catalog.label(key) });
   const asked = catalog.order.filter((key) => !catalog.isSearchSurface(key));
   const observed = catalog.order.filter((key) => catalog.isSearchSurface(key));
-  return (
-    <Menu>
-      <MenuTrigger asChild>
-        <FilterTrigger
-          label="Filter by surface"
-          hideLabel
-          value={engine === 'all' ? 'All surfaces' : engineLabel(engine)}
-          active={engine !== 'all'}
-        />
-      </MenuTrigger>
-      <MenuContent>
-        <MenuLabel>Surface</MenuLabel>
-        <MenuRadioGroup value={engine}>
-          <MenuRadioItem value="all" onSelect={() => onChangeEngine('all')}>
-            All surfaces
-          </MenuRadioItem>
-          <MenuSeparator />
-          <MenuLabel>Answer engines</MenuLabel>
-          {asked.map((key) => (
-            <MenuRadioItem key={key} value={key} onSelect={() => onChangeEngine(key)}>
-              {engineLabel(key)}
-            </MenuRadioItem>
-          ))}
-          {observed.length ? (
-            <>
-              <MenuSeparator />
-              <MenuLabel>Observed surfaces</MenuLabel>
-              {observed.map((key) => (
-                <MenuRadioItem key={key} value={key} onSelect={() => onChangeEngine(key)}>
-                  {engineLabel(key)}
-                </MenuRadioItem>
-              ))}
-            </>
-          ) : null}
-        </MenuRadioGroup>
-      </MenuContent>
-    </Menu>
-  );
+  return choiceFilter<EngineFilter>({
+    id: 'engine',
+    label: 'Surface',
+    value: engine,
+    defaultValue: 'all',
+    valueLabel: engine === 'all' ? 'All surfaces' : catalog.label(engine),
+    groups: [
+      { options: [{ value: 'all', label: 'All surfaces' }] },
+      { label: 'Answer engines', options: asked.map(option) },
+      ...(observed.length ? [{ label: 'Observed surfaces', options: observed.map(option) }] : []),
+    ],
+    onChange: onChangeEngine,
+  });
 }
 
-function RangeFilter({ range, onChangeRange }: ToolbarProps) {
-  return (
-    <FilterChoice
-      label="Select date range"
-      menuLabel="Period"
-      value={range}
-      defaultValue="90d"
-      options={RANGE_OPTIONS}
-      onChange={onChangeRange}
-    />
-  );
+const EVERY_PROMPT = '__all__';
+
+/** One tracked prompt; the list is long, so its submenu searches. */
+function promptFilter({ promptOptions, promptId, onChangePrompt }: ToolbarProps): FilterDefinition {
+  return choiceFilter({
+    id: 'prompt',
+    label: 'Prompt',
+    value: promptId ?? EVERY_PROMPT,
+    defaultValue: EVERY_PROMPT,
+    groups: [
+      {
+        options: [
+          { value: EVERY_PROMPT, label: 'Every prompt' },
+          ...promptOptions.map((option) => ({ value: option.id, label: option.label })),
+        ],
+      },
+    ],
+    onChange: (value) => onChangePrompt(value === EVERY_PROMPT ? null : value),
+  });
 }
 
-function GranularityFilter({ granularity, onChangeGranularity }: ToolbarProps) {
-  return (
-    <FilterChoice
-      label="Select granularity"
-      menuLabel="Group history by"
-      value={granularity}
-      defaultValue="run"
-      options={GRANULARITY_OPTIONS}
-      onChange={onChangeGranularity}
-    />
-  );
+function outcomeFilter({ outcome, onChangeOutcome }: ToolbarProps): FilterDefinition | null {
+  if (!onChangeOutcome) return null;
+  return choiceFilter({
+    id: 'outcome',
+    label: 'Answer outcome',
+    value: outcome ?? 'all',
+    defaultValue: 'all',
+    groups: [{ options: ANSWER_OUTCOMES }],
+    onChange: (value) => onChangeOutcome(value === 'all' ? null : value),
+  });
 }
 
-function PromptFilter({ promptOptions, promptId, onChangePrompt }: ToolbarProps) {
-  const prompt = promptOptions.find((option) => option.id === promptId);
-  return (
-    <Menu>
-      <MenuTrigger asChild>
-        <FilterTrigger
-          label="Filter by prompt"
-          hideLabel
-          value={prompt?.label ?? 'Every prompt'}
-          active={promptId !== null}
-          className="max-w-64"
-        />
-      </MenuTrigger>
-      <MenuContent>
-        <MenuLabel>Prompt</MenuLabel>
-        <MenuRadioGroup value={promptId ?? '__all__'}>
-          <MenuRadioItem value="__all__" onSelect={() => onChangePrompt(null)}>
-            Every prompt
-          </MenuRadioItem>
-          {promptOptions.map((option) => (
-            <MenuRadioItem
-              key={option.id}
-              value={option.id}
-              onSelect={() => onChangePrompt(option.id)}
-            >
-              {option.label}
-            </MenuRadioItem>
-          ))}
-        </MenuRadioGroup>
-      </MenuContent>
-    </Menu>
-  );
-}
-
-/** Toolbar-adjacent actions, hoisted to the tab row so the filters keep one line. */
+/** Header actions beside the page title: run a new audit, and how the metrics work. */
 export function VisibilityActions() {
   return (
     <>
@@ -344,14 +269,6 @@ export function VisibilityActions() {
           tooltip={false}
           href={METRICS_HELP_URL}
         />
-      </Tooltip>
-      <Tooltip content="Export is available from a run (coming with reports)">
-        <span>
-          <Button variant="secondary" disabled aria-disabled="true">
-            <Icon icon={Download} />
-            Export
-          </Button>
-        </span>
       </Tooltip>
     </>
   );

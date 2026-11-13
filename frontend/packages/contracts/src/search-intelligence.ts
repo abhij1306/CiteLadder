@@ -171,6 +171,10 @@ export const searchReadinessSchema = responseObject({
   preferences: searchPreferencesSchema,
   latest_run: searchRunSchema.nullable(),
   datasets: z.array(searchDatasetSchema),
+  /** The markets a review may choose: each country and its DataForSEO location code. */
+  markets: z.array(responseObject({ country_code: z.string(), location_code: z.number().int() })),
+  /** The largest depth a list dataset accepts. */
+  max_depth: z.number().int(),
 });
 export const searchRowSchema = responseObject({
   id: z.uuid(),

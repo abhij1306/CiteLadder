@@ -49,9 +49,15 @@ export async function writeArtifact(
   task: SiteTask,
   page: FetchedPage,
   facts: Facts | null,
-  fetch: { policyVersion: string; latencyMs: number; purpose: 'analyze' | 'discover' },
+  fetch: {
+    policyVersion: string;
+    latencyMs: number;
+    purpose: 'analyze' | 'discover';
+    /** Fetched despite a robots.txt exclusion, because the crawl ignores robots.txt. */
+    robotsExcluded: boolean;
+  },
 ) {
-  const { policyVersion, latencyMs, purpose } = fetch;
+  const { policyVersion, latencyMs, purpose, robotsExcluded } = fetch;
   const id = randomUUID();
   const now = new Date();
   await db
@@ -81,6 +87,7 @@ export async function writeArtifact(
       wire_bytes: page.wireBytes ?? page.body.length,
       decoded_bytes: page.body.length,
       ...provenance(policyVersion),
+      acquisition_options: robotsExcluded ? JSON.stringify({ robots_excluded: true }) : null,
       extractor_version: extractorVersion(crawl),
       normalized_facts: facts ? JSON.stringify(facts) : null,
       fetched_at: now,

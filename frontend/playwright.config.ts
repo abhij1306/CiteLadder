@@ -8,13 +8,17 @@ export default defineConfig({
   // spread across workers.
   fullyParallel: true,
   workers: process.env.CI ? 4 : undefined,
+  // A retry only labels a test: in CI a test that fails once and then passes
+  // is flaky, and flaky fails the run. The trace comes from the first,
+  // failing attempt, which is the one that shows the defect.
   retries: 1,
-  // `list` records every test's duration, so the log shows where time goes.
+  failOnFlakyTests: Boolean(process.env.CI),
+  // `list` records every test's duration, so CI's log shows where time goes.
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   outputDir: 'test-results',
   use: {
     baseURL: `http://127.0.0.1:${e2ePort}`,
-    trace: 'on-first-retry',
+    trace: 'retain-on-first-failure',
   },
   webServer: {
     // The built SPA, as it ships: a dev server transforms hundreds of modules

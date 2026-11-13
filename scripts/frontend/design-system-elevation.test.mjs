@@ -12,12 +12,13 @@ test('elevation policy admits only roles and diagnoses radius family drift separ
     '<div className="shadow-raised" />',
     '<div className="shadow-overlay" />',
     '<div className="shadow-[0_2px_4px_currentColor]" />',
+    '<div className="shadow-card" />',
   ]) {
     assert.equal(shadowRoleViolations(source, label, true).length, 1);
   }
   assert.deepEqual(
     shadowRoleViolations(
-      '<div className="shadow-none shadow-xs shadow-card shadow-pop shadow-press" />',
+      '<div className="shadow-none shadow-xs shadow-float shadow-pop shadow-press" />',
       label,
       true,
     ),

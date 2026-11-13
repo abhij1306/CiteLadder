@@ -8,7 +8,7 @@ import { providersApi } from '@/lib/api/providers';
 import { runsApi } from '@/lib/api/runs';
 import { ActiveProjectScopeProvider } from '@/lib/project/active-project-scope';
 import { makeProject } from '@/test/fixtures/project';
-import { renderWithProviders } from '@/test/render';
+import { renderWithProviders, selectionAs } from '@/test/render';
 
 import { AuditSchedules } from './audit-schedules';
 
@@ -163,6 +163,33 @@ describe('AuditSchedules', () => {
         { workspaceId: WORKSPACE_ID },
       ),
     );
+  });
+
+  it('shows a viewer the schedules and why one paused, with nothing to schedule or resume', async () => {
+    listSchedules.mockResolvedValue([
+      {
+        id: '44444444-4444-4444-8444-444444444444',
+        cadence: 'weekly',
+        engines: ['chatgpt'],
+        enabled: false,
+        failure_count: 3,
+        last_error: 'provider_key_missing',
+        audit_scope: 'brand',
+        next_run_at: null,
+      } as never,
+    ]);
+    renderWithProviders(
+      <RoutedSchedules
+        projectId="11111111-1111-4111-8111-111111111111"
+        promptSets={[{ id: '22222222-2222-4222-8222-222222222222', name: 'Core prompts' } as never]}
+      />,
+      { projectSelection: selectionAs('viewer') },
+    );
+
+    expect(await screen.findByText(/Paused/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Schedule audit' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Cadence' })).toBeNull();
   });
 
   it('does not reuse a fresh schedules cache entry after a workspace transition', async () => {

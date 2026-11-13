@@ -4,6 +4,7 @@
  * evaluations that run after it are folded in (`addArchitectureIssues`).
  */
 import { sql } from 'kysely';
+import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { issueImpact, siteLevelScope } from './reads/rules.ts';
 import type { Crawl } from './site-task.ts';
@@ -33,7 +34,7 @@ export async function snapshotIssues(db: Database, crawl: Crawl, evaluationIds: 
     ])
     .where('i.workspace_id', '=', crawl.workspace_id)
     .where('i.project_id', '=', crawl.project_id)
-    .where('i.crawl_id', '=', crawl.id)
+    // The manifest names exact evaluations, a page rerun's among them (SH-B9).
     .where('i.evaluation_id', '=', sql<string>`any(${evaluationIds}::uuid[])`)
     .execute();
   const severities: Record<string, number> = {};
@@ -94,7 +95,7 @@ export async function snapshotIssues(db: Database, crawl: Crawl, evaluationIds: 
     issue_count: rows.length,
     severity_counts: severities,
     category_counts: categories,
-    top_issues: top.slice(0, 10),
+    top_issues: top.slice(0, policy.site_health.reads.snapshot_top_issues),
     technical_defect_count: technical,
     technical_defect_affected_page_count: technicalPages.size,
     aeo_readiness_gap_count: readiness,

@@ -175,9 +175,14 @@ export async function appendCostProjection(
     .insertInto('execution_cost_projections')
     .values({
       id: randomUUID(),
+      workspace_id: artifact.workspace_id,
       raw_response_artifact_id: artifact.id,
       audit_id: artifact.audit_id,
       task_id: artifact.task_id,
+      // The cost outlives its answer: it keeps what was priced.
+      logical_engine: artifact.logical_engine,
+      transport_provider: artifact.transport_provider,
+      transport_model: artifact.transport_model,
       ...projectCost(artifact.usage, pricing),
       attempt_count: Number(count.attempts),
       pricing_version: pricingVersion,

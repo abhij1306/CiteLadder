@@ -22,7 +22,6 @@ export const searchPreferencesRequestSchema = z.object({
   // Pages per list dataset, by dataset kind.
   depths: z.record(z.string(), z.int().min(1)).optional(),
 });
-export type SearchPreferencesRequest = z.input<typeof searchPreferencesRequestSchema>;
 
 /**
  * One dataset a review asks for. The API checks which controls each kind

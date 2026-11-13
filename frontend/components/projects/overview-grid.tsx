@@ -1,5 +1,3 @@
-'use client';
-
 import { ArrowDown, ArrowUp, Maximize2, Minimize2, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 

@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { act, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { ApiError } from '@/lib/api/errors';
 import { queryKeys } from '@/lib/api/query-keys';
 import { renderWithProviders } from '@/test/render';
 
@@ -232,5 +234,47 @@ describe('CatalogHeader', () => {
     );
     expect(screen.getByText('No crawl yet')).toBeInTheDocument();
     expect(statValue('Pages analyzed')).toHaveTextContent('Not measured');
+  });
+
+  it('never reads a failed Site Health read as no crawl, and Refresh reads it again', async () => {
+    const { siteHealthApi } = await import('@/lib/api/site-health');
+    getDashboard.mockRejectedValue(new ApiError('Bad request', 400, ''));
+    const user = userEvent.setup();
+    renderWithProviders(
+      <CatalogHeaderHost
+        workspaceId={WORKSPACE_ID}
+        projectId={PROJECT_ID}
+        query={catalogQuery()}
+      />,
+    );
+
+    await waitFor(() => expect(statValue('Site Health')).toHaveTextContent("Couldn't load"));
+    expect(statValue('Pages analyzed')).toHaveTextContent("Couldn't load");
+    expect(screen.queryByText('No crawl yet')).not.toBeInTheDocument();
+    const refresh = screen.getByRole('button', { name: 'Refresh from Site Health' });
+
+    getDashboard.mockResolvedValue(crawl());
+    await user.click(refresh);
+    await waitFor(() => expect(screen.getByText('49/50')).toBeInTheDocument());
+    expect(siteHealthApi.createCrawl).not.toHaveBeenCalled();
+  });
+
+  it('reports a failed refresh rather than the stale "no crawl" it replaced', async () => {
+    getDashboard.mockResolvedValue({ crawl: null });
+    const { queryClient } = renderWithProviders(
+      <CatalogHeaderHost
+        workspaceId={WORKSPACE_ID}
+        projectId={PROJECT_ID}
+        query={catalogQuery()}
+      />,
+    );
+    expect(await screen.findByText('No crawl yet')).toBeInTheDocument();
+
+    getDashboard.mockRejectedValue(new ApiError('Bad request', 400, ''));
+    await act(() => queryClient.invalidateQueries({ queryKey: DASHBOARD_KEY }));
+
+    await waitFor(() => expect(statValue('Site Health')).toHaveTextContent("Couldn't load"));
+    expect(screen.queryByText('No crawl yet')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refresh from Site Health' })).toBeInTheDocument();
   });
 });

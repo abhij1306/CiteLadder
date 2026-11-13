@@ -20,7 +20,11 @@ export function integrationSettings(env: SettingSource = process.env) {
   if (settings.token_refresh_claim_seconds <= settings.sync_request_timeout_seconds) {
     throw new ConfigError('Integration refresh claim must outlive the provider timeout');
   }
-  for (const name of ['sync_default_window_days', 'sync_late_data_revision_days'] as const) {
+  for (const name of [
+    'sync_default_window_days',
+    'sync_late_data_revision_days',
+    'sync_search_console_finality_days',
+  ] as const) {
     if (settings[name] > settings.sync_backfill_max_days) {
       throw new ConfigError(`${name} must not exceed sync_backfill_max_days`);
     }

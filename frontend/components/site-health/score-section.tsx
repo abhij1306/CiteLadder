@@ -18,14 +18,14 @@ export function ScoreSection({
           value: summary?.web_fundamentals_score ?? null,
           unavailable: unavailable(summary?.web_fundamentals_state),
           icon: ICONS.siteHealth,
-          href: '/issues?dimension=technical',
+          href: '/issues?section=technical',
         },
         {
           title: 'AEO Readiness',
           value: summary?.aeo_readiness_score ?? null,
           unavailable: unavailable(summary?.aeo_measurement_state),
           icon: ICONS.visibility,
-          href: '/issues?dimension=aeo',
+          href: '/issues?section=aeo',
         },
         {
           title: 'AEO Checklist Completion',

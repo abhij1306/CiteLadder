@@ -187,7 +187,7 @@ export class AuditQueue {
           .execute();
         await auditEvent(
           trx,
-          claimed.audit_id,
+          { workspaceId: claimed.workspace_id, auditId: claimed.audit_id },
           auditPolicy.constants.event_audit_running,
           'audit running',
           {},

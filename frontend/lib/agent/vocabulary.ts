@@ -5,22 +5,30 @@
  * structurally required), never as the raw backend identifier.
  */
 import type { PriorityValue } from '@/components/ui/badge';
-import type { ActionStatus } from '@/lib/api/actions';
-import { ACTION_PRIORITY_BANDS } from '@/lib/config/agent';
+import type { ActionGroup, ActionPriorityBand, ActionStatus } from '@/lib/api/actions';
+import type { ActionTargetKind } from '@citeladder/contracts/actions';
+import type { ContentGapEvidence } from '@citeladder/contracts/opportunity-evidence';
 
-export type PriorityBand = 'High' | 'Medium' | 'Low';
-
-/** An Action's priority score as the band a reader compares by; the score itself only ranks. */
-export function priorityBand(score: number): PriorityBand {
-  if (score >= ACTION_PRIORITY_BANDS.high) return 'High';
-  return score >= ACTION_PRIORITY_BANDS.medium ? 'Medium' : 'Low';
-}
+/** The band the server put an Action's priority score in; the score itself only ranks. */
+export const PRIORITY_BAND_LABEL: Record<ActionPriorityBand, string> = {
+  high: 'High',
+  medium: 'Medium',
+  low: 'Low',
+};
 
 /** A band as the priority badge's value (its tint and bar glyph). */
-export const PRIORITY_BAND_VALUE: Record<PriorityBand, PriorityValue> = {
-  High: 'high',
-  Medium: 'medium',
-  Low: 'low',
+export const PRIORITY_BAND_VALUE: Record<ActionPriorityBand, PriorityValue> = {
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+};
+
+/** The Actions list's groups, in the order the list shows them (AS2). */
+export const ACTION_GROUP_LABEL: Record<ActionGroup, string> = {
+  fix_site: 'Fix how AI reads your site',
+  own_pages: 'Improve your own pages',
+  earned: 'Get mentioned elsewhere',
+  products: 'Improve your products',
 };
 
 export const ACTION_STATUS_LABEL: Record<ActionStatus, string> = {
@@ -43,7 +51,7 @@ export const ACTION_STATUS_TONE: Record<ActionStatus, 'neutral' | 'info' | 'succ
     dismissed: 'neutral',
   };
 
-const TARGET_KIND_LABEL: Record<string, string> = {
+const TARGET_KIND_LABEL: Record<ActionTargetKind, string> = {
   page: 'Page',
   earned_page: 'Earned page',
   product: 'Product',
@@ -51,12 +59,18 @@ const TARGET_KIND_LABEL: Record<string, string> = {
   query: 'Search query',
   prompt: 'Prompt',
   planned_page: 'Planned page',
+  issue_family: 'Issue across pages',
 };
 
-export const ACTION_TARGET_KINDS = Object.keys(TARGET_KIND_LABEL);
+// Keyed by the contract's kinds, so a kind without a label fails the type check;
+// the contract is imported as a type only, keeping its schemas out of the eager bundle.
+const isTargetKind = (kind: unknown): kind is ActionTargetKind =>
+  typeof kind === 'string' && Object.hasOwn(TARGET_KIND_LABEL, kind);
+
+export const ACTION_TARGET_KINDS = Object.keys(TARGET_KIND_LABEL).filter(isTargetKind);
 
 export function targetKindLabel(kind: string | null | undefined): string | null {
-  return kind ? (TARGET_KIND_LABEL[kind] ?? null) : null;
+  return isTargetKind(kind) ? TARGET_KIND_LABEL[kind] : null;
 }
 
 const FAMILY_LABEL: Record<string, string> = {
@@ -68,7 +82,11 @@ const FAMILY_LABEL: Record<string, string> = {
   link_graph: 'Link graph',
   site_changes: 'Site changes',
   commerce: 'Commerce',
+  content_optimization: 'Content optimization',
 };
+
+/** Every Action Source (evidence family) a reader can filter by. */
+export const ACTION_FAMILIES = Object.keys(FAMILY_LABEL);
 
 export function familyLabel(family: string): string | null {
   return FAMILY_LABEL[family] ?? null;
@@ -82,6 +100,9 @@ const APPROACH_LABEL: Record<string, string> = {
   earned_placement: 'Earn a placement',
   improve_links: 'Improve internal links',
 };
+
+/** Every Action type (approach) a reader can filter by. */
+export const ACTION_APPROACHES = Object.keys(APPROACH_LABEL);
 
 export function approachLabel(approach: string | null | undefined): string | null {
   return approach ? (APPROACH_LABEL[approach] ?? null) : null;
@@ -104,13 +125,47 @@ const CHECK_KIND_LABEL: Record<string, string> = {
   visibility_metric: 'Prompt score rises',
   traffic_metric: 'Search Console clicks rise',
   keyword_presence: 'You appear for the search',
+  owned_url_cited: 'An AI answer cites your page',
+  product_metric: 'The product metric clears in later answers',
+  issue_family: 'Every affected page passes the Site Health check',
 };
 
 export function checkKindLabel(kind: string): string {
   return CHECK_KIND_LABEL[kind] ?? 'Check';
 }
 
-export const CHECK_STATE_LABEL: Record<'waiting' | 'met' | 'unmet' | 'unavailable', string> = {
+/** What a check names when the server names nothing: a new page has no URL until it is cited. */
+const CHECK_SUBJECT_FALLBACK: Record<string, string> = {
+  owned_url_cited: 'A new page of yours, not one already cited for these prompts',
+};
+
+export function checkSubject(check: { kind: string; subject: string | null }): string | null {
+  return check.subject ?? CHECK_SUBJECT_FALLBACK[check.kind] ?? null;
+}
+
+/** What a check's reading cannot show, said beside it. */
+const CHECK_KIND_NOTE: Record<string, string> = {
+  owned_url_cited:
+    'A citation shows the page was cited, not which version of it the AI engine read.',
+};
+
+export function checkKindNote(kind: string): string | null {
+  return CHECK_KIND_NOTE[kind] ?? null;
+}
+
+/**
+ * What declaring a content-gap finding will check, before the user commits:
+ * the improved page's address, or a new page of theirs.
+ */
+export function contentGapCheckPreview(evidence: ContentGapEvidence): string {
+  const page =
+    'planned_page_key' in evidence
+      ? 'a new page of yours, one not already cited for them'
+      : evidence.url;
+  return `${checkKindLabel('owned_url_cited')}: checks whether an AI answer to the angle's prompts cites ${page}.`;
+}
+
+const CHECK_STATE_LABEL: Record<'waiting' | 'met' | 'unmet' | 'unavailable', string> = {
   waiting: 'Waiting',
   met: 'Met',
   unmet: 'Not met',
@@ -135,12 +190,56 @@ const CHECK_REASON: Record<string, string> = {
   no_search_console_row: 'Search Console reported no row for this page or query.',
   not_ranking_yet: 'A later Keyword Research analysis does not show you ranking yet.',
   still_missing: 'A later Keyword Research analysis still lists this as a gap.',
+  prompts_not_in_run: 'None of these prompts was part of that run.',
+  no_answers: 'That run has no answers to these prompts.',
+  too_few_samples:
+    'The answers since go-live are too few to read this metric yet. Later runs add to them.',
+  quotes_in_other_currencies:
+    'The answers since go-live quote this product only in other currencies, which are not converted. Later runs may quote the catalog currency.',
+  no_answers_after_go_live: 'No matched answer has completed since the go-live date yet.',
+  no_catalog_price: 'The product has no catalog price to compare quoted prices with.',
+  product_not_in_catalog: 'The product is no longer an active catalog product.',
+  unsupported_window: 'The check names a window the Products read no longer offers.',
   provider_serp_predates_change:
     'DataForSEO last checked this search before the go-live date. A later analysis can answer it.',
+  partially_resolved: 'Some affected pages now pass; the pages listed still fail.',
+  still_failing: 'No affected page the crawl read passes yet.',
+  non_comparable_crawl:
+    'That crawl used a different analyzer or rule set than the one that found the issue, so it cannot be compared.',
+  baseline_crawl_unavailable: 'The crawl that found the issue is no longer stored.',
+  cohort_not_analyzed:
+    'That crawl did not read the affected pages after go-live. Run a crawl that includes them.',
+  cohort_partly_analyzed:
+    'The affected pages that crawl read pass, but it did not read them all. Run a crawl that includes the rest.',
+  cohort_sampled:
+    'Every checked page passes or no longer applies, but the issue was on more pages than one check covers, so it cannot be verified on all of them.',
 };
 
 export function checkReasonLabel(reason: string | null): string | null {
   return reason ? (CHECK_REASON[reason] ?? null) : null;
+}
+
+const FAMILY_UNMET_LABEL: Record<string, string> = {
+  partially_resolved: 'Partially resolved',
+  still_failing: 'Still failing',
+};
+
+/**
+ * A check's state as a reader is told it. An issue-family check reads its
+ * whole cohort, so it is verified, partially resolved, still failing or
+ * inconclusive; an unmet reading with an unknown reason, and every other
+ * check, keep `CHECK_STATE_LABEL`.
+ */
+export function checkStateLabel(check: {
+  kind: string;
+  state: 'waiting' | 'met' | 'unmet' | 'unavailable';
+  reason: string | null;
+}): string {
+  if (check.kind !== 'issue_family') return CHECK_STATE_LABEL[check.state];
+  if (check.state === 'met') return 'Verified';
+  if (check.state === 'unavailable') return 'Inconclusive';
+  const subtype = check.state === 'unmet' && check.reason ? FAMILY_UNMET_LABEL[check.reason] : null;
+  return subtype ?? CHECK_STATE_LABEL[check.state];
 }
 
 /** The declaration's overall reading, never the raw observation kind. */
@@ -260,6 +359,11 @@ const BUILTIN_TOOL_LABEL: Record<string, Record<'started' | 'completed' | 'refus
     completed: 'Edited the document',
     refused: 'Document not edited',
   },
+  suggest_edits: {
+    started: 'Suggesting changes…',
+    completed: 'Suggested changes',
+    refused: 'Changes not suggested',
+  },
   // Provider-hosted; its results are outside pages, not CiteLadder data.
   web_search: {
     started: 'Searching the web…',
@@ -279,6 +383,63 @@ export function toolCallLabel({ tool, status }: { tool: string; status: string }
     return `Reading ${tool.replace(/^(read|get)_/u, '').replaceAll('_', ' ')}…`;
   return runStepLabel({ tool, status });
 }
+
+/** The page workspace's suggestion categories (the content rules engine's). */
+const SUGGESTION_CATEGORY_LABEL: Record<string, string> = {
+  correctness: 'Correctness',
+  clarity: 'Clarity',
+  ai_answers: 'AI answers',
+  proof: 'Proof',
+  search_guidelines: 'Search guidelines',
+  natural_voice: 'Natural voice',
+  coverage: 'Coverage',
+};
+
+export function suggestionCategoryLabel(category: string): string {
+  return SUGGESTION_CATEGORY_LABEL[category] ?? 'Suggestion';
+}
+
+/**
+ * How a suggestion's rule strength reads on its card. A requirement restates a
+ * search engine policy; recommendations and heuristics are options, and a
+ * heuristic is labelled as one. No strength is a score.
+ */
+const SUGGESTION_STRENGTH_COPY = {
+  requirement: { badge: 'Search policy', lead: 'Required by' },
+  recommendation: { badge: null, lead: 'Optional. Recommended in' },
+  heuristic: {
+    badge: 'Heuristic',
+    lead: 'Optional. A heuristic, not search engine guidance, from',
+  },
+} as const satisfies Record<
+  'requirement' | 'recommendation' | 'heuristic',
+  { badge: string | null; lead: string }
+>;
+
+export function suggestionStrengthCopy(strength: keyof typeof SUGGESTION_STRENGTH_COPY) {
+  return SUGGESTION_STRENGTH_COPY[strength];
+}
+
+/** Why a suggestion no longer fits the page, as Apply reports it. */
+const SUGGESTION_STALE_COPY: Record<string, string> = {
+  span_changed: 'The text it would change was edited since it was suggested.',
+  field_changed: 'That SEO field was edited since it was suggested.',
+  dependency_changed: 'The section it read was edited since it was suggested.',
+  replaced: 'A newer suggestion replaced it.',
+};
+
+export function suggestionStaleCopy(reason: string | null): string {
+  const why = reason ? SUGGESTION_STALE_COPY[reason] : undefined;
+  return `This suggestion no longer fits the page. ${why ?? 'The page changed since it was suggested.'}`;
+}
+
+/** A suggestion change the server refused without saying why (`agent_suggestion_conflict`). */
+export const SUGGESTION_CONFLICT_COPY =
+  'This suggestion can’t be changed now. Reload the page and try again.';
+
+/** A suggestion change or save made against a page that has since changed (`agent_output_conflict`). */
+export const PAGE_CHANGED_COPY =
+  'The page changed since you opened it. The latest version is shown now; check it and try again.';
 
 export function runErrorCopy(code: string): string {
   return RUN_ERROR_COPY[code] ?? 'The agent could not finish this request. Try again.';

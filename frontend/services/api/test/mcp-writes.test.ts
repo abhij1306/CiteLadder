@@ -143,6 +143,35 @@ it('previews a prompt add without writing, then activates it once on confirmatio
   ).toEqual([['mcp.write.add_prompts', tenant.projectId]]);
 });
 
+it('files a confirmed prompt with no cohort by brand naming, as the browser does', async () => {
+  const tenant = await auditTenant(db, fixtures);
+  const principal = await connection(tenant);
+  const prepared = await call(principal, 'prepare_add_prompts', {
+    project_id: tenant.projectId,
+    prompts: [
+      { text: 'Is Acme Running good for marathon training?' },
+      { text: 'Which running shoes last longest?' },
+      { text: 'Is Acme Running sold in Europe?', cohort: 'core' },
+    ],
+  });
+  expect(prepared.dropped).toEqual([]);
+  await call(principal, 'confirm_change', {
+    confirmation_token: String(prepared.confirmation_token),
+  });
+  const rows = await db
+    .selectFrom('prompts')
+    .select(['text', 'cohort'])
+    .where('prompt_set_id', '=', tenant.setId)
+    .orderBy('text')
+    .execute();
+  expect(rows.map((row) => `${row.text} [${row.cohort}]`)).toEqual([
+    'Is Acme Running good for marathon training? [brand_diagnostic]',
+    'Is Acme Running sold in Europe? [core]',
+    'Which running shoes last longest? [core]',
+    'Which running shoes suit road use? [core]',
+  ]);
+});
+
 it('runs a token confirmed twice at once exactly one time', async () => {
   const tenant = await auditTenant(db, fixtures);
   const principal = await connection(tenant);

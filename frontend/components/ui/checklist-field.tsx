@@ -1,5 +1,3 @@
-'use client';
-
 import { Pencil } from 'lucide-react';
 import { useId, useState, type ReactNode } from 'react';
 
@@ -34,7 +32,7 @@ export function FieldGroup({
     <fieldset aria-labelledby={labelId} className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
       <div className="flex flex-col gap-1">
         <div className="flex items-baseline justify-between gap-3">
-          <span id={labelId} className="text-label text-ink">
+          <span id={labelId} className="text-body-sm text-ink">
             {label}
           </span>
           {count ? (

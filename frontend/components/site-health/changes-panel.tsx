@@ -1,9 +1,9 @@
-'use client';
-
+import { useState } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { GitCompare } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
+import { Badge, type BadgeTone } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DataTable, type DataTableColumn, type DataTableState } from '@/components/ui/data-table';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -11,16 +11,11 @@ import { readErrorProps } from '@/components/ui/read-error';
 import { StatRow } from '@/components/ui/stat-row';
 import { ClampText, TableCell, TableRow } from '@/components/ui/table';
 import { TextLink } from '@/components/ui/text-link';
-import { treeBranchClasses } from '@/components/ui/workspace';
 import { siteHealthQueries } from '@/lib/api/site-health-queries';
 import type { ChangeObservation, ChangeSummary } from '@citeladder/contracts';
 import { useCursorTableQuery } from '@/lib/table/use-cursor-table-query';
-import { textRole } from '@/components/ui/typography';
-import {
-  CHANGE_EVIDENCE_DEPTH_LIMIT,
-  CHANGE_EVIDENCE_LIMIT,
-  CHANGE_EVIDENCE_TEXT_LIMIT,
-} from '@/lib/config/site-health';
+import { changeFieldLabel } from '@/lib/site-health/change-fields';
+import { ChangeEvidenceDrawer } from './changes-panel-evidence';
 
 const CLASS_LABELS = {
   improvement: 'Improvement',
@@ -28,6 +23,14 @@ const CLASS_LABELS = {
   'potential-regression': 'Potential regression',
   'critical-regression': 'Critical regression',
 } as const;
+
+/** A change class is a delta, so it carries the delta's direction. */
+const CLASS_TONES: Readonly<Record<keyof typeof CLASS_LABELS, BadgeTone>> = {
+  improvement: 'positive',
+  'neutral-change': 'neutral',
+  'potential-regression': 'warning',
+  'critical-regression': 'negative',
+};
 
 function displayPath(url: string) {
   try {
@@ -38,166 +41,13 @@ function displayPath(url: string) {
   }
 }
 
-function boundedText(value: string) {
-  return value.length > CHANGE_EVIDENCE_TEXT_LIMIT
-    ? `${value.slice(0, CHANGE_EVIDENCE_TEXT_LIMIT)}…`
-    : value;
-}
-
-function ChangeValue({ value, depth = 0 }: Readonly<{ value: unknown; depth?: number }>) {
-  if (value === null || value === undefined || value === '') return <>Not present</>;
-  if (Array.isArray(value)) {
-    if (!value.length) return <>Not present</>;
-    if (depth >= CHANGE_EVIDENCE_DEPTH_LIMIT)
-      return (
-        <>
-          {value.length} {value.length === 1 ? 'item' : 'items'}
-        </>
-      );
-    return (
-      <ul className={treeBranchClasses()}>
-        {value.slice(0, CHANGE_EVIDENCE_LIMIT).map((item, index) => (
-          <li
-            key={index} // NOSONAR -- an immutable evidence array that never reorders and may repeat values; position is the identity
-          >
-            <ChangeValue value={item} depth={depth + 1} />
-          </li>
-        ))}
-        {value.length > CHANGE_EVIDENCE_LIMIT ? (
-          <li className="text-ink-muted">
-            {value.length - CHANGE_EVIDENCE_LIMIT} more items not shown
-          </li>
-        ) : null}
-      </ul>
-    );
-  }
-  if (typeof value === 'object') return <ChangeRecord value={value} depth={depth} />;
-  const text = scalarText(value);
-  return text === null ? <>Not present</> : <>{boundedText(text)}</>;
-}
-
-/** Persisted evidence is JSON, so anything that is not a container is a scalar. */
-function scalarText(value: unknown): string | null {
-  switch (typeof value) {
-    case 'string':
-    case 'number':
-    case 'boolean':
-    case 'bigint':
-      return String(value);
-    default:
-      return null;
-  }
-}
-
-const CONTENT_FIELD_ORDER = [
-  'content_change_classification',
-  'content_delta_ratio',
-  'comparison_coverage',
-  'coverage_reason',
-  'sections_added',
-  'sections_removed',
-  'heading_outline',
-  'word_count',
-];
-
-const CONTENT_STATE_FIELDS = new Set([
-  'content_change_classification',
-  'metadata_consistency',
-  'comparison_coverage',
-  'coverage',
-  'coverage_reason',
-  'content_delta_measure',
-]);
-
-function changeFieldValue(key: string, value: unknown) {
-  if (typeof value !== 'string' || !CONTENT_STATE_FIELDS.has(key)) return value;
-  const label = value.replaceAll('_', ' ');
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
-
-function ChangeRecord({ value, depth }: Readonly<{ value: object; depth: number }>) {
-  const fields = Object.entries(value);
-  if (!fields.length) return <>Not present</>;
-  if (depth >= CHANGE_EVIDENCE_DEPTH_LIMIT)
-    return (
-      <>
-        {fields.length} {fields.length === 1 ? 'field' : 'fields'}
-      </>
-    );
-  // Comparison outcomes precede capture details in the bounded content record.
-  const rank = (key: string) => {
-    const index = CONTENT_FIELD_ORDER.indexOf(key);
-    return index < 0 ? CONTENT_FIELD_ORDER.length : index;
-  };
-  fields.sort(([left], [right]) => rank(left) - rank(right));
-  return (
-    <dl className={treeBranchClasses()}>
-      {fields.slice(0, CHANGE_EVIDENCE_LIMIT).map(([key, item]) => (
-        <div key={key}>
-          <dt className="text-ink-muted inline">{boundedText(key.replaceAll('_', ' '))}: </dt>
-          <dd className="inline [overflow-wrap:anywhere]">
-            {key === 'shingles' && Array.isArray(item) ? (
-              `${item.length} text fingerprints`
-            ) : (
-              <ChangeValue value={changeFieldValue(key, item)} depth={depth + 1} />
-            )}
-          </dd>
-        </div>
-      ))}
-      {fields.length > CHANGE_EVIDENCE_LIMIT ? (
-        <div>
-          <dt className="sr-only">Additional evidence</dt>
-          <dd className="text-ink-muted">
-            {fields.length - CHANGE_EVIDENCE_LIMIT} more fields not shown
-          </dd>
-        </div>
-      ) : null}
-    </dl>
-  );
-}
-
-function Evidence({ row }: Readonly<{ row: ChangeObservation }>) {
-  return (
-    <Stack as="details" gap="item">
-      <summary className={textRole('label', 'text-accent-ink cursor-pointer')}>
-        View evidence
-      </summary>
-      <Stack as="dl" gap="tight" className="type-caption">
-        <div>
-          <dt className="text-ink-muted inline">Before: </dt>
-          <dd className="inline">
-            <ChangeValue value={row.before_value} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-ink-muted inline">After: </dt>
-          <dd className="inline">
-            <ChangeValue value={row.after_value} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-ink-muted inline">Analyses: </dt>
-          <dd className="inline break-all">
-            {row.source_analysis_a_id ?? 'none'} → {row.source_analysis_b_id ?? 'none'}
-          </dd>
-        </div>
-        {row.implementation_event_id ? (
-          <div>
-            <dt className="text-ink-muted inline">Implementation event: </dt>
-            <dd className="inline break-all">{row.implementation_event_id}</dd>
-          </div>
-        ) : null}
-      </Stack>
-    </Stack>
-  );
-}
-
 export function ChangesPanel({
   workspaceId,
   projectId,
 }: Readonly<{ workspaceId: string; projectId: string }>) {
   const scope = { workspaceId, projectId };
   const summary = useQuery(siteHealthQueries.changesSummary(scope));
+  const [selected, setSelected] = useState<ChangeObservation | undefined>(undefined);
   const crawlAId = summary.data?.crawl_a_id ?? undefined;
   const crawlBId = summary.data?.crawl_b_id ?? undefined;
   const pairAvailable = summary.data?.state === 'available' && Boolean(crawlAId && crawlBId);
@@ -235,10 +85,10 @@ export function ChangesPanel({
     <Stack gap="workspace" className="min-w-0" data-testid="website-changes">
       <Card>
         <CardHeader>
-          <CardTitle>Website Changes</CardTitle>
+          <CardTitle>Since the previous crawl</CardTitle>
           <CardDescription>
-            Deterministic field changes between the immediate comparable crawls. Expected marks
-            exact implementation-event matches.
+            What changed on your pages between your last two crawls. Expected means the change
+            matches an implementation you declared.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -260,29 +110,54 @@ export function ChangesPanel({
         pager={summaryState ? undefined : table.pager}
       >
         {page?.items.map((row) => (
-          <TableRow key={row.id}>
-            <TableCell>
-              <TextLink
-                text="emphasis"
-                href={`/site/crawls/${summary.data?.crawl_b_id}/pages/${row.site_url_id}`}
-              >
-                <ClampText>{displayPath(row.normalized_url)}</ClampText>
-              </TextLink>
-            </TableCell>
-            <TableCell>{row.field.replaceAll('_', ' ')}</TableCell>
-            <TableCell>
-              <Inline className="whitespace-nowrap">
-                <Badge>{CLASS_LABELS[row.change_class]}</Badge>
-                {row.expected ? <span className="type-caption">Expected</span> : null}
-              </Inline>
-            </TableCell>
-            <TableCell>
-              <Evidence row={row} />
-            </TableCell>
-          </TableRow>
+          <ChangeRow
+            key={row.id}
+            row={row}
+            crawlBId={summary.data?.crawl_b_id ?? null}
+            onOpen={() => setSelected(row)}
+          />
         ))}
       </DataTable>
+      <ChangeEvidenceDrawer
+        row={selected}
+        crawlAId={summary.data?.crawl_a_id ?? null}
+        crawlBId={summary.data?.crawl_b_id ?? null}
+        onClose={() => setSelected(undefined)}
+      />
     </Stack>
+  );
+}
+
+function ChangeRow({
+  row,
+  crawlBId,
+  onOpen,
+}: Readonly<{ row: ChangeObservation; crawlBId: string | null; onOpen: () => void }>) {
+  const field = changeFieldLabel(row.field);
+  return (
+    <TableRow>
+      <TableCell>
+        <TextLink text="emphasis" href={`/site/crawls/${crawlBId}/pages/${row.site_url_id}`}>
+          <ClampText>{displayPath(row.normalized_url)}</ClampText>
+        </TextLink>
+      </TableCell>
+      <TableCell>{field}</TableCell>
+      <TableCell>
+        <Inline className="whitespace-nowrap">
+          <Badge tone={CLASS_TONES[row.change_class]}>{CLASS_LABELS[row.change_class]}</Badge>
+          {row.expected ? <span className="type-caption">Expected</span> : null}
+        </Inline>
+      </TableCell>
+      <TableCell>
+        <Button
+          variant="ghost"
+          onClick={onOpen}
+          aria-label={`View evidence: ${field} on ${displayPath(row.normalized_url)}`}
+        >
+          View evidence
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }
 
@@ -311,7 +186,7 @@ function comparisonState(
       icon: GitCompare,
       headingLevel: 3,
       heading: 'These crawls are not comparable',
-      description: `Reason: ${summary.data.reason_code?.replaceAll('_', ' ') ?? 'scope or version mismatch'}. Recrawl to compare the same scope and settings.`,
+      description: `Reason: ${summary.data.reason_code?.replaceAll('_', ' ') ?? 'unknown'}.`,
     };
   if (!pairAvailable)
     return {
@@ -319,14 +194,15 @@ function comparisonState(
       icon: GitCompare,
       headingLevel: 3,
       heading: 'This comparison is no longer available',
-      description: 'Recrawl to compare again.',
+      description: 'Run a new crawl to compare again.',
     };
   return undefined;
 }
 
+// Page is the one flexible column; the evidence is a button at the row's end.
 const CHANGE_COLUMNS: readonly DataTableColumn[] = [
   { key: 'page', label: 'Page' },
   { key: 'field', label: 'Field', width: 'name' },
   { key: 'class', label: 'Class', width: 'name' },
-  { key: 'evidence', label: 'Evidence' },
+  { key: 'evidence', label: 'Evidence', width: 'category' },
 ];

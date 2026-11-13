@@ -147,7 +147,7 @@ describe('Agent persisted context binding', () => {
       ),
     ).rejects.toMatchObject({ code: 'agent_context_unavailable' });
   });
-  it('falls back past factless terminal crawls and ranks an explicit target before lexical matches and brand background', async () => {
+  it('reads the current crawl past a later page rerun and ranks an explicit target before lexical matches and brand background', async () => {
     const seed = await fixtures.crawl();
     const home = await fixtures.page(seed, '/', {
       title: 'Home',
@@ -168,13 +168,20 @@ describe('Agent persisted context binding', () => {
       .where('workspace_id', '=', seed.workspaceId)
       .where('crawl_id', '=', seed.crawlId)
       .execute();
-    const emptyId = await fixtures.sibling(seed, { created_at: new Date(Date.now() + 1000) });
-    await fixtures.page({ ...seed, crawlId: emptyId }, '/empty', {});
+    // A later one-page rerun re-reads one page; it is never the site's content.
+    const rerunId = await fixtures.sibling(seed, {
+      configuration: JSON.stringify({ page_rerun: true }),
+      created_at: new Date(Date.now() + 1000),
+    });
+    await fixtures.page({ ...seed, crawlId: rerunId }, '/pricing-guide', {
+      title: 'Rerun pricing guide',
+      body: { text: 'Pricing guide re-read' },
+    });
     await db
       .updateTable('site_page_analyses')
       .set({ finalized_at: new Date() })
       .where('workspace_id', '=', seed.workspaceId)
-      .where('crawl_id', '=', emptyId)
+      .where('crawl_id', '=', rerunId)
       .execute();
     const selection = await selectContentFragments(
       db,
@@ -210,6 +217,38 @@ describe('Agent persisted context binding', () => {
       target_url: 'https://example.test/product',
       crawl_page_count: 3,
       related_page_count: 2,
+    });
+  });
+  it('reports no usable crawl when the current crawl holds no content pages, and reads an older crawl only when named', async () => {
+    const seed = await fixtures.crawl();
+    const pricing = await fixtures.page(seed, '/pricing', {
+      title: 'Pricing guide',
+      body: { text: 'Costs pricing plans' },
+    });
+    await db
+      .updateTable('site_page_analyses')
+      .set({ finalized_at: new Date() })
+      .where('workspace_id', '=', seed.workspaceId)
+      .where('crawl_id', '=', seed.crawlId)
+      .execute();
+    await fixtures.sibling(seed, { created_at: new Date(Date.now() + 1000) });
+
+    const current = await selectContentFragments(db, seed, 'pricing guide');
+    expect(current.pages).toEqual([]);
+    expect(current.summary.omissions).toEqual([{ reason: 'no_usable_crawl' }]);
+    const named = await selectContentFragments(db, seed, 'pricing guide', '', seed.crawlId);
+    expect(named.pages.map((page) => page.site_url_id)).toEqual([pricing.id]);
+
+    // A failed crawl audited nothing: naming it never passes off a tracked page's older audit.
+    await fixtures.monitor(seed, [pricing.id]);
+    const failed = await fixtures.sibling(seed, {
+      status: 'failed',
+      created_at: new Date(Date.now() + 500),
+    });
+    const unusable = await selectContentFragments(db, seed, 'pricing guide', '', failed);
+    expect(unusable.summary).toMatchObject({
+      crawl_id: failed,
+      omissions: [{ reason: 'no_usable_crawl' }],
     });
   });
   it("treats an address on the project's site in the message as the target page, with a longer excerpt", async () => {

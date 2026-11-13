@@ -1,7 +1,5 @@
-'use client';
-
 import { Download } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Callout } from '@/components/ui/callout';
@@ -65,23 +63,32 @@ export function CsvImportDialog({
   /** The import bounds the API enforces, from the prompt-set list. */
   limits: PromptCsvLimits;
 }>) {
-  const { fileName, inputRef, parsed, reset, selectFile } = useCsvImportFile<ParsedCsv>((raw) =>
-    parsePromptCsv(raw, limits),
-  );
+  const { fileName, inputRef, parsed, readError, reading, reset, selectFile } =
+    useCsvImportFile<ParsedCsv>((raw) => parsePromptCsv(raw, limits));
 
   const importable = useMemo(() => (parsed ? validRows(parsed) : []), [parsed]);
   const importNoun = importable.length === 1 ? 'prompt' : 'prompts';
-  const errorCount = parsed ? parsed.rows.filter((row) => row.errors.length > 0).length : 0;
 
   const handleOpenChange = (next: boolean) => {
     if (!next) reset();
     onOpenChange(next);
   };
 
+  // A second click before the first import settles is ignored, not sent again.
+  const submitting = useRef(false);
+  const [submitted, setSubmitted] = useState(false);
   const confirm = async () => {
-    if (importable.length === 0) return;
-    await onImport(importable);
+    if (importable.length === 0 || submitting.current) return;
+    submitting.current = true;
+    setSubmitted(true);
+    try {
+      await onImport(importable);
+    } finally {
+      submitting.current = false;
+      setSubmitted(false);
+    }
   };
+  const importing = Boolean(isImporting) || submitted;
 
   return (
     <Dialog
@@ -98,9 +105,11 @@ export function CsvImportDialog({
           <Button
             variant="primary"
             onClick={confirm}
-            disabled={isImporting || importable.length === 0 || Boolean(parsed?.errors.length)}
+            disabled={
+              importing || reading || importable.length === 0 || Boolean(parsed?.errors.length)
+            }
           >
-            {isImporting ? 'Importing…' : `Import ${importable.length} ${importNoun}`}
+            {importing ? 'Importing…' : `Import ${importable.length} ${importNoun}`}
           </Button>
         </>
       }
@@ -116,36 +125,44 @@ export function CsvImportDialog({
           </Button>
         </Stack>
 
+        {readError ? <Callout tone="negative">{readError}</Callout> : null}
+
         {parsed && parsed.errors.length > 0 ? (
           <Callout tone="negative">{parsed.errors.join(' ')}</Callout>
         ) : null}
 
-        {parsed && parsed.rows.length > 0 ? (
-          <CsvImportPreview
-            errorCount={errorCount}
-            fileName={fileName}
-            rowCount={parsed.rows.length}
-          >
-            <DataTable nested label="Parsed rows" columns={PREVIEW_COLUMNS}>
-              {parsed.rows.map((row) => {
-                const invalid = row.errors.length > 0;
-                return (
-                  <TableRow key={row.line} className={invalid ? 'opacity-60' : undefined}>
-                    <TableCell numeric className="text-ink-muted">
-                      {row.line}
-                    </TableCell>
-                    <TableCell>{row.input.topic || <UnavailableValue state="not_set" />}</TableCell>
-                    <TableCell>{row.input.text || <UnavailableValue state="not_set" />}</TableCell>
-                    <TableCell>
-                      <RowStatus errors={row.errors} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </DataTable>
-          </CsvImportPreview>
-        ) : null}
+        {parsed ? <ParsedRows parsed={parsed} fileName={fileName} /> : null}
       </Stack>
     </Dialog>
+  );
+}
+
+/** The parsed rows with each row's problems, before anything is imported. */
+function ParsedRows({
+  parsed,
+  fileName,
+}: Readonly<{ parsed: ParsedCsv; fileName: string | null }>) {
+  if (parsed.rows.length === 0) return null;
+  const errorCount = parsed.rows.filter((row) => row.errors.length > 0).length;
+  return (
+    <CsvImportPreview errorCount={errorCount} fileName={fileName} rowCount={parsed.rows.length}>
+      <DataTable nested label="Parsed rows" columns={PREVIEW_COLUMNS}>
+        {parsed.rows.map((row) => {
+          const invalid = row.errors.length > 0;
+          return (
+            <TableRow key={row.line} className={invalid ? 'opacity-60' : undefined}>
+              <TableCell numeric className="text-ink-muted">
+                {row.line}
+              </TableCell>
+              <TableCell>{row.input.topic || <UnavailableValue state="not_set" />}</TableCell>
+              <TableCell>{row.input.text || <UnavailableValue state="not_set" />}</TableCell>
+              <TableCell>
+                <RowStatus errors={row.errors} />
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </DataTable>
+    </CsvImportPreview>
   );
 }

@@ -7,7 +7,7 @@ import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { Stack } from '@/components/ui/layout';
 import { MarketSelect } from '@/components/ui/market-select';
-import { OnboardingStep, StepFindings } from '@/components/ui/onboarding-shell';
+import { OnboardingStep, StepColumns, StepFindings } from '@/components/ui/onboarding-shell';
 import { StepList, type Step } from '@/components/ui/step-list';
 import { MARKET_COUNTRIES, MARKET_LANGUAGES } from '@citeladder/contracts/markets';
 import { discoveryActivity } from '@/lib/onboarding/discovery-activity';
@@ -44,7 +44,7 @@ export function BrandStage({
       next={actions.next}
     >
       <form id="onboarding-brand-form" noValidate onSubmit={onSubmit}>
-        <Stack gap="workspace">
+        <StepColumns>
           <Field label="Brand name" required error={form.formState.errors.brand_name?.message}>
             {(props) => <Input {...props} {...form.register('brand_name')} placeholder="Acme" />}
           </Field>
@@ -95,7 +95,7 @@ export function BrandStage({
               />
             )}
           </Field>
-        </Stack>
+        </StepColumns>
       </form>
     </OnboardingStep>
   );
@@ -140,12 +140,16 @@ export function DiscoveryStage({
       back={actions.back}
       next={actions.next}
     >
-      <StageSteps
-        label="Discovering your brand"
-        steps={discoveryActivity(discovery.discovery)}
-        stagger
-      />
-      {found.length > 0 ? <StepFindings title="Found so far" items={found} /> : null}
+      <StepColumns>
+        <div className="min-w-0">
+          <StageSteps
+            label="Discovering your brand"
+            steps={discoveryActivity(discovery.discovery)}
+            stagger
+          />
+        </div>
+        {found.length > 0 ? <StepFindings title="Found so far" items={found} /> : null}
+      </StepColumns>
       {warningCallouts(warnings, rerunWarning).map(({ message, rerunnable }) => (
         <Callout key={message} tone="warning" action={rerunnable ? rerun : undefined}>
           {message}
@@ -296,38 +300,46 @@ export function ReviewStage({
         <CompletionStateAlert failed={completionFailed} />
       </ReviewNotices>
       {/* In reading order: the websites and competitor picks, each with the
-          reason Create project waits beneath it, then what you sell and who
-          buys it. */}
-      <ReviewStep
-        domains={domains}
-        competitors={competitors}
-        onToggleDomain={toggle(flow.setDomains)}
-        onToggleCompetitor={(index) => toggleCompetitor(index, setCompetitors, maximumCompetitors)}
-        onEditCompetitor={(index, name, domain) =>
-          editCompetitor(index, name, domain, setCompetitors)
-        }
-        onRemoveCompetitor={(index) =>
-          setCompetitors((current) => current.filter((_, itemIndex) => itemIndex !== index))
-        }
-        onAddCompetitor={() => addCompetitor(setCompetitors, maximumCompetitors)}
-        maximumCompetitors={maximumCompetitors}
-        domainNote={hasSelectedDomain ? undefined : 'Keep at least one website address selected.'}
-        competitorNote={
-          flow.hasIncompleteCompetitor
-            ? 'Add a name and website for each selected competitor.'
-            : undefined
-        }
-      />
-      {profile ? (
-        <>
-          <IcpCategory
-            profile={profile}
-            onChange={setProfile}
-            note={hasConfirmedIcp(profile) ? undefined : 'Choose or describe what you sell.'}
+          reason Create project waits beneath it, then (beside them from
+          desktop:) what you sell and who buys it. */}
+      <StepColumns>
+        <Stack gap="workspace" className="min-w-0">
+          <ReviewStep
+            domains={domains}
+            competitors={competitors}
+            onToggleDomain={toggle(flow.setDomains)}
+            onToggleCompetitor={(index) =>
+              toggleCompetitor(index, setCompetitors, maximumCompetitors)
+            }
+            onEditCompetitor={(index, name, domain) =>
+              editCompetitor(index, name, domain, setCompetitors)
+            }
+            onRemoveCompetitor={(index) =>
+              setCompetitors((current) => current.filter((_, itemIndex) => itemIndex !== index))
+            }
+            onAddCompetitor={() => addCompetitor(setCompetitors, maximumCompetitors)}
+            maximumCompetitors={maximumCompetitors}
+            domainNote={
+              hasSelectedDomain ? undefined : 'Keep at least one website address selected.'
+            }
+            competitorNote={
+              flow.hasIncompleteCompetitor
+                ? 'Add a name and website for each selected competitor.'
+                : undefined
+            }
           />
-          <IcpAudience profile={profile} onChange={setProfile} />
-        </>
-      ) : null}
+        </Stack>
+        {profile ? (
+          <Stack gap="workspace" className="min-w-0">
+            <IcpCategory
+              profile={profile}
+              onChange={setProfile}
+              note={hasConfirmedIcp(profile) ? undefined : 'Choose or describe what you sell.'}
+            />
+            <IcpAudience profile={profile} onChange={setProfile} />
+          </Stack>
+        ) : null}
+      </StepColumns>
     </OnboardingStep>
   );
 }
@@ -415,6 +427,8 @@ function warningMessage(code: string): string {
       'We used the website details we could confirm. Review them before continuing.',
     conflicting_evidence:
       'Sources disagreed about this business. Review the suggested positioning carefully.',
+    insufficient_evidence:
+      'Too little evidence was found to confirm this business. Review the suggested positioning carefully.',
     site_health_deferred:
       'The project is ready; its Site Health review will need to be started later.',
   };

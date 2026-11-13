@@ -12,6 +12,8 @@ export type TargetRef =
   | { kind: 'prompt_index'; audit_id: string; prompt_index: number; theme: string | null }
   /** An owned page a Site Health rule failed on. */
   | { kind: 'site_page'; url: string }
+  /** One Site Health rule across every owned page it fails on; `label` is the rule's. */
+  | { kind: 'issue_family'; rule_id: string; label: string }
   /** One field of an owned page that changed between two crawls. */
   | { kind: 'site_change'; site_url_id: string; field: string; url: string }
   /** An owned page that should link to related pages. */
@@ -23,7 +25,12 @@ export type TargetRef =
   /** A third-party page answers cite, keyed by its url hash. */
   | { kind: 'earned_page'; url_hash: string; url: string; theme: string | null }
   /** A search competitors rank for; `url` is the owned page that covers it, if any. */
-  | { kind: 'search_gap'; terms: string; keyword: string; url: string | null };
+  | { kind: 'search_gap'; terms: string; keyword: string; url: string | null }
+  /**
+   * A page to create, by a planned-page key its producer stored once
+   * (`plannedPageKey`), so no reader re-slugs a label that may have changed.
+   */
+  | { kind: 'planned_page'; key: string; label: string };
 
 type TargetColumns = {
   target_key: string;
@@ -61,6 +68,8 @@ export function targetColumns(target: TargetRef): TargetColumns {
       });
     case 'site_page':
       return columns(`url:${target.url}`, { target_url: target.url });
+    case 'issue_family':
+      return columns(`issue-family:${target.rule_id}`, { target_theme: target.label });
     case 'site_change':
       return columns(`site-change:${target.site_url_id}:${target.field}`, {
         target_url: target.url,
@@ -86,6 +95,8 @@ export function targetColumns(target: TargetRef): TargetColumns {
         target_url: target.url,
         target_theme: target.keyword,
       });
+    case 'planned_page':
+      return columns(target.key, { target_theme: target.label });
     default: {
       const unknownTarget: never = target;
       throw new Error(`Unknown Opportunity target: ${JSON.stringify(unknownTarget)}`);

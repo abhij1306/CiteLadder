@@ -63,11 +63,8 @@ describe('atomic audit admission', () => {
   ])('refuses zero execution bound %s', (name) => {
     expect(() => auditRuntime({ [name]: '0' })).toThrow();
   });
-  it('permits disabled pacing and jitter while refusing inconsistent heartbeat and retry bounds', () => {
-    expect(
-      auditRuntime({ AUDIT_MIN_REQUEST_INTERVAL_SECONDS: '0', AUDIT_RETRY_JITTER_SECONDS: '0' })
-        .audits.retry_jitter_seconds,
-    ).toBe(0);
+  it('permits disabled jitter while refusing inconsistent heartbeat and retry bounds', () => {
+    expect(auditRuntime({ AUDIT_RETRY_JITTER_SECONDS: '0' }).audits.retry_jitter_seconds).toBe(0);
     expect(() => auditRuntime({ AUDIT_HEARTBEAT_INTERVAL_SECONDS: '120' })).toThrow('heartbeat');
     expect(() => auditRuntime({ AUDIT_RETRY_BASE_DELAY_SECONDS: '46' })).toThrow('retry');
   });

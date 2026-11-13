@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createApp } from '../src/app.ts';
+import { editProduct } from '../src/commerce/edits.ts';
 import { updateActionStatus, attachOrCreateAction } from '../src/opportunities/actions.ts';
 import { policy } from '../src/config.ts';
 import { loadWorkerSettings } from '../src/config/analytics.ts';
@@ -17,8 +18,10 @@ import { record } from '../src/db/json.ts';
 import { recomputeOpportunities, refreshOpportunities } from '../src/opportunities/refresh.ts';
 import { enqueueOpportunityRefresh } from '../src/opportunities/enqueue.ts';
 import { drainWorkspace } from './analytics-drain.ts';
-import { seedOpportunityScenario, type OpportunitySeed } from './opportunity-fixtures.ts';
+import { angleRun, seedOpportunityScenario, type OpportunitySeed } from './opportunity-fixtures.ts';
 import { sourcePage } from './action-support.ts';
+import { importCatalog } from './commerce-support.ts';
+import { prompt, promptSet } from './prompt-fixtures.ts';
 import { TEST_SESSION_COOKIE, sessionToken, testConfig, testDatabase } from './support.ts';
 import { VisibilityFixtures, type Tenant } from './visibility-fixtures.ts';
 
@@ -230,10 +233,72 @@ describe('opportunity_refresh', () => {
     expect(await snapshotCount(s)).toBe(before + 1);
   });
 
-  /** A completed Commerce run whose one product was never named. */
-  async function unseenProductRun(tenant: Tenant, completedAt: Date) {
+  it('refreshes once a content-angle run succeeds, and not for a failed one', async () => {
+    const s = await seed();
+    await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    const before = await snapshotCount(s);
+    await angleRun(db, scope(s), { outcome: 'failed' });
+    await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    expect(await snapshotCount(s)).toBe(before);
+    const { runId } = await angleRun(db, scope(s));
+    const refreshed = await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    expect(await snapshotCount(s)).toBe(before + 1);
+    expect(record(refreshed.coverage.source_identity).content_angle_run_id).toBe(runId);
+    await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    expect(await snapshotCount(s)).toBe(before + 1);
+  });
+
+  it('refreshes once a catalog edit changes a product field, although no match pass is new', async () => {
+    const s = await seed();
+    const imported = await importCatalog(
+      db,
+      scope(s),
+      'link,title,brand\nhttps://acme.test/products/one,One,Acme\n',
+    );
+    const productId = imported.row_outcomes[0]!.product_id!;
+    await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    const before = await snapshotCount(s);
+    await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    expect(await snapshotCount(s)).toBe(before);
+    // A description is not matching identity: no catalog revision or match pass follows it.
+    await editProduct(db, scope(s), productId, { description: 'Waterproof trail shoe' });
+    await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    expect(await snapshotCount(s)).toBe(before + 1);
+    await recomputeOpportunities(db, scope(s), { skipIfCurrent: true });
+    expect(await snapshotCount(s)).toBe(before + 1);
+  });
+
+  /**
+   * A completed Commerce run whose one category prompt was answered with a
+   * third-party citation and no uploaded product.
+   */
+  async function uncoveredCategoryRun(tenant: Tenant, completedAt: Date) {
     const auditId = await visibility.audit(tenant, { scope: 'commerce', completedAt });
-    const productId = randomUUID();
+    const categoryId = randomUUID();
+    const promptId = await prompt(db, await promptSet(db, tenant.projectId), `best ${categoryId}`);
+    await db
+      .insertInto('commerce_prompt_targets')
+      .values({
+        id: randomUUID(),
+        workspace_id: tenant.workspaceId,
+        project_id: tenant.projectId,
+        prompt_id: promptId,
+        target_kind: 'category',
+        target_id: categoryId,
+        template_version: 'test',
+        approved_at: new Date(),
+        created_at: new Date(),
+      })
+      .execute();
+    await visibility.execution(tenant, {
+      auditId,
+      analysis: { citations: [{ url: 'https://reviews.example/best-shoes' }] },
+    });
+    await db
+      .updateTable('audit_prompt_snapshots')
+      .set({ prompt_id: promptId })
+      .where('audit_id', '=', auditId)
+      .execute();
     await db
       .insertInto('commerce_shelf_snapshots')
       .values({
@@ -241,8 +306,8 @@ describe('opportunity_refresh', () => {
         workspace_id: tenant.workspaceId,
         project_id: tenant.projectId,
         audit_id: auditId,
-        target_kind: 'product',
-        target_id: productId,
+        target_kind: 'category',
+        target_id: categoryId,
         product_visibility: 0,
         share_of_shelf: null,
         average_shelf_position: null,
@@ -256,23 +321,23 @@ describe('opportunity_refresh', () => {
         created_at: new Date(),
       })
       .execute();
-    return productId;
+    return categoryId;
   }
 
   it('keeps brand and Commerce Actions when a Commerce run follows the brand run', async () => {
     const s = await seed();
     const tenant = { userId: s.user_id, workspaceId: s.workspace_id, projectId: s.project_id };
     // Completed after the seed's brand run, so it is the project's newest run of any scope.
-    const productId = await unseenProductRun(tenant, new Date(Date.now() + 60_000));
+    const categoryId = await uncoveredCategoryRun(tenant, new Date(Date.now() + 60_000));
     await recomputeOpportunities(db, scope(s));
     const rows = await live(s);
     const rules = rows.map((row) => [row.rule_id, row.target_key]).toSorted();
     expect(rules).toEqual([
       ['brand_absent_high_value_prompt', `prompt:${s.prompt0_id}`],
+      ['cited_alternatives_without_uploaded_presence', `category:${categoryId}`],
       ['content_structure_incomplete', expect.any(String)],
       ['missing_structured_data', expect.any(String)],
       ['owned_page_not_cited', expect.any(String)],
-      ['product_not_mentioned', `product:${productId}`],
     ]);
     const snapshot = await db
       .selectFrom('opportunity_snapshots')
@@ -287,9 +352,9 @@ describe('opportunity_refresh', () => {
   it('refreshes a project whose only source is Commerce when a newer Commerce run lands', async () => {
     const tenant = await visibility.tenant();
     const scoped = { workspaceId: tenant.workspaceId, projectId: tenant.projectId };
-    await unseenProductRun(tenant, new Date(Date.now() - 60_000));
+    await uncoveredCategoryRun(tenant, new Date(Date.now() - 60_000));
     await recomputeOpportunities(db, scoped);
-    const second = await unseenProductRun(tenant, new Date());
+    const second = await uncoveredCategoryRun(tenant, new Date());
     await recomputeOpportunities(db, scoped);
 
     const rows = await db
@@ -299,7 +364,7 @@ describe('opportunity_refresh', () => {
       .where('superseded_at', 'is', null)
       .execute();
     expect(rows.map((row) => [row.rule_id, row.target_key])).toEqual([
-      ['product_not_mentioned', `product:${second}`],
+      ['cited_alternatives_without_uploaded_presence', `category:${second}`],
     ]);
   });
 

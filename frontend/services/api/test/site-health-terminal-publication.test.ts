@@ -102,6 +102,71 @@ describe('terminal analysis publication', () => {
         .executeTakeFirstOrThrow(),
     ).toEqual(first);
   });
+  it('compares only with earlier usable, non-empty site crawls of the same scope', async () => {
+    const seed = await fixtures.crawl('completed');
+    const publish = async (values: Partial<Insertable<SiteCrawls>>) => {
+      const crawlId = await fixtures.sibling(seed, { analyzed_url_count: 1, ...values });
+      await persistCrawlSnapshot(db, await crawlRow(crawlId), true);
+      return crawlId;
+    };
+    const changeOf = async (crawlId: string) =>
+      record(
+        (
+          await db
+            .selectFrom('site_health_snapshots')
+            .select('change_summary')
+            .where('crawl_id', '=', crawlId)
+            .executeTakeFirstOrThrow()
+        ).change_summary,
+      );
+    // Each earlier snapshot reads a distinct AEO Readiness score, so the compared one shows.
+    const scored = async (values: Partial<Insertable<SiteCrawls>>, score: number) => {
+      const crawlId = await publish(values);
+      await db
+        .updateTable('site_health_snapshots')
+        .set({ aeo_readiness_score: score })
+        .where('crawl_id', '=', crawlId)
+        .execute();
+      return crawlId;
+    };
+    const comparable = await scored({}, 70);
+    await scored({ status: 'failed' }, 11);
+    await scored({ analyzed_url_count: 0 }, 12);
+    await scored({ configuration: JSON.stringify({ root_registrable_domain: 'blog.test' }) }, 13);
+    // A rerun snapshot written before reruns stopped writing them.
+    const rerun = await scored({}, 14);
+    await db
+      .updateTable('site_crawls')
+      .set({ configuration: JSON.stringify({ page_rerun: true }) })
+      .where('id', '=', rerun)
+      .execute();
+    const current = await publish({});
+    const change = await changeOf(current);
+    expect(change).toMatchObject({ state: 'measured', reason: 'comparable_snapshot' });
+    expect(change.metrics).toContainEqual(
+      expect.objectContaining({ key: 'aeo_readiness_score', previous: 70 }),
+    );
+
+    // The first crawl of a scope has nothing to compare with.
+    expect(await changeOf(comparable)).toMatchObject({
+      state: 'unavailable',
+      reason: 'no_comparable_snapshot',
+    });
+    const otherScope = await publish({
+      configuration: JSON.stringify({ root_registrable_domain: 'other.test' }),
+    });
+    expect(await changeOf(otherScope)).toMatchObject({
+      state: 'unavailable',
+      reason: 'no_comparable_snapshot',
+    });
+    // A crawl older than all of them, published late, has no earlier crawl to compare with.
+    const late = await publish({ created_at: LONG_AGO });
+    expect(await changeOf(late)).toMatchObject({
+      state: 'unavailable',
+      reason: 'no_comparable_snapshot',
+    });
+  });
+
   it('serializes concurrent finalization and preserves initial evaluation ownership', async () => {
     const seed = await fixtures.crawl('running');
     const page = await fixtures.page(
@@ -535,10 +600,10 @@ async function running(changes: Partial<Insertable<SiteCrawls>> = {}) {
   return seed;
 }
 /** A completed analysis of an active monitored page, settled by its own analyze task. */
-async function monitoredPage(seed: SiteSeed, path: string) {
+async function monitoredPage(seed: SiteSeed, path: string, facts: Record<string, unknown> = {}) {
   const member = await fixtures.analyzable(seed, path);
   await db.deleteFrom('site_crawl_tasks').where('id', '=', member.taskId).execute();
-  const page = await fixtures.page(seed, path, {}, { siteUrlId: member.siteUrlId });
+  const page = await fixtures.page(seed, path, facts, { siteUrlId: member.siteUrlId });
   await fixtures.evaluation(seed, page, 'technical.indexable', 'satisfied');
   return page;
 }
@@ -756,6 +821,38 @@ describe('crawl lifecycle', () => {
     }
   });
 
+  it('drains a page rerun without a project snapshot or a one-page score summary', async () => {
+    const rerun = await running({
+      configuration: JSON.stringify({ page_rerun: true }),
+      discovery_status: 'completed',
+      discovered_url_count: 1,
+    });
+    const page = await monitoredPage(rerun, '/');
+    const pending = await fixtures.analyzable(rerun, '/pending');
+    await reconcileAfterTask(db, settled(rerun, page.taskId), cadence());
+    expect((await crawlRow(rerun.crawlId)).score_summary).toBeNull();
+    await db
+      .updateTable('site_crawl_tasks')
+      .set({ status: 'failed', error_code: 'task_failed' })
+      .where('id', '=', pending.taskId)
+      .execute();
+    await reconcileCrawl(db, rerun.workspaceId, rerun.crawlId);
+    expect(await crawlRow(rerun.crawlId)).toMatchObject({
+      status: 'partially_completed',
+      analyzed_url_count: 1,
+      score_summary: null,
+    });
+    expect(await snapshots(rerun.crawlId)).toHaveLength(0);
+    // The rerun still hands its page on.
+    expect(await tasksOf(rerun.crawlId, 'change_intel')).toHaveLength(1);
+
+    const site = await running();
+    await monitoredPage(site, '/');
+    await reconcileCrawl(db, site.workspaceId, site.crawlId);
+    expect((await crawlRow(site.crawlId)).score_summary).toMatchObject({ analyzed_count: 1 });
+    expect(await snapshots(site.crawlId)).toHaveLength(1);
+  });
+
   it('counts a rerun page once, by its latest generation', async () => {
     const seed = await running();
     const page = await monitoredPage(seed, '/');
@@ -782,7 +879,7 @@ describe('crawl lifecycle', () => {
   });
 
   it('marks the inventory complete only when no page limit cut discovery short', async () => {
-    const discovered = async (changes: Partial<Insertable<SiteCrawls>>) => {
+    const discovered = async (changes: Partial<Insertable<SiteCrawls>>, pending = false) => {
       const seed = await running({ discovery_status: 'running', ...changes });
       const root = await fixtures.task(seed, 'discover');
       await db
@@ -791,12 +888,39 @@ describe('crawl lifecycle', () => {
         .where('id', '=', root)
         .execute();
       await fixtures.page(seed, '/', {}, { observed: true });
+      if (pending)
+        await db
+          .insertInto('site_discovery_frontier')
+          .values({
+            id: randomUUID(),
+            workspace_id: seed.workspaceId,
+            crawl_id: seed.crawlId,
+            url_hash: 'left-behind',
+            normalized_url: 'https://example.test/left-behind',
+            status: 'pending',
+            depth: 1,
+            link_ordinal: 0,
+            parent_position: 0,
+            referrer_site_url_ids: [],
+            rewrite_reason: '',
+            rewrite_version: '',
+            source_kind: 'link',
+            value_kind: 'other',
+            value_priority: 0,
+            admitted_at: null,
+            created_at: new Date(),
+          })
+          .execute();
       await reconcileCrawl(db, seed.workspaceId, seed.crawlId);
       return crawlRow(seed.crawlId);
     };
     expect(await discovered({})).toMatchObject({ status: 'completed', inventory_complete: true });
+    // A site with exactly the requested page count exhausted its frontier.
     expect(await discovered({ discovery_requested_count: 1 })).toMatchObject({
       status: 'completed',
+      inventory_complete: true,
+    });
+    expect(await discovered({ discovery_requested_count: 1 }, true)).toMatchObject({
       inventory_complete: false,
     });
   });
@@ -869,19 +993,38 @@ describe('crawl lifecycle', () => {
 
   it('publishes a cancelled run once and leaves a cancel without evidence unpublished', async () => {
     const seed = await fixtures.crawl('cancelled');
-    const page = await monitoredPage(seed, '/');
+    const page = await monitoredPage(seed, '/', { canonical_url: 'https://example.test/' });
+    const plain = await fixtures.crawl('cancelled');
+    await monitoredPage(plain, '/');
     const empty = await fixtures.crawl('cancelled');
     await publishCancelledCrawls(db, 50);
     await publishCancelledCrawls(db, 50);
     expect(await snapshots(seed.crawlId)).toHaveLength(1);
-    const current = await db
-      .selectFrom('site_page_analyses')
-      .selectAll()
-      .where('crawl_id', '=', seed.crawlId)
-      .where('is_current', '=', true)
-      .executeTakeFirstOrThrow();
+    const final = (crawlId: string) =>
+      db
+        .selectFrom('site_page_analyses')
+        .selectAll()
+        .where('crawl_id', '=', crawlId)
+        .where('is_current', '=', true)
+        .executeTakeFirstOrThrow();
+    const canonicalCheck = (analysis: { expected_checkpoint_profile: unknown }) =>
+      (analysis.expected_checkpoint_profile as { check_id: string }[]).find(
+        (entry) => entry.check_id === 'technical.canonical_integrity',
+      );
+    const current = await final(seed.crawlId);
     expect(current.supersedes_analysis_id).toBe(page.analysisId);
     expect(current.finalized_at).not.toBeNull();
+    // The skipped crawl-finalize canonical check is unknown, not silently absent,
+    // unless the page declared no canonical for it to judge.
+    expect(canonicalCheck(current)).toMatchObject({
+      outcome: 'unknown',
+      reason: 'crawl_not_finalized',
+      web_membership: true,
+    });
+    expect(canonicalCheck(await final(plain.crawlId))).toMatchObject({
+      outcome: 'not_applicable',
+      reason: 'no_canonical',
+    });
     expect((await crawlRow(seed.crawlId)).score_summary).toMatchObject({
       analyzed_count: 1,
       selected_count: 1,
@@ -889,5 +1032,27 @@ describe('crawl lifecycle', () => {
     expect(await tasksOf(seed.crawlId, 'change_intel')).toHaveLength(1);
     expect(await snapshots(empty.crawlId)).toHaveLength(0);
     expect((await crawlRow(empty.crawlId)).score_summary).toBeNull();
+  });
+
+  it('publishes a cancelled page rerun once, without a snapshot or score summary', async () => {
+    const rerun = await fixtures.crawl('cancelled');
+    await db
+      .updateTable('site_crawls')
+      .set({ configuration: JSON.stringify({ page_rerun: true }) })
+      .where('id', '=', rerun.crawlId)
+      .execute();
+    const page = await monitoredPage(rerun, '/');
+    await publishCancelledCrawls(db, 50);
+    await publishCancelledCrawls(db, 50);
+    const current = await db
+      .selectFrom('site_page_analyses')
+      .select(['supersedes_analysis_id'])
+      .where('crawl_id', '=', rerun.crawlId)
+      .where('is_current', '=', true)
+      .executeTakeFirstOrThrow();
+    expect(current.supersedes_analysis_id).toBe(page.analysisId);
+    expect(await tasksOf(rerun.crawlId, 'change_intel')).toHaveLength(1);
+    expect(await snapshots(rerun.crawlId)).toHaveLength(0);
+    expect((await crawlRow(rerun.crawlId)).score_summary).toBeNull();
   });
 });

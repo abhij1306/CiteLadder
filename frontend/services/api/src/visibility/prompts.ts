@@ -28,6 +28,7 @@ import {
   type ComparisonCell,
 } from './comparison.ts';
 import { answerCounts, answerRates } from '../analysis/aggregate.ts';
+import { brandIdentities, leadingBrands, type BrandCount } from './brand-identities.ts';
 import { round2 } from './metrics.ts';
 import { runSetComparisonStatus } from './run-sets.ts';
 import { marketOf, type RunScope } from './runs.ts';
@@ -46,8 +47,11 @@ const { succeeded: SUCCEEDED, failed: FAILED } = policy.task_queue.statuses;
 export type PromptMetricItem = z.input<typeof promptMetricItemSchema>;
 type Counts = z.input<typeof measurementCountsSchema>;
 type Outcome = NonNullable<PromptMetricItem['outcomes']>[number];
-/** An item with its creation instant as sortable UTC text. */
-type PromptRow = { item: PromptMetricItem; createdAt: string };
+/**
+ * An item with its creation instant as sortable UTC text, and every brand its
+ * answers named (the item carries only the leading few, once marks resolve).
+ */
+type PromptRow = { item: PromptMetricItem; createdAt: string; named: BrandCount[] };
 
 export type PromptQuery = {
   auditId: string | null;
@@ -71,8 +75,19 @@ export async function getPromptMetrics(
     ? await periodRows(db, scope, query, query.auditIds)
     : await runRows(db, scope, query);
   const items = rows.map((row) => row.item);
-  await attachActions(db, scope, items);
+  await Promise.all([attachActions(db, scope, items), attachBrands(db, scope, rows)]);
   return items;
+}
+
+/** Each row's named brands as the leading few with their marks, in place. */
+async function attachBrands(
+  db: Database,
+  scope: RunScope,
+  rows: readonly PromptRow[],
+): Promise<void> {
+  if (!rows.some((row) => row.named.length)) return;
+  const identities = await brandIdentities(db, scope);
+  for (const row of rows) Object.assign(row.item, leadingBrands(row.named, identities));
 }
 
 /** Each row's Action: the live one the refresh opened on that prompt, if any. */
@@ -147,6 +162,7 @@ async function scoreRows(
     .execute();
   const rows: PromptRow[] = snapshots.map((row) => ({
     createdAt: row.created_at_text,
+    named: [],
     item: {
       id: row.id,
       audit_id: row.audit_id,
@@ -181,6 +197,8 @@ async function scoreRows(
       counts: emptyCounts(),
       answer_states: null,
       action_id: null,
+      mentions: 0,
+      brands: [],
       outcomes: [],
     },
   }));
@@ -387,8 +405,48 @@ async function loadOutcomes(
     .where('prompt.cohort', 'in', [...selectedCohorts(cohort)])
     .where('task.audit_id', 'in', auditIds);
   if (engine) taskQuery = taskQuery.where('task.logical_engine', '=', engine);
-  const [answerRows, tasks] = await Promise.all([answers.execute(), taskQuery.execute()]);
-  return { prompts, answers: answerRows, tasks };
+  const [answerRows, tasks, mentions] = await Promise.all([
+    answers.execute(),
+    taskQuery.execute(),
+    namedBrands(db, scope, { auditIds, cohort, engine }),
+  ]);
+  return { prompts, answers: answerRows, tasks, mentions };
+}
+
+/**
+ * The brands each prompt's answers named, over the same answers its rates
+ * count: the tracked brand and every competitor, by distinct answers.
+ */
+async function namedBrands(
+  db: Database,
+  scope: RunScope,
+  query: { auditIds: readonly string[]; cohort: string; engine: string | null },
+) {
+  const engine = query.engine ? sql`and answer.logical_engine = ${query.engine}` : sql``;
+  const answers = sql`
+    select answer.id, answer.audit_id, answer.prompt_index
+    from response_analyses answer
+    where answer.workspace_id = ${scope.workspaceId}
+      and answer.audit_id in (${sql.join(query.auditIds)})
+      and answer.cohort in (${sql.join([...selectedCohorts(query.cohort)])})
+      ${engine}`;
+  const { rows } = await sql<BrandCount & { audit_id: string; prompt_index: number }>`
+    with answer as (${answers})
+    select answer.audit_id, answer.prompt_index, 'brand' as kind, mention.brand_name as name,
+      count(distinct answer.id)::int as responses
+    from answer join brand_mentions mention on mention.analysis_id = answer.id
+      and mention.workspace_id = ${scope.workspaceId}
+    where mention.brand_name <> ''
+    group by answer.audit_id, answer.prompt_index, mention.brand_name
+    union all
+    select answer.audit_id, answer.prompt_index, 'competitor' as kind,
+      mention.competitor_name as name, count(distinct answer.id)::int as responses
+    from answer join competitor_mentions mention on mention.analysis_id = answer.id
+      and mention.workspace_id = ${scope.workspaceId}
+    where mention.competitor_name <> ''
+    group by answer.audit_id, answer.prompt_index, mention.competitor_name
+  `.execute(db);
+  return rows;
 }
 
 /** Fill each row's frozen prompt facts, outcome counts and baseline change, in place. */
@@ -414,6 +472,10 @@ async function enrichOutcomes(
     data.tasks.filter((row) => row.audit_id === audit.id),
     (row) => row.prompt_index,
   );
+  const mentions = groupBy(
+    data.mentions.filter((row) => row.audit_id === audit.id),
+    (row) => row.prompt_index,
+  );
   const previous = await baselineRun(db, scope, audit, query.baselineId);
   const runs = previous && {
     current: {
@@ -431,9 +493,15 @@ async function enrichOutcomes(
   const cells = runs
     ? await loadComparisonCells(db, runs, { cohort: audit.cohort, engine: query.logicalEngine })
     : null;
-  for (const { item } of rows) {
+  for (const row of rows) {
+    const { item } = row;
     const prompt = prompts.get(item.prompt_index);
     if (prompt === undefined) throw new Error('prompt score has no frozen prompt snapshot');
+    row.named = (mentions.get(item.prompt_index) ?? []).map(({ kind, name, responses }) => ({
+      kind,
+      name,
+      responses,
+    }));
     item.prompt_snapshot_id = prompt.id;
     item.theme = prompt.theme;
     item.intent = prompt.prompt_intent || prompt.intent;
@@ -448,28 +516,25 @@ async function enrichOutcomes(
       ? round2(ranked.reduce((total, value) => total + value, 0) / ranked.length)
       : null;
     // A cell is one (engine, model) pair, counted against that pair's tasks.
-    const cellsByRoute = groupBy(answered, (row) =>
-      JSON.stringify([row.logical_engine, row.transport_model]),
+    // A pair whose every task failed keeps its cell, so it reads as failed
+    // rather than vanishing.
+    const routeKey = (row: { logical_engine: string; transport_model: string }) =>
+      JSON.stringify([row.logical_engine, row.transport_model]);
+    const cellsByRoute = groupBy(answered, routeKey);
+    const tasksByRoute = groupBy(promptTasks, routeKey);
+    const routes = new Map(
+      [...promptTasks, ...answered].map((row) => [
+        routeKey(row),
+        { engine: row.logical_engine, model: row.transport_model },
+      ]),
     );
-    item.outcomes = [...cellsByRoute.values()]
-      .map((values) => ({
-        engine: values[0].logical_engine,
-        model: values[0].transport_model,
-        values,
-      }))
+    item.outcomes = [...routes]
       .sort(
-        (left, right) =>
+        ([, left], [, right]) =>
           compareText(left.engine, right.engine) || compareText(left.model, right.model),
       )
-      .map(({ engine: cellEngine, model, values }) =>
-        outcome(
-          cellEngine,
-          model,
-          values,
-          promptTasks.filter(
-            (task) => task.logical_engine === cellEngine && task.transport_model === model,
-          ),
-        ),
+      .map(([key, { engine: cellEngine, model }]) =>
+        outcome(cellEngine, model, cellsByRoute.get(key) ?? [], tasksByRoute.get(key) ?? []),
       );
     if (runs && cells) {
       const identity = JSON.stringify([prompt.prompt_id ?? prompt.text, prompt.text]);
@@ -538,8 +603,15 @@ function poolPrompt(rows: readonly PromptRow[]): PromptRow {
     rows.flatMap((row) => row.item.outcomes ?? []),
     (entry) => JSON.stringify([entry.logical_engine, entry.transport_model]),
   );
+  const named = new Map<string, BrandCount>();
+  for (const entry of rows.flatMap((row) => row.named)) {
+    const key = JSON.stringify([entry.kind, entry.name]);
+    const pooled = named.get(key);
+    named.set(key, { ...entry, responses: (pooled?.responses ?? 0) + entry.responses });
+  }
   return {
     createdAt: latest.createdAt,
+    named: [...named.values()],
     item: {
       ...structuredClone(latest.item),
       source_audit_ids: [...new Set(rows.map((row) => row.item.audit_id))].sort(compareText),

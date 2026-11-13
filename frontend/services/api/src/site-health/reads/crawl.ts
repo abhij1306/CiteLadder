@@ -1,15 +1,15 @@
 /**
- * Workspace-scoped crawl loading and the crawl projection every Site Health
- * read shares. A foreign or missing crawl is a 404; nothing here writes.
+ * Workspace-scoped crawl loading, the per-page-latest crawl view every Site
+ * Health read shares, and a failed crawl's root failure. A foreign or missing
+ * crawl is a 404; nothing here writes.
  */
 import {
-  crawlCountersSchema,
+  ACTIVE_CRAWL_STATUSES,
   isTerminalCrawl,
   isUsableCrawl,
   USABLE_CRAWL_STATUSES,
 } from '@citeladder/contracts/site-health';
-import { sql } from 'kysely';
-import type { z } from 'zod';
+import { sql, type RawBuilder } from 'kysely';
 
 import { policy } from '../../config.ts';
 import type { Database } from '../../db/database.ts';
@@ -17,16 +17,13 @@ import { record, strings } from '../../db/json.ts';
 import { WorkspaceScope } from '../../db/workspace-scope.ts';
 import { notFound } from '../../errors.ts';
 import { parseUuid } from '../../http/uuid.ts';
-import { firstOf } from '../../lists.ts';
-import { pageRerunSql } from '../page-rerun.ts';
+import { isPageRerun, pageRerunSql } from '../page-rerun.ts';
 import type { Crawl } from '../site-task.ts';
-import { failedAs } from '../task-outcome.ts';
+import { siteLevelRuleOf } from './rules.ts';
 
 const reads = policy.site_health.reads;
-const NOT_MEASURED = 'not_measured';
 
 export type { Crawl };
-type Counters = z.input<typeof crawlCountersSchema>;
 export type FailureSummary = {
   code: string;
   message: string;
@@ -48,9 +45,248 @@ export async function loadCrawl(db: Database, workspaceId: string, crawlId: stri
   return crawl;
 }
 
+/** The project's site crawls, newest first: every crawl except one-page reruns. */
+function siteCrawls(db: Database, workspaceId: string, projectId: string) {
+  return new WorkspaceScope(workspaceId)
+    .selectFrom(db, 'site_crawls')
+    .where('project_id', '=', projectId)
+    .where(sql<boolean>`not ${pageRerunSql}`)
+    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc');
+}
+
 /**
- * The named crawl or, without one, the project's newest crawl in any state:
- * the crawl the dashboard shows. The caller's route has authorized the
+ * The current crawl as a one-row query, for callers that choose their own
+ * columns: the project's newest usable crawl that is not a one-page rerun
+ * (SH-B1). A rerun updates only its own page's evidence; it never becomes the
+ * site evidence Site Health, Opportunities, Overview, the Agent, MCP, AI
+ * Traffic, verification or internal links read; each reads every page's latest
+ * audit as that crawl shows it (`pageAuditsSql`, SH-B9). `completedAfter`
+ * narrows it to crawls that finished after a moment, for verifying a
+ * backdated declaration.
+ */
+export function currentSiteCrawlQuery(
+  db: Database,
+  workspaceId: string,
+  projectId: string,
+  { completedAfter }: { completedAfter?: string } = {},
+) {
+  let usable = siteCrawls(db, workspaceId, projectId).where('status', 'in', USABLE_CRAWL_STATUSES);
+  if (completedAfter !== undefined)
+    usable = usable.where('completed_at', '>', sql<Date>`${completedAfter}::timestamptz`);
+  return usable.limit(1);
+}
+
+/** The current crawl (`currentSiteCrawlQuery`), or `null` before the project has one. */
+export async function currentSiteCrawl(
+  db: Database,
+  workspaceId: string,
+  projectId: string,
+): Promise<Crawl | null> {
+  const crawl = await currentSiteCrawlQuery(db, workspaceId, projectId)
+    .selectAll()
+    .executeTakeFirst();
+  return crawl ?? null;
+}
+
+/** The crawl fields a per-page-latest view reads. */
+export type ViewCrawl = Pick<
+  Crawl,
+  'id' | 'workspace_id' | 'project_id' | 'created_at' | 'configuration'
+>;
+
+/** When a crawl began auditing (alias `alias`): its start, else its creation. */
+function auditAt(alias: string) {
+  const started = sql.ref(alias + '.started_at');
+  const created = sql.ref(alias + '.created_at');
+  return sql`coalesce(${started}, ${created})`;
+}
+
+/**
+ * When the site crawl after `crawl` began auditing: its view's upper bound,
+ * or null while `crawl` is the newest usable site crawl.
+ */
+function nextSiteAudit(crawl: ViewCrawl) {
+  return sql`(select min(${auditAt('n')}) from site_crawls n
+    where n.workspace_id = ${crawl.workspace_id} and n.project_id = ${crawl.project_id}
+      and not coalesce(n.configuration->>'page_rerun' = 'true', false)
+      and n.status = any(${USABLE_CRAWL_STATUSES}::text[])
+      and (n.created_at, n.id) > (${crawl.created_at}::timestamptz, ${crawl.id}::uuid))`;
+}
+
+/** A tracked page of the crawl's project: its page column is `siteUrlId`. */
+function trackedPage(crawl: ViewCrawl, siteUrlId: RawBuilder<unknown>) {
+  return sql`exists (
+    select 1 from monitored_site_urls m
+    where m.workspace_id = ${crawl.workspace_id} and m.project_id = ${crawl.project_id}
+      and m.site_url_id = ${siteUrlId} and m.active and m.fill_order is not null)`;
+}
+
+/**
+ * Each page's latest audit as a site crawl shows it (SH-B9): one row per page,
+ * `(site_url_id, crawl_id, analysis_id)`. A site crawl shows, for every page it
+ * audited and every tracked page, the newest finalized current analysis from
+ * any audit of the project (the crawl itself, a page rerun or an earlier
+ * crawl) that began before the next site crawl. So the current crawl reads
+ * each tracked page's latest audit: a rerun landing after it moves its page,
+ * and a page a cancelled crawl never reached keeps its earlier audit. The
+ * crawl's own current analyses count before they are finalized, so a running
+ * crawl shows its progress. A page rerun shows its own page only. `page`
+ * narrows the relation to one page reference for a lateral join.
+ *
+ * The read stays bounded by the tracked set, never the project's history: it
+ * takes the crawl's own analyses and those of audits that began after it
+ * (through `uq_site_page_analysis_current`), and looks further back, one page
+ * at a time, only for a tracked page the crawl never analyzed. An earlier
+ * audit cannot outrank the crawl's own analysis of a page.
+ */
+export function pageAuditsSql(crawl: ViewCrawl, page?: RawBuilder<unknown>) {
+  const onePage = (column: string) => (page ? sql`and ${sql.ref(column)} = ${page}` : sql``);
+  if (isPageRerun(crawl))
+    return sql`select distinct on (a.site_url_id) a.site_url_id, a.crawl_id, a.id as analysis_id
+      from site_page_analyses a
+      where a.workspace_id = ${crawl.workspace_id} and a.crawl_id = ${crawl.id} and a.is_current
+        ${onePage('a.site_url_id')}
+      order by a.site_url_id, a.created_at desc, a.id desc`;
+  const before = sql`coalesce(${nextSiteAudit(crawl)}, 'infinity'::timestamptz)`;
+  const began = sql`(select ${auditAt('x')} from site_crawls x
+    where x.workspace_id = ${crawl.workspace_id} and x.id = ${crawl.id})`;
+  return sql`select distinct on (v.site_url_id) v.site_url_id, v.crawl_id, v.analysis_id
+    from (
+      -- The crawl's own analyses, and the tracked pages' audits since it began.
+      select a.site_url_id, a.crawl_id, a.id as analysis_id, a.created_at, ${auditAt('c')} as audit_at
+      from site_crawls c
+      join site_page_analyses a
+        on a.workspace_id = c.workspace_id and a.crawl_id = c.id and a.is_current
+      where c.workspace_id = ${crawl.workspace_id} and c.project_id = ${crawl.project_id}
+        ${onePage('a.site_url_id')}
+        and (c.id = ${crawl.id} or (${auditAt('c')} >= ${began} and ${auditAt('c')} < ${before}))
+        and (c.id = ${crawl.id} or (
+          a.finalized_at is not null and ${trackedPage(crawl, sql.ref('a.site_url_id'))}))
+      union all
+      -- A tracked page the crawl never analyzed: its newest earlier audit.
+      select f.* from monitored_site_urls m
+      cross join lateral (
+        select a.site_url_id, a.crawl_id, a.id as analysis_id, a.created_at,
+          ${auditAt('c')} as audit_at
+        from site_page_analyses a
+        join site_crawls c on c.workspace_id = a.workspace_id and c.id = a.crawl_id
+        where a.workspace_id = m.workspace_id and a.project_id = m.project_id
+          and a.site_url_id = m.site_url_id and a.is_current and a.finalized_at is not null
+          and ${auditAt('c')} < ${before}
+        order by audit_at desc, a.created_at desc, a.id desc limit 1
+      ) f
+      where m.workspace_id = ${crawl.workspace_id} and m.project_id = ${crawl.project_id}
+        and m.active and m.fill_order is not null ${onePage('m.site_url_id')}
+        and not exists (
+          select 1 from site_page_analyses own
+          where own.workspace_id = m.workspace_id and own.crawl_id = ${crawl.id}
+            and own.site_url_id = m.site_url_id and own.is_current)
+    ) v
+    order by v.site_url_id, v.audit_at desc, v.created_at desc, v.analysis_id desc`;
+}
+
+/**
+ * The crawl's pages at their latest audit (`pageAuditsSql`), each analysis
+ * `a` with its fetch `f` and URL `u`, for readers that choose their columns.
+ */
+export function latestPagesQuery(db: Database, crawl: ViewCrawl) {
+  return db
+    .selectFrom('site_page_analyses as a')
+    .innerJoin('site_fetch_artifacts as f', (join) =>
+      join
+        .onRef('f.id', '=', 'a.artifact_id')
+        .onRef('f.workspace_id', '=', 'a.workspace_id')
+        .onRef('f.crawl_id', '=', 'a.crawl_id'),
+    )
+    .innerJoin('site_urls as u', (join) =>
+      join
+        .onRef('u.id', '=', 'a.site_url_id')
+        .onRef('u.workspace_id', '=', 'a.workspace_id')
+        .onRef('u.project_id', '=', 'a.project_id'),
+    )
+    .where('a.workspace_id', '=', crawl.workspace_id)
+    .where('a.project_id', '=', crawl.project_id)
+    .where('a.id', 'in', sql<string>`(select v.analysis_id from (${pageAuditsSql(crawl)}) v)`);
+}
+
+/**
+ * The issues a site crawl shows (alias `alias`): each page's current issues
+ * from its latest audit (`pageAuditsSql`), and the crawl's own site-level
+ * findings (architecture and sitewide links), which only a site crawl
+ * evaluates. A page rerun shows its own current issues. The crawls the view
+ * names bound the read to their current issues (`ix_site_issues_current`).
+ */
+export function viewIssuesSql(crawl: ViewCrawl, alias = 'i') {
+  const ref = (column: string) => sql.ref(`${alias}.${column}`);
+  const own = sql`${ref('workspace_id')} = ${crawl.workspace_id} and ${ref('crawl_id')} = ${crawl.id}
+    and ${ref('is_current')}`;
+  if (isPageRerun(crawl)) return own;
+  const siteLevel = siteLevelRuleOf(alias);
+  const view = pageAuditsSql(crawl);
+  return sql`${ref('workspace_id')} = ${crawl.workspace_id} and ${ref('project_id')} = ${crawl.project_id}
+    and ${ref('is_current')}
+    and ${ref('crawl_id')} = any(array(
+      select ${crawl.id}::uuid union select v.crawl_id from (${view}) v))
+    and (
+      (${siteLevel} and ${ref('crawl_id')} = ${crawl.id})
+      or (not ${siteLevel} and (${ref('crawl_id')}, ${ref('site_url_id')}) in (
+        select v.crawl_id, v.site_url_id from (${view}) v)))`;
+}
+
+/**
+ * The site crawl a page rerun lands in: the newest usable site crawl created
+ * before it, whose view (`pageAuditsSql`) folds the rerun's page. Null for a
+ * site crawl or before any site crawl is usable.
+ */
+export async function foldingSiteCrawl(db: Database, rerun: Crawl): Promise<Crawl | null> {
+  if (!isPageRerun(rerun)) return null;
+  const crawl = await siteCrawls(db, rerun.workspace_id, rerun.project_id)
+    .selectAll()
+    .where('status', 'in', USABLE_CRAWL_STATUSES)
+    .where(sql<boolean>`(created_at, id) < (${rerun.created_at}::timestamptz, ${rerun.id}::uuid)`)
+    .executeTakeFirst();
+  return crawl ?? null;
+}
+
+/**
+ * The newest landed page rerun that folds into the current site crawl's view
+ * (`foldingSiteCrawl`), or null: the revision of that view since the crawl
+ * finished, for readers keyed on the crawl, such as the Opportunity refresh.
+ */
+export async function foldedRerunId(db: Database, current: ViewCrawl): Promise<string | null> {
+  const rerun = await new WorkspaceScope(current.workspace_id)
+    .selectFrom(db, 'site_crawls')
+    .select('id')
+    .where('project_id', '=', current.project_id)
+    .where(pageRerunSql)
+    .where('status', 'in', USABLE_CRAWL_STATUSES)
+    .where(
+      sql<boolean>`(created_at, id) > (${current.created_at}::timestamptz, ${current.id}::uuid)`,
+    )
+    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(1)
+    .executeTakeFirst();
+  return rerun?.id ?? null;
+}
+
+/** The current crawl's newest Site Health snapshot, as a one-row query. */
+export function currentSiteSnapshotQuery(db: Database, workspaceId: string, projectId: string) {
+  return new WorkspaceScope(workspaceId)
+    .selectFrom(db, 'site_health_snapshots')
+    .where('project_id', '=', projectId)
+    .where('crawl_id', '=', currentSiteCrawlQuery(db, workspaceId, projectId).select('id'))
+    .orderBy('created_at', 'desc')
+    .orderBy('id', 'desc')
+    .limit(1);
+}
+
+/**
+ * The named crawl or, without one, the crawl the dashboard shows: a running
+ * site crawl, so its progress stays visible; else the current crawl; else the
+ * newest site crawl, so a project whose crawls all failed still sees why. A
+ * page rerun is never the default. The caller's route has authorized the
  * project; a crawl outside it is a 404 and a project with no crawl is `null`.
  */
 export async function dashboardCrawl(
@@ -59,23 +295,22 @@ export async function dashboardCrawl(
   projectId: string,
   crawlId: string | null,
 ): Promise<Crawl | null> {
-  let crawls = new WorkspaceScope(workspaceId)
-    .selectFrom(db, 'site_crawls')
-    .selectAll()
-    .where('project_id', '=', projectId);
-  crawls = crawlId === null ? crawls : crawls.where('id', '=', crawlId);
-  const crawl =
-    (await crawls.orderBy('created_at', 'desc').orderBy('id', 'desc').executeTakeFirst()) ?? null;
-  if (crawl === null && crawlId !== null) throw notFound('Crawl');
-  return crawl;
+  if (crawlId !== null) return loadProjectCrawl(db, workspaceId, projectId, crawlId);
+  const crawls = siteCrawls(db, workspaceId, projectId).selectAll();
+  const active = await crawls.where('status', 'in', ACTIVE_CRAWL_STATUSES).executeTakeFirst();
+  if (active !== undefined) return active;
+  return (
+    (await currentSiteCrawl(db, workspaceId, projectId)) ??
+    (await crawls.executeTakeFirst()) ??
+    null
+  );
 }
 
 /**
- * The named crawl (404 when foreign) or the project's newest usable site
- * crawl; only a named crawl may be a page rerun. A
- * named crawl that has not reached a usable terminal state, or a project with
- * none, is `null`: the caller renders its own "nothing yet" state. The
- * caller's route has authorized the project.
+ * The named crawl (404 when foreign) or the current crawl; only a named crawl
+ * may be a page rerun. A named crawl that has not reached a usable terminal
+ * state, or a project with none, is `null`: the caller renders its own
+ * "nothing yet" state. The caller's route has authorized the project.
  */
 export async function resolveUsableCrawl(
   db: Database,
@@ -83,23 +318,25 @@ export async function resolveUsableCrawl(
   projectId: string,
   crawlId: string | null,
 ): Promise<Crawl | null> {
-  const crawls = new WorkspaceScope(workspaceId)
+  if (crawlId === null) return currentSiteCrawl(db, workspaceId, projectId);
+  const crawl = await loadProjectCrawl(db, workspaceId, projectId, crawlId);
+  return isUsableCrawl(crawl.status) ? crawl : null;
+}
+
+async function loadProjectCrawl(
+  db: Database,
+  workspaceId: string,
+  projectId: string,
+  crawlId: string,
+) {
+  const crawl = await new WorkspaceScope(workspaceId)
     .selectFrom(db, 'site_crawls')
     .selectAll()
-    .where('project_id', '=', projectId);
-  if (crawlId !== null) {
-    const crawl = await crawls.where('id', '=', crawlId).executeTakeFirst();
-    if (crawl === undefined) throw notFound('Crawl');
-    return isUsableCrawl(crawl.status) ? crawl : null;
-  }
-  // A page rerun re-reads one page; it is never the site crawl a default read shows.
-  const latest = await crawls
-    .where('status', 'in', USABLE_CRAWL_STATUSES)
-    .where(sql<boolean>`not ${pageRerunSql}`)
-    .orderBy('created_at', 'desc')
-    .orderBy('id', 'desc')
+    .where('project_id', '=', projectId)
+    .where('id', '=', crawlId)
     .executeTakeFirst();
-  return latest ?? null;
+  if (crawl === undefined) throw notFound('Crawl');
+  return crawl;
 }
 
 /** Only a crawl frozen with count disclosure may reveal discovered totals. */
@@ -117,139 +354,6 @@ function inheritedCrawlIds(crawl: Crawl): string[] {
 
 /** The crawl followed by its frozen inventory lineage. */
 export const inventoryCrawlIds = (crawl: Crawl) => [crawl.id, ...inheritedCrawlIds(crawl)];
-
-const int = (value: unknown) => (typeof value === 'number' ? Math.trunc(value) : 0);
-const num = (value: unknown) => (typeof value === 'number' ? value : null);
-const text = (value: unknown, fallback: string) =>
-  typeof value === 'string' && value !== '' ? value : fallback;
-
-/** The worker-written `score_summary`, or null before scoring. */
-export function scoreSummary(crawl: Crawl) {
-  const summary = record(crawl.score_summary);
-  if (Object.keys(summary).length === 0) return null;
-  const byKind = Object.entries(record(summary.by_page_kind)).map(([kind, raw]) => {
-    const values = record(raw);
-    return [
-      kind,
-      {
-        analyzed_count: int(values.analyzed_count),
-        web_fundamentals_score: num(values.web_fundamentals_score),
-        web_fundamentals_coverage: num(values.web_fundamentals_coverage),
-        web_fundamentals_state: text(values.web_fundamentals_state, NOT_MEASURED),
-        aeo_readiness_score: num(values.aeo_readiness_score),
-        aeo_measurement_coverage: num(values.aeo_measurement_coverage),
-        aeo_measurement_state: text(values.aeo_measurement_state, NOT_MEASURED),
-        aeo_measurement_reason: text(values.aeo_measurement_reason, ''),
-      },
-    ] as const;
-  });
-  return {
-    web_fundamentals_score: num(summary.web_fundamentals_score),
-    web_fundamentals_coverage: num(summary.web_fundamentals_coverage),
-    web_fundamentals_state: text(summary.web_fundamentals_state, NOT_MEASURED),
-    aeo_readiness_score: num(summary.aeo_readiness_score),
-    aeo_measurement_coverage: num(summary.aeo_measurement_coverage),
-    aeo_measurement_state: text(summary.aeo_measurement_state, NOT_MEASURED),
-    search_eligibility: text(summary.search_eligibility, 'unknown'),
-    selected_count: int(summary.selected_count),
-    analyzed_count: int(summary.analyzed_count),
-    issue_count: int(summary.issue_count),
-    // The version the crawl was pinned to, never the current configuration.
-    scoring_version: text(summary.scoring_version, crawl.scoring_version),
-    classified_page_count: int(summary.classified_page_count),
-    other_page_count: int(summary.other_page_count),
-    classification_error_page_count: int(summary.classification_error_page_count),
-    classification_expected_page_count: int(summary.classification_expected_page_count),
-    classification_coverage: num(summary.classification_coverage),
-    classification_state: text(summary.classification_state, NOT_MEASURED),
-    classification_reason_groups: record(summary.classification_reason_groups),
-    classification_formula_version: text(summary.classification_formula_version, ''),
-    // The stored summary keeps its classification source id lists; no reader renders them.
-    scored_page_kind_set: strings(summary.scored_page_kind_set),
-    scored_page_count_by_kind: record(summary.scored_page_count_by_kind),
-    by_page_kind: Object.fromEntries(byKind),
-  };
-}
-
-const iso = (value: Date | null) => value?.toISOString() ?? null;
-
-/**
- * The crawl contract, with discovered totals redacted unless the crawl was
- * frozen with count disclosure. The inventory total is the larger of fetched
- * and admitted URLs: a sitemap crawl fetches the root once and admits many.
- */
-/**
- * The persisted site facts without the sitemap URL manifest.
- *
- * `sitemap.urls` and `sitemap.lastmod` hold every admitted sitemap URL — up to
- * `max_sitemap_admitted_urls` of them — and are the analysis-time authority for
- * sitemap membership, which page detail already reports per page. Shipping them
- * on every crawl read made the dashboard megabytes; the projection keeps their
- * size as `sitemap.url_count` and leaves the stored facts untouched.
- */
-function publicSiteFacts(facts: Record<string, unknown>) {
-  if (!('sitemap' in facts)) return facts;
-  const { urls, lastmod: _lastmod, ...sitemap } = record(facts.sitemap);
-  return {
-    ...facts,
-    sitemap: Array.isArray(urls) ? { ...sitemap, url_count: urls.length } : sitemap,
-  };
-}
-
-/** The crawl contract with its chosen counters. */
-export async function crawlProjection(
-  db: Database,
-  crawl: Crawl,
-  options: { failureSummary?: FailureSummary | null } = {},
-) {
-  return projectCrawl(crawl, await crawlCounters(db, crawl), options);
-}
-
-/** The crawl contract; `counters` come from `crawlCounters`, the one chooser. */
-export function projectCrawl(
-  crawl: Crawl,
-  counters: Counters,
-  options: { failureSummary?: FailureSummary | null } = {},
-) {
-  const disclose = countDisclosure(crawl);
-  const summary = scoreSummary(crawl);
-  const inventoryTotal = Math.max(crawl.discovered_url_count, crawl.admitted_url_count);
-  return {
-    id: crawl.id,
-    workspace_id: crawl.workspace_id,
-    project_id: crawl.project_id,
-    profile_id: crawl.profile_id,
-    status: crawl.status,
-    discovery_status: crawl.discovery_status,
-    analysis_status: crawl.analysis_status,
-    root_url: crawl.root_url,
-    sample_mode: crawl.sample_mode,
-    seed: crawl.random_seed,
-    inventory_complete: crawl.inventory_complete,
-    partial_reason: crawl.partial_reason,
-    visible_url_count: crawl.admitted_url_count,
-    analyzed_count: crawl.analyzed_url_count,
-    failed_count: crawl.failed_url_count,
-    discovery_requested_count: crawl.discovery_requested_count,
-    analysis_requested_count: crawl.analysis_requested_count,
-    counters,
-    discovered_count: disclose ? inventoryTotal : null,
-    total_url_count: disclose && crawl.inventory_complete ? inventoryTotal : null,
-    has_more_site_urls: disclose ? !crawl.inventory_complete : null,
-    score_summary: summary,
-    failure_summary: options.failureSummary ?? null,
-    site_facts: crawl.site_facts === null ? null : publicSiteFacts(record(crawl.site_facts)),
-    extractor_version: crawl.extractor_version,
-    analyzer_version: crawl.analyzer_version,
-    rule_version: crawl.rule_catalog_version,
-    scoring_version: crawl.scoring_version,
-    error_message: crawl.error_message,
-    created_at: crawl.created_at.toISOString(),
-    updated_at: crawl.updated_at.toISOString(),
-    started_at: iso(crawl.started_at),
-    completed_at: iso(crawl.completed_at),
-  };
-}
 
 const FAILURE_MESSAGES: Record<string, string> = {
   dns_resolution_failed: 'The domain could not be resolved (DNS)',
@@ -329,149 +433,5 @@ export async function rootFailure(db: Database, crawl: Crawl) {
         status_code: row.status_code,
         latency_ms: row.latency_ms,
       })),
-  };
-}
-
-/**
- * The task a page's status reads (alias `t`): its analysis, else a fetch that
- * failed for good, so a URL that could never be fetched counts and lists as
- * an error. A URL the crawl's own policy excluded is not one.
- */
-export const ROW_TASK = sql`(t.task_kind = 'analyze'
-  or (t.task_kind = 'discover' and t.status = 'failed'
-    and not ${failedAs('t', ['excluded'])}))`;
-/** Which `ROW_TASK` row wins: the analysis, then the latest generation. */
-export const ROW_TASK_ORDER = sql`t.task_kind = 'analyze' desc, t.generation desc`;
-
-/** What the crawl's tasks and analyses count: every counter except the live selection. */
-export type TaskCounters = Omit<Counters, 'selected'>;
-const terminalCountersSchema = crawlCountersSchema.omit({ selected: true });
-
-/** The project's active monitored selection: current configuration, read live. */
-async function selectedCount(db: Database, crawl: Crawl) {
-  const row = await db
-    .selectFrom('monitored_site_urls')
-    .select((eb) => eb.fn.countAll<string>().as('count'))
-    .where('workspace_id', '=', crawl.workspace_id)
-    .where('project_id', '=', crawl.project_id)
-    .where('active', '=', true)
-    .executeTakeFirstOrThrow();
-  return Number(row.count);
-}
-
-/**
- * The one counter chooser every crawl read uses, with the live selection. An
- * active crawl counts its tasks live; a terminal one reads the counters its
- * terminalization persisted (`site-health/terminal-counters.ts`). A terminal
- * crawl without persisted counters is counted from its tasks rather than
- * reported as zeros it never observed.
- */
-export async function crawlCounters(db: Database, crawl: Crawl): Promise<Counters> {
-  const persisted =
-    isTerminal(crawl) && crawl.terminal_counters !== null
-      ? terminalCountersSchema.parse(crawl.terminal_counters)
-      : null;
-  const [counters, selected] = await Promise.all([
-    persisted ?? taskCounters(db, crawl),
-    selectedCount(db, crawl),
-  ]);
-  return { ...counters, selected };
-}
-
-/** Counters of the crawl's own tasks and analyses, scanned now. */
-export async function taskCounters(db: Database, crawl: Crawl): Promise<TaskCounters> {
-  // A site or policy refusal is no page error: it counts as blocked.
-  const refused = failedAs('t', ['blocked', 'excluded']);
-  const tasks = sql<{
-    queued: number;
-    running: number;
-    analyzed: number;
-    failed: number;
-    blocked: number;
-    robots_denied: number;
-    http_4xx: number;
-    http_5xx: number;
-    timeout: number;
-    ready: number;
-    waiting: number;
-    leased_live: number;
-    running_live: number;
-    expired: number;
-    next_available_at: Date | null;
-  }>`
-    with latest as (
-      select distinct on (t.site_url_id) t.status, t.error_code, t.available_at, t.lease_expires_at
-      from site_crawl_tasks t
-      where t.workspace_id = ${crawl.workspace_id} and t.crawl_id = ${crawl.id}
-        and ${ROW_TASK} and t.site_url_id is not null
-      order by t.site_url_id, ${ROW_TASK_ORDER}
-    )
-    select
-      count(*) filter (where status in ('queued','retry_wait','capacity_wait'))::int as queued,
-      count(*) filter (where status in ('leased','running'))::int as running,
-      count(*) filter (where status = 'succeeded')::int as analyzed,
-      count(*) filter (where status = 'failed')::int as failed,
-      count(*) filter (where status = 'failed' and ${refused})::int as blocked,
-      count(*) filter (where status = 'failed' and error_code = 'robots_denied')::int as robots_denied,
-      count(*) filter (where status = 'failed' and error_code = 'http_4xx')::int as http_4xx,
-      count(*) filter (where status = 'failed' and error_code = 'http_5xx')::int as http_5xx,
-      count(*) filter (where status = 'failed' and error_code = 'timeout')::int as timeout,
-      count(*) filter (where status in ('queued','retry_wait','capacity_wait') and available_at <= now())::int as ready,
-      count(*) filter (where status in ('queued','retry_wait','capacity_wait') and available_at > now())::int as waiting,
-      count(*) filter (where status = 'leased' and lease_expires_at > now())::int as leased_live,
-      count(*) filter (where status = 'running' and lease_expires_at > now())::int as running_live,
-      count(*) filter (where status in ('leased','running') and lease_expires_at <= now())::int as expired,
-      min(available_at) filter (where status in ('queued','retry_wait','capacity_wait') and available_at > now()) as next_available_at
-    from latest t`.execute(db);
-  const [counts, kinds, excluded] = await Promise.all([
-    tasks,
-    sql<{ page_kind: string; count: number }>`
-      select page_kind, count(*)::int as count from (
-        select distinct on (site_url_id) coalesce(page_kind, 'other') as page_kind
-        from site_page_analyses
-        where workspace_id = ${crawl.workspace_id} and crawl_id = ${crawl.id} and status = 'completed'
-        order by site_url_id, created_at desc
-      ) latest group by page_kind`.execute(db),
-    // URLs admitted and then declined by the crawl's own policy leave both
-    // sides of analyzed/total, in whichever task kind declined them.
-    sql<{ count: number }>`
-      select count(distinct url_hash)::int as count from site_crawl_tasks
-      where workspace_id = ${crawl.workspace_id} and crawl_id = ${crawl.id}
-        and task_kind in ('discover','analyze') and status = 'failed'
-        and ${failedAs('site_crawl_tasks', ['excluded'])} and url_hash <> ''`.execute(db),
-  ]);
-  const c = firstOf(counts.rows, 'the crawl task counters');
-  const terminal = isTerminal(crawl);
-  let state: Counters['activity']['state'] = 'working';
-  let reason: Counters['activity']['reason'] = 'active_work';
-  if (terminal) [state, reason] = ['terminal', 'terminal'];
-  else if (c.expired) [state, reason] = ['stalled', 'expired_lease'];
-  else if (c.waiting && !(c.ready || c.leased_live || c.running_live))
-    [state, reason] = ['waiting', 'retry_backoff'];
-  return {
-    discovered: countDisclosure(crawl)
-      ? Math.max(
-          crawl.admitted_url_count - firstOf(excluded.rows, 'the excluded URL count').count,
-          0,
-        )
-      : null,
-    queued: c.queued,
-    running: c.running,
-    analyzed: c.analyzed,
-    errors: Math.max(c.failed - c.blocked, 0),
-    blocked: c.blocked,
-    failure_breakdown: {
-      robots_denied: c.robots_denied,
-      http_4xx: c.http_4xx,
-      http_5xx: c.http_5xx,
-      timeout: c.timeout,
-    },
-    activity: {
-      state,
-      reason,
-      queue_depth: c.ready + c.waiting + c.leased_live + c.running_live + c.expired,
-      next_available_at: iso(c.next_available_at),
-    },
-    by_page_kind: Object.fromEntries(kinds.rows.map((row) => [row.page_kind, row.count])),
   };
 }

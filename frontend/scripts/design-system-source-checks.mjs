@@ -1,20 +1,22 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { visitorKeys } from 'oxc-parser';
 export { textContrastViolations } from './design-system-contrast.mjs';
 
+import {
+  classFragments,
+  jsxClassData,
+  oneOf,
+  staticBindings,
+} from './design-system-class-data.mjs';
 import {
   lineIndex,
   nameText,
   parseSource,
   stringFragments,
   stringValue,
-  unwrap,
   walk,
 } from './source-ast.mjs';
 
-const TOKEN_CSS = 'apps/app/src/globals.css';
+export const TOKEN_CSS = 'apps/app/src/globals.css';
 
 const LINE_TERMINATOR = /[\n\r\p{Zl}\p{Zp}]/u;
 const WHITESPACE = /\s/;
@@ -103,7 +105,7 @@ export function focusRoleViolations(source, label, ownsProductUi) {
 }
 
 /** The system's five shadows (and none) are the whole elevation vocabulary. */
-const SHADOW_ROLES = new Set(['none', 'edge', 'xs', 'card', 'pop', 'press']);
+const SHADOW_ROLES = new Set(['none', 'edge', 'xs', 'float', 'pop', 'press']);
 
 export function shadowRoleViolations(source, label, ownsProductUi) {
   if (!ownsProductUi || label === TOKEN_CSS) return [];
@@ -112,11 +114,11 @@ export function shadowRoleViolations(source, label, ownsProductUi) {
   const rawDeclaration =
     label.endsWith('.css') &&
     [...text.matchAll(/box-shadow\s*:([^;]+);/g)].some(
-      ([, value]) => !/^(?:none|var\(--shadow-(?:edge|xs|card|pop|press)\))$/.test(value.trim()),
+      ([, value]) => !/^(?:none|var\(--shadow-(?:edge|xs|float|pop|press)\))$/.test(value.trim()),
     );
   if ([...shadows].some(([, role]) => !SHADOW_ROLES.has(role)) || rawDeclaration) {
     return [
-      `${label}: elevation must use shadow-edge, shadow-xs, shadow-card, shadow-pop, shadow-press or none`,
+      `${label}: elevation must use shadow-edge, shadow-xs, shadow-float, shadow-pop, shadow-press or none`,
     ];
   }
   return [];
@@ -161,9 +163,6 @@ export function densityRoleViolations(source, label, ownsProductUi) {
   }
   return [];
 }
-
-/** Alternation over literal values, escaped for use inside a RegExp. */
-const oneOf = (values) => `(?:${values.map(escapeRegExp).join('|')})`;
 
 /** A class token (with any variant prefixes) whose utility part matches `utility`. */
 const classToken = (utility, end) => new RegExp(String.raw`(?<![\w-])(?:[\w-]+:)*` + utility + end);
@@ -232,321 +231,6 @@ const OFF_GRID_SPACING = classToken(
   `-?${oneOf(SPACING_UTILITIES)}-(?:${oneOf(OFF_GRID_STEPS)}|${ARBITRARY_PX})`,
   String.raw`(?![\w.-])`,
 );
-
-function staticBindings(program) {
-  const bindings = new Map();
-  walk(program, (node) => {
-    if (node.type === 'VariableDeclarator' && node.id?.type === 'Identifier' && node.init) {
-      bindings.set(node.id.name, node.init);
-    }
-  });
-  return bindings;
-}
-
-function identifierClassFragments(node, bindings, seen) {
-  if (seen.has(node.name)) return [];
-  const initializer = bindings.get(node.name);
-  if (!initializer) return [];
-  return classFragments(initializer, bindings, new Set([...seen, node.name]));
-}
-
-function memberClassFragments(node, bindings, seen) {
-  const target = unwrap(
-    node.object?.type === 'Identifier' ? bindings.get(node.object.name) : node.object,
-  );
-  if (target?.type === 'ObjectExpression') {
-    return target.properties.flatMap((property) =>
-      property.type === 'Property' ? classFragments(property.value, bindings, seen) : [],
-    );
-  }
-  return classFragments(target, bindings, seen);
-}
-
-const childFragments = (children, bindings, seen) =>
-  children.flatMap((child) => classFragments(child, bindings, seen));
-
-/** Class fragments per expression type, once literals and wrappers are peeled off. */
-const CLASS_FRAGMENT_READERS = {
-  Identifier: identifierClassFragments,
-  MemberExpression: memberClassFragments,
-  CallExpression: (node, bindings, seen) => childFragments(node.arguments, bindings, seen),
-  ConditionalExpression: (node, bindings, seen) =>
-    childFragments([node.consequent, node.alternate], bindings, seen),
-  BinaryExpression: (node, bindings, seen) =>
-    childFragments([node.left, node.right], bindings, seen),
-  LogicalExpression: (node, bindings, seen) =>
-    childFragments([node.left, node.right], bindings, seen),
-  ArrayExpression: (node, bindings, seen) => childFragments(node.elements, bindings, seen),
-  // Conditional class maps key the class off a flag, so the key is the class.
-  ObjectExpression: (node, bindings, seen) =>
-    childFragments(
-      node.properties.filter((property) => property.type === 'Property').map(({ key }) => key),
-      bindings,
-      seen,
-    ),
-  JSXExpressionContainer: (node, bindings, seen) => classFragments(node.expression, bindings, seen),
-};
-
-function classFragments(node, bindings, seen = new Set()) {
-  if (!node) return [];
-  const literal = stringValue(node);
-  if (literal !== null) return [literal];
-  if (node.type === 'TemplateLiteral') {
-    // Both halves matter: the static chunks carry classes directly, and the
-    // interpolations can resolve to more through the binding table.
-    return [
-      ...node.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw ?? ''),
-      ...childFragments(node.expressions, bindings, seen),
-    ];
-  }
-  const unwrapped = unwrap(node);
-  if (unwrapped !== node) return classFragments(unwrapped, bindings, seen);
-  const reader = Object.hasOwn(CLASS_FRAGMENT_READERS, node.type)
-    ? CLASS_FRAGMENT_READERS[node.type]
-    : null;
-  return reader ? reader(node, bindings, seen) : [];
-}
-
-/** Every prop through which a call site can hand Tailwind classes to a component. */
-const CLASS_ATTRIBUTES = new Set([
-  'className',
-  'rootClassName',
-  'contentClassName',
-  'bodyClassName',
-  'panelClassName',
-  'itemClassName',
-  'triggerClassName',
-]);
-
-/** Every JSX element's class attributes as `{ tag, classes, line }`. */
-function jsxClassData(source, label) {
-  const program = parseSource(source, label);
-  const lineOf = lineIndex(source);
-  const bindings = staticBindings(program);
-  const entries = [];
-  walk(program, (node) => {
-    if (node.type !== 'JSXOpeningElement') return;
-    // `className` is not the only way a call site hands classes to a
-    // component. `rootClassName="grid gap-6"` slipped past every spacing and
-    // type rule for exactly as long as this only looked at one attribute.
-    const classAttributes = node.attributes.filter(
-      (property) =>
-        property.type === 'JSXAttribute' && CLASS_ATTRIBUTES.has(nameText(property.name)),
-    );
-    for (const classAttribute of classAttributes) {
-      entries.push({
-        tag: nameText(node.name),
-        classes: classAttribute.value
-          ? classFragments(classAttribute.value, bindings).join(' ')
-          : '',
-        line: lineOf(node.start),
-      });
-    }
-  });
-  return entries;
-}
-
-const SEMANTIC_TEST_CLASSES = new Set([
-  'focus-ring',
-  'sr-only',
-  'tabular-nums',
-  'value-placeholder',
-]);
-/** Utility stems that are presentation whenever a `-` follows them. */
-const RAW_STYLE_STEMS = new Set([
-  'bg',
-  'text',
-  'border',
-  'rounded',
-  'shadow',
-  'p',
-  'px',
-  'py',
-  'ps',
-  'pe',
-  'pt',
-  'pb',
-  'm',
-  'mx',
-  'my',
-  'ms',
-  'me',
-  'mt',
-  'mb',
-  'gap',
-  'space',
-  'w',
-  'h',
-  'min',
-  'max',
-  'z',
-  'table',
-  'overflow',
-  'whitespace',
-  'translate',
-  'opacity',
-  'size',
-  'shrink',
-  'grow',
-  'items',
-  'justify',
-  'content',
-  'place',
-  'font',
-  'tracking',
-  'leading',
-  'break',
-  'ring',
-  'divide',
-  'align',
-]);
-/** Utilities that are presentation on their own. */
-const RAW_STYLE_BARE_UTILITIES = new Set(['border', 'rounded', 'shadow']);
-/** Utility prefixes that are presentation whatever follows them. */
-const RAW_STYLE_PREFIXES = [
-  'truncate',
-  'sticky',
-  'hidden',
-  'grid',
-  'flex',
-  'inline-flex',
-  'block',
-  'uppercase',
-  'lowercase',
-];
-const ARBITRARY_VALUE_PREFIX = /^\[[^\]]+\]/;
-
-/** Whether a class with its variants stripped starts with a presentation utility. */
-function isRawStyleUtility(utility) {
-  const dash = utility.indexOf('-');
-  return (
-    ARBITRARY_VALUE_PREFIX.test(utility) ||
-    RAW_STYLE_BARE_UTILITIES.has(utility) ||
-    (dash > 0 && RAW_STYLE_STEMS.has(utility.slice(0, dash))) ||
-    RAW_STYLE_PREFIXES.some((prefix) => utility.startsWith(prefix))
-  );
-}
-
-/**
- * A raw style token is an optional `-`, any non-empty `variant:` prefixes, then
- * a presentation utility. Every split point between those prefixes is tried.
- */
-function isRawStyleAssertionToken(token) {
-  if (isRawStyleUtility(token.startsWith('-') ? token.slice(1) : token)) return true;
-  let segmentStart = 0;
-  for (
-    let colon = token.indexOf(':');
-    colon > segmentStart;
-    colon = token.indexOf(':', segmentStart)
-  ) {
-    if (isRawStyleUtility(token.slice(colon + 1))) return true;
-    segmentStart = colon + 1;
-  }
-  return false;
-}
-
-function testExpression(node) {
-  let current = node;
-  while (
-    current &&
-    (current.type === 'ChainExpression' ||
-      current.type === 'ParenthesizedExpression' ||
-      current.type === 'TSAsExpression' ||
-      current.type === 'TSSatisfiesExpression' ||
-      current.type === 'TSNonNullExpression')
-  ) {
-    current = current.expression;
-  }
-  return current;
-}
-
-function memberPropertyName(node) {
-  const expression = testExpression(node);
-  if (expression?.type !== 'MemberExpression') return '';
-  return expression.computed
-    ? (stringValue(expression.property) ?? '')
-    : nameText(expression.property);
-}
-
-function callName(node) {
-  const expression = testExpression(node);
-  return expression?.type === 'Identifier' ? expression.name : '';
-}
-
-function styleAssertion(node) {
-  if (node.type !== 'CallExpression') return null;
-  const callee = testExpression(node.callee);
-  if (callee?.type !== 'MemberExpression') return null;
-
-  let receiver = testExpression(callee.object);
-  if (memberPropertyName(receiver) === 'not') {
-    receiver = testExpression(receiver.object);
-  }
-  if (receiver?.type !== 'CallExpression' || callName(receiver.callee) !== 'expect') return null;
-
-  const matcher = memberPropertyName(callee);
-  const target = testExpression(receiver.arguments[0]);
-  // `expect(el.classList.contains('bg-panel')).toBe(true)` asserts the same
-  // visual recipe as `toHaveClass`, but the class sits in the `contains`
-  // argument rather than the matcher's, so the tokens have to be read there.
-  if (
-    target?.type === 'CallExpression' &&
-    memberPropertyName(target.callee) === 'contains' &&
-    memberPropertyName(testExpression(target.callee)?.object) === 'classList'
-  ) {
-    return { matcher, arguments: target.arguments };
-  }
-  if (matcher !== 'toHaveClass' && memberPropertyName(target) !== 'className') return null;
-  return { matcher, arguments: node.arguments };
-}
-
-function staticAssertionText(node) {
-  const expression = testExpression(node);
-  if (stringValue(expression) !== null) return [stringValue(expression)];
-  // Only an expression-free template is static text. One with interpolations
-  // hides the class behind a runtime value, so it has to read as dynamic —
-  // returning its quasis would let `` `${cls}` `` pass as an empty assertion.
-  if (expression?.type === 'TemplateLiteral' && expression.expressions.length === 0) {
-    return expression.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw ?? '');
-  }
-  return [];
-}
-
-function isSemanticTestClass(token) {
-  return SEMANTIC_TEST_CLASSES.has(token) || /^website-|(?:-hook)$/.test(token);
-}
-
-function rawStyleAssertionTokens(text) {
-  return text
-    .split(/\s+/)
-    .filter((token) => token && !isSemanticTestClass(token) && isRawStyleAssertionToken(token));
-}
-
-/** Tests assert contracts and consistency, never a frozen presentation recipe. */
-export function styleAssertionViolations(source, label) {
-  if (!/(?:\.test|\.spec)\./.test(label)) return [];
-  const program = parseSource(source, label);
-  const lineOf = lineIndex(source);
-  const violations = [];
-
-  walk(program, (node) => {
-    const assertion = styleAssertion(node);
-    if (!assertion) return;
-    const staticText = assertion.arguments.flatMap(staticAssertionText);
-    const hasDynamicArgument = assertion.arguments.some(
-      (argument) => staticAssertionText(argument).length === 0,
-    );
-    const rawTokens = staticText.flatMap(rawStyleAssertionTokens);
-    if (hasDynamicArgument || rawTokens.length > 0) {
-      const detail = rawTokens.length > 0 ? ` (${rawTokens.join(', ')})` : '';
-      violations.push(
-        `${label}:${lineOf(node.start)}: visual class assertions${detail} must not freeze presentation; assert contracts or semantic roles`,
-      );
-    }
-  });
-
-  return violations;
-}
 
 /** Product data absence must name its state instead of rendering punctuation alone. */
 export function standalonePlaceholderViolations(source, label, ownsProductUi) {
@@ -659,7 +343,7 @@ const PRODUCT_UI_CLASS_RULES = [
   {
     appliesTo: outsideUiPackage,
     test: (classes) =>
-      /(?<![\w-])(?:hover:)?shadow-(?:xs|sm|card|card-hover|lg|press)(?![\w-])/.test(classes),
+      /(?<![\w-])(?:hover:)?shadow-(?:xs|sm|float|lg|press)(?![\w-])/.test(classes),
     message: 'feature-owned static elevation is retired',
   },
   {
@@ -824,12 +508,10 @@ export function directRadixImportViolations(source, label) {
  * painted the page-kind score expansion as a dark slate panel with unreadable
  * controls on it, and neither review nor the type system could catch it.
  *
- * This lived as an ESLint `no-restricted-syntax` selector pair until the linter
- * moved to Oxlint, which does not implement that rule. The check belongs here
- * regardless: it is a design-token contract, and this file already owns the
- * others. The AST walk (rather than a source regex) is what the ESLint
- * selectors gave us -- it matches string and template text only, so the rule
- * cannot be tripped by a prose mention in a comment.
+ * The check lives here because it is a design-token contract, and this file
+ * already owns the others. It walks the AST rather than matching source text:
+ * it reads string and template text only, so the rule cannot be tripped by a
+ * prose mention in a comment.
  *
  * NOT banned: `bg-ink` + `text-on-ink` is the primary button and the
  * inverse-chip pattern.
@@ -846,267 +528,6 @@ const TEXT_ROLE_BACKGROUND_MESSAGE =
 
 /** Surfaces must never be painted with a text-ink token. */
 
-/**
- * Radius is the system's scale and nothing else: `rounded-2xs` (2, chart bars,
- * rungs), `-xs` (6, badges, checkboxes), `-sm` (8, tabs in a track, menu
- * items), `-md` (12, buttons, inputs, code), `-lg` (14, app cards, menus,
- * dialogs), `-xl` (20, product frames) and `-full`. No
- * arbitrary value, not even a `var()`.
- *
- * This applies to every surface, not just product UI: the app, login and
- * flow each used to carry their own idea of a rounded corner, so the same
- * button rendered at different radii depending on which page it sat on.
- */
-export function rawRadiusViolations(source, label) {
-  if (label.includes('.test.') || !/\.(?:tsx|ts)$/.test(label)) return [];
-  const violations = [];
-  for (const entry of jsxClassData(source, label)) {
-    const raw = entry.classes.split(/\s+/).filter(isRawRadiusToken);
-    if (raw.length) {
-      violations.push(
-        `${label}:${entry.line}: ${raw.join(', ')} — radius must be rounded-2xs, -xs, -sm, -md, -lg, -xl or -full`,
-      );
-    }
-  }
-  return violations;
-}
-
-const RADIUS_SIDES = ['t', 'b', 'l', 'r', 's', 'e', 'tl', 'tr', 'bl', 'br', 'ss', 'se', 'es', 'ee'];
-/** The system's radius scale: the only sizes a `rounded-*` utility may name. */
-const SYSTEM_RADII = new Set(['2xs', 'xs', 'sm', 'md', 'lg', 'xl', 'full']);
-const LOWERCASE_VARIANTS = /^(?:[a-z-]+:)*$/;
-
-/**
- * `variant:rounded`, optionally `-side`, then a size outside the system's
- * scale, no size at all, or an arbitrary `[value]` (even a `var()`): a corner
- * the system does not name.
- */
-function isRawRadiusToken(token) {
-  const utilityStart = token.lastIndexOf(':') + 1;
-  if (!LOWERCASE_VARIANTS.test(token.slice(0, utilityStart))) return false;
-  const utility = token.slice(utilityStart).replace(/^!/, '');
-  if (!/^rounded(?:-|$)/.test(utility)) return false;
-  // `inherit` lets an overlay follow its frame's corner, so it names no value.
-  if (/^rounded(?:-[a-z]+)?-\[/.test(utility)) return !utility.endsWith('-[inherit]');
-  const suffixes = utility.split('-').slice(1);
-  if (suffixes.length === 2) {
-    return !(RADIUS_SIDES.includes(suffixes[0]) && SYSTEM_RADII.has(suffixes[1]));
-  }
-  if (suffixes.length === 1) return !SYSTEM_RADII.has(suffixes[0]);
-  return true;
-}
-const SIZE_UTILITIES = ['w', 'h', 'min-w', 'min-h', 'max-w', 'max-h', 'size'];
-/** A whole class token: variant prefixes, an optional `!`, then `utility-[value]`. */
-const arbitraryToken = (utility) =>
-  new RegExp(String.raw`^(?:[\w-]+:)*!?` + utility + String.raw`-\[([^\]]+)\]$`);
-const ARBITRARY_RADIUS = arbitraryToken(`rounded(?:-${oneOf(RADIUS_SIDES)})?`);
-const ARBITRARY_SIZE = arbitraryToken(`-?${oneOf(SIZE_UTILITIES)}`);
-const ARBITRARY_STROKE = arbitraryToken('stroke');
-const LITERAL_LENGTH = /(?<![\w-])(?:\d+(?:\.\d+)?|\.\d+)(?:px|rem)(?![\w-])/;
-const STYLE_LENGTH_KEYS = new Set([
-  'width',
-  'height',
-  'minWidth',
-  'minHeight',
-  'maxWidth',
-  'maxHeight',
-  'top',
-  'right',
-  'bottom',
-  'left',
-  'gap',
-  'rowGap',
-  'columnGap',
-  'fontSize',
-  'lineHeight',
-  'borderRadius',
-  'borderWidth',
-  'outlineWidth',
-  'outlineOffset',
-]);
-const STYLE_LENGTH_FAMILIES = [/^(?:inset|margin|padding)\w*$/, /^border\w*Radius$/];
-const isStyleLengthKey = (key) =>
-  STYLE_LENGTH_KEYS.has(key) || STYLE_LENGTH_FAMILIES.some((family) => family.test(key));
-const STYLE_COLOUR = /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?|oklch|lab)\(/i;
-
-/** Every class-like token in a module's string and template text. */
-function classTokens(program, lineOf) {
-  return stringFragments(program).flatMap(({ text, start }) => {
-    const line = lineOf(start);
-    return text
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((token) => ({ token, line }));
-  });
-}
-
-function styleObjectFindings(node, label, lineOf) {
-  const value =
-    node.value?.type === 'JSXExpressionContainer' ? unwrap(node.value.expression) : null;
-  if (value?.type !== 'ObjectExpression') return [];
-  return value.properties.flatMap((property) => {
-    if (property.type !== 'Property') return [];
-    const key = nameText(property.key) || stringValue(property.key) || '';
-    const literal = unwrap(property.value);
-    const text = stringValue(literal);
-    const raw =
-      (key === 'boxShadow' && !(text !== null && /^(?:none|var\(--[\w-]+\))$/.test(text))) ||
-      (text !== null && (STYLE_COLOUR.test(text) || LITERAL_LENGTH.test(text))) ||
-      (literal?.type === 'Literal' &&
-        typeof literal.value === 'number' &&
-        literal.value !== 0 &&
-        isStyleLengthKey(key));
-    if (!raw) return [];
-    return [
-      {
-        rule: 'tsx-style',
-        file: label,
-        line: lineOf(property.start),
-        message: `style ${key} is a literal; use a token or a class role`,
-      },
-    ];
-  });
-}
-
-/**
- * Geometry and inline-style escapes the className rules never saw.
- *
- * jsxClassData only follows className props, so `cva()` recipes and exported
- * class constants slipped through. This reads every string and template
- * fragment in the module instead: the arbitrary-value shapes it looks for
- * (`rounded-[6px]`, `w-[240px]`, `stroke-[1.5]`) do not occur in prose.
- * Findings are ratcheted by check-design-system.mjs.
- */
-export function tsxGeometryFindings(source, label) {
-  if (label.includes('.test.') || !/\.(?:tsx|ts)$/.test(label)) return [];
-  const program = parseSource(source, label);
-  const lineOf = lineIndex(source);
-  const findings = [];
-  const push = (rule, line, message) => findings.push({ rule, file: label, line, message });
-  for (const { token, line } of classTokens(program, lineOf)) {
-    const radius = ARBITRARY_RADIUS.exec(token);
-    // `inherit` lets an overlay follow its frame's corner, so it is not a literal.
-    if (radius && !/^(?:inherit|0)$/.test(radius[1])) {
-      push('tsx-radius', line, `${token} — radius must be one of the system's rounded-* sizes`);
-    }
-    const size = ARBITRARY_SIZE.exec(token);
-    if (size && LITERAL_LENGTH.test(size[1]) && !label.startsWith('components/ui/')) {
-      push(
-        'tsx-size',
-        line,
-        `${token} — literal dimensions belong to a components/ui owner or a layout token`,
-      );
-    }
-    if (ARBITRARY_STROKE.test(token)) {
-      push('tsx-stroke', line, `${token} — icon stroke weight belongs to the shared .lucide rule`);
-    }
-  }
-  const lucide = new Set();
-  walk(program, (node) => {
-    if (node.type === 'ImportDeclaration' && node.source?.value === 'lucide-react') {
-      for (const specifier of node.specifiers ?? []) lucide.add(specifier.local?.name);
-    }
-  });
-  walk(program, (node) => {
-    if (node.type !== 'JSXOpeningElement') return;
-    for (const attribute of node.attributes) {
-      if (attribute.type !== 'JSXAttribute') continue;
-      const name = nameText(attribute.name);
-      if (name === 'style') findings.push(...styleObjectFindings(attribute, label, lineOf));
-      if (name === 'strokeWidth' && lucide.has(nameText(node.name))) {
-        push('tsx-stroke', lineOf(attribute.start), `${nameText(node.name)} strokeWidth override`);
-      }
-    }
-  });
-  return findings;
-}
-
-/*
- * Atomic layering (docs/design.md §Component recipes, app geometry decision 8).
- * Geometry lives in `components/ui` (atoms, organisms, templates) and the
- * shell in `components/layout`; a feature folder composes them and chooses
- * none of its own. The auth and onboarding flows keep their own ladder for
- * breakpoints.
- */
-const LAYERING_OWNERS = new Set(['ui', 'layout']);
-const FLOW_FOLDERS = new Set(['auth', 'onboarding']);
-const LAYER_SPACING = /^-?(?:p[xytrblse]?|m[xytrblse]?|gap(?:-[xy])?|space-[xy])-(?:\d|px\b|\[|\()/;
-const LAYER_SIZE = /^-?(?:h|w|size)-(?:\d|px\b|\[|\()/;
-const LAYER_RADIUS = /^rounded(?:-|$)/;
-const LAYER_BREAKPOINT = /^(?:max-)?(?:sm|md|lg|xl|2xl)$|^(?:min|max)-\[/;
-const LAYER_GEOMETRY_PROPS = new Set(['size', 'padding']);
-
-/** `variant:variant:utility` split on the colons outside arbitrary brackets. */
-function splitVariants(token) {
-  const parts = [];
-  let depth = 0;
-  let start = 0;
-  for (let index = 0; index < token.length; index += 1) {
-    const character = token[index];
-    if (character === '[' || character === '(') depth += 1;
-    else if (character === ']' || character === ')') depth -= 1;
-    else if (character === ':' && depth === 0) {
-      parts.push(token.slice(start, index));
-      start = index + 1;
-    }
-  }
-  return { variants: parts, utility: token.slice(start).replace(/^!/, '') };
-}
-
-/** The components/ folder a non-test component file belongs to, or null. */
-function componentFolder(label) {
-  const match = /^components\/([^/]+)\//.exec(label);
-  if (!match || /\.(?:test|spec)\.tsx?$/.test(label) || !/\.tsx?$/.test(label)) return null;
-  return match[1];
-}
-
-/**
- * Geometry a feature folder chose for itself: spacing, sized boxes and radii
- * as utilities (`layer-geometry`), and `size=`/`padding=` props
- * (`layer-size-prop`); and, in every product folder including `ui/` and
- * `layout/`, a breakpoint other than `desktop:` and the shell's `shell:`
- * (`layer-breakpoint`).
- * Every one is a violation: the layering debt was burned to zero (app
- * geometry PR 7), so none is ratcheted or baselined and none can regrow.
- */
-export function featureLayeringViolations(source, label) {
-  const folder = componentFolder(label);
-  if (!folder) return [];
-  const feature = !LAYERING_OWNERS.has(folder);
-  const product = !FLOW_FOLDERS.has(folder);
-  if (!feature && !product) return [];
-  const program = parseSource(source, label);
-  const lineOf = lineIndex(source);
-  const findings = [];
-  const push = (rule, line, message) => findings.push(`${label}:${line}: ${message} [${rule}]`);
-  for (const { token, line } of classTokens(program, lineOf)) {
-    const { variants, utility } = splitVariants(token);
-    if (
-      feature &&
-      (LAYER_SPACING.test(utility) || LAYER_SIZE.test(utility) || LAYER_RADIUS.test(utility))
-    ) {
-      push('layer-geometry', line, `${token} — geometry belongs to a components/ui organism`);
-    }
-    if (product && variants.some((variant) => LAYER_BREAKPOINT.test(variant))) {
-      push(
-        'layer-breakpoint',
-        line,
-        `${token} — the product's breakpoints are desktop: and shell:`,
-      );
-    }
-  }
-  if (!feature) return findings;
-  walk(program, (node) => {
-    if (node.type !== 'JSXAttribute' || !LAYER_GEOMETRY_PROPS.has(nameText(node.name))) return;
-    push(
-      'layer-size-prop',
-      lineOf(node.start),
-      `${nameText(node.name)}= — atoms have one form; a feature never picks a size`,
-    );
-  });
-  return findings;
-}
-
 export function textRoleBackgroundViolations(source, label) {
   if (!/\.(?:tsx|ts|mjs|js)$/.test(label)) return [];
   const program = parseSource(source, label);
@@ -1122,79 +543,6 @@ export function textRoleBackgroundViolations(source, label) {
     }
   });
   return violations;
-}
-
-/** Shared token completeness and relative scale consistency; absolute appearance is free to change. */
-export function productContractViolations(root) {
-  const violations = [];
-  const css = readFileSync(join(root, ...TOKEN_CSS.split('/')), 'utf8');
-  // Every role the product builds on has to be defined somewhere. The value is
-  // the design system's to choose: pinning `--color-accent` to a literal hex
-  // meant a rebrand failed a test rather than a review.
-  // The system's own tokens are pinned by design-system-contract.mjs; these are
-  // the component geometry roles the product derives from them.
-  const requiredTokens = [
-    '--content-gutter',
-    '--content-max-width',
-    '--workspace-gap',
-    '--compact-gap',
-    '--page-section-gap',
-    '--card-padding',
-    '--modal-padding',
-    '--nav-item-height',
-    '--menu-item-height',
-    '--tab-height',
-    '--badge-height-sm',
-    '--table-row-height',
-    '--table-header-height',
-  ];
-  for (const token of requiredTokens) {
-    if (!new RegExp(escapeRegExp(token) + String.raw`\s*:\s*[^;]+;`).test(css)) {
-      violations.push(`${TOKEN_CSS}: ${token} must be defined`);
-    }
-  }
-  // The type ladder is ordered even though its absolute sizes are free.
-  const TYPE_SCALE = [
-    '--text-caption',
-    '--text-body-sm',
-    '--text-body',
-    '--text-body-lg',
-    '--text-lead',
-    '--text-title',
-    '--text-display-md',
-    '--text-display-lg',
-    '--text-display-xl',
-    '--text-display-2xl',
-  ];
-  const scale = TYPE_SCALE.map((token) => {
-    const match = new RegExp(escapeRegExp(token) + String.raw`\s*:\s*([\d.]+)px`).exec(css);
-    return { token, size: match ? Number(match[1]) : null };
-  });
-  for (const { token, size } of scale) {
-    if (size === null) violations.push(`${TOKEN_CSS}: ${token} must be a px size`);
-  }
-  const sized = scale.filter((step) => step.size !== null);
-  for (let index = 1; index < sized.length; index += 1) {
-    if (sized[index].size <= sized[index - 1].size) {
-      violations.push(
-        `${TOKEN_CSS}: ${sized[index].token} must be larger than ${sized[index - 1].token}`,
-      );
-    }
-  }
-  if (/\.website-type\b/.test(css)) {
-    violations.push(`${TOKEN_CSS}: retired .website-type palette boundary must not return`);
-  }
-  // The class itself is gone from the shell, so guarding only the palette-override
-  // shape would be an assertion that can never fire. Keep the namespace retired.
-  if (/\.product-app\b/.test(css)) {
-    violations.push(`${TOKEN_CSS}: the retired product-app palette scope must not return`);
-  }
-
-  return violations;
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^$(){}|[\]\\]/g, String.raw`\$&`);
 }
 
 /**

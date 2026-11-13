@@ -406,7 +406,7 @@ function listingContainers(page: PageScope) {
 }
 
 /** A visible navigable target; item naming is assessed separately. */
-function cardTarget(anchor: HtmlElement, finalUrl: string) {
+function cardTarget(anchor: HtmlElement, baseUrl: string) {
   if (!regionNodeIsVisible(anchor)) return null;
   const href = attribute(anchor, 'href').trim();
   if (
@@ -417,7 +417,7 @@ function cardTarget(anchor: HtmlElement, finalUrl: string) {
   )
     return null;
   try {
-    const target = new URL(href, finalUrl);
+    const target = new URL(href, baseUrl);
     return ['http:', 'https:'].includes(target.protocol) ? target : null;
   } catch {
     return null;
@@ -438,14 +438,14 @@ function cardTitle(anchor: HtmlElement) {
   return isGenericItemLabel(alternative) ? '' : alternative;
 }
 
-function cardObservation(container: HtmlElement, finalUrl: string) {
+function cardObservation(container: HtmlElement, baseUrl: string) {
   let items = 0;
   const targets = new Set<string>();
   const details: { title: string; url: string }[] = [];
   for (const child of childElements(container)) {
     let hasTarget = false;
     for (const anchor of elements(child, 'a')) {
-      const target = cardTarget(anchor, finalUrl);
+      const target = cardTarget(anchor, baseUrl);
       if (!target) continue;
       hasTarget = true;
       targets.add(target.href);
@@ -491,9 +491,9 @@ function observeCollection(
   container: HtmlElement,
   affordances: { node: HtmlElement; kind: string }[],
   containers: Set<HtmlElement>,
-  finalUrl: string,
+  baseUrl: string,
 ) {
-  const { items, targets, details } = cardObservation(container, finalUrl);
+  const { items, targets, details } = cardObservation(container, baseUrl);
   const name = containerName(container);
   const found: Affordance[] = [];
   const seen = new Set<string>();
@@ -539,7 +539,7 @@ function listingFacts(page: PageScope) {
   const containers = listingContainers(page);
   const containerSet = new Set(containers);
   const observations = containers.map((item) =>
-    observeCollection(item, affordances, containerSet, page.finalUrl),
+    observeCollection(item, affordances, containerSet, page.baseUrl),
   );
   const size = (item: (typeof observations)[number]) => item.evidence.container;
   const largest = maxBy(observations, (item) => [

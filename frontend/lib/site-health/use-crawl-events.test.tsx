@@ -79,14 +79,23 @@ describe('useCrawlEvents', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not open a stream when disabled', () => {
-    const fetchMock = vi.fn();
+  it('does not open a stream while disabled, and opens it once enabled', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(makeStreamResponse([]));
     vi.stubGlobal('fetch', fetchMock);
     const client = new QueryClient();
-    renderHook(() => useCrawlEvents(CRAWL, PROJECT, false), {
-      wrapper: wrapper(client),
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
+    const { rerender, unmount } = renderHook(
+      ({ enabled }) => useCrawlEvents(CRAWL, PROJECT, enabled),
+      { wrapper: wrapper(client), initialProps: { enabled: false } },
+    );
+    const whileDisabled = fetchMock.mock.calls.length;
+    rerender({ enabled: true });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect([whileDisabled, String(fetchMock.mock.calls[0]![0])]).toEqual([
+      0,
+      expect.stringContaining(`/site-crawls/${CRAWL}/events`),
+    ]);
+    unmount();
     vi.unstubAllGlobals();
   });
 
@@ -132,14 +141,14 @@ describe('useCrawlEvents', () => {
   });
 
   it('leaves per-page progress to the bounded dashboard poll', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        makeStreamResponse([
-          'event: analysis.progress\nid: 1\ndata: {"event_type":"analysis.progress"}\n\n',
-          'event: discovery.progress\nid: 2\ndata: {"event_type":"discovery.progress"}\n\n',
-        ]),
-      );
+    const fetchMock = vi.fn().mockResolvedValue(
+      makeStreamResponse([
+        'event: analysis.progress\nid: 1\ndata: {"event_type":"analysis.progress"}\n\n',
+        'event: discovery.progress\nid: 2\ndata: {"event_type":"discovery.progress"}\n\n',
+        // The lifecycle frame after them is the only one that refreshes.
+        'id: 3\ndata: {"event_type":"page_updated"}\n\n',
+      ]),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const client = new QueryClient();
@@ -148,8 +157,10 @@ describe('useCrawlEvents', () => {
       wrapper: wrapper(client),
     });
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalled());
+    expect(invalidateSpy.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      queryKeys.siteHealth.resource(PROJECT, 'dashboard'),
+    ]);
     unmount();
   });
 

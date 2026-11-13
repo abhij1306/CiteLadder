@@ -183,6 +183,31 @@ describe('structurally bounded Agent context and tool results', () => {
     expect(JSON.parse(supplied.text).action.diagnosis).toEqual({});
     expect(supplied.omissions).toContain(`action.diagnosis:${source}`);
   });
+  it('cites only the Action findings the model received', () => {
+    const kept = '00000000-0000-4000-8000-00000000000a';
+    const trimmed = '00000000-0000-4000-8000-00000000000b';
+    const action = (id: string, opportunity: string, bulk: number) => ({
+      id,
+      target_label: 'Action',
+      skill_id: null,
+      diagnosis: { what_happened: [{ opportunity_id: opportunity }], notes: 'x'.repeat(bulk) },
+    });
+    const manifest = {
+      version: 'agent-context-1',
+      refs: {},
+      instructions: null,
+      package: emptyPackage,
+      action: action('00000000-0000-4000-8000-000000000001', kept, 0),
+      mentions: [action('00000000-0000-4000-8000-000000000002', trimmed, 10000)],
+    };
+    expect(suppliedManifest(manifest, 50000).citations).toEqual(
+      new Set([`citeladder://opportunity/${kept}`, `citeladder://opportunity/${trimmed}`]),
+    );
+    // The mention is trimmed to fit, so its finding is not a source.
+    const supplied = suppliedManifest(manifest, 1500);
+    expect(supplied.omissions).toEqual(['mentioned_action:00000000-0000-4000-8000-000000000002']);
+    expect(supplied.citations).toEqual(new Set([`citeladder://opportunity/${kept}`]));
+  });
   it('keeps generic tool envelopes valid and labels whole omitted fields', () => {
     const bounded = boundToolData({ count: 119, details: '😀\\\"'.repeat(10000) }, 500);
     expect(JSON.parse(bounded.text)).toEqual({

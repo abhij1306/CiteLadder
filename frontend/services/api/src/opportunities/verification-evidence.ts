@@ -4,6 +4,7 @@
  * their earlier states carry forward in the merged observation.
  */
 import { expectedCheckSchema, type ExpectedCheck } from '@citeladder/contracts/opportunities';
+import { DAY_MS } from '../calendar-days.ts';
 import type { Database } from '../db/database.ts';
 import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { record } from '../db/json.ts';
@@ -13,7 +14,6 @@ import { CHECKS, SOURCE_CHECK_KINDS } from './checks/registry.ts';
 import type { CheckKind, CheckModule } from './checks/kind.ts';
 import type { ReadContext, Source } from './checks/read-context.ts';
 
-const DAY_MS = 86_400_000;
 const checksOf = (d: Declaration) =>
   Array.isArray(d.expected_checks) ? d.expected_checks.map(record) : [];
 
@@ -45,9 +45,8 @@ export async function evidenceFor(
     if (age > checkWindowDays(kind) * DAY_MS) continue;
     // A frozen check that no longer parses cannot be read; say so rather than wait.
     const parsed = expectedCheckSchema.safeParse(raw);
-    // One source reads its checks in order on the caller's connection.
     const found = parsed.success
-      ? await readCheck(ctx, source, parsed.data) // NOSONAR
+      ? await readCheck(ctx, source, parsed.data) // NOSONAR -- One source reads its checks in order on the caller's connection.
       : outcome(ctx.reading, 'unavailable', 'malformed_check');
     if (found) ctx.result.outcomes.set(index, found);
   }

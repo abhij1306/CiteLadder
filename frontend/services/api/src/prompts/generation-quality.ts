@@ -70,6 +70,14 @@ export function applyQualityPolicy(decision: Record<string, unknown>) {
     .filter(({ value, flagBelow }) => value !== null && value < flagBelow)
     .map(({ key }) => key);
   if (duplicateP !== null && duplicateP >= thresholds.duplicate_flag_at) flags.push('duplicate_of');
+  // A core draft the judge reads as seeking understanding or setup gets advice,
+  // not named options to buy, whatever the drafter labelled it.
+  const intent = record(decision.intent).choice;
+  const seeksAdvice =
+    (decision.cohort ?? 'core') === 'core' &&
+    typeof intent === 'string' &&
+    Q.core_advice_intents.includes(intent);
+  if (seeksAdvice) flags.push('advice_intent');
   if (
     values.some(({ value }) => value === null) ||
     (Object.keys(duplicate).length > 0 &&
@@ -78,6 +86,7 @@ export function applyQualityPolicy(decision: Record<string, unknown>) {
   )
     flags.push(Q.flag_incomplete);
   const fail =
+    seeksAdvice ||
     values.some(({ value, failBelow }) => value !== null && value < failBelow) ||
     (duplicateP !== null && duplicateP >= thresholds.duplicate_fail_at);
   let verdict = flags.length ? 'uncertain' : 'pass';

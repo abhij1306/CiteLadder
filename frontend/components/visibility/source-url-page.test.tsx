@@ -61,6 +61,14 @@ describe('what a cited page means for you', () => {
     expect(
       screen.getByText('Searched 4,200 characters of readable text; no form of the name matched.'),
     ).toBeVisible();
+    // The request opens New chat on the Action, which writes its message; the
+    // link carries the id alone.
+    const draft = screen.getByRole('link', { name: 'Draft the request' });
+    const chat = new globalThis.URL(draft.getAttribute('href')!, 'https://app.test');
+    expect({ path: chat.pathname, ...Object.fromEntries(chat.searchParams) }).toEqual({
+      path: '/agent',
+      action_id: ACTION,
+    });
   });
 
   it('says a page was never read instead of reporting anyone absent', () => {

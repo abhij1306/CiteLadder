@@ -8,6 +8,8 @@
         // covers the HTML-driven runtime graph.
         "apps/app/vite.config.ts",
         "apps/app/src/main.tsx",
+        // Run by the root vite.config.ts pre-commit hook and the CI classifier job.
+        "scripts/check-token-size.mjs",
       ],
       "project": [
         "apps/app/**/*.{ts,tsx}",
@@ -32,8 +34,6 @@
     // The TypeScript API service. Its generated inputs
     // are consumed wholesale, so unused generated table types are expected.
     "services/api": {
-      // Native development seed orchestration invokes this CLI entrypoint directly.
-      "entry": ["src/cli/seed-audit.ts"],
       "project": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"],
       "ignore": ["src/generated/**"],
     },

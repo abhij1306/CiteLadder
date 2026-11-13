@@ -75,20 +75,20 @@ export async function classifyProjectQueries(
     .where('id', '=', projectId)
     .executeTakeFirst();
   if (!project) return result;
-  const brand = await db
-    .selectFrom('brands')
+  const brand = await scope
+    .selectFrom(db, 'brands')
     .select(['id', 'name'])
     .where('project_id', '=', projectId)
     .executeTakeFirst();
   const aliases = brand
-    ? await db
-        .selectFrom('brand_aliases')
+    ? await scope
+        .selectFrom(db, 'brand_aliases')
         .select('alias')
         .where('brand_id', '=', brand.id)
         .execute()
     : [];
-  const domains = await db
-    .selectFrom('owned_domains')
+  const domains = await scope
+    .selectFrom(db, 'owned_domains')
     .select('domain')
     .where('project_id', '=', projectId)
     .execute();

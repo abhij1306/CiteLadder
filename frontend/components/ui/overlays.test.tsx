@@ -15,6 +15,8 @@ import {
   MenuSeparator,
   MenuTrigger,
 } from './menu';
+import { focusByKeyboard } from '@/test/keyboard-focus';
+
 import { Tooltip, TooltipProvider } from './tooltip';
 import { ToastProvider, useToast } from './toast';
 
@@ -202,7 +204,7 @@ describe('Tooltip', () => {
         </Tooltip>
       </TooltipProvider>,
     );
-    fireEvent.focus(screen.getByRole('button', { name: 'Generate' }));
+    focusByKeyboard(screen.getByRole('button', { name: 'Generate' }));
     const tip = await screen.findByRole('tooltip');
     expect(tip).toHaveTextContent('Coming soonG');
   });

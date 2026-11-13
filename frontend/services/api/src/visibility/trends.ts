@@ -101,7 +101,7 @@ export async function getVisibilityTrends(
   const points = (
     query.granularity === 'run' ? sources.map(rawPoint) : bucketPoints(sources, query.granularity)
   ).slice(-visibility.trend_max_points);
-  const marks = await rankingMarks(db, scope.projectId);
+  const marks = await rankingMarks(db, scope);
   for (const point of points) applyMarks(point.rankings, marks);
   return points;
 }

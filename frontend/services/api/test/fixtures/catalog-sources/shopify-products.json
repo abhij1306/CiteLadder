@@ -1,0 +1,31 @@
+{
+  "products": [
+    {
+      "id": 101,
+      "title": "Trail Runner",
+      "handle": "trail-runner",
+      "body_html": "<p>Grippy &amp; light <strong>trail</strong> shoe</p>",
+      "vendor": "Acme",
+      "product_type": "Running Shoes",
+      "tags": ["Trail", "Sale"],
+      "variants": [
+        { "id": 1, "title": "9", "sku": "TR-1-9", "barcode": "0012345678905", "price": "119.00" },
+        { "id": 2, "title": "10", "sku": "TR-1-10", "barcode": "0012345678912", "price": "129.00" }
+      ],
+      "images": [{ "id": 7, "src": "https://cdn.shopify.example/trail.png" }]
+    },
+    {
+      "id": 102,
+      "title": "Wool Sock",
+      "handle": "wool-sock",
+      "body_html": "",
+      "vendor": "Acme",
+      "product_type": "",
+      "tags": [],
+      "variants": [
+        { "id": 3, "title": "Default Title", "sku": "SK-1", "barcode": "", "price": "12.00" }
+      ],
+      "images": []
+    }
+  ]
+}

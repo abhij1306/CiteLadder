@@ -1,5 +1,3 @@
-'use client';
-
 import { memo, useDeferredValue } from 'react';
 
 import { AgentTurn } from '@/components/ui/chat-dock';
@@ -8,6 +6,7 @@ import { Stack } from '@/components/ui/layout';
 import { cardClasses } from '@/components/ui/card';
 import { textRole } from '@/components/ui/typography';
 import type { LiveTurn } from '@/lib/agent/live-turns';
+import { useAgentLinkHosts } from '@/lib/agent/link-hosts';
 import { ContentMarkdown } from '@/lib/markdown/markdown';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +16,9 @@ import { cn } from '@/lib/utils';
  */
 export function LiveReply({ live: latest }: Readonly<{ live: LiveTurn | undefined }>) {
   const live = useDeferredValue(latest);
+  // The turn's sources are known once it is saved; until then only the
+  // project's own hosts open directly.
+  const knownHosts = useAgentLinkHosts();
   if (!live) return null;
   const { thinking, reply, document } = live;
   if (!thinking && !reply && !document) return null;
@@ -27,8 +29,12 @@ export function LiveReply({ live: latest }: Readonly<{ live: LiveTurn | undefine
           <p className={textRole('caption', 'whitespace-pre-wrap')}>{thinking.text}</p>
         </Disclosure>
       ) : null}
-      {reply?.text ? <ContentMarkdown markdown={reply.text} density="compact" /> : null}
-      {document?.body ? <LiveDocument title={document.title} body={document.body} /> : null}
+      {reply?.text ? (
+        <ContentMarkdown markdown={reply.text} density="compact" knownHosts={knownHosts} />
+      ) : null}
+      {document?.body ? (
+        <LiveDocument title={document.title} body={document.body} knownHosts={knownHosts} />
+      ) : null}
     </AgentTurn>
   );
 }
@@ -37,7 +43,8 @@ export function LiveReply({ live: latest }: Readonly<{ live: LiveTurn | undefine
 const LiveDocument = memo(function LiveDocument({
   title,
   body,
-}: Readonly<{ title: string | null; body: string }>) {
+  knownHosts,
+}: Readonly<{ title: string | null; body: string; knownHosts: readonly string[] }>) {
   return (
     <Stack
       as="section"
@@ -47,7 +54,7 @@ const LiveDocument = memo(function LiveDocument({
     >
       <span className={textRole('caption')}>Writing…</span>
       {title ? <h2 className={textRole('sectionTitle')}>{title}</h2> : null}
-      <ContentMarkdown markdown={body} />
+      <ContentMarkdown markdown={body} knownHosts={knownHosts} />
     </Stack>
   );
 });

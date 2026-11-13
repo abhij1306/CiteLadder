@@ -55,7 +55,7 @@ export const SITE_HEALTH_CRAWL = {
   analysis_status: 'pending' as const,
   root_url: 'https://example.com/',
   sample_mode: false,
-  seed: '12345',
+  robots: { handling: 'respect' as const, decided_by_email: null, decided_at: null },
   inventory_complete: false,
   partial_reason: '',
   visible_url_count: 42,

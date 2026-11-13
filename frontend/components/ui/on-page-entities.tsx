@@ -1,5 +1,3 @@
-'use client';
-
 import { Badge } from '@/components/ui/badge';
 import { Passage } from '@/components/ui/passage';
 import { textRole } from '@/components/ui/typography';

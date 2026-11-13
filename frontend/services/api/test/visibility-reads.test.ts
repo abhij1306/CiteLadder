@@ -95,7 +95,12 @@ async function measuredRun(
   tenant: Tenant,
   completedAt: string,
   metrics: Record<string, unknown>,
-  options: { visibilityScore?: number; analyzerVersion?: string; configuration?: Json } = {},
+  options: {
+    visibilityScore?: number;
+    analyzerVersion?: string;
+    configuration?: Json;
+    finalize?: boolean;
+  } = {},
 ): Promise<string> {
   const auditId = await fixtures.audit(tenant, {
     completedAt: new Date(completedAt),
@@ -105,8 +110,46 @@ async function measuredRun(
     metrics: { ...metrics, per_engine: { chatgpt: metrics } } as Json,
     visibilityScore: options.visibilityScore,
     analyzerVersion: options.analyzerVersion,
+    finalize: options.finalize,
   });
   return auditId;
+}
+
+/** A new non-default market for the tenant's project. */
+async function newMarket(tenant: Tenant): Promise<string> {
+  const marketId = randomUUID();
+  await db
+    .insertInto('project_markets')
+    .values({
+      id: marketId,
+      workspace_id: tenant.workspaceId,
+      project_id: tenant.projectId,
+      label: 'United Kingdom',
+      country_code: 'GB',
+      language_code: 'en',
+      created_at: new Date(),
+    })
+    .execute();
+  return marketId;
+}
+
+/** A complete baseline run and a later one, each citing one URL, in a new non-default market. */
+async function runsInOwnMarket(tenant: Tenant, cited: { baseline: string; current: string }) {
+  const marketId = await newMarket(tenant);
+  const complete = aggregate({ completed: 1, brand: 0 });
+  const run = async (completedAt: string, url: string) => {
+    const auditId = await measuredRun(tenant, completedAt, complete);
+    await fixtures.execution(tenant, { auditId, analysis: { citations: [{ url }] } });
+    return auditId;
+  };
+  const baseline = await run('2026-02-01T00:00:00Z', cited.baseline);
+  const current = await run('2026-03-01T00:00:00Z', cited.current);
+  await db
+    .updateTable('audits')
+    .set({ market_id: marketId })
+    .where('id', 'in', [baseline, current])
+    .execute();
+  return { baseline, current };
 }
 
 afterAll(async () => {
@@ -117,27 +160,24 @@ afterAll(async () => {
 it('measures the baseline walk over 100 runs with alternating frozen routes', async () => {
   const tenant = await fixtures.tenant();
   const metrics = aggregate({ completed: 2, brand: 1 });
-  const ids: string[] = [];
-  let currentConfiguration: Json = {};
-  for (let index = 0; index < 100; index++) {
-    currentConfiguration = {
-      ...frozen(),
-      engine_routes: {
-        chatgpt: {
-          transport_provider: 'test',
-          transport_model: index % 2 ? 'model-b' : 'model-a',
-        },
+  const configuration = (index: number): Json => ({
+    ...frozen(),
+    engine_routes: {
+      chatgpt: {
+        transport_provider: 'test',
+        transport_model: index % 2 ? 'model-b' : 'model-a',
       },
-    };
-    ids.push(
-      await measuredRun(
-        tenant,
-        new Date(Date.UTC(2026, 0, 1) + index * 86400000).toISOString(),
-        metrics,
-        { configuration: currentConfiguration },
-      ),
-    );
-  }
+    },
+  });
+  const run = (index: number, finalize: boolean) =>
+    measuredRun(tenant, new Date(Date.UTC(2026, 0, 1) + index * 86400000).toISOString(), metrics, {
+      configuration: configuration(index),
+      finalize,
+    });
+  // Only the newest run is compared, so only it is finalized, over the 99 runs before it.
+  const ids = await Promise.all(Array.from({ length: 99 }, (_, index) => run(index, false)));
+  ids.push(await run(99, true));
+  const currentConfiguration = configuration(99);
   let cellQueries = 0;
   const counted = db.withPlugin({
     transformQuery({ node }) {
@@ -264,6 +304,19 @@ describe('GET /visibility', () => {
     const engine = await get(tenant, route(tenant), { engine: 'chatgpt' });
     expect(engine.body).toMatchObject({ visibility_score: null, visibility_rate: 0.75 });
     expect((engine.body.per_engine as Row[]).map((row) => row.logical_engine)).toEqual(['chatgpt']);
+  });
+
+  it('reports failed answers as unknown when the run recorded no coverage', async () => {
+    const unrecorded = await fixtures.tenant();
+    const { coverage: _coverage, ...withoutCoverage } = aggregate({ completed: 2, brand: 1 });
+    await measuredRun(unrecorded, '2026-03-02T09:00:00Z', withoutCoverage);
+    const unknown = await get(unrecorded, route(unrecorded));
+    expect(unknown.body).toMatchObject({ total_completed: 2, total_failed: null });
+
+    const recorded = await fixtures.tenant();
+    await measuredRun(recorded, '2026-03-02T09:00:00Z', aggregate({ completed: 2, brand: 1 }));
+    const measured = await get(recorded, route(recorded));
+    expect(measured.body).toMatchObject({ total_completed: 2, total_failed: 0 });
   });
 
   it('compares share of voice at the mention level, as the tile shows it', async () => {
@@ -526,13 +579,22 @@ describe('GET /visibility/prompts', () => {
       ...best,
       engine: 'chatgpt',
       transportModel: 'model-a',
-      analysis: { brandMentioned: true, avgPosition: 1 },
+      analysis: {
+        brandMentioned: true,
+        avgPosition: 1,
+        brandMentions: ['Acme Corp'],
+        competitorMentions: ['Globex'],
+      },
     });
     await fixtures.execution(tenant, {
       ...best,
       engine: 'claude',
       transportModel: 'model-b',
-      analysis: { brandMentioned: false, score: { competitors_mentioned: ['Globex'] } },
+      analysis: {
+        brandMentioned: false,
+        score: { competitors_mentioned: ['Globex'] },
+        competitorMentions: ['Globex', 'Initech'],
+      },
     });
     await fixtures.execution(tenant, {
       ...best,
@@ -564,6 +626,16 @@ describe('GET /visibility/prompts', () => {
       avg_position: 1,
       comparison_status: 'no_baseline',
     });
+    // Every brand the answers named, most answers first: competitors count too.
+    expect(scored).toMatchObject({
+      mentions: 3,
+      brands: [
+        { kind: 'competitor', name: 'Globex', responses: 2 },
+        { kind: 'brand', name: 'Acme Corp', responses: 1 },
+        { kind: 'competitor', name: 'Initech', responses: 1 },
+      ],
+    });
+    expect([body[0]!.mentions, body[0]!.brands]).toEqual([0, []]);
     expect(scored.outcomes).toEqual([
       expect.objectContaining({
         logical_engine: 'chatgpt',
@@ -573,6 +645,19 @@ describe('GET /visibility/prompts', () => {
       expect.objectContaining({
         logical_engine: 'claude',
         gap_counts: { Globex: 1 },
+      }),
+      // An engine whose every task failed reads as failed, not as missing.
+      expect.objectContaining({
+        logical_engine: 'gemini',
+        transport_model: 'model-a',
+        counts: expect.objectContaining({
+          state: 'no_observations',
+          responses: 0,
+          expected: 1,
+          failed: 1,
+        }),
+        visibility_rate: null,
+        answer_states: null,
       }),
     ]);
 
@@ -598,7 +683,11 @@ describe('GET /visibility/prompts', () => {
         auditId,
         promptIndex: 0,
         promptText: 'best crm',
-        analysis: { brandMentioned: brand },
+        analysis: {
+          brandMentioned: brand,
+          brandMentions: brand ? ['Acme Corp'] : [],
+          competitorMentions: ['Globex'],
+        },
       });
       await fixtures.promptScore(tenant, auditId, {
         promptIndex: 0,
@@ -617,6 +706,12 @@ describe('GET /visibility/prompts', () => {
       rolling_four: [],
       counts: { responses: 2, brand_responses: 1 },
       visibility_rate: 0.5,
+      // A name's answers are summed across the pooled runs.
+      mentions: 2,
+      brands: [
+        { name: 'Globex', responses: 2 },
+        { name: 'Acme Corp', responses: 1 },
+      ],
     });
   });
 });
@@ -754,19 +849,7 @@ describe('GET /visibility/prompts/{prompt_id}/history', () => {
   it('stays inside the requested market', async () => {
     const tenant = await fixtures.tenant();
     const promptId = await trackedPrompt(db, await promptSet(db, tenant.projectId), 'best crm');
-    const marketId = randomUUID();
-    await db
-      .insertInto('project_markets')
-      .values({
-        id: marketId,
-        workspace_id: tenant.workspaceId,
-        project_id: tenant.projectId,
-        label: 'United Kingdom',
-        country_code: 'GB',
-        language_code: 'en',
-        created_at: new Date(),
-      })
-      .execute();
+    const marketId = await newMarket(tenant);
     const home = await measuredRun(tenant, promptId, {
       day: '2026-03-02',
       answers: [{ mentioned: true, cited: false }],
@@ -1129,6 +1212,18 @@ describe('GET /visibility/fanout and /visibility/evidence', () => {
       prompt_options: [{ label: 'Precise prompt' }],
     });
   });
+
+  it("offers only brand runs' prompts in the prompt filter", async () => {
+    const shop = await fixtures.tenant();
+    const brand = await fixtures.audit(shop);
+    const commerce = await fixtures.audit(shop, { scope: 'commerce' });
+    await fixtures.execution(shop, { auditId: brand, promptText: 'Best index fund?' });
+    await fixtures.execution(shop, { auditId: commerce, promptText: 'Cheapest running shoes?' });
+
+    const { body } = await get(shop, route(shop, '/evidence'), {});
+    expect(body).toMatchObject({ total: 1, prompt_options: [{ label: 'Best index fund?' }] });
+    expect(body.prompt_options).toHaveLength(1);
+  });
 });
 
 describe('GET /visibility/sources', () => {
@@ -1292,35 +1387,10 @@ describe('GET /visibility/sources', () => {
 
   it("compares a named run with its baseline in the runs' own market", async () => {
     const tenant = await fixtures.tenant();
-    const marketId = randomUUID();
-    await db
-      .insertInto('project_markets')
-      .values({
-        id: marketId,
-        workspace_id: tenant.workspaceId,
-        project_id: tenant.projectId,
-        label: 'United Kingdom',
-        country_code: 'GB',
-        language_code: 'en',
-        created_at: new Date(),
-      })
-      .execute();
-    const complete = aggregate({ completed: 1, brand: 0 });
-    const baseline = await measuredRun(tenant, '2026-02-01T00:00:00Z', complete);
-    await fixtures.execution(tenant, {
-      auditId: baseline,
-      analysis: { citations: [{ url: 'https://other.com/y' }] },
+    const { baseline, current } = await runsInOwnMarket(tenant, {
+      baseline: 'https://other.com/y',
+      current: 'https://other.com/x',
     });
-    const current = await measuredRun(tenant, '2026-03-01T00:00:00Z', complete);
-    await fixtures.execution(tenant, {
-      auditId: current,
-      analysis: { citations: [{ url: 'https://other.com/x' }] },
-    });
-    await db
-      .updateTable('audits')
-      .set({ market_id: marketId })
-      .where('id', 'in', [baseline, current])
-      .execute();
     await fixtures.sourceAggregates(tenant, baseline);
     await fixtures.sourceAggregates(tenant, current);
 
@@ -1484,5 +1554,24 @@ describe('GET /visibility/sources', () => {
 
     const unpaired = await get(tenant, route(tenant, '/sources/movers'), { audit_ids: [current] });
     expect(unpaired.body).toMatchObject({ comparison_status: 'no_baseline', risers: [] });
+  });
+
+  it("ranks movers against a baseline in the runs' own, non-default market", async () => {
+    const tenant = await fixtures.tenant();
+    const { baseline, current } = await runsInOwnMarket(tenant, {
+      baseline: 'https://falling.example/a',
+      current: 'https://rising.example/a',
+    });
+
+    const { body } = await get(tenant, route(tenant, '/sources/movers'), {
+      audit_id: current,
+      baseline_audit_ids: [baseline],
+    });
+    expect(body).toEqual({
+      dimension: 'domain',
+      comparison_status: 'comparable',
+      risers: [{ key: 'rising.example', current_share: 1, previous_share: 0, delta: 100 }],
+      fallers: [{ key: 'falling.example', current_share: 0, previous_share: 1, delta: -100 }],
+    });
   });
 });

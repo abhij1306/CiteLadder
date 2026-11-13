@@ -144,7 +144,7 @@ export const brandIdentityRoutes = [
     },
   }),
   definePostRoute({
-    family,
+    ...activeProject,
     exposure: 'both',
     permission: COMPETITORS_WRITE,
     path: `${root}/competitor-suggestions/{candidate_id}/accept`,

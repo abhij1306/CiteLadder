@@ -95,19 +95,19 @@ function csvExport(tasks: ExportTask[], audit: ExportAudit) {
         ),
         status: task.status,
         search_used: bool(task.search_used),
-        search_query_count: score.search_query_count ?? 0,
+        search_query_count: score.search_query_count,
         search_queries: joined(
           array(task.search_events).map((value) => record(value).query ?? null),
         ),
-        prompt_class: score.prompt_class ?? '',
-        prompt_contains_brand: bool(score.prompt_contains_brand ?? false),
-        prompt_contains_competitor: bool(score.prompt_contains_competitor ?? false),
-        brand_mentioned: bool(score.brand_mentioned ?? false),
-        brand_injected_in_search: bool(score.brand_injected_in_search ?? false),
-        owned_domain_cited: bool(score.owned_domain_cited ?? false),
-        owned_citation_count: score.owned_citation_count ?? 0,
-        unintended_domain_cited: bool(score.unintended_domain_cited ?? false),
-        citation_count: score.citation_count ?? 0,
+        prompt_class: score.prompt_class,
+        prompt_contains_brand: bool(score.prompt_contains_brand),
+        prompt_contains_competitor: bool(score.prompt_contains_competitor),
+        brand_mentioned: bool(score.brand_mentioned),
+        brand_injected_in_search: bool(score.brand_injected_in_search),
+        owned_domain_cited: bool(score.owned_domain_cited),
+        owned_citation_count: score.owned_citation_count,
+        unintended_domain_cited: bool(score.unintended_domain_cited),
+        citation_count: score.citation_count,
         citation_domains: joined(
           array(task.citations)
             .map((value) => record(value).domain)
@@ -146,7 +146,7 @@ async function markdownExport(db: Database, tasks: ExportTask[], audit: ExportAu
   const config = record(audit.configuration),
     summary = record(audit.summary),
     cost = record(summary.cost);
-  const routes = await engineSnapshots(db, [audit.id]);
+  const routes = await engineSnapshots(db, audit.workspace_id, [audit.id]);
   const provenance = modelProvenanceFor(routes.get(audit.id) ?? [], config);
   const brand = md(config.brand_name ?? 'Brand'),
     mode = String(config.benchmark_mode ?? audit.benchmark_mode);

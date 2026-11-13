@@ -236,7 +236,14 @@ describe('durable audit occurrence planning', () => {
     expect(
       await db
         .selectFrom('audit_schedules')
-        .select(['failure_count', 'enabled', 'last_error', 'lease_owner', 'next_run_at'])
+        .select([
+          'failure_count',
+          'enabled',
+          'last_error',
+          'lease_owner',
+          'lease_expires_at',
+          'next_run_at',
+        ])
         .where('id', '=', schedule.id)
         .executeTakeFirstOrThrow(),
     ).toEqual({
@@ -244,7 +251,61 @@ describe('durable audit occurrence planning', () => {
       enabled: false,
       last_error: 'execution_credentials_unavailable', // the admission code the owner can act on
       lease_owner: null,
-      next_run_at: new Date(at.getTime() + settings.failure_retry_seconds * 1000),
+      // Paused: no backoff lease, so Resume plans the held occurrence at once.
+      lease_expires_at: null,
+      next_run_at: at,
     });
+  });
+  it('retries a failed occurrence after the backoff and keeps the cadence anchor', async () => {
+    const t = await auditTenant(db, fixtures),
+      start = new Date(),
+      scope = { workspaceId: t.workspaceId, projectId: t.projectId };
+    const connections = (active: boolean) =>
+      db
+        .updateTable('provider_connections')
+        .set({ active })
+        .where('workspace_id', '=', t.workspaceId)
+        .execute();
+    await connections(false);
+    const schedule = await createSchedule(
+      db,
+      scope,
+      scheduleCreate.parse({
+        prompt_set_id: t.setId,
+        cadence: 'hourly',
+        engines: ['chatgpt'],
+        next_run_at: start.toISOString(),
+      }),
+    );
+    expect(
+      await new AuditScheduler(db, runtime, settings, { now: () => start }).runOnce(start),
+    ).toBe(0);
+    // Backing off: the occurrence is held, not claimable on the next pass.
+    const failing = new AuditScheduler(db, runtime, settings, { now: () => start });
+    expect(await failing.claimDue(start)).toEqual([]);
+    await connections(true);
+    await db
+      .updateTable('audit_schedules')
+      .set({ lease_expires_at: new Date(0) })
+      .where('id', '=', schedule.id)
+      .execute();
+    const later = new Date(start.getTime() + settings.failure_retry_seconds * 1000 + 1000);
+    expect(
+      await new AuditScheduler(db, runtime, settings, { now: () => later }).runOnce(later),
+    ).toBe(1);
+    expect(
+      await db
+        .selectFrom('audits')
+        .select('scheduled_for')
+        .where('schedule_id', '=', schedule.id)
+        .execute(),
+    ).toEqual([{ scheduled_for: start }]);
+    expect(
+      await db
+        .selectFrom('audit_schedules')
+        .select(['failure_count', 'next_run_at'])
+        .where('id', '=', schedule.id)
+        .executeTakeFirstOrThrow(),
+    ).toEqual({ failure_count: 0, next_run_at: new Date(start.getTime() + 3_600_000) });
   });
 });

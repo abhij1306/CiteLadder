@@ -17,10 +17,7 @@ function isGoogleSearchSurface(domain: string): boolean {
   );
 }
 export function classifySourceOrigin(domain: string): string {
-  const normalized = domain
-    .trim()
-    .toLowerCase()
-    .replace(/^www\./u, '');
+  const normalized = normalizeDomain(domain);
   return isGoogleSearchSurface(normalized) || p.GOOGLE_OWNED_PLATFORM_DOMAINS.includes(normalized)
     ? p.SOURCE_ORIGIN_GOOGLE_OWNED
     : p.SOURCE_ORIGIN_EXTERNAL;

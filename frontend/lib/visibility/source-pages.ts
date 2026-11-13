@@ -35,6 +35,7 @@ const PRESENCE_LABELS: Record<string, string> = {
   not_detected: 'Not found on the page',
   ambiguous: 'Match could not be confirmed',
   partial: COVERAGE_TOO_THIN,
+  not_assessable: 'Name too short to judge on a page',
   not_inspected: 'Not inspected',
   blocked: 'Publisher blocks automated access',
   stale: 'From an earlier inspection',
@@ -102,6 +103,7 @@ const STANDING_SENTENCES: Record<PageStanding, string> = {
   gap: 'Competitors are listed on this page and you are not.',
   listed: 'You are on this page.',
   read: 'No tracked competitor is listed on this page.',
+  not_assessable: 'Your name is too short to find reliably on a page, so this page is not judged.',
 };
 
 export function standingSentence(standing: PageStanding): string {
@@ -119,6 +121,7 @@ const STANDING_LABELS: Record<PageStanding, string> = {
   gap: 'Gap',
   listed: 'Listed',
   read: 'Read',
+  not_assessable: 'Not assessable',
 };
 
 /** A URL row's standing; a page this project has no record of is untracked. */

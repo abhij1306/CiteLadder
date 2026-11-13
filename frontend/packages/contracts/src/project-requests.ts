@@ -23,6 +23,14 @@ export const competitorRequestSchema = z.object({
   aliases: list().default([]),
   domains: list().default([]),
 });
+/**
+ * One row of the project editor's competitor list: a tracked competitor's
+ * `id` keeps that competitor, its ID and logo, through a rename; a row
+ * without one is matched by name or added.
+ */
+export const competitorListItemRequestSchema = competitorRequestSchema.extend({
+  id: z.uuid().optional(),
+});
 /** One competitor added on its own; unknown fields are rejected. */
 export const competitorCreateRequestSchema = competitorRequestSchema.strict();
 /** A partial edit of one tracked competitor; absent fields are kept. */
@@ -79,7 +87,7 @@ export const projectUpdateRequestSchema = z.object({
   brand: z.object({ aliases: list() }).optional(),
   owned_domains: list().optional(),
   unintended_domains: list().optional(),
-  competitors: z.array(competitorRequestSchema).optional(),
+  competitors: z.array(competitorListItemRequestSchema).optional(),
   // Names the project no longer tracks are dropped on save.
   entity_matching: z.array(entityMatchingRequestSchema).optional(),
 });

@@ -10,23 +10,29 @@ import { setUrlStateRouter } from '@/lib/navigation/url-state';
 
 import { appRoutes } from './router';
 
-// Before anything renders, so an error during the first paint is reported too.
-installClientErrorListeners();
-const queryClient = getAppQueryClient();
-const router = createBrowserRouter(appRoutes);
-// URL-owned filter state writes through the router rather than around it, so
-// `useLocation`/`useSearchParams` cannot go stale behind a filter change.
-setUrlStateRouter(router);
-const rootElement = document.getElementById('root');
+function mountApp(): void {
+  // Before anything renders, so an error during the first paint is reported too.
+  installClientErrorListeners();
+  const queryClient = getAppQueryClient();
+  const router = createBrowserRouter(appRoutes);
+  // URL-owned filter state writes through the router rather than around it, so
+  // `useLocation`/`useSearchParams` cannot go stale behind a filter change.
+  setUrlStateRouter(router);
+  const rootElement = document.getElementById('root');
 
-if (!rootElement) {
-  throw new Error('Vite application root element was not found.');
+  if (!rootElement) {
+    throw new Error('Vite application root element was not found.');
+  }
+
+  createRoot(rootElement).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  </StrictMode>,
-);
+// `/browser-support.js` has already shown "Update your browser" in #root on a
+// browser below the support matrix; the app would break part way there.
+if (document.documentElement.dataset.browserSupport !== 'unsupported') mountApp();

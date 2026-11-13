@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { firstOf, groupBy, lastOf, onlyOf } from '../src/lists.ts';
+import { firstOf, groupBy, jaccard, lastOf, onlyOf } from '../src/lists.ts';
 
 describe('list reads', () => {
   it('reads the first item, and names the expected item when there is none', () => {
@@ -11,6 +11,11 @@ describe('list reads', () => {
     expect(lastOf(['a'])).toBe('a');
     expect(lastOf(['a', 'b', 'c'])).toBe('c');
     expect(lastOf(['a', null])).toBeNull();
+  });
+
+  it('measures set overlap as shared items over all items, and two empty sets as none', () => {
+    expect(jaccard(new Set(['a', 'b', 'c']), new Set(['b', 'c', 'd']))).toBe(0.5);
+    expect(jaccard(new Set(), new Set())).toBe(0);
   });
 
   it('reads the item only when the collection holds exactly one', () => {

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vite-plus/test';
 
+import { ApiError } from '@/lib/api/errors';
 import { projectsApi } from '@/lib/api/projects';
 import { promptsApi } from '@/lib/api/prompts';
 import { providersApi } from '@/lib/api/providers';
@@ -85,6 +86,38 @@ async function selectEngineAndLaunch() {
   fireEvent.click(await screen.findByRole('button', { name: 'ChatGPT API' }));
   fireEvent.click(screen.getByRole('button', { name: 'Launch audit' }));
 }
+
+describe('Prompt set field', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reports a failed prompt-set read with a retry instead of "no prompt set yet"', async () => {
+    stubApis();
+    vi.mocked(promptsApi.listPromptSets).mockRejectedValueOnce(
+      new ApiError('Prompt sets are unavailable right now.', 400, ''),
+    );
+    renderWithProviders(
+      <RoutedLaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
+    );
+
+    expect(await screen.findByText('Prompt sets are unavailable right now.')).toBeVisible();
+    expect(screen.queryByText(/No prompt set yet/u)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('combobox', { name: 'Prompt set' })).toBeVisible();
+  });
+
+  it('says there is no prompt set only when the read answered with none', async () => {
+    stubApis();
+    vi.mocked(promptsApi.listPromptSets).mockResolvedValue(listed([]) as never);
+    renderWithProviders(
+      <RoutedLaunchDialog open onOpenChange={() => undefined} projectId={PROJECT_ID} />,
+    );
+
+    expect(
+      await screen.findByText('No prompt set yet. Add prompts on the Prompts screen first.'),
+    ).toBeVisible();
+  });
+});
 
 describe('Repetitions', () => {
   afterEach(() => vi.restoreAllMocks());

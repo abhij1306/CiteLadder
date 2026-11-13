@@ -1,13 +1,22 @@
 /**
  * Structured JSON logging keyed by request id.
  *
- * Records carry `event`, `logger`, `level`, `correlation_id` and `timestamp`
- * so one log query covers every record. The correlation id travels in
+ * Records carry `event`, `logger`, `level`, Cloud Logging's `severity`,
+ * `correlation_id` and `timestamp` so one log query covers every record. The correlation id travels in
  * AsyncLocalStorage.
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 type Level = 'debug' | 'info' | 'warning' | 'error';
+
+/** Cloud Logging reads `severity` from a JSON line; log-based alerts filter on it. */
+const SEVERITY = {
+  debug: 'DEBUG',
+  info: 'INFO',
+  warning: 'WARNING',
+  error: 'ERROR',
+} as const satisfies Record<Level, string>;
+
 type Fields = Record<string, unknown>;
 export type LogSink = (line: string) => void;
 
@@ -55,6 +64,7 @@ export function getLogger(name: string): Logger {
         event,
         logger: name,
         level,
+        severity: SEVERITY[level],
         ...(correlationId ? { correlation_id: correlationId } : {}),
         timestamp: new Date().toISOString(),
       }),

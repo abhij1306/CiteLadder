@@ -1,5 +1,3 @@
-'use client';
-
 import { ChipInput, type ChipItem } from '@/components/ui/chip-input';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -47,7 +45,7 @@ function OfferingFacts({
   onChange: (map: BusinessDraft['maps'][number]) => void;
 }>) {
   return (
-    <Stack as="section" gap="workspace" className={panelClasses({ tone: 'well' })}>
+    <Stack as="section" gap="workspace" className={panelClasses()}>
       <h3 className={textRole('itemTitle')}>{map.offering}</h3>
       <ChipInput
         label="Who buys it"

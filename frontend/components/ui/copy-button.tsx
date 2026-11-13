@@ -1,5 +1,3 @@
-'use client';
-
 import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import { Check, Copy } from 'lucide-react';
 

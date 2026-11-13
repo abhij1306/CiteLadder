@@ -28,7 +28,7 @@ import { scalarText } from '../../text-order.ts';
 import type { SiteChangeSnapshots } from '../../generated/db-schema.ts';
 import { loadCrawl, resolveUsableCrawl, type Crawl } from './crawl.ts';
 import { pageRerunSql } from '../page-rerun.ts';
-import { issueImpact, remediationRoute, ruleScoreRoles, ruleTitle } from './rules.ts';
+import { issueImpact, remediationRoute, ruleScoreRoles, ruleSection, ruleTitle } from './rules.ts';
 
 const reads = policy.site_health.reads;
 const labels: Record<string, string> = reads.aeo_dimension_labels;
@@ -90,7 +90,6 @@ const OVERVIEW_COLUMNS = [
   'category_counts',
   'readiness_dimensions',
   'top_issues',
-  'trend',
   'change_summary',
 ] as const;
 
@@ -116,6 +115,22 @@ function overviewSnapshot(db: Database, crawl: Crawl) {
     .select(OVERVIEW_COLUMNS)
     .select(webFundamentals.as('web_fundamentals'))
     .executeTakeFirst();
+}
+
+/**
+ * The project's open issue count per day an audit landed, oldest first: the
+ * persisted trend each landing rewrites (SH-B9), never recounted on read.
+ */
+async function openIssueTrend(db: Database, workspaceId: string, projectId: string) {
+  const rows = await db
+    .selectFrom('site_issue_trend')
+    .select([sql<string>`to_char(day, 'YYYY-MM-DD')`.as('day'), 'open_count'])
+    .where('workspace_id', '=', workspaceId)
+    .where('project_id', '=', projectId)
+    .orderBy('day', 'desc')
+    .limit(reads.overview_issue_trend_day_limit)
+    .execute();
+  return rows.reverse();
 }
 
 /** The frozen readiness diagnostic without its source analysis id list. */
@@ -209,6 +224,8 @@ export async function overview(
           // The failing title from the current catalog, as the Issues catalog
           // reads it; the persisted description states the passing expectation.
           title: ruleTitle(ruleId),
+          // The Issues tab the rule is listed under, so a link opens on it.
+          section: ruleSection(ruleId),
         };
       }),
     web_fundamentals: snapshot.web_fundamentals ?? {
@@ -223,13 +240,7 @@ export async function overview(
       },
       limitations: [],
     },
-    trend: snapshot.trend ?? {
-      state: 'unavailable',
-      reason: 'no_comparable_snapshot',
-      metric: 'aeo_readiness_score',
-      series: [],
-      cohort_composition: NO_COMPARABLE,
-    },
+    open_issue_trend: await openIssueTrend(db, workspaceId, projectId),
     change_summary: snapshot.change_summary ?? {
       state: 'unavailable',
       reason: 'no_comparable_snapshot',

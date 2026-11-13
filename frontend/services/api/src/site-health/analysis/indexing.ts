@@ -1,4 +1,5 @@
 /** `noindex` judged against strong evidence of indexing intent; uncertainty stays unknown. */
+import { DAY_MS } from '../../calendar-days.ts';
 import { policy } from '../../config.ts';
 import { stripTrailing } from '../../text-order.ts';
 import { canonicalUrl } from '../url-identity.ts';
@@ -130,7 +131,6 @@ export function checkSitemapRedirect(facts: Facts): CheckResult {
     : ['missing', { ...evidence, reason: 'sitemap_lists_redirect' }];
 }
 
-const DAY_MS = 86_400_000;
 const LASTMOD_TOLERANCE_MS =
   policy.site_health.page_analysis.rules.sitemap_lastmod_tolerance_days * DAY_MS;
 

@@ -35,7 +35,7 @@ export async function transitionAudit(
     .execute();
   await auditEvent(
     db,
-    auditId,
+    { workspaceId, auditId },
     auditPolicy.constants.event_audit_status,
     message || `status -> ${target}`,
     { status: target },
@@ -44,7 +44,7 @@ export async function transitionAudit(
 }
 export function auditEvent(
   db: Database,
-  auditId: string,
+  { workspaceId, auditId }: { workspaceId: string; auditId: string },
   type: string,
   message: string,
   payload: Record<string, unknown>,
@@ -54,6 +54,7 @@ export function auditEvent(
     .insertInto('audit_events')
     .values({
       id: randomUUID(),
+      workspace_id: workspaceId,
       audit_id: auditId,
       event_type: type,
       message,

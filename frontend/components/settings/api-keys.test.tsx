@@ -2,7 +2,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, expect, it, vi } from 'vite-plus/test';
+import { beforeEach, expect, it, onTestFinished, vi } from 'vite-plus/test';
 
 import { apiKeysApi } from '@/lib/api/api-keys';
 import { createAppQueryClient } from '@/lib/api/query-client';
@@ -68,6 +68,33 @@ beforeEach(() => {
   list.mockReset();
   create.mockReset();
   revoke.mockReset();
+});
+
+it('sends the end of the chosen day in the display time zone and lists that day', async () => {
+  document.cookie = 'citeladder-display-timezone=Asia%2FKolkata; path=/';
+  onTestFinished(() => {
+    document.cookie = 'citeladder-display-timezone=; path=/; max-age=0';
+  });
+  const user = userEvent.setup();
+  list.mockResolvedValue({ keys: [] });
+  create.mockResolvedValue({ key: ciKey, secret: SHOWN_ONCE });
+  renderTab();
+  await user.click(await screen.findByRole('button', { name: 'Create key' }));
+  const dialog = screen.getByRole('dialog', { name: 'Create an API key' });
+  expect(dialog).toHaveTextContent('The key stops working at the end of this day (Asia/Kolkata).');
+  await user.type(within(dialog).getByLabelText(/Name/u), 'CI export');
+  const expiry = within(dialog).getByRole('textbox', { name: 'Expiry date' });
+  // A day that does not exist is refused in the field, before any request.
+  await user.type(expiry, '2026-02-30');
+  expect(dialog).toHaveTextContent('Enter a date as YYYY-MM-DD.');
+  expect(within(dialog).getByRole('button', { name: 'Create key' })).toBeDisabled();
+  await user.clear(expiry);
+  await user.type(expiry, '2026-11-30');
+  await user.click(within(dialog).getByRole('button', { name: 'Create key' }));
+  expect(create).toHaveBeenCalledWith(
+    WORKSPACE,
+    expect.objectContaining({ expires_at: '2026-11-30T18:29:59.000Z' }),
+  );
 });
 
 it('lists a key by name, prefix, scopes and projects without its ID', async () => {

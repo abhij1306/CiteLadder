@@ -7,7 +7,13 @@ import { WorkspaceScope } from '../db/workspace-scope.ts';
 import { record } from '../db/json.ts';
 import { containsPattern } from '../db/like.ts';
 import { parseUuid } from '../http/uuid.ts';
-import { rootFailure } from '../site-health/reads/crawl.ts';
+import {
+  currentSiteCrawl,
+  currentSiteSnapshotQuery,
+  latestPagesQuery,
+  rootFailure,
+  type ViewCrawl,
+} from '../site-health/reads/crawl.ts';
 import { comparableUrl } from '../site-health/reads/content-fragments.ts';
 import {
   currentIssueRules,
@@ -15,6 +21,7 @@ import {
   pageRows,
 } from '../site-health/reads/page-rows.ts';
 import { isKnownRule } from '../site-health/reads/rules.ts';
+import { referenceSnippetSchema } from '../site-health/issue-catalog.ts';
 import { policy } from '../config.ts';
 
 const FORMULA_VERSION = policy.site_health.link_metrics.formula_version;
@@ -31,16 +38,19 @@ export async function siteSnapshot(
   { db, scope, origin }: ProjectRead,
   args: { snapshot_id?: string | null },
 ): Promise<Evidence> {
-  let query = new WorkspaceScope(scope.workspaceId)
-    .selectFrom(db, 'site_health_snapshots')
-    .selectAll()
-    .where('project_id', '=', scope.projectId);
   // The id may name the snapshot or the crawl it was built from: an issue in
-  // the Agent's context carries only its crawl id.
+  // the Agent's context carries only its crawl id. Without one, the current
+  // crawl's snapshot answers, never a one-page rerun's.
   const selected = args.snapshot_id;
-  if (selected)
-    query = query.where((eb) => eb.or([eb('id', '=', selected), eb('crawl_id', '=', selected)]));
-  const row = await query.orderBy('created_at', 'desc').orderBy('id', 'desc').executeTakeFirst();
+  const query = selected
+    ? new WorkspaceScope(scope.workspaceId)
+        .selectFrom(db, 'site_health_snapshots')
+        .where('project_id', '=', scope.projectId)
+        .where((eb) => eb.or([eb('id', '=', selected), eb('crawl_id', '=', selected)]))
+        .orderBy('created_at', 'desc')
+        .orderBy('id', 'desc')
+    : currentSiteSnapshotQuery(db, scope.workspaceId, scope.projectId);
+  const row = await query.selectAll().executeTakeFirst();
   if (args.snapshot_id && !row) throw new McpInputError('Selected snapshot is unavailable');
   if (!row) return unavailable('no_site_snapshot');
   return {
@@ -75,15 +85,21 @@ export async function siteSnapshot(
   } satisfies McpSiteSnapshot & Evidence;
 }
 
-/** The selected crawl, or the latest; an explicit crawl from elsewhere is refused. */
+/**
+ * The selected crawl, or the current one (SH-B1), so neither a crawl still
+ * running mid-turn nor a one-page rerun answers a default read; an explicit
+ * crawl from elsewhere is refused.
+ */
 async function selectCrawl({ db, scope }: ProjectRead, crawlId: string | null | undefined) {
-  let query = new WorkspaceScope(scope.workspaceId)
+  if (!crawlId)
+    return (await currentSiteCrawl(db, scope.workspaceId, scope.projectId)) ?? undefined;
+  const crawl = await new WorkspaceScope(scope.workspaceId)
     .selectFrom(db, 'site_crawls')
     .selectAll()
-    .where('project_id', '=', scope.projectId);
-  if (crawlId) query = query.where('id', '=', crawlId);
-  const crawl = await query.orderBy('created_at', 'desc').orderBy('id', 'desc').executeTakeFirst();
-  if (crawlId && !crawl) throw new McpInputError('Crawl was not found in this project');
+    .where('project_id', '=', scope.projectId)
+    .where('id', '=', crawlId)
+    .executeTakeFirst();
+  if (!crawl) throw new McpInputError('Crawl was not found in this project');
   return crawl;
 }
 
@@ -119,8 +135,29 @@ const neighborList = z.array(z.unknown()).catch([]);
 const neighbors = (value: unknown) =>
   neighborList.parse(value).flatMap((item) => {
     const parsed = neighborSchema.safeParse(item);
-    return parsed.success ? [parsed.data] : [];
+    return parsed.success ? [{ ...parsed.data, url: withoutQuery(parsed.data.url) }] : [];
   });
+
+/**
+ * Anchor diagnostics as the model reads them: destinations (and an anchor text
+ * that is itself a URL) without query or fragment, query variants of one
+ * destination folded; `destination_count` stays the persisted count.
+ */
+function anchorDiagnostics(value: unknown) {
+  return neighborList.parse(value).map((item) => {
+    const diagnostic = record(item);
+    const text = diagnostic.anchor_text;
+    return {
+      ...diagnostic,
+      ...(typeof text === 'string' && looksLikeUrl(text)
+        ? { anchor_text: withoutQuery(text) }
+        : {}),
+      ...(Array.isArray(diagnostic.destinations)
+        ? { destinations: distinctWithoutQuery(diagnostic.destinations) }
+        : {}),
+    };
+  });
+}
 
 /** Anchor diagnostics as counts by kind: the compact form for several named pages. */
 function diagnosticCounts(value: unknown): Record<string, number> {
@@ -180,7 +217,7 @@ export async function siteLinks(
   const sample = pages.length ? mcpPolicy.named_link_page_neighbors : undefined;
   const items = selected.map((row) => ({
     site_url_id: row.site_url_id,
-    url: row.url,
+    url: withoutQuery(row.url),
     inbound_count: row.inbound_count,
     outbound_count: row.outbound_count,
     main_content_inbound_count: row.main_content_inbound_count,
@@ -191,7 +228,7 @@ export async function siteLinks(
     top_inbound: neighbors(row.top_inbound).slice(0, sample),
     top_outbound: neighbors(row.top_outbound).slice(0, sample),
     ...(sample === undefined
-      ? { anchor_diagnostics: row.anchor_diagnostics ?? [] }
+      ? { anchor_diagnostics: anchorDiagnostics(row.anchor_diagnostics) }
       : { anchor_diagnostic_counts: diagnosticCounts(row.anchor_diagnostics) }),
   }));
   return {
@@ -213,8 +250,89 @@ export async function siteLinks(
   };
 }
 
-const withoutQuery = (url: string) => url.replace(/[?#].*$/u, '');
+/**
+ * A URL without its query string or fragment. Every page URL these reads hand
+ * the model passes through it: a query or fragment can carry a token, session
+ * or email. Pages that differ only by query stay apart by `site_url_id`.
+ */
+export function withoutQuery(url: string) {
+  const end = url.search(/[?#]/u);
+  return end < 0 ? url : url.slice(0, end);
+}
+/** The string URLs among `values` without query or fragment, query variants folded, in order. */
+const distinctWithoutQuery = (values: readonly unknown[]) => [
+  ...new Set(values.filter((url): url is string => typeof url === 'string').map(withoutQuery)),
+];
+const looksLikeUrl = (value: string) => /^https?:\/\//iu.test(value);
+/** `text` without query or fragment when it is an absolute http(s) URL; other text keeps any `?`. */
+export const textWithoutUrlQuery = (text: string) =>
+  looksLikeUrl(text) ? withoutQuery(text) : text;
+/**
+ * `value` with every absolute http(s) URL string inside it, at any depth,
+ * stripped of its query and fragment: a fetched record's crawl facts and
+ * evidence carry page and link URLs in many shapes.
+ */
+export function withoutQueryDeep(value: unknown): unknown {
+  if (typeof value === 'string') return textWithoutUrlQuery(value);
+  if (Array.isArray(value)) return value.map(withoutQueryDeep);
+  if (value !== null && typeof value === 'object' && !(value instanceof Date))
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, withoutQueryDeep(item)]),
+    );
+  return value;
+}
 const SUMMARY_TEXT_CHARS = 160;
+
+/** Where one failing target ended: a loop, its landing URL, its status, else a plain failure. */
+function targetOutcome(target: Record<string, unknown>) {
+  if (target.reason === 'redirect_limit') return 'redirect loop';
+  if (typeof target.final_url === 'string') return withoutQuery(target.final_url);
+  if (typeof target.status_code === 'number') return String(target.status_code);
+  return 'failed';
+}
+
+/** Distinct failing targets, query-string variants of one link folded together. */
+function failingTargetsSummary(evidence: Record<string, unknown>, targets: readonly unknown[]) {
+  const distinct = new Set<string>();
+  for (const target of targets.map(record)) {
+    if (typeof target.url !== 'string') continue;
+    distinct.add(`${withoutQuery(target.url)} → ${targetOutcome(target)}`);
+  }
+  const lines = [...distinct];
+  return {
+    failing_targets: lines.slice(0, mcpPolicy.rule_evidence_items),
+    // Distinct within the persisted (bounded) sample; failure_count is the check's own total.
+    distinct_failing_target_count: lines.length,
+    ...(typeof evidence.failure_count === 'number'
+      ? { failure_count: evidence.failure_count }
+      : {}),
+  };
+}
+
+/**
+ * A site-level architecture finding sits on the homepage and names its pages,
+ * query-string variants of one page folded into one entry; the count stays the
+ * check's own total of pages.
+ */
+function affectedPagesSummary(evidence: Record<string, unknown>, pages: readonly unknown[]) {
+  const urls = distinctWithoutQuery(pages.map((page) => record(page).url));
+  return {
+    affected_pages: urls.slice(0, mcpPolicy.rule_evidence_items),
+    affected_page_count: typeof evidence.count === 'number' ? evidence.count : urls.length,
+  };
+}
+
+/** The evidence's scalar facts, ids left out, URLs without query and text capped. */
+function scalarFacts(evidence: Record<string, unknown>) {
+  const facts: Record<string, string | number | boolean> = {};
+  for (const [key, item] of Object.entries(evidence)) {
+    if (key === 'id' || key.endsWith('_id') || key.endsWith('_ids')) continue;
+    if (typeof item === 'number' || typeof item === 'boolean') facts[key] = item;
+    else if (typeof item === 'string' && item)
+      facts[key] = textWithoutUrlQuery(item).slice(0, SUMMARY_TEXT_CHARS);
+  }
+  return facts;
+}
 
 /**
  * One page's evidence for a rule, compact: its distinct failing targets
@@ -223,43 +341,10 @@ const SUMMARY_TEXT_CHARS = 160;
  */
 function ruleEvidenceSummary(value: unknown): Record<string, string | number | boolean | string[]> {
   const evidence = record(value);
-  if (Array.isArray(evidence.failing_targets)) {
-    const distinct = new Set<string>();
-    for (const target of evidence.failing_targets.map(record)) {
-      if (typeof target.url !== 'string') continue;
-      let outcome = 'failed';
-      if (target.reason === 'redirect_limit') outcome = 'redirect loop';
-      else if (typeof target.final_url === 'string') outcome = withoutQuery(target.final_url);
-      else if (typeof target.status_code === 'number') outcome = String(target.status_code);
-      distinct.add(`${withoutQuery(target.url)} → ${outcome}`);
-    }
-    const lines = [...distinct];
-    return {
-      failing_targets: lines.slice(0, mcpPolicy.rule_evidence_items),
-      // Distinct within the persisted (bounded) sample; failure_count is the check's own total.
-      distinct_failing_target_count: lines.length,
-      ...(typeof evidence.failure_count === 'number'
-        ? { failure_count: evidence.failure_count }
-        : {}),
-    };
-  }
-  // A site-level architecture finding sits on the homepage and names its pages.
-  if (Array.isArray(evidence.pages)) {
-    const urls = evidence.pages
-      .map((page) => record(page).url)
-      .filter((url): url is string => typeof url === 'string');
-    return {
-      affected_pages: urls.slice(0, mcpPolicy.rule_evidence_items),
-      affected_page_count: typeof evidence.count === 'number' ? evidence.count : urls.length,
-    };
-  }
-  const facts: Record<string, string | number | boolean> = {};
-  for (const [key, item] of Object.entries(evidence)) {
-    if (key === 'id' || key.endsWith('_id') || key.endsWith('_ids')) continue;
-    if (typeof item === 'number' || typeof item === 'boolean') facts[key] = item;
-    else if (typeof item === 'string' && item) facts[key] = item.slice(0, SUMMARY_TEXT_CHARS);
-  }
-  return facts;
+  if (Array.isArray(evidence.failing_targets))
+    return failingTargetsSummary(evidence, evidence.failing_targets);
+  if (Array.isArray(evidence.pages)) return affectedPagesSummary(evidence, evidence.pages);
+  return scalarFacts(evidence);
 }
 
 /**
@@ -268,14 +353,61 @@ function ruleEvidenceSummary(value: unknown): Record<string, string | number | b
  * `https://www.site.com/a/` and a crawled `https://site.com/a` are one page.
  */
 function matchableUrl(value: string) {
-  const end = value.search(/[?#]/u);
-  return comparableUrl(end < 0 ? value : value.slice(0, end));
+  return comparableUrl(withoutQuery(value));
 }
 function urlFilter(value: string | null | undefined) {
   if (value === null || value === undefined) return null;
   const url = matchableUrl(value);
   if (!url) throw new McpInputError('url must name a page, such as example.com/pricing.');
   return url;
+}
+
+/**
+ * The issue family's one reference snippet in the crawl's persisted catalog
+ * (`site-health/issue-catalog.ts`): redacted markup of the failing element and
+ * its label context on the first affected page, or null when none was kept.
+ */
+export async function familySnippet(
+  { db, scope }: Pick<ProjectRead, 'db' | 'scope'>,
+  crawlId: string,
+  ruleId: string,
+) {
+  const rows = await new WorkspaceScope(scope.workspaceId)
+    .selectFrom(db, 'site_issue_catalogs')
+    .select('reference_snippets')
+    .where('project_id', '=', scope.projectId)
+    .where('crawl_id', '=', crawlId)
+    .execute();
+  const snippet = rows
+    .flatMap((row) => referenceSnippetList.parse(row.reference_snippets))
+    .find((item) => item.rule_id === ruleId);
+  if (!snippet) return null;
+  return {
+    page_url: withoutQuery(snippet.page_url),
+    site_url_id: snippet.site_url_id,
+    html: snippet.html,
+    truncated: snippet.truncated,
+  };
+}
+const referenceSnippetList = z.array(referenceSnippetSchema);
+
+/**
+ * Where a page cursor resumes. The cursor carries only the last page's id, never
+ * its URL (a readable cursor would hand the model the query string); the URL
+ * the page order resumes after is read back from the project's own page.
+ */
+async function pageCursor({ db, scope }: ProjectRead, cursor: string, filterKey: string) {
+  const [fingerprint, id] = decodeCursor(cursor, 2);
+  const siteUrlId = parseUuid(id);
+  if (fingerprint !== filterKey || !siteUrlId) throw new McpInputError('cursor is invalid');
+  const page = await new WorkspaceScope(scope.workspaceId)
+    .selectFrom(db, 'site_urls')
+    .select('normalized_url')
+    .where('project_id', '=', scope.projectId)
+    .where('id', '=', siteUrlId)
+    .executeTakeFirst();
+  if (!page) throw new McpInputError('cursor is invalid');
+  return { value: page.normalized_url, id: siteUrlId };
 }
 
 export async function sitePages(
@@ -305,13 +437,7 @@ export async function sitePages(
     args.rule_id ?? null,
     url,
   ]);
-  let after: { value: string; id: string } | null = null;
-  if (args.cursor) {
-    const [fingerprint, url, id] = decodeCursor(args.cursor, 3);
-    if (fingerprint !== filterKey || !url || !parseUuid(id))
-      throw new McpInputError('cursor is invalid');
-    after = { value: url, id: id! };
-  }
+  const after = args.cursor ? await pageCursor(read, args.cursor, filterKey) : null;
   const [rows, root] = await Promise.all([
     pageRows(read.db, crawl, {
       filters: {
@@ -328,16 +454,17 @@ export async function sitePages(
   ]);
   const selected = rows.slice(0, count);
   const analysisIds = selected.flatMap((row) => (row.analysis_id ? [row.analysis_id] : []));
-  const [rules, evidence] = await Promise.all([
+  const [rules, evidence, snippet] = await Promise.all([
     currentIssueRules(read.db, crawl, analysisIds),
     args.rule_id
       ? currentRuleEvidence(read.db, crawl, analysisIds, args.rule_id)
       : Promise.resolve(new Map<string, unknown>()),
+    args.rule_id ? familySnippet(read, crawl.id, args.rule_id) : Promise.resolve(null),
   ]);
   // Compact rows: the next read's ids, the page, its states and failing rules.
   const items = selected.map((row) => ({
     site_url_id: row.site_url_id,
-    url: row.display_url,
+    url: withoutQuery(row.display_url),
     title: row.title,
     page_kind: row.page_kind,
     status: row.analysis_status,
@@ -380,11 +507,11 @@ export async function sitePages(
       root_errors: root.errors,
     },
     items,
+    // The issue family's one redacted markup sample, for an exact fix.
+    ...(snippet ? { reference_snippet: snippet } : {}),
     pagination: pagination(
       items,
-      rows.length > count && last
-        ? encodeCursor(filterKey, last.normalized_url, last.site_url_id)
-        : null,
+      rows.length > count && last ? encodeCursor(filterKey, last.site_url_id) : null,
     ),
     artifact_refs: [
       reference('site_crawl', crawl.id),
@@ -395,38 +522,20 @@ export async function sitePages(
   } satisfies McpSitePages & Evidence;
 }
 
-/** The crawled pages of one crawl with their current analysis and fetched facts. */
-function crawledPages({ db, scope }: ProjectRead, crawlId: string) {
-  return db
-    .selectFrom('site_page_analyses as a')
-    .innerJoin('site_fetch_artifacts as f', (join) =>
-      join
-        .onRef('f.id', '=', 'a.artifact_id')
-        .onRef('f.workspace_id', '=', 'a.workspace_id')
-        .onRef('f.crawl_id', '=', 'a.crawl_id'),
-    )
-    .innerJoin('site_urls as u', (join) =>
-      join
-        .onRef('u.id', '=', 'a.site_url_id')
-        .onRef('u.workspace_id', '=', 'a.workspace_id')
-        .onRef('u.project_id', '=', 'a.project_id'),
-    )
-    .where('a.workspace_id', '=', scope.workspaceId)
-    .where('a.project_id', '=', scope.projectId)
-    .where('a.crawl_id', '=', crawlId)
-    .where('a.is_current', '=', true)
-    .select([
-      'a.id as analysis_id',
-      'a.page_kind',
-      'u.id as site_url_id',
-      'u.normalized_url',
-      sql<string>`coalesce(nullif(u.display_url, ''), u.normalized_url)`.as('url'),
-      'f.id as artifact_id',
-      'f.final_url',
-      'f.fetched_at',
-      'f.extractor_version',
-      'f.normalized_facts',
-    ]);
+/** The crawl's pages at their latest audit (`latestPagesQuery`, SH-B9) and their fetched facts. */
+function crawledPages({ db }: ProjectRead, crawl: ViewCrawl) {
+  return latestPagesQuery(db, crawl).select([
+    'a.id as analysis_id',
+    'a.page_kind',
+    'u.id as site_url_id',
+    'u.normalized_url',
+    sql<string>`coalesce(nullif(u.display_url, ''), u.normalized_url)`.as('url'),
+    'f.id as artifact_id',
+    'f.final_url',
+    'f.fetched_at',
+    'f.extractor_version',
+    'f.normalized_facts',
+  ]);
 }
 type CrawledPage = Awaited<ReturnType<ReturnType<typeof crawledPages>['execute']>>[number];
 
@@ -488,7 +597,7 @@ export async function pageText(
   const url = args.site_url_id ? null : urlFilter(args.url);
   const crawl = await selectCrawl(read, args.crawl_id);
   if (!crawl) return unavailable('no_site_crawl');
-  let query = crawledPages(read, crawl.id);
+  let query = crawledPages(read, crawl);
   if (args.site_url_id) query = query.where('u.id', '=', args.site_url_id);
   if (url)
     query = query.where((eb) =>
@@ -517,14 +626,16 @@ export async function pageText(
       ...unavailable('page_not_crawled'),
       ...identity,
       // Near matches let the caller pick the page the crawl did reach.
-      crawled_urls: candidates.slice(0, mcpPolicy.page_text_url_suggestions).map((row) => row.url),
+      crawled_urls: candidates
+        .slice(0, mcpPolicy.page_text_url_suggestions)
+        .map((row) => withoutQuery(row.url)),
       artifact_refs: [reference('site_crawl', crawl.id)],
     };
   return {
     state: 'available',
-    url: page.url,
+    url: withoutQuery(page.url),
     ...pageCopy(page),
-    final_url: page.final_url,
+    final_url: page.final_url === null ? null : withoutQuery(page.final_url),
     page_kind: page.page_kind,
     site_url_id: page.site_url_id,
     fetched_at: page.fetched_at,

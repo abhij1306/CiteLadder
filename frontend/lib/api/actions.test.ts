@@ -16,6 +16,7 @@ const declaration = {
   output_revision_id: REVISION,
   member_opportunity_ids: [],
   opportunity_snapshot_id: SNAPSHOT,
+  resolved_before_snapshot_id: null,
   target_site_url_ids: [],
   target_external_url: null,
   declared_implemented_at: NOW,

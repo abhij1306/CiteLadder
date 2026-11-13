@@ -1,5 +1,3 @@
-'use client';
-
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { retainPreviousDataForScope, warmQuery } from '@/lib/api/query-client';
@@ -68,6 +66,11 @@ function setRange(value: TrendRange) {
     configuration: null,
     ...Object.fromEntries(pageKeys.map((key) => [key, null])),
   });
+}
+
+/** A link to Visibility Sources for one run, in the URL keys `useVisibilityFilters` reads. */
+export function visibilityRunSourcesHref(runId: string) {
+  return `/visibility?${new URLSearchParams({ tab: 'sources', run: runId }).toString()}`;
 }
 
 export function useVisibilityFilters() {

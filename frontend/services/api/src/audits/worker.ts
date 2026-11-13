@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { Database } from '../db/database.ts';
-import { getLogger } from '../logging.ts';
+import { failureFacts, getLogger } from '../logging.ts';
 import {
   AuditQueue,
   ownedAuditTask,
@@ -90,7 +90,12 @@ export class AuditWorker {
       this.#runtime.audits.worker_concurrency,
       this.#taskScope,
     );
-    await Promise.all(tasks.map((task) => this.#execute(task, signal)));
+    // Every claimed task settles before a failure surfaces; none is left running detached.
+    const settled = await Promise.allSettled(tasks.map((task) => this.#execute(task, signal)));
+    const failure = settled.find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    if (failure) throw failure.reason;
     return tasks.length;
   }
   /**
@@ -190,7 +195,22 @@ export class AuditWorker {
       });
     } finally {
       await heartbeat.stop();
-      await this.#projections.finalize(claimed.workspace_id, claimed.audit_id);
+      await this.#finalize(claimed);
+    }
+  }
+  /**
+   * The task already settled: one audit's failed finalize never fails the lane
+   * or its siblings. Maintenance finalizes an audit whose tasks are all terminal.
+   */
+  async #finalize(task: AuditTask) {
+    try {
+      await this.#projections.finalize(task.workspace_id, task.audit_id);
+    } catch (error) {
+      logger.warning('audit_finalize_failed', {
+        audit_id: task.audit_id,
+        task_id: task.id,
+        ...failureFacts(error),
+      });
     }
   }
   /** The leased dispatch: ownership is rechecked right before any network boundary. */
@@ -291,7 +311,7 @@ export class AuditWorker {
       await parkAuditTask(trx, locked.task, 'capacity_wait', available, at);
       await auditEvent(
         trx,
-        task.audit_id,
+        { workspaceId: task.workspace_id, auditId: task.audit_id },
         auditPolicy.constants.event_task_capacity_wait,
         'task capacity wait',
         {

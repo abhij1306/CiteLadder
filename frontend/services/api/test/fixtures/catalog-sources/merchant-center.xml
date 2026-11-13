@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
+  <channel>
+    <title>Acme store</title>
+    <item>
+      <g:id>TR-1-9</g:id>
+      <g:item_group_id>TR-1</g:item_group_id>
+      <title>Trail Runner - Size 9</title>
+      <link>https://shop.example/products/trail-runner?variant=9</link>
+      <g:image_link>https://cdn.example/trail.png</g:image_link>
+      <g:price>119.00 EUR</g:price>
+      <g:brand>Acme</g:brand>
+      <g:gtin>0012345678905</g:gtin>
+      <g:product_type>Footwear &gt; Running &gt; Trail</g:product_type>
+    </item>
+    <item>
+      <g:id>TR-1-10</g:id>
+      <g:item_group_id>TR-1</g:item_group_id>
+      <title>Trail Runner - Size 10</title>
+      <link>https://shop.example/products/trail-runner?variant=10</link>
+      <g:price>129.00 EUR</g:price>
+      <g:brand>Acme</g:brand>
+      <g:gtin>0012345678912</g:gtin>
+      <g:product_type>Footwear &gt; Running &gt; Trail</g:product_type>
+    </item>
+    <item>
+      <g:id>SK-1</g:id>
+      <title>Wool Sock</title>
+      <link>https://shop.example/products/sock</link>
+      <g:price>12.00 EUR</g:price>
+      <g:brand>Acme</g:brand>
+      <g:mpn>SOCK-W</g:mpn>
+      <g:product_type>Accessories</g:product_type>
+    </item>
+  </channel>
+</rss>

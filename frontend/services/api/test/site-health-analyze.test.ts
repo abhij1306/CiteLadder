@@ -1,11 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
 import { record } from '../src/db/json.ts';
 import type { FetchedPage } from '../src/safe-fetch.ts';
-import { isBotBlock, SitePageFetcher, siteFetchSettings } from '../src/site-health/page-fetch.ts';
-import { crawlCounters } from '../src/site-health/reads/crawl.ts';
+import {
+  crawlRobotsHandling,
+  isBotBlock,
+  SitePageFetcher,
+  siteFetchSettings,
+} from '../src/site-health/page-fetch.ts';
+import { crawlCounters } from '../src/site-health/reads/crawl-counters.ts';
+import { pageDetail, pages } from '../src/site-health/reads/pages.ts';
 import * as interpretation from '../src/site-health/analysis/off-thread.ts';
 import { hardExcluded } from '../src/site-health/url-admission.ts';
 import { siteWorkerSettings } from '../src/site-health/runtime.ts';
@@ -31,10 +38,13 @@ const workerSettings = {
 const fetchSettings = siteFetchSettings({
   SITE_HEALTH_PER_HOST_DELAY_SECONDS: '0',
   SITE_HEALTH_DEFAULT_CRAWL_DELAY_SECONDS: '0',
+  SITE_HEALTH_ROBOTS_TRANSIENT_BACKOFF_SECONDS: '0.001',
 });
 const RICH =
   "<html lang='en'><head><title>Rich page about widgets</title><meta name='description' content='Widgets.'></head>" +
   '<body><main><h1>Widgets</h1><p>Widgets are useful tools for small workshops.</p></main></body></html>';
+/** A crawl of example.test that chose to ignore robots.txt. */
+const IGNORE_ROBOTS = JSON.stringify({ robots: 'ignore', root_registrable_domain: 'example.test' });
 
 const site = (pages: Record<string, Served>, requests: string[] = []) =>
   new SitePageFetcher(db, recordedSite(pages, requests), fetchSettings);
@@ -438,20 +448,20 @@ describe('analyze failures', () => {
     },
   );
 
-  it('releases a system selection that answers 404, but keeps a user selection and a server error', async () => {
+  it('releases a selection that answers 404, but keeps one with a server error', async () => {
     const seed = await running();
-    const gone = await fixtures.analyzable(seed, '/gone', { source: 'bootstrap' });
-    const chosen = await fixtures.analyzable(seed, '/chosen');
-    const broken = await fixtures.analyzable(seed, '/broken', { source: 'bootstrap' });
+    const gone = await fixtures.analyzable(seed, '/gone');
+    const sampled = await fixtures.analyzable(seed, '/sampled', { source: 'free_sample' });
+    const broken = await fixtures.analyzable(seed, '/broken');
     await db
       .updateTable('site_crawl_tasks')
       .set({ max_attempts: 1 })
       .where('id', '=', broken.taskId)
       .execute();
     await analyze(
-      site({ '/gone': { status: 404 }, '/chosen': { status: 404 }, '/broken': { status: 503 } }),
+      site({ '/gone': { status: 404 }, '/sampled': { status: 404 }, '/broken': { status: 503 } }),
       gone.taskId,
-      chosen.taskId,
+      sampled.taskId,
       broken.taskId,
     );
     const active = async (siteUrlId: string) =>
@@ -464,9 +474,9 @@ describe('analyze failures', () => {
       ).active;
     expect([
       await active(gone.siteUrlId),
-      await active(chosen.siteUrlId),
+      await active(sampled.siteUrlId),
       await active(broken.siteUrlId),
-    ]).toEqual([false, true, true]);
+    ]).toEqual([false, false, true]);
   });
 
   it('honors robots before any page request and records one diagnostic attempt', async () => {
@@ -489,6 +499,125 @@ describe('analyze failures', () => {
       expect.objectContaining({ error_code: codes.robots_denied, status_code: null }),
     ]);
   });
+
+  it('fetches a disallowed page for a crawl that ignores robots.txt and marks the page', async () => {
+    const seed = await running({ configuration: IGNORE_ROBOTS });
+    const page = await fixtures.analyzable(seed, '/private');
+    const open = await fixtures.analyzable(seed, '/open');
+    const requests: string[] = [];
+    await analyze(
+      site(
+        {
+          '/robots.txt': { body: 'User-agent: *\nDisallow: /private\n', contentType: 'text/plain' },
+          '/private': { body: RICH },
+          '/open': { body: RICH },
+        },
+        requests,
+      ),
+      page.taskId,
+      open.taskId,
+    );
+    expect(await task(page.taskId)).toMatchObject({ status: 'succeeded', error_code: '' });
+    expect(requests).toEqual(['/robots.txt', '/private', '/open']);
+    // Discovery would have observed both pages in this crawl.
+    await db
+      .insertInto('site_url_observations')
+      .values(
+        [page, open].map(({ siteUrlId }) => ({
+          id: randomUUID(),
+          workspace_id: seed.workspaceId,
+          project_id: seed.projectId,
+          crawl_id: seed.crawlId,
+          site_url_id: siteUrlId,
+          source_kind: 'link',
+          observed_url: '',
+          final_url: '',
+          status_code: 200,
+          content_type: 'text/html',
+          depth: 0,
+          title: '',
+          rewrite_reason: '',
+          rewrite_version: '',
+          value_kind: '',
+          value_priority: 0,
+          created_at: new Date(),
+        })),
+      )
+      .execute();
+    const listed = await pages(db, seed.workspaceId, seed.crawlId, {}, 'url', {
+      limit: 10,
+      cursor: null,
+    });
+    expect(
+      listed.items.map((item) => [item.normalized_url, item.analysis_status, item.robots_excluded]),
+    ).toEqual([
+      ['https://example.test/open', 'completed', false],
+      ['https://example.test/private', 'completed', true],
+    ]);
+    const detail = await pageDetail(db, seed.workspaceId, seed.crawlId, page.siteUrlId);
+    expect(detail.robots_excluded).toBe(true);
+  });
+
+  it('respects robots.txt for every caller that does not pass the crawl’s ignore choice', async () => {
+    const fetcher = site({
+      '/robots.txt': { body: 'User-agent: *\nDisallow: /private\n', contentType: 'text/plain' },
+      '/private': { body: RICH },
+    });
+    // Page documents and other non-crawl fetches call without a choice.
+    expect(await fetcher.fetch('https://example.test/private')).toMatchObject({
+      ok: false,
+      code: codes.robots_denied,
+    });
+    expect(
+      await fetcher.fetch('https://example.test/private', {
+        robots: crawlRobotsHandling(JSON.parse(IGNORE_ROBOTS)),
+      }),
+    ).toMatchObject({ ok: true, robotsExcluded: true });
+  });
+
+  it('never follows a redirect off the crawl’s own site, as discovery does not', async () => {
+    const seed = await running({ configuration: IGNORE_ROBOTS });
+    const page = await fixtures.analyzable(seed, '/go');
+    const requests: string[] = [];
+    await analyze(
+      site(
+        {
+          '/go': { status: 302, redirect: 'https://elsewhere.test/private' },
+          '/private': { body: RICH },
+        },
+        requests,
+      ),
+      page.taskId,
+    );
+    expect(await task(page.taskId)).toMatchObject({
+      status: 'failed',
+      error_code: codes.url_admission_rejected,
+    });
+    // The own-site page is fetched; the off-site hop is never requested.
+    expect(requests).toEqual(['/robots.txt', '/go']);
+  });
+
+  it.each([
+    ['access-blocked (403)', { status: 403 }, 'failed', codes.access_blocked, ['/robots.txt']],
+    // A transient failure is retried in place, then the task retries later.
+    [
+      'unreachable (503)',
+      { status: 503 },
+      'retry_wait',
+      codes.robots_unavailable,
+      ['/robots.txt', '/robots.txt', '/robots.txt'],
+    ],
+  ])(
+    'still stops at an %s robots.txt when the crawl ignores robots.txt',
+    async (_label, robots, status, code, expected) => {
+      const seed = await running({ configuration: IGNORE_ROBOTS });
+      const page = await fixtures.analyzable(seed, '/private');
+      const requests: string[] = [];
+      await analyze(site({ '/robots.txt': robots }, requests), page.taskId);
+      expect(await task(page.taskId)).toMatchObject({ status, error_code: code });
+      expect(requests).toEqual(expected);
+    },
+  );
 
   it('never follows a redirect into a hard-excluded endpoint', async () => {
     const seed = await running();
@@ -612,22 +741,22 @@ describe('analyze guards', () => {
     expect(await analyses(foreign, page.siteUrlId)).toEqual([]);
   });
 
-  it('cancels before fetching the page when the monitored-URL limit is 0', async () => {
+  it('keeps analyzing tracked pages after the monitored-URL limit drops to zero', async () => {
     const seed = await running();
-    const user = await fixtures.analyzable(seed, '/user', { monitoredLimit: 0 });
+    const picked = await fixtures.analyzable(seed, '/picked', { monitoredLimit: 0 });
     const sample = await fixtures.analyzable(seed, '/sample', {
       monitoredLimit: 0,
       source: 'free_sample',
     });
     const requests: string[] = [];
-    await analyze(site({ '/sample': { body: RICH } }, requests), user.taskId, sample.taskId);
-    expect(await task(user.taskId)).toMatchObject({ status: 'cancelled', error_code: 'cancelled' });
-    expect(await task(sample.taskId)).toMatchObject({
-      status: 'cancelled',
-      error_code: 'cancelled',
-    });
-    expect(requests).not.toContain('/user');
-    expect(requests).not.toContain('/sample');
+    await analyze(
+      site({ '/picked': { body: RICH }, '/sample': { body: RICH } }, requests),
+      picked.taskId,
+      sample.taskId,
+    );
+    expect((await task(picked.taskId)).status).toBe('succeeded');
+    expect((await task(sample.taskId)).status).toBe('succeeded');
+    expect(requests.toSorted()).toEqual(['/picked', '/robots.txt', '/sample']);
   });
 
   it.each([

@@ -3,10 +3,9 @@ import { describe, expect, it } from 'vite-plus/test';
 import {
   emptyIssueFilters,
   findingClassChange,
-  issueFilterClass,
-  issueFilterClassChange,
-  issueFilterClasses,
   issueFilterParams,
+  issueSeverityChange,
+  issueSeverityChoice,
   toIssueParams,
 } from './issue-filters';
 
@@ -15,10 +14,11 @@ describe('toIssueParams', () => {
     expect(toIssueParams({ ...emptyIssueFilters, severity: 'low' }, 'C', 50)).toEqual({
       cursor: 'C',
       limit: 50,
+      section: 'technical',
+      sort: 'severity',
       query: undefined,
       severity: 'low',
       category: undefined,
-      dimension: undefined,
       rule: undefined,
       site_url_id: undefined,
       finding_class: 'defect',
@@ -32,10 +32,20 @@ describe('toIssueParams', () => {
     expect('rule_id' in params).toBe(false);
   });
 
-  it('trims the query and passes the page kind through', () => {
-    const params = toIssueParams({ ...emptyIssueFilters, query: '  schema  ', page_kind: 'faq' });
-    expect(params.query).toBe('schema');
-    expect(params.page_kind).toBe('faq');
+  it('trims the query and passes the tab, order and page kind through', () => {
+    const params = toIssueParams({
+      ...emptyIssueFilters,
+      section: 'aeo',
+      sort: 'pages',
+      query: '  schema  ',
+      page_kind: 'faq',
+    });
+    expect(params).toMatchObject({
+      section: 'aeo',
+      sort: 'pages',
+      query: 'schema',
+      page_kind: 'faq',
+    });
   });
 });
 
@@ -43,20 +53,22 @@ describe('issueFilterParams (the URL patch)', () => {
   it('writes every set filter', () => {
     expect(
       issueFilterParams({
+        section: 'content',
+        sort: 'pages',
         query: '  schema  ',
         severity: 'high',
         category: 'metadata',
-        dimension: 'aeo',
         rule_id: 'meta.title',
         site_url_id: 'u1',
         finding_class: 'advisory',
         page_kind: 'product',
       }),
     ).toEqual({
+      section: 'content',
+      sort: 'pages',
       query: 'schema',
       severity: 'high',
       category: 'metadata',
-      dimension: 'aeo',
       rule: 'meta.title',
       site_url_id: 'u1',
       finding_class: 'advisory',
@@ -69,42 +81,20 @@ describe('issueFilterParams (the URL patch)', () => {
   });
 });
 
-describe('the severity/dimension segment', () => {
-  it('reads a severity, then a dimension, and otherwise "all"', () => {
-    expect(issueFilterClass({ ...emptyIssueFilters, severity: 'medium' })).toBe('medium');
-    expect(issueFilterClass({ ...emptyIssueFilters, dimension: 'aeo' })).toBe('aeo');
-    expect(issueFilterClass(emptyIssueFilters)).toBe('all');
-    // An unrecognized inbound value is not a segment.
-    expect(issueFilterClass({ ...emptyIssueFilters, severity: 'critical' })).toBe('all');
+describe('the severity choice', () => {
+  it('reads a known severity, and otherwise "all"', () => {
+    expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'medium' })).toBe('medium');
+    expect(issueSeverityChoice(emptyIssueFilters)).toBe('all');
+    // An unrecognized inbound value is not a choice.
+    expect(issueSeverityChoice({ ...emptyIssueFilters, severity: 'critical' })).toBe('all');
   });
 
-  it('sets one half of the pair and clears the other', () => {
-    expect(issueFilterClassChange('low')).toEqual({ severity: 'low', dimension: '' });
-    expect(issueFilterClassChange('technical')).toEqual({ severity: '', dimension: 'technical' });
-    expect(issueFilterClassChange('all')).toEqual({ severity: '', dimension: '' });
+  it('sets the severity, and "all" clears it', () => {
+    expect(issueSeverityChange('low')).toEqual({ severity: 'low' });
+    expect(issueSeverityChange('all')).toEqual({ severity: '' });
   });
 
-  it('offers severities to defects only — advisories have none', () => {
-    expect(issueFilterClasses('defect').map((item) => item.key)).toEqual([
-      'all',
-      'high',
-      'medium',
-      'low',
-      'technical',
-      'aeo',
-    ]);
-    expect(issueFilterClasses('advisory').map((item) => item.key)).toEqual([
-      'all',
-      'technical',
-      'aeo',
-    ]);
-  });
-
-  it('resets the segment when the finding class switches', () => {
-    expect(findingClassChange('advisory')).toEqual({
-      finding_class: 'advisory',
-      severity: '',
-      dimension: '',
-    });
+  it('resets the severity when the finding class switches', () => {
+    expect(findingClassChange('advisory')).toEqual({ finding_class: 'advisory', severity: '' });
   });
 });

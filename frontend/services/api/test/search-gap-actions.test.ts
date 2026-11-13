@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { afterAll, describe, expect, it } from 'vitest';
 
-import { groupMembers, plannedPageKey } from '../src/analysis/opportunities/actions.ts';
+import { groupMembers, NO_HANDOFF_FACTS } from '../src/analysis/opportunities/actions.ts';
+import { plannedPageKey } from '../src/opportunities/targets/registry.ts';
 import type { TargetRef } from '../src/analysis/opportunities/targets.ts';
 import { opportunityEvidenceSchemas } from '@citeladder/contracts/opportunity-evidence';
 import { policy } from '../src/config.ts';
@@ -309,6 +310,7 @@ describe('keyword gaps become Actions', () => {
       source_analysis_ids: [],
       source_issue_ids: [],
       source_metric_ids: [],
+      facts: NO_HANDOFF_FACTS,
     });
     const groups = groupMembers([
       member('emerging_query', { kind: 'demand', identity_hash: 'h', url: null, query: ' Shoes ' }),
@@ -365,6 +367,7 @@ describe('keyword gaps become Actions', () => {
       source_analysis_ids: [],
       source_issue_ids: [],
       source_metric_ids: [],
+      facts: NO_HANDOFF_FACTS,
     });
     const [page] = groupMembers([
       member('missing_structured_data', 30),

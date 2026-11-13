@@ -37,6 +37,7 @@ export function readSeedQueries(
       .selectFrom('topics')
       .select(['id', 'name', 'description'])
       .where('project_id', '=', projectId)
+      .where('workspace_id', '=', workspaceId)
       .orderBy('created_at')
       .orderBy('id')
       .execute();
@@ -50,12 +51,14 @@ export function readSeedQueries(
       .selectFrom('brands')
       .select(['id', 'name'])
       .where('project_id', '=', projectId)
+      .where('workspace_id', '=', workspaceId)
       .executeTakeFirst();
     const aliases = brand
       ? await trx
           .selectFrom('brand_aliases')
           .select('alias')
           .where('brand_id', '=', brand.id)
+          .where('workspace_id', '=', workspaceId)
           .execute()
       : [];
     const competitors = (
@@ -63,6 +66,7 @@ export function readSeedQueries(
         .selectFrom('competitors')
         .select(['name', 'aliases'])
         .where('project_id', '=', projectId)
+        .where('workspace_id', '=', workspaceId)
         .execute()
     ).map((row) => ({ name: row.name, aliases: strings(row.aliases) }));
     // The same mention rules generation applies, so a query naming a

@@ -1,5 +1,3 @@
-'use client';
-
 import { Component, Suspense, type ReactNode } from 'react';
 
 import { textRole } from '@/components/ui/typography';

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Selectable } from 'kysely';
 import type { Database } from '../db/database.ts';
-import type { Audits } from '../generated/db-schema.ts';
+import type { Audits, BrandMentions } from '../generated/db-schema.ts';
 import type { AuditTask } from '../queue/audit-queue.ts';
 import { policy } from '../config.ts';
 import { record, jsonObjects } from '../db/json.ts';
@@ -30,28 +30,11 @@ function citationClassification(classified: ClassifiedCitation) {
   return classified.matched_competitor ? 'competitor' : 'third_party';
 }
 
-/**
- * Derives one answer's analysis, mentions, citations, retrieved sources and ads from its
- * immutable artifact. The caller holds the scoped audit/task lock and commits alongside the
- * artifact. Returns the new analysis, or null when the artifact was already analyzed.
- */
-export async function analyzeResponse(
+/** The artifact, its prompt snapshot and the deterministic score derived from them. */
+async function scoredArtifact(
   db: Database,
-  task: AuditTask,
-  audit: Selectable<Audits>,
-  artifactId: string,
+  { task, audit, artifactId }: { task: AuditTask; audit: Selectable<Audits>; artifactId: string },
 ) {
-  const existing = await db
-    .selectFrom('response_analyses')
-    .selectAll()
-    .where('workspace_id', '=', task.workspace_id)
-    .where('audit_id', '=', audit.id)
-    .where('task_id', '=', task.id)
-    .executeTakeFirst();
-  if (existing) {
-    if (existing.artifact_id !== artifactId) throw new Error('Analysis artifact mismatch');
-    return null;
-  }
   const artifact = await db
     .selectFrom('raw_response_artifacts')
     .selectAll()
@@ -86,6 +69,133 @@ export async function analyzeResponse(
     }),
     cohort: snapshot.cohort,
   };
+  return { artifact, snapshot, config, citations, retrieved, score };
+}
+
+/** What every derived row carries: its analysis, artifact and analyzer version. */
+type Provenance = Pick<
+  Selectable<BrandMentions>,
+  'workspace_id' | 'audit_id' | 'analysis_id' | 'artifact_id' | 'analyzer_version' | 'created_at'
+>;
+type Scored = Awaited<ReturnType<typeof scoredArtifact>>;
+type Derived = { provenance: Provenance; config: Scored['config'] };
+
+async function persistMentions(
+  db: Database,
+  { provenance, score, config }: Derived & Pick<Scored, 'score'>,
+) {
+  if (score.brand_mentioned)
+    await db
+      .insertInto('brand_mentions')
+      .values({
+        ...provenance,
+        id: randomUUID(),
+        brand_name: config.brandName,
+        first_offset: score.brand_first_offset,
+      })
+      .execute();
+  if (score.competitors_mentioned.length)
+    await db
+      .insertInto('competitor_mentions')
+      .values(
+        score.competitors_mentioned.map((name) => ({
+          ...provenance,
+          id: randomUUID(),
+          competitor_name: name,
+          first_offset: score.competitor_first_offsets[name] ?? null,
+        })),
+      )
+      .execute();
+}
+
+async function persistCitations(
+  db: Database,
+  { provenance, citations, config }: Derived & Pick<Scored, 'citations'>,
+) {
+  if (citations.length)
+    await db
+      .insertInto('citations')
+      .values(
+        citations.map((citation, ordinal) => {
+          const classified = classifyCitation(citation, config),
+            resolved = scalarText(citation.resolved_url).trim();
+          return {
+            ...provenance,
+            id: randomUUID(),
+            ordinal: typeof citation.ordinal === 'number' ? citation.ordinal : ordinal,
+            url: scalarText(citation.url),
+            title: scalarText(citation.title),
+            domain: classified.domain,
+            classification: citationClassification(classified),
+            source_class: classifySourceDomain(
+              classified.domain,
+              classified.is_owned,
+              classified.matched_competitor,
+            ),
+            source_origin: classifySourceOrigin(classified.domain),
+            source_taxonomy_version: policy.opportunity.source_patterns.SOURCE_TAXONOMY_VERSION,
+            is_owned: classified.is_owned,
+            is_unintended: classified.is_unintended,
+            matched_competitor: classified.matched_competitor,
+            ...citationIdentity(resolved || scalarText(citation.url), Boolean(resolved)),
+          };
+        }),
+      )
+      .execute();
+}
+
+async function persistRetrievedSources(
+  db: Database,
+  { provenance, retrieved, config }: Derived & Pick<Scored, 'retrieved'>,
+) {
+  if (retrieved?.length)
+    await db
+      .insertInto('retrieved_sources')
+      .values(
+        retrieved.map((source, ordinal) => {
+          const classified = classifyCitation(source, config);
+          return {
+            ...provenance,
+            id: randomUUID(),
+            ordinal: typeof source.ordinal === 'number' ? source.ordinal : ordinal,
+            url: scalarText(source.url),
+            title: scalarText(source.title),
+            domain: classified.domain,
+            is_owned: classified.is_owned,
+            ...retrievedIdentity(scalarText(source.url)),
+          };
+        }),
+      )
+      .execute();
+}
+
+/**
+ * Derives one answer's analysis, mentions, citations, retrieved sources and ads from its
+ * immutable artifact. The caller holds the scoped audit/task lock and commits alongside the
+ * artifact. Returns the new analysis, or null when the artifact was already analyzed.
+ */
+export async function analyzeResponse(
+  db: Database,
+  task: AuditTask,
+  audit: Selectable<Audits>,
+  artifactId: string,
+) {
+  const existing = await db
+    .selectFrom('response_analyses')
+    .selectAll()
+    .where('workspace_id', '=', task.workspace_id)
+    .where('audit_id', '=', audit.id)
+    .where('task_id', '=', task.id)
+    .executeTakeFirst();
+  if (existing) {
+    if (existing.artifact_id !== artifactId) throw new Error('Analysis artifact mismatch');
+    return null;
+  }
+  const { artifact, snapshot, config, citations, retrieved, score } = await scoredArtifact(db, {
+    task,
+    audit,
+    artifactId,
+  });
   const at = new Date(),
     id = randomUUID(),
     versions = policy.audits.analysis,
@@ -144,77 +254,9 @@ export async function analyzeResponse(
     analyzer_version: versions.analyzer_version,
     created_at: at,
   };
-  if (score.brand_mentioned)
-    await db
-      .insertInto('brand_mentions')
-      .values({
-        ...provenance,
-        id: randomUUID(),
-        brand_name: config.brandName,
-        first_offset: score.brand_first_offset,
-      })
-      .execute();
-  if (score.competitors_mentioned.length)
-    await db
-      .insertInto('competitor_mentions')
-      .values(
-        score.competitors_mentioned.map((name) => ({
-          ...provenance,
-          id: randomUUID(),
-          competitor_name: name,
-          first_offset: score.competitor_first_offsets[name] ?? null,
-        })),
-      )
-      .execute();
-  if (citations.length)
-    await db
-      .insertInto('citations')
-      .values(
-        citations.map((citation, ordinal) => {
-          const classified = classifyCitation(citation, config),
-            resolved = scalarText(citation.resolved_url).trim();
-          return {
-            ...provenance,
-            id: randomUUID(),
-            ordinal: typeof citation.ordinal === 'number' ? citation.ordinal : ordinal,
-            url: scalarText(citation.url),
-            title: scalarText(citation.title),
-            domain: classified.domain,
-            classification: citationClassification(classified),
-            source_class: classifySourceDomain(
-              classified.domain,
-              classified.is_owned,
-              classified.matched_competitor,
-            ),
-            source_origin: classifySourceOrigin(classified.domain),
-            source_taxonomy_version: policy.opportunity.source_patterns.SOURCE_TAXONOMY_VERSION,
-            is_owned: classified.is_owned,
-            is_unintended: classified.is_unintended,
-            matched_competitor: classified.matched_competitor,
-            ...citationIdentity(resolved || scalarText(citation.url), Boolean(resolved)),
-          };
-        }),
-      )
-      .execute();
-  if (retrieved?.length)
-    await db
-      .insertInto('retrieved_sources')
-      .values(
-        retrieved.map((source, ordinal) => {
-          const classified = classifyCitation(source, config);
-          return {
-            ...provenance,
-            id: randomUUID(),
-            ordinal: typeof source.ordinal === 'number' ? source.ordinal : ordinal,
-            url: scalarText(source.url),
-            title: scalarText(source.title),
-            domain: classified.domain,
-            is_owned: classified.is_owned,
-            ...retrievedIdentity(scalarText(source.url)),
-          };
-        }),
-      )
-      .execute();
+  await persistMentions(db, { provenance, score, config });
+  await persistCitations(db, { provenance, citations, config });
+  await persistRetrievedSources(db, { provenance, retrieved, config });
   if (ads)
     await persistAds(db, {
       workspaceId: task.workspace_id,

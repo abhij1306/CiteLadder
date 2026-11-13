@@ -51,6 +51,7 @@ export const siteHealthKeys = {
   crawls: (scope: ProjectScope, filters: ListFilters = {}) =>
     siteHealth.read('crawls', scope, filters),
   monitored: (scope: ProjectScope) => siteHealth.read('monitored', scope),
+  crawlSchedule: (scope: ProjectScope) => siteHealth.read('crawl-schedule', scope),
   internalLinks: (scope: ProjectScope, analysisId?: string) =>
     siteHealth.read('internal-links', scope, analysisId ?? 'latest'),
   /**
@@ -88,6 +89,13 @@ export const siteHealthKeys = {
     groupId: string,
     filters: ListFilters = {},
   ) => crawlRead('issue', workspaceId, crawlId, groupId, filters),
+  /** Every issue's detail pages of one crawl, in any workspace and filter. */
+  crawlIssueDetails: (crawlId: string) => crawlResource(crawlId, 'issue'),
+  /** The crawl's fix progress, in every workspace. */
+  crawlIssueFixes: (crawlId: string) => crawlResource(crawlId, 'issue-fixes'),
+  /** How far each of the crawl's issues is fixed: what Mark fixed and every audit move. */
+  issueFixes: (workspaceId: string | null, crawlId: string) =>
+    crawlRead('issue-fixes', workspaceId, crawlId),
   /** One URL's detail, in every workspace: what a rerun refreshes. */
   crawlPage: (crawlId: string, siteUrlId: string) =>
     [...crawlResource(crawlId, 'page'), siteUrlId] as const,

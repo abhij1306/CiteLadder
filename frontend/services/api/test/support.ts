@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { SignJWT, jwtVerify } from 'jose';
 
+import { authorize, type Authorized, type Permission } from '../src/commands/permission.ts';
 import { loadConfig, type ServiceConfig } from '../src/config.ts';
 import { ApiError } from '../src/errors.ts';
 import { createDatabase, type Database } from '../src/db/database.ts';
@@ -45,6 +46,34 @@ export function testConfig(overrides: Record<string, string> = {}): ServiceConfi
 
 export function testDatabase(config: ServiceConfig = testConfig()): Database {
   return createDatabase(config);
+}
+
+/** The test database URL, for fixtures and schema tests that open their own connection. */
+export function ownerDatabaseUrl(): string {
+  return testConfig().databaseUrl;
+}
+
+/**
+ * Run fixture work on its own connection, as the schema owner the app also
+ * connects as: tests that arrange or remove append-only evidence and attempt
+ * rows do it here, apart from the code under test.
+ */
+export async function asOwner<T>(work: (owner: Database) => Promise<T>): Promise<T> {
+  const owner = createDatabase(testConfig({ DATABASE_URL: ownerDatabaseUrl() }));
+  try {
+    return await work(owner);
+  } finally {
+    await owner.destroy();
+  }
+}
+
+/** A workspace owner's member actor, checked against `required` as a route's gate would. */
+export function ownerActor<P extends Permission>(
+  workspaceId: string,
+  userId: string,
+  required: P,
+): Authorized<P> {
+  return authorize({ kind: 'member', workspaceId, userId, role: 'owner', scopes: 'all' }, required);
 }
 
 export function sessionToken(claims: Record<string, unknown>, key = TEST_SESSION_KEY) {

@@ -2,11 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { getDomain } from 'tldts';
 
+import { abortable } from '../agent/async.ts';
 import { policy } from '../config.ts';
 import type { Database } from '../db/database.ts';
 import { acquireProjectLock } from '../prompts/locks.ts';
 import type { ProjectScope } from './brand-profile.ts';
-import { extractPage } from './html-evidence.ts';
+import { pageIconsAsync } from '../site-health/analysis/off-thread.ts';
 import { fetchWebsite, websiteIdentity, type WebsiteFetcher } from '../safe-fetch.ts';
 import { readProject } from './service.ts';
 import { failureFacts, getLogger } from '../logging.ts';
@@ -47,7 +48,9 @@ async function fetchLogo(url: string, fetcher: WebsiteFetcher, signal: AbortSign
     });
     if (page.status >= 200 && page.status < 300) {
       base = page.url;
-      icons = extractPage(page.body, base).icons;
+      // The homepage HTML parses off the API's event loop; the refresh deadline
+      // also bounds waiting behind other jobs on the shared parse pool.
+      icons = await abortable(() => pageIconsAsync(page.body, base), signal);
     }
   } catch (error) {
     // The well-known fallback can still work when the homepage cannot.

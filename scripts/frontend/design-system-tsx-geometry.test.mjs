@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import {
   featureLayeringViolations,
   tsxGeometryFindings,
-} from '../../frontend/scripts/design-system-source-checks.mjs';
+} from '../../frontend/scripts/design-system-geometry-checks.mjs';
 
 const feature = 'components/example/view.tsx';
 const rules = (source, label = feature) =>

@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vite-plus/test';
@@ -234,6 +234,31 @@ it('links a missing keyword that became an Action', async () => {
   );
 });
 
+it('opens Sources on the run a citation match came from', async () => {
+  const runId = '88888888-8888-4888-8888-888888888888';
+  const match = {
+    ...row('99999999-9999-4999-8999-999999999999', 'crm software'),
+    row_kind: 'citation_match',
+    auxiliary: { audit_id: runId },
+  };
+  mswServer.use(
+    http.get(`/api/v1/projects/${project.id}/search-intelligence/datasets/${dataset.id}/rows`, () =>
+      HttpResponse.json({ dataset, rows: [match], next_cursor: null }),
+    ),
+  );
+  renderWithProviders(<SearchIntelligenceDatasetView dataset={dataset} />, {
+    projectSelection: testProjectSelection({ activeProject: project, activeProjectId: project.id }),
+  });
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'View evidence for crm software' }),
+  );
+  const href = screen.getByRole('link', { name: 'View in Sources' }).getAttribute('href')!;
+  const url = new URL(href, 'http://x');
+  expect(url.pathname).toBe('/visibility');
+  expect(url.searchParams.get('tab')).toBe('sources');
+  expect(url.searchParams.get('run')).toBe(runId);
+});
+
 // `empty` is what acquisition records when the provider answered with no rows.
 it.each([
   ['empty', 0, 'The provider returned no data for this saved scope.'],
@@ -294,6 +319,15 @@ it('uses shared pagination and resets its cursor when sorting or changing rows p
 
   expect(await screen.findByText('First keyword')).toBeInTheDocument();
   expect(requests[0]?.get('limit')).toBe('10');
+  // The pager counts the rows; the footer adds only what the provider had.
+  expect(
+    screen.getByText(
+      (_, node) =>
+        node?.tagName === 'OUTPUT' && /of 201 evidence rows$/.test(node.textContent ?? ''),
+    ),
+  ).toBeInTheDocument();
+  expect(screen.getByText('201 available from the provider')).toBeInTheDocument();
+  expect(screen.queryByText(/rows shown|saved rows/)).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
   expect(await screen.findByText('Later keyword')).toBeInTheDocument();
   expect(screen.queryByText('First keyword')).not.toBeInTheDocument();
@@ -444,7 +478,7 @@ it('does not show a previous query page after a sort read fails', async () => {
   expect(screen.queryByText('First keyword')).not.toBeInTheDocument();
 });
 
-it('sends only nonnegative integer minimum volumes', async () => {
+it('reads the rows the strip’s keyword filters narrow to', async () => {
   const requests: URLSearchParams[] = [];
   mswServer.use(
     http.get(
@@ -459,17 +493,25 @@ it('sends only nonnegative integer minimum volumes', async () => {
       },
     ),
   );
-  renderWithProviders(<SearchIntelligenceDatasetView dataset={dataset} />, {
-    projectSelection: testProjectSelection({ activeProject: project, activeProjectId: project.id }),
-  });
+  renderWithProviders(
+    <SearchIntelligenceDatasetView
+      dataset={dataset}
+      keywordFilters={{ minVolume: '10', intent: 'commercial' }}
+    />,
+    {
+      projectSelection: testProjectSelection({
+        activeProject: project,
+        activeProjectId: project.id,
+      }),
+    },
+  );
   await screen.findByText('First keyword');
-  const input = screen.getByRole('spinbutton', { name: 'Minimum search volume' });
-  fireEvent.change(input, { target: { value: '-1' } });
-  fireEvent.change(input, { target: { value: '1.5' } });
-  expect(input).toHaveValue(null);
-  expect(requests).toHaveLength(1);
-  fireEvent.change(input, { target: { value: '10' } });
-  await waitFor(() => expect(requests.at(-1)?.get('min_volume')).toBe('10'));
+  expect(requests.at(-1)?.get('min_volume')).toBe('10');
+  expect(requests.at(-1)?.get('intent')).toBe('commercial');
+  // The table's own toolbar keeps only its search and actions.
+  expect(
+    screen.queryByRole('spinbutton', { name: 'Minimum search volume' }),
+  ).not.toBeInTheDocument();
 });
 
 it('removes saved rows when access to a dataset is revoked', async () => {

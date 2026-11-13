@@ -122,7 +122,7 @@ describe('Architecture panel', () => {
     expect(screen.getByText('8 including menus')).toBeInTheDocument();
   });
 
-  it('renders the persisted parent hierarchy and relationship source', async () => {
+  it('renders the parent hierarchy and relationship source', async () => {
     stubArchitecture();
     renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
 
@@ -135,16 +135,43 @@ describe('Architecture panel', () => {
     expect(within(homeBranch!).getAllByText('Breadcrumb')).toHaveLength(2);
   });
 
-  it('reveals all URLs assigned to a page kind', async () => {
+  it('labels a parent source only where it differs from the URL path', async () => {
+    const [home, bags, boots] = architecture().nodes;
+    stubArchitecture({ nodes: [home, bags, { ...boots, parent_source: 'url_parent' }] });
+    renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
+
+    const tree = await screen.findByRole('region', { name: 'Observed hierarchy pages' });
+    const row = (url: string) => within(tree).getByRole('link', { name: url }).parentElement!;
+    expect(row('https://acme.test/shop/bags')).toHaveTextContent('Breadcrumb');
+    const bootsRow = row('https://acme.test/shop/boots');
+    expect(bootsRow.textContent).toBe('https://acme.test/shop/bootsProduct');
+    // The home page is the root, not a page missing its parent.
+    expect(row('https://acme.test/').textContent).toBe('https://acme.test/Homepage');
+  });
+
+  it('reveals all URLs assigned to a page kind in the row it controls', async () => {
     stubArchitecture();
     renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
 
     const productButton = await screen.findByRole('button', { name: 'Product' });
+    expect(productButton).toHaveAttribute('aria-expanded', 'false');
     await userEvent.click(productButton);
-    const bags = screen.getAllByRole('link', { name: 'https://acme.test/shop/bags' });
-    expect(bags).toHaveLength(2);
-    expect(bags[0]).toHaveAttribute('href', `/site/crawls/${CRAWL}/pages/${BAGS}`);
-    expect(screen.getAllByRole('link', { name: 'https://acme.test/shop/boots' })).toHaveLength(2);
+    expect(productButton).toHaveAttribute('aria-expanded', 'true');
+    const controlled = document.getElementById(productButton.getAttribute('aria-controls')!);
+    const bags = within(controlled!).getByRole('link', { name: 'https://acme.test/shop/bags' });
+    expect(bags).toHaveAttribute('href', `/site/crawls/${CRAWL}/pages/${BAGS}`);
+    expect(
+      within(controlled!).getByRole('link', { name: 'https://acme.test/shop/boots' }),
+    ).toBeInTheDocument();
+  });
+
+  it('states the orphan count in the linking summary and per kind, not a third time', async () => {
+    stubArchitecture();
+    renderWithProviders(<ArchitecturePanel projectId={PROJECT} crawlId={CRAWL} />);
+
+    const table = await screen.findByRole('region', { name: 'Page kinds' });
+    expect(within(table).getByRole('columnheader', { name: 'Orphaned' })).toBeInTheDocument();
+    expect(screen.getAllByText('Orphaned pages')).toHaveLength(1);
   });
 
   it('reports the orphan count under partial coverage, scoped to what was crawled', async () => {

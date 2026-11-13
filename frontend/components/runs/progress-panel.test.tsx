@@ -12,9 +12,9 @@ import { ProgressPanel, RunActions } from './progress-panel';
  * `components/runs` shipped with no colocated tests. The run lifecycle surface
  * is the one place a user can stop work that costs money, so the assertions
  * that matter are about the Cancel affordance: it must be live while — and only
- * while — the backend would still accept a cooperative cancel. `reporting` is
- * deliberately NOT cancelable (execution and analysis are already done), which
- * is exactly the boundary a rendering test can pin.
+ * while — the backend says it would still accept a cooperative cancel
+ * (`cancelable`). A reporting run is not cancelable (execution and analysis are
+ * already done).
  */
 const BASE_AUDIT: Audit = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -22,6 +22,7 @@ const BASE_AUDIT: Audit = {
   project_id: '33333333-3333-4333-8333-333333333333',
   parent_audit_id: null,
   status: 'running',
+  cancelable: true,
   benchmark_mode: 'consumer_like',
   audit_scope: 'brand',
   model_provenance: [],
@@ -73,7 +74,7 @@ describe('ProgressPanel', () => {
   });
 
   it('disables Cancel once the run is reporting', () => {
-    renderPanel({ status: 'reporting' });
+    renderPanel({ status: 'reporting', cancelable: false });
     expect(cancelButton()).toBeDisabled();
   });
 

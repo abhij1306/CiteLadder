@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vite-plus/test';
 
 import {
   DISPLAY_TIME_ZONE_COOKIE,
+  endOfDayInZone,
   readTimeZonePreference,
   resolveDisplayTimeZone,
   resolveServerDisplayTimeZone,
@@ -20,6 +21,15 @@ afterEach(() => {
 });
 
 describe('display timezone', () => {
+  it('ends a chosen calendar day in the display zone, across daylight-saving changes', () => {
+    expect(endOfDayInZone('2026-11-30', 'UTC')).toBe('2026-11-30T23:59:59.000Z');
+    expect(endOfDayInZone('2026-11-30', 'America/Los_Angeles')).toBe('2026-12-01T07:59:59.000Z');
+    expect(endOfDayInZone('2026-11-30', 'Asia/Kolkata')).toBe('2026-11-30T18:29:59.000Z');
+    // New York switches to daylight time on 2026-03-08: the day ends at UTC-4.
+    expect(endOfDayInZone('2026-03-08', 'America/New_York')).toBe('2026-03-09T03:59:59.000Z');
+    expect(endOfDayInZone('2026-11-01', 'America/New_York')).toBe('2026-11-02T04:59:59.000Z');
+  });
+
   it('uses the visit device zone for Auto and UTC for an unavailable device zone', () => {
     expect(resolveDisplayTimeZone('auto', 'Asia/Kolkata')).toBe('Asia/Kolkata');
     expect(resolveDisplayTimeZone('auto', 'not/a-zone')).toBe('UTC');

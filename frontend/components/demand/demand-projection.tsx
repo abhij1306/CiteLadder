@@ -1,5 +1,3 @@
-'use client';
-
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   useMutation,
@@ -41,6 +39,7 @@ import {
 import { formatCount, formatWindowDate } from '@/lib/format';
 import { InlineFigure } from '@/components/ui/typography';
 import { useProjectScope } from '@/lib/project/active-project-scope';
+import { useWorkspaceCapability } from '@/lib/project/project-context';
 import { optionalStringUrlCodec, stringUrlCodec, useUrlState } from '@/lib/navigation/url-state';
 import { Icon } from '@/components/ui/icon';
 import { Inline, Stack } from '@/components/ui/layout';
@@ -137,6 +136,7 @@ function SearchDemandView({
   // Recompute is queued: the screen reports that the work was queued and lets
   // the reader check for the new snapshot once it lands.
   const recomputeMutation = useMutation(demandMutations.recompute({ workspaceId, projectId }));
+  const canRun = useWorkspaceCapability('run');
   const refreshSnapshot = () => refreshDemandSnapshot(queryClient, projectId);
 
   const handleInspect = (signal: DemandSignal) => {
@@ -200,14 +200,11 @@ function SearchDemandView({
   );
   if (filteredSignals.length > 0) {
     signalsFeed = (
-      <Stack gap="compact">
-        <DemandSignalTable
-          rows={filteredSignals}
-          filterKey={`${activeTab}\u0000${searchQuery.trim().toLowerCase()}`}
-          onInspect={handleInspect}
-        />
-        <SignalLegend signals={filteredSignals.map(({ signal }) => signal)} />
-      </Stack>
+      <DemandSignalTable
+        rows={filteredSignals}
+        filterKey={`${activeTab}\u0000${searchQuery.trim().toLowerCase()}`}
+        onInspect={handleInspect}
+      />
     );
   } else if (snapshot.signals.length === 0) {
     signalsFeed = (
@@ -223,36 +220,54 @@ function SearchDemandView({
   return (
     <ListScreen
       actions={
-        <RecomputeAction
-          mutation={recomputeMutation}
-          onRecompute={() =>
-            recomputeMutation.mutate({
-              window_start: snapshot.window_start,
-              window_end: snapshot.window_end,
-            })
-          }
-          onCheck={() => {
-            recomputeMutation.reset();
-            void refreshSnapshot();
-          }}
-        />
+        // Recomputing is a run; a role without it reads the snapshot as is.
+        canRun ? (
+          <RecomputeAction
+            mutation={recomputeMutation}
+            onRecompute={() =>
+              recomputeMutation.mutate({
+                window_start: snapshot.window_start,
+                window_end: snapshot.window_end,
+              })
+            }
+            onCheck={() => {
+              recomputeMutation.reset();
+              void refreshSnapshot();
+            }}
+          />
+        ) : undefined
       }
       controls={{
-        search: (
-          <SearchField
-            value={searchQuery}
-            onValueChange={setSearchQuery}
-            placeholder="Filter signals…"
-            aria-label="Filter queries or pages"
-          />
-        ),
-        filters: (
+        // Which signals the table lists is the row's view; it leads.
+        view: (
           <DemandSignalFilters
             snapshot={snapshot}
             activeTab={activeTab}
             onTabChange={setActiveTab}
             tabCounts={tabCounts}
           />
+        ),
+        search: (
+          <SearchField
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+            placeholder="Filter queries or pages…"
+            aria-label="Filter queries or pages"
+          />
+        ),
+        // What the table holds, and over which window, closes the row.
+        status: (
+          <>
+            <span>
+              <InlineFigure>{formatCount(snapshot.signals.length)}</InlineFigure>
+              {snapshot.signals.length === 1 ? ' signal observed' : ' signals observed'}
+            </span>
+            <Inline as="span" gap="tight">
+              <Icon icon={Calendar} />
+              {windowLabel}
+            </Inline>
+            <DemandLatentDemand snapshot={snapshot} />
+          </>
         ),
       }}
     >
@@ -266,19 +281,11 @@ function SearchDemandView({
           />
         ) : null}
         <RecomputeFailure mutation={recomputeMutation} />
-        {/* The summary line, then the table the top strip's filters narrow.
-            A queued recompute rides the summary line and the header button. */}
+        {/* What the figures mean, then the table the control row narrows.
+            A queued recompute rides this line and the header button. */}
         <Stack>
           <Inline as="p" gap="meta">
-            <span className="type-caption">
-              <InlineFigure>{formatCount(snapshot.signals.length)}</InlineFigure>
-              {snapshot.signals.length === 1 ? ' signal observed' : ' signals observed'}
-            </span>
-            <Inline as="span" gap="tight" className="type-caption">
-              <Icon icon={Calendar} />
-              {windowLabel}
-            </Inline>
-            <DemandLatentDemand snapshot={snapshot} />
+            <SignalLegend signals={snapshot.signals} policy={snapshot.detector_policy} />
             <DemandDataCaveats snapshot={snapshot} />
             <RecomputeStatus mutation={recomputeMutation} />
           </Inline>
@@ -287,6 +294,7 @@ function SearchDemandView({
 
         <DemandEvidenceDrawer
           signal={selectedSignal}
+          policy={snapshot.detector_policy}
           open={selectedSignal !== null}
           onOpenChange={(open) => {
             if (!open) setSelectedSignalId(null);
@@ -351,7 +359,6 @@ function SearchConsoleSetup() {
     <DataSourceSetup
       required={['gsc']}
       title="Connect Search Console"
-      description="Search Demand finds opportunities in this project's own search queries. Connect Google and use the property for this site."
       whenReady={
         <QueryState
           kind="empty"

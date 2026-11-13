@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import { afterAll, expect, it, vi } from 'vitest';
 
 import { policy } from '../src/config.ts';
@@ -11,7 +12,8 @@ import { claimPages, spendRedirect } from '../src/source-pages/admission.ts';
 import { assessPage } from '../src/source-pages/assessment.ts';
 import { extractSourcePage } from '../src/source-pages/extract.ts';
 import { recordInspection } from '../src/source-pages/persistence.ts';
-import { projectRoster } from '../src/source-pages/reading.ts';
+import { latestReadings, projectRoster } from '../src/source-pages/reading.ts';
+import { gapPageHashes } from '../src/visibility/page-standing.ts';
 import { resolveCitation, syncCitedPages, syncPages } from '../src/source-pages/sync.ts';
 import { sourcePageInspector, compensateInspection } from '../src/source-pages/inspector.ts';
 import { refreshDifferentiation } from '../src/source-pages/differentiation.ts';
@@ -206,6 +208,64 @@ it('appends exact snapshot and quoted-presence provenance only under the owning 
         .executeTakeFirstOrThrow()
     ).latest_snapshot_id,
   ).toBe(snapshot);
+});
+it('stops counting a reading judged against an outdated roster until the page is read again', async () => {
+  const own = await seed(['https://publisher.test/listed', 'https://publisher.test/other']);
+  await syncPages(db, own.scope, own.audit, projectRoster(own.configuration));
+  const [first, second] = await claimPages(db, own.scope);
+  const filler = 'Other words. '.repeat(100);
+  const read = async (claim: NonNullable<typeof first>, configuration: Record<string, unknown>) => {
+    const page = extractSourcePage(Buffer.from(`<p>Rival is listed here. ${filler}</p>`));
+    await recordInspection(db, own.task, {
+      scope: own.scope,
+      pageId: claim.id,
+      lease: claim.lease,
+      fetch: { outcome: 'inspected', requestedUrl: claim.url, finalUrl: claim.url, status: 200 },
+      auditId: own.audit,
+      roster: projectRoster(configuration),
+      extracted: page,
+      assessment: assessPage(page, configuration),
+    });
+  };
+  const selection = {
+    ...own.scope,
+    marketId: null,
+    auditId: null,
+    auditIds: null,
+    logicalEngine: null,
+    cohort: 'all',
+    fromAt: null,
+    toAt: null,
+  };
+  const gaps = async () =>
+    (
+      await sql<{
+        url_hash: string;
+      }>`select url_hash from (${gapPageHashes(selection)}) gap`.execute(db)
+    ).rows.map((row) => row.url_hash);
+  const hashOf = async (id: string) =>
+    (
+      await db
+        .selectFrom('source_pages')
+        .select('url_hash')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow()
+    ).url_hash;
+
+  await read(first!, own.configuration);
+  expect([...(await latestReadings(db, own.scope, [first!.id])).keys()]).toEqual([first!.id]);
+  expect(await gaps()).toEqual([await hashOf(first!.id)]);
+
+  // The competitor is removed; the newest inspection judges with the new roster.
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 5);
+  });
+  const withoutRival = { ...own.configuration, competitors: [] };
+  await read(second!, withoutRival);
+  expect([...(await latestReadings(db, own.scope, [first!.id, second!.id])).keys()]).toEqual([
+    second!.id,
+  ]);
+  expect(await gaps()).toEqual([]);
 });
 it('runs recorded acquisition through persisted admission, robots refusal and batch handoff without resending fresh evidence', async () => {
   const own = await seed(['https://publisher.test/review', 'https://publisher.test/private']);

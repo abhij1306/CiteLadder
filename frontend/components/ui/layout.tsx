@@ -11,13 +11,16 @@ import { cn } from '@/lib/utils';
  * an `Inline` (horizontal) owns the gap once, so the rhythm is a token edit
  * and a feature names the role, never a number.
  *
- * The rungs are one ladder for both directions:
- *   `section`   — between top-level sections of a screen (24px)
- *   `workspace` — between peers inside a section (16px)
- *   `compact`   — between elements inside one component (12px)
- *   `item`      — between the parts of one item: an icon and its text, a
- *                 row's badges, the lines of a short list (8px)
- *   `tight`     — a label and the value it belongs to (4px)
+ * The rungs are one ladder for both directions, each a named relationship
+ * between two elements (app values; the website and docs keep larger ones):
+ *   `section`   — the page's bands: the title rule to the controls (16px)
+ *   `workspace` — block to block inside one pane, and card to card (12px)
+ *   `compact`   — elements inside one small component (8px)
+ *   `item`      — atoms in one row: a badge and its text, buttons, filter
+ *                 controls, the lines of a short list (8px)
+ *   `tight`     — the parts of one fact: a title and its meta line, a label
+ *                 and its sentence, a name and its URL (4px)
+ * docs/design.md (Layout) lists every role; D56 in docs/design-decisions.md records why.
  */
 const STACK_GAP = {
   section: 'gap-[var(--page-section-gap)]',

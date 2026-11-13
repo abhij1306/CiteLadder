@@ -1,5 +1,3 @@
-'use client';
-
 import { useQuery } from '@tanstack/react-query';
 
 import { retainPreviousDataForScope } from '@/lib/api/query-client';
@@ -34,5 +32,5 @@ export function useAccuracy(
     refetchInterval: (current) =>
       current.state.data?.state === 'pending' ? PERCEPTION_PENDING_POLL_MS : false,
   });
-  return { query, enabled };
+  return query;
 }

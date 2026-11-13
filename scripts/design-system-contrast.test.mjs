@@ -80,6 +80,29 @@ test('a dark rebinding fails the dark scope only', () => {
   );
 });
 
+test('an app rebinding fails the theme it reaches', () => {
+  const appLight = ':root:not([data-public-surface]) { --color-ink-secondary: #eeeeee; }';
+  const violations = paletteViolations(css({ extra: appLight }));
+  assert.ok(
+    violations.some((violation) =>
+      violation.includes(': :root --color-ink-secondary on --color-sidebar is 1.'),
+    ),
+  );
+});
+
+test("the app's light rebinding reaches the app's dark unless the app's dark rebinds it", () => {
+  const appLight = ':root:not([data-public-surface]) { --color-ink-secondary: #555555; }';
+  const appDark =
+    ":root[data-theme='dark']:not([data-public-surface]) { --color-ink-secondary: #ffffff; }";
+  const unbound = paletteViolations(css({ extra: appLight }));
+  assert.ok(
+    unbound.some((violation) =>
+      violation.includes(":root[data-theme='dark'] --color-ink-secondary on --color-paper is 2."),
+    ),
+  );
+  assert.deepEqual(paletteViolations(css({ extra: `${appLight}\n${appDark}` })), []);
+});
+
 test('a translucent soft is composited onto the surface before measuring', () => {
   const violations = paletteViolations(
     css({ light: { '--color-positive-soft': 'rgb(0 0 0 / 90%)' } }),

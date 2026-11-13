@@ -195,6 +195,22 @@ const crawlFailureSummarySchema = responseObject({
 // A crawl projection. `total_url_count` is null while full discovery runs and
 // ALWAYS null for a Free sample crawl; `has_more_site_urls`/`discovered_count`
 // are absent (optional) or null under Free redaction — never a leaked total.
+/**
+ * How a crawl of the project's own site treats robots.txt exclusions. `ignore`
+ * waives only the disallow rules; crawl delay, an unreadable or access-blocked
+ * robots.txt, rate limits and suppression still apply.
+ */
+export const crawlRobotsHandlingSchema = z.enum(['respect', 'ignore']);
+export type CrawlRobotsHandling = z.infer<typeof crawlRobotsHandlingSchema>;
+
+/** The crawl's robots choice and, when it ignores robots.txt, who confirmed authorization. */
+export const crawlRobotsChoiceSchema = responseObject({
+  handling: crawlRobotsHandlingSchema,
+  decided_by_email: z.string().nullable(),
+  decided_at: z.string().nullable(),
+});
+export type CrawlRobotsChoice = z.infer<typeof crawlRobotsChoiceSchema>;
+
 export const siteCrawlSchema = responseObject({
   id: uuid(),
   workspace_id: uuid(),
@@ -205,7 +221,7 @@ export const siteCrawlSchema = responseObject({
   analysis_status: crawlAnalysisStatusSchema,
   root_url: z.string(),
   sample_mode: z.boolean(),
-  seed: z.string(),
+  robots: crawlRobotsChoiceSchema,
   inventory_complete: z.boolean(),
   // Why a `partially_completed` crawl is partial. Empty on every other status.
   // URLs that could not be FETCHED are routine on a real site and are not an
@@ -246,22 +262,31 @@ export const siteCrawlSchema = responseObject({
   completed_at: z.string().nullable(),
 });
 
-const urlPreviewRowSchema = responseObject({
-  row: z.number().int(),
-  input: z.string(),
-  accepted: z.boolean(),
-  canonical_url: z.string().nullable(),
-  reason_code: z.string().nullable(),
-  value_kind: z.string(),
-  priority: z.number().int(),
-});
-export const urlPreviewResponseSchema = responseObject({
-  items: z.array(urlPreviewRowSchema),
-  truncated: z.boolean(),
-  counts: z.record(z.string(), z.number().int()),
-  policy_version: z.string(),
+/** How often a scheduled crawl runs. */
+export const crawlScheduleCadenceSchema = z.enum(['weekly', 'monthly']);
+/**
+ * What the last scheduled occurrence did: started a crawl, or skipped because
+ * a crawl was already queued or running, or the page-fetch budget refused it.
+ */
+export const crawlScheduleOutcomeSchema = z.enum([
+  'created',
+  'crawl_already_active',
+  'site_health_fetches_exhausted',
+  'failed',
+]);
+// `GET|PUT /projects/{id}/crawl-schedule` — a project without one reads as off.
+export const crawlScheduleSchema = responseObject({
+  project_id: uuid(),
+  enabled: z.boolean(),
+  cadence: crawlScheduleCadenceSchema,
+  next_run_at: z.string().nullable(),
+  last_run_at: z.string().nullable(),
+  last_outcome: crawlScheduleOutcomeSchema.nullable(),
+  last_crawl_id: uuid().nullable(),
 });
 
+export type CrawlScheduleCadence = z.infer<typeof crawlScheduleCadenceSchema>;
+export type CrawlSchedule = z.infer<typeof crawlScheduleSchema>;
 export type CrawlOverallStatus = z.infer<typeof crawlOverallStatusSchema>;
 export type CrawlDiscoveryStatus = z.infer<typeof crawlDiscoveryStatusSchema>;
 export type CrawlAnalysisStatus = z.infer<typeof crawlAnalysisStatusSchema>;
@@ -270,4 +295,3 @@ export type PageKind = z.infer<typeof pageKindSchema>;
 export type PageKindScoreSummary = z.infer<typeof pageKindScoreSummarySchema>;
 export type SiteScoreSummary = z.infer<typeof siteScoreSummarySchema>;
 export type SiteCrawl = z.infer<typeof siteCrawlSchema>;
-export type UrlPreviewResponse = z.infer<typeof urlPreviewResponseSchema>;

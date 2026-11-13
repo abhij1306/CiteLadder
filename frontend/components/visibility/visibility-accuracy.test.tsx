@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { renderWithProviders as render } from '@/test/render';
 import { describe, expect, it } from 'vite-plus/test';
 import type { AccuracyResponse } from '@citeladder/contracts/fact-checking';
@@ -60,6 +60,22 @@ describe('AccuracyView', () => {
       `/runs/${RUN}?execution=${EXECUTION}`,
     );
     expect(screen.getByText('Your fact: Pro costs $59 per month.')).toBeInTheDocument();
+  });
+
+  it('counts claims with no fact apart from inconclusive ones, never as one sum', () => {
+    const split = { ...coverage, claims: 10, not_covered: 4, inconclusive: 3 };
+    render(<AccuracyView data={response({ score: { accuracy: 2 / 3, coverage: split } })} />);
+    const checks = within(screen.getByLabelText('Fact checks'));
+    expect(checks.getByText('Not covered')).toBeVisible();
+    expect(checks.getByText('Inconclusive')).toBeVisible();
+    expect(checks.getByText('4')).toBeVisible();
+    expect(checks.getByText('3')).toBeVisible();
+    expect(checks.queryByText('7')).toBeNull();
+  });
+
+  it('says in one line that no source was cited alongside a contradiction', () => {
+    render(<AccuracyView data={response()} />);
+    expect(screen.getByText('No sources cited alongside contradictions.')).toBeVisible();
   });
 
   it('explains a read without a value instead of showing a zero', () => {

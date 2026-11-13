@@ -32,33 +32,36 @@ const NOT_MEASURED = availabilityLabel('not_measured');
 // Range and compare vocabularies
 // ---------------------------------------------------------------------------
 
-export const RANGE_OPTIONS: readonly { value: PerformanceRange; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: '3_months', label: '3 months' },
-  { value: '6_months', label: '6 months' },
-  { value: 'last_synced', label: 'Last synced' },
-  { value: 'custom', label: 'Custom' },
-] as const;
-
+/**
+ * Every preset is labelled by the window it actually selects, never by a
+ * calendar word: the server resolves `day`, `week` and `month` to its 1-, 7-
+ * and 28-day snapshots and the two extended presets to 90 and 180 days
+ * (`PERFORMANCE_PRESET_RANGE_DAYS` / `PERFORMANCE_EXTENDED_RANGE_DAYS` in the
+ * API's traffic config). "Month" over a 28-day window promised a span it did
+ * not chart (owner decision, 10 Nov 2026).
+ */
 export const QUICK_RANGE_OPTIONS: readonly {
   value: Extract<PerformanceRange, 'day' | 'week' | 'month'>;
   label: string;
 }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
+  { value: 'day', label: 'Last day' },
+  { value: 'week', label: 'Last 7 days' },
+  { value: 'month', label: 'Last 28 days' },
 ] as const;
 
 export const DIALOG_RANGE_OPTIONS: readonly {
   value: Extract<PerformanceRange, '3_months' | '6_months' | 'last_synced' | 'custom'>;
   label: string;
 }[] = [
-  { value: '3_months', label: '3 months' },
-  { value: '6_months', label: '6 months' },
+  { value: '3_months', label: 'Last 90 days' },
+  { value: '6_months', label: 'Last 180 days' },
   { value: 'last_synced', label: 'Last synced' },
   { value: 'custom', label: 'Custom' },
+] as const;
+
+export const RANGE_OPTIONS: readonly { value: PerformanceRange; label: string }[] = [
+  ...QUICK_RANGE_OPTIONS,
+  ...DIALOG_RANGE_OPTIONS,
 ] as const;
 
 /**
@@ -173,9 +176,9 @@ export function windowLength(window: PerformanceWindow): number {
   return Math.round((end - start) / 86_400_000) + 1;
 }
 
-/** "1 Jan – 28 Jan 2026", or an explicit note when the range is unresolved. */
+/** "1 Jan – 28 Jan 2026", or empty when the range is unresolved. */
 export function describeWindow(window: PerformanceWindow): string {
-  if (!window.window_start || !window.window_end) return 'No dates resolved';
+  if (!window.window_start || !window.window_end) return '';
   return `${formatWindowDate(window.window_start)} – ${formatWindowDate(window.window_end)}`;
 }
 
@@ -189,9 +192,9 @@ export const METRIC_CARDS: readonly {
   key: PerformanceMetricKey;
   label: string;
 }[] = [
-  { key: 'clicks', label: 'Total clicks' },
-  { key: 'impressions', label: 'Total impressions' },
-  { key: 'ctr', label: 'Average CTR' },
+  { key: 'clicks', label: 'Clicks' },
+  { key: 'impressions', label: 'Impressions' },
+  { key: 'ctr', label: 'CTR' },
   { key: 'position', label: 'Average position' },
 ] as const;
 
@@ -248,30 +251,33 @@ export function metricDifference(
  */
 export { measured } from '@/lib/format';
 
-/** A difference rendered with an explicit sign (`+2`, `−3`, `0`). */
-export function formatDifference(key: PerformanceMetricKey, difference: number | null): string {
-  if (difference === null) return NOT_MEASURED;
-  if (difference === 0) return '0';
-  const sign = difference > 0 ? '+' : '−';
-  const magnitude = Math.abs(difference);
-  if (key === 'ctr') return `${sign}${formatCtr(magnitude, 2)}`;
-  if (key === 'position') return `${sign}${formatPosition(magnitude)}`;
-  return `${sign}${formatCount(magnitude)}`;
-}
+/** What the shared `Delta` needs to draw one metric's difference. */
+export type MetricDelta = {
+  value: number | null;
+  precision: number;
+  unit: string;
+  policy: 'higher-is-better' | 'lower-is-better';
+};
 
 /**
- * Whether a difference is favourable, for tone only.
+ * One metric's difference in the shared `Delta`'s terms, at the precision of
+ * the metric it compares: CTR in percentage points to one decimal (as CTR
+ * itself shows), position to one decimal, counts whole.
  *
  * Position inverts: a smaller average position is a better ranking, so a
  * negative difference there is an improvement.
  */
-export function differenceTone(
-  key: PerformanceMetricKey,
-  difference: number | null,
-): 'up' | 'down' | 'flat' {
-  if (difference === null || difference === 0) return 'flat';
-  const improved = isInvertedMetric(key) ? difference < 0 : difference > 0;
-  return improved ? 'up' : 'down';
+export function metricDelta(key: PerformanceMetricKey, difference: number | null): MetricDelta {
+  const policy = isInvertedMetric(key) ? 'lower-is-better' : 'higher-is-better';
+  if (key === 'ctr') {
+    return {
+      value: difference === null ? null : difference * 100,
+      precision: 1,
+      unit: ' pp',
+      policy,
+    };
+  }
+  return { value: difference, precision: key === 'position' ? 1 : 0, unit: '', policy };
 }
 
 // ---------------------------------------------------------------------------
