@@ -67,6 +67,9 @@ docker compose up -d --build
 
 Open **http://localhost:8100**. No sign-up, no login.
 
+> CiteLadder has no login and listens on `127.0.0.1` only. Put an authenticating reverse proxy in
+> front before exposing it, and treat `MCP_TOKEN` like a password. See [SECURITY.md](SECURITY.md).
+
 1. **Create a project** from your website.
 2. **Add model keys** in *Settings → Providers* to run AI Visibility audits.
 3. **Run Site Health.** No keys needed.

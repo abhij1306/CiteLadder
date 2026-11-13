@@ -1,4 +1,4 @@
--- Tracked pages (Site Health tracked pages, PR B1: SH-B5, SH-B6; PERF-006).
+-- Tracked pages.
 -- Forward-only and safe on existing rows. Greenfield: no backfill.
 --
 -- A project's tracked pages are its active monitored_site_urls rows with a

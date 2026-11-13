@@ -1,4 +1,4 @@
--- Issue-family Actions (backlog implementation A4). Forward-only and safe on
+-- Issue-family Actions. Forward-only and safe on
 -- existing rows.
 --
 -- One Action can carry one Site Health issue family: one rule across the pages

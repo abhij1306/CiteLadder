@@ -1,4 +1,4 @@
--- Issue reference snippets (backlog implementation E1, BL3). Forward-only and
+-- Issue reference snippets. Forward-only and
 -- safe on existing rows.
 --
 -- Each finding class's catalog row keeps at most one bounded, redacted HTML

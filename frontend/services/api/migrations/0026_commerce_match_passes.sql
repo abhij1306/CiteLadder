@@ -1,5 +1,4 @@
--- Match the catalog in every answer (commerce improvement, PR 2, owner
--- decision CM1). Forward-only and safe on existing rows.
+-- Match the catalog in every answer. Forward-only and safe on existing rows.
 --
 -- A catalog revision is an immutable copy of a project's matching identity:
 -- its active products (with category memberships) and approved competitors,

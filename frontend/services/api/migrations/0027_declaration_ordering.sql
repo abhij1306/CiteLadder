@@ -1,4 +1,4 @@
--- Declaration ordering (backlog implementation A1). Forward-only and safe on
+-- Declaration ordering. Forward-only and safe on
 -- existing rows.
 --
 -- An Action keeps the last non-empty member set it carried, so a finding a

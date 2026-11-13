@@ -1,11 +1,11 @@
--- Page documents (content optimization phase 2, PR 1). Forward-only and safe on
+-- Page documents. Forward-only and safe on
 -- existing rows: one new table and three nullable columns.
 --
 -- An `optimize_page` chat commits a `page_fetch` analytics task instead of an
 -- Agent run. The task fetches the live page once and appends one snapshot with
 -- its outcome. A fetched page becomes the chat's `page` document: revision 1,
 -- authored `fetch`, holds the main content as Markdown and the page's SEO
--- fields. Only then is the Agent run queued, so a failed fetch charges nothing.
+-- fields. Only then is the Agent run queued, so a failed fetch spends nothing.
 --
 -- Tenancy follows 0007 and the status vocabulary is a CHECK (0014). Every
 -- reference a project deletion follows is indexed (0018).

@@ -1,4 +1,4 @@
--- ChatGPT shopping carousel capture (commerce improvement, PR 1). Forward-only
+-- ChatGPT shopping carousel capture. Forward-only
 -- and safe on existing rows, which keep NULL: the fields were not observed.
 --
 -- A carousel card is recorded as a shelf observation with

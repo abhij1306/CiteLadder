@@ -1,4 +1,4 @@
--- Page suggestions (content optimization phase 2, PR 2). Forward-only and safe
+-- Page suggestions. Forward-only and safe
 -- on existing rows: two new tables and two unique keys on columns that are
 -- already primary keys.
 --

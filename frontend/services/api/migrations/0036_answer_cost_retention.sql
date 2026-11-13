@@ -1,5 +1,5 @@
 -- Answer-engine internal costs survive project deletion with their exact
--- source IDs, like Agent model and model call costs (DB-007). Forward-only and
+-- source IDs, like Agent model and model call costs. Forward-only and
 -- safe on existing rows: the new columns are filled from each row's raw answer
 -- before they become NOT NULL.
 --

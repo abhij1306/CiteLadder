@@ -1,4 +1,4 @@
--- Action surface (content optimization phase 1, PR 2). Forward-only and safe on
+-- Action surface. Forward-only and safe on
 -- existing rows: one new column with a default, its CHECK and one index.
 --
 -- `surface` names the screen an Action belongs to: `content` for an owned page

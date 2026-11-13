@@ -1,4 +1,4 @@
--- Deployment record (backlog implementation A5). Forward-only and safe on
+-- Deployment record. Forward-only and safe on
 -- existing rows.
 --
 -- A declaration is the Action's recorded deployment step: its

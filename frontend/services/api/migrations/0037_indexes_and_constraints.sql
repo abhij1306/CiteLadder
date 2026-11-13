@@ -1,11 +1,11 @@
--- Indexes and constraints (DB-004, DB-005, DB-006, DB-011, DB-009).
+-- Indexes and constraints.
 -- Forward-only and applied in place. The runner applies every pending file in
 -- one transaction, so CREATE INDEX CONCURRENTLY is unavailable: each index
 -- below is built with a plain CREATE INDEX, which blocks writes to its table
 -- for the build. Dropped indexes are redundant or replaced in this file; no
 -- running query depends on one by name.
 
--- 1. Set-null references (DB-004). PostgreSQL clears each reference with one
+-- 1. Set-null references. PostgreSQL clears each reference with one
 --    lookup per deleted parent row, so an unindexed one scans its whole table,
 --    every tenant included, per deleted crawl, audit, prompt, snapshot or
 --    connection. Scheduled crawls and audits (0029) end migration 0018's
@@ -85,14 +85,14 @@ CREATE INDEX ix_source_pages_last_seen_audit_id ON public.source_pages
 CREATE INDEX ix_source_pages_latest_snapshot_id ON public.source_pages
     USING btree (latest_snapshot_id) WHERE latest_snapshot_id IS NOT NULL;
 
--- 2. Background reads (DB-006). The referral retention sweep pages one
+-- 2. Background reads. The referral retention sweep pages one
 --    workspace's expired events oldest first, and had no index leading with
 --    the workspace.
 
 CREATE INDEX ix_referral_events_retention ON public.referral_events
     USING btree (workspace_id, occurred_at, id);
 
--- 3. Queue claims (DB-011). A claim reads claimable rows in (available_at, id)
+-- 3. Queue claims. A claim reads claimable rows in (available_at, id)
 --    order (queue/task-queue.ts claimStatement, next-due.ts). A
 --    (status, available_at) index cannot return that order across the
 --    claimable IN list, and it keeps every terminal row. Each lane's claim
@@ -136,7 +136,7 @@ CREATE INDEX ix_site_crawl_tasks_claim ON public.site_crawl_tasks USING btree (a
         'submission_uncertain');
 CREATE INDEX ix_audit_tasks_lease ON public.audit_tasks USING btree (status, lease_expires_at);
 
--- 4. Redundant indexes (DB-011): each is a leading prefix of another index on
+-- 4. Redundant indexes: each is a leading prefix of another index on
 --    its table, so it only adds write cost.
 
 DROP INDEX public.ix_audit_tasks_status;                      -- ix_audit_tasks_lease
@@ -146,7 +146,7 @@ DROP INDEX public.ix_commerce_categories_workspace_id;        -- uq_commerce_cat
 DROP INDEX public.ix_commerce_recommendation_observations_workspace_id;
                                                   -- uq_commerce_recommendation_observations_ws_id
 
--- 5. One provider attempt per task and number (DB-009), like the sibling
+-- 5. One provider attempt per task and number, like the sibling
 --    attempt tables. The writer numbers attempts count + 1 under the audit and
 --    task row locks; the key makes a second writer fail instead of duplicating.
 --    It also leads with task_id, so the task_id index is redundant.
@@ -155,7 +155,7 @@ ALTER TABLE public.provider_attempts
     ADD CONSTRAINT uq_provider_attempt_slot UNIQUE (task_id, attempt_number);
 DROP INDEX public.ix_provider_attempts_task_id;
 
--- 6. Status vocabularies (DB-009), added NOT VALID and then validated as in
+-- 6. Status vocabularies, added NOT VALID and then validated as in
 --    0014: a stored value outside its list fails this migration and nothing
 --    changes. Each list is what its writer stores: Agent model attempt
 --    outcomes (agent/model-calls.ts) and answer cost projections

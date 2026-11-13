@@ -1,5 +1,5 @@
 -- Tenancy in the schema for the project-owned evidence tables that had no
--- workspace_id (DB-001, invariant 3): each row names its workspace, and every
+-- workspace_id (invariant 3): each row names its workspace, and every
 -- key to a workspace-owned parent names both, so PostgreSQL refuses a row
 -- whose parent belongs to another workspace.
 --

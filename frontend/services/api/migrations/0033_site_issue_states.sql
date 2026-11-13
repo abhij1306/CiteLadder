@@ -1,5 +1,4 @@
--- Issue state and trend (Site Health tracked pages, PR B2: SH-B2, SH-B8,
--- SH-B9). Forward-only; two new tables, so no existing row changes. Greenfield:
+-- Issue state and trend. Forward-only; two new tables, so no existing row changes. Greenfield:
 -- no backfill, the first landing audit after this writes them.
 --
 -- site_issue_states holds one row per project, page and rule: the issue's

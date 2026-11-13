@@ -1,4 +1,4 @@
--- Content angles (content optimization phase 1, PR 1). Forward-only and safe
+-- Content angles. Forward-only and safe
 -- on existing rows: five new tables, no change to existing data.
 --
 -- The `content_angle_refresh` analytics task groups the titles of competitor

@@ -35,6 +35,7 @@ Then run the API, the runner and the app dev server in three terminals:
 
 ```bash
 export DATABASE_URL=postgresql://citeladder:citeladder@127.0.0.1:5432/citeladder
+export APP_ENV=development
 pnpm --dir frontend --filter @citeladder/api migrate             # apply the schema
 pnpm --dir frontend --filter @citeladder/api bootstrap:account   # create the local workspace
 pnpm --dir frontend --filter @citeladder/api start               # API on http://127.0.0.1:8100

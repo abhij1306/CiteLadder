@@ -1,4 +1,4 @@
--- Catalog ingestion (commerce improvement PR 6, owner decision CM3).
+-- Catalog ingestion.
 -- Forward-only and safe on existing rows.
 --
 -- Categories form a tree: `parent_category_id` names the category one level

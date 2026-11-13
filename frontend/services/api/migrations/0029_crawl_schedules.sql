@@ -1,4 +1,4 @@
--- Scheduled crawls (backlog implementation S1, BL5). Forward-only; a new
+-- Scheduled crawls. Forward-only; a new
 -- table, so no existing row changes.
 --
 -- One schedule per project, off until the person turns it on. A due row is
